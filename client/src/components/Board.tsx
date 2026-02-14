@@ -389,18 +389,12 @@ export function Board({
     setCamera({ x: 0, y: 0, scale: fitScale });
   }, [layout, unitToPixels]);
 
-  // Empty board with no valid plays
-  if (!board && validPositions.length === 0) {
-    return (
-      <div ref={containerRef} className="board-container">
-        <div className="board-empty-message">No tiles played yet</div>
-      </div>
-    );
-  }
-
   // Calculate board center offset
   const centerX = (layout.minX + layout.maxX) / 2;
   const centerY = (layout.minY + layout.maxY) / 2;
+
+  // Check if there are any legal play moves (for showing helpful message)
+  const hasLegalPlays = legalMoves.some(m => m.type === "play");
 
   return (
     <div
@@ -414,6 +408,15 @@ export function Board({
       onDoubleClick={handleDoubleClick}
       style={{ cursor: isDragging ? "grabbing" : "grab" }}
     >
+      {/* Show message when board is empty */}
+      {!board && (
+        <div className="board-empty-message">
+          {hasLegalPlays && !selectedTile
+            ? "Select a tile from your hand to play"
+            : "No tiles played yet"}
+        </div>
+      )}
+
       <div
         className="board-canvas"
         style={{
