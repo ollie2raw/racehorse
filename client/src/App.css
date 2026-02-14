@@ -319,9 +319,12 @@ html, body {
 /* ─── Game Screen ───────────────────────────────────────────── */
 
 .game-screen {
+  display: flex;
+  flex-direction: column;
   padding: 8px 12px;
   gap: 8px;
   flex: 1;
+  min-height: 0; /* Allow flex child to shrink */
   overflow: hidden;
 }
 
@@ -472,7 +475,8 @@ html, body {
 
 .board-area {
   flex: 1;
-  min-height: 300px;
+  min-height: 40vh;
+  width: 100%;
   background: var(--bg-board-gradient);
   border-radius: var(--radius-xl);
   box-shadow:
