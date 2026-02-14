@@ -221,7 +221,11 @@ function layoutBranches(
         // On branches: non-doubles are vertical (90 deg), doubles are horizontal (0 deg)
         const tileHeight = double ? TILE_UNIT : TILE_UNIT * 2;
         const rotation = double ? 0 : 90;
-        const flipped = pt.orientation.endsWith("flipped");
+
+        // Server orientation assumes DOWN direction (matching end on top after rotation)
+        // For UP branches (armIdx=0), we need to invert the flip
+        const serverFlipped = pt.orientation.endsWith("flipped");
+        const flipped = armIdx === 0 ? !serverFlipped : serverFlipped;
 
         const centerY = currentY + direction * (tileHeight / 2);
 
