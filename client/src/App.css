@@ -472,7 +472,7 @@ html, body {
 
 .board-area {
   flex: 1;
-  min-height: 0;
+  min-height: 300px;
   background: var(--bg-board-gradient);
   border-radius: var(--radius-xl);
   box-shadow:
@@ -496,35 +496,35 @@ html, body {
 .board-container {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: auto;
-  padding: 20px;
   position: relative;
+  overflow: hidden;
+  user-select: none;
 }
 
 .board-canvas {
-  position: relative;
-  transition: transform 0.3s ease;
-}
-
-.board-canvas.empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 200px;
-  min-height: 150px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Smooth panning, but quick response */
+  transition: none;
 }
 
 .board-empty-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   color: rgba(255, 255, 255, 0.5);
-  font-size: 1rem;
+  font-size: 1.2rem;
   text-align: center;
 }
 
 .board-tile-wrapper {
   position: absolute;
+  /* Prevent tiles from causing layout jitter */
+  will-change: transform;
 }
 
 /* ─── Placement Zones ───────────────────────────────────────── */
@@ -570,11 +570,16 @@ html, body {
 /* ─── Domino Tiles ──────────────────────────────────────────── */
 
 .domino-tile {
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition: box-shadow var(--transition-fast);
 }
 
-.domino-tile:not(.disabled):hover {
-  transform: translateY(-3px) scale(1.02);
+.domino-tile:not(.disabled):not(.board-tile):hover {
+  box-shadow: var(--tile-shadow-hover);
+}
+
+/* Board tiles should not hover-animate to avoid layout jitter */
+.domino-tile.board-tile {
+  pointer-events: none;
 }
 
 .domino-body {
@@ -615,12 +620,13 @@ html, body {
   box-shadow: 0 0 0 4px var(--tile-highlight), var(--tile-shadow);
 }
 
-.domino-tile.disabled {
-  opacity: 0.7;
+.domino-tile.disabled:not(.board-tile) {
+  opacity: 0.6;
 }
 
-.domino-tile.disabled:hover {
-  transform: none;
+/* Board tiles should look fully opaque */
+.domino-tile.board-tile {
+  opacity: 1;
 }
 
 .domino-tile.double .domino-body {

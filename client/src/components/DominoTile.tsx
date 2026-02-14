@@ -22,7 +22,7 @@ interface PipHalfProps {
 
 function PipHalf({ value, size }: PipHalfProps) {
   const positions = pipLayouts[value] || [];
-  const pipSize = Math.max(4, size / 5);
+  const pipSize = Math.max(6, size / 4.5);
   const cellSize = size / 3;
 
   return (
@@ -32,6 +32,7 @@ function PipHalf({ value, size }: PipHalfProps) {
         width: size,
         height: size,
         position: "relative",
+        flexShrink: 0,
       }}
     >
       {positions.map(([row, col], idx) => (
@@ -70,7 +71,7 @@ export interface DominoTileProps {
 
 export function DominoTile({
   tile,
-  size = 40,
+  size = 60,
   selected = false,
   highlight = false,
   onClick,
@@ -91,23 +92,21 @@ export function DominoTile({
     className,
   ].filter(Boolean).join(" ");
 
-  // Determine which pip to show first based on orientation
+  // Determine which pip to show first based on flipped flag
+  // When flipped=false: low on left/top, high on right/bottom
+  // When flipped=true: high on left/top, low on right/bottom
   const firstPip = flipped ? tile.high : tile.low;
   const secondPip = flipped ? tile.low : tile.high;
 
-  // Calculate dimensions based on rotation
-  // At 0/180 degrees: horizontal (width > height)
-  // At 90/270 degrees: vertical (height > width)
-  const isVertical = rotation === 90 || rotation === 270;
-
+  // Tile is always rendered horizontally (row direction)
+  // Rotation is applied via CSS transform
   return (
     <button
       className={tileClass}
       onClick={onClick}
       disabled={disabled}
       style={{
-        display: "flex",
-        flexDirection: isVertical ? "column" : "row",
+        display: "block",
         padding: 0,
         border: "none",
         background: "none",
@@ -119,11 +118,12 @@ export function DominoTile({
       <div
         className="domino-body"
         style={{
-          flexDirection: isVertical ? "column" : "row",
+          display: "flex",
+          flexDirection: "row",
         }}
       >
         <PipHalf value={firstPip} size={size} />
-        <div className={`domino-divider ${isVertical ? "horizontal" : "vertical"}`} />
+        <div className="domino-divider vertical" />
         <PipHalf value={secondPip} size={size} />
       </div>
     </button>

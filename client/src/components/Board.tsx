@@ -1,14 +1,14 @@
 // client/src/components/Board.tsx
-import { useMemo, useRef, useEffect, useState } from "react";
+import { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { DominoTile } from "./DominoTile";
 import type { Tile, BoardState, PlacementPosition, Move } from "../types";
 
 // ─── Layout Constants ────────────────────────────────────────
 
-// Tile dimensions in layout units
-const TILE_UNIT = 50;        // Half-size unit (one pip-half)
-const TILE_GAP = 6;          // Gap between tiles
-const DOUBLE_CROSS_GAP = 8;  // Extra gap for doubles (perpendicular)
+// Tile dimensions in layout units (1 unit = 1 pip half)
+const TILE_UNIT = 1;
+const TILE_GAP = 0.15;
+const DOUBLE_CROSS_GAP = 0.2;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -33,10 +33,10 @@ interface LayoutZone {
 interface BoardLayout {
   tiles: LayoutTile[];
   zones: LayoutZone[];
-  width: number;
-  height: number;
-  offsetX: number;
-  offsetY: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -74,10 +74,10 @@ function computeLayout(
     return {
       tiles,
       zones,
-      width: TILE_UNIT * 4,
-      height: TILE_UNIT * 4,
-      offsetX: TILE_UNIT * 2,
-      offsetY: TILE_UNIT * 2,
+      minX: -2,
+      maxX: 2,
+      minY: -2,
+      maxY: 2,
     };
   }
 
@@ -103,7 +103,9 @@ function computeLayout(
   let currentX = -totalWidth / 2;
   const mainY = 0;
 
-  // Track bounds for branches
+  // Track bounds
+  let minX = currentX - 2;
+  let maxX = -currentX + 2;
   let minY = -TILE_UNIT;
   let maxY = TILE_UNIT;
 
@@ -116,7 +118,7 @@ function computeLayout(
     const tileWidth = double ? TILE_UNIT : TILE_UNIT * 2;
     const centerX = currentX + tileWidth / 2;
 
-    // Determine rotation: doubles are vertical (90 deg)
+    // Doubles are perpendicular (90 deg rotation)
     const rotation = double ? 90 : 0;
     const flipped = pt.orientation.endsWith("flipped");
 
@@ -147,6 +149,10 @@ function computeLayout(
     currentX += tileWidth + TILE_GAP;
   }
 
+  // Update X bounds
+  minX = -totalWidth / 2 - 3;
+  maxX = totalWidth / 2 + 3;
+
   // Main line placement zones
   if (validPositions.includes("left")) {
     const leftX = -totalWidth / 2 - TILE_GAP - TILE_UNIT;
@@ -158,6 +164,7 @@ function computeLayout(
       height: TILE_UNIT,
       key: "zone-left",
     });
+    minX = Math.min(minX, leftX - TILE_UNIT);
   }
 
   if (validPositions.includes("right")) {
@@ -170,20 +177,16 @@ function computeLayout(
       height: TILE_UNIT,
       key: "zone-right",
     });
+    maxX = Math.max(maxX, rightX + TILE_UNIT);
   }
-
-  // Calculate final dimensions with padding
-  const padding = TILE_UNIT * 2;
-  const width = totalWidth + padding * 2 + TILE_UNIT * 4; // Extra for placement zones
-  const height = maxY - minY + padding * 2;
 
   return {
     tiles,
     zones,
-    width,
-    height,
-    offsetX: width / 2,
-    offsetY: -minY + padding,
+    minX,
+    maxX,
+    minY,
+    maxY,
   };
 }
 
@@ -288,10 +291,12 @@ export function Board({
   legalMoves,
   selectedTile,
   onPositionClick,
-  tileSize = 40,
+  tileSize = 60, // Increased from 40 to 60 (1.5x)
 }: BoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
+  const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
 
   // Get valid positions for the selected tile
   const validPositions = useMemo((): PlacementPosition[] => {
@@ -307,64 +312,120 @@ export function Board({
     return computeLayout(board, validPositions);
   }, [board, validPositions]);
 
-  // Scale factor from layout units to pixels
-  const pixelScale = tileSize / TILE_UNIT;
+  // Convert layout units to pixels
+  const unitToPixels = tileSize;
 
-  // Auto-scale to fit container
+  // Auto-fit camera on layout change
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const updateScale = () => {
-      const containerWidth = container.clientWidth - 40; // padding
-      const containerHeight = container.clientHeight - 40;
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
 
-      const layoutWidth = layout.width * pixelScale;
-      const layoutHeight = layout.height * pixelScale;
+    const layoutWidth = (layout.maxX - layout.minX) * unitToPixels;
+    const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
 
-      const scaleX = containerWidth / layoutWidth;
-      const scaleY = containerHeight / layoutHeight;
+    // Calculate scale to fit
+    const scaleX = (containerWidth - 40) / layoutWidth;
+    const scaleY = (containerHeight - 40) / layoutHeight;
+    const fitScale = Math.min(1.2, Math.max(0.6, Math.min(scaleX, scaleY)));
 
-      // Use the smaller scale to fit, but cap at 1 (don't zoom in)
-      const newScale = Math.min(1, scaleX, scaleY);
-      setScale(Math.max(0.3, newScale)); // Minimum 30% scale
+    setCamera({ x: 0, y: 0, scale: fitScale });
+  }, [layout, unitToPixels]);
+
+  // Mouse wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setCamera(cam => ({
+      ...cam,
+      scale: Math.min(1.6, Math.max(0.6, cam.scale * delta)),
+    }));
+  }, []);
+
+  // Pan handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      camX: camera.x,
+      camY: camera.y,
     };
+  }, [camera.x, camera.y]);
 
-    updateScale();
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    setCamera(cam => ({
+      ...cam,
+      x: dragStart.current.camX + dx,
+      y: dragStart.current.camY + dy,
+    }));
+  }, [isDragging]);
 
-    const observer = new ResizeObserver(updateScale);
-    observer.observe(container);
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
 
-    return () => observer.disconnect();
-  }, [layout, pixelScale]);
+  // Double-click to reset
+  const handleDoubleClick = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+
+    const layoutWidth = (layout.maxX - layout.minX) * unitToPixels;
+    const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
+
+    const scaleX = (containerWidth - 40) / layoutWidth;
+    const scaleY = (containerHeight - 40) / layoutHeight;
+    const fitScale = Math.min(1.2, Math.max(0.6, Math.min(scaleX, scaleY)));
+
+    setCamera({ x: 0, y: 0, scale: fitScale });
+  }, [layout, unitToPixels]);
 
   // Empty board with no valid plays
   if (!board && validPositions.length === 0) {
     return (
       <div ref={containerRef} className="board-container">
-        <div className="board-canvas empty">
-          <div className="board-empty-message">No tiles played yet</div>
-        </div>
+        <div className="board-empty-message">No tiles played yet</div>
       </div>
     );
   }
 
+  // Calculate board center offset
+  const centerX = (layout.minX + layout.maxX) / 2;
+  const centerY = (layout.minY + layout.maxY) / 2;
+
   return (
-    <div ref={containerRef} className="board-container">
+    <div
+      ref={containerRef}
+      className="board-container"
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onDoubleClick={handleDoubleClick}
+      style={{ cursor: isDragging ? "grabbing" : "grab" }}
+    >
       <div
         className="board-canvas"
         style={{
-          width: layout.width * pixelScale,
-          height: layout.height * pixelScale,
-          transform: `scale(${scale})`,
+          transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
           transformOrigin: "center center",
         }}
       >
         {/* Render tiles */}
         {layout.tiles.map((lt) => {
-          const x = (lt.x + layout.offsetX) * pixelScale;
-          const y = (lt.y + layout.offsetY) * pixelScale;
-          const double = isDouble(lt.tile);
+          const x = (lt.x - centerX) * unitToPixels;
+          const y = (lt.y - centerY) * unitToPixels;
+          const tileIsDouble = isDouble(lt.tile);
 
           return (
             <div
@@ -372,8 +433,8 @@ export function Board({
               className="board-tile-wrapper"
               style={{
                 position: "absolute",
-                left: x,
-                top: y,
+                left: `calc(50% + ${x}px)`,
+                top: `calc(50% + ${y}px)`,
                 transform: "translate(-50%, -50%)",
               }}
             >
@@ -383,7 +444,7 @@ export function Board({
                 rotation={lt.rotation}
                 flipped={lt.flipped}
                 disabled
-                className={`board-tile ${double ? "hub-double" : ""}`}
+                className={`board-tile ${tileIsDouble ? "hub-double" : ""}`}
               />
             </div>
           );
@@ -391,13 +452,13 @@ export function Board({
 
         {/* Render placement zones */}
         {layout.zones.map((zone) => {
-          const x = (zone.x + layout.offsetX) * pixelScale;
-          const y = (zone.y + layout.offsetY) * pixelScale;
-          const width = zone.width * pixelScale;
-          const height = zone.height * pixelScale;
+          const x = (zone.x - centerX) * unitToPixels;
+          const y = (zone.y - centerY) * unitToPixels;
+          const width = zone.width * unitToPixels;
+          const height = zone.height * unitToPixels;
 
           // Determine arrow direction
-          let arrow = "↔";
+          let arrow = "+";
           if (zone.position === "left") arrow = "←";
           else if (zone.position === "right") arrow = "→";
           else if (zone.position.includes("-0")) arrow = "↑";
@@ -409,13 +470,16 @@ export function Board({
               className="placement-zone active"
               style={{
                 position: "absolute",
-                left: x,
-                top: y,
+                left: `calc(50% + ${x}px)`,
+                top: `calc(50% + ${y}px)`,
                 width,
                 height,
                 transform: "translate(-50%, -50%)",
               }}
-              onClick={() => onPositionClick(zone.position)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPositionClick(zone.position);
+              }}
             >
               <span className="placement-arrow">{arrow}</span>
             </div>
