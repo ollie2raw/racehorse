@@ -291,7 +291,7 @@ export function Board({
   legalMoves,
   selectedTile,
   onPositionClick,
-  tileSize = 60, // Increased from 40 to 60 (1.5x)
+  tileSize = 80, // Large tiles for better visibility
 }: BoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });

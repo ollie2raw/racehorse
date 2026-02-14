@@ -71,7 +71,7 @@ export interface DominoTileProps {
 
 export function DominoTile({
   tile,
-  size = 60,
+  size = 70,
   selected = false,
   highlight = false,
   onClick,

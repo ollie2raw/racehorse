@@ -82,7 +82,7 @@ function HandView({ hand, selectedTile, onSelect, isMyTurn, legalMoves }: HandVi
           <DominoTile
             key={`${idx}-${tile.low}-${tile.high}`}
             tile={tile}
-            size={54}
+            size={70}
             selected={isSel ?? false}
             highlight={canPlay}
             onClick={() => isMyTurn && onSelect(tile)}
@@ -511,7 +511,7 @@ export default function App() {
               legalMoves={legalMoves}
               selectedTile={selectedTile}
               onPositionClick={play}
-              tileSize={60}
+              tileSize={80}
             />
           </div>
 

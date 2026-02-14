@@ -321,18 +321,19 @@ html, body {
 .game-screen {
   display: flex;
   flex-direction: column;
-  padding: 8px 12px;
-  gap: 8px;
+  padding: 6px 10px;
+  gap: 6px;
   flex: 1;
   min-height: 0; /* Allow flex child to shrink */
   overflow: hidden;
+  align-items: stretch; /* Override .screen's center alignment */
 }
 
 .game-top-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
   flex-shrink: 0;
 }
@@ -474,11 +475,11 @@ html, body {
 /* ─── Board Area ────────────────────────────────────────────── */
 
 .board-area {
-  flex: 1;
-  min-height: 40vh;
+  flex: 1 1 0;
+  min-height: 50vh;
   width: 100%;
   background: var(--bg-board-gradient);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   box-shadow:
     inset 0 2px 8px rgba(0, 0, 0, 0.4),
     0 4px 12px rgba(0, 0, 0, 0.3);
