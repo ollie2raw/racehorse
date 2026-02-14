@@ -1,0 +1,329 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.computeOpenEndsSum = computeOpenEndsSum;
+exports.computePlayScore = computePlayScore;
+exports.computeHandPenalty = computeHandPenalty;
+exports.simulatePlacement = simulatePlacement;
+exports.getOpenEnds = getOpenEnds;
+exports.canPlaceTileAt = canPlaceTileAt;
+const types_1 = require("./types");
+// ─── Orientation Helpers ─────────────────────────────────────
+/**
+ * Determine the orientation of a tile being placed.
+ * - Doubles are always vertical (perpendicular to the line)
+ * - Non-doubles are horizontal, with the matching end facing the board
+ */
+function getPlacementOrientation(tile, matchValue, placementSide) {
+    // Doubles are always vertical
+    if ((0, types_1.isDouble)(tile)) {
+        return 'vertical-normal';
+    }
+    // For non-doubles, determine which end faces the board
+    if (placementSide === 'left') {
+        // Placing on left: high end should face right (toward board)
+        return tile.high === matchValue ? 'horizontal-normal' : 'horizontal-flipped';
+    }
+    else if (placementSide === 'right') {
+        // Placing on right: low end should face left (toward board)
+        return tile.low === matchValue ? 'horizontal-normal' : 'horizontal-flipped';
+    }
+    else {
+        // Branch: depends on which end matches the hub
+        return tile.high === matchValue ? 'vertical-flipped' : 'vertical-normal';
+    }
+}
+/**
+ * Given a tile being placed and the value it must match,
+ * return the pip value that will be exposed (the "other" end).
+ */
+function exposedPip(tile, matchValue) {
+    if (tile.high === matchValue)
+        return tile.low;
+    if (tile.low === matchValue)
+        return tile.high;
+    // Fallback (shouldn't happen if tile matches)
+    return tile.high;
+}
+// ─── Open Ends Sum ───────────────────────────────────────────
+/**
+ * Compute the sum of all open ends on the board.
+ *
+ * IMPORTANT: Doubles at open ends count as 2*value (both pips are exposed).
+ *
+ * Open ends include:
+ * - The main line left end
+ * - The main line right end
+ * - Each branch arm's open end
+ *
+ * Special case: If the board has only 1 tile (a double),
+ * that tile counts as both ends (2 * value).
+ */
+function computeOpenEndsSum(board) {
+    // Single tile case
+    if (board.mainLine.length === 1) {
+        const t = board.mainLine[0].tile;
+        // A single double counts as 2*value (both ends open)
+        // A single non-double counts as high + low
+        return t.high + t.low;
+    }
+    // Main line ends - doubles count twice
+    let sum = 0;
+    if (board.leftEndIsDouble) {
+        sum += board.leftEnd * 2;
+    }
+    else {
+        sum += board.leftEnd;
+    }
+    if (board.rightEndIsDouble) {
+        sum += board.rightEnd * 2;
+    }
+    else {
+        sum += board.rightEnd;
+    }
+    // Branch ends - doubles count twice
+    for (const hub of board.hubDoubles) {
+        for (const branch of hub.branches) {
+            if (branch.openEndIsDouble) {
+                sum += branch.openEnd * 2;
+            }
+            else {
+                sum += branch.openEnd;
+            }
+        }
+    }
+    return sum;
+}
+// ─── Scoring ─────────────────────────────────────────────────
+/**
+ * POINTS scoring:
+ * if sum divisible by scoringMultiple (5), points = sum / 5, else 0
+ */
+function computePlayScore(board, config = types_1.DEFAULT_CONFIG) {
+    const sum = computeOpenEndsSum(board);
+    return sum % config.scoringMultiple === 0 ? sum / config.scoringMultiple : 0;
+}
+/**
+ * Hand penalty for end-of-hand bonus calculation.
+ * Sum of pips rounded UP to nearest scoringMultiple.
+ */
+function computeHandPenalty(hand, config = types_1.DEFAULT_CONFIG) {
+    const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
+    const multiple = config.scoringMultiple;
+    return Math.ceil(total / multiple) * multiple;
+}
+// ─── Board Placement ─────────────────────────────────────────
+/**
+ * Simulate placing a tile at a position and return the new board state.
+ *
+ * Placement rules:
+ * - 'left': prepend to main line, update leftEnd
+ * - 'right': append to main line, update rightEnd
+ * - 'branch-H-A': extend branch arm A on hub H (or create it)
+ *
+ * Crossing a double:
+ * When a tile is played through a double (extending the main line past it),
+ * that double becomes "crossed" and can spawn branches.
+ */
+function simulatePlacement(board, tile, position) {
+    // ─── First tile on empty board ───
+    if (board === null) {
+        const placedTile = {
+            tile,
+            orientation: (0, types_1.isDouble)(tile) ? 'vertical-normal' : 'horizontal-normal',
+        };
+        const newBoard = {
+            mainLine: [placedTile],
+            leftEnd: tile.low,
+            rightEnd: tile.high,
+            leftEndIsDouble: (0, types_1.isDouble)(tile),
+            rightEndIsDouble: (0, types_1.isDouble)(tile),
+            hubDoubles: [],
+        };
+        // If the first tile is a double, register it as a potential hub
+        if ((0, types_1.isDouble)(tile)) {
+            return {
+                ...newBoard,
+                hubDoubles: [{
+                        tileIndex: 0,
+                        hubValue: tile.high,
+                        isCrossed: false,
+                        branches: [],
+                    }],
+            };
+        }
+        return newBoard;
+    }
+    // ─── Branch placement ───
+    const branchPos = (0, types_1.parseBranchPosition)(position);
+    if (branchPos !== null) {
+        return placeTileOnBranch(board, tile, branchPos.hubIndex, branchPos.armIndex);
+    }
+    // ─── Main line placement ───
+    return placeTileOnMainLine(board, tile, position);
+}
+/**
+ * Place a tile on the main line (left or right end).
+ */
+function placeTileOnMainLine(board, tile, end) {
+    const matchValue = end === 'left' ? board.leftEnd : board.rightEnd;
+    const newExposedEnd = exposedPip(tile, matchValue);
+    const tileIsDouble = (0, types_1.isDouble)(tile);
+    // Create placed tile with orientation
+    const placedTile = {
+        tile,
+        orientation: getPlacementOrientation(tile, matchValue, end),
+    };
+    // Update main line
+    const newMainLine = end === 'left'
+        ? [placedTile, ...board.mainLine]
+        : [...board.mainLine, placedTile];
+    const newLeftEnd = end === 'left' ? newExposedEnd : board.leftEnd;
+    const newRightEnd = end === 'right' ? newExposedEnd : board.rightEnd;
+    const newLeftEndIsDouble = end === 'left' ? tileIsDouble : board.leftEndIsDouble;
+    const newRightEndIsDouble = end === 'right' ? tileIsDouble : board.rightEndIsDouble;
+    // Check if we're crossing a double at this end
+    let newHubDoubles = [...board.hubDoubles];
+    // Find hub double at the end we're playing on
+    const hubAtEnd = newHubDoubles.find(hub => {
+        const hubTile = board.mainLine[hub.tileIndex].tile;
+        if (end === 'left') {
+            return hub.tileIndex === 0 && (0, types_1.tileMatchesEnd)(hubTile, board.leftEnd);
+        }
+        else {
+            return hub.tileIndex === board.mainLine.length - 1 && (0, types_1.tileMatchesEnd)(hubTile, board.rightEnd);
+        }
+    });
+    if (hubAtEnd && !hubAtEnd.isCrossed) {
+        newHubDoubles = newHubDoubles.map(h => h === hubAtEnd ? { ...h, isCrossed: true } : h);
+    }
+    // Adjust hub indices if we prepended to the left
+    if (end === 'left') {
+        newHubDoubles = newHubDoubles.map(h => ({
+            ...h,
+            tileIndex: h.tileIndex + 1,
+        }));
+    }
+    // If the new tile is a double, register it as a potential hub
+    if (tileIsDouble) {
+        const newHubIndex = end === 'left' ? 0 : newMainLine.length - 1;
+        newHubDoubles.push({
+            tileIndex: newHubIndex,
+            hubValue: tile.high,
+            isCrossed: false,
+            branches: [],
+        });
+    }
+    return {
+        mainLine: newMainLine,
+        leftEnd: newLeftEnd,
+        rightEnd: newRightEnd,
+        leftEndIsDouble: newLeftEndIsDouble,
+        rightEndIsDouble: newRightEndIsDouble,
+        hubDoubles: newHubDoubles,
+    };
+}
+/**
+ * Place a tile on a branch arm of a hub double.
+ */
+function placeTileOnBranch(board, tile, hubIndex, armIndex) {
+    const hub = board.hubDoubles[hubIndex];
+    if (!hub) {
+        throw new Error(`Invalid hub index: ${hubIndex}`);
+    }
+    if (!hub.isCrossed) {
+        throw new Error(`Cannot branch from hub ${hubIndex} - it is not crossed yet`);
+    }
+    if (armIndex >= 2) {
+        throw new Error(`Invalid arm index: ${armIndex}. Max 2 branches per hub.`);
+    }
+    const tileIsDouble = (0, types_1.isDouble)(tile);
+    let newBranches;
+    if (armIndex < hub.branches.length) {
+        // Extend existing branch
+        const existingBranch = hub.branches[armIndex];
+        const branchMatchValue = existingBranch.openEnd;
+        const branchNewEnd = exposedPip(tile, branchMatchValue);
+        const placedTile = {
+            tile,
+            orientation: getPlacementOrientation(tile, branchMatchValue, 'branch'),
+        };
+        newBranches = hub.branches.map((b, i) => i === armIndex
+            ? {
+                tiles: [...b.tiles, placedTile],
+                openEnd: branchNewEnd,
+                openEndIsDouble: tileIsDouble,
+            }
+            : b);
+    }
+    else if (armIndex === hub.branches.length) {
+        // Create new branch arm
+        const matchValue = hub.hubValue;
+        const newExposedEnd = exposedPip(tile, matchValue);
+        const placedTile = {
+            tile,
+            orientation: getPlacementOrientation(tile, matchValue, 'branch'),
+        };
+        newBranches = [
+            ...hub.branches,
+            {
+                tiles: [placedTile],
+                openEnd: newExposedEnd,
+                openEndIsDouble: tileIsDouble,
+            },
+        ];
+    }
+    else {
+        throw new Error(`Cannot create branch ${armIndex} - must create ${hub.branches.length} first`);
+    }
+    const newHubDoubles = board.hubDoubles.map((h, i) => i === hubIndex ? { ...h, branches: newBranches } : h);
+    return {
+        ...board,
+        hubDoubles: newHubDoubles,
+    };
+}
+/**
+ * Get all open ends where a tile could potentially be placed.
+ */
+function getOpenEnds(board) {
+    if (board === null) {
+        return [{ position: 'left', matchValue: -1 }];
+    }
+    const ends = [
+        { position: 'left', matchValue: board.leftEnd },
+        { position: 'right', matchValue: board.rightEnd },
+    ];
+    // Add branch ends
+    for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
+        const hub = board.hubDoubles[hubIdx];
+        if (hub.isCrossed) {
+            // Can extend existing branches
+            for (let armIdx = 0; armIdx < hub.branches.length; armIdx++) {
+                ends.push({
+                    position: `branch-${hubIdx}-${armIdx}`,
+                    matchValue: hub.branches[armIdx].openEnd,
+                });
+            }
+            // Can create a new branch if < 2 exist
+            if (hub.branches.length < 2) {
+                ends.push({
+                    position: `branch-${hubIdx}-${hub.branches.length}`,
+                    matchValue: hub.hubValue,
+                });
+            }
+        }
+    }
+    return ends;
+}
+/**
+ * Check if a tile can be placed at a given position.
+ */
+function canPlaceTileAt(board, tile, position) {
+    const ends = getOpenEnds(board);
+    const end = ends.find(e => e.position === position);
+    if (!end)
+        return false;
+    if (end.matchValue === -1)
+        return true;
+    return (0, types_1.tileMatchesEnd)(tile, end.matchValue);
+}
+//# sourceMappingURL=scoring.js.map

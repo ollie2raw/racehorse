@@ -1,0 +1,216 @@
+import { GameState, Config, PlacementPosition, Move } from "./game/types";
+import {
+  createInitialState,
+  startNewHand,
+  drawUntilPlayableOrEmpty,
+  applyMove,
+  getLegalMoves,
+  getOpenEnds,
+  canDraw,
+} from "./game/engine";
+
+export type RoomCode = string;
+
+export type Room = {
+  code: RoomCode;
+  players: string[];              // socket ids in seat order
+  state: GameState | null;        // null until game started
+  config: Partial<Config>;
+};
+
+const rooms = new Map<RoomCode, Room>();
+
+function makeCode(len = 5): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < len; i++) {
+    s += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return s;
+}
+
+export function createRoom(
+  hostSocketId: string,
+  config: Partial<Config> = {}
+): Room {
+  let code = makeCode();
+  while (rooms.has(code)) code = makeCode();
+
+  const room: Room = {
+    code,
+    players: [hostSocketId],
+    state: null,
+    config,
+  };
+
+  rooms.set(code, room);
+  return room;
+}
+
+export function joinRoom(code: string, socketId: string): Room {
+  const room = rooms.get(code);
+  if (!room) throw new Error("Room not found.");
+
+  if (!room.players.includes(socketId)) {
+    if (room.players.length >= 2) {
+      throw new Error("Room is full (v1 supports 2 players).");
+    }
+    room.players.push(socketId);
+  }
+
+  return room;
+}
+
+export function getRoom(code: string): Room {
+  const room = rooms.get(code);
+  if (!room) throw new Error("Room not found.");
+  return room;
+}
+
+export function startGame(code: string): Room {
+  const room = getRoom(code);
+
+  if (room.players.length !== 2) {
+    throw new Error("Need exactly 2 players to start.");
+  }
+
+  // Defensive: If game is in a stale state (handOver but not gameOver), allow restart
+  // This handles edge cases where the room got stuck
+  if (room.state && !room.state.gameOver && !room.state.handOver) {
+    // Game is actively in progress - don't allow restart
+    throw new Error("Game is already in progress.");
+  }
+
+  // Create fresh game state (either first start or restart after stale state)
+  const state0 = createInitialState(room.players, room.config);
+  const state1 = startNewHand(state0);
+
+  // Auto-draw for starting player until they can open
+  const currentPlayerId = state1.playerIds[state1.currentPlayerIndex];
+  const { state: state2 } = drawUntilPlayableOrEmpty(
+    state1,
+    currentPlayerId
+  );
+
+  room.state = state2;
+  return room;
+}
+
+export function nextHand(code: string): Room {
+  const room = getRoom(code);
+  if (!room.state) throw new Error("Game not started.");
+
+  if (!room.state.handOver) {
+    throw new Error("Hand is not over yet.");
+  }
+
+  if (room.state.gameOver) {
+    throw new Error("Game is over. Cannot start a new hand.");
+  }
+
+  // Start new hand
+  const state1 = startNewHand(room.state);
+
+  // Auto-draw for starting player until they can open
+  const currentPlayerId = state1.playerIds[state1.currentPlayerIndex];
+  const { state: state2 } = drawUntilPlayableOrEmpty(state1, currentPlayerId);
+
+  room.state = state2;
+  return room;
+}
+
+export interface ActionPayload {
+  type: "DRAW" | "MOVE" | "PASS";
+  move?: {
+    tile: { high: number; low: number };
+    position?: PlacementPosition;
+    end?: "left" | "right";
+  };
+}
+
+export function act(
+  code: string,
+  socketId: string,
+  action: ActionPayload
+): Room {
+  const room = getRoom(code);
+  if (!room.state) throw new Error("Game not started.");
+
+  let state = room.state;
+
+  const { type } = action;
+
+  // ─────────────────────────────
+  // DRAW
+  // ─────────────────────────────
+  if (type === "DRAW") {
+    if (!canDraw(state, socketId)) {
+      const currentId = state.playerIds[state.currentPlayerIndex];
+      if (currentId !== socketId) {
+        throw new Error("It's not your turn.");
+      }
+      if (state.boneyard.length === 0) {
+        throw new Error("Boneyard is empty.");
+      }
+      throw new Error("You have a legal play — you may not draw.");
+    }
+
+    const res = drawUntilPlayableOrEmpty(state, socketId);
+    room.state = res.state;
+    return room;
+  }
+
+  // ─────────────────────────────
+  // MOVE
+  // ─────────────────────────────
+  if (type === "MOVE") {
+    if (!action.move) throw new Error("Move payload missing.");
+
+    const { tile } = action.move;
+    const position: PlacementPosition = action.move.position ?? action.move.end ?? "left";
+
+    const move: Move = {
+      type: "play",
+      tile: { high: tile.high, low: tile.low },
+      position,
+    };
+
+    room.state = applyMove(state, socketId, move);
+    return room;
+  }
+
+  // ─────────────────────────────
+  // PASS
+  // ─────────────────────────────
+  if (type === "PASS") {
+    room.state = applyMove(state, socketId, { type: "pass" });
+    return room;
+  }
+
+  throw new Error("Unknown action type.");
+}
+
+// Get legal moves for a player
+export function getRoomLegalMoves(code: string, playerId: string) {
+  const room = getRoom(code);
+  if (!room.state) return [];
+
+  const currentId = room.state.playerIds[room.state.currentPlayerIndex];
+  if (currentId !== playerId) return [];
+
+  return getLegalMoves(room.state, playerId);
+}
+
+// Check if player can draw
+export function getRoomCanDraw(code: string, playerId: string): boolean {
+  const room = getRoom(code);
+  if (!room.state) return false;
+  return canDraw(room.state, playerId);
+}
+
+// Expose getOpenEnds for client to know valid placements
+export function getRoomOpenEnds(code: string) {
+  const room = getRoom(code);
+  if (!room.state) return [];
+  return getOpenEnds(room.state.board);
+}

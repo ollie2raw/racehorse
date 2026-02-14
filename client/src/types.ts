@@ -1,0 +1,70 @@
+// client/src/types.ts
+// Shared types for the client
+
+export interface Tile {
+  high: number;
+  low: number;
+}
+
+export type TileOrientation =
+  | "horizontal-normal"
+  | "horizontal-flipped"
+  | "vertical-normal"
+  | "vertical-flipped";
+
+export type PlacementPosition = "left" | "right" | `branch-${number}-${number}`;
+
+export interface PlacedTile {
+  tile: Tile;
+  orientation: TileOrientation;
+}
+
+export interface BranchArm {
+  tiles: PlacedTile[];
+  openEnd: number;
+  openEndIsDouble: boolean;
+}
+
+export interface HubDouble {
+  tileIndex: number;
+  hubValue: number;
+  isCrossed: boolean;
+  branches: BranchArm[];
+}
+
+export interface BoardState {
+  mainLine: PlacedTile[];
+  leftEnd: number;
+  rightEnd: number;
+  leftEndIsDouble: boolean;
+  rightEndIsDouble: boolean;
+  hubDoubles: HubDouble[];
+}
+
+export interface GameState {
+  config: { scoringMultiple: number; winningScore: number };
+  playerIds: string[];
+  players: Record<string, { id: string; hand: Tile[]; score: number }>;
+  board: BoardState | null;
+  boneyard: Tile[];
+  deadTiles: Tile[];
+  currentPlayerIndex: number;
+  handNumber: number;
+  handOpen: boolean;
+  handOver: boolean;
+  gameOver: boolean;
+  winnerId: string | null;
+  consecutivePasses: number;
+}
+
+export interface Move {
+  type: "play" | "pass";
+  tile?: Tile;
+  position?: PlacementPosition;
+}
+
+export interface StateUpdate {
+  state: GameState;
+  legalMoves: Move[];
+  canDraw: boolean;
+}
