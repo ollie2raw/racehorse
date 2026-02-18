@@ -26,8 +26,12 @@ export interface BranchArm {
 }
 
 export interface HubDouble {
+  hubId?: number;
   tileIndex: number;
+  mainlineIndex?: number;
   hubValue: number;
+  leftSideFilled?: boolean;
+  rightSideFilled?: boolean;
   isCrossed: boolean;
   branches: BranchArm[];
 }

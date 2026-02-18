@@ -252,16 +252,20 @@ describe("Crossed Doubles and Branching", () => {
     expect(board.hubDoubles[0].branches.length).toBe(0);
   });
 
-  it("playing through a double crosses it", () => {
+  it("playing through both sides crosses a double", () => {
     // Start with [3|3]
     let board = simulatePlacement(null, t(3, 3), "left");
     expect(board.hubDoubles[0].isCrossed).toBe(false);
 
-    // Play [3|5] on right, crossing the double
+    // Play [3|5] on right (fills right side only)
     board = simulatePlacement(board, t(3, 5), "right");
+    expect(board.hubDoubles[0].isCrossed).toBe(false);
 
-    expect(board.mainLine.length).toBe(2);
-    expect(board.leftEnd).toBe(3); // [3|3] still at left
+    // Fill left side too
+    board = simulatePlacement(board, t(2, 3), "left");
+
+    expect(board.mainLine.length).toBe(3);
+    expect(board.leftEnd).toBe(2);
     expect(board.rightEnd).toBe(5);
     expect(board.hubDoubles[0].isCrossed).toBe(true);
   });
@@ -269,8 +273,9 @@ describe("Crossed Doubles and Branching", () => {
   it("crossed double enables branching", () => {
     // Start: [3|3]
     let board = simulatePlacement(null, t(3, 3), "left");
-    // Cross it: [3|3][3|5]
+    // Fill both sides around [3|3]
     board = simulatePlacement(board, t(3, 5), "right");
+    board = simulatePlacement(board, t(2, 3), "left");
 
     const openEnds = getOpenEnds(board);
 
@@ -282,9 +287,10 @@ describe("Crossed Doubles and Branching", () => {
   });
 
   it("can create a branch on a crossed double", () => {
-    // [3|3][3|5], crossed
+    // [2|3][3|3][3|5], crossed
     let board = simulatePlacement(null, t(3, 3), "left");
     board = simulatePlacement(board, t(3, 5), "right");
+    board = simulatePlacement(board, t(2, 3), "left");
 
     // Create branch with [3|1]
     board = simulatePlacement(board, t(1, 3), "branch-0-0");
@@ -295,24 +301,26 @@ describe("Crossed Doubles and Branching", () => {
   });
 
   it("branch end is included in open ends sum", () => {
-    // [3|3][3|5], main ends: 3 (double), 5
+    // [2|3][3|3][3|5], crossed
     let board = simulatePlacement(null, t(3, 3), "left");
     board = simulatePlacement(board, t(3, 5), "right");
+    board = simulatePlacement(board, t(2, 3), "left");
 
-    // Before branch: sum = 6 (double-3) + 5 = 11
-    expect(computeOpenEndsSum(board)).toBe(11);
+    // Before branch: sum = 2 + 5 = 7
+    expect(computeOpenEndsSum(board)).toBe(7);
 
     // Add branch [3|2], branch end = 2
     board = simulatePlacement(board, t(2, 3), "branch-0-0");
 
-    // After branch: sum = 6 + 5 + 2 = 13
-    expect(computeOpenEndsSum(board)).toBe(13);
+    // After branch: sum = 2 + 5 + 2 = 9
+    expect(computeOpenEndsSum(board)).toBe(9);
   });
 
   it("each hub can have at most 2 branches", () => {
-    // [3|3][3|5]
+    // [2|3][3|3][3|5]
     let board = simulatePlacement(null, t(3, 3), "left");
     board = simulatePlacement(board, t(3, 5), "right");
+    board = simulatePlacement(board, t(2, 3), "left");
 
     // First branch
     board = simulatePlacement(board, t(3, 1), "branch-0-0");
@@ -331,9 +339,10 @@ describe("Crossed Doubles and Branching", () => {
   });
 
   it("can extend an existing branch", () => {
-    // [3|3][3|5] with branch [3|1]
+    // [2|3][3|3][3|5] with branch [3|1]
     let board = simulatePlacement(null, t(3, 3), "left");
     board = simulatePlacement(board, t(3, 5), "right");
+    board = simulatePlacement(board, t(2, 3), "left");
     board = simulatePlacement(board, t(3, 1), "branch-0-0");
 
     // Branch open end is 1, extend with [1|4]
@@ -342,22 +351,25 @@ describe("Crossed Doubles and Branching", () => {
     expect(board.hubDoubles[0].branches[0].tiles.length).toBe(2);
     expect(board.hubDoubles[0].branches[0].openEnd).toBe(4);
 
-    // Sum: left=6 (double-3), right=5, branch=4 → 15
-    expect(computeOpenEndsSum(board)).toBe(15);
-    expect(computePlayScore(board)).toBe(3); // 15/5 = 3 points
+    // Sum: left=2, right=5, branch=4 → 11
+    expect(computeOpenEndsSum(board)).toBe(11);
+    expect(computePlayScore(board)).toBe(0);
   });
 
   it("multiple crossed doubles can each have branches", () => {
-    // Build: [5|5][5|3][3|3][3|1]
-    // Two doubles: [5|5] and [3|3], both get crossed
+    // Build with both doubles crossed by filling both sides around each
 
     let board = simulatePlacement(null, t(5, 5), "left");
-    // Play [5|3] on right, crosses [5|5]
+    // Fill right of [5|5]
     board = simulatePlacement(board, t(3, 5), "right");
-    // Play [3|3] on right
+    // Fill left of [5|5]
+    board = simulatePlacement(board, t(2, 5), "left");
+    // Add [3|3] on right
     board = simulatePlacement(board, t(3, 3), "right");
-    // Play [3|1] on right, crosses [3|3]
+    // Fill right of [3|3]
     board = simulatePlacement(board, t(1, 3), "right");
+    // Fill left of [3|3]
+    board = simulatePlacement(board, t(4, 3), "left");
 
     expect(board.hubDoubles.length).toBe(2);
     expect(board.hubDoubles[0].isCrossed).toBe(true); // [5|5]
@@ -368,11 +380,11 @@ describe("Crossed Doubles and Branching", () => {
     // Create branch on second hub [3|3]
     board = simulatePlacement(board, t(3, 4), "branch-1-0");
 
-    // Main: left=10 (double-5), right=1
+    // Main ends: left=4, right=1
     // Branch on hub 0: 2
     // Branch on hub 1: 4
-    // Total: 10 + 1 + 2 + 4 = 17
-    expect(computeOpenEndsSum(board)).toBe(17);
+    // Total: 4 + 1 + 2 + 4 = 11
+    expect(computeOpenEndsSum(board)).toBe(11);
   });
 
   it("uncrossed double at end does not allow branching", () => {
@@ -439,7 +451,7 @@ describe("Crossed Doubles and Branching", () => {
   });
 
   it("double becomes branchable only AFTER being crossed", () => {
-    // Setup: [3|3] alone (uncrossed), then cross it, then verify branching
+    // Setup: [3|3] alone (uncrossed), fill both sides, then verify branching
     const state = setupState({
       board: {
         mainLine: [pt(3, 3)],
@@ -448,15 +460,19 @@ describe("Crossed Doubles and Branching", () => {
         leftEndIsDouble: true,
         rightEndIsDouble: true,
         hubDoubles: [{
+          hubId: 0,
           tileIndex: 0,
+          mainlineIndex: 0,
           hubValue: 3,
+          leftSideFilled: false,
+          rightSideFilled: false,
           isCrossed: false, // Not crossed yet
           branches: [],
         }],
       },
       currentPlayerIndex: 0,
       players: {
-        A: { id: "A", hand: [t(3, 5), t(3, 2)], score: 0 },
+        A: { id: "A", hand: [t(3, 5), t(2, 3)], score: 0 },
         B: { id: "B", hand: [t(0, 1)], score: 0 },
       },
       boneyard: [],
@@ -470,24 +486,27 @@ describe("Crossed Doubles and Branching", () => {
     );
     expect(branchMovesBeforeCross.length).toBe(0);
 
-    // Cross the double by playing through it
-    const afterCross = applyMove(state, "A", {
+    const afterOneSide = applyMove(state, "A", {
       type: "play",
       tile: t(3, 5),
       position: "right",
     });
+    expect(afterOneSide.board?.hubDoubles[0].isCrossed).toBe(false);
 
-    expect(afterCross.board?.hubDoubles[0].isCrossed).toBe(true);
+    const afterCross = {
+      ...afterOneSide,
+      currentPlayerIndex: 0,
+    };
+    const afterTwoSides = applyMove(afterCross, "A", {
+      type: "play",
+      tile: t(2, 3),
+      position: "left",
+    });
 
-    // A still has turn (scored: 3+5=8? no, 6+5=11, no score... wait
-    // Actually left is double-3 (6), right is 5, sum=11, no score
-    // But played a tile through a double which might not grant extra turn
-    // Let's check who's turn it is
-    // Normal play, no score, no double → turn passes to B
-    expect(afterCross.currentPlayerIndex).toBe(1);
+    expect(afterTwoSides.board?.hubDoubles[0].isCrossed).toBe(true);
 
     // Now it's B's turn, but let's check the open ends to confirm branching is available
-    const openEndsAfterCross = getOpenEnds(afterCross.board);
+    const openEndsAfterCross = getOpenEnds(afterTwoSides.board);
     expect(openEndsAfterCross.some(e => e.position === "branch-0-0")).toBe(true);
   });
 
@@ -536,16 +555,17 @@ describe("Crossed Doubles and Branching", () => {
   });
 
   it("double on branch end counts as 2x value", () => {
-    // [3|3][3|5], crossed, with branch ending in [3|6][6|6]
+    // [2|3][3|3][3|5], crossed, with branch ending in [3|6][6|6]
     let board = simulatePlacement(null, t(3, 3), "left");
     board = simulatePlacement(board, t(3, 5), "right");
+    board = simulatePlacement(board, t(2, 3), "left");
     board = simulatePlacement(board, t(3, 6), "branch-0-0");
     board = simulatePlacement(board, t(6, 6), "branch-0-0");
 
-    // Main: left=6 (double-3), right=5
+    // Main: left=2, right=5
     // Branch: [6|6] = 12
-    // Total: 6 + 5 + 12 = 23
-    expect(computeOpenEndsSum(board)).toBe(23);
+    // Total: 2 + 5 + 12 = 19
+    expect(computeOpenEndsSum(board)).toBe(19);
   });
 
 });
@@ -565,8 +585,12 @@ describe("Cannot go out with branch scoring", () => {
         leftEndIsDouble: true,
         rightEndIsDouble: false,
         hubDoubles: [{
+          hubId: 0,
           tileIndex: 0,
+          mainlineIndex: 0,
           hubValue: 3,
+          leftSideFilled: true,
+          rightSideFilled: true,
           isCrossed: true,
           branches: [],
         }],
@@ -869,6 +893,130 @@ describe("Game ends at 60 points", () => {
     expect(next.winnerId).toBeNull();
   });
 
+  it("when both players are >= target, higher score wins", () => {
+    const state = setupState({
+      board: {
+        mainLine: [pt(1, 4)],
+        leftEnd: 1,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(1, 6), t(0, 0)], score: 61 }, // reaches 63
+        B: { id: "B", hand: [t(0, 1)], score: 65 },          // already higher
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const next = applyMove(state, "A", {
+      type: "play",
+      tile: t(1, 6),
+      position: "left",
+    });
+
+    expect(next.gameOver).toBe(true);
+    expect(next.winnerId).toBe("B");
+  });
+
+});
+
+describe("Deterministic legality and pending priority", () => {
+  it("returns play moves in deterministic sorted order", () => {
+    const state = setupState({
+      board: {
+        mainLine: [pt(3, 5), pt(5, 5), pt(5, 2)],
+        leftEnd: 3,
+        rightEnd: 2,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [{
+          hubId: 7,
+          tileIndex: 1,
+          mainlineIndex: 1,
+          hubValue: 5,
+          leftSideFilled: true,
+          rightSideFilled: true,
+          isCrossed: true,
+          branches: [],
+        }],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(2, 5), t(1, 3)], score: 0 },
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const plays = getLegalMoves(state, "A").filter(m => m.type === "play");
+    const rendered = plays.map(m => `${m.tile.low}|${m.tile.high}@${m.position}`);
+    expect(rendered).toEqual([
+      "1|3@left",
+      "2|5@right",
+      "2|5@branch-7-0",
+      "2|5@branch-7-1",
+    ]);
+  });
+
+  it("pending only restricts moves when satisfying plays exist now", () => {
+    const state = setupState({
+      board: {
+        mainLine: [pt(2, 6), pt(6, 6), pt(6, 3), pt(3, 5), pt(5, 5)],
+        leftEnd: 2,
+        rightEnd: 5,
+        leftEndIsDouble: false,
+        rightEndIsDouble: true,
+        hubDoubles: [
+          {
+            hubId: 3,
+            tileIndex: 1,
+            mainlineIndex: 1,
+            hubValue: 6,
+            leftSideFilled: true,
+            rightSideFilled: true,
+            isCrossed: true,
+            branches: [{ tiles: [pt(6, 1)], openEnd: 1, openEndIsDouble: false }],
+          },
+          {
+            hubId: 9,
+            tileIndex: 4,
+            mainlineIndex: 4,
+            hubValue: 5,
+            leftSideFilled: true,
+            rightSideFilled: false,
+            isCrossed: false,
+            branches: [],
+          },
+        ],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(1, 4)], score: 0 }, // no 5, cannot satisfy pending on right now
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const movesUnsat = getLegalMoves(state, "A");
+    expect(movesUnsat.some(m => m.type === "play" && m.position === "branch-3-0")).toBe(true);
+
+    const satState = {
+      ...state,
+      players: {
+        ...state.players,
+        A: { id: "A", hand: [t(1, 4), t(4, 5)], score: 0 },
+      },
+    };
+    const movesSat = getLegalMoves(satState, "A").filter(m => m.type === "play");
+    expect(movesSat.length).toBeGreaterThan(0);
+    expect(movesSat.every(m => m.position === "right")).toBe(true);
+  });
 });
 
 describe("canDraw function", () => {

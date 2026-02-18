@@ -467,6 +467,17 @@ html, body {
   animation: pulse 2s infinite;
 }
 
+.debug-pill {
+  align-self: center;
+  font-size: 0.75rem;
+  color: #d1fae5;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 999px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.8; }

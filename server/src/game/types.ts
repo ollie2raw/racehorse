@@ -117,9 +117,13 @@ export interface BranchArm {
 }
 
 export interface HubDouble {
-  readonly tileIndex: number;           // index in mainLine where this double sits
+  readonly hubId?: number;              // stable hub id
+  readonly tileIndex: number;           // legacy index in mainLine where this double sits
+  readonly mainlineIndex?: number;      // preferred index in mainLine where this double sits
   readonly hubValue: number;            // the pip value of the double (e.g., 3 for [3|3])
-  readonly isCrossed: boolean;          // true once a tile has been played "through" this double
+  readonly leftSideFilled?: boolean;    // tile exists on the left side of this hub
+  readonly rightSideFilled?: boolean;   // tile exists on the right side of this hub
+  readonly isCrossed: boolean;          // true once both sides are filled
   readonly branches: readonly BranchArm[]; // 0-2 branch arms
 }
 

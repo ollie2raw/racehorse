@@ -85,8 +85,10 @@ function computeLayout(
 
   // Build hub lookup
   const hubsByIndex = new Map<number, typeof hubDoubles[number]>();
-  for (const hub of hubDoubles) {
-    hubsByIndex.set(hub.tileIndex, hub);
+  for (let idx = 0; idx < hubDoubles.length; idx++) {
+    const hub = hubDoubles[idx];
+    const mainIndex = hub.mainlineIndex ?? hub.tileIndex;
+    hubsByIndex.set(mainIndex, hub);
   }
 
   // First pass: calculate total width of main line
@@ -135,7 +137,7 @@ function computeLayout(
     if (hub && hub.isCrossed) {
       const branchResult = layoutBranches(
         hub,
-        hubDoubles.indexOf(hub),
+        hub.hubId ?? hubDoubles.indexOf(hub),
         centerX,
         mainY,
         validPositions
@@ -192,7 +194,7 @@ function computeLayout(
 
 function layoutBranches(
   hub: BoardState["hubDoubles"][number],
-  hubIdx: number,
+  hubRef: number,
   hubX: number,
   hubY: number,
   validPositions: PlacementPosition[]
@@ -235,7 +237,7 @@ function layoutBranches(
           y: centerY,
           rotation,
           flipped,
-          key: `branch-${hubIdx}-${armIdx}-${i}`,
+          key: `branch-${hubRef}-${armIdx}-${i}`,
         });
 
         currentY = centerY + direction * (tileHeight / 2 + TILE_GAP);
@@ -244,7 +246,7 @@ function layoutBranches(
       }
 
       // Placement zone at end of branch
-      const branchPos: PlacementPosition = `branch-${hubIdx}-${armIdx}`;
+      const branchPos: PlacementPosition = `branch-${hubRef}-${armIdx}`;
       if (validPositions.includes(branchPos)) {
         const zoneY = currentY + direction * TILE_UNIT;
         zones.push({
@@ -253,14 +255,14 @@ function layoutBranches(
           y: zoneY,
           width: TILE_UNIT,
           height: TILE_UNIT * 2,
-          key: `zone-branch-${hubIdx}-${armIdx}`,
+          key: `zone-branch-${hubRef}-${armIdx}`,
         });
         minY = Math.min(minY, zoneY - TILE_UNIT);
         maxY = Math.max(maxY, zoneY + TILE_UNIT);
       }
     } else {
       // No branch yet - show placement zone if valid
-      const branchPos: PlacementPosition = `branch-${hubIdx}-${armIdx}`;
+      const branchPos: PlacementPosition = `branch-${hubRef}-${armIdx}`;
       if (validPositions.includes(branchPos)) {
         const zoneY = currentY + direction * TILE_UNIT;
         zones.push({
@@ -269,7 +271,7 @@ function layoutBranches(
           y: zoneY,
           width: TILE_UNIT,
           height: TILE_UNIT * 2,
-          key: `zone-branch-${hubIdx}-${armIdx}`,
+          key: `zone-branch-${hubRef}-${armIdx}`,
         });
         minY = Math.min(minY, zoneY - TILE_UNIT);
         maxY = Math.max(maxY, zoneY + TILE_UNIT);

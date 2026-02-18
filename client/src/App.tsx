@@ -17,6 +17,28 @@ function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
 
+function pendingSummary(board: BoardState | null): string {
+  if (!board || board.mainLine.length === 0) return "none";
+  const checks: Array<{ side: "L" | "R"; index: number }> = [
+    { side: "L", index: 0 },
+    { side: "R", index: board.mainLine.length - 1 },
+  ];
+  for (const { side, index } of checks) {
+    const endpointTile = board.mainLine[index]?.tile;
+    if (!endpointTile || endpointTile.high !== endpointTile.low) continue;
+    const hub = board.hubDoubles.find(h =>
+      (h.mainlineIndex ?? h.tileIndex) === index &&
+      h.hubValue === endpointTile.high &&
+      !h.isCrossed
+    );
+    if (!hub) continue;
+    const left = hub.leftSideFilled ? "1" : "0";
+    const right = hub.rightSideFilled ? "1" : "0";
+    return `${side}:${hub.hubValue} (${left}/${right})`;
+  }
+  return "none";
+}
+
 // Compute open ends sum (doubles count as 2x)
 function computeOpenEndsSum(board: BoardState): number {
   if (board.mainLine.length === 1) {
@@ -365,6 +387,13 @@ export default function App() {
   const isMyTurn = currentTurnId === you;
   const myHand = state?.players[you]?.hand ?? [];
   const canPass = legalMoves.some(m => m.type === "pass");
+  const playPositions = [...new Set(
+    legalMoves
+      .filter((m): m is Move & { type: "play"; position: PlacementPosition } => m.type === "play" && Boolean(m.position))
+      .map(m => m.position)
+  )];
+  const positionsSample = playPositions.slice(0, 4).join(", ");
+  const pendingText = pendingSummary(state?.board ?? null);
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -502,6 +531,10 @@ export default function App() {
               : isMyTurn
               ? "Your Turn"
               : "Opponent's Turn"}
+          </div>
+
+          <div className="debug-pill">
+            legal: {legalMoves.length} | pos: {positionsSample || "-"} | pending: {pendingText}
           </div>
 
           {/* Board */}

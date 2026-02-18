@@ -67,12 +67,12 @@ function assertCurrentPlayer(state: GameState, playerId: string): void {
  * Check if any player has reached the winning score.
  */
 function checkForGameWinner(state: GameState): string | null {
-  for (const id of state.playerIds) {
-    if (state.players[id].score >= state.config.winningScore) {
-      return id;
-    }
-  }
-  return null;
+  const target = state.config.winningScore;
+  const qualified = state.playerIds.filter(id => state.players[id].score >= target);
+  if (qualified.length === 0) return null;
+  return qualified.reduce((best, id) =>
+    state.players[id].score > state.players[best].score ? id : best
+  );
 }
 
 /**
@@ -122,6 +122,71 @@ function validateConfig(playerCount: number, cfg: Config): void {
       `set only has ${total} tiles.`
     );
   }
+}
+
+function canonicalTileId(tile: Tile): string {
+  const low = Math.min(tile.low, tile.high);
+  const high = Math.max(tile.low, tile.high);
+  return `${low}|${high}`;
+}
+
+function positionSortKey(position: PlacementPosition): [number, number, number] {
+  if (position === 'left') return [0, 0, 0];
+  if (position === 'right') return [1, 0, 0];
+  const parsed = parseBranchPosition(position);
+  if (!parsed) return [9, 0, 0];
+  return [2, parsed.hubIndex, parsed.armIndex];
+}
+
+function sortLegalMoves(moves: Move[]): Move[] {
+  const plays = moves.filter((m): m is PlayMove => m.type === 'play');
+  const passes = moves.filter(m => m.type === 'pass');
+  plays.sort((a, b) => {
+    const aId = canonicalTileId(a.tile);
+    const bId = canonicalTileId(b.tile);
+    if (aId < bId) return -1;
+    if (aId > bId) return 1;
+    const aPos = positionSortKey(a.position);
+    const bPos = positionSortKey(b.position);
+    if (aPos[0] !== bPos[0]) return aPos[0] - bPos[0];
+    if (aPos[1] !== bPos[1]) return aPos[1] - bPos[1];
+    return aPos[2] - bPos[2];
+  });
+  return [...plays, ...passes];
+}
+
+function getPendingRequirement(state: GameState): { positions: Set<PlacementPosition>; hubValue: number } | null {
+  const board = state.board;
+  if (!board || board.mainLine.length === 0) return null;
+
+  const candidates: { side: 'left' | 'right'; positions: Set<PlacementPosition>; hubValue: number }[] = [];
+  const endpointChecks: Array<{ side: 'left' | 'right'; index: number }> = [
+    { side: 'left', index: 0 },
+    { side: 'right', index: board.mainLine.length - 1 },
+  ];
+
+  for (const { side, index } of endpointChecks) {
+    const endpointTile = board.mainLine[index]?.tile;
+    if (!endpointTile || !isDouble(endpointTile)) continue;
+    for (const hub of board.hubDoubles) {
+      const hubIndex = hub.mainlineIndex ?? hub.tileIndex;
+      if (hubIndex !== index) continue;
+      if (hub.hubValue !== endpointTile.high) continue;
+      if (hub.isCrossed) continue;
+      const leftFilled = hub.leftSideFilled ?? false;
+      const rightFilled = hub.rightSideFilled ?? false;
+      const positions = new Set<PlacementPosition>();
+      if (!leftFilled && index === 0) positions.add('left');
+      if (!rightFilled && index === board.mainLine.length - 1) positions.add('right');
+      if (positions.size > 0) {
+        candidates.push({ side, positions, hubValue: hub.hubValue });
+      }
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  const selected = candidates.find(c => c.side === 'right') ?? candidates[0];
+  return { positions: selected.positions, hubValue: selected.hubValue };
 }
 
 // ─── Blocked hand resolution ──────────────────────────────
@@ -330,6 +395,19 @@ export function getLegalMoves(state: GameState, playerId: string): Move[] {
         }
       }
     }
+
+    // Pending priority semantics:
+    // Build full legal list first, then only constrain if pending can be satisfied now.
+    const pending = getPendingRequirement(state);
+    if (pending) {
+      const pendingSatisfying = moves.filter(
+        (m): m is PlayMove => m.type === 'play' && pending.positions.has(m.position)
+      );
+      if (pendingSatisfying.length > 0) {
+        moves.length = 0;
+        moves.push(...pendingSatisfying);
+      }
+    }
   }
 
   // Pass is only legal when no play moves exist AND drawable boneyard is empty
@@ -337,7 +415,7 @@ export function getLegalMoves(state: GameState, playerId: string): Move[] {
     moves.push({ type: 'pass' });
   }
 
-  return moves;
+  return sortLegalMoves(moves);
 }
 
 /**

@@ -12,6 +12,15 @@ import {
   tileMatchesEnd,
 } from './types';
 
+function hubIdAt(hub: BoardState['hubDoubles'][number], fallbackIdx: number): number {
+  return hub.hubId ?? fallbackIdx;
+}
+
+function nextHubId(board: BoardState): number {
+  if (board.hubDoubles.length === 0) return 0;
+  return Math.max(...board.hubDoubles.map((h, idx) => hubIdAt(h, idx))) + 1;
+}
+
 // ─── Orientation Helpers ─────────────────────────────────────
 
 /**
@@ -95,6 +104,7 @@ export function computeOpenEndsSum(board: BoardState): number {
   // Branch ends - doubles count twice
   for (const hub of board.hubDoubles) {
     for (const branch of hub.branches) {
+      if (!branch) continue;
       if (branch.openEndIsDouble) {
         sum += branch.openEnd * 2;
       } else {
@@ -170,12 +180,17 @@ export function simulatePlacement(
 
     // If the first tile is a double, register it as a potential hub
     if (isDouble(tile)) {
+      const hubId = nextHubId(newBoard);
       return {
         ...newBoard,
         hubDoubles: [{
+          hubId,
           tileIndex: 0,
+          mainlineIndex: 0,
           hubValue: tile.high,
           isCrossed: false,
+          leftSideFilled: false,
+          rightSideFilled: false,
           branches: [],
         }],
       };
@@ -222,40 +237,55 @@ function placeTileOnMainLine(
   const newLeftEndIsDouble = end === 'left' ? tileIsDouble : board.leftEndIsDouble;
   const newRightEndIsDouble = end === 'right' ? tileIsDouble : board.rightEndIsDouble;
 
-  // Check if we're crossing a double at this end
+  // Update side-fill state for endpoint hubs before index shifts.
   let newHubDoubles = [...board.hubDoubles];
-
-  // Find hub double at the end we're playing on
-  const hubAtEnd = newHubDoubles.find(hub => {
-    const hubTile = board.mainLine[hub.tileIndex].tile;
-    if (end === 'left') {
-      return hub.tileIndex === 0 && tileMatchesEnd(hubTile, board.leftEnd);
-    } else {
-      return hub.tileIndex === board.mainLine.length - 1 && tileMatchesEnd(hubTile, board.rightEnd);
-    }
+  const endpointIndex = end === 'left' ? 0 : board.mainLine.length - 1;
+  newHubDoubles = newHubDoubles.map((hub, idx) => {
+    const hubIndex = hub.mainlineIndex ?? hub.tileIndex;
+    if (hubIndex !== endpointIndex) return hub;
+    const leftSideFilled = hub.leftSideFilled ?? false;
+    const rightSideFilled = hub.rightSideFilled ?? false;
+    const updatedLeft = end === 'left' ? true : leftSideFilled;
+    const updatedRight = end === 'right' ? true : rightSideFilled;
+    return {
+      ...hub,
+      leftSideFilled: updatedLeft,
+      rightSideFilled: updatedRight,
+      isCrossed: updatedLeft && updatedRight,
+    };
   });
-
-  if (hubAtEnd && !hubAtEnd.isCrossed) {
-    newHubDoubles = newHubDoubles.map(h =>
-      h === hubAtEnd ? { ...h, isCrossed: true } : h
-    );
-  }
 
   // Adjust hub indices if we prepended to the left
   if (end === 'left') {
+    newHubDoubles = newHubDoubles.map(h => {
+      const nextIndex = (h.mainlineIndex ?? h.tileIndex) + 1;
+      return {
+        ...h,
+        tileIndex: nextIndex,
+        mainlineIndex: nextIndex,
+      };
+    });
+  } else {
     newHubDoubles = newHubDoubles.map(h => ({
       ...h,
-      tileIndex: h.tileIndex + 1,
+      mainlineIndex: h.mainlineIndex ?? h.tileIndex,
     }));
   }
 
-  // If the new tile is a double, register it as a potential hub
+  // If the new tile is a double, register it as a pending hub (uncrossed)
   if (tileIsDouble) {
     const newHubIndex = end === 'left' ? 0 : newMainLine.length - 1;
+    const hubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
+    const leftSideFilled = end === 'right';
+    const rightSideFilled = end === 'left';
     newHubDoubles.push({
+      hubId,
       tileIndex: newHubIndex,
+      mainlineIndex: newHubIndex,
       hubValue: tile.high,
-      isCrossed: false,
+      isCrossed: leftSideFilled && rightSideFilled,
+      leftSideFilled,
+      rightSideFilled,
       branches: [],
     });
   }
@@ -276,16 +306,17 @@ function placeTileOnMainLine(
 function placeTileOnBranch(
   board: BoardState,
   tile: Tile,
-  hubIndex: number,
+  hubRef: number,
   armIndex: number
 ): BoardState {
-  const hub = board.hubDoubles[hubIndex];
+  const hubIndex = board.hubDoubles.findIndex((h, idx) => hubIdAt(h, idx) === hubRef);
+  const hub = hubIndex >= 0 ? board.hubDoubles[hubIndex] : null;
   if (!hub) {
-    throw new Error(`Invalid hub index: ${hubIndex}`);
+    throw new Error(`Invalid hub id: ${hubRef}`);
   }
 
   if (!hub.isCrossed) {
-    throw new Error(`Cannot branch from hub ${hubIndex} - it is not crossed yet`);
+    throw new Error(`Cannot branch from hub ${hubRef} - it is not crossed yet`);
   }
 
   if (armIndex >= 2) {
@@ -295,7 +326,7 @@ function placeTileOnBranch(
   const tileIsDouble = isDouble(tile);
   let newBranches: BranchArm[];
 
-  if (armIndex < hub.branches.length) {
+  if (hub.branches[armIndex]) {
     // Extend existing branch
     const existingBranch = hub.branches[armIndex];
     const branchMatchValue = existingBranch.openEnd;
@@ -315,8 +346,8 @@ function placeTileOnBranch(
           }
         : b
     );
-  } else if (armIndex === hub.branches.length) {
-    // Create new branch arm
+  } else if (armIndex === 0 || armIndex === 1) {
+    // Create requested arm directly (0 or 1) while preserving existing sibling arm if any.
     const matchValue = hub.hubValue;
     const newExposedEnd = exposedPip(tile, matchValue);
 
@@ -325,16 +356,14 @@ function placeTileOnBranch(
       orientation: getPlacementOrientation(tile, matchValue, 'branch'),
     };
 
-    newBranches = [
-      ...hub.branches,
-      {
-        tiles: [placedTile],
-        openEnd: newExposedEnd,
-        openEndIsDouble: tileIsDouble,
-      },
-    ];
+    newBranches = [...hub.branches];
+    newBranches[armIndex] = {
+      tiles: [placedTile],
+      openEnd: newExposedEnd,
+      openEndIsDouble: tileIsDouble,
+    };
   } else {
-    throw new Error(`Cannot create branch ${armIndex} - must create ${hub.branches.length} first`);
+    throw new Error(`Cannot create branch ${armIndex}`);
   }
 
   const newHubDoubles = board.hubDoubles.map((h, i) =>
@@ -347,8 +376,9 @@ function placeTileOnBranch(
   };
 }
 
-// ─── Legal Placement Positions ───────────────────────────────
-
+/**
+ * Get all open ends where a tile could potentially be placed.
+ */
 export interface OpenEnd {
   position: PlacementPosition;
   matchValue: number;
@@ -370,21 +400,15 @@ export function getOpenEnds(board: BoardState | null): OpenEnd[] {
   // Add branch ends
   for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
     const hub = board.hubDoubles[hubIdx];
+    const hubId = hubIdAt(hub, hubIdx);
 
     if (hub.isCrossed) {
-      // Can extend existing branches
-      for (let armIdx = 0; armIdx < hub.branches.length; armIdx++) {
+      // Expose both branch arms on crossed hubs.
+      for (let armIdx = 0; armIdx < 2; armIdx++) {
+        const branch = hub.branches[armIdx];
         ends.push({
-          position: `branch-${hubIdx}-${armIdx}`,
-          matchValue: hub.branches[armIdx].openEnd,
-        });
-      }
-
-      // Can create a new branch if < 2 exist
-      if (hub.branches.length < 2) {
-        ends.push({
-          position: `branch-${hubIdx}-${hub.branches.length}`,
-          matchValue: hub.hubValue,
+          position: `branch-${hubId}-${armIdx}`,
+          matchValue: branch ? branch.openEnd : hub.hubValue,
         });
       }
     }
