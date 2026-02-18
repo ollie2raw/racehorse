@@ -60,13 +60,38 @@ function computeOpenEndsSum(board: BoardState): number {
     sum += board.rightEnd;
   }
 
+  const loggedInvalidHubs = new Set<string>();
   for (const hub of board.hubDoubles) {
-    for (const branch of hub.branches) {
-      if (branch.openEndIsDouble) {
-        sum += branch.openEnd * 2;
-      } else {
-        sum += branch.openEnd;
+    const branches = Array.isArray(hub.branches) ? hub.branches : [];
+    const hubLogKey = typeof hub.hubId === "number" ? `hub-${hub.hubId}` : `tileIndex-${hub.tileIndex}`;
+
+    if (import.meta.env.DEV && !Array.isArray(hub.branches) && !loggedInvalidHubs.has(hubLogKey)) {
+      console.warn("[computeOpenEndsSum] Hub has invalid branches container", {
+        hubId: hub.hubId,
+        tileIndex: hub.tileIndex,
+        laneType: hub.laneType,
+        branchesType: typeof hub.branches,
+      });
+      loggedInvalidHubs.add(hubLogKey);
+    }
+
+    for (const branch of branches) {
+      if (!branch || typeof branch.openEnd !== "number") {
+        if (import.meta.env.DEV && !loggedInvalidHubs.has(hubLogKey)) {
+          console.warn("[computeOpenEndsSum] Ignoring invalid branch entry", {
+            hubId: hub.hubId,
+            tileIndex: hub.tileIndex,
+            laneType: hub.laneType,
+            branchesLength: branches.length,
+            branchValue: branch,
+          });
+          loggedInvalidHubs.add(hubLogKey);
+        }
+        continue;
       }
+
+      const isDouble = branch.openEndIsDouble === true;
+      sum += isDouble ? branch.openEnd * 2 : branch.openEnd;
     }
   }
 

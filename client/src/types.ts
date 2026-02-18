@@ -27,6 +27,9 @@ export interface BranchArm {
 
 export interface HubDouble {
   hubId?: number;
+  laneType?: "mainline" | "branch";
+  laneRef?: string;
+  branchDepth?: number;
   tileIndex: number;
   mainlineIndex?: number;
   hubValue: number;

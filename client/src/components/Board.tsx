@@ -49,6 +49,12 @@ function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
 
+interface HubLookup {
+  byMainIndex: Map<number, BoardState["hubDoubles"][number]>;
+  byLaneDepth: Map<string, number>;
+  byId: Map<number, BoardState["hubDoubles"][number]>;
+}
+
 // ─── Layout Engine ───────────────────────────────────────────
 
 function computeLayout(
@@ -84,12 +90,52 @@ function computeLayout(
   const { mainLine, hubDoubles } = board;
 
   // Build hub lookup
-  const hubsByIndex = new Map<number, typeof hubDoubles[number]>();
+  const hubLookup: HubLookup = {
+    byMainIndex: new Map<number, BoardState["hubDoubles"][number]>(),
+    byLaneDepth: new Map<string, number>(),
+    byId: new Map<number, BoardState["hubDoubles"][number]>(),
+  };
   for (let idx = 0; idx < hubDoubles.length; idx++) {
     const hub = hubDoubles[idx];
-    const mainIndex = hub.mainlineIndex ?? hub.tileIndex;
-    hubsByIndex.set(mainIndex, hub);
+    const stableHubId = hub.hubId;
+    if (typeof stableHubId !== "number") continue;
+    hubLookup.byId.set(stableHubId, hub);
+
+    if ((hub.laneType ?? "mainline") === "mainline") {
+      const mainIndex = hub.mainlineIndex ?? hub.tileIndex;
+      hubLookup.byMainIndex.set(mainIndex, hub);
+    }
+
+    if ((hub.laneType ?? "mainline") === "branch" && hub.laneRef && typeof hub.branchDepth === "number") {
+      hubLookup.byLaneDepth.set(`${hub.laneRef}|${hub.branchDepth}`, stableHubId);
+    }
   }
+
+  const hubCenters = new Map<number, { x: number; y: number }>();
+  const laidOutHubIds = new Set<number>();
+
+  const layoutHubBranches = (
+    hub: BoardState["hubDoubles"][number],
+    hubId: number,
+    hubX: number,
+    hubY: number
+  ) => {
+    if (laidOutHubIds.has(hubId)) {
+      return { tiles: [] as LayoutTile[], zones: [] as LayoutZone[], minY: hubY, maxY: hubY };
+    }
+    laidOutHubIds.add(hubId);
+    hubCenters.set(hubId, { x: hubX, y: hubY });
+    return layoutBranches(
+      hub,
+      hubId,
+      hubX,
+      hubY,
+      validPositions,
+      hubLookup,
+      hubCenters,
+      layoutHubBranches
+    );
+  };
 
   // First pass: calculate total width of main line
   let totalWidth = 0;
@@ -115,7 +161,7 @@ function computeLayout(
   for (let i = 0; i < mainLine.length; i++) {
     const pt = mainLine[i];
     const double = isDouble(pt.tile);
-    const hub = hubsByIndex.get(i);
+    const hub = hubLookup.byMainIndex.get(i);
 
     const tileWidth = double ? TILE_UNIT : TILE_UNIT * 2;
     const centerX = currentX + tileWidth / 2;
@@ -134,13 +180,12 @@ function computeLayout(
     });
 
     // Layout branches from this hub
-    if (hub && hub.isCrossed) {
-      const branchResult = layoutBranches(
+    if (hub && hub.isCrossed && typeof hub.hubId === "number") {
+      const branchResult = layoutHubBranches(
         hub,
-        hub.hubId ?? hubDoubles.indexOf(hub),
+        hub.hubId,
         centerX,
-        mainY,
-        validPositions
+        mainY
       );
       tiles.push(...branchResult.tiles);
       zones.push(...branchResult.zones);
@@ -194,17 +239,31 @@ function computeLayout(
 
 function layoutBranches(
   hub: BoardState["hubDoubles"][number],
-  hubRef: number,
+  hubId: number,
   hubX: number,
   hubY: number,
-  validPositions: PlacementPosition[]
+  validPositions: PlacementPosition[],
+  hubLookup: HubLookup,
+  hubCenters: Map<number, { x: number; y: number }>,
+  layoutHubBranches: (
+    hub: BoardState["hubDoubles"][number],
+    hubId: number,
+    hubX: number,
+    hubY: number
+  ) => { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number }
 ): { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number } {
   const tiles: LayoutTile[] = [];
   const zones: LayoutZone[] = [];
   let minY = hubY - TILE_UNIT / 2;
   let maxY = hubY + TILE_UNIT / 2;
+  let minX = hubX - TILE_UNIT / 2;
+  let maxX = hubX + TILE_UNIT / 2;
 
-  // Branch 0 goes up (negative Y), Branch 1 goes down (positive Y)
+  const laneType = hub.laneType ?? "mainline";
+  const verticalArms = laneType === "mainline";
+
+  // arm 0: up (mainline lane) / left (branch lane)
+  // arm 1: down (mainline lane) / right (branch lane)
   const directions = [-1, 1];
 
   for (let armIdx = 0; armIdx < 2; armIdx++) {
@@ -212,7 +271,8 @@ function layoutBranches(
     const branch = hub.branches[armIdx];
 
     // Start position for branch
-    let currentY = hubY + direction * (TILE_UNIT / 2 + DOUBLE_CROSS_GAP);
+    let currentX = hubX + (verticalArms ? 0 : direction * (TILE_UNIT + DOUBLE_CROSS_GAP));
+    let currentY = hubY + (verticalArms ? direction * (TILE_UNIT + DOUBLE_CROSS_GAP) : 0);
 
     if (branch && branch.tiles.length > 0) {
       // Layout branch tiles
@@ -220,61 +280,92 @@ function layoutBranches(
         const pt = branch.tiles[i];
         const double = isDouble(pt.tile);
 
-        // On branches: non-doubles are vertical (90 deg), doubles are horizontal (0 deg)
-        const tileHeight = double ? TILE_UNIT : TILE_UNIT * 2;
-        const rotation = double ? 0 : 90;
+        const tileSpan = double ? TILE_UNIT : TILE_UNIT * 2;
+        const rotation = verticalArms
+          ? (double ? 0 : 90)
+          : (double ? 90 : 0);
 
-        // Server orientation assumes DOWN direction (matching end on top after rotation)
-        // For UP branches (armIdx=0), we need to invert the flip
+        // Arm-0 needs inverted flip relative to arm-1 for both vertical and horizontal lanes.
         const serverFlipped = pt.orientation.endsWith("flipped");
         const flipped = armIdx === 0 ? !serverFlipped : serverFlipped;
 
-        const centerY = currentY + direction * (tileHeight / 2);
+        const centerX = verticalArms ? currentX : currentX + direction * (tileSpan / 2);
+        const centerY = verticalArms ? currentY + direction * (tileSpan / 2) : currentY;
 
         tiles.push({
           tile: pt.tile,
-          x: hubX,
+          x: centerX,
           y: centerY,
           rotation,
           flipped,
-          key: `branch-${hubRef}-${armIdx}-${i}`,
+          key: `branch-${hubId}-${armIdx}-${i}`,
         });
 
-        currentY = centerY + direction * (tileHeight / 2 + TILE_GAP);
-        minY = Math.min(minY, centerY - tileHeight / 2);
-        maxY = Math.max(maxY, centerY + tileHeight / 2);
+        if (double) {
+          const laneRef = `branch-${hubId}-${armIdx}`;
+          const childHubId = hubLookup.byLaneDepth.get(`${laneRef}|${i}`);
+          if (typeof childHubId === "number") {
+            hubCenters.set(childHubId, { x: centerX, y: centerY });
+            const childHub = hubLookup.byId.get(childHubId);
+            if (childHub && childHub.isCrossed) {
+              const nested = layoutHubBranches(childHub, childHubId, centerX, centerY);
+              tiles.push(...nested.tiles);
+              zones.push(...nested.zones);
+              minX = Math.min(minX, ...nested.tiles.map(t => t.x));
+              maxX = Math.max(maxX, ...nested.tiles.map(t => t.x));
+              minY = Math.min(minY, nested.minY);
+              maxY = Math.max(maxY, nested.maxY);
+            }
+          }
+        }
+
+        if (verticalArms) {
+          currentY = centerY + direction * (tileSpan / 2 + TILE_GAP);
+        } else {
+          currentX = centerX + direction * (tileSpan / 2 + TILE_GAP);
+        }
+        minX = Math.min(minX, centerX - (verticalArms ? TILE_UNIT / 2 : tileSpan / 2));
+        maxX = Math.max(maxX, centerX + (verticalArms ? TILE_UNIT / 2 : tileSpan / 2));
+        minY = Math.min(minY, centerY - (verticalArms ? tileSpan / 2 : TILE_UNIT / 2));
+        maxY = Math.max(maxY, centerY + (verticalArms ? tileSpan / 2 : TILE_UNIT / 2));
       }
 
       // Placement zone at end of branch
-      const branchPos: PlacementPosition = `branch-${hubRef}-${armIdx}`;
+      const branchPos: PlacementPosition = `branch-${hubId}-${armIdx}`;
       if (validPositions.includes(branchPos)) {
-        const zoneY = currentY + direction * TILE_UNIT;
+        const zoneX = verticalArms ? currentX : currentX + direction * TILE_UNIT;
+        const zoneY = verticalArms ? currentY + direction * TILE_UNIT : currentY;
         zones.push({
           position: branchPos,
-          x: hubX,
+          x: zoneX,
           y: zoneY,
-          width: TILE_UNIT,
-          height: TILE_UNIT * 2,
-          key: `zone-branch-${hubRef}-${armIdx}`,
+          width: verticalArms ? TILE_UNIT : TILE_UNIT * 2,
+          height: verticalArms ? TILE_UNIT * 2 : TILE_UNIT,
+          key: `zone-branch-${hubId}-${armIdx}`,
         });
-        minY = Math.min(minY, zoneY - TILE_UNIT);
-        maxY = Math.max(maxY, zoneY + TILE_UNIT);
+        minX = Math.min(minX, zoneX - (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
+        maxX = Math.max(maxX, zoneX + (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
+        minY = Math.min(minY, zoneY - (verticalArms ? TILE_UNIT : TILE_UNIT / 2));
+        maxY = Math.max(maxY, zoneY + (verticalArms ? TILE_UNIT : TILE_UNIT / 2));
       }
     } else {
       // No branch yet - show placement zone if valid
-      const branchPos: PlacementPosition = `branch-${hubRef}-${armIdx}`;
+      const branchPos: PlacementPosition = `branch-${hubId}-${armIdx}`;
       if (validPositions.includes(branchPos)) {
-        const zoneY = currentY + direction * TILE_UNIT;
+        const zoneX = verticalArms ? currentX : currentX + direction * TILE_UNIT;
+        const zoneY = verticalArms ? currentY + direction * TILE_UNIT : currentY;
         zones.push({
           position: branchPos,
-          x: hubX,
+          x: zoneX,
           y: zoneY,
-          width: TILE_UNIT,
-          height: TILE_UNIT * 2,
-          key: `zone-branch-${hubRef}-${armIdx}`,
+          width: verticalArms ? TILE_UNIT : TILE_UNIT * 2,
+          height: verticalArms ? TILE_UNIT * 2 : TILE_UNIT,
+          key: `zone-branch-${hubId}-${armIdx}`,
         });
-        minY = Math.min(minY, zoneY - TILE_UNIT);
-        maxY = Math.max(maxY, zoneY + TILE_UNIT);
+        minX = Math.min(minX, zoneX - (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
+        maxX = Math.max(maxX, zoneX + (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
+        minY = Math.min(minY, zoneY - (verticalArms ? TILE_UNIT : TILE_UNIT / 2));
+        maxY = Math.max(maxY, zoneY + (verticalArms ? TILE_UNIT : TILE_UNIT / 2));
       }
     }
   }
@@ -335,7 +426,7 @@ export function Board({
     // Calculate scale to fit
     const scaleX = (containerWidth - 40) / layoutWidth;
     const scaleY = (containerHeight - 40) / layoutHeight;
-    const fitScale = Math.min(1.2, Math.max(0.6, Math.min(scaleX, scaleY)));
+    const fitScale = Math.min(1.2, Math.max(0.3, Math.min(scaleX, scaleY)));
 
     setCamera({ x: 0, y: 0, scale: fitScale });
   }, [layout, unitToPixels]);
@@ -390,7 +481,7 @@ export function Board({
 
     const scaleX = (containerWidth - 40) / layoutWidth;
     const scaleY = (containerHeight - 40) / layoutHeight;
-    const fitScale = Math.min(1.2, Math.max(0.6, Math.min(scaleX, scaleY)));
+    const fitScale = Math.min(1.2, Math.max(0.3, Math.min(scaleX, scaleY)));
 
     setCamera({ x: 0, y: 0, scale: fitScale });
   }, [layout, unitToPixels]);

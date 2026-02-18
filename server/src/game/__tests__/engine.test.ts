@@ -59,7 +59,7 @@ describe("Racehorse Engine Core Rules", () => {
     expect(total).toBe(28);
   });
 
-  it("cannot go out on a double", () => {
+  it("last-tile double is legal and forces draw when boneyard has tiles", () => {
     const state = setupState({
       board: {
         mainLine: [pt(1, 2)],
@@ -74,17 +74,24 @@ describe("Racehorse Engine Core Rules", () => {
         A: { id: "A", hand: [t(2, 2)], score: 0 },
         B: { id: "B", hand: [t(0, 0)], score: 0 },
       },
-      boneyard: [],
+      boneyard: [t(3, 4)],
       deadTiles: [],
     });
 
     const moves = getLegalMoves(state, "A");
+    expect(moves.some(m => m.type === "play" && m.position === "right")).toBe(true);
 
-    expect(moves.some(m => m.type === "play")).toBe(false);
-    expect(moves.some(m => m.type === "pass")).toBe(true);
+    const next = applyMove(state, "A", {
+      type: "play",
+      tile: t(2, 2),
+      position: "right",
+    });
+    expect(next.handOver).toBe(false);
+    expect(next.players.A.hand.length).toBe(1);
+    expect(next.players.A.hand[0]).toEqual(t(3, 4));
   });
 
-  it("cannot go out on a scoring play", () => {
+  it("last-tile scoring play is legal and forces draw when boneyard has tiles", () => {
     // Board: [1|4], left=1, right=4
     // Playing [1|6] on left makes ends 6 + 4 = 10 → scores 2 points
     const state = setupState({
@@ -101,14 +108,48 @@ describe("Racehorse Engine Core Rules", () => {
         A: { id: "A", hand: [t(1, 6)], score: 0 },
         B: { id: "B", hand: [t(0, 0)], score: 0 },
       },
-      boneyard: [],
+      boneyard: [t(2, 2)],
       deadTiles: [],
     });
 
     const moves = getLegalMoves(state, "A");
+    expect(moves.some(m => m.type === "play" && m.position === "left")).toBe(true);
 
-    expect(moves.some(m => m.type === "play")).toBe(false);
-    expect(moves.some(m => m.type === "pass")).toBe(true);
+    const next = applyMove(state, "A", {
+      type: "play",
+      tile: t(1, 6),
+      position: "left",
+    });
+    expect(next.handOver).toBe(false);
+    expect(next.players.A.hand.length).toBe(1);
+    expect(next.players.A.hand[0]).toEqual(t(2, 2));
+  });
+
+  it("last-tile non-scoring non-double goes out normally", () => {
+    const state = setupState({
+      board: {
+        mainLine: [pt(2, 4)],
+        leftEnd: 2,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(2, 0)], score: 0 },
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [t(6, 6)],
+      deadTiles: [],
+    });
+
+    const next = applyMove(state, "A", {
+      type: "play",
+      tile: t(2, 0),
+      position: "left",
+    });
+    expect(next.handOver).toBe(true);
   });
 
   it("scoring play grants an extra turn", () => {
@@ -570,9 +611,9 @@ describe("Crossed Doubles and Branching", () => {
 
 });
 
-describe("Cannot go out with branch scoring", () => {
+describe("Last-tile branch scoring behavior", () => {
 
-  it("cannot go out if branch play scores", () => {
+  it("branch scoring last tile is legal and forces draw when boneyard has tiles", () => {
     // Setup: [3|3][3|5] with main ends 6 (double-3), 5
     // Playing [3|4] on branch makes sum 6 + 5 + 4 = 15 → scores
     // If this is last tile, cannot play it
@@ -600,26 +641,25 @@ describe("Cannot go out with branch scoring", () => {
         A: { id: "A", hand: [t(3, 4)], score: 0 }, // Only tile, would score on branch (6+5+4=15)
         B: { id: "B", hand: [t(0, 1)], score: 0 },
       },
-      boneyard: [],
+      boneyard: [t(2, 2)],
       deadTiles: [],
     });
 
     const moves = getLegalMoves(state, "A");
 
-    // Branch-0-0 would score (sum=15), can't go out
-    // Left (3 match) → new left would be 4, sum = 4 + 5 = 9, no score, legal
     const branchMove = moves.find(m =>
       m.type === "play" &&
       m.position === "branch-0-0"
     );
-    expect(branchMove).toBeUndefined(); // Can't go out on scoring branch
+    expect(branchMove).toBeDefined();
 
-    // But can play on left since it doesn't score
-    const leftMove = moves.find(m =>
-      m.type === "play" &&
-      m.position === "left"
-    );
-    expect(leftMove).toBeDefined();
+    const next = applyMove(state, "A", {
+      type: "play",
+      tile: t(3, 4),
+      position: "branch-0-0",
+    });
+    expect(next.handOver).toBe(false);
+    expect(next.players.A.hand.length).toBe(1);
   });
 
 });
@@ -832,7 +872,7 @@ describe("Blocked hand", () => {
 
 describe("Game ends at 60 points", () => {
 
-  it("game is over when a player reaches 60 points", () => {
+  it("reaching 60 mid-hand does not end the game immediately", () => {
     const state = setupState({
       board: {
         mainLine: [pt(1, 4)],
@@ -859,8 +899,9 @@ describe("Game ends at 60 points", () => {
     });
 
     expect(next.players.A.score).toBe(60);
-    expect(next.gameOver).toBe(true);
-    expect(next.winnerId).toBe("A");
+    expect(next.handOver).toBe(false);
+    expect(next.gameOver).toBe(false);
+    expect(next.winnerId).toBeNull();
   });
 
   it("game continues if no one has reached 60", () => {
@@ -893,7 +934,7 @@ describe("Game ends at 60 points", () => {
     expect(next.winnerId).toBeNull();
   });
 
-  it("when both players are >= target, higher score wins", () => {
+  it("after hand end, highest score wins even if another player reached 60 earlier", () => {
     const state = setupState({
       board: {
         mainLine: [pt(1, 4)],
@@ -905,8 +946,51 @@ describe("Game ends at 60 points", () => {
       },
       currentPlayerIndex: 0,
       players: {
-        A: { id: "A", hand: [t(1, 6), t(0, 0)], score: 61 }, // reaches 63
-        B: { id: "B", hand: [t(0, 1)], score: 65 },          // already higher
+        A: { id: "A", hand: [t(1, 6), t(0, 0)], score: 58 }, // reaches 60 mid-hand
+        B: { id: "B", hand: [t(4, 5)], score: 65 },          // ends hand higher
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const afterA = applyMove(state, "A", {
+      type: "play",
+      tile: t(1, 6),
+      position: "left",
+    });
+    expect(afterA.players.A.score).toBe(60);
+    expect(afterA.handOver).toBe(false);
+    expect(afterA.gameOver).toBe(false);
+
+    const bTurn = { ...afterA, currentPlayerIndex: 1 };
+    const afterB = applyMove(bTurn, "B", {
+      type: "play",
+      tile: t(4, 5),
+      position: "right",
+    });
+
+    expect(afterB.handOver).toBe(true);
+    expect(afterB.gameOver).toBe(true);
+    expect(afterB.winnerId).toBe("B");
+  });
+
+});
+
+describe("Go-out bonus scoring", () => {
+  function runGoOutBonusCase(opponentHand: Tile[], expectedBonus: number) {
+    const state = setupState({
+      board: {
+        mainLine: [pt(1, 4)],
+        leftEnd: 1,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(1, 2)], score: 0 }, // non-scoring, non-double go-out tile
+        B: { id: "B", hand: opponentHand, score: 0 },
       },
       boneyard: [],
       deadTiles: [],
@@ -914,17 +998,178 @@ describe("Game ends at 60 points", () => {
 
     const next = applyMove(state, "A", {
       type: "play",
-      tile: t(1, 6),
+      tile: t(1, 2),
       position: "left",
     });
 
-    expect(next.gameOver).toBe(true);
-    expect(next.winnerId).toBe("B");
-  });
+    expect(next.handOver).toBe(true);
+    expect(next.players.A.score).toBe(expectedBonus);
+  }
 
+  it("awards rounded-to-nearest-5 points on go-out (20->4, 22->4, 23->5)", () => {
+    runGoOutBonusCase([t(4, 5), t(5, 6)], 4); // 20 -> 4
+    runGoOutBonusCase([t(4, 6), t(6, 6)], 4); // 22 -> 4
+    runGoOutBonusCase([t(5, 6), t(6, 6)], 5); // 23 -> 5
+  });
 });
 
 describe("Deterministic legality and pending priority", () => {
+  it("nested branch hub contributes branch endpoints and allows 1-4 play", () => {
+    let board = simulatePlacement(null, t(6, 6), "left");
+    board = simulatePlacement(board, t(5, 6), "left");
+    board = simulatePlacement(board, t(6, 3), "right");   // hub A crossed
+    board = simulatePlacement(board, t(6, 1), "branch-0-0");
+    board = simulatePlacement(board, t(1, 1), "branch-0-0"); // hub B (double-1) on branch lane
+    board = simulatePlacement(board, t(1, 2), "branch-0-0"); // cross hub B
+
+    const hubB = board.hubDoubles.find(h =>
+      h.laneType === "branch" &&
+      h.laneRef === "branch-0-0" &&
+      h.branchDepth === 1 &&
+      h.hubValue === 1
+    );
+    expect(hubB).toBeDefined();
+    expect(hubB?.isCrossed).toBe(true);
+    const hubBId = hubB?.hubId;
+    expect(typeof hubBId).toBe("number");
+
+    const state = setupState({
+      board,
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(1, 4)], score: 0 },
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const moves = getLegalMoves(state, "A").filter(m => m.type === "play");
+    expect(moves.some(m => m.position === `branch-${hubBId}-0`)).toBe(true);
+    expect(moves.some(m => m.position === `branch-${hubBId}-1`)).toBe(true);
+
+    expect(() =>
+      applyMove(state, "A", {
+        type: "play",
+        tile: t(1, 4),
+        position: `branch-${hubBId}-0`,
+      })
+    ).not.toThrow();
+  });
+
+  it("nested branch hub on arm 1 opens both nested branch endpoints after crossing", () => {
+    let board = simulatePlacement(null, t(6, 6), "left");
+    board = simulatePlacement(board, t(5, 6), "left");
+    board = simulatePlacement(board, t(6, 3), "right");    // main hub crossed
+    board = simulatePlacement(board, t(6, 1), "branch-0-1");
+    board = simulatePlacement(board, t(1, 1), "branch-0-1"); // nested hub on branch lane
+    board = simulatePlacement(board, t(1, 2), "branch-0-1"); // cross nested hub by neighbor-on-both-sides
+
+    const nestedHub = board.hubDoubles.find(h =>
+      h.laneType === "branch" &&
+      h.laneRef === "branch-0-1" &&
+      h.branchDepth === 1 &&
+      h.hubValue === 1
+    );
+    expect(nestedHub).toBeDefined();
+    expect(nestedHub?.isCrossed).toBe(true);
+    const nestedHubId = nestedHub?.hubId;
+    expect(typeof nestedHubId).toBe("number");
+
+    const state = setupState({
+      board,
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(1, 4)], score: 0 },
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const positions = getLegalMoves(state, "A")
+      .filter(m => m.type === "play")
+      .map(m => m.position);
+    expect(positions).toContain(`branch-${nestedHubId}-0`);
+    expect(positions).toContain(`branch-${nestedHubId}-1`);
+
+    expect(() =>
+      applyMove(state, "A", {
+        type: "play",
+        tile: t(1, 4),
+        position: `branch-${nestedHubId}-1`,
+      })
+    ).not.toThrow();
+  });
+
+  it("includes branch endpoints from crossed hubs created on branch lanes", () => {
+    let board = simulatePlacement(null, t(3, 3), "left");
+    board = simulatePlacement(board, t(2, 3), "left");
+    board = simulatePlacement(board, t(3, 5), "right");   // mainline hub crossed
+    board = simulatePlacement(board, t(3, 2), "branch-0-0");
+    board = simulatePlacement(board, t(2, 2), "branch-0-0"); // double on branch -> nested hub
+    board = simulatePlacement(board, t(2, 4), "branch-0-0"); // cross nested hub on branch lane
+
+    const nestedHub = board.hubDoubles.find(h =>
+      h.laneType === "branch" &&
+      h.laneRef === "branch-0-0" &&
+      h.branchDepth === 1
+    );
+    expect(nestedHub).toBeDefined();
+    expect(nestedHub?.isCrossed).toBe(true);
+    const nestedHubId = nestedHub?.hubId;
+    expect(typeof nestedHubId).toBe("number");
+
+    const state = setupState({
+      board,
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(2, 6)], score: 0 },
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const positions = getLegalMoves(state, "A")
+      .filter(m => m.type === "play")
+      .map(m => m.position);
+    expect(positions).toContain(`branch-${nestedHubId}-0`);
+    expect(positions).toContain(`branch-${nestedHubId}-1`);
+  });
+
+  it("0-3 remains legal when endpoint is double-3 (orientation-derived endpoint pip)", () => {
+    const state = setupState({
+      board: {
+        mainLine: [pt(2, 3), pt(3, 3)],
+        leftEnd: 2,
+        rightEnd: 6, // intentionally stale/wrong; endpoint tile is [3|3]
+        leftEndIsDouble: false,
+        rightEndIsDouble: true,
+        hubDoubles: [{
+          hubId: 3,
+          tileIndex: 1,
+          mainlineIndex: 1,
+          hubValue: 3,
+          leftSideFilled: true,
+          rightSideFilled: false,
+          isCrossed: false,
+          branches: [],
+        }],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(0, 3), t(1, 1)], score: 0 },
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const moves = getLegalMoves(state, "A").filter(m => m.type === "play");
+    expect(moves.some(m => m.tile.low === 0 && m.tile.high === 3)).toBe(true);
+  });
+
   it("returns play moves in deterministic sorted order", () => {
     const state = setupState({
       board: {
@@ -963,7 +1208,7 @@ describe("Deterministic legality and pending priority", () => {
     ]);
   });
 
-  it("pending only restricts moves when satisfying plays exist now", () => {
+  it("pending does not restrict legal moves when satisfying plays exist now", () => {
     const state = setupState({
       board: {
         mainLine: [pt(2, 6), pt(6, 6), pt(6, 3), pt(3, 5), pt(5, 5)],
@@ -1015,7 +1260,89 @@ describe("Deterministic legality and pending priority", () => {
     };
     const movesSat = getLegalMoves(satState, "A").filter(m => m.type === "play");
     expect(movesSat.length).toBeGreaterThan(0);
-    expect(movesSat.every(m => m.position === "right")).toBe(true);
+    expect(movesSat.some(m => m.position === "right")).toBe(true);
+    expect(movesSat.some(m => m.position === "branch-3-0")).toBe(true);
+  });
+
+  it("pending pip 6 does not block 0-6 play on blank endpoint", () => {
+    const state = setupState({
+      board: {
+        mainLine: [pt(0, 1), pt(1, 6), pt(6, 6)],
+        leftEnd: 0,
+        rightEnd: 6,
+        leftEndIsDouble: false,
+        rightEndIsDouble: true,
+        hubDoubles: [{
+          hubId: 12,
+          tileIndex: 2,
+          mainlineIndex: 2,
+          hubValue: 6,
+          leftSideFilled: true,
+          rightSideFilled: false,
+          isCrossed: false,
+          branches: [],
+        }],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(0, 6), t(4, 6)], score: 0 },
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const moves = getLegalMoves(state, "A").filter(m => m.type === "play");
+    expect(moves.some(m => m.tile.low === 0 && m.tile.high === 6 && m.position === "left")).toBe(true);
+    expect(moves.some(m => m.position === "right")).toBe(true);
+  });
+
+  it("pending end-double does not remove branch endpoints from crossed hubs", () => {
+    const crossedHubId = 6;
+    const state = setupState({
+      board: {
+        mainLine: [pt(2, 6), pt(6, 6), pt(6, 1), pt(1, 0), pt(0, 0)],
+        leftEnd: 2,
+        rightEnd: 0,
+        leftEndIsDouble: false,
+        rightEndIsDouble: true,
+        hubDoubles: [
+          {
+            hubId: crossedHubId,
+            tileIndex: 1,
+            mainlineIndex: 1,
+            hubValue: 6,
+            leftSideFilled: true,
+            rightSideFilled: true,
+            isCrossed: true,
+            branches: [],
+          },
+          {
+            hubId: 0,
+            tileIndex: 4,
+            mainlineIndex: 4,
+            hubValue: 0,
+            leftSideFilled: true,
+            rightSideFilled: false,
+            isCrossed: false,
+            branches: [],
+          },
+        ],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: "A", hand: [t(0, 6)], score: 0 },
+        B: { id: "B", hand: [t(0, 0)], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    const moves = getLegalMoves(state, "A").filter(m => m.type === "play");
+    const positions = moves.map(m => m.position);
+    expect(positions).toContain("right");
+    expect(positions).toContain(`branch-${crossedHubId}-0`);
+    expect(positions).toContain(`branch-${crossedHubId}-1`);
   });
 });
 

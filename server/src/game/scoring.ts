@@ -21,6 +21,27 @@ function nextHubId(board: BoardState): number {
   return Math.max(...board.hubDoubles.map((h, idx) => hubIdAt(h, idx))) + 1;
 }
 
+function recomputeBranchLaneHubStates(
+  hubDoubles: BoardState['hubDoubles'],
+  laneRef: string,
+  branchTiles: readonly PlacedTile[]
+): BoardState['hubDoubles'] {
+  return hubDoubles.map(h => {
+    if (h.laneType !== 'branch' || h.laneRef !== laneRef || typeof h.branchDepth !== 'number') {
+      return h;
+    }
+    const depth = h.branchDepth;
+    const leftSideFilled = depth === 0 ? true : depth > 0 && Boolean(branchTiles[depth - 1]);
+    const rightSideFilled = Boolean(branchTiles[depth + 1]);
+    return {
+      ...h,
+      leftSideFilled,
+      rightSideFilled,
+      isCrossed: leftSideFilled && rightSideFilled,
+    };
+  });
+}
+
 // ─── Orientation Helpers ─────────────────────────────────────
 
 /**
@@ -143,6 +164,18 @@ export function computeHandPenalty(
   return Math.ceil(total / multiple) * multiple;
 }
 
+/**
+ * Go-out bonus points:
+ * sum opponent pips, divide by scoringMultiple, round to nearest integer points.
+ */
+export function computeGoOutBonusPoints(
+  hand: readonly Tile[],
+  config: Config = DEFAULT_CONFIG
+): number {
+  const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
+  return Math.round(total / config.scoringMultiple);
+}
+
 // ─── Board Placement ─────────────────────────────────────────
 
 /**
@@ -185,6 +218,8 @@ export function simulatePlacement(
         ...newBoard,
         hubDoubles: [{
           hubId,
+          laneType: 'mainline',
+          laneRef: 'mainline',
           tileIndex: 0,
           mainlineIndex: 0,
           hubValue: tile.high,
@@ -280,6 +315,8 @@ function placeTileOnMainLine(
     const rightSideFilled = end === 'left';
     newHubDoubles.push({
       hubId,
+      laneType: 'mainline',
+      laneRef: 'mainline',
       tileIndex: newHubIndex,
       mainlineIndex: newHubIndex,
       hubValue: tile.high,
@@ -324,13 +361,16 @@ function placeTileOnBranch(
   }
 
   const tileIsDouble = isDouble(tile);
+  const laneRef = `branch-${hubRef}-${armIndex}`;
   let newBranches: BranchArm[];
+  let newHubDoubles = [...board.hubDoubles];
 
   if (hub.branches[armIndex]) {
     // Extend existing branch
     const existingBranch = hub.branches[armIndex];
     const branchMatchValue = existingBranch.openEnd;
     const branchNewEnd = exposedPip(tile, branchMatchValue);
+    const depthBeforeAppend = existingBranch.tiles.length;
 
     const placedTile: PlacedTile = {
       tile,
@@ -346,6 +386,26 @@ function placeTileOnBranch(
           }
         : b
     );
+
+    // A new double at the branch tip becomes a new branch-lane hub.
+    if (tileIsDouble) {
+      const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
+      newHubDoubles.push({
+        hubId: newHubId,
+        laneType: 'branch',
+        laneRef,
+        branchDepth: depthBeforeAppend,
+        tileIndex: -1,
+        mainlineIndex: undefined,
+        hubValue: tile.high,
+        leftSideFilled: true,
+        rightSideFilled: false,
+        isCrossed: false,
+        branches: [],
+      });
+    }
+
+    newHubDoubles = recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []);
   } else if (armIndex === 0 || armIndex === 1) {
     // Create requested arm directly (0 or 1) while preserving existing sibling arm if any.
     const matchValue = hub.hubValue;
@@ -362,11 +422,30 @@ function placeTileOnBranch(
       openEnd: newExposedEnd,
       openEndIsDouble: tileIsDouble,
     };
+
+    if (tileIsDouble) {
+      const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
+      newHubDoubles.push({
+        hubId: newHubId,
+        laneType: 'branch',
+        laneRef,
+        branchDepth: 0,
+        tileIndex: -1,
+        mainlineIndex: undefined,
+        hubValue: tile.high,
+        leftSideFilled: true,
+        rightSideFilled: false,
+        isCrossed: false,
+        branches: [],
+      });
+    }
+
+    newHubDoubles = recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []);
   } else {
     throw new Error(`Cannot create branch ${armIndex}`);
   }
 
-  const newHubDoubles = board.hubDoubles.map((h, i) =>
+  newHubDoubles = newHubDoubles.map((h, i) =>
     i === hubIndex ? { ...h, branches: newBranches } : h
   );
 

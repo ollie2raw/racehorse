@@ -118,6 +118,9 @@ export interface BranchArm {
 
 export interface HubDouble {
   readonly hubId?: number;              // stable hub id
+  readonly laneType?: 'mainline' | 'branch';
+  readonly laneRef?: string;
+  readonly branchDepth?: number;
   readonly tileIndex: number;           // legacy index in mainLine where this double sits
   readonly mainlineIndex?: number;      // preferred index in mainLine where this double sits
   readonly hubValue: number;            // the pip value of the double (e.g., 3 for [3|3])
