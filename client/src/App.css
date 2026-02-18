@@ -527,16 +527,6 @@ html, body {
   transition: none;
 }
 
-.board-empty-message {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 1.2rem;
-  text-align: center;
-}
-
 .board-tile-wrapper {
   position: absolute;
   /* Prevent tiles from causing layout jitter */

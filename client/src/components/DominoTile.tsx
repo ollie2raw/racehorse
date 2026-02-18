@@ -13,6 +13,15 @@ const pipLayouts: Record<number, [number, number][]> = {
   6: [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2]],
 };
 
+const PIP_COLORS: Record<number, string> = {
+  1: "#1e3a8a",
+  2: "#0B5A3C",
+  3: "#38bdf8",
+  4: "#f97316",
+  5: "#22c55e",
+  6: "#dc2626",
+};
+
 // ─── Pip Half Component ──────────────────────────────────────
 
 interface PipHalfProps {
@@ -24,6 +33,7 @@ function PipHalf({ value, size }: PipHalfProps) {
   const positions = pipLayouts[value] || [];
   const pipSize = Math.max(6, size / 4.5);
   const cellSize = size / 3;
+  const pipColor = PIP_COLORS[value] ?? "#1f2937";
 
   return (
     <div
@@ -44,7 +54,9 @@ function PipHalf({ value, size }: PipHalfProps) {
             width: pipSize,
             height: pipSize,
             borderRadius: "50%",
-            backgroundColor: "currentColor",
+            backgroundColor: pipColor,
+            boxShadow: "none",
+            border: "1px solid rgba(0,0,0,0.18)",
             left: col * cellSize + cellSize / 2 - pipSize / 2,
             top: row * cellSize + cellSize / 2 - pipSize / 2,
           }}

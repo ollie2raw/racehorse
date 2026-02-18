@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import "./App.css";
 import { Board, DominoTile } from "./components";
@@ -15,28 +15,6 @@ import type {
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
-}
-
-function pendingSummary(board: BoardState | null): string {
-  if (!board || board.mainLine.length === 0) return "none";
-  const checks: Array<{ side: "L" | "R"; index: number }> = [
-    { side: "L", index: 0 },
-    { side: "R", index: board.mainLine.length - 1 },
-  ];
-  for (const { side, index } of checks) {
-    const endpointTile = board.mainLine[index]?.tile;
-    if (!endpointTile || endpointTile.high !== endpointTile.low) continue;
-    const hub = board.hubDoubles.find(h =>
-      (h.mainlineIndex ?? h.tileIndex) === index &&
-      h.hubValue === endpointTile.high &&
-      !h.isCrossed
-    );
-    if (!hub) continue;
-    const left = hub.leftSideFilled ? "1" : "0";
-    const right = hub.rightSideFilled ? "1" : "0";
-    return `${side}:${hub.hubValue} (${left}/${right})`;
-  }
-  return "none";
 }
 
 // Compute open ends sum (doubles count as 2x)
@@ -146,18 +124,43 @@ function HandView({ hand, selectedTile, onSelect, isMyTurn, legalMoves }: HandVi
 interface ScoreBoardProps {
   state: GameState;
   myId: string;
+  isMyTurn: boolean;
 }
 
-function ScoreBoard({ state, myId }: ScoreBoardProps) {
+function ScoreBoard({ state, myId, isMyTurn }: ScoreBoardProps) {
   const openEndsSum = useMemo(() => {
     if (!state.board) return 0;
     return computeOpenEndsSum(state.board);
   }, [state.board]);
+  const [scorePulse, setScorePulse] = useState<Record<string, boolean>>({});
+  const prevScoresRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    const nextScores: Record<string, number> = {};
+    const nextPulse: Record<string, boolean> = {};
+    let changed = false;
+
+    for (const pid of state.playerIds) {
+      const score = state.players[pid]?.score ?? 0;
+      nextScores[pid] = score;
+      if (prevScoresRef.current[pid] !== undefined && prevScoresRef.current[pid] !== score) {
+        nextPulse[pid] = true;
+        changed = true;
+      }
+    }
+
+    prevScoresRef.current = nextScores;
+    if (!changed) return;
+
+    setScorePulse(nextPulse);
+    const timeout = setTimeout(() => setScorePulse({}), 150);
+    return () => clearTimeout(timeout);
+  }, [state.playerIds, state.players]);
 
   const winningScore = state.config.winningScore ?? 60;
 
   return (
-    <div className="scoreboard">
+    <div className={`scoreboard uiPanelWood ${isMyTurn ? "my-turn" : ""}`}>
       <div className="scoreboard-header">
         <span className="scoreboard-title">Race to {winningScore}</span>
         {state.board && (
@@ -175,7 +178,7 @@ function ScoreBoard({ state, myId }: ScoreBoardProps) {
           return (
             <div
               key={pid}
-              className={`player-score ${pid === myId ? "you" : ""} ${isActive ? "active" : ""} ${isWinner ? "winner" : ""}`}
+              className={`player-score ${pid === myId ? "you" : ""} ${isActive ? "active" : ""} ${isWinner ? "winner" : ""} ${scorePulse[pid] ? "score-pulse" : ""}`}
             >
               <div className="player-label">
                 {pid === myId ? "You" : "Opponent"}
@@ -234,9 +237,11 @@ function GameOverOverlay({ state, myId, onNewGame }: GameOverOverlayProps) {
 // ─── Main App ────────────────────────────────────────────────
 
 export default function App() {
+  const appRootRef = useRef<HTMLDivElement>(null);
   const [serverUrl] = useState("http://localhost:3001");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [roomCode, setRoomCode] = useState("");
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
@@ -250,10 +255,37 @@ export default function App() {
   const [toast, setToast] = useState<string>("");
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const autoTurnActionKeyRef = useRef<string>("");
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    handleFullscreenChange();
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (appRootRef.current) {
+        await appRootRef.current.requestFullscreen();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to toggle fullscreen.";
+      setError(`Fullscreen error: ${message}`);
+    }
   }, []);
 
   // Connection
@@ -411,33 +443,63 @@ export default function App() {
   const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
   const isMyTurn = currentTurnId === you;
   const myHand = state?.players[you]?.hand ?? [];
+  const inGame = Boolean(isConnected && joinedRoom && state);
   const canPass = legalMoves.some(m => m.type === "pass");
-  const playPositions = [...new Set(
-    legalMoves
-      .filter((m): m is Move & { type: "play"; position: PlacementPosition } => m.type === "play" && Boolean(m.position))
-      .map(m => m.position)
-  )];
-  const positionsSample = playPositions.slice(0, 4).join(", ");
-  const pendingText = pendingSummary(state?.board ?? null);
+  const hasPlayMoves = legalMoves.some(m => m.type === "play");
+
+  useEffect(() => {
+    const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
+    if (!handActive || !isMyTurn || hasPlayMoves) {
+      autoTurnActionKeyRef.current = "";
+      return;
+    }
+
+    const autoAction: "draw" | "pass" | null = canDraw ? "draw" : canPass ? "pass" : null;
+    if (!autoAction) return;
+
+    const turnKey = `${state?.handNumber ?? 0}:${state?.currentPlayerIndex ?? -1}:${myHand.length}:${state?.boneyard.length ?? 0}:${autoAction}`;
+    if (autoTurnActionKeyRef.current === turnKey) return;
+
+    autoTurnActionKeyRef.current = turnKey;
+    if (autoAction === "draw") {
+      draw();
+    } else {
+      pass();
+    }
+  }, [
+    state,
+    isMyTurn,
+    hasPlayMoves,
+    canDraw,
+    canPass,
+    myHand.length,
+    draw,
+    pass,
+  ]);
 
   // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div className="app">
+    <div ref={appRootRef} className="app">
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
 
       {/* Header */}
-      <header className="header">
-        <h1>Racehorse Dominoes</h1>
-        <div className="connection-status">
-          {isConnected ? (
-            <span className="status connected">● Connected</span>
-          ) : (
-            <span className="status disconnected">○ Disconnected</span>
-          )}
-        </div>
-      </header>
+      {!inGame && (
+        <header className="header uiPanelWood">
+          <h1>Racehorse Dominoes</h1>
+          <div className="connection-status">
+            {isConnected ? (
+              <span className="status connected">● Connected</span>
+            ) : (
+              <span className="status disconnected">○ Disconnected</span>
+            )}
+            <button className="btn text fullscreen-btn" onClick={toggleFullscreen}>
+              {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Error Banner */}
       {error && (
@@ -458,7 +520,7 @@ export default function App() {
       {/* Connection Screen */}
       {!isConnected && (
         <div className="screen connect-screen">
-          <div className="card">
+          <div className="card uiPanelWood">
             <h2>Connect to Server</h2>
             <p>Server: {serverUrl}</p>
             <button className="btn primary" onClick={connect}>
@@ -471,7 +533,7 @@ export default function App() {
       {/* Lobby Screen */}
       {isConnected && !joinedRoom && (
         <div className="screen lobby-screen">
-          <div className="card">
+          <div className="card uiPanelWood">
             <h2>Join or Create a Room</h2>
             <div className="lobby-actions">
               <button className="btn primary" onClick={createRoom}>
@@ -501,7 +563,7 @@ export default function App() {
       {/* Room Screen (waiting for game) */}
       {isConnected && joinedRoom && !state && (
         <div className="screen room-screen">
-          <div className="card">
+          <div className="card uiPanelWood">
             <h2>Room: {joinedRoom}</h2>
             <div className="players-list">
               <h3>Players ({players.length}/2)</h3>
@@ -535,35 +597,21 @@ export default function App() {
             <GameOverOverlay state={state} myId={you} onNewGame={disconnect} />
           )}
 
-          {/* Top Bar: Room + Scores */}
-          <div className="game-top-bar">
+          <div className="game-top-bar uiPanelWood" data-ui="hud">
             <div className="room-info">
               <span className="room-label">Room</span>
               <span className="room-code">{joinedRoom}</span>
               <span className="hand-number">Hand #{state.handNumber}</span>
             </div>
-            <ScoreBoard state={state} myId={you} />
+            <ScoreBoard state={state} myId={you} isMyTurn={isMyTurn} />
+            {state.handOver && !state.gameOver && (
+              <button className="btn primary next-hand-btn" onClick={nextHand}>
+                Next Hand
+              </button>
+            )}
           </div>
 
-          {/* Turn Indicator */}
-          <div className={`turn-indicator ${isMyTurn ? "your-turn" : ""}`}>
-            {state.gameOver
-              ? state.winnerId === you
-                ? "You Win!"
-                : "Game Over"
-              : state.handOver
-              ? "Hand Over"
-              : isMyTurn
-              ? "Your Turn"
-              : "Opponent's Turn"}
-          </div>
-
-          <div className="debug-pill">
-            legal: {legalMoves.length} | pos: {positionsSample || "-"} | pending: {pendingText}
-          </div>
-
-          {/* Board */}
-          <div className="board-area">
+          <div className="board-area" data-ui="board">
             <Board
               board={state.board}
               legalMoves={legalMoves}
@@ -573,46 +621,40 @@ export default function App() {
             />
           </div>
 
-          {/* Action Buttons */}
-          <div className="actions">
-            {state.handOver && !state.gameOver ? (
-              <button className="btn primary" onClick={nextHand}>
-                Next Hand
-              </button>
-            ) : (
-              <>
-                <button
-                  className="btn action"
-                  disabled={!isMyTurn || !canDraw}
-                  onClick={draw}
-                >
-                  Draw ({state.boneyard.length})
-                </button>
-                <button
-                  className="btn action"
-                  disabled={!isMyTurn || !canPass}
-                  onClick={pass}
-                >
-                  Pass
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Your Hand */}
-          <div className="hand-area">
+          <div className="hand-area uiPanelWood" data-ui="tray">
             <div className="hand-header">
               <h3>Your Hand ({myHand.length})</h3>
-              {selectedTile && (
-                <span className="selection-info">
-                  Selected: [{selectedTile.low}|{selectedTile.high}]
-                  {legalMoves.some(m => m.type === "play" && m.tile && tileEquals(m.tile, selectedTile)) ? (
-                    <span className="hint"> — Click a zone on the board</span>
-                  ) : (
-                    <span className="invalid"> — Cannot play this tile</span>
-                  )}
+              <div className="hand-controls" data-ui="actions">
+                {selectedTile && (
+                  <span className="selection-info">
+                    Selected: [{selectedTile.low}|{selectedTile.high}]
+                    {legalMoves.some(m => m.type === "play" && m.tile && tileEquals(m.tile, selectedTile)) ? (
+                      <span className="hint"> — Click a zone on the board</span>
+                    ) : (
+                      <span className="invalid"> — Cannot play this tile</span>
+                    )}
+                  </span>
+                )}
+                {isMyTurn && !state.handOver && !state.gameOver && hasPlayMoves && canDraw && (
+                  <button className="btn text optional-draw-btn" onClick={draw}>
+                    Draw ({state.boneyard.length})
+                  </button>
+                )}
+                <button className="btn text fullscreen-btn" onClick={toggleFullscreen}>
+                  {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                </button>
+                <span className={`status ${isConnected ? "connected" : "disconnected"}`}>
+                  {isConnected ? "● Connected" : "○ Disconnected"}
                 </span>
-              )}
+                {state.handOver && !state.gameOver && (
+                  <button className="btn primary next-hand-btn" onClick={nextHand}>
+                    Next Hand
+                  </button>
+                )}
+                <button className="btn text leave-btn" onClick={disconnect}>
+                  Leave Game
+                </button>
+              </div>
             </div>
             <HandView
               hand={myHand}
@@ -622,11 +664,6 @@ export default function App() {
               legalMoves={legalMoves}
             />
           </div>
-
-          {/* Leave button */}
-          <button className="btn text leave-btn" onClick={disconnect}>
-            Leave Game
-          </button>
         </div>
       )}
     </div>
