@@ -401,7 +401,6 @@ export default function App() {
   const isMyTurn = currentTurnId === you;
   const myHand = state?.players[you]?.hand ?? [];
   const opponentId = state?.playerIds.find(pid => pid !== you) ?? null;
-  const myTileCount = state ? (state.handCounts?.[you] ?? state.players[you]?.hand?.length ?? 0) : 0;
   const opponentTileCount = state && opponentId
     ? (state.handCounts?.[opponentId] ?? state.players[opponentId]?.hand?.length ?? 0)
     : 0;
@@ -624,6 +623,11 @@ export default function App() {
             <GameOverOverlay state={state} myId={you} onNewGame={disconnect} />
           )}
 
+          <div className={`opponent-tile-card ${!isMyTurn ? "active" : ""}`}>
+            <span className="opponent-tile-label">OPP TILES</span>
+            <span className="opponent-tile-number">{opponentTileCount}</span>
+          </div>
+
           <div className="game-top-bar" data-ui="hud">
             <ScoreBoard state={state} myId={you} isMyTurn={isMyTurn} />
             {state.handOver && !state.gameOver && (
@@ -644,18 +648,6 @@ export default function App() {
           </div>
 
           <div className="hand-area" data-ui="tray">
-            <div className="counts-hud" aria-label="Tile counts">
-              <div className={`count-block ${isMyTurn ? "active" : ""}`}>
-                <span className="count-label">YOU</span>
-                <span className="count-number">{myTileCount}</span>
-                <span className="count-caption">tiles</span>
-              </div>
-              <div className={`count-block ${!isMyTurn ? "active" : ""}`}>
-                <span className="count-label">OPP</span>
-                <span className="count-number">{opponentTileCount}</span>
-                <span className="count-caption">tiles</span>
-              </div>
-            </div>
             <div className="tray-rail">
               <div className="tray-left">
                 <h3>Your Hand ({myHand.length})</h3>
