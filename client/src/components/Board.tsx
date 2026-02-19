@@ -391,6 +391,7 @@ export function Board({
   tileSize = 80, // Large tiles for better visibility
 }: BoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const seenBoardTileKeysRef = useRef<Set<string>>(new Set());
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
@@ -514,11 +515,15 @@ export function Board({
           const x = (lt.x - centerX) * unitToPixels;
           const y = (lt.y - centerY) * unitToPixels;
           const tileIsDouble = isDouble(lt.tile);
+          const isEntering = !seenBoardTileKeysRef.current.has(lt.key);
+          if (isEntering) {
+            seenBoardTileKeysRef.current.add(lt.key);
+          }
 
           return (
             <div
               key={lt.key}
-              className="board-tile-wrapper"
+              className={`board-tile-wrapper ${isEntering ? "entering" : ""}`}
               style={{
                 position: "absolute",
                 left: `calc(50% + ${x}px)`,

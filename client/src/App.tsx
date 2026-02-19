@@ -39,6 +39,7 @@ function HandView({
   handScale,
   handScrollable,
 }: HandViewProps) {
+  const seenHandTileKeysRef = useRef<Set<string>>(new Set());
   const playableTiles = useMemo(() => {
     return legalMoves
       .filter(m => m.type === "play" && m.tile)
@@ -58,18 +59,25 @@ function HandView({
       }}
     >
       {hand.map((tile, idx) => {
+        const tileKey = `${idx}-${tile.low}-${tile.high}`;
         const isSel = selectedTile && tileEquals(tile, selectedTile);
         const canPlay = isMyTurn && canPlayTile(tile);
+        const isEntering = !seenHandTileKeysRef.current.has(tileKey);
+        if (isEntering) {
+          seenHandTileKeysRef.current.add(tileKey);
+        }
 
         return (
           <DominoTile
-            key={`${idx}-${tile.low}-${tile.high}`}
+            key={tileKey}
             tile={tile}
             size={tileSize}
             selected={isSel ?? false}
             highlight={canPlay}
             onClick={() => isMyTurn && onSelect(tile)}
             disabled={!isMyTurn}
+            className={isEntering ? "hand-entering" : "hand-tile"}
+            style={isEntering ? { animationDelay: `${Math.min(idx * 30, 250)}ms` } : undefined}
           />
         );
       })}
@@ -213,8 +221,10 @@ export default function App() {
   const [handTileSize, setHandTileSize] = useState(70);
   const [handScale, setHandScale] = useState(1);
   const [handScrollable, setHandScrollable] = useState(false);
+  const [handShakeActive, setHandShakeActive] = useState(false);
   const autoTurnActionKeyRef = useRef<string>("");
   const handRevealShownRef = useRef<number | null>(null);
+  const handShakeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((msg: string, duration = 3000) => {
     if (toastTimeoutRef.current) {
@@ -229,7 +239,19 @@ export default function App() {
       if (toastTimeoutRef.current) {
         clearTimeout(toastTimeoutRef.current);
       }
+      if (handShakeTimeoutRef.current) {
+        clearTimeout(handShakeTimeoutRef.current);
+      }
     };
+  }, []);
+
+  const triggerHandShake = useCallback(() => {
+    if (handShakeTimeoutRef.current) {
+      clearTimeout(handShakeTimeoutRef.current);
+    }
+    setHandShakeActive(false);
+    requestAnimationFrame(() => setHandShakeActive(true));
+    handShakeTimeoutRef.current = setTimeout(() => setHandShakeActive(false), 260);
   }, []);
 
   useEffect(() => {
@@ -388,17 +410,23 @@ export default function App() {
     setActionError("");
     if (!socket || !joinedRoom) return;
     socket.emit("game:action", joinedRoom, { type: "DRAW" }, (resp: any) => {
-      if (!resp.ok) setActionError(resp.error);
+      if (!resp.ok) {
+        setActionError(resp.error);
+        triggerHandShake();
+      }
     });
-  }, [socket, joinedRoom]);
+  }, [socket, joinedRoom, triggerHandShake]);
 
   const pass = useCallback(() => {
     setActionError("");
     if (!socket || !joinedRoom) return;
     socket.emit("game:action", joinedRoom, { type: "PASS" }, (resp: any) => {
-      if (!resp.ok) setActionError(resp.error);
+      if (!resp.ok) {
+        setActionError(resp.error);
+        triggerHandShake();
+      }
     });
-  }, [socket, joinedRoom]);
+  }, [socket, joinedRoom, triggerHandShake]);
 
   const play = useCallback(
     (position: PlacementPosition) => {
@@ -413,12 +441,15 @@ export default function App() {
           move: { tile: selectedTile, position },
         },
         (resp: any) => {
-          if (!resp.ok) setActionError(resp.error);
+          if (!resp.ok) {
+            setActionError(resp.error);
+            triggerHandShake();
+          }
           setSelectedTile(null);
         }
       );
     },
-    [socket, joinedRoom, selectedTile]
+    [socket, joinedRoom, selectedTile, triggerHandShake]
   );
 
   // Derived state
@@ -735,7 +766,7 @@ export default function App() {
             />
           </div>
 
-          <div className="hand-area" data-ui="tray">
+          <div className={`hand-area ${handShakeActive ? "shake-feedback" : ""}`} data-ui="tray">
             <div className="tray-rail">
               <div className="tray-left">
                 <h3>Your Hand ({myHand.length})</h3>

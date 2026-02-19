@@ -596,6 +596,9 @@ html, body {
   position: absolute;
   /* Prevent tiles from causing layout jitter */
   will-change: transform;
+}
+
+.board-tile-wrapper.entering {
   animation: board-tile-enter 220ms cubic-bezier(.2,.8,.2,1);
 }
 
@@ -766,6 +769,18 @@ html, body {
   z-index: 30;
 }
 
+.hand-area.shake-feedback {
+  animation: shake-invalid 250ms ease;
+}
+
+@keyframes shake-invalid {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
 .opponent-tile-card {
   position: absolute;
   top: 16px;
@@ -873,7 +888,11 @@ html, body {
 
 .hand-container .domino-tile {
   flex: 0 0 auto;
+}
+
+.hand-container .domino-tile.hand-entering {
   animation: hand-tile-enter 220ms cubic-bezier(.2,.8,.2,1);
+  animation-fill-mode: both;
 }
 
 @keyframes hand-tile-enter {
@@ -1211,8 +1230,9 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-tile-wrapper,
-  .hand-container .domino-tile,
+  .board-tile-wrapper.entering,
+  .hand-container .domino-tile.hand-entering,
+  .hand-area.shake-feedback,
   .player-score.active {
     animation: none !important;
     transition: none !important;
