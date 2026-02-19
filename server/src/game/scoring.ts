@@ -405,7 +405,7 @@ function placeTileOnBranch(
       });
     }
 
-    newHubDoubles = recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []);
+    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
   } else if (armIndex === 0 || armIndex === 1) {
     // Create requested arm directly (0 or 1) while preserving existing sibling arm if any.
     const matchValue = hub.hubValue;
@@ -440,7 +440,7 @@ function placeTileOnBranch(
       });
     }
 
-    newHubDoubles = recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []);
+    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
   } else {
     throw new Error(`Cannot create branch ${armIndex}`);
   }
