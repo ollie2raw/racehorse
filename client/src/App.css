@@ -599,13 +599,13 @@ html, body {
 }
 
 .board-tile-wrapper.entering {
-  animation: board-tile-enter 220ms cubic-bezier(.2,.8,.2,1);
+  animation: board-tile-enter 300ms cubic-bezier(.2,.8,.2,1);
 }
 
 @keyframes board-tile-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.94);
+    transform: translate(-50%, calc(-50% + 14px)) scale(0.9);
   }
   to {
     opacity: 1;
@@ -891,19 +891,27 @@ html, body {
 }
 
 .hand-container .domino-tile.hand-entering {
-  animation: hand-tile-enter 220ms cubic-bezier(.2,.8,.2,1);
+  animation: hand-tile-enter 300ms cubic-bezier(.2,.8,.2,1);
   animation-fill-mode: both;
 }
 
 @keyframes hand-tile-enter {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.96);
+    transform: translateY(14px) scale(0.9);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+.debug-entering .domino-body {
+  outline: 2px solid rgba(0, 255, 150, 0.8);
+  outline-offset: 1px;
+  box-shadow:
+    0 0 24px rgba(0, 255, 150, 0.35),
+    var(--tile-shadow);
 }
 
 .hand-container.is-scrollable {
@@ -1230,10 +1238,10 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-tile-wrapper.entering,
-  .hand-container .domino-tile.hand-entering,
-  .hand-area.shake-feedback,
-  .player-score.active {
+  .app:not(.debug-force-anim) .board-tile-wrapper.entering,
+  .app:not(.debug-force-anim) .hand-container .domino-tile.hand-entering,
+  .app:not(.debug-force-anim) .hand-area.shake-feedback,
+  .app:not(.debug-force-anim) .player-score.active {
     animation: none !important;
     transition: none !important;
   }

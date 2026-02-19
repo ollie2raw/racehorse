@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import "./App.css";
 import { Board, DominoTile } from "./components";
+import { DEBUG_FORCE_ANIM, useEnterAnimation } from "./hooks/useEnterAnimation";
 import type {
   Tile,
   PlacementPosition,
@@ -27,6 +28,43 @@ interface HandViewProps {
   tileSize: number;
   handScale: number;
   handScrollable: boolean;
+}
+
+interface HandTileEntryProps {
+  tile: Tile;
+  tileKey: string;
+  size: number;
+  selected: boolean;
+  highlight: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  index: number;
+}
+
+function HandTileEntry({
+  tile,
+  tileKey,
+  size,
+  selected,
+  highlight,
+  disabled,
+  onClick,
+  index,
+}: HandTileEntryProps) {
+  const entering = useEnterAnimation(300);
+  return (
+    <DominoTile
+      key={tileKey}
+      tile={tile}
+      size={size}
+      selected={selected}
+      highlight={highlight}
+      onClick={onClick}
+      disabled={disabled}
+      className={`hand-tile ${entering ? "hand-entering debug-entering" : ""}`}
+      style={entering ? { animationDelay: `${Math.min(index * 30, 250)}ms` } : undefined}
+    />
+  );
 }
 
 function HandView({
@@ -64,7 +102,24 @@ function HandView({
         const canPlay = isMyTurn && canPlayTile(tile);
         const isEntering = !seenHandTileKeysRef.current.has(tileKey);
         if (isEntering) {
+          console.log("[anim] hand enter", tileKey);
           seenHandTileKeysRef.current.add(tileKey);
+        }
+
+        if (isEntering) {
+          return (
+            <HandTileEntry
+              key={tileKey}
+              tile={tile}
+              tileKey={tileKey}
+              size={tileSize}
+              selected={isSel ?? false}
+              highlight={canPlay}
+              onClick={() => isMyTurn && onSelect(tile)}
+              disabled={!isMyTurn}
+              index={idx}
+            />
+          );
         }
 
         return (
@@ -76,8 +131,7 @@ function HandView({
             highlight={canPlay}
             onClick={() => isMyTurn && onSelect(tile)}
             disabled={!isMyTurn}
-            className={isEntering ? "hand-entering" : "hand-tile"}
-            style={isEntering ? { animationDelay: `${Math.min(idx * 30, 250)}ms` } : undefined}
+            className="hand-tile"
           />
         );
       })}
@@ -578,7 +632,7 @@ export default function App() {
   // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div ref={appRootRef} className="app">
+    <div ref={appRootRef} className={`app ${DEBUG_FORCE_ANIM ? "debug-force-anim" : ""}`}>
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
 

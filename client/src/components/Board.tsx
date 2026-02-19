@@ -2,6 +2,7 @@
 import { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { DominoTile } from "./DominoTile";
 import type { Tile, BoardState, PlacementPosition, Move } from "../types";
+import { useEnterAnimation } from "../hooks/useEnterAnimation";
 
 // ─── Layout Constants ────────────────────────────────────────
 
@@ -383,6 +384,39 @@ interface BoardProps {
   tileSize?: number;
 }
 
+interface EnteringBoardTileProps {
+  lt: LayoutTile;
+  x: number;
+  y: number;
+  tileSize: number;
+}
+
+function EnteringBoardTile({ lt, x, y, tileSize }: EnteringBoardTileProps) {
+  const entering = useEnterAnimation(300);
+  const tileIsDouble = isDouble(lt.tile);
+
+  return (
+    <div
+      className={`board-tile-wrapper ${entering ? "entering debug-entering" : ""}`}
+      style={{
+        position: "absolute",
+        left: `calc(50% + ${x}px)`,
+        top: `calc(50% + ${y}px)`,
+        transform: "translate(-50%, -50%)",
+      }}
+    >
+      <DominoTile
+        tile={lt.tile}
+        size={tileSize}
+        rotation={lt.rotation}
+        flipped={lt.flipped}
+        disabled
+        className={`board-tile ${tileIsDouble ? "hub-double" : ""}`}
+      />
+    </div>
+  );
+}
+
 export function Board({
   board,
   legalMoves,
@@ -514,16 +548,28 @@ export function Board({
         {layout.tiles.map((lt) => {
           const x = (lt.x - centerX) * unitToPixels;
           const y = (lt.y - centerY) * unitToPixels;
-          const tileIsDouble = isDouble(lt.tile);
           const isEntering = !seenBoardTileKeysRef.current.has(lt.key);
           if (isEntering) {
+            console.log("[anim] board enter", lt.key);
             seenBoardTileKeysRef.current.add(lt.key);
+          }
+
+          if (isEntering) {
+            return (
+              <EnteringBoardTile
+                key={lt.key}
+                lt={lt}
+                x={x}
+                y={y}
+                tileSize={tileSize}
+              />
+            );
           }
 
           return (
             <div
               key={lt.key}
-              className={`board-tile-wrapper ${isEntering ? "entering" : ""}`}
+              className="board-tile-wrapper"
               style={{
                 position: "absolute",
                 left: `calc(50% + ${x}px)`,
@@ -537,7 +583,7 @@ export function Board({
                 rotation={lt.rotation}
                 flipped={lt.flipped}
                 disabled
-                className={`board-tile ${tileIsDouble ? "hub-double" : ""}`}
+                className={`board-tile ${isDouble(lt.tile) ? "hub-double" : ""}`}
               />
             </div>
           );
