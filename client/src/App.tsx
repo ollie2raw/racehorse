@@ -128,9 +128,6 @@ function ScoreBoard({ state, myId, isMyTurn }: ScoreBoardProps) {
                 {pid === myId ? "You" : "Opponent"}
                 {isWinner && " 👑"}
               </div>
-              <div className="player-tiles">
-                Tiles: {state.handCounts?.[pid] ?? state.players[pid]?.hand?.length ?? 0}
-              </div>
               <div className="score-number">{score}</div>
             </div>
           );
@@ -403,6 +400,11 @@ export default function App() {
   const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
   const isMyTurn = currentTurnId === you;
   const myHand = state?.players[you]?.hand ?? [];
+  const opponentId = state?.playerIds.find(pid => pid !== you) ?? null;
+  const myTileCount = state ? (state.handCounts?.[you] ?? state.players[you]?.hand?.length ?? 0) : 0;
+  const opponentTileCount = state && opponentId
+    ? (state.handCounts?.[opponentId] ?? state.players[opponentId]?.hand?.length ?? 0)
+    : 0;
   const inGame = Boolean(isConnected && joinedRoom && state);
   const canPass = legalMoves.some(m => m.type === "pass");
   const hasPlayMoves = legalMoves.some(m => m.type === "play");
@@ -645,6 +647,10 @@ export default function App() {
             <div className="tray-rail">
               <div className="tray-left">
                 <h3>Your Hand ({myHand.length})</h3>
+                <div className="tile-count-hud">
+                  <span className="tile-count-label">You</span>
+                  <span className="tile-count-value">{myTileCount}</span>
+                </div>
                 {selectedTile && (
                   <span className="selection-info">
                     [{selectedTile.low}|{selectedTile.high}]
@@ -666,6 +672,10 @@ export default function App() {
               </div>
 
               <div className="tray-right" data-ui="actions">
+                <div className="tile-count-hud opponent">
+                  <span className="tile-count-label">Opponent</span>
+                  <span className="tile-count-value">{opponentTileCount}</span>
+                </div>
                 {isMyTurn && !state.handOver && !state.gameOver && hasPlayMoves && canDraw && (
                   <button className="btn text optional-draw-btn" onClick={draw}>
                     Draw ({state.boneyard.length})

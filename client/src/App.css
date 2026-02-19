@@ -479,13 +479,6 @@ html, body {
   text-transform: uppercase;
 }
 
-.player-tiles {
-  font-size: 0.62rem;
-  color: rgba(233, 240, 248, 0.72);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .player-score.active .player-label {
   color: rgba(255, 255, 255, 0.8);
 }
@@ -771,7 +764,7 @@ html, body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   color: rgba(240, 244, 248, 0.84);
 }
 
@@ -799,6 +792,36 @@ html, body {
   justify-content: flex-end;
   gap: 10px;
   white-space: nowrap;
+}
+
+.tile-count-hud {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  background: rgba(8, 12, 18, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 4px 8px;
+  width: fit-content;
+}
+
+.tile-count-hud.opponent {
+  margin-right: 4px;
+}
+
+.tile-count-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(230, 238, 248, 0.72);
+  font-weight: 600;
+}
+
+.tile-count-value {
+  font-size: 1.2rem;
+  line-height: 1;
+  font-weight: 800;
+  color: rgba(248, 252, 255, 0.98);
 }
 
 .selection-info {
