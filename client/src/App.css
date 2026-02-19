@@ -982,6 +982,18 @@ html, body {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.reveal-tiles .hand-over-tile .domino-body {
+  filter: brightness(1.14) contrast(1.06);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 /* ─── Game Over Overlay ─────────────────────────────────────── */

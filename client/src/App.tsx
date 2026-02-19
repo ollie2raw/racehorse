@@ -154,6 +154,8 @@ interface HandEndedPayload {
   };
 }
 
+const HAND_OVER_REVEAL_MS = 5000;
+
 function GameOverOverlay({ state, myId, onNewGame }: GameOverOverlayProps) {
   const winner = state.winnerId;
   const iWon = winner === myId;
@@ -492,7 +494,7 @@ export default function App() {
     const timer = setTimeout(() => {
       socket.emit("hand:ready", joinedRoom, () => {});
       setHandReveal(null);
-    }, 2500);
+    }, HAND_OVER_REVEAL_MS);
 
     return () => clearTimeout(timer);
   }, [handReveal, socket, joinedRoom, state?.gameOver]);
@@ -703,6 +705,7 @@ export default function App() {
                       key={`reveal-${idx}-${tile.low}-${tile.high}`}
                       tile={tile}
                       size={34}
+                      className="hand-over-tile"
                       disabled
                     />
                   ))}
