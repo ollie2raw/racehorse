@@ -935,13 +935,24 @@ html, body {
   right: 0;
   bottom: 0;
   z-index: 95;
+  pointer-events: auto;
+}
+
+.hand-reveal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+
+.hand-reveal-modal {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(25, 44, 36, 0.16) 0%, rgba(0, 0, 0, 0) 48%),
-    rgba(0, 0, 0, 0.52);
-  backdrop-filter: blur(6px);
+  opacity: 1;
+  filter: none;
 }
 
 .hand-reveal-card {
@@ -989,11 +1000,8 @@ html, body {
 }
 
 .reveal-tiles .hand-over-tile .domino-body {
-  filter: brightness(1.14) contrast(1.06);
-  border-color: rgba(255, 255, 255, 0.34);
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.22),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  filter: none;
+  opacity: 1;
 }
 
 /* ─── Game Over Overlay ─────────────────────────────────────── */

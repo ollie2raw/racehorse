@@ -691,24 +691,26 @@ export default function App() {
           )}
           {handReveal && !state.gameOver && (
             <div className="hand-reveal-overlay">
-              <div className="hand-reveal-card">
-                <h3>Hand Over</h3>
-                <p className="reveal-points">
-                  You: {handReveal.pointsAwarded.you >= 0 ? `+${handReveal.pointsAwarded.you}` : handReveal.pointsAwarded.you}
-                  {" · "}
-                  Opponent: {handReveal.pointsAwarded.opponent >= 0 ? `+${handReveal.pointsAwarded.opponent}` : handReveal.pointsAwarded.opponent}
-                </p>
-                <p className="reveal-label">Opponent remaining tiles</p>
-                <div className="reveal-tiles">
-                  {handReveal.opponentRemainingTiles.map((tile, idx) => (
-                    <DominoTile
-                      key={`reveal-${idx}-${tile.low}-${tile.high}`}
-                      tile={tile}
-                      size={34}
-                      className="hand-over-tile"
-                      disabled
-                    />
-                  ))}
+              <div className="hand-reveal-backdrop" />
+              <div className="hand-reveal-modal">
+                <div className="hand-reveal-card">
+                  <h3>Hand Over</h3>
+                  <p className="reveal-points">
+                    You: {handReveal.pointsAwarded.you >= 0 ? `+${handReveal.pointsAwarded.you}` : handReveal.pointsAwarded.you}
+                    {" · "}
+                    Opponent: {handReveal.pointsAwarded.opponent >= 0 ? `+${handReveal.pointsAwarded.opponent}` : handReveal.pointsAwarded.opponent}
+                  </p>
+                  <p className="reveal-label">Opponent remaining tiles</p>
+                  <div className="reveal-tiles">
+                    {handReveal.opponentRemainingTiles.map((tile, idx) => (
+                      <DominoTile
+                        key={`reveal-${idx}-${tile.low}-${tile.high}`}
+                        tile={tile}
+                        size={34}
+                        className="hand-over-tile"
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
