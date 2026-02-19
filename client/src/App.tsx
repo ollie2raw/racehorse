@@ -128,6 +128,9 @@ function ScoreBoard({ state, myId, isMyTurn }: ScoreBoardProps) {
                 {pid === myId ? "You" : "Opponent"}
                 {isWinner && " 👑"}
               </div>
+              <div className="player-tiles">
+                Tiles: {state.handCounts?.[pid] ?? state.players[pid]?.hand?.length ?? 0}
+              </div>
               <div className="score-number">{score}</div>
             </div>
           );

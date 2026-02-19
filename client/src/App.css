@@ -479,6 +479,13 @@ html, body {
   text-transform: uppercase;
 }
 
+.player-tiles {
+  font-size: 0.62rem;
+  color: rgba(233, 240, 248, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .player-score.active .player-label {
   color: rgba(255, 255, 255, 0.8);
 }

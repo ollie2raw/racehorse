@@ -56,8 +56,15 @@ function broadcastStateUpdate(roomCode: string) {
         branchMoves.length > 0 ? branchMoves.map((m: any) => m.position) : ""
       );
 
+      const handCounts = Object.fromEntries(
+        room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0])
+      );
+
       socket.emit("state:update", {
-        state: room.state,
+        state: {
+          ...room.state,
+          handCounts,
+        },
         legalMoves,
         canDraw,
       });
@@ -90,7 +97,15 @@ io.on("connection", (socket: Socket) => {
       socket.join(room.code);
       io.to(room.code).emit("room:update", { players: room.players });
       console.log(`[room:join] joined room=${room.code}, players=${room.players.length}`);
-      cb({ ok: true, roomCode: room.code, you: socket.id, players: room.players, state: room.state });
+      const stateWithCounts = room.state
+        ? {
+            ...room.state,
+            handCounts: Object.fromEntries(
+              room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0])
+            ),
+          }
+        : null;
+      cb({ ok: true, roomCode: room.code, you: socket.id, players: room.players, state: stateWithCounts });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "unknown error";
       console.log(`[room:join] ERROR: ${message}`);

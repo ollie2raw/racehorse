@@ -52,6 +52,7 @@ export interface GameState {
   config: { scoringMultiple: number; winningScore: number };
   playerIds: string[];
   players: Record<string, { id: string; hand: Tile[]; score: number }>;
+  handCounts?: Record<string, number>;
   board: BoardState | null;
   boneyard: Tile[];
   deadTiles: Tile[];
