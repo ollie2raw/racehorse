@@ -16,6 +16,9 @@ export type Room = {
   players: string[];              // socket ids in seat order
   state: GameState | null;        // null until game started
   config: Partial<Config>;
+  nextHandReady: Set<string>;
+  lastHandEndedNotifiedHand: number | null;
+  lastBroadcastScores: Record<string, number>;
 };
 
 const rooms = new Map<RoomCode, Room>();
@@ -41,6 +44,9 @@ export function createRoom(
     players: [hostSocketId],
     state: null,
     config,
+    nextHandReady: new Set<string>(),
+    lastHandEndedNotifiedHand: null,
+    lastBroadcastScores: {},
   };
 
   rooms.set(code, room);
@@ -93,6 +99,11 @@ export function startGame(code: string): Room {
   );
 
   room.state = state2;
+  room.nextHandReady.clear();
+  room.lastHandEndedNotifiedHand = null;
+  room.lastBroadcastScores = Object.fromEntries(
+    room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0])
+  );
   return room;
 }
 
@@ -116,7 +127,32 @@ export function nextHand(code: string): Room {
   const { state: state2 } = drawUntilPlayableOrEmpty(state1, currentPlayerId);
 
   room.state = state2;
+  room.nextHandReady.clear();
+  room.lastHandEndedNotifiedHand = null;
+  room.lastBroadcastScores = Object.fromEntries(
+    room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0])
+  );
   return room;
+}
+
+export function readyForNextHand(
+  code: string,
+  socketId: string
+): { started: boolean; room: Room } {
+  const room = getRoom(code);
+  if (!room.state) throw new Error("Game not started.");
+  if (room.state.gameOver) return { started: false, room };
+  if (!room.state.handOver) return { started: false, room };
+  if (!room.players.includes(socketId)) throw new Error("Player not in room.");
+
+  room.nextHandReady.add(socketId);
+  if (room.nextHandReady.size >= room.players.length) {
+    room.nextHandReady.clear();
+    const startedRoom = nextHand(code);
+    return { started: true, room: startedRoom };
+  }
+
+  return { started: false, room };
 }
 
 export interface ActionPayload {

@@ -145,6 +145,15 @@ interface GameOverOverlayProps {
   onNewGame: () => void;
 }
 
+interface HandEndedPayload {
+  handNumber: number;
+  opponentRemainingTiles: Tile[];
+  pointsAwarded: {
+    you: number;
+    opponent: number;
+  };
+}
+
 function GameOverOverlay({ state, myId, onNewGame }: GameOverOverlayProps) {
   const winner = state.winnerId;
   const iWon = winner === myId;
@@ -196,12 +205,14 @@ export default function App() {
   const [error, setError] = useState<string>("");
   const [actionError, setActionError] = useState<string>("");
   const [toast, setToast] = useState<string>("");
+  const [handReveal, setHandReveal] = useState<HandEndedPayload | null>(null);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
   const [handScale, setHandScale] = useState(1);
   const [handScrollable, setHandScrollable] = useState(false);
   const autoTurnActionKeyRef = useRef<string>("");
+  const handRevealShownRef = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string, duration = 3000) => {
     if (toastTimeoutRef.current) {
@@ -276,7 +287,7 @@ export default function App() {
       setSelectedTile(null);
       setActionError("");
       if (update.state.handOver && !update.state.gameOver) {
-        showToast("Hand over! Click 'Next Hand' to continue.");
+        showToast("Hand over", 1200);
       }
       if (update.state.gameOver) {
         showToast(update.state.winnerId === s.id ? "You win!" : "Game over!");
@@ -285,6 +296,11 @@ export default function App() {
 
     s.on("room:update", (data: { players: string[] }) => {
       setPlayers(data.players);
+    });
+
+    s.on("hand:ended", (payload: HandEndedPayload) => {
+      setHandReveal(payload);
+      handRevealShownRef.current = payload.handNumber;
     });
 
     s.on("connect_error", (e) => {
@@ -316,6 +332,8 @@ export default function App() {
     setIsConnected(false);
     setIsConnecting(false);
     setPlayers([]);
+    setHandReveal(null);
+    handRevealShownRef.current = null;
   }, [socket]);
 
   // Room actions
@@ -401,14 +419,6 @@ export default function App() {
     [socket, joinedRoom, selectedTile]
   );
 
-  const nextHand = useCallback(() => {
-    setActionError("");
-    if (!socket || !joinedRoom) return;
-    socket.emit("hand:next", joinedRoom, (resp: any) => {
-      if (!resp.ok) setActionError(resp.error);
-    });
-  }, [socket, joinedRoom]);
-
   // Derived state
   const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
   const isMyTurn = currentTurnId === you;
@@ -459,6 +469,33 @@ export default function App() {
       window.removeEventListener("resize", updateHandTileSize);
     };
   }, [myHand.length]);
+
+  useEffect(() => {
+    if (!inGame || !state || state.gameOver || !state.handOver) return;
+    if (handRevealShownRef.current === state.handNumber) return;
+    const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
+    setHandReveal({
+      handNumber: state.handNumber,
+      opponentRemainingTiles: opponentIdFromState ? state.players[opponentIdFromState]?.hand ?? [] : [],
+      pointsAwarded: { you: 0, opponent: 0 },
+    });
+    handRevealShownRef.current = state.handNumber;
+  }, [inGame, state, you]);
+
+  useEffect(() => {
+    if (!handReveal || !socket || !joinedRoom) return;
+    if (state?.gameOver) {
+      setHandReveal(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      socket.emit("hand:ready", joinedRoom, () => {});
+      setHandReveal(null);
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [handReveal, socket, joinedRoom, state?.gameOver]);
 
   useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
@@ -650,6 +687,29 @@ export default function App() {
           {state.gameOver && (
             <GameOverOverlay state={state} myId={you} onNewGame={disconnect} />
           )}
+          {handReveal && !state.gameOver && (
+            <div className="hand-reveal-overlay">
+              <div className="hand-reveal-card">
+                <h3>Hand Over</h3>
+                <p className="reveal-points">
+                  You: {handReveal.pointsAwarded.you >= 0 ? `+${handReveal.pointsAwarded.you}` : handReveal.pointsAwarded.you}
+                  {" · "}
+                  Opponent: {handReveal.pointsAwarded.opponent >= 0 ? `+${handReveal.pointsAwarded.opponent}` : handReveal.pointsAwarded.opponent}
+                </p>
+                <p className="reveal-label">Opponent remaining tiles</p>
+                <div className="reveal-tiles">
+                  {handReveal.opponentRemainingTiles.map((tile, idx) => (
+                    <DominoTile
+                      key={`reveal-${idx}-${tile.low}-${tile.high}`}
+                      tile={tile}
+                      size={34}
+                      disabled
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className={`opponent-tile-card ${!isMyTurn ? "active" : ""}`}>
             <span className="opponent-tile-label">OPP TILES</span>
@@ -658,11 +718,6 @@ export default function App() {
 
           <div className="game-top-bar" data-ui="hud">
             <ScoreBoard state={state} myId={you} isMyTurn={isMyTurn} />
-            {state.handOver && !state.gameOver && (
-              <button className="btn primary next-hand-btn" onClick={nextHand}>
-                Next Hand
-              </button>
-            )}
           </div>
 
           <div className="board-area" data-ui="board">
@@ -713,11 +768,6 @@ export default function App() {
                 >
                   <span aria-hidden="true">{isFullscreen ? "🗗" : "⛶"}</span>
                 </button>
-                {state.handOver && !state.gameOver && (
-                  <button className="btn primary next-hand-btn" onClick={nextHand}>
-                    Next Hand
-                  </button>
-                )}
                 <button className="btn text leave-btn" onClick={disconnect}>
                   Leave Game
                 </button>

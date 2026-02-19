@@ -9,6 +9,7 @@ import {
   startGame,
   act,
   nextHand,
+  readyForNextHand,
   getRoom,
   getRoomLegalMoves,
   getRoomCanDraw,
@@ -41,6 +42,11 @@ function broadcastStateUpdate(roomCode: string) {
   const sockets = io.sockets.adapter.rooms.get(roomCode);
   if (!sockets) return;
 
+  const currentScores = Object.fromEntries(
+    room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0])
+  );
+  const previousScores = room.lastBroadcastScores;
+
   for (const socketId of sockets) {
     const socket = io.sockets.sockets.get(socketId);
     if (socket) {
@@ -60,16 +66,60 @@ function broadcastStateUpdate(roomCode: string) {
         room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0])
       );
 
+      const maskedPlayers = Object.fromEntries(
+        room.state.playerIds.map((pid) => {
+          const playerState = room.state!.players[pid];
+          const canReveal = room.state!.handOver || room.state!.gameOver || pid === socketId;
+          return [
+            pid,
+            {
+              ...playerState,
+              hand: canReveal ? playerState.hand : [],
+            },
+          ];
+        })
+      );
+
       socket.emit("state:update", {
         state: {
           ...room.state,
+          players: maskedPlayers,
           handCounts,
         },
         legalMoves,
         canDraw,
       });
+
+      if (
+        room.state.handOver &&
+        !room.state.gameOver &&
+        room.lastHandEndedNotifiedHand !== room.state.handNumber
+      ) {
+        const opponentId = room.state.playerIds.find((pid) => pid !== socketId) ?? null;
+        const youScoreDelta =
+          (currentScores[socketId] ?? 0) - (previousScores[socketId] ?? currentScores[socketId] ?? 0);
+        const opponentScoreDelta = opponentId
+          ? (currentScores[opponentId] ?? 0) - (previousScores[opponentId] ?? currentScores[opponentId] ?? 0)
+          : 0;
+
+        socket.emit("hand:ended", {
+          handNumber: room.state.handNumber,
+          opponentRemainingTiles: opponentId ? room.state.players[opponentId]?.hand ?? [] : [],
+          pointsAwarded: {
+            you: youScoreDelta,
+            opponent: opponentScoreDelta,
+          },
+        });
+      }
     }
   }
+
+  if (room.state.handOver && !room.state.gameOver) {
+    room.lastHandEndedNotifiedHand = room.state.handNumber;
+  } else if (!room.state.handOver) {
+    room.lastHandEndedNotifiedHand = null;
+  }
+  room.lastBroadcastScores = currentScores;
 }
 
 io.on("connection", (socket: Socket) => {
@@ -100,6 +150,19 @@ io.on("connection", (socket: Socket) => {
       const stateWithCounts = room.state
         ? {
             ...room.state,
+            players: Object.fromEntries(
+              room.state.playerIds.map((pid) => {
+                const playerState = room.state!.players[pid];
+                const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id;
+                return [
+                  pid,
+                  {
+                    ...playerState,
+                    hand: canReveal ? playerState.hand : [],
+                  },
+                ];
+              })
+            ),
             handCounts: Object.fromEntries(
               room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0])
             ),
@@ -154,6 +217,20 @@ io.on("connection", (socket: Socket) => {
       const message = err instanceof Error ? err.message : "unknown error";
       console.log(`[hand:next] ERROR: ${message}`);
       cb({ ok: false, error: message });
+    }
+  });
+
+  socket.on("hand:ready", (code, cb) => {
+    const roomCode = String(code).trim().toUpperCase();
+    try {
+      const result = readyForNextHand(roomCode, socket.id);
+      if (result.started) {
+        broadcastStateUpdate(result.room.code);
+      }
+      cb?.({ ok: true, started: result.started });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "unknown error";
+      cb?.({ ok: false, error: message });
     }
   });
 
