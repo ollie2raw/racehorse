@@ -466,6 +466,10 @@ html, body {
 
 .player-score.active {
   background: var(--accent-primary);
+  box-shadow:
+    0 0 0 1px rgba(93, 194, 255, 0.3),
+    0 8px 18px rgba(37, 99, 235, 0.24);
+  transition: box-shadow 180ms ease, background 180ms ease;
 }
 
 .player-score.winner {
@@ -592,6 +596,18 @@ html, body {
   position: absolute;
   /* Prevent tiles from causing layout jitter */
   will-change: transform;
+  animation: board-tile-enter 220ms cubic-bezier(.2,.8,.2,1);
+}
+
+@keyframes board-tile-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 /* ─── Placement Zones ───────────────────────────────────────── */
@@ -857,6 +873,18 @@ html, body {
 
 .hand-container .domino-tile {
   flex: 0 0 auto;
+  animation: hand-tile-enter 220ms cubic-bezier(.2,.8,.2,1);
+}
+
+@keyframes hand-tile-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .hand-container.is-scrollable {
@@ -1101,5 +1129,14 @@ html, body {
 
   .opponent-tile-number {
     font-size: 1.32rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-tile-wrapper,
+  .hand-container .domino-tile,
+  .player-score.active {
+    animation: none !important;
+    transition: none !important;
   }
 }

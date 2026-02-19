@@ -178,6 +178,8 @@ export default function App() {
   const appRootRef = useRef<HTMLDivElement>(null);
   const trayCenterRef = useRef<HTMLDivElement>(null);
   const autoConnectAttemptedRef = useRef(false);
+  const turnToastRef = useRef<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [serverUrl] = useState(import.meta.env.VITE_SERVER_URL || "http://localhost:3001");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -201,9 +203,20 @@ export default function App() {
   const [handScrollable, setHandScrollable] = useState(false);
   const autoTurnActionKeyRef = useRef<string>("");
 
-  const showToast = useCallback((msg: string) => {
+  const showToast = useCallback((msg: string, duration = 3000) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToast(msg);
-    setTimeout(() => setToast(""), 3000);
+    toastTimeoutRef.current = setTimeout(() => setToast(""), duration);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -476,6 +489,21 @@ export default function App() {
     draw,
     pass,
   ]);
+
+  useEffect(() => {
+    if (!inGame || !state || state.handOver || state.gameOver) {
+      turnToastRef.current = null;
+      return;
+    }
+
+    const activePlayerId = state.playerIds[state.currentPlayerIndex];
+    if (!activePlayerId || turnToastRef.current === activePlayerId) return;
+
+    if (turnToastRef.current !== null) {
+      showToast(activePlayerId === you ? "Your turn" : "Opponent's turn", 1200);
+    }
+    turnToastRef.current = activePlayerId;
+  }, [inGame, state, showToast, you]);
 
   // ─── Render ───────────────────────────────────────────────
 
