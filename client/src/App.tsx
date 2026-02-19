@@ -178,7 +178,7 @@ export default function App() {
   const appRootRef = useRef<HTMLDivElement>(null);
   const trayCenterRef = useRef<HTMLDivElement>(null);
   const autoConnectAttemptedRef = useRef(false);
-  const [serverUrl] = useState("http://localhost:3001");
+  const [serverUrl] = useState(import.meta.env.VITE_SERVER_URL || "http://localhost:3001");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
