@@ -5,7 +5,6 @@ import { Board, DominoTile } from "./components";
 import type {
   Tile,
   PlacementPosition,
-  BoardState,
   GameState,
   Move,
   StateUpdate,
@@ -17,65 +16,6 @@ function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
 
-// Compute open ends sum (doubles count as 2x)
-function computeOpenEndsSum(board: BoardState): number {
-  if (board.mainLine.length === 1) {
-    const t = board.mainLine[0].tile;
-    return t.high + t.low;
-  }
-
-  let sum = 0;
-
-  if (board.leftEndIsDouble) {
-    sum += board.leftEnd * 2;
-  } else {
-    sum += board.leftEnd;
-  }
-
-  if (board.rightEndIsDouble) {
-    sum += board.rightEnd * 2;
-  } else {
-    sum += board.rightEnd;
-  }
-
-  const loggedInvalidHubs = new Set<string>();
-  for (const hub of board.hubDoubles) {
-    const branches = Array.isArray(hub.branches) ? hub.branches : [];
-    const hubLogKey = typeof hub.hubId === "number" ? `hub-${hub.hubId}` : `tileIndex-${hub.tileIndex}`;
-
-    if (import.meta.env.DEV && !Array.isArray(hub.branches) && !loggedInvalidHubs.has(hubLogKey)) {
-      console.warn("[computeOpenEndsSum] Hub has invalid branches container", {
-        hubId: hub.hubId,
-        tileIndex: hub.tileIndex,
-        laneType: hub.laneType,
-        branchesType: typeof hub.branches,
-      });
-      loggedInvalidHubs.add(hubLogKey);
-    }
-
-    for (const branch of branches) {
-      if (!branch || typeof branch.openEnd !== "number") {
-        if (import.meta.env.DEV && !loggedInvalidHubs.has(hubLogKey)) {
-          console.warn("[computeOpenEndsSum] Ignoring invalid branch entry", {
-            hubId: hub.hubId,
-            tileIndex: hub.tileIndex,
-            laneType: hub.laneType,
-            branchesLength: branches.length,
-            branchValue: branch,
-          });
-          loggedInvalidHubs.add(hubLogKey);
-        }
-        continue;
-      }
-
-      const isDouble = branch.openEndIsDouble === true;
-      sum += isDouble ? branch.openEnd * 2 : branch.openEnd;
-    }
-  }
-
-  return sum;
-}
-
 // ─── Hand View ───────────────────────────────────────────────
 
 interface HandViewProps {
@@ -84,9 +24,21 @@ interface HandViewProps {
   onSelect: (tile: Tile) => void;
   isMyTurn: boolean;
   legalMoves: Move[];
+  tileSize: number;
+  handScale: number;
+  handScrollable: boolean;
 }
 
-function HandView({ hand, selectedTile, onSelect, isMyTurn, legalMoves }: HandViewProps) {
+function HandView({
+  hand,
+  selectedTile,
+  onSelect,
+  isMyTurn,
+  legalMoves,
+  tileSize,
+  handScale,
+  handScrollable,
+}: HandViewProps) {
   const playableTiles = useMemo(() => {
     return legalMoves
       .filter(m => m.type === "play" && m.tile)
@@ -98,7 +50,13 @@ function HandView({ hand, selectedTile, onSelect, isMyTurn, legalMoves }: HandVi
   };
 
   return (
-    <div className="hand-container">
+    <div
+      className={`hand-container ${handScrollable ? "is-scrollable" : ""}`}
+      style={{
+        ["--hand-scale" as any]: handScale,
+        ["--hand-gap" as any]: `${Math.max(8, Math.round(10 * handScale))}px`,
+      }}
+    >
       {hand.map((tile, idx) => {
         const isSel = selectedTile && tileEquals(tile, selectedTile);
         const canPlay = isMyTurn && canPlayTile(tile);
@@ -107,7 +65,7 @@ function HandView({ hand, selectedTile, onSelect, isMyTurn, legalMoves }: HandVi
           <DominoTile
             key={`${idx}-${tile.low}-${tile.high}`}
             tile={tile}
-            size={70}
+            size={tileSize}
             selected={isSel ?? false}
             highlight={canPlay}
             onClick={() => isMyTurn && onSelect(tile)}
@@ -128,10 +86,6 @@ interface ScoreBoardProps {
 }
 
 function ScoreBoard({ state, myId, isMyTurn }: ScoreBoardProps) {
-  const openEndsSum = useMemo(() => {
-    if (!state.board) return 0;
-    return computeOpenEndsSum(state.board);
-  }, [state.board]);
   const [scorePulse, setScorePulse] = useState<Record<string, boolean>>({});
   const prevScoresRef = useRef<Record<string, number>>({});
 
@@ -157,18 +111,8 @@ function ScoreBoard({ state, myId, isMyTurn }: ScoreBoardProps) {
     return () => clearTimeout(timeout);
   }, [state.playerIds, state.players]);
 
-  const winningScore = state.config.winningScore ?? 60;
-
   return (
-    <div className={`scoreboard uiPanelWood ${isMyTurn ? "my-turn" : ""}`}>
-      <div className="scoreboard-header">
-        <span className="scoreboard-title">Race to {winningScore}</span>
-        {state.board && (
-          <span className="ends-sum">
-            Open: {openEndsSum} {openEndsSum % 5 === 0 ? `= ${openEndsSum / 5} pts` : ""}
-          </span>
-        )}
-      </div>
+    <div className={`scoreboard ${isMyTurn ? "my-turn" : ""}`}>
       <div className="scores-row">
         {state.playerIds.map((pid, idx) => {
           const score = state.players[pid]?.score ?? 0;
@@ -185,12 +129,6 @@ function ScoreBoard({ state, myId, isMyTurn }: ScoreBoardProps) {
                 {isWinner && " 👑"}
               </div>
               <div className="score-number">{score}</div>
-              <div className="score-bar">
-                <div
-                  className="score-fill"
-                  style={{ width: `${Math.min(100, (score / winningScore) * 100)}%` }}
-                />
-              </div>
             </div>
           );
         })}
@@ -214,7 +152,7 @@ function GameOverOverlay({ state, myId, onNewGame }: GameOverOverlayProps) {
   return (
     <div className="game-over-overlay">
       <div className="game-over-card">
-        <h2>{iWon ? "You Win!" : "Game Over"}</h2>
+        <h2 className="victory-title">{iWon ? "You Win!" : "You Lose"}</h2>
         <div className="final-scores">
           {state.playerIds.map((pid, idx) => (
             <div key={pid} className={`final-score ${pid === winner ? "winner" : ""}`}>
@@ -226,7 +164,7 @@ function GameOverOverlay({ state, myId, onNewGame }: GameOverOverlayProps) {
             </div>
           ))}
         </div>
-        <button className="btn primary" onClick={onNewGame}>
+        <button className="btn primary victory-cta" onClick={onNewGame}>
           New Game
         </button>
       </div>
@@ -238,9 +176,12 @@ function GameOverOverlay({ state, myId, onNewGame }: GameOverOverlayProps) {
 
 export default function App() {
   const appRootRef = useRef<HTMLDivElement>(null);
+  const trayCenterRef = useRef<HTMLDivElement>(null);
+  const autoConnectAttemptedRef = useRef(false);
   const [serverUrl] = useState("http://localhost:3001");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [roomCode, setRoomCode] = useState("");
@@ -255,6 +196,9 @@ export default function App() {
   const [toast, setToast] = useState<string>("");
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [handTileSize, setHandTileSize] = useState(70);
+  const [handScale, setHandScale] = useState(1);
+  const [handScrollable, setHandScrollable] = useState(false);
   const autoTurnActionKeyRef = useRef<string>("");
 
   const showToast = useCallback((msg: string) => {
@@ -290,16 +234,20 @@ export default function App() {
 
   // Connection
   const connect = useCallback(() => {
+    if (isConnecting || socket?.connected) return;
     setError("");
+    setIsConnecting(true);
     const s = io(serverUrl, { transports: ["websocket"] });
 
     s.on("connect", () => {
       setIsConnected(true);
       setYou(s.id ?? "");
+      setIsConnecting(false);
     });
 
     s.on("disconnect", () => {
       setIsConnected(false);
+      setIsConnecting(false);
       setJoinedRoom(null);
       setState(null);
       setLegalMoves([]);
@@ -327,11 +275,19 @@ export default function App() {
     });
 
     s.on("connect_error", (e) => {
+      setIsConnecting(false);
       setError(`Connection error: ${e.message}`);
     });
 
     setSocket(s);
-  }, [serverUrl, showToast]);
+  }, [isConnecting, socket, serverUrl, showToast]);
+
+  useEffect(() => {
+    if (autoConnectAttemptedRef.current) return;
+    if (!serverUrl) return;
+    autoConnectAttemptedRef.current = true;
+    connect();
+  }, [connect, serverUrl]);
 
   const disconnect = useCallback(() => {
     socket?.disconnect();
@@ -345,6 +301,7 @@ export default function App() {
     setYou("");
     setSelectedTile(null);
     setIsConnected(false);
+    setIsConnecting(false);
     setPlayers([]);
   }, [socket]);
 
@@ -448,6 +405,45 @@ export default function App() {
   const hasPlayMoves = legalMoves.some(m => m.type === "play");
 
   useEffect(() => {
+    const centerEl = trayCenterRef.current;
+    if (!centerEl) return;
+
+    const BASE_TILE_SIZE = 70;
+    const BASE_GAP = 10;
+    const MIN_SCALE = 0.72;
+    const MAX_SCALE = 1.0;
+
+    const updateHandTileSize = () => {
+      const count = Math.max(1, myHand.length);
+      const availableWidth = Math.max(0, centerEl.clientWidth - 12);
+      const baseTileWidth = BASE_TILE_SIZE * 2 + 9;
+      const neededBaseWidth = count * baseTileWidth + (count - 1) * BASE_GAP;
+      const rawScale = neededBaseWidth > 0 ? availableWidth / neededBaseWidth : 1;
+      const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, rawScale));
+      const nextSize = Math.max(24, Math.floor(BASE_TILE_SIZE * nextScale));
+      const scaledGap = Math.max(6, Math.round(BASE_GAP * nextScale));
+      const scaledTileWidth = nextSize * 2 + 9;
+      const neededScaledWidth = count * scaledTileWidth + (count - 1) * scaledGap;
+      const shouldScroll =
+        nextScale <= MIN_SCALE + 0.001 && neededScaledWidth > availableWidth + 1;
+
+      setHandScale(prev => (prev === nextScale ? prev : nextScale));
+      setHandScrollable(prev => (prev === shouldScroll ? prev : shouldScroll));
+      setHandTileSize(prev => (prev === nextSize ? prev : nextSize));
+    };
+
+    updateHandTileSize();
+    const observer = new ResizeObserver(updateHandTileSize);
+    observer.observe(centerEl);
+    window.addEventListener("resize", updateHandTileSize);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHandTileSize);
+    };
+  }, [myHand.length]);
+
+  useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
     if (!handActive || !isMyTurn || hasPlayMoves) {
       autoTurnActionKeyRef.current = "";
@@ -494,8 +490,13 @@ export default function App() {
             ) : (
               <span className="status disconnected">○ Disconnected</span>
             )}
-            <button className="btn text fullscreen-btn" onClick={toggleFullscreen}>
-              {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            <button
+              className="btn text icon-btn fullscreen-btn"
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            >
+              <span aria-hidden="true">{isFullscreen ? "🗗" : "⛶"}</span>
             </button>
           </div>
         </header>
@@ -517,15 +518,36 @@ export default function App() {
         </div>
       )}
 
-      {/* Connection Screen */}
+      {/* Disconnected Lobby Screen */}
       {!isConnected && (
-        <div className="screen connect-screen">
-          <div className="card uiPanelWood">
-            <h2>Connect to Server</h2>
-            <p>Server: {serverUrl}</p>
-            <button className="btn primary" onClick={connect}>
-              Connect
-            </button>
+        <div className="screen lobby-screen">
+          <div className="card lobby-card">
+            <p className="lobby-kicker">Racehorse Dominoes</p>
+            <h2>Play online with a friend</h2>
+            <p className="lobby-server">Server: {serverUrl}</p>
+            <div className="lobby-actions">
+              <button className="btn primary lobby-connect-btn" onClick={connect} disabled={isConnecting}>
+                {isConnecting ? "Connecting..." : "Connect"}
+              </button>
+              <div className="divider">or</div>
+              <button className="btn primary" onClick={createRoom} disabled>
+                Create New Room
+              </button>
+              <div className="join-form">
+                <input
+                  type="text"
+                  placeholder="Room Code"
+                  value={roomCode}
+                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                  maxLength={6}
+                  disabled
+                />
+                <button className="btn secondary" onClick={joinRoom} disabled>
+                  Join Room
+                </button>
+              </div>
+              <p className="lobby-server">Connect to enable room actions.</p>
+            </div>
           </div>
         </div>
       )}
@@ -597,12 +619,7 @@ export default function App() {
             <GameOverOverlay state={state} myId={you} onNewGame={disconnect} />
           )}
 
-          <div className="game-top-bar uiPanelWood" data-ui="hud">
-            <div className="room-info">
-              <span className="room-label">Room</span>
-              <span className="room-code">{joinedRoom}</span>
-              <span className="hand-number">Hand #{state.handNumber}</span>
-            </div>
+          <div className="game-top-bar" data-ui="hud">
             <ScoreBoard state={state} myId={you} isMyTurn={isMyTurn} />
             {state.handOver && !state.gameOver && (
               <button className="btn primary next-hand-btn" onClick={nextHand}>
@@ -621,31 +638,44 @@ export default function App() {
             />
           </div>
 
-          <div className="hand-area uiPanelWood" data-ui="tray">
-            <div className="hand-header">
-              <h3>Your Hand ({myHand.length})</h3>
-              <div className="hand-controls" data-ui="actions">
+          <div className="hand-area" data-ui="tray">
+            <div className="tray-rail">
+              <div className="tray-left">
+                <h3>Your Hand ({myHand.length})</h3>
                 {selectedTile && (
                   <span className="selection-info">
-                    Selected: [{selectedTile.low}|{selectedTile.high}]
-                    {legalMoves.some(m => m.type === "play" && m.tile && tileEquals(m.tile, selectedTile)) ? (
-                      <span className="hint"> — Click a zone on the board</span>
-                    ) : (
-                      <span className="invalid"> — Cannot play this tile</span>
-                    )}
+                    [{selectedTile.low}|{selectedTile.high}]
                   </span>
                 )}
+              </div>
+
+              <div className="tray-center" ref={trayCenterRef}>
+                <HandView
+                  hand={myHand}
+                  selectedTile={selectedTile}
+                  onSelect={setSelectedTile}
+                  isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
+                  legalMoves={legalMoves}
+                  tileSize={handTileSize}
+                  handScale={handScale}
+                  handScrollable={handScrollable}
+                />
+              </div>
+
+              <div className="tray-right" data-ui="actions">
                 {isMyTurn && !state.handOver && !state.gameOver && hasPlayMoves && canDraw && (
                   <button className="btn text optional-draw-btn" onClick={draw}>
                     Draw ({state.boneyard.length})
                   </button>
                 )}
-                <button className="btn text fullscreen-btn" onClick={toggleFullscreen}>
-                  {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                <button
+                  className="btn text icon-btn fullscreen-btn"
+                  onClick={toggleFullscreen}
+                  aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                >
+                  <span aria-hidden="true">{isFullscreen ? "🗗" : "⛶"}</span>
                 </button>
-                <span className={`status ${isConnected ? "connected" : "disconnected"}`}>
-                  {isConnected ? "● Connected" : "○ Disconnected"}
-                </span>
                 {state.handOver && !state.gameOver && (
                   <button className="btn primary next-hand-btn" onClick={nextHand}>
                     Next Hand
@@ -656,13 +686,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <HandView
-              hand={myHand}
-              selectedTile={selectedTile}
-              onSelect={setSelectedTile}
-              isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
-              legalMoves={legalMoves}
-            />
           </div>
         </div>
       )}
