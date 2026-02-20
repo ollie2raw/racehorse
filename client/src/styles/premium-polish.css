@@ -1,538 +1,594 @@
 /* ================================================
-   RACEHORSE DOMINOES — BOLD VIBRANT PREMIUM
-   Skyjo-inspired energy. Green felt + warm wood.
-   ABSOLUTE RULE: zero selectors touching
-   .domino-tile, .domino-body, .pip, or children.
-   Only transform/box-shadow allowed on .domino-tile.
+   RACEHORSE DOMINOES — SKYJO-QUALITY PREMIUM THEME
+   Green felt + warm wood. Bold, vibrant, physical.
+
+   FROZEN — never touch these:
+   .domino-tile, .domino-body, .pip, .dot
+   Only allowed on .domino-tile: transform, box-shadow,
+   transition, will-change, position, z-index, animation
    ================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@800;900&display=swap');
 
-/* === DESIGN TOKENS === */
+/* ── TOKENS ─────────────────────────────────────── */
 :root {
-  /* Felt */
-  --felt-1: #2d9e5f;
-  --felt-2: #1e7d47;
-  --felt-3: #145c32;
-  --felt-4: #0d3d20;
+  --felt-top:    #2ea55e;
+  --felt-mid:    #1e824a;
+  --felt-dark:   #145c32;
+  --felt-deep:   #0d3d20;
 
-  /* Wood rack */
-  --wood-1: #e8b870;
-  --wood-2: #c8903e;
-  --wood-3: #a06820;
-  --wood-4: #6b4010;
-  --wood-5: #3d2008;
+  --wood-shine:  #f0c878;
+  --wood-light:  #d4964a;
+  --wood-mid:    #a86c28;
+  --wood-dark:   #7a4a10;
+  --wood-deep:   #3d2008;
+  --wood-shadow: rgba(30,12,0,0.75);
 
-  /* Vibrant accent — warm amber/gold */
-  --accent:       #f5a623;
-  --accent-light: #ffc84a;
-  --accent-dark:  #c47d0e;
-  --accent-glow:  rgba(245, 166, 35, 0.40);
+  --teal:        #00c896;
+  --teal-dark:   #009e78;
+  --teal-deep:   #006b52;
+  --teal-glow:   rgba(0,200,150,0.40);
 
-  /* Vibrant YOU color — bold teal/green highlight */
-  --you-1:    #00c896;
-  --you-2:    #00a87c;
-  --you-3:    #007d5c;
-  --you-glow: rgba(0, 200, 150, 0.35);
+  --amber:       #f5a623;
+  --amber-light: #ffc84a;
+  --amber-glow:  rgba(245,166,35,0.45);
 
-  /* Text */
-  --text-white: #ffffff;
-  --text-warm:  #fff4e0;
-  --text-mid:   rgba(255, 244, 224, 0.65);
-  --text-dim:   rgba(255, 244, 224, 0.35);
+  --text-white:  #ffffff;
+  --text-warm:   #fff4e0;
+  --text-mid:    rgba(255,244,224,0.60);
+  --text-dim:    rgba(255,244,224,0.32);
 
-  /* Shadows */
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.60);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
-  --shadow-sm: 0 3px 10px rgba(0, 0, 0, 0.30);
+  --shadow-xl:   0 16px 56px rgba(0,0,0,0.70);
+  --shadow-lg:   0 10px 36px rgba(0,0,0,0.60);
+  --shadow-md:   0 5px 18px rgba(0,0,0,0.45);
 
-  --radius-xl: 18px;
-  --radius-lg: 12px;
-  --radius-md: 8px;
-  --radius-sm: 5px;
-
-  /* Tile faces — pure white (override App.css cream) */
-  --tile-bg:          #ffffff;
-  --tile-bg-gradient: linear-gradient(145deg, #ffffff 0%, #f9f9f9 100%);
+  --r-xl: 20px;
+  --r-lg: 14px;
+  --r-md: 9px;
+  --r-sm: 5px;
 }
 
-/* ================================================
-   GLOBAL FONT
-   ================================================ */
-.hand-area,
-.scoreboard,
-.opponent-tile-card,
-.leave-btn,
-.icon-btn,
-.tray-left {
+/* ── GAME SCREEN LAYOUT ──────────────────────────── */
+/*
+  App.css likely sets .game-screen as position:relative or flex.
+  We ensure it fills the full viewport and stacks correctly.
+  board-area fills remaining space between top-bar and hand-area.
+*/
+.game-screen {
+  display:        flex          !important;
+  flex-direction: column        !important;
+  width:          100vw         !important;
+  height:         100dvh        !important;
+  height:         100vh         !important;
+  overflow:       hidden        !important;
+  position:       relative      !important;
   font-family: 'Nunito', system-ui, sans-serif !important;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ================================================
-   FELT / BOARD AREA
-   Rich saturated green — no blobs, clean depth
-   ================================================ */
-.board-area {
-  position:   relative !important;
-  overflow:   hidden   !important;
-  background: linear-gradient(
-    160deg,
-    var(--felt-1) 0%,
-    var(--felt-2) 40%,
-    var(--felt-3) 100%
-  ) !important;
-}
-
-/*
-  Override App.css noise texture ::before (opacity: 0.22) — make invisible.
-  Keeps content/position/inset from App.css, just hides it.
-*/
-.board-area::before {
-  opacity:        0    !important;
-  pointer-events: none !important;
-  z-index:        0    !important;
-}
-
-/* Wood rail — top 8px stripe */
-.board-area::after {
-  content:    '' !important;
-  position:   absolute !important;
-  inset:      0 0 auto 0 !important;
-  height:     8px !important;
-  background: linear-gradient(180deg,
-    var(--wood-1) 0%,
-    var(--wood-2) 50%,
-    var(--wood-3) 100%
-  ) !important;
-  box-shadow:     0 3px 14px rgba(0, 0, 0, 0.55) !important;
-  z-index:        10 !important;
-  pointer-events: none !important;
-}
-
-/* Board content above overlays */
-.board-container {
-  position: relative !important;
-  z-index:  2        !important;
-}
-
-/* ================================================
-   PLACEMENT ZONES — bold and obvious
-   ================================================ */
-.placement-zone.active {
-  background:    rgba(245, 166, 35, 0.18)          !important;
-  border:        2px dashed rgba(245, 166, 35, 0.75) !important;
-  border-radius: var(--radius-md)                  !important;
-  transition:    background 150ms ease, border-color 150ms ease !important;
-  cursor:        pointer                           !important;
-}
-
-.placement-zone.active:hover {
-  background:  rgba(245, 166, 35, 0.32)            !important;
-  border-color: var(--accent-light)                !important;
-  box-shadow:  0 0 18px rgba(245, 166, 35, 0.30)   !important;
-}
-
-.placement-arrow {
-  color:       var(--accent-light) !important;
-  font-size:   1.4rem              !important;
-  font-weight: 900                 !important;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.50) !important;
-}
-
-/* ================================================
-   OPP TILES CARD — bold dark card, chunky number
-   ================================================ */
+/* OPP TILES card — fixed to top-left of game-screen */
 .opponent-tile-card {
+  position:  absolute           !important;
+  top:       16px               !important;
+  left:      16px               !important;
+  z-index:   50                 !important;
+  /* Dark wood glass card */
   background: linear-gradient(145deg,
-    #2a1e10 0%,
+    #2c1e0c 0%,
     #1a1008 100%
-  ) !important;
-  border:        2px solid var(--wood-2) !important;
-  border-bottom: 2px solid var(--wood-4) !important;
-  border-radius: var(--radius-lg)        !important;
+  )                             !important;
+  border:        2px solid var(--wood-light)  !important;
+  border-bottom: 2px solid var(--wood-deep)   !important;
+  border-radius: var(--r-lg)                  !important;
   box-shadow:
     var(--shadow-lg),
-    inset 0  1px 0 rgba(232, 184, 112, 0.25),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.40) !important;
-  padding:                 12px 18px 14px !important;
-  min-width:               88px           !important;
-  backdrop-filter:         none           !important;
-  -webkit-backdrop-filter: none           !important;
+    inset 0 1px 0 rgba(240,200,120,0.22),
+    inset 0 -1px 0 rgba(0,0,0,0.45)          !important;
+  padding:       12px 20px 14px              !important;
+  min-width:     90px                        !important;
+  backdrop-filter:         none             !important;
+  -webkit-backdrop-filter: none             !important;
+  cursor: default                            !important;
+}
+
+.opponent-tile-card.active {
+  border-color: var(--amber)                 !important;
+  box-shadow:
+    var(--shadow-lg),
+    0 0 20px var(--amber-glow),
+    inset 0 1px 0 rgba(255,200,74,0.28)      !important;
 }
 
 .opponent-tile-label {
-  display:        block  !important;
+  display:        block                      !important;
   font-family:    'Nunito', system-ui, sans-serif !important;
-  font-size:      0.52rem !important;
-  font-weight:    900    !important;
-  letter-spacing: 0.20em !important;
-  text-transform: uppercase !important;
-  color:          var(--text-mid) !important;
-  margin-bottom:  5px    !important;
-  line-height:    1      !important;
+  font-size:      0.50rem                    !important;
+  font-weight:    900                        !important;
+  letter-spacing: 0.22em                     !important;
+  text-transform: uppercase                  !important;
+  color:          var(--text-mid)            !important;
+  margin-bottom:  5px                        !important;
+  line-height:    1                          !important;
 }
 
 .opponent-tile-number {
-  display:              block !important;
+  display:              block                !important;
   font-family:          'Nunito', system-ui, sans-serif !important;
-  font-size:            2.6rem !important;
-  font-weight:          900   !important;
-  color:                var(--text-warm) !important;
-  line-height:          1     !important;
-  letter-spacing:       -0.04em !important;
-  font-variant-numeric: tabular-nums !important;
+  font-size:            2.8rem               !important;
+  font-weight:          900                  !important;
+  color:                var(--text-warm)     !important;
+  line-height:          1                   !important;
+  letter-spacing:       -0.04em             !important;
+  font-variant-numeric: tabular-nums         !important;
 }
 
 @keyframes card-pop {
   0%   { transform: scale(1); }
-  40%  {
-    transform:  scale(1.08);
-    box-shadow: var(--shadow-lg),
-                0 0 0 3px var(--accent),
-                inset 0 1px 0 rgba(232, 184, 112, 0.30);
-  }
+  40%  { transform: scale(1.10);
+         box-shadow: var(--shadow-lg), 0 0 0 3px var(--amber), inset 0 1px 0 rgba(255,200,74,0.30); }
   100% { transform: scale(1); }
 }
+.card-updated { animation: card-pop 300ms cubic-bezier(0.34,1.56,0.64,1); }
 
-.card-updated {
-  animation: card-pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+/* TOP BAR — sits above board, houses scoreboard */
+.game-top-bar {
+  position:        absolute    !important;
+  top:             16px        !important;
+  right:           16px        !important;
+  z-index:         50          !important;
+  pointer-events:  auto        !important;
 }
 
-/* ================================================
-   SCOREBOARD — bold pill, YOU = vibrant teal
-   ================================================ */
+/* ── SCOREBOARD ──────────────────────────────────── */
 .scoreboard {
-  display:                 flex             !important;
-  align-items:             stretch          !important;
-  border-radius:           var(--radius-lg) !important;
-  overflow:                hidden           !important;
-  border:                  2px solid var(--wood-2) !important;
-  border-bottom:           2px solid var(--wood-4) !important;
-  box-shadow:
-    var(--shadow-lg),
-    inset 0 1px 0 rgba(232, 184, 112, 0.20) !important;
-  gap:                     2px              !important;
-  background:              var(--wood-4)    !important;
-  padding:                 0               !important;
-  backdrop-filter:         none            !important;
-  -webkit-backdrop-filter: none            !important;
-}
-
-/* Direct parent of .player-score cards */
-.scores-row {
-  display:    flex          !important;
-  width:      100%          !important;
-  gap:        2px           !important;
-  background: var(--wood-4) !important;
-}
-
-/* Base score card */
-.player-score {
-  padding:        12px 24px 14px !important;
-  border-radius:  0              !important;
-  border:         none           !important;
-  min-width:      80px           !important;
-  display:        flex           !important;
-  flex-direction: column         !important;
-  align-items:    center         !important;
-  gap:            3px            !important;
-  box-shadow:     none           !important;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* YOU card — vibrant teal, eye-catching */
-.player-score.you {
-  background: linear-gradient(160deg,
-    var(--you-1) 0%,
-    var(--you-2) 50%,
-    var(--you-3) 100%
-  ) !important;
-  box-shadow:
-    inset 0  1px 0 rgba(255, 255, 255, 0.30),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
-    0 0 24px var(--you-glow) !important;
-}
-
-.player-score.you .player-label {
-  color: rgba(220, 255, 240, 0.75) !important;
-}
-
-.player-score.you .score-number {
-  color:       #ffffff !important;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.25) !important;
-  font-size:   2rem !important;
-}
-
-/* OPPONENT card — dark wood, clearly subordinate */
-.player-score:not(.you) {
-  background: linear-gradient(160deg,
-    #3a2510 0%,
-    #221408 100%
-  ) !important;
-  box-shadow: inset 0 1px 0 rgba(232, 184, 112, 0.08) !important;
-}
-
-.player-score:not(.you) .player-label {
-  color: var(--text-mid) !important;
-}
-
-.player-score:not(.you) .score-number {
-  color:     rgba(255, 244, 224, 0.80) !important;
-  font-size: 2rem !important;
-}
-
-/* Active turn indicator */
-.player-score.active {
-  filter: brightness(1.12) !important;
-}
-
-@keyframes score-pop {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.06); }
-  100% { transform: scale(1); }
-}
-
-.player-score.score-pulse {
-  animation: score-pop 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-/* Labels */
-.player-label {
-  font-family:    'Nunito', system-ui, sans-serif !important;
-  font-size:      0.52rem !important;
-  font-weight:    900     !important;
-  letter-spacing: 0.20em  !important;
-  text-transform: uppercase !important;
-  white-space:    nowrap  !important;
-  line-height:    1       !important;
-}
-
-/* Numbers */
-.score-number {
-  font-family:          'Nunito', system-ui, sans-serif !important;
-  font-size:            2rem   !important;
-  font-weight:          900    !important;
-  line-height:          1      !important;
-  letter-spacing:       -0.03em !important;
-  font-variant-numeric: tabular-nums !important;
-}
-
-/* ================================================
-   BOTTOM TRAY — wood rack like Rummikub/Skyjo
-   ================================================ */
-.hand-area {
-  position:   relative !important;
-  background: linear-gradient(180deg,
-    var(--wood-2) 0%,
-    var(--wood-3) 30%,
-    var(--wood-4) 100%
-  ) !important;
-  border-top:              3px solid var(--wood-1) !important;
-  box-shadow:
-    0 -4px 0   var(--wood-5),
-    0 -8px 40px rgba(0, 0, 0, 0.65),
-    inset 0 1px 0 rgba(232, 184, 112, 0.30) !important;
+  display:       flex          !important;
+  align-items:   stretch       !important;
+  border-radius: var(--r-lg)   !important;
+  overflow:      hidden        !important;
+  border:        2px solid var(--wood-light) !important;
+  border-bottom: 2px solid var(--wood-deep)  !important;
+  box-shadow:    var(--shadow-lg),
+    inset 0 1px 0 rgba(240,200,120,0.18)     !important;
+  gap:           2px           !important;
+  background:    var(--wood-deep) !important;
+  padding:       0             !important;
   backdrop-filter:         none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* Wood grain highlight seam */
+.scores-row {
+  display:    flex              !important;
+  width:      100%              !important;
+  gap:        2px               !important;
+  background: var(--wood-deep)  !important;
+}
+
+.player-score {
+  padding:        13px 26px 15px !important;
+  border-radius:  0             !important;
+  border:         none          !important;
+  min-width:      88px          !important;
+  display:        flex          !important;
+  flex-direction: column        !important;
+  align-items:    center        !important;
+  gap:            4px           !important;
+  box-shadow:     none          !important;
+  font-family:    'Nunito', system-ui, sans-serif !important;
+}
+
+/* YOU — vibrant teal, unmissable */
+.player-score.you {
+  background: linear-gradient(160deg,
+    var(--teal)      0%,
+    var(--teal-dark) 55%,
+    var(--teal-deep) 100%
+  )                             !important;
+  box-shadow:
+    inset 0  1px 0 rgba(255,255,255,0.28),
+    inset 0 -1px 0 rgba(0,0,0,0.22),
+    0 0 28px var(--teal-glow)   !important;
+}
+.player-score.you .player-label {
+  color: rgba(200,255,235,0.75) !important;
+}
+.player-score.you .score-number {
+  color:       #ffffff          !important;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.25) !important;
+  font-size:   2.1rem           !important;
+}
+
+/* OPPONENT — dark wood */
+.player-score:not(.you) {
+  background: linear-gradient(160deg,
+    #3d2812 0%,
+    #231508 100%
+  )                             !important;
+  box-shadow: inset 0 1px 0 rgba(240,200,120,0.07) !important;
+}
+.player-score:not(.you) .player-label {
+  color: var(--text-mid)        !important;
+}
+.player-score:not(.you) .score-number {
+  color:     rgba(255,244,224,0.82) !important;
+  font-size: 2.1rem             !important;
+}
+
+/* Active turn — glow pulse */
+.player-score.active {
+  filter: brightness(1.14)      !important;
+}
+
+@keyframes score-pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+.player-score.score-pulse {
+  animation: score-pop 260ms cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.player-label {
+  font-family:    'Nunito', system-ui, sans-serif !important;
+  font-size:      0.50rem       !important;
+  font-weight:    900           !important;
+  letter-spacing: 0.22em        !important;
+  text-transform: uppercase     !important;
+  white-space:    nowrap        !important;
+  line-height:    1             !important;
+}
+.score-number {
+  font-family:          'Nunito', system-ui, sans-serif !important;
+  font-weight:          900     !important;
+  line-height:          1       !important;
+  letter-spacing:       -0.03em !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/* ── BOARD / FELT ────────────────────────────────── */
+.board-area {
+  flex:       1 1 auto          !important;
+  position:   relative          !important;
+  overflow:   hidden            !important;
+  min-height: 0                 !important;
+  background: linear-gradient(145deg,
+    var(--felt-top)  0%,
+    var(--felt-mid)  45%,
+    var(--felt-dark) 100%
+  )                             !important;
+}
+
+/* Suppress App.css noise texture pseudo — replace with clean rails */
+.board-area::before {
+  content:        ''            !important;
+  position:       absolute      !important;
+  inset:          0 0 auto 0   !important;
+  height:         8px           !important;
+  background: linear-gradient(180deg,
+    var(--wood-shine) 0%,
+    var(--wood-light) 40%,
+    var(--wood-mid)   100%
+  )                             !important;
+  box-shadow:     0 3px 16px rgba(0,0,0,0.55) !important;
+  opacity:        1             !important;
+  pointer-events: none          !important;
+  z-index:        10            !important;
+}
+
+/* Bottom wood rail — above tray */
+.board-area::after {
+  content:        ''            !important;
+  position:       absolute      !important;
+  inset:          auto 0 0 0   !important;
+  height:         7px           !important;
+  background: linear-gradient(180deg,
+    var(--wood-dark)  0%,
+    var(--wood-light) 100%
+  )                             !important;
+  box-shadow:     0 -3px 14px rgba(0,0,0,0.50) !important;
+  pointer-events: none          !important;
+  z-index:        10            !important;
+}
+
+.board-container {
+  position: relative !important;
+  z-index:  2        !important;
+  width:    100%     !important;
+  height:   100%     !important;
+}
+
+/* Placement zones */
+.placement-zone.active {
+  background:    rgba(245,166,35,0.16)           !important;
+  border:        2.5px dashed rgba(245,166,35,0.70) !important;
+  border-radius: var(--r-md)                     !important;
+  transition:    background 140ms, border-color 140ms !important;
+  cursor:        pointer                          !important;
+}
+.placement-zone.active:hover {
+  background:  rgba(245,166,35,0.30)             !important;
+  border-color: var(--amber-light)               !important;
+  box-shadow:  0 0 20px var(--amber-glow)        !important;
+}
+.placement-arrow {
+  color:       var(--amber-light)                !important;
+  font-size:   1.5rem                            !important;
+  font-weight: 900                               !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.60)      !important;
+}
+
+/* ── HAND TRAY ───────────────────────────────────── */
+/* Physical wood rack — the most important structural change */
+.hand-area {
+  flex:       0 0 auto          !important;
+  position:   relative          !important;
+  background: linear-gradient(180deg,
+    var(--wood-light) 0%,
+    var(--wood-mid)   25%,
+    var(--wood-dark)  70%,
+    var(--wood-deep)  100%
+  )                             !important;
+  border-top:  3px solid var(--wood-shine)        !important;
+  box-shadow:
+    0 -4px 0   var(--wood-deep),
+    0 -10px 50px rgba(0,0,0,0.70),
+    inset 0 1px 0 rgba(255,220,100,0.35)          !important;
+  backdrop-filter:         none !important;
+  -webkit-backdrop-filter: none !important;
+  z-index:     20               !important;
+}
+
+/* Golden wood seam highlight */
 .hand-area::before {
-  content:    '';
-  position:   absolute;
-  top:        0;
-  left:       3%;
-  right:      3%;
-  height:     2px;
+  content:    ''                ;
+  position:   absolute          ;
+  top:        0                 ;
+  left:       2%                ;
+  right:      2%                ;
+  height:     2px               ;
   background: linear-gradient(90deg,
-    transparent                  0%,
-    rgba(255, 220, 120, 0.60)   20%,
-    rgba(255, 240, 180, 0.85)   50%,
-    rgba(255, 220, 120, 0.60)   80%,
-    transparent                 100%
-  );
-  pointer-events: none;
-  z-index:        1;
+    transparent              0%,
+    rgba(255,215,100,0.55)  15%,
+    rgba(255,235,160,0.90)  50%,
+    rgba(255,215,100,0.55)  85%,
+    transparent             100%
+  )                             ;
+  pointer-events: none          ;
+  z-index: 1                    ;
+}
+
+/* Tray rail layout */
+.tray-rail {
+  display:     flex             !important;
+  align-items: center           !important;
+  width:       100%             !important;
+  padding:     10px 16px        !important;
+  gap:         12px             !important;
+  box-sizing:  border-box       !important;
 }
 
 /* "YOUR HAND (N)" label */
+.tray-left {
+  flex:        0 0 auto         !important;
+  min-width:   80px             !important;
+}
 .tray-left h3 {
   font-family:    'Nunito', system-ui, sans-serif !important;
-  font-size:      0.55rem !important;
-  font-weight:    900     !important;
-  letter-spacing: 0.20em  !important;
-  text-transform: uppercase !important;
-  color:          rgba(255, 220, 140, 0.50) !important;
-  line-height:    1 !important;
+  font-size:      0.52rem       !important;
+  font-weight:    900           !important;
+  letter-spacing: 0.20em        !important;
+  text-transform: uppercase     !important;
+  color:          rgba(255,215,100,0.50) !important;
+  line-height:    1             !important;
+  margin:         0             !important;
+  white-space:    nowrap        !important;
 }
 
-/* Tile container — must stay clean, no tinting */
-.hand-container {
-  backdrop-filter:         none        !important;
-  -webkit-backdrop-filter: none        !important;
-  background:              transparent !important;
-  border:                  none        !important;
-  box-shadow:              none        !important;
-  border-radius:           0           !important;
+/* Selection info chip */
+.selection-info {
+  display:        inline-block               !important;
+  margin-top:     5px                        !important;
+  font-size:      0.60rem                    !important;
+  font-weight:    900                        !important;
+  letter-spacing: 0.08em                     !important;
+  color:          var(--amber-light)         !important;
+  background:     rgba(245,166,35,0.18)      !important;
+  border:         1px solid rgba(245,166,35,0.35) !important;
+  border-radius:  var(--r-sm)               !important;
+  padding:        2px 7px                    !important;
 }
 
-/* Tile well — recessed slot in the wood rack */
+/* Center tile well */
 .tray-center {
+  flex:          1 1 auto                    !important;
+  min-width:     0                           !important;
   background: linear-gradient(180deg,
-    rgba(0, 0, 0, 0.45) 0%,
-    rgba(0, 0, 0, 0.28) 100%
-  ) !important;
-  border:        1px solid rgba(0, 0, 0, 0.60) !important;
-  border-top:    1px solid rgba(0, 0, 0, 0.75) !important;
-  border-radius: var(--radius-lg) !important;
-  padding:       12px 20px !important;
+    rgba(0,0,0,0.50) 0%,
+    rgba(0,0,0,0.30) 100%
+  )                                          !important;
+  border:        1px solid rgba(0,0,0,0.65)  !important;
+  border-top:    1px solid rgba(0,0,0,0.80)  !important;
+  border-radius: var(--r-lg)                 !important;
+  padding:       10px 16px                   !important;
   box-shadow:
-    inset 0 6px 20px rgba(0, 0, 0, 0.55),
-    inset 0 2px 6px  rgba(0, 0, 0, 0.65),
-    0 1px 0 rgba(232, 184, 112, 0.18) !important;
-  overflow: visible !important;
+    inset 0 6px 22px rgba(0,0,0,0.55),
+    inset 0 2px 6px  rgba(0,0,0,0.65),
+    0 1px 0 rgba(240,200,120,0.15)           !important;
+  overflow:      visible                     !important;
 }
 
-/* ================================================
-   LEAVE GAME BUTTON — warm amber styled
-   ================================================ */
+/* Tile container — absolutely no tinting */
+.hand-container {
+  display:                 flex              !important;
+  align-items:             center           !important;
+  justify-content:         center           !important;
+  backdrop-filter:         none             !important;
+  -webkit-backdrop-filter: none             !important;
+  background:              transparent      !important;
+  border:                  none             !important;
+  box-shadow:              none             !important;
+  gap:                     var(--hand-gap, 10px) !important;
+}
+
+/* Right side actions */
+.tray-right {
+  flex:        0 0 auto     !important;
+  display:     flex         !important;
+  align-items: center       !important;
+  gap:         8px          !important;
+}
+
+/* Optional draw button */
+.optional-draw-btn {
+  font-family:    'Nunito', system-ui, sans-serif !important;
+  font-size:      0.58rem   !important;
+  font-weight:    900       !important;
+  letter-spacing: 0.10em    !important;
+  text-transform: uppercase !important;
+  color:          var(--amber-light)           !important;
+  border:         1.5px solid rgba(245,166,35,0.40) !important;
+  border-radius:  var(--r-md)                 !important;
+  padding:        7px 13px                    !important;
+  background:     rgba(245,166,35,0.10)       !important;
+  cursor:         pointer                     !important;
+  transition:     all 120ms ease              !important;
+  white-space:    nowrap                      !important;
+}
+.optional-draw-btn:hover {
+  background:   rgba(245,166,35,0.22)         !important;
+  border-color: var(--amber-light)            !important;
+  color:        #fff                          !important;
+}
+
+/* LEAVE GAME button */
 .leave-btn {
   font-family:    'Nunito', system-ui, sans-serif !important;
-  font-size:      0.58rem !important;
-  font-weight:    900     !important;
-  letter-spacing: 0.16em  !important;
-  text-transform: uppercase !important;
-  color:          rgba(255, 220, 140, 0.55) !important;
-  border:         1.5px solid rgba(232, 184, 112, 0.25) !important;
-  border-radius:  var(--radius-md) !important;
-  padding:        7px 15px !important;
-  background:     rgba(232, 184, 112, 0.06) !important;
-  cursor:         pointer !important;
-  transition:
-    color        120ms ease,
-    border-color 120ms ease,
-    background   120ms ease,
-    transform     90ms ease !important;
-  white-space: nowrap !important;
-  user-select: none   !important;
+  font-size:      0.56rem                     !important;
+  font-weight:    900                         !important;
+  letter-spacing: 0.16em                      !important;
+  text-transform: uppercase                   !important;
+  color:          rgba(255,215,100,0.50)       !important;
+  border:         1.5px solid rgba(240,190,90,0.22) !important;
+  border-radius:  var(--r-md)                 !important;
+  padding:        7px 14px                    !important;
+  background:     rgba(240,190,90,0.05)       !important;
+  cursor:         pointer                     !important;
+  transition:     all 120ms ease              !important;
+  white-space:    nowrap                      !important;
+  user-select:    none                        !important;
+}
+.leave-btn:hover {
+  color:        rgba(255,230,150,0.95)        !important;
+  border-color: rgba(240,190,90,0.55)         !important;
+  background:   rgba(240,190,90,0.15)         !important;
+  box-shadow:   0 0 14px rgba(240,190,90,0.12) !important;
+  filter:       none                          !important;
+  transform:    none                          !important;
+}
+.leave-btn:active {
+  transform:  scale(0.95)                     !important;
+  background: rgba(240,190,90,0.22)           !important;
 }
 
-.leave-btn:hover:not(:disabled) {
-  color:        rgba(255, 230, 160, 0.95)        !important;
-  border-color: rgba(232, 184, 112, 0.55)        !important;
-  background:   rgba(232, 184, 112, 0.14)        !important;
-  box-shadow:   0 0 14px rgba(232, 184, 112, 0.12) !important;
-  transform:    none                             !important;
-  filter:       none                             !important;
+/* Fullscreen icon */
+.icon-btn,
+.fullscreen-btn {
+  color:           rgba(255,215,100,0.40)     !important;
+  cursor:          pointer                    !important;
+  transition:      color 120ms, transform 130ms !important;
+  display:         flex                       !important;
+  align-items:     center                     !important;
+  justify-content: center                     !important;
+  background:      none                       !important;
+  border:          none                       !important;
+  padding:         6px                        !important;
+}
+.icon-btn:hover,
+.fullscreen-btn:hover {
+  color:      rgba(255,230,150,0.90)          !important;
+  transform:  scale(1.15)                     !important;
+  filter:     none                            !important;
+  background: none                            !important;
 }
 
-.leave-btn:active:not(:disabled) {
-  transform:  scale(0.95) !important;
-  background: rgba(232, 184, 112, 0.22) !important;
-  filter:     none !important;
-}
-
-.leave-btn:focus-visible {
-  outline:        2px solid var(--accent) !important;
-  outline-offset: 2px                     !important;
-}
-
-/* ================================================
-   FULLSCREEN ICON
-   ================================================ */
-.icon-btn {
-  color:           rgba(255, 220, 140, 0.40) !important;
-  cursor:          pointer !important;
-  transition:      color 120ms ease, transform 140ms ease !important;
-  display:         flex !important;
-  align-items:     center !important;
-  justify-content: center !important;
-}
-
-.icon-btn:hover {
-  color:      rgba(255, 230, 160, 0.85) !important;
-  transform:  scale(1.12) !important;
-  background: transparent !important;
-  filter:     none !important;
-}
-
-/* ================================================
-   HAND TILE INTERACTIONS
-   transform + box-shadow ONLY — no background changes
-   ================================================ */
+/* ── HAND TILE INTERACTIONS ──────────────────────── */
+/* transform + box-shadow ONLY */
 .hand-container .domino-tile {
-  position:    relative;
+  position:    relative                       ;
   transition:
-    transform  150ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 150ms ease;
-  will-change: transform;
+    transform  150ms cubic-bezier(0.34,1.56,0.64,1),
+    box-shadow 150ms ease                     ;
+  will-change: transform                      ;
+  cursor:      pointer                        ;
 }
 
-/* Hover lift */
 .hand-container .domino-tile:not(.disabled):not(.selected):hover {
-  transform: translateY(-12px) scale(1.06) !important;
-  z-index:   20;
+  transform: translateY(-12px) scale(1.06)   !important;
+  z-index:   20                              ;
 }
-
 .hand-container .domino-tile:not(.disabled):not(.selected):hover .domino-body {
   box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.55),
-    0  4px 10px rgba(0, 0, 0, 0.25) !important;
+    0 18px 42px rgba(0,0,0,0.58),
+    0  4px 10px rgba(0,0,0,0.28)             !important;
 }
 
-/* Selected — gold glow */
 .hand-container .domino-tile.selected {
-  transform: translateY(-16px) scale(1.08) !important;
-  z-index:   20;
+  transform: translateY(-16px) scale(1.08)   !important;
+  z-index:   20                              ;
 }
-
 .hand-container .domino-tile.selected .domino-body {
   box-shadow:
-    0 0 0 3px var(--accent),
-    0 0 22px var(--accent-glow),
-    0 22px 44px rgba(0, 0, 0, 0.60) !important;
+    0 0 0 3px var(--amber),
+    0 0 24px var(--amber-glow),
+    0 24px 48px rgba(0,0,0,0.65)             !important;
 }
 
-/* Legal move — bright teal ring */
 .hand-container .domino-tile.highlight:not(.selected) .domino-body {
   box-shadow:
-    0 0 0 2.5px var(--you-1),
-    0 0 14px rgba(0, 200, 150, 0.30),
-    0 4px 14px rgba(0, 0, 0, 0.35) !important;
+    0 0 0 2.5px var(--teal),
+    0 0  14px var(--teal-glow),
+    0 4px 14px rgba(0,0,0,0.38)              !important;
 }
 
-/* Invalid shake */
 @keyframes shake-invalid {
-  0%, 100% { transform: translateX(0); }
-  15%      { transform: translateX(-7px); }
-  35%      { transform: translateX(7px); }
-  55%      { transform: translateX(-5px); }
-  75%      { transform: translateX(4px); }
+  0%,100% { transform: translateX(0); }
+  15%     { transform: translateX(-7px); }
+  35%     { transform: translateX(7px); }
+  55%     { transform: translateX(-5px); }
+  75%     { transform: translateX(4px); }
 }
-
 .hand-container .domino-tile.tile-invalid {
-  animation: shake-invalid 300ms cubic-bezier(0.36, 0.07, 0.19, 0.97) !important;
+  animation: shake-invalid 300ms cubic-bezier(0.36,0.07,0.19,0.97) !important;
 }
 
-/* ================================================
-   BOARD TILE LAND ANIMATION
-   Preserves inline translate(-50%,-50%)
-   ================================================ */
+/* ── BOARD TILE LAND ANIMATION ───────────────────── */
 @keyframes tile-land {
-  0%   { transform: translate(-50%, calc(-50% - 20px)) scale(0.60); opacity: 0; }
-  60%  { transform: translate(-50%, calc(-50% + 3px))  scale(1.08); opacity: 1; }
+  0%   { transform: translate(-50%, calc(-50% - 22px)) scale(0.58); opacity: 0; }
+  60%  { transform: translate(-50%, calc(-50% +  3px)) scale(1.09); opacity: 1; }
   80%  { transform: translate(-50%, -50%)               scale(0.96); opacity: 1; }
   100% { transform: translate(-50%, -50%)               scale(1);    opacity: 1; }
 }
-
 .board-tile-wrapper {
-  animation: tile-land 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both !important;
+  animation: tile-land 380ms cubic-bezier(0.34,1.56,0.64,1) both !important;
 }
 
-/* ================================================
-   REDUCED MOTION
-   ================================================ */
+/* ── TOAST ───────────────────────────────────────── */
+.toast {
+  font-family:    'Nunito', system-ui, sans-serif !important;
+  font-size:      0.85rem                     !important;
+  font-weight:    900                         !important;
+  letter-spacing: 0.08em                      !important;
+  background: linear-gradient(135deg,
+    rgba(30,22,10,0.97) 0%,
+    rgba(20,14,6,0.99)  100%
+  )                                           !important;
+  border:       1.5px solid rgba(245,166,35,0.40) !important;
+  border-radius: var(--r-lg)                  !important;
+  color:         var(--text-warm)             !important;
+  box-shadow:    var(--shadow-lg)             !important;
+  padding:       10px 20px                    !important;
+}
+
+/* ── REDUCED MOTION ──────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration:  0.01ms !important;
