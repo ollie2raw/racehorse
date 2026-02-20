@@ -1,0 +1,232 @@
+/* ═══════════════════════════════════════════════════════════════════
+   PREMIUM POLISH — racehorse-dominoes
+   Visual and animation enhancements only.
+   Zero gameplay, logic, networking, or layout changes.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── 3A. Board Felt Enhancement ─────────────────────────────────── */
+
+/* Noise texture + centre bloom, replaces the simpler cinematic/theme versions */
+.board-area::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='256'%20height='256'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.85'%20numOctaves='4'%20stitchTiles='stitch'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'%20opacity='0.45'/%3E%3C/svg%3E")
+      0 0 / 256px 256px,
+    radial-gradient(
+      ellipse at 50% 44%,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.07) 30%,
+      transparent 58%
+    );
+  mix-blend-mode: soft-light;
+}
+
+/* Deeper sculpted vignette — edges darken, corners are darkest */
+.board-area::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.52) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 52px 130px rgba(0, 0, 0, 0.54),
+    inset 0 -52px 130px rgba(0, 0, 0, 0.54),
+    inset 76px 0 130px rgba(0, 0, 0, 0.30),
+    inset -76px 0 130px rgba(0, 0, 0, 0.30);
+}
+
+/* ─── 3B. Hand Tray ───────────────────────────────────────────────── */
+
+/*
+  CRITICAL: No backdrop-filter, opacity, or filter on any container that
+  is an ancestor of tile elements. This prevents tile graying/tinting.
+
+  The cinematic.css brute-force selector hits .hand-area and .hand-container
+  with backdrop-filter: blur(16px) !important.  We zero it out here.
+*/
+
+.hand-area {
+  background: linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Tile container: must be clean — no glass, no blur, no border */
+.hand-container {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* ─── 3C. Tile Micro-interactions ────────────────────────────────── */
+
+/* Base: smooth transform transitions on all hand tiles */
+.hand-container .domino-tile {
+  position: relative;      /* required for z-index */
+  transition:
+    transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 160ms ease;
+  will-change: transform;
+}
+
+/* Hover lift (exclude selected tiles — they have their own rule) */
+.hand-container .domino-tile:not(.disabled):not(.selected):hover {
+  transform: translateY(-8px) scale(1.04);
+  z-index: 10;
+}
+
+.hand-container .domino-tile:not(.disabled):not(.selected):hover .domino-body {
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.45),
+    0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Selected / "charged" state: lift higher + golden glow */
+.hand-container .domino-tile.selected {
+  transform: translateY(-12px) scale(1.06);
+  z-index: 11;
+}
+
+.hand-container .domino-tile.selected .domino-body {
+  box-shadow:
+    0 0 0 2px rgba(255, 220, 80, 0.72),
+    0 16px 32px rgba(0, 0, 0, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Legal move highlight: refined green ring, not neon */
+.hand-container .domino-tile.highlight:not(.selected) .domino-body {
+  box-shadow:
+    0 0 0 2px rgba(100, 220, 130, 0.65),
+    0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+/* Invalid move shake — class applied by JS if wired in future */
+@keyframes pp-shake-invalid {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-5px); }
+  40%       { transform: translateX(5px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(3px); }
+}
+
+.hand-container .domino-tile.tile-invalid {
+  animation: pp-shake-invalid 320ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+/* ─── 3D. Board Tile Landing Animation ───────────────────────────── */
+
+/*
+  Tiles drop in from slightly above with a spring overshoot.
+  Final keyframe matches the inline transform: translate(-50%, -50%)
+  so there is no snap when the animation ends.
+*/
+@keyframes pp-board-tile-land {
+  0% {
+    transform: translate(-50%, calc(-50% - 20px)) scale(0.68);
+    opacity: 0;
+  }
+  62% {
+    transform: translate(-50%, calc(-50% + 3px)) scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.board-tile-wrapper {
+  animation: pp-board-tile-land 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ─── 3E. Score + Opp-Tiles Card Pulse ───────────────────────────── */
+
+@keyframes pp-card-pulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.038); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
+  100% { transform: scale(1); }
+}
+
+/* Score-pulse class is toggled by ScoreBoard component for 150 ms */
+.player-score.score-pulse {
+  animation: pp-card-pulse 220ms ease-out;
+}
+
+/* card-updated class toggled by App for opponent tile count changes */
+.opponent-tile-card.card-updated {
+  animation: pp-card-pulse 220ms ease-out;
+}
+
+/* ─── 3F. Leave Game Button ──────────────────────────────────────── */
+
+.leave-btn {
+  font-size: 0.75rem !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  padding: 6px 12px !important;
+  background: transparent !important;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease !important;
+}
+
+.leave-btn:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.30) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  transform: none !important;   /* suppress global btn translateY */
+  filter: none !important;
+}
+
+.leave-btn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12) !important;
+  transform: scale(0.97) !important;
+  filter: none !important;
+}
+
+/* ─── 3G. Typography ─────────────────────────────────────────────── */
+
+/* Score numbers: tabular alignment, tighter tracking */
+.score-number,
+.opponent-tile-number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Hand label tightening */
+.tray-left h3 {
+  letter-spacing: 0.05em;
+}
+
+/* OPP TILES label already has uppercase in App.css; enhance spacing */
+.opponent-tile-label {
+  letter-spacing: 0.12em;
+}
+
+/* ─── 3H. Reduced Motion ─────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

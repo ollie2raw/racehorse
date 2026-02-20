@@ -215,6 +215,8 @@ export default function App() {
   const [handScrollable, setHandScrollable] = useState(false);
   const autoTurnActionKeyRef = useRef<string>("");
   const handRevealShownRef = useRef<number | null>(null);
+  const prevOppCountRef = useRef<number | null>(null);
+  const [oppTilePulse, setOppTilePulse] = useState(false);
 
   const showToast = useCallback((msg: string, duration = 3000) => {
     if (toastTimeoutRef.current) {
@@ -544,6 +546,16 @@ export default function App() {
     turnToastRef.current = activePlayerId;
   }, [inGame, state, showToast, you]);
 
+  // Pulse the opp-tile card whenever the count changes
+  useEffect(() => {
+    if (prevOppCountRef.current !== null && prevOppCountRef.current !== opponentTileCount) {
+      setOppTilePulse(true);
+      const t = setTimeout(() => setOppTilePulse(false), 250);
+      return () => clearTimeout(t);
+    }
+    prevOppCountRef.current = opponentTileCount;
+  }, [opponentTileCount]);
+
   // ─── Render ───────────────────────────────────────────────
 
   return (
@@ -716,7 +728,7 @@ export default function App() {
             </div>
           )}
 
-          <div className={`opponent-tile-card ${!isMyTurn ? "active" : ""}`}>
+          <div className={`opponent-tile-card ${!isMyTurn ? "active" : ""} ${oppTilePulse ? "card-updated" : ""}`}>
             <span className="opponent-tile-label">OPP TILES</span>
             <span className="opponent-tile-number">{opponentTileCount}</span>
           </div>
