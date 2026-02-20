@@ -2,6 +2,8 @@
    PREMIUM POLISH — racehorse-dominoes
    Visual and animation enhancements only.
    Zero gameplay, logic, networking, or layout changes.
+   TILES ARE COMPLETELY FROZEN — no rules touch .tile, .domino,
+   .pip, dividers, or any tile-ancestor background/filter/opacity.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ─── CSS Token Overrides ────────────────────────────────────────── */
@@ -12,68 +14,210 @@
   --tile-bg-gradient: linear-gradient(145deg, #ffffff 0%, #f9f9f9 100%);
 }
 
-/* ─── 3A. Board Felt Enhancement ─────────────────────────────────── */
+/* ─── 1. Board Felt — Casino-Quality Physical Depth ─────────────── */
 
-/* Subtle centre bloom only — no noise overlay */
-.board-area::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse at 50% 44%,
-    rgba(255, 255, 255, 0.10) 0%,
-    rgba(255, 255, 255, 0.04) 35%,
-    transparent 60%
-  );
-  mix-blend-mode: soft-light;
+/* Layer an overhead bloom on top of the existing felt gradient.
+   box-shadow provides inset rail shadows. */
+.board-area {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 42%, rgba(255, 255, 255, 0.045) 0%, transparent 100%),
+    var(--bg-board-gradient) !important;
+  box-shadow:
+    inset 0 0 80px rgba(0, 0, 0, 0.22),
+    inset 0 12px 35px rgba(0, 0, 0, 0.18),
+    inset 0 -12px 35px rgba(0, 0, 0, 0.12) !important;
 }
 
-/* Light vignette — just enough to frame the edges */
+/*
+  App.css sets .board-area::before { opacity: 0.22 } for its noise overlay.
+  We neutralize it completely: blank background, opacity reset to 1.
+*/
+.board-area::before {
+  background: none !important;
+  opacity: 1 !important;
+}
+
+/*
+  Rail-edge gradient — soft top/bottom darkening to suggest physical rails.
+  z-index: 0 keeps it BELOW .board-container (which gets z-index: 2),
+  so tiles are never painted over.
+*/
 .board-area::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 1;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.18) 100%);
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.20) 0%,
+    transparent 8%,
+    transparent 88%,
+    rgba(0, 0, 0, 0.16) 100%
+  );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    inset 4px 0 12px rgba(0, 0, 0, 0.12),
+    inset -4px 0 12px rgba(0, 0, 0, 0.10);
 }
 
-/* ─── 3B. Hand Tray ───────────────────────────────────────────────── */
+/* Ensure the board canvas renders above the ::after rail overlay */
+.board-container {
+  position: relative;
+  z-index: 2;
+}
+
+/* ─── 2. OPP TILES Card — Real Premium Dark Glass ───────────────── */
+
+.opponent-tile-card {
+  background: linear-gradient(
+    145deg,
+    rgba(18, 22, 38, 0.96) 0%,
+    rgba(10, 12, 24, 0.98) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.40) !important;
+  border-right-color: rgba(0, 0, 0, 0.30) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.04),
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.40) !important;
+  padding: 10px 16px 12px !important;
+  min-width: 80px !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+.opponent-tile-label {
+  font-size: 0.55rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.18em !important;
+  text-transform: uppercase !important;
+  color: rgba(255, 255, 255, 0.35) !important;
+  display: block !important;
+  margin-bottom: 4px !important;
+  line-height: 1 !important;
+}
+
+.opponent-tile-number {
+  font-size: 2rem !important;
+  font-weight: 900 !important;
+  color: #ffffff !important;
+  font-variant-numeric: tabular-nums !important;
+  line-height: 1 !important;
+  letter-spacing: -0.03em !important;
+  display: block !important;
+}
+
+/* ─── 3. Scoreboard — Unified Premium Pill ──────────────────────── */
+
+/* Outer wrapper: single border-radius clips all child cards cleanly */
+.scoreboard {
+  display: flex !important;
+  align-items: stretch !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.35) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  background: rgba(0, 0, 0, 0.30) !important; /* gap colour between cards */
+  gap: 1px !important;
+  padding: 0 !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+}
+
+.scores-row {
+  display: flex !important;
+  gap: 1px !important;
+  background: rgba(0, 0, 0, 0.30) !important;
+}
+
+/* Base card */
+.player-score {
+  padding: 10px 22px 12px !important;
+  border-radius: 0 !important;
+  border: none !important;
+  min-width: 72px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 3px !important;
+  box-shadow: none !important;
+}
+
+/* YOUR card — always premium blue, regardless of turn */
+.player-score.you {
+  background: linear-gradient(145deg, #1e7de8 0%, #1459c4 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18) !important;
+}
+
+/* OPPONENT card — always dark navy */
+.player-score:not(.you) {
+  background: linear-gradient(145deg, rgba(22, 26, 44, 0.97) 0%, rgba(13, 15, 28, 0.99) 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Active turn indicator: subtle brightness boost, no color identity change */
+.player-score.active {
+  filter: brightness(1.08) !important;
+}
+
+/* Score card labels — YOU / OPPONENT */
+.player-label {
+  font-size: 0.52rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.18em !important;
+  text-transform: uppercase !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  line-height: 1 !important;
+}
+
+/* Score numbers */
+.score-number {
+  font-size: 1.6rem !important;
+  font-weight: 900 !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1 !important;
+  color: #ffffff !important;
+}
+
+/* ─── 4. Bottom Tray — Full Premium Treatment ───────────────────── */
 
 /*
-  CRITICAL: No backdrop-filter, opacity, or filter on any container that
-  is an ancestor of tile elements. This prevents tile graying/tinting.
-
-  The cinematic.css brute-force selector hits .hand-area and .hand-container
-  with backdrop-filter: blur(16px) !important.  We zero it out here.
+  CRITICAL: No backdrop-filter, opacity, or filter on any ancestor of tile
+  elements. This prevents tile graying/tinting.
 */
-
 .hand-area {
-  background: linear-gradient(180deg, #0f1223 0%, #080a14 100%) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  background: linear-gradient(180deg, #0d1022 0%, #080a18 100%) !important;
+  border-top: none !important;
+  box-shadow:
+    0 -1px 0 rgba(0, 0, 0, 0.90),
+    0 -4px 40px rgba(0, 0, 0, 0.60),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* Subtle inner highlight stripe at the top edge */
+/* Hairline highlight at the top edge of the tray */
 .hand-area::before {
   content: "";
   position: absolute;
   top: 0;
-  left: 8%;
-  right: 8%;
+  left: 6%;
+  right: 6%;
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.20) 40%,
-    rgba(255, 255, 255, 0.20) 60%,
+    rgba(255, 255, 255, 0.14) 35%,
+    rgba(255, 255, 255, 0.14) 65%,
     transparent 100%
   );
   pointer-events: none;
@@ -89,7 +233,34 @@
   border-radius: 0 !important;
 }
 
-/* ─── 3C. Tile Micro-interactions ────────────────────────────────── */
+/* Tile "well" — recessed slot that tiles appear to sit inside */
+.tray-center {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.28) 0%,
+    rgba(0, 0, 0, 0.18) 100%
+  ) !important;
+  border: 1px solid rgba(0, 0, 0, 0.45) !important;
+  border-top-color: rgba(0, 0, 0, 0.60) !important;
+  border-radius: 12px !important;
+  padding: 10px 16px !important;
+  box-shadow:
+    inset 0 3px 10px rgba(0, 0, 0, 0.35),
+    inset 0 1px 3px rgba(0, 0, 0, 0.50) !important;
+  overflow: visible !important; /* allow lifted tiles to escape the well */
+}
+
+/* Hand label — ultra-small, dimmed */
+.tray-left h3 {
+  font-size: 0.56rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.18em !important;
+  text-transform: uppercase !important;
+  color: rgba(255, 255, 255, 0.28) !important;
+  line-height: 1 !important;
+}
+
+/* ─── 5. Tile Micro-interactions ─────────────────────────────────── */
 
 /* Base: smooth transform transitions on all hand tiles */
 .hand-container .domino-tile {
@@ -100,7 +271,7 @@
   will-change: transform;
 }
 
-/* Hover lift (exclude selected tiles — they have their own rule) */
+/* Hover lift */
 .hand-container .domino-tile:not(.disabled):not(.selected):hover {
   transform: translateY(-8px) scale(1.04);
   z-index: 10;
@@ -125,14 +296,14 @@
     0 4px 8px rgba(0, 0, 0, 0.25);
 }
 
-/* Legal move highlight: refined green ring, not neon */
+/* Legal move highlight: refined green ring */
 .hand-container .domino-tile.highlight:not(.selected) .domino-body {
   box-shadow:
     0 0 0 2px rgba(100, 220, 130, 0.65),
     0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
-/* Invalid move shake — class applied by JS if wired in future */
+/* Invalid move shake */
 @keyframes pp-shake-invalid {
   0%, 100% { transform: translateX(0); }
   20%       { transform: translateX(-5px); }
@@ -145,10 +316,9 @@
   animation: pp-shake-invalid 320ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
 }
 
-/* ─── 3D. Board Tile Landing Animation ───────────────────────────── */
+/* ─── 6. Board Tile Landing Animation ────────────────────────────── */
 
 /*
-  Tiles drop in from slightly above with a spring overshoot.
   Final keyframe matches the inline transform: translate(-50%, -50%)
   so there is no snap when the animation ends.
 */
@@ -171,7 +341,7 @@
   animation: pp-board-tile-land 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* ─── 3E. Score + Opp-Tiles Card Pulse ───────────────────────────── */
+/* ─── 7. Score + Opp-Tiles Pulse ─────────────────────────────────── */
 
 @keyframes pp-card-pulse {
   0%   { transform: scale(1); }
@@ -179,203 +349,68 @@
   100% { transform: scale(1); }
 }
 
-/* Score-pulse class is toggled by ScoreBoard component for 150 ms */
 .player-score.score-pulse {
   animation: pp-card-pulse 220ms ease-out;
 }
 
-/* card-updated class toggled by App for opponent tile count changes */
 .opponent-tile-card.card-updated {
   animation: pp-card-pulse 220ms ease-out;
 }
 
-/* "YOU" card: subtle top accent when not active (overflow:hidden hides outer glow) */
-.player-score.you:not(.active) {
-  box-shadow: inset 0 2px 0 rgba(93, 194, 255, 0.28) !important;
-}
-
-/* ─── 3F. Leave Game Button ──────────────────────────────────────── */
+/* ─── 8. Leave Game Button ───────────────────────────────────────── */
 
 .leave-btn {
-  font-size: 0.75rem !important;
-  letter-spacing: 0.08em !important;
+  font-size: 0.58rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.16em !important;
   text-transform: uppercase !important;
-  color: rgba(255, 255, 255, 0.55) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
-  padding: 6px 12px !important;
-  background: transparent !important;
+  color: rgba(255, 255, 255, 0.32) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 7px !important;
+  padding: 7px 14px !important;
+  background: rgba(255, 255, 255, 0.02) !important;
   transition:
-    color 150ms ease,
-    border-color 150ms ease,
-    background 150ms ease,
-    transform 150ms ease !important;
+    color 130ms ease,
+    border-color 130ms ease,
+    background 130ms ease,
+    transform 130ms ease !important;
 }
 
 .leave-btn:hover:not(:disabled) {
-  color: rgba(255, 255, 255, 0.92) !important;
-  border-color: rgba(255, 255, 255, 0.30) !important;
-  background: rgba(255, 255, 255, 0.07) !important;
-  transform: none !important;   /* suppress global btn translateY */
+  color: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.26) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  transform: none !important;
   filter: none !important;
 }
 
 .leave-btn:active:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12) !important;
-  transform: scale(0.97) !important;
+  background: rgba(255, 255, 255, 0.10) !important;
+  transform: scale(0.96) !important;
   filter: none !important;
 }
 
-/* ─── 3G. Typography ─────────────────────────────────────────────── */
-
-/* Score numbers: tabular alignment, tighter tracking */
-.score-number,
-.opponent-tile-number {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-/* Hand label — small, caps, dimmed to not compete with tiles */
-.tray-left h3 {
-  font-size: 0.65rem !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.14em !important;
-  text-transform: uppercase !important;
-  color: rgba(240, 244, 248, 0.38) !important;
-}
-
-/* OPP TILES label already has uppercase in App.css; enhance spacing */
-.opponent-tile-label {
-  letter-spacing: 0.12em;
-}
-
-/* ─── 3I. OPP TILES Card ─────────────────────────────────────────── */
-
-.opponent-tile-card {
-  background: linear-gradient(135deg, rgba(20,24,40,0.92) 0%, rgba(10,12,22,0.96) 100%) !important;
-  border: 1px solid rgba(255,255,255,0.13) !important;
-  border-radius: 10px !important;
-  box-shadow:
-    0 4px 20px rgba(0,0,0,0.5),
-    inset 0 1px 0 rgba(255,255,255,0.08) !important;
-  padding: 8px 14px !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
-}
-
-.opponent-tile-label {
-  font-size: 0.58rem !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.16em !important;
-  text-transform: uppercase !important;
-  color: rgba(255,255,255,0.38) !important;
-  margin-bottom: 2px !important;
-}
-
-.opponent-tile-number {
-  font-size: 1.6rem !important;
-  font-weight: 800 !important;
-  color: #ffffff !important;
-  font-variant-numeric: tabular-nums !important;
-  line-height: 1 !important;
-  letter-spacing: -0.02em !important;
-}
-
-/* ─── 3J. Scoreboard Overhaul ────────────────────────────────────── */
-
-/* Unified pill panel — cards flush together, outer rounding clips them */
-.scoreboard {
-  display: flex !important;
-  gap: 0 !important;
-  background: rgba(0,0,0,0.30) !important;
-  border: 1px solid rgba(255,255,255,0.10) !important;
-  border-radius: 10px !important;
-  overflow: hidden !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.45) !important;
-  padding: 0 !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  align-items: stretch !important;
-}
-
-.scores-row {
-  display: flex !important;
-  gap: 0 !important;
-}
-
-/* Base card style */
-.player-score {
-  padding: 10px 18px !important;
-  border-radius: 0 !important;
-  border: none !important;
-  min-width: 72px !important;
-  background: linear-gradient(145deg, rgba(30,34,52,0.9) 0%, rgba(18,20,35,0.95) 100%) !important;
-  box-shadow: none !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  gap: 2px !important;
-}
-
-/* Thin separator between adjacent cards */
-.player-score + .player-score {
-  border-left: 1px solid rgba(255,255,255,0.06) !important;
-}
-
-/* Label — YOU / OPPONENT */
-.player-label {
-  font-size: 0.55rem !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.16em !important;
-  text-transform: uppercase !important;
-  color: rgba(255,255,255,0.45) !important;
-}
-
-/* Score number */
-.score-number {
-  font-size: 1.5rem !important;
-  font-weight: 800 !important;
-  font-variant-numeric: tabular-nums !important;
-  letter-spacing: -0.02em !important;
-  line-height: 1 !important;
-  color: #ffffff !important;
-}
-
-/* Active player card — premium blue gradient */
-.player-score.active {
-  background: linear-gradient(145deg, #1a72e8 0%, #1255c0 100%) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.20),
-    inset 0 -1px 0 rgba(0,0,0,0.15) !important;
-}
-
-.player-score.active .player-label {
-  color: rgba(255,255,255,0.72) !important;
-}
-
-/* ─── 3K. Icon Button (Fullscreen) ───────────────────────────────── */
+/* ─── 9. Icon Button (Fullscreen) ────────────────────────────────── */
 
 .icon-btn {
-  color: rgba(255,255,255,0.30) !important;
-  transition: color 130ms ease, background 130ms ease !important;
+  color: rgba(255, 255, 255, 0.25) !important;
+  transition: color 130ms ease, background 130ms ease, transform 130ms ease !important;
 }
 
 .icon-btn:hover {
-  color: rgba(255,255,255,0.75) !important;
-  background: rgba(255,255,255,0.06) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  transform: scale(1.10) !important;
 }
 
-/* ─── 3L. Felt Rails ─────────────────────────────────────────────── */
+/* ─── 10. Global Typography ──────────────────────────────────────── */
 
-/* Gentle inset shadows suggesting physical table rails.
-   No pseudo-elements, no z-index conflicts, no center darkening. */
-.board-area {
-  box-shadow:
-    inset 0 0 60px rgba(0,0,0,0.12),
-    inset 0 8px 20px rgba(0,0,0,0.10),
-    inset 0 -8px 20px rgba(0,0,0,0.08) !important;
+/* OPP TILES label already uppercase; enhance spacing */
+.opponent-tile-label {
+  letter-spacing: 0.16em;
 }
 
-/* ─── 3H. Reduced Motion ─────────────────────────────────────────── */
+/* ─── 11. Reduced Motion Guard ───────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   *,
