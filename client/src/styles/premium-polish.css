@@ -1,422 +1,510 @@
-/* ═══════════════════════════════════════════════════════════════════
-   PREMIUM POLISH — racehorse-dominoes
-   Visual and animation enhancements only.
-   Zero gameplay, logic, networking, or layout changes.
-   TILES ARE COMPLETELY FROZEN — no rules touch .tile, .domino,
-   .pip, dividers, or any tile-ancestor background/filter/opacity.
-   ═══════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════
+   RACEHORSE DOMINOES — PREMIUM POLISH
+   Chrome only. Zero changes to tile faces, pips, or dividers.
+   Selector guard: only transform/shadow/animation are allowed on
+   any selector containing "domino" or "tile".
+   ════════════════════════════════════════════════════════════════════ */
 
-/* ─── CSS Token Overrides ────────────────────────────────────────── */
+/* ═══ 1. DESIGN TOKENS ══════════════════════════════════════════════ */
 
 :root {
-  /* Tile faces: override App.css cream (#fffef5→#f5f0e0) to pure white */
-  --tile-bg: #ffffff;
+  /* Felt palette */
+  --felt-base:  #1a5c35;
+  --felt-light: #1e6b3d;
+  --felt-dark:  #0f3d22;
+
+  /* Chrome surfaces */
+  --chrome-bg:              #0a0c18;
+  --chrome-surface:         #10142a;
+  --chrome-border:          rgba(255, 255, 255, 0.10);
+  --chrome-border-bright:   rgba(255, 255, 255, 0.18);
+  --chrome-highlight:       rgba(255, 255, 255, 0.06);
+
+  /* Accent */
+  --accent-blue:        #1a72e8;
+  --accent-blue-bright: #2d87ff;
+
+  /* Text */
+  --text-primary:   #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.45);
+  --text-dim:       rgba(255, 255, 255, 0.22);
+
+  /* Shadows */
+  --shadow-heavy:  0 8px 40px rgba(0, 0, 0, 0.65);
+  --shadow-medium: 0 4px 20px rgba(0, 0, 0, 0.45);
+
+  /* Radii */
+  --radius-card: 12px;
+  --radius-btn:   7px;
+
+  /* Tile faces — override App.css cream (#fffef5) to pure white */
+  --tile-bg:          #ffffff;
   --tile-bg-gradient: linear-gradient(145deg, #ffffff 0%, #f9f9f9 100%);
 }
 
-/* ─── 1. Board Felt — Casino-Quality Physical Depth ─────────────── */
+/* ═══ 2. FELT SURFACE ════════════════════════════════════════════════ */
 
-/* Layer an overhead bloom on top of the existing felt gradient.
-   box-shadow provides inset rail shadows. */
 .board-area {
+  position: relative !important;
+  overflow: hidden   !important;
+  /* Directional overhead light + radial vignette toward edges */
   background:
-    radial-gradient(ellipse 70% 55% at 50% 42%, rgba(255, 255, 255, 0.045) 0%, transparent 100%),
-    var(--bg-board-gradient) !important;
-  box-shadow:
-    inset 0 0 80px rgba(0, 0, 0, 0.22),
-    inset 0 12px 35px rgba(0, 0, 0, 0.18),
-    inset 0 -12px 35px rgba(0, 0, 0, 0.12) !important;
+    radial-gradient(
+      ellipse 60% 45% at 50% 38%,
+      rgba(38, 110, 65, 0.55) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 100% 100% at 50% 50%,
+      var(--felt-light) 0%,
+      var(--felt-base)  45%,
+      var(--felt-dark)  100%
+    ) !important;
 }
 
 /*
-  App.css sets .board-area::before { opacity: 0.22 } for its noise overlay.
-  We neutralize it completely: blank background, opacity reset to 1.
+  App.css sets .board-area::before at opacity: 0.22 for a noise texture.
+  We completely replace it with physical table-rail shadow gradients.
+  opacity: 1 !important undoes the App.css dimming.
 */
 .board-area::before {
-  background: none !important;
-  opacity: 1 !important;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.32) 0px,
+      rgba(0, 0, 0, 0.10) 60px,
+      transparent 25%,
+      transparent 75%,
+      rgba(0, 0, 0, 0.08) calc(100% - 60px),
+      rgba(0, 0, 0, 0.22) 100%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.18) 0px,
+      transparent 80px,
+      transparent calc(100% - 80px),
+      rgba(0, 0, 0, 0.18) 100%
+    ) !important;
+  opacity:        1 !important;
+  z-index:        1 !important;
+  pointer-events: none !important;
 }
 
-/*
-  Rail-edge gradient — soft top/bottom darkening to suggest physical rails.
-  z-index: 0 keeps it BELOW .board-container (which gets z-index: 2),
-  so tiles are never painted over.
-*/
+/* Neutralize ::after — keep z-index: 0 so board-container (z: 2) renders above */
 .board-area::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.20) 0%,
-    transparent 8%,
-    transparent 88%,
-    rgba(0, 0, 0, 0.16) 100%
-  );
-  box-shadow:
-    inset 4px 0 12px rgba(0, 0, 0, 0.12),
-    inset -4px 0 12px rgba(0, 0, 0, 0.10);
+  background: none !important;
+  box-shadow: none !important;
+  z-index:    0    !important;
 }
 
-/* Ensure the board canvas renders above the ::after rail overlay */
+/* Board content above both pseudo-element layers */
 .board-container {
   position: relative;
-  z-index: 2;
+  z-index:  2;
 }
 
-/* ─── 2. OPP TILES Card — Real Premium Dark Glass ───────────────── */
+/* ═══ 3. OPP TILES CARD ══════════════════════════════════════════════ */
 
 .opponent-tile-card {
-  background: linear-gradient(
-    145deg,
-    rgba(18, 22, 38, 0.96) 0%,
-    rgba(10, 12, 24, 0.98) 100%
-  ) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-bottom-color: rgba(0, 0, 0, 0.40) !important;
-  border-right-color: rgba(0, 0, 0, 0.30) !important;
-  border-radius: 12px !important;
+  position:         relative;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(22, 27, 48, 0.97) 0%,
+      rgba(11, 13, 26, 0.99) 100%
+    ) !important;
+  border:              1px solid var(--chrome-border)  !important;
+  border-top-color:    var(--chrome-border-bright)     !important;
+  border-left-color:   rgba(255, 255, 255, 0.08)       !important;
+  border-bottom-color: rgba(0, 0, 0, 0.50)             !important;
+  border-right-color:  rgba(0, 0, 0, 0.40)             !important;
+  border-radius:       var(--radius-card)               !important;
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.04),
-    0 8px 32px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.40) !important;
-  padding: 10px 16px 12px !important;
-  min-width: 80px !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
+    var(--shadow-heavy),
+    inset 0  1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.30) !important;
+  padding:                 10px 18px 13px !important;
+  min-width:               82px           !important;
+  backdrop-filter:         blur(16px)     !important;
+  -webkit-backdrop-filter: blur(16px)     !important;
 }
 
 .opponent-tile-label {
-  font-size: 0.55rem !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.18em !important;
-  text-transform: uppercase !important;
-  color: rgba(255, 255, 255, 0.35) !important;
-  display: block !important;
-  margin-bottom: 4px !important;
-  line-height: 1 !important;
+  display:               block                   !important;
+  font-size:             0.52rem                 !important;
+  font-weight:           900                     !important;
+  letter-spacing:        0.20em                  !important;
+  text-transform:        uppercase                !important;
+  color:                 var(--text-secondary)   !important;
+  margin-bottom:         5px                     !important;
+  line-height:           1                       !important;
+  -webkit-font-smoothing: antialiased;
 }
 
 .opponent-tile-number {
-  font-size: 2rem !important;
-  font-weight: 900 !important;
-  color: #ffffff !important;
-  font-variant-numeric: tabular-nums !important;
-  line-height: 1 !important;
-  letter-spacing: -0.03em !important;
-  display: block !important;
+  display:              block               !important;
+  font-size:            2.2rem              !important;
+  font-weight:          900                 !important;
+  color:                var(--text-primary) !important;
+  line-height:          1                   !important;
+  letter-spacing:       -0.04em             !important;
+  font-variant-numeric: tabular-nums        !important;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ─── 3. Scoreboard — Unified Premium Pill ──────────────────────── */
+@keyframes card-pop {
+  0%   { transform: scale(1); }
+  40%  {
+    transform:  scale(1.05);
+    box-shadow: var(--shadow-heavy),
+                0 0 0 2px rgba(255, 255, 255, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  }
+  100% { transform: scale(1); }
+}
 
-/* Outer wrapper: single border-radius clips all child cards cleanly */
+.card-updated {
+  animation: card-pop 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ═══ 4. SCOREBOARD ══════════════════════════════════════════════════ */
+
+/*
+  Outer pill: border-radius + overflow:hidden clips all child cards.
+  No backdrop-filter (Step 4 rule).
+*/
 .scoreboard {
-  display: flex !important;
-  align-items: stretch !important;
-  border-radius: 12px !important;
-  overflow: hidden !important;
-  border: 1px solid rgba(255, 255, 255, 0.10) !important;
-  border-bottom-color: rgba(0, 0, 0, 0.35) !important;
+  display:                 flex           !important;
+  align-items:             stretch        !important;
+  border-radius:           var(--radius-card) !important;
+  overflow:                hidden         !important;
+  border:                  1px solid var(--chrome-border)        !important;
+  border-top-color:        var(--chrome-border-bright)           !important;
+  border-bottom-color:     rgba(0, 0, 0, 0.45)                   !important;
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.40),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
-  background: rgba(0, 0, 0, 0.30) !important; /* gap colour between cards */
-  gap: 1px !important;
-  padding: 0 !important;
-  backdrop-filter: blur(14px) !important;
-  -webkit-backdrop-filter: blur(14px) !important;
+    var(--shadow-heavy),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  padding:                 0              !important;
+  background:              rgba(0,0,0,0.60) !important; /* not visible — scores-row fills it */
+  backdrop-filter:         none           !important;
+  -webkit-backdrop-filter: none           !important;
 }
 
+/*
+  scores-row is the direct parent of .player-score cards.
+  gap: 1px here creates the visible dark divider between cards.
+  Dark background shows through the 1px gap.
+*/
 .scores-row {
-  display: flex !important;
-  gap: 1px !important;
-  background: rgba(0, 0, 0, 0.30) !important;
+  display:    flex             !important;
+  width:      100%             !important;
+  gap:        1px              !important;
+  background: rgba(0,0,0,0.60) !important;
 }
 
-/* Base card */
+/* Base card — no border-radius (parent clips it) */
 .player-score {
-  padding: 10px 22px 12px !important;
-  border-radius: 0 !important;
-  border: none !important;
-  min-width: 72px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  gap: 3px !important;
-  box-shadow: none !important;
+  padding:        10px 24px 13px !important;
+  border-radius:  0              !important;
+  border:         none           !important;
+  min-width:      72px           !important;
+  display:        flex           !important;
+  flex-direction: column         !important;
+  align-items:    center         !important;
+  gap:            3px            !important;
+  box-shadow:     none           !important;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* YOUR card — always premium blue, regardless of turn */
+/* YOU card — always premium blue, regardless of whose turn it is */
 .player-score.you {
-  background: linear-gradient(145deg, #1e7de8 0%, #1459c4 100%) !important;
+  background:
+    linear-gradient(160deg, #2181f5 0%, #1460d4 50%, #1052bc 100%) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.18) !important;
+    inset  0   1px 0 rgba(255, 255, 255, 0.25),
+    inset  0  -1px 0 rgba(0, 0, 0, 0.20),
+    inset  1px 0   0 rgba(255, 255, 255, 0.08) !important;
 }
 
 /* OPPONENT card — always dark navy */
 .player-score:not(.you) {
-  background: linear-gradient(145deg, rgba(22, 26, 44, 0.97) 0%, rgba(13, 15, 28, 0.99) 100%) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  background:
+    linear-gradient(160deg,
+      rgba(24, 29, 52, 0.99) 0%,
+      rgba(13, 15, 30, 1.00) 100%
+    ) !important;
+  box-shadow:
+    inset  0   1px 0 rgba(255, 255, 255, 0.05),
+    inset -1px 0   0 rgba(255, 255, 255, 0.03) !important;
 }
 
-/* Active turn indicator: subtle brightness boost, no color identity change */
+/* Active turn indicator — brightness only, identity color preserved */
 .player-score.active {
   filter: brightness(1.08) !important;
 }
 
-/* Score card labels — YOU / OPPONENT */
+/* Score pop on point change */
+@keyframes score-pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+.player-score.score-pulse {
+  animation: score-pop 220ms ease-out;
+}
+
 .player-label {
-  font-size: 0.52rem !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.18em !important;
-  text-transform: uppercase !important;
-  color: rgba(255, 255, 255, 0.45) !important;
-  line-height: 1 !important;
+  font-size:      0.50rem            !important;
+  font-weight:    900                !important;
+  letter-spacing: 0.22em             !important;
+  text-transform: uppercase          !important;
+  color:          rgba(255,255,255,0.50) !important;
+  white-space:    nowrap             !important;
+  line-height:    1                  !important;
 }
 
-/* Score numbers */
 .score-number {
-  font-size: 1.6rem !important;
-  font-weight: 900 !important;
-  font-variant-numeric: tabular-nums !important;
-  letter-spacing: -0.03em !important;
-  line-height: 1 !important;
-  color: #ffffff !important;
+  font-size:            1.75rem            !important;
+  font-weight:          900                !important;
+  color:                var(--text-primary) !important;
+  line-height:          1                   !important;
+  letter-spacing:       -0.04em             !important;
+  font-variant-numeric: tabular-nums        !important;
 }
 
-/* ─── 4. Bottom Tray — Full Premium Treatment ───────────────────── */
+/* ═══ 5. BOTTOM TRAY ════════════════════════════════════════════════ */
 
 /*
-  CRITICAL: No backdrop-filter, opacity, or filter on any ancestor of tile
-  elements. This prevents tile graying/tinting.
+  CRITICAL: No backdrop-filter, opacity, or filter on any element that
+  is an ancestor of hand tiles. This prevents tile graying/tinting.
 */
 .hand-area {
-  background: linear-gradient(180deg, #0d1022 0%, #080a18 100%) !important;
-  border-top: none !important;
+  position:                relative    !important;
+  background:
+    linear-gradient(180deg, #0d1124 0%, #080917 100%) !important;
+  border-top:              1px solid rgba(255, 255, 255, 0.07) !important;
   box-shadow:
-    0 -1px 0 rgba(0, 0, 0, 0.90),
-    0 -4px 40px rgba(0, 0, 0, 0.60),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: none !important;
+    0  -1px 0   rgba(0, 0, 0, 1.00),
+    0  -6px 50px rgba(0, 0, 0, 0.70),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  backdrop-filter:         none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* Hairline highlight at the top edge of the tray */
+/* Bright highlight seam at the very top edge of the tray */
 .hand-area::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 6%;
-  right: 6%;
-  height: 1px;
+  content:    '';
+  position:   absolute;
+  top:        0;
+  left:       5%;
+  right:      5%;
+  height:     1px;
   background: linear-gradient(
     90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.14) 35%,
-    rgba(255, 255, 255, 0.14) 65%,
-    transparent 100%
+    transparent              0%,
+    rgba(255,255,255,0.22)  15%,
+    rgba(255,255,255,0.28)  50%,
+    rgba(255,255,255,0.22)  85%,
+    transparent             100%
   );
   pointer-events: none;
+  z-index:    1;
 }
 
-/* Tile container: must be clean — no glass, no blur, no border */
+/* Tile container — completely clean, no glass, no blur */
 .hand-container {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
+  backdrop-filter:         none        !important;
+  -webkit-backdrop-filter: none        !important;
+  background:              transparent !important;
+  border:                  none        !important;
+  box-shadow:              none        !important;
+  border-radius:           0           !important;
 }
 
-/* Tile "well" — recessed slot that tiles appear to sit inside */
+/* Tile "well" — recessed dark slot the tiles appear to sit in */
 .tray-center {
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.28) 0%,
-    rgba(0, 0, 0, 0.18) 100%
-  ) !important;
-  border: 1px solid rgba(0, 0, 0, 0.45) !important;
-  border-top-color: rgba(0, 0, 0, 0.60) !important;
-  border-radius: 12px !important;
-  padding: 10px 16px !important;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.35) 0%,
+      rgba(0, 0, 0, 0.20) 100%
+    ) !important;
+  border:           1px solid rgba(0, 0, 0, 0.55)  !important;
+  border-top-color: rgba(0, 0, 0, 0.70)            !important;
+  border-radius:    14px                             !important;
+  padding:          10px 18px                        !important;
   box-shadow:
-    inset 0 3px 10px rgba(0, 0, 0, 0.35),
-    inset 0 1px 3px rgba(0, 0, 0, 0.50) !important;
-  overflow: visible !important; /* allow lifted tiles to escape the well */
+    inset 0 4px 14px rgba(0, 0, 0, 0.45),
+    inset 0  1px 4px rgba(0, 0, 0, 0.60),
+    0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  overflow: visible !important; /* tiles lift above the well rim on hover */
 }
 
-/* Hand label — ultra-small, dimmed */
+/* "YOUR HAND (N)" label */
 .tray-left h3 {
-  font-size: 0.56rem !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.18em !important;
-  text-transform: uppercase !important;
-  color: rgba(255, 255, 255, 0.28) !important;
-  line-height: 1 !important;
+  font-size:      0.54rem         !important;
+  font-weight:    900             !important;
+  letter-spacing: 0.20em          !important;
+  text-transform: uppercase       !important;
+  color:          var(--text-dim) !important;
+  line-height:    1               !important;
 }
 
-/* ─── 5. Tile Micro-interactions ─────────────────────────────────── */
+/* ═══ 6. HAND TILE INTERACTIONS ══════════════════════════════════════ */
 
-/* Base: smooth transform transitions on all hand tiles */
+/* Base — spring transition on all hand tiles */
 .hand-container .domino-tile {
-  position: relative;      /* required for z-index */
+  position:    relative;
   transition:
-    transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 160ms ease;
+    transform  150ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 150ms ease;
   will-change: transform;
 }
 
 /* Hover lift */
 .hand-container .domino-tile:not(.disabled):not(.selected):hover {
-  transform: translateY(-8px) scale(1.04);
-  z-index: 10;
+  transform: translateY(-10px) scale(1.05) !important;
+  z-index:   20;
 }
 
 .hand-container .domino-tile:not(.disabled):not(.selected):hover .domino-body {
   box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.45),
-    0 4px 8px rgba(0, 0, 0, 0.2);
+    0 16px 36px rgba(0, 0, 0, 0.50),
+    0  4px  8px rgba(0, 0, 0, 0.20) !important;
 }
 
-/* Selected / "charged" state: lift higher + golden glow */
+/* Selected — lifted higher with gold glow */
 .hand-container .domino-tile.selected {
-  transform: translateY(-12px) scale(1.06);
-  z-index: 11;
+  transform: translateY(-14px) scale(1.07) !important;
+  z-index:   20;
 }
 
 .hand-container .domino-tile.selected .domino-body {
   box-shadow:
-    0 0 0 2px rgba(255, 220, 80, 0.72),
-    0 16px 32px rgba(0, 0, 0, 0.5),
-    0 4px 8px rgba(0, 0, 0, 0.25);
+    0 0 0 2.5px rgba(255, 210, 60, 0.75),
+    0 20px 40px rgba(0, 0, 0, 0.55),
+    0  0   20px rgba(255, 210, 60, 0.15) !important;
 }
 
-/* Legal move highlight: refined green ring */
+/* Legal move — green ring, no lift */
 .hand-container .domino-tile.highlight:not(.selected) .domino-body {
   box-shadow:
-    0 0 0 2px rgba(100, 220, 130, 0.65),
-    0 4px 12px rgba(0, 0, 0, 0.35);
+    0 0 0 2px rgba(80, 220, 120, 0.60),
+    0 4px 14px rgba(0, 0, 0, 0.35) !important;
 }
 
-/* Invalid move shake */
-@keyframes pp-shake-invalid {
+/* Invalid shake */
+@keyframes shake-invalid {
   0%, 100% { transform: translateX(0); }
-  20%       { transform: translateX(-5px); }
-  40%       { transform: translateX(5px); }
-  60%       { transform: translateX(-4px); }
-  80%       { transform: translateX(3px); }
+  15%      { transform: translateX(-6px); }
+  35%      { transform: translateX(6px); }
+  55%      { transform: translateX(-5px); }
+  75%      { transform: translateX(4px); }
 }
 
 .hand-container .domino-tile.tile-invalid {
-  animation: pp-shake-invalid 320ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  animation: shake-invalid 300ms cubic-bezier(0.36, 0.07, 0.19, 0.97) !important;
 }
 
-/* ─── 6. Board Tile Landing Animation ────────────────────────────── */
+/* ═══ 7. BOARD TILE LAND ANIMATION ══════════════════════════════════ */
 
 /*
-  Final keyframe matches the inline transform: translate(-50%, -50%)
-  so there is no snap when the animation ends.
+  Keyframes include translate(-50%, -50%) to match the inline style on
+  .board-tile-wrapper — no snap at animation end.
 */
-@keyframes pp-board-tile-land {
+@keyframes tile-land {
   0% {
-    transform: translate(-50%, calc(-50% - 20px)) scale(0.68);
-    opacity: 0;
+    transform: translate(-50%, calc(-50% - 18px)) scale(0.65);
+    opacity:   0;
   }
-  62% {
-    transform: translate(-50%, calc(-50% + 3px)) scale(1.06);
-    opacity: 1;
+  65% {
+    transform: translate(-50%, calc(-50% + 2px)) scale(1.06);
+    opacity:   1;
+  }
+  85% {
+    transform: translate(-50%, -50%) scale(0.97);
+    opacity:   1;
   }
   100% {
     transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
+    opacity:   1;
   }
 }
 
 .board-tile-wrapper {
-  animation: pp-board-tile-land 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: tile-land 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* ─── 7. Score + Opp-Tiles Pulse ─────────────────────────────────── */
-
-@keyframes pp-card-pulse {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.038); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22); }
-  100% { transform: scale(1); }
-}
-
-.player-score.score-pulse {
-  animation: pp-card-pulse 220ms ease-out;
-}
-
-.opponent-tile-card.card-updated {
-  animation: pp-card-pulse 220ms ease-out;
-}
-
-/* ─── 8. Leave Game Button ───────────────────────────────────────── */
+/* ═══ 8. LEAVE GAME BUTTON ═══════════════════════════════════════════ */
 
 .leave-btn {
-  font-size: 0.58rem !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.16em !important;
-  text-transform: uppercase !important;
-  color: rgba(255, 255, 255, 0.32) !important;
-  border: 1px solid rgba(255, 255, 255, 0.10) !important;
-  border-radius: 7px !important;
-  padding: 7px 14px !important;
-  background: rgba(255, 255, 255, 0.02) !important;
+  font-size:      0.56rem                      !important;
+  font-weight:    900                          !important;
+  letter-spacing: 0.18em                       !important;
+  text-transform: uppercase                    !important;
+  color:          var(--text-dim)              !important;
+  border:         1px solid rgba(255,255,255,0.09) !important;
+  border-radius:  var(--radius-btn)            !important;
+  padding:        7px 15px                     !important;
+  background:     rgba(255,255,255,0.02)       !important;
+  cursor:         pointer                      !important;
   transition:
-    color 130ms ease,
-    border-color 130ms ease,
-    background 130ms ease,
-    transform 130ms ease !important;
+    color        120ms ease,
+    border-color 120ms ease,
+    background   120ms ease,
+    box-shadow   120ms ease,
+    transform     90ms ease !important;
+  white-space:  nowrap  !important;
+  user-select:  none    !important;
+  -webkit-font-smoothing: antialiased;
 }
 
 .leave-btn:hover:not(:disabled) {
-  color: rgba(255, 255, 255, 0.85) !important;
-  border-color: rgba(255, 255, 255, 0.26) !important;
-  background: rgba(255, 255, 255, 0.06) !important;
-  transform: none !important;
-  filter: none !important;
+  color:         rgba(255,255,255,0.85)        !important;
+  border-color:  rgba(255,255,255,0.28)        !important;
+  background:    rgba(255,255,255,0.07)        !important;
+  box-shadow:
+    0 0 16px rgba(255,255,255,0.04),
+    inset 0 1px 0 rgba(255,255,255,0.08)       !important;
+  transform:     none                          !important;
+  filter:        none                          !important;
 }
 
 .leave-btn:active:not(:disabled) {
-  background: rgba(255, 255, 255, 0.10) !important;
-  transform: scale(0.96) !important;
-  filter: none !important;
+  transform:  scale(0.95)                      !important;
+  background: rgba(255,255,255,0.11)           !important;
+  filter:     none                             !important;
 }
 
-/* ─── 9. Icon Button (Fullscreen) ────────────────────────────────── */
+.leave-btn:focus-visible {
+  outline:        2px solid rgba(255,255,255,0.30) !important;
+  outline-offset: 2px                              !important;
+}
+
+/* ═══ 9. ICON BUTTON (FULLSCREEN) ════════════════════════════════════ */
 
 .icon-btn {
-  color: rgba(255, 255, 255, 0.25) !important;
-  transition: color 130ms ease, background 130ms ease, transform 130ms ease !important;
+  color:           rgba(255,255,255,0.22) !important;
+  cursor:          pointer                !important;
+  transition:      color 120ms ease, transform 140ms ease !important;
+  display:         flex                   !important;
+  align-items:     center                 !important;
+  justify-content: center                 !important;
 }
 
 .icon-btn:hover {
-  color: rgba(255, 255, 255, 0.75) !important;
-  background: rgba(255, 255, 255, 0.06) !important;
-  transform: scale(1.10) !important;
+  color:      rgba(255,255,255,0.70) !important;
+  transform:  scale(1.12)            !important;
+  background: transparent            !important;
+  filter:     none                   !important;
 }
 
-/* ─── 10. Global Typography ──────────────────────────────────────── */
-
-/* OPP TILES label already uppercase; enhance spacing */
-.opponent-tile-label {
-  letter-spacing: 0.16em;
-}
-
-/* ─── 11. Reduced Motion Guard ───────────────────────────────────── */
+/* ═══ 10. REDUCED MOTION ════════════════════════════════════════════ */
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
+  *, *::before, *::after {
+    animation-duration:  0.01ms !important;
     transition-duration: 0.01ms !important;
   }
 }
