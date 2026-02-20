@@ -176,7 +176,7 @@ function computeLayout(
       y: mainY,
       rotation,
       flipped,
-      key: `main-${i}`,
+      key: `main-${pt.tile.high}-${pt.tile.low}`,
     });
 
     // Layout branches from this hub
