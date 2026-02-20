@@ -4,6 +4,14 @@
    Zero gameplay, logic, networking, or layout changes.
    ═══════════════════════════════════════════════════════════════════ */
 
+/* ─── CSS Token Overrides ────────────────────────────────────────── */
+
+:root {
+  /* Tile faces: override App.css cream (#fffef5→#f5f0e0) to pure white */
+  --tile-bg: #ffffff;
+  --tile-bg-gradient: linear-gradient(145deg, #ffffff 0%, #f9f9f9 100%);
+}
+
 /* ─── 3A. Board Felt Enhancement ─────────────────────────────────── */
 
 /* Subtle centre bloom only — no noise overlay */
