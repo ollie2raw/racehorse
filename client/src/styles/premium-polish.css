@@ -56,16 +56,10 @@
   position: relative !important;
   overflow: hidden   !important;
   background:
-    radial-gradient(
-      ellipse 55% 40% at 50% 40%,
-      rgba(34, 122, 69, 0.60) 0%,
-      transparent 70%
-    ),
-    radial-gradient(
-      ellipse 100% 100% at 50% 50%,
-      var(--felt-light) 0%,
-      var(--felt-mid)   40%,
-      var(--felt-dark)  100%
+    radial-gradient(ellipse 100% 100% at 50% 50%,
+      #227a45 0%,
+      #1a6038 55%,
+      #0f3d22 100%
     ) !important;
 }
 
@@ -122,16 +116,16 @@
       var(--surface-warm-mid) 0%,
       var(--surface-warm)     100%
     ) !important;
-  border:              1px solid var(--border-warm-bright) !important;
-  border-bottom-color: rgba(0, 0, 0, 0.60)                !important;
-  border-right-color:  rgba(0, 0, 0, 0.40)                !important;
-  border-radius:       var(--radius-card)                  !important;
+  border:              1px solid rgba(200, 146, 90, 0.40) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.65)               !important;
+  border-right-color:  rgba(0, 0, 0, 0.50)               !important;
+  border-radius:       var(--radius-card)                 !important;
   box-shadow:
-    var(--shadow-warm-heavy),
-    inset 0  1px 0 rgba(200, 146, 90, 0.22),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.35) !important;
-  padding:                 10px 16px 12px !important;
-  min-width:               78px           !important;
+    0 8px 40px rgba(20, 8, 0, 0.75),
+    inset 0  1px 0 rgba(200, 146, 90, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.40) !important;
+  padding:                 11px 18px 14px !important;
+  min-width:               86px           !important;
   backdrop-filter:         blur(12px)     !important;
   -webkit-backdrop-filter: blur(12px)     !important;
   -webkit-font-smoothing:  antialiased;
@@ -150,11 +144,11 @@
 
 .opponent-tile-number {
   display:              block               !important;
-  font-size:            2.1rem              !important;
+  font-size:            2.4rem              !important;
   font-weight:          900                 !important;
   color:                var(--text-primary) !important;
   line-height:          1                   !important;
-  letter-spacing:       -0.04em             !important;
+  letter-spacing:       -0.05em             !important;
   font-variant-numeric: tabular-nums        !important;
 }
 
@@ -186,11 +180,12 @@
   align-items:             stretch                     !important;
   border-radius:           var(--radius-card)          !important;
   overflow:                hidden                      !important;
-  border:                  1px solid var(--border-warm-bright) !important;
-  border-bottom-color:     rgba(0, 0, 0, 0.55)         !important;
+  border:                  1px solid rgba(200, 146, 90, 0.45) !important;
+  border-bottom-color:     rgba(0, 0, 0, 0.65)               !important;
   box-shadow:
-    var(--shadow-warm-heavy),
-    inset 0 1px 0 rgba(200, 146, 90, 0.15) !important;
+    0 8px 40px rgba(20, 8, 0, 0.75),
+    0 2px 8px  rgba(20, 8, 0, 0.50),
+    inset 0 1px 0 rgba(200, 146, 90, 0.18) !important;
   padding:                 0                           !important;
   background:              rgba(0, 0, 0, 0.70)         !important;
   backdrop-filter:         none                        !important;
@@ -220,27 +215,45 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* YOU card — warm wood gradient */
+/* YOU card — warm wood/amber, clearly distinct */
 .player-score.you {
   background:
     linear-gradient(160deg,
-      var(--wood-light) 0%,
-      var(--wood-mid)   55%,
-      var(--wood-dark)  100%
+      #c8925a 0%,
+      #a0683a 45%,
+      #7a4820 100%
     ) !important;
   box-shadow:
-    inset 0  1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.30) !important;
+    inset 0  1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 0 20px rgba(200, 146, 90, 0.25) !important;
+  padding: 11px 26px 14px !important;
 }
 
-/* OPPONENT card — dark warm brown */
+.player-score.you .player-label {
+  color: rgba(255, 240, 210, 0.70) !important;
+}
+
+.player-score.you .score-number {
+  font-size:   1.9rem !important;
+  color:       #fff8ee !important;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.30) !important;
+}
+
+/* OPPONENT card — clearly darker/cooler */
 .player-score:not(.you) {
   background:
     linear-gradient(160deg,
-      var(--surface-warm-light) 0%,
-      var(--surface-warm)       100%
+      #3d2510 0%,
+      #271508 100%
     ) !important;
-  box-shadow: inset 0 1px 0 rgba(200, 146, 90, 0.08) !important;
+  box-shadow:  inset 0 1px 0 rgba(200, 146, 90, 0.06) !important;
+  padding:     11px 26px 14px !important;
+}
+
+.player-score:not(.you) .score-number {
+  font-size: 1.9rem !important;
+  color:     rgba(245, 230, 208, 0.75) !important;
 }
 
 /* Active turn — brightness boost, no color override */
@@ -286,14 +299,14 @@
   position:                relative    !important;
   background:
     linear-gradient(180deg,
-      var(--surface-warm-mid) 0%,
-      var(--surface-warm)     100%
+      #3d2510 0%,
+      #271508 100%
     ) !important;
-  border-top:              1px solid var(--border-warm-bright) !important;
+  border-top:              1px solid rgba(200, 146, 90, 0.35) !important;
   box-shadow:
-    0  -1px 0    rgba(0, 0, 0, 0.90),
-    0  -6px 50px rgba(20, 8, 0, 0.75),
-    inset 0 1px 0 rgba(200, 146, 90, 0.12) !important;
+    0  -1px 0    rgba(0, 0, 0, 0.95),
+    0  -8px 50px rgba(20, 8, 0, 0.80),
+    inset 0 1px 0 rgba(200, 146, 90, 0.10) !important;
   backdrop-filter:         none !important;
   -webkit-backdrop-filter: none !important;
   -webkit-font-smoothing:  antialiased;
@@ -330,21 +343,21 @@
   border-radius:           0           !important;
 }
 
-/* Tile well — dark recessed slot */
+/* Tile well — deep dark recessed slot */
 .tray-center {
   background:
     linear-gradient(180deg,
-      rgba(0, 0, 0, 0.40) 0%,
-      rgba(0, 0, 0, 0.25) 100%
+      rgba(0, 0, 0, 0.50) 0%,
+      rgba(0, 0, 0, 0.32) 100%
     ) !important;
-  border:           1px solid rgba(0, 0, 0, 0.55) !important;
-  border-top-color: rgba(0, 0, 0, 0.70)           !important;
-  border-radius:    12px                            !important;
-  padding:          10px 16px                       !important;
+  border:           1px solid rgba(0, 0, 0, 0.70) !important;
+  border-top:       1px solid rgba(0, 0, 0, 0.80) !important;
+  border-radius:    10px                            !important;
+  padding:          12px 18px                       !important;
   box-shadow:
-    inset 0 4px 14px rgba(0, 0, 0, 0.50),
-    inset 0  1px 3px rgba(0, 0, 0, 0.65),
-    0 1px 0 rgba(200, 146, 90, 0.08) !important;
+    inset 0 5px 18px rgba(0, 0, 0, 0.55),
+    inset 0  2px 5px rgba(0, 0, 0, 0.70),
+    0 1px 0 rgba(200, 146, 90, 0.12) !important;
   overflow: visible !important;
 }
 
@@ -452,16 +465,16 @@
    ================================================ */
 
 .leave-btn {
-  font-size:      0.55rem                       !important;
-  font-weight:    900                           !important;
-  letter-spacing: 0.18em                        !important;
-  text-transform: uppercase                     !important;
-  color:          var(--text-dim)               !important;
-  border:         1px solid var(--border-warm-dim) !important;
-  border-radius:  var(--radius-btn)             !important;
-  padding:        7px 14px                      !important;
-  background:     rgba(200, 146, 90, 0.04)      !important;
-  cursor:         pointer                       !important;
+  font-size:      0.57rem                          !important;
+  font-weight:    900                              !important;
+  letter-spacing: 0.18em                           !important;
+  text-transform: uppercase                        !important;
+  color:          rgba(200, 146, 90, 0.55)         !important;
+  border:         1px solid rgba(200, 146, 90, 0.22) !important;
+  border-radius:  6px                              !important;
+  padding:        7px 14px                         !important;
+  background:     rgba(200, 146, 90, 0.05)         !important;
+  cursor:         pointer                          !important;
   transition:
     color        120ms ease,
     border-color 120ms ease,
@@ -474,18 +487,18 @@
 }
 
 .leave-btn:hover:not(:disabled) {
-  color:        var(--text-primary)              !important;
-  border-color: var(--border-warm-bright)        !important;
-  background:   rgba(200, 146, 90, 0.10)         !important;
-  box-shadow:   0 0 14px rgba(200, 146, 90, 0.08) !important;
-  transform:    none                             !important;
-  filter:       none                             !important;
+  color:        rgba(220, 170, 100, 0.95)          !important;
+  border-color: rgba(200, 146, 90, 0.50)           !important;
+  background:   rgba(200, 146, 90, 0.12)           !important;
+  box-shadow:   0 0 12px rgba(200, 146, 90, 0.08)  !important;
+  transform:    none                               !important;
+  filter:       none                               !important;
 }
 
 .leave-btn:active:not(:disabled) {
-  transform:  scale(0.95)                        !important;
-  background: rgba(200, 146, 90, 0.16)           !important;
-  filter:     none                               !important;
+  transform:  scale(0.95)                          !important;
+  background: rgba(200, 146, 90, 0.18)             !important;
+  filter:     none                                 !important;
 }
 
 .leave-btn:focus-visible {
