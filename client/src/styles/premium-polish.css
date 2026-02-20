@@ -58,8 +58,8 @@
   content: "";
   position: absolute;
   top: 0;
-  left: 10%;
-  right: 10%;
+  left: 8%;
+  right: 8%;
   height: 1px;
   background: linear-gradient(
     90deg,
@@ -181,12 +181,9 @@
   animation: pp-card-pulse 220ms ease-out;
 }
 
-/* "YOU" card: upgrade border to a soft blue glow */
-.player-score.you {
-  border: 2px solid rgba(93, 194, 255, 0.55) !important;
-  box-shadow:
-    0 0 0 1px rgba(93, 194, 255, 0.12),
-    0 0 18px rgba(37, 99, 235, 0.22) !important;
+/* "YOU" card: subtle top accent when not active (overflow:hidden hides outer glow) */
+.player-score.you:not(.active) {
+  box-shadow: inset 0 2px 0 rgba(93, 194, 255, 0.28) !important;
 }
 
 /* ─── 3F. Leave Game Button ──────────────────────────────────────── */
@@ -241,6 +238,133 @@
 /* OPP TILES label already has uppercase in App.css; enhance spacing */
 .opponent-tile-label {
   letter-spacing: 0.12em;
+}
+
+/* ─── 3I. OPP TILES Card ─────────────────────────────────────────── */
+
+.opponent-tile-card {
+  background: linear-gradient(135deg, rgba(20,24,40,0.92) 0%, rgba(10,12,22,0.96) 100%) !important;
+  border: 1px solid rgba(255,255,255,0.13) !important;
+  border-radius: 10px !important;
+  box-shadow:
+    0 4px 20px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.08) !important;
+  padding: 8px 14px !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+.opponent-tile-label {
+  font-size: 0.58rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.16em !important;
+  text-transform: uppercase !important;
+  color: rgba(255,255,255,0.38) !important;
+  margin-bottom: 2px !important;
+}
+
+.opponent-tile-number {
+  font-size: 1.6rem !important;
+  font-weight: 800 !important;
+  color: #ffffff !important;
+  font-variant-numeric: tabular-nums !important;
+  line-height: 1 !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* ─── 3J. Scoreboard Overhaul ────────────────────────────────────── */
+
+/* Unified pill panel — cards flush together, outer rounding clips them */
+.scoreboard {
+  display: flex !important;
+  gap: 0 !important;
+  background: rgba(0,0,0,0.30) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.45) !important;
+  padding: 0 !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  align-items: stretch !important;
+}
+
+.scores-row {
+  display: flex !important;
+  gap: 0 !important;
+}
+
+/* Base card style */
+.player-score {
+  padding: 10px 18px !important;
+  border-radius: 0 !important;
+  border: none !important;
+  min-width: 72px !important;
+  background: linear-gradient(145deg, rgba(30,34,52,0.9) 0%, rgba(18,20,35,0.95) 100%) !important;
+  box-shadow: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
+/* Thin separator between adjacent cards */
+.player-score + .player-score {
+  border-left: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* Label — YOU / OPPONENT */
+.player-label {
+  font-size: 0.55rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.16em !important;
+  text-transform: uppercase !important;
+  color: rgba(255,255,255,0.45) !important;
+}
+
+/* Score number */
+.score-number {
+  font-size: 1.5rem !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1 !important;
+  color: #ffffff !important;
+}
+
+/* Active player card — premium blue gradient */
+.player-score.active {
+  background: linear-gradient(145deg, #1a72e8 0%, #1255c0 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.20),
+    inset 0 -1px 0 rgba(0,0,0,0.15) !important;
+}
+
+.player-score.active .player-label {
+  color: rgba(255,255,255,0.72) !important;
+}
+
+/* ─── 3K. Icon Button (Fullscreen) ───────────────────────────────── */
+
+.icon-btn {
+  color: rgba(255,255,255,0.30) !important;
+  transition: color 130ms ease, background 130ms ease !important;
+}
+
+.icon-btn:hover {
+  color: rgba(255,255,255,0.75) !important;
+  background: rgba(255,255,255,0.06) !important;
+}
+
+/* ─── 3L. Felt Rails ─────────────────────────────────────────────── */
+
+/* Gentle inset shadows suggesting physical table rails.
+   No pseudo-elements, no z-index conflicts, no center darkening. */
+.board-area {
+  box-shadow:
+    inset 0 0 60px rgba(0,0,0,0.12),
+    inset 0 8px 20px rgba(0,0,0,0.10),
+    inset 0 -8px 20px rgba(0,0,0,0.08) !important;
 }
 
 /* ─── 3H. Reduced Motion ─────────────────────────────────────────── */
