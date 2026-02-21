@@ -126,63 +126,48 @@
     inset 0 -2px 6px rgba(0,0,0,0.14);
 }
 
-/* ─── 3B. Hand Tray ───────────────────────────────────────────────── */
+/* ─── Phase 4: Tray dock card ────────────────────────────────────── */
 
 /*
-  CRITICAL: No backdrop-filter, opacity, or filter on any container that
-  is an ancestor of tile elements. This prevents tile graying/tinting.
+  CRITICAL: No backdrop-filter or filter on ancestors of tile elements.
+  Tiles must render at full opacity with no tinting.
 
-  The cinematic.css brute-force selector hits .hand-area and .hand-container
-  with backdrop-filter: blur(16px) !important.  We zero it out here.
-
-  CLIPPING FIX: .tray-center and .hand-container both have overflow:hidden,
-  which clips the -12px lift + box-shadow of selected/hovered tiles.
-  Fix: set overflow:visible on both, and give .tray-center a 14px top
-  padding so tiles have clearance before the tray edge.
+  Clipping strategy: overflow:visible on hand-area + tray-center + hand-container
+  allows tiles to lift above the tray boundary. padding-top on tray-center
+  provides the physical clearance for the lift transform + shadow.
 */
 
 .hand-area {
-  background: linear-gradient(180deg, #0d1020 0%, #080a14 100%) !important;
-  /* Stronger seam: crisp top border + ambient uplift shadow */
-  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  /* Dock card: surface-1 bg, top corners rounded, flush to bottom edge */
+  background: var(--surface-1) !important;
+  border: 1px solid var(--hairline-light) !important;
+  border-bottom: none !important;
+  border-radius: var(--r-md) var(--r-md) 0 0 !important;
+  /* Dock sits on margin from viewport bottom; adjust left/right for breathing room */
+  left: var(--game-pad) !important;
+  right: var(--game-pad) !important;
+  width: auto !important;
   box-shadow:
-    0 -8px 28px rgba(0, 0, 0, 0.50),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 4px 16px rgba(0, 0, 0, 0.24) !important;
+    0 -4px 20px rgba(0,0,0,0.36),
+    var(--sh-inset) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  /* Overflow must be visible so lifted tiles don't clip at the top edge */
   overflow: visible !important;
+  padding: 8px 16px !important;
 }
 
-/* Top seam highlight — fades in from sides, sits at exact tray boundary */
+/* Remove pseudo-element seam highlight — replaced by top border + sh-inset */
 .hand-area::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 6%;
-  right: 6%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.22) 35%,
-    rgba(255, 255, 255, 0.22) 65%,
-    transparent 100%
-  );
-  pointer-events: none;
+  display: none !important;
 }
 
-/*
-  Tray center: overflow visible so selection lift and shadow renders fully.
-  Add top padding equal to the max tile lift (12px transform + shadow room).
-*/
+/* Tray center: overflow visible + top padding for tile lift clearance */
 .tray-center {
   overflow: visible !important;
   padding-top: 14px !important;
 }
 
-/* Tile container: must be clean — no glass, no blur, no border */
+/* Tile container: transparent, no blur, no border, no clipping */
 .hand-container {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -190,11 +175,10 @@
   border: none !important;
   box-shadow: none !important;
   border-radius: 0 !important;
-  /* Allow tile lift to render above tray boundary */
   overflow: visible !important;
 }
 
-/* Scrollable path: restore horizontal scroll axis, only clip vertically */
+/* Scrollable path: restore horizontal scroll, keep vertical visible for lift */
 .hand-container.is-scrollable {
   overflow-x: auto !important;
   overflow-y: visible !important;
