@@ -12,6 +12,22 @@
   --tile-bg-gradient: linear-gradient(145deg, #ffffff 0%, #f9f9f9 100%);
 }
 
+/* ─── Doubles: neutralise gold/warm styling ──────────────────────── */
+
+/*
+  App.css applies a warm cream gradient and amber border to doubles.
+  This block resets doubles to the same face/border/shadow as all
+  other tiles. Only pip arrangement distinguishes a double.
+*/
+.domino-tile.double .domino-body {
+  background: var(--tile-bg-gradient) !important;
+}
+
+.domino-tile.hub-double .domino-body {
+  border-color: var(--tile-border) !important;
+  border-width: 3px !important;
+}
+
 /* ─── 3A. Board Felt Enhancement ─────────────────────────────────── */
 
 /* Subtle centre bloom only — no noise overlay */
