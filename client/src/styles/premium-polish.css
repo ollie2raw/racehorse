@@ -284,88 +284,57 @@
   animation: pp-card-pulse 220ms ease-out;
 }
 
-/* "YOU" card: subtle top accent when not active (overflow:hidden hides outer glow) */
-.player-score.you:not(.active) {
-  box-shadow: inset 0 2px 0 rgba(93, 194, 255, 0.28) !important;
-}
-
 /* ─── 3F. Leave Game Button ──────────────────────────────────────── */
 
 .leave-btn {
-  font-size: 0.75rem !important;
-  letter-spacing: 0.08em !important;
+  font-size: var(--label-size) !important;
+  letter-spacing: 0.10em !important;
   text-transform: uppercase !important;
-  color: rgba(255, 255, 255, 0.55) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
-  padding: 6px 12px !important;
+  color: rgba(255, 255, 255, 0.50) !important;
+  border: 1px solid var(--hairline) !important;
+  padding: 5px 12px !important;
   background: transparent !important;
-  transition:
-    color 150ms ease,
-    border-color 150ms ease,
-    background 150ms ease,
-    transform 150ms ease !important;
+  border-radius: var(--r-sm) !important;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease !important;
 }
 
 .leave-btn:hover:not(:disabled) {
-  color: rgba(255, 255, 255, 0.92) !important;
-  border-color: rgba(255, 255, 255, 0.30) !important;
-  background: rgba(255, 255, 255, 0.07) !important;
-  transform: none !important;   /* suppress global btn translateY */
+  color: rgba(255, 255, 255, 0.88) !important;
+  border-color: var(--hairline-light) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  transform: none !important;
   filter: none !important;
 }
 
 .leave-btn:active:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.10) !important;
   transform: scale(0.97) !important;
   filter: none !important;
 }
 
-/* ─── 3G. Typography ─────────────────────────────────────────────── */
+/* ─── Typography ─────────────────────────────────────────────────── */
 
-/* Score numbers: tabular alignment, tighter tracking */
-.score-number,
-.opponent-tile-number {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-/* Hand label — small, caps, dimmed to not compete with tiles */
+/* Hand label: subtle, small, caps */
 .tray-left h3 {
-  font-size: 0.65rem !important;
+  font-size: var(--label-size) !important;
   font-weight: 700 !important;
   letter-spacing: 0.14em !important;
   text-transform: uppercase !important;
-  color: rgba(240, 244, 248, 0.38) !important;
+  color: rgba(255, 255, 255, 0.32) !important;
 }
 
-/* OPP TILES label already has uppercase in App.css; enhance spacing */
+/* OPP TILES card */
 .opponent-tile-label {
-  letter-spacing: 0.12em;
-}
-
-/* ─── 3I. OPP TILES Card ─────────────────────────────────────────── */
-
-.opponent-tile-card {
-  background: linear-gradient(160deg, var(--surface-2) 0%, var(--surface-1) 100%) !important;
-  border: 1px solid var(--hairline-light) !important;
-  border-radius: var(--r-md) !important;
-  box-shadow: var(--sh-2), var(--sh-inset) !important;
-  padding: 6px 14px !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
-}
-
-.opponent-tile-label {
-  font-size: 0.58rem !important;
+  font-size: var(--label-size) !important;
   font-weight: 700 !important;
-  letter-spacing: 0.16em !important;
+  letter-spacing: 0.14em !important;
   text-transform: uppercase !important;
   color: rgba(255,255,255,0.38) !important;
-  margin-bottom: 2px !important;
+  margin-bottom: 1px !important;
 }
 
 .opponent-tile-number {
-  font-size: 1.6rem !important;
+  font-size: 1.52rem !important;
   font-weight: 800 !important;
   color: #ffffff !important;
   font-variant-numeric: tabular-nums !important;
@@ -373,98 +342,19 @@
   letter-spacing: -0.02em !important;
 }
 
-/* ─── 3J. Scoreboard Overhaul ────────────────────────────────────── */
-
-/* Unified pill panel — cards flush together, outer rounding clips them */
-.scoreboard {
-  display: flex !important;
-  gap: 0 !important;
-  background: rgba(0,0,0,0.30) !important;
-  border: 1px solid rgba(255,255,255,0.10) !important;
-  border-radius: 10px !important;
-  overflow: hidden !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.45) !important;
-  padding: 0 !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  align-items: stretch !important;
-}
-
-.scores-row {
-  display: flex !important;
-  gap: 0 !important;
-}
-
-/* Base card style */
-.player-score {
-  padding: 8px 16px !important;
-  border-radius: 6px !important;
-  border: none !important;
-  min-width: 72px !important;
-  background: linear-gradient(145deg, rgba(30,34,52,0.9) 0%, rgba(18,20,35,0.95) 100%) !important;
-  box-shadow: none !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  gap: 2px !important;
-}
-
-/* Thin separator between adjacent cards */
-.player-score + .player-score {
-  border-left: 1px solid rgba(255,255,255,0.06) !important;
-}
-
-/* Label — YOU / OPPONENT */
-.player-label {
-  font-size: 0.72rem !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.12em !important;
-  text-transform: uppercase !important;
-  color: rgba(255,255,255,0.45) !important;
-}
-
-/* Score number — idle; tabular so digits don't shift width */
-.score-number {
-  font-size: 1.15rem !important;
-  font-weight: 800 !important;
-  font-variant-numeric: tabular-nums !important;
-  letter-spacing: -0.02em !important;
-  line-height: 1 !important;
-  color: #ffffff !important;
-}
-
-/* Active player card — stable, no animation, no glow */
-.player-score.active {
-  background: rgba(93, 194, 255, 0.12) !important;
-  /* border-top is 2px; nudge padding-top down by 1px to keep content centred */
-  padding-top: 7px !important;
-  border-top: 2px solid rgba(93, 194, 255, 0.55) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.10) !important;
-  transition: none !important;
-  animation: none !important;
-}
-
-.player-score.active .player-label {
-  color: rgba(255, 255, 255, 0.65) !important;
-}
-
-/* Active score: larger to reinforce turn ownership */
-.player-score.active .score-number {
-  font-size: 1.38rem !important;
-}
-
-/* ─── 3K. Icon Button (Fullscreen) ───────────────────────────────── */
+/* ─── Icon Button (Fullscreen) ───────────────────────────────────── */
 
 .icon-btn {
   color: rgba(255,255,255,0.30) !important;
-  transition: color 130ms ease, background 130ms ease !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--r-sm) !important;
+  transition: color 130ms ease, background 130ms ease, border-color 130ms ease !important;
 }
 
 .icon-btn:hover {
-  color: rgba(255,255,255,0.75) !important;
+  color: rgba(255,255,255,0.72) !important;
   background: rgba(255,255,255,0.06) !important;
+  border-color: var(--hairline) !important;
 }
 
 /* 3L removed — board inset depth is now handled by .board-area::after in Phase 2 */
