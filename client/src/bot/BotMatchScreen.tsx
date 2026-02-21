@@ -300,7 +300,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
         </div>
       )}
 
-      <div className="wl-top-rail" data-ui="hud">
+      <div className="wl-top-rail bot-top-rail" data-ui="hud">
         <button
           type="button"
           className={`wl-player-pill wl-player-pill-btn ${botTurn ? "is-active" : ""}`}
@@ -322,6 +322,52 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
             Hand {match.handNumber} · Offline vs Bot · {match.dealSize}-tile
             {match.dealSize === 14 ? " (no boneyard)" : ""}
           </span>
+        </div>
+        <div className="bot-top-controls bot-top-controls-inline">
+          <div className="tray-controls bot-tray-controls">
+            <button
+              className="btn text icon-btn fullscreen-btn"
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            >
+              <FullscreenIcon isFullscreen={isFullscreen} />
+            </button>
+            <label className="bot-difficulty bot-chip-control">
+              <span>Bot</span>
+              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as BotDifficulty)}>
+                <option value="casual">Casual</option>
+                <option value="standard">Standard</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+            <label className="bot-difficulty bot-chip-control">
+              <span>Deal</span>
+              <select
+                value={dealSize}
+                onChange={(e) => {
+                  const nextDeal = Number(e.target.value) as BotDealSize;
+                  setDealSize(nextDeal);
+                  setSelectedTile(null);
+                  setLastBotChoice(null);
+                  setHandReveal(null);
+                  setMatch(createBotMatch(60, nextDeal));
+                }}
+              >
+                <option value={7}>7 tiles + boneyard</option>
+                <option value={14}>14 tiles (no boneyard)</option>
+              </select>
+            </label>
+            <button className="btn text compact bot-chip-control" onClick={() => setUiTheme(prev => (prev === "green" ? "brown" : "green"))}>
+              Color
+            </button>
+            <button className="btn text compact bot-chip-control" onClick={startFreshMatch}>
+              New Match
+            </button>
+            <button className="btn text leave-btn compact bot-chip-control" onClick={onBack}>
+              Home
+            </button>
+          </div>
         </div>
         <button
           type="button"
@@ -370,58 +416,6 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                 );
               })}
               </div>
-          </div>
-
-          <div className="tray-right">
-            <div className="tray-controls">
-              <div className="tray-icon-row">
-                <button
-                  className="btn text icon-btn fullscreen-btn"
-                  onClick={toggleFullscreen}
-                  aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                >
-                  <FullscreenIcon isFullscreen={isFullscreen} />
-                </button>
-              </div>
-              <label className="bot-difficulty">
-                <span>Bot</span>
-                <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as BotDifficulty)}>
-                  <option value="casual">Casual</option>
-                  <option value="standard">Standard</option>
-                  <option value="hard">Hard</option>
-                </select>
-              </label>
-              <label className="bot-difficulty">
-                <span>Deal</span>
-                <select
-                  value={dealSize}
-                  onChange={(e) => {
-                    const nextDeal = Number(e.target.value) as BotDealSize;
-                    setDealSize(nextDeal);
-                    setSelectedTile(null);
-                    setLastBotChoice(null);
-                    setHandReveal(null);
-                    setMatch(createBotMatch(60, nextDeal));
-                  }}
-                >
-                  <option value={7}>7 tiles + boneyard</option>
-                  <option value={14}>14 tiles (no boneyard)</option>
-                </select>
-              </label>
-              <button className="btn text compact" onClick={() => setUiTheme(prev => (prev === "green" ? "brown" : "green"))}>
-                Color
-              </button>
-              <button
-                className="btn text compact"
-                onClick={startFreshMatch}
-              >
-                New Match
-              </button>
-              <button className="btn text leave-btn compact" onClick={onBack}>
-                Home
-              </button>
-            </div>
           </div>
         </div>
       </div>

@@ -7,6 +7,53 @@
   padding-bottom: 90px !important;
 }
 
+.bot-match-screen .bot-tray-controls {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 6px !important;
+  border-radius: 12px !important;
+}
+
+.bot-match-screen .bot-top-controls {
+  position: absolute;
+  right: 238px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+}
+
+.bot-match-screen .bot-top-controls-inline {
+  margin: 0;
+}
+
+.bot-match-screen .bot-top-controls-inline .bot-chip-control {
+  height: 28px;
+  min-height: 28px;
+  min-width: 92px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+}
+
+.bot-match-screen .bot-top-controls-inline .bot-difficulty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.bot-match-screen .bot-top-controls-inline .bot-difficulty span {
+  font-size: 0.58rem;
+}
+
+.bot-match-screen .bot-top-controls-inline .bot-difficulty select {
+  font-size: 0.6rem;
+  max-width: 72px;
+}
+
 .bot-match-screen .hand-container.is-scrollable {
   scrollbar-width: thin;
 }
