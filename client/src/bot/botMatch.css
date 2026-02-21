@@ -2,28 +2,26 @@
   position: relative;
 }
 
-.bot-match-screen .wl-hand-area .tray-center {
-  padding: 0 6px;
-}
-
-.bot-match-screen .hand-container {
-  height: 100%;
-  padding: 0 6px;
+.bot-match-screen .hand-area.wl-hand-area {
+  border-top-color: transparent !important;
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.28) !important;
 }
 
 .bot-match-screen .hand-container.is-scrollable {
-  overflow-x: auto;
-  overflow-y: hidden;
   scrollbar-width: thin;
 }
 
 .bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar {
-  height: 7px;
+  height: 6px;
 }
 
 .bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.22);
   border-radius: 999px;
+}
+
+.bot-match-screen .wl-hand-area .hand-container {
+  transform: translateY(-8px);
 }
 
 .bot-difficulty {
@@ -64,4 +62,23 @@
   line-height: 1.4;
   display: grid;
   gap: 4px;
+}
+
+.bot-victory-card {
+  width: min(560px, calc(100vw - 28px));
+}
+
+.bot-victory-meta {
+  margin: -10px 0 16px;
+  color: rgba(229, 239, 248, 0.78);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bot-victory-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }

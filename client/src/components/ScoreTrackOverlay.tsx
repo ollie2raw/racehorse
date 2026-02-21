@@ -33,8 +33,9 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
   if (!open) return null;
 
   const laneLength = Math.floor(target / 2);
-  const outerLane = Array.from({ length: laneLength + 1 }, (_, i) => i);
-  const innerLane = Array.from({ length: laneLength }, (_, i) => target - 1 - i);
+  // 6 groups of 5 on the left for each row.
+  const topMainLane = Array.from({ length: laneLength }, (_, i) => laneLength - i); // 30..1
+  const bottomMainLane = Array.from({ length: laneLength }, (_, i) => laneLength + 1 + i); // 31..60
   const renderLane = (
     values: number[],
     pegValue: number | null,
@@ -46,11 +47,11 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
       nodes.push(
         <div
           key={`${player.label}-${lane}-hole-${n}`}
-          className={`score-hole ${pegValue === n ? `is-peg ${player.tone}` : ""} ${n % 5 === 0 ? "is-mark" : ""}`}
+          className={`score-hole ${pegValue === n ? `is-peg ${player.tone}` : ""} ${n % 5 === 0 ? "is-mark" : ""} ${n % 15 === 0 ? "is-major" : ""}`}
           title={`${player.label}: ${n}`}
         />
       );
-      if ((idx + 1) % 5 === 0 && idx < values.length - 1) {
+      if (idx < values.length - 1 && (idx + 1) % 5 === 0) {
         nodes.push(
           <div
             key={`${player.label}-${lane}-gap-${n}`}
@@ -76,8 +77,10 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
         <div className="score-track-board">
           {players.map((player) => {
             const pegAt = clampScore(player.score, target);
-            const outerPeg = pegAt <= laneLength ? pegAt : null;
-            const innerPeg = pegAt > laneLength ? pegAt : null;
+            const topSoloPeg = pegAt === 0;
+            const bottomSoloPeg = pegAt >= target;
+            const topMainPeg = pegAt >= 1 && pegAt <= laneLength ? pegAt : null;
+            const bottomMainPeg = pegAt > laneLength && pegAt < target ? pegAt : null;
             return (
               <div className="score-track-lane" key={player.label}>
                 <div className="score-track-meta">
@@ -86,10 +89,20 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
                 </div>
                 <div className="score-track-lane-grid">
                   <div className="score-track-holes">
-                    {renderLane(outerLane, outerPeg, player, "outer")}
+                    {renderLane(topMainLane, topMainPeg, player, "outer")}
+                    <div className="score-gap score-gap-solo" aria-hidden="true" />
+                    <div
+                      className={`score-hole score-hole-solo ${topSoloPeg ? `is-peg ${player.tone}` : ""}`}
+                      title={`${player.label}: start`}
+                    />
                   </div>
                   <div className="score-track-holes">
-                    {renderLane(innerLane, innerPeg, player, "inner")}
+                    {renderLane(bottomMainLane, bottomMainPeg, player, "inner")}
+                    <div className="score-gap score-gap-solo" aria-hidden="true" />
+                    <div
+                      className={`score-hole score-hole-solo ${bottomSoloPeg ? `is-peg ${player.tone}` : ""}`}
+                      title={`${player.label}: finish`}
+                    />
                   </div>
                 </div>
               </div>

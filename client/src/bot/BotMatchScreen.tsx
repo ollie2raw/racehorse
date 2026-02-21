@@ -134,6 +134,13 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
     toastTimerRef.current = setTimeout(() => setToast(""), ms);
   };
 
+  const startFreshMatch = () => {
+    setSelectedTile(null);
+    setLastBotChoice(null);
+    setHandReveal(null);
+    setMatch(createBotMatch(60, dealSize));
+  };
+
   const userLegalMoves = useMemo(() => {
     return match.currentPlayer === "you" ? getLegalMoves(match, "you") : [];
   }, [match]);
@@ -241,7 +248,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
         ]}
       />
       {toast && <div className="toast">{toast}</div>}
-      {handReveal && (
+      {handReveal && !match.gameOver && (
         <div className="hand-reveal-overlay">
           <div className="hand-reveal-backdrop" />
           <div className="hand-reveal-modal">
@@ -258,6 +265,36 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                   <DominoTile key={`bot-reveal-${idx}-${tile.low}-${tile.high}`} tile={tile} size={34} className="hand-over-tile" />
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {match.gameOver && (
+        <div className="game-over-overlay">
+          <div className="game-over-card bot-victory-card">
+            <h2 className="victory-title">{match.winnerId === "you" ? "Champion!" : "Bot Wins"}</h2>
+            <p className="bot-victory-meta">
+              Final hand {match.handNumber} · {match.dealSize}-tile mode
+            </p>
+            <div className="final-scores">
+              <div className={`final-score ${match.winnerId === "you" ? "winner" : ""}`}>
+                <span className="player-name">You</span>
+                <span className="score">{match.players.you.score}</span>
+                {match.winnerId === "you" && <span className="crown">👑</span>}
+              </div>
+              <div className={`final-score ${match.winnerId === "bot" ? "winner" : ""}`}>
+                <span className="player-name">Bot</span>
+                <span className="score">{match.players.bot.score}</span>
+                {match.winnerId === "bot" && <span className="crown">👑</span>}
+              </div>
+            </div>
+            <div className="bot-victory-actions">
+              <button className="btn primary victory-cta" onClick={startFreshMatch}>
+                New Match
+              </button>
+              <button className="btn text compact" onClick={onBack}>
+                Home
+              </button>
             </div>
           </div>
         </div>
@@ -377,12 +414,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
               </button>
               <button
                 className="btn text compact"
-                onClick={() => {
-                  setSelectedTile(null);
-                  setLastBotChoice(null);
-                  setHandReveal(null);
-                  setMatch(createBotMatch(60, dealSize));
-                }}
+                onClick={startFreshMatch}
               >
                 New Match
               </button>
