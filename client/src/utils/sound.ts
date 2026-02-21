@@ -185,86 +185,86 @@ export function playTileSound(type: TileSoundType, isMuted: boolean): void {
   switch (type) {
 
     case "standard": {
-      // Mahogany thud — Layer 1: woody attack click, 600 Hz lowpass
-      const stdDecay1 = 0.080 + (Math.random() * 0.02 - 0.01);   // ±10 ms
+      // Domino click + short body thud.
+      const stdDecay1 = 0.056 + (Math.random() * 0.014 - 0.007);
       buildThwack(
         ac, now,
-        /* bodyFreq */    600,
+        /* bodyFreq */    760,
         /* oscType */     "triangle",
-        /* pitchDrop */   0.50,
-        /* peakGain */    0.34,
+        /* pitchDrop */   0.58,
+        /* peakGain */    0.24,
         /* decayTime */   stdDecay1,
-        /* lpFreq */      600,
-        /* lpQ */         0.8,
-        /* noiseGain */   0.30,
-        /* noiseDur */    0.022,
+        /* lpFreq */      780,
+        /* lpQ */         0.9,
+        /* noiseGain */   0.20,
+        /* noiseDur */    0.015,
         /* startDelay */  0
       );
-      // Layer 2 — deep mahogany body resonance, slightly delayed
-      const stdDecay2 = 0.120 + (Math.random() * 0.02 - 0.01);   // ±10 ms
+      // Low body resonance.
+      const stdDecay2 = 0.102 + (Math.random() * 0.016 - 0.008);
       buildThwack(
         ac, now,
-        /* bodyFreq */    110,
+        /* bodyFreq */    158,
         /* oscType */     "sine",
-        /* pitchDrop */   0.65,
-        /* peakGain */    0.20,
+        /* pitchDrop */   0.72,
+        /* peakGain */    0.18,
         /* decayTime */   stdDecay2,
-        /* lpFreq */      550,
-        /* lpQ */         1.4,
+        /* lpFreq */      520,
+        /* lpQ */         1.1,
         /* noiseGain */   0,
         /* noiseDur */    0,
-        /* startDelay */  0.004
+        /* startDelay */  0.003
       );
       break;
     }
 
     case "slam": {
-      // Mahogany slam — Layer 1: heavy wood-on-table thud, 600 Hz lowpass
-      const slamDecay1 = 0.155 + (Math.random() * 0.02 - 0.01);  // ±10 ms
+      // Heavier domino slap.
+      const slamDecay1 = 0.145 + (Math.random() * 0.02 - 0.01);
       buildThwack(
         ac, now,
-        /* bodyFreq */    260,
+        /* bodyFreq */    230,
         /* oscType */     "triangle",
-        /* pitchDrop */   0.40,
-        /* peakGain */    0.55,
+        /* pitchDrop */   0.46,
+        /* peakGain */    0.48,
         /* decayTime */   slamDecay1,
-        /* lpFreq */      600,
-        /* lpQ */         0.7,
-        /* noiseGain */   0.44,
-        /* noiseDur */    0.032,
+        /* lpFreq */      560,
+        /* lpQ */         0.72,
+        /* noiseGain */   0.34,
+        /* noiseDur */    0.024,
         /* startDelay */  0
       );
-      // Layer 2 — mid click: definition at the impact moment
-      const slamDecay2 = 0.055 + (Math.random() * 0.02 - 0.01);  // ±10 ms
+      // Sharp click on impact.
+      const slamDecay2 = 0.048 + (Math.random() * 0.012 - 0.006);
       buildThwack(
         ac, now,
-        /* bodyFreq */    500,
+        /* bodyFreq */    860,
         /* oscType */     "triangle",
-        /* pitchDrop */   0.50,
-        /* peakGain */    0.26,
+        /* pitchDrop */   0.63,
+        /* peakGain */    0.18,
         /* decayTime */   slamDecay2,
-        /* lpFreq */      650,
-        /* lpQ */         1.0,
-        /* noiseGain */   0.16,
-        /* noiseDur */    0.018,
+        /* lpFreq */      920,
+        /* lpQ */         0.8,
+        /* noiseGain */   0.12,
+        /* noiseDur */    0.012,
         /* startDelay */  0
       );
       break;
     }
 
     case "deal": {
-      // Single soft flick — quiet, barely-there, just tactile
+      // Soft draw/deal tick.
       buildThwack(
         ac, now,
-        /* bodyFreq */    2400,
+        /* bodyFreq */    1600,
         /* oscType */     "triangle",
-        /* pitchDrop */   0.65,
-        /* peakGain */    0.09,
-        /* decayTime */   0.022,
-        /* lpFreq */      1200,
+        /* pitchDrop */   0.70,
+        /* peakGain */    0.07,
+        /* decayTime */   0.028,
+        /* lpFreq */      980,
         /* lpQ */         0.8,
-        /* noiseGain */   0.07,
-        /* noiseDur */    0.012,
+        /* noiseGain */   0.04,
+        /* noiseDur */    0.010,
         /* startDelay */  0
       );
       break;

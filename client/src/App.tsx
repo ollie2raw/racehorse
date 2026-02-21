@@ -17,6 +17,43 @@ function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
 
+function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
+  return (
+    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {isFullscreen ? (
+        <>
+          <path d="M4 9V4h5" />
+          <path d="M20 9V4h-5" />
+          <path d="M4 15v5h5" />
+          <path d="M20 15v5h-5" />
+        </>
+      ) : (
+        <>
+          <path d="M9 4H4v5" />
+          <path d="M15 4h5v5" />
+          <path d="M9 20H4v-5" />
+          <path d="M15 20h5v-5" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function VolumeIcon({ isMuted }: { isMuted: boolean }) {
+  return (
+    <svg className="icon-svg volume-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 10h4l5-4v12l-5-4H4z" />
+      {!isMuted && (
+        <>
+          <path d="M16 9a4 4 0 010 6" />
+          <path d="M18 7a7 7 0 010 10" />
+        </>
+      )}
+      {isMuted && <path className="icon-slash" d="M5 5l14 14" />}
+    </svg>
+  );
+}
+
 // ─── Hand View ───────────────────────────────────────────────
 
 interface HandViewProps {
@@ -42,6 +79,8 @@ function HandView({
   handScrollable,
   drawPulseIndex,
 }: HandViewProps) {
+  const handContainerRef = useRef<HTMLDivElement>(null);
+
   const playableTiles = useMemo(() => {
     return legalMoves
       .filter(m => m.type === "play" && m.tile)
@@ -52,8 +91,23 @@ function HandView({
     return playableTiles.some(t => tileEquals(t, tile));
   };
 
+  useEffect(() => {
+    const el = handContainerRef.current;
+    if (!el) return;
+
+    // Keep hand visually centered and avoid stale left offsets from previous scroll states.
+    if (!handScrollable) {
+      el.scrollLeft = 0;
+      return;
+    }
+
+    const overflow = el.scrollWidth - el.clientWidth;
+    el.scrollLeft = overflow > 0 ? Math.round(overflow / 2) : 0;
+  }, [handScrollable, hand.length, tileSize, handScale]);
+
   return (
     <div
+      ref={handContainerRef}
       className={`hand-container ${handScrollable ? "is-scrollable" : ""}`}
       style={{
         ["--hand-scale" as any]: handScale,
@@ -133,13 +187,16 @@ export default function App() {
   const appRootRef = useRef<HTMLDivElement>(null);
   const trayCenterRef = useRef<HTMLDivElement>(null);
   const autoConnectAttemptedRef = useRef(false);
-  const turnToastRef = useRef<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [serverUrl] = useState(import.meta.env.VITE_SERVER_URL || "http://localhost:3001");
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("racehorse_muted") === "1";
+  });
   const [uiTheme, setUiTheme] = useState<"green" | "brown">(() => {
     if (typeof window === "undefined") return "green";
     const stored = window.localStorage.getItem("racehorse_ui_theme");
@@ -193,6 +250,11 @@ export default function App() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("racehorse_ui_theme", uiTheme);
   }, [uiTheme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("racehorse_muted", isMuted ? "1" : "0");
+  }, [isMuted]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -403,8 +465,8 @@ export default function App() {
 
     const getStableTileSize = () => {
       const vw = window.innerWidth;
-      if (vw >= 1500) return 104;
-      if (vw >= 1280) return 98;
+      if (vw >= 1500) return 96;
+      if (vw >= 1280) return 92;
       if (vw >= 1100) return 92;
       if (vw >= 900) return 86;
       if (vw >= 760) return 80;
@@ -514,21 +576,6 @@ export default function App() {
     pass,
   ]);
 
-  useEffect(() => {
-    if (!inGame || !state || state.handOver || state.gameOver) {
-      turnToastRef.current = null;
-      return;
-    }
-
-    const activePlayerId = state.playerIds[state.currentPlayerIndex];
-    if (!activePlayerId || turnToastRef.current === activePlayerId) return;
-
-    if (turnToastRef.current !== null) {
-      showToast(activePlayerId === you ? "Your turn" : "Opponent's turn", 1200);
-    }
-    turnToastRef.current = activePlayerId;
-  }, [inGame, state, showToast, you]);
-
   // Pulse the opp-tile card whenever the count changes
   useEffect(() => {
     if (prevOppCountRef.current !== null && prevOppCountRef.current !== opponentTileCount) {
@@ -559,11 +606,11 @@ export default function App() {
     prevHudScoresRef.current = nextScores;
     if (!changed) return;
 
-    playTileSound("slam", false);
+    playTileSound("slam", isMuted);
     setHudScorePulse(nextPulse);
     const timeout = setTimeout(() => setHudScorePulse({}), 260);
     return () => clearTimeout(timeout);
-  }, [state]);
+  }, [state, isMuted]);
 
   // Add tactile audio feedback for turn switches and tile placements.
   useEffect(() => {
@@ -578,7 +625,7 @@ export default function App() {
       prevBoardTileCountRef.current > 0 &&
       currentTileCount > prevBoardTileCountRef.current
     ) {
-      playTileSound(currentTileCount - prevBoardTileCountRef.current > 1 ? "slam" : "standard", false);
+      playTileSound(currentTileCount - prevBoardTileCountRef.current > 1 ? "slam" : "standard", isMuted);
     }
     prevBoardTileCountRef.current = currentTileCount;
 
@@ -588,10 +635,10 @@ export default function App() {
       activePlayerId &&
       prevTurnIdRef.current !== activePlayerId
     ) {
-      playTileSound("deal", false);
+      playTileSound("deal", isMuted);
     }
     prevTurnIdRef.current = activePlayerId;
-  }, [inGame, state]);
+  }, [inGame, state, isMuted]);
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -616,7 +663,7 @@ export default function App() {
               aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             >
-              <span aria-hidden="true">{isFullscreen ? "🗗" : "⛶"}</span>
+              <FullscreenIcon isFullscreen={isFullscreen} />
             </button>
           </div>
         </header>
@@ -769,7 +816,10 @@ export default function App() {
             <div className={`wl-player-pill ${!isMyTurn ? "is-active" : ""} ${opponentId && hudScorePulse[opponentId] ? "score-hit" : ""}`}>
               <div className="wl-pill-top">
                 <span className="wl-player-label">Rival</span>
-                <span className={`wl-tiles-chip ${oppTilePulse ? "is-pulsing" : ""}`}>{opponentTileCount} tiles</span>
+                <span className={`wl-tiles-chip ${oppTilePulse ? "is-pulsing" : ""}`}>
+                  <span className="wl-tiles-count">{opponentTileCount}</span>
+                  <span className="wl-tiles-text">tiles</span>
+                </span>
               </div>
               <span className="wl-player-score">{opponentScore}</span>
             </div>
@@ -820,14 +870,24 @@ export default function App() {
                   </button>
                 )}
                 <div className="tray-controls">
-                  <button
-                    className="btn text icon-btn fullscreen-btn"
-                    onClick={toggleFullscreen}
-                    aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                    title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  >
-                    <span aria-hidden="true">{isFullscreen ? "🗗" : "⛶"}</span>
-                  </button>
+                  <div className="tray-icon-row">
+                    <button
+                      className="btn text icon-btn fullscreen-btn"
+                      onClick={toggleFullscreen}
+                      aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                    >
+                      <FullscreenIcon isFullscreen={isFullscreen} />
+                    </button>
+                    <button
+                      className="btn text icon-btn volume-btn"
+                      onClick={() => setIsMuted(prev => !prev)}
+                      aria-label={isMuted ? "Unmute" : "Mute"}
+                      title={isMuted ? "Unmute" : "Mute"}
+                    >
+                      <VolumeIcon isMuted={isMuted} />
+                    </button>
+                  </div>
                   <button
                     className="btn text compact"
                     onClick={() => setUiTheme(prev => (prev === "green" ? "brown" : "green"))}
