@@ -1,10 +1,10 @@
-.bot-match-screen {
-  position: relative;
+.bot-match-screen .wl-hand-area {
+  height: 128px !important;
 }
 
-.bot-match-screen .hand-area.wl-hand-area {
-  border-top-color: transparent !important;
-  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.28) !important;
+.bot-match-screen .tray-center {
+  padding-top: 0 !important;
+  padding-bottom: 90px !important;
 }
 
 .bot-match-screen .hand-container.is-scrollable {
@@ -18,10 +18,6 @@
 .bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.22);
   border-radius: 999px;
-}
-
-.bot-match-screen .wl-hand-area .hand-container {
-  transform: translateY(-8px);
 }
 
 .bot-difficulty {

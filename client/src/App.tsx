@@ -654,7 +654,7 @@ export default function App() {
   }
 
   if (appMode === "bot") {
-    return <BotMatchScreen onBack={() => setAppMode("home")} />;
+    return <div className="app"><BotMatchScreen onBack={() => setAppMode("home")} /></div>;
   }
 
   if (appMode === "home") {
