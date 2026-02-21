@@ -728,13 +728,21 @@ export default function App() {
             </div>
           )}
 
-          <div className={`opponent-tile-card ${!isMyTurn ? "active" : ""} ${oppTilePulse ? "card-updated" : ""}`}>
-            <span className="opponent-tile-label">OPP TILES</span>
-            <span className="opponent-tile-number">{opponentTileCount}</span>
-          </div>
-
-          <div className="game-top-bar" data-ui="hud">
-            <ScoreBoard state={state} myId={you} isMyTurn={isMyTurn} />
+          <div className="hud-rail" data-ui="hud">
+            <div className="hud-left">
+              <div className={`opponent-tile-card ${!isMyTurn ? "active" : ""} ${oppTilePulse ? "card-updated" : ""}`}>
+                <span className="opponent-tile-label">OPP TILES</span>
+                <span className="opponent-tile-number">{opponentTileCount}</span>
+              </div>
+            </div>
+            <div className="hud-center">
+              <span className={`turn-label ${isMyTurn ? "your-turn" : "opp-turn"}`}>
+                {isMyTurn ? "Your Turn" : "Opponent's Turn"}
+              </span>
+            </div>
+            <div className="hud-right">
+              <ScoreBoard state={state} myId={you} isMyTurn={isMyTurn} />
+            </div>
           </div>
 
           <div className="board-area" data-ui="board">
