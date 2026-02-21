@@ -40,6 +40,9 @@
   --label-size:  0.68rem;
   --value-size:  1.15rem;
   --value-lg:    1.38rem;
+
+  /* Layout */
+  --game-pad:    12px;   /* breathing room around the board card */
 }
 
 /* ─── Doubles: neutralise gold/warm styling ──────────────────────── */
@@ -58,9 +61,39 @@
   border-width: 3px !important;
 }
 
-/* ─── 3A. Board Felt Enhancement ─────────────────────────────────── */
+/* ─── Phase 2: Board hero card ───────────────────────────────────── */
 
-/* Subtle centre bloom only — no noise overlay */
+/*
+  Game screen: padding creates breathing room around the board card.
+  The board-area inherits the narrower content box — no width:100vw override needed
+  because board-area uses width:100% (set below) which respects the padding.
+*/
+.game-screen {
+  padding: var(--game-pad) var(--game-pad) 0 var(--game-pad) !important;
+  background: var(--surface-0) !important;
+}
+
+/*
+  Board area: becomes the hero card.
+  - Rounded corners (clipped by overflow:hidden so tiles stay inside)
+  - Thin hairline border
+  - Soft outer shadow
+  - Height adjusted to account for vertical padding
+  - Width respects game-screen padding
+*/
+.board-area {
+  width: 100% !important;
+  height: calc(100vh - var(--tray-height) - var(--game-pad)) !important;
+  border-radius: var(--r-lg) !important;
+  border: 1px solid var(--hairline) !important;
+  box-shadow: var(--sh-3) !important;
+  /* Keep overflow:hidden from App.css — clips tile z-stack to card boundary */
+}
+
+/*
+  Felt bloom: very subtle centre brightening.
+  Soft-light blend keeps the felt's saturation; no noise.
+*/
 .board-area::before {
   content: "";
   position: absolute;
@@ -69,24 +102,28 @@
   pointer-events: none;
   background: radial-gradient(
     ellipse at 50% 44%,
-    rgba(255, 255, 255, 0.10) 0%,
-    rgba(255, 255, 255, 0.04) 35%,
-    transparent 60%
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 58%
   );
   mix-blend-mode: soft-light;
 }
 
-/* Light vignette — just enough to frame the edges */
+/*
+  Felt inset shadow: replaces gradient vignette with a cleaner
+  box-shadow stack that gives the card a recessed-surface feel.
+  No opacity gradient — just directional inset depth.
+*/
 .board-area::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 1;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.18) 100%);
+  border-radius: inherit;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    inset 0 0 0 1px rgba(255,255,255,0.05),
+    inset 0 2px 8px rgba(0,0,0,0.22),
+    inset 0 -2px 6px rgba(0,0,0,0.14);
 }
 
 /* ─── 3B. Hand Tray ───────────────────────────────────────────────── */
@@ -446,16 +483,7 @@
   background: rgba(255,255,255,0.06) !important;
 }
 
-/* ─── 3L. Felt Rails ─────────────────────────────────────────────── */
-
-/* Gentle inset shadows suggesting physical table rails.
-   No pseudo-elements, no z-index conflicts, no center darkening. */
-.board-area {
-  box-shadow:
-    inset 0 0 60px rgba(0,0,0,0.12),
-    inset 0 8px 20px rgba(0,0,0,0.10),
-    inset 0 -8px 20px rgba(0,0,0,0.08) !important;
-}
+/* 3L removed — board inset depth is now handled by .board-area::after in Phase 2 */
 
 /* ─── HUD Rail ───────────────────────────────────────────────────── */
 
