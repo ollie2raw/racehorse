@@ -3,6 +3,8 @@ import { io, Socket } from "socket.io-client";
 import "./App.css";
 import { Board, DominoTile } from "./components";
 import { playTileSound } from "./utils/sound";
+import NoBrainerLabScreen from "./practice/NoBrainerLabScreen";
+import BotMatchScreen from "./bot/BotMatchScreen";
 import type {
   Tile,
   PlacementPosition,
@@ -193,6 +195,7 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [appMode, setAppMode] = useState<"home" | "multiplayer" | "noBrainer" | "bot">("home");
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("racehorse_muted") === "1";
@@ -338,11 +341,12 @@ export default function App() {
   }, [isConnecting, socket, serverUrl, showToast]);
 
   useEffect(() => {
+    if (appMode !== "multiplayer") return;
     if (autoConnectAttemptedRef.current) return;
     if (!serverUrl) return;
     autoConnectAttemptedRef.current = true;
     connect();
-  }, [connect, serverUrl]);
+  }, [appMode, connect, serverUrl]);
 
   const disconnect = useCallback(() => {
     socket?.disconnect();
@@ -360,6 +364,8 @@ export default function App() {
     setPlayers([]);
     setHandReveal(null);
     handRevealShownRef.current = null;
+    setAppMode("home");
+    autoConnectAttemptedRef.current = false;
   }, [socket]);
 
   // Room actions
@@ -642,32 +648,47 @@ export default function App() {
 
   // ─── Render ───────────────────────────────────────────────
 
+  if (appMode === "noBrainer") {
+    return <NoBrainerLabScreen onBack={() => setAppMode("home")} />;
+  }
+
+  if (appMode === "bot") {
+    return <BotMatchScreen onBack={() => setAppMode("home")} />;
+  }
+
+  if (appMode === "home") {
+    return (
+      <div ref={appRootRef} className="app">
+        <div className="screen lobby-screen mode-home-screen">
+          <div className="mode-home-glow" aria-hidden="true" />
+          <div className="card lobby-card mode-card">
+            <p className="lobby-kicker">Racehorse Dominoes</p>
+            <h2>Choose Game Mode</h2>
+            <p className="lobby-server mode-subtitle">Pick online multiplayer or a local no-brainer practice run.</p>
+            <div className="mode-actions">
+              <button className="mode-option mode-option-primary" onClick={() => setAppMode("multiplayer")}>
+                <span className="mode-option-title">Multiplayer Online</span>
+                <span className="mode-option-meta">Play live in private rooms</span>
+              </button>
+              <button className="mode-option mode-option-secondary" onClick={() => setAppMode("noBrainer")}>
+                <span className="mode-option-title">Practice → No-Brainer Lab</span>
+                <span className="mode-option-meta">Offline puzzle mode, no server needed</span>
+              </button>
+              <button className="mode-option mode-option-secondary" onClick={() => setAppMode("bot")}>
+                <span className="mode-option-title">Practice → Play vs Bot</span>
+                <span className="mode-option-meta">Offline match vs a simple but strong bot (no server)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div ref={appRootRef} className="app">
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
-
-      {/* Header */}
-      {!inGame && (
-        <header className="header uiPanelWood">
-          <h1>Racehorse Dominoes</h1>
-          <div className="connection-status">
-            {isConnected ? (
-              <span className="status connected">● Connected</span>
-            ) : (
-              <span className="status disconnected">○ Disconnected</span>
-            )}
-            <button
-              className="btn text icon-btn fullscreen-btn"
-              onClick={toggleFullscreen}
-              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            >
-              <FullscreenIcon isFullscreen={isFullscreen} />
-            </button>
-          </div>
-        </header>
-      )}
 
       {/* Error Banner */}
       {error && (
@@ -687,21 +708,25 @@ export default function App() {
 
       {/* Disconnected Lobby Screen */}
       {!isConnected && (
-        <div className="screen lobby-screen">
-          <div className="card lobby-card">
+        <div className="screen lobby-screen mode-home-screen">
+          <div className="mode-home-glow" aria-hidden="true" />
+          <div className="card lobby-card mode-card multiplayer-menu-card">
             <p className="lobby-kicker">Racehorse Dominoes</p>
-            <h2>Play online with a friend</h2>
-            <p className="lobby-server">Server: {serverUrl}</p>
-            <div className="lobby-actions">
-              <button className="btn primary lobby-connect-btn" onClick={connect} disabled={isConnecting}>
-                {isConnecting ? "Connecting..." : "Connect"}
+            <h2>Multiplayer Online</h2>
+            <p className="lobby-server mode-subtitle">Connect to create a room or join a friend using a room code.</p>
+            <p className="lobby-server mode-server-line">Server: {serverUrl}</p>
+            <div className="mode-actions">
+              <button className="mode-option mode-option-primary" onClick={connect} disabled={isConnecting}>
+                <span className="mode-option-title">{isConnecting ? "Connecting..." : "Connect"}</span>
+                <span className="mode-option-meta">Enable room creation and room joins</span>
               </button>
-              <div className="divider">or</div>
-              <button className="btn primary" onClick={createRoom} disabled>
-                Create New Room
+              <button className="mode-option mode-option-secondary" onClick={createRoom} disabled>
+                <span className="mode-option-title">Create New Room</span>
+                <span className="mode-option-meta">Connect first to start hosting</span>
               </button>
-              <div className="join-form">
+              <div className="mode-join-row">
                 <input
+                  className="mode-join-input"
                   type="text"
                   placeholder="Room Code"
                   value={roomCode}
@@ -709,11 +734,10 @@ export default function App() {
                   maxLength={6}
                   disabled
                 />
-                <button className="btn secondary" onClick={joinRoom} disabled>
+                <button className="mode-inline-btn" onClick={joinRoom} disabled>
                   Join Room
                 </button>
               </div>
-              <p className="lobby-server">Connect to enable room actions.</p>
             </div>
           </div>
         </div>
@@ -721,43 +745,51 @@ export default function App() {
 
       {/* Lobby Screen */}
       {isConnected && !joinedRoom && (
-        <div className="screen lobby-screen">
-          <div className="card uiPanelWood">
+        <div className="screen lobby-screen mode-home-screen">
+          <div className="mode-home-glow" aria-hidden="true" />
+          <div className="card lobby-card mode-card multiplayer-menu-card">
+            <p className="lobby-kicker">Racehorse Dominoes</p>
             <h2>Join or Create a Room</h2>
-            <div className="lobby-actions">
-              <button className="btn primary" onClick={createRoom}>
-                Create New Room
+            <p className="lobby-server mode-subtitle">Create a new room or enter a code to join your friend instantly.</p>
+            <div className="mode-actions">
+              <button className="mode-option mode-option-primary" onClick={createRoom}>
+                <span className="mode-option-title">Create New Room</span>
+                <span className="mode-option-meta">Start a room and share the code</span>
               </button>
-              <div className="divider">or</div>
-              <div className="join-form">
+              <div className="mode-join-row">
                 <input
+                  className="mode-join-input"
                   type="text"
                   placeholder="Room Code"
                   value={roomCode}
                   onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                   maxLength={6}
                 />
-                <button className="btn secondary" onClick={joinRoom}>
+                <button className="mode-inline-btn" onClick={joinRoom}>
                   Join Room
                 </button>
               </div>
+              <button className="mode-option mode-option-secondary" onClick={disconnect}>
+                <span className="mode-option-title">Disconnect</span>
+                <span className="mode-option-meta">Return to offline mode selector</span>
+              </button>
             </div>
           </div>
-          <button className="btn text" onClick={disconnect}>
-            Disconnect
-          </button>
         </div>
       )}
 
       {/* Room Screen (waiting for game) */}
       {isConnected && joinedRoom && !state && (
-        <div className="screen room-screen">
-          <div className="card uiPanelWood">
+        <div className="screen room-screen mode-home-screen">
+          <div className="mode-home-glow" aria-hidden="true" />
+          <div className="card lobby-card mode-card multiplayer-menu-card">
+            <p className="lobby-kicker">Racehorse Dominoes</p>
             <h2>Room: {joinedRoom}</h2>
-            <div className="players-list">
+            <p className="lobby-server mode-subtitle">Waiting for all players to join before starting the hand.</p>
+            <div className="players-list mode-room-list">
               <h3>Players ({players.length}/2)</h3>
               {players.map((p, i) => (
-                <div key={p} className={`player-item ${p === you ? "you" : ""}`}>
+                <div key={p} className={`player-item mode-room-item ${p === you ? "you" : ""}`}>
                   {p === you ? "You" : `Player ${i + 1}`}
                   {p === you && <span className="badge">Host</span>}
                 </div>
@@ -767,14 +799,16 @@ export default function App() {
               )}
             </div>
             {players.length === 2 && (
-              <button className="btn primary" onClick={startGame}>
-                Start Game
+              <button className="mode-option mode-option-primary" onClick={startGame}>
+                <span className="mode-option-title">Start Game</span>
+                <span className="mode-option-meta">Begin the live multiplayer hand</span>
               </button>
             )}
+            <button className="mode-option mode-option-secondary" onClick={disconnect}>
+              <span className="mode-option-title">Leave Room</span>
+              <span className="mode-option-meta">Exit this room and return to setup</span>
+            </button>
           </div>
-          <button className="btn text" onClick={disconnect}>
-            Leave Room
-          </button>
         </div>
       )}
 

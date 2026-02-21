@@ -1,0 +1,54 @@
+.bot-match-screen {
+  position: relative;
+}
+
+.bot-match-screen .hand-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 4px;
+}
+
+.bot-difficulty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(230, 240, 236, 0.85);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bot-difficulty select {
+  border: none;
+  background: transparent;
+  color: rgba(234, 245, 240, 0.92);
+  font-size: 0.64rem;
+  letter-spacing: 0.05em;
+}
+
+.bot-debug-panel {
+  position: fixed;
+  left: 12px;
+  bottom: 120px;
+  z-index: 1400;
+  max-width: min(760px, calc(100vw - 24px));
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(9, 12, 20, 0.9);
+  color: rgba(230, 240, 236, 0.92);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  display: grid;
+  gap: 4px;
+}
