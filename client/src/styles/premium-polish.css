@@ -67,32 +67,52 @@
 
   The cinematic.css brute-force selector hits .hand-area and .hand-container
   with backdrop-filter: blur(16px) !important.  We zero it out here.
+
+  CLIPPING FIX: .tray-center and .hand-container both have overflow:hidden,
+  which clips the -12px lift + box-shadow of selected/hovered tiles.
+  Fix: set overflow:visible on both, and give .tray-center a 14px top
+  padding so tiles have clearance before the tray edge.
 */
 
 .hand-area {
-  background: linear-gradient(180deg, #0f1223 0%, #080a14 100%) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  background: linear-gradient(180deg, #0d1020 0%, #080a14 100%) !important;
+  /* Stronger seam: crisp top border + ambient uplift shadow */
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow:
+    0 -8px 28px rgba(0, 0, 0, 0.50),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 4px 16px rgba(0, 0, 0, 0.24) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  /* Overflow must be visible so lifted tiles don't clip at the top edge */
+  overflow: visible !important;
 }
 
-/* Subtle inner highlight stripe at the top edge */
+/* Top seam highlight — fades in from sides, sits at exact tray boundary */
 .hand-area::before {
   content: "";
   position: absolute;
   top: 0;
-  left: 8%;
-  right: 8%;
+  left: 6%;
+  right: 6%;
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.20) 40%,
-    rgba(255, 255, 255, 0.20) 60%,
+    rgba(255, 255, 255, 0.22) 35%,
+    rgba(255, 255, 255, 0.22) 65%,
     transparent 100%
   );
   pointer-events: none;
+}
+
+/*
+  Tray center: overflow visible so selection lift and shadow renders fully.
+  Add top padding equal to the max tile lift (12px transform + shadow room).
+*/
+.tray-center {
+  overflow: visible !important;
+  padding-top: 14px !important;
 }
 
 /* Tile container: must be clean — no glass, no blur, no border */
@@ -103,6 +123,14 @@
   border: none !important;
   box-shadow: none !important;
   border-radius: 0 !important;
+  /* Allow tile lift to render above tray boundary */
+  overflow: visible !important;
+}
+
+/* Scrollable path: restore horizontal scroll axis, only clip vertically */
+.hand-container.is-scrollable {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
 }
 
 /* ─── 3C. Tile Micro-interactions ────────────────────────────────── */
