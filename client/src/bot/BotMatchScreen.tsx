@@ -18,6 +18,15 @@ interface BotMatchScreenProps {
   onBack: () => void;
 }
 
+interface BotHandReveal {
+  winner: "you" | "bot" | null;
+  reason: "domino" | "blocked";
+  pointsAwarded: number;
+  loserPips: number;
+  calcText: string;
+  botRemainingTiles: Tile[];
+}
+
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
   return (
     <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -56,10 +65,9 @@ function asPlayMoves(moves: Move[]): Move[] {
 
 function toastFromResult(result: BotActionResult): string {
   if (result.scored) {
-    return `${result.scored.player === "you" ? "You" : "Bot"} scored +${result.scored.points * 5}`;
+    return `${result.scored.player === "you" ? "You" : "Bot"} scored +${result.scored.points}`;
   }
   if (result.handEnded) {
-    if (result.handEnded.winner === null) return "Blocked hand: tie";
     const winner = result.handEnded.winner === "you" ? "You" : "Bot";
     return `${winner} won hand (${result.handEnded.reason}) +${result.handEnded.pointsAwarded}`;
   }
@@ -75,6 +83,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
   const [toast, setToast] = useState("");
   const [difficulty, setDifficulty] = useState<BotDifficulty>("standard");
   const [lastBotChoice, setLastBotChoice] = useState<BotChoice | null>(null);
+  const [handReveal, setHandReveal] = useState<BotHandReveal | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showDebug = typeof window !== "undefined" && window.localStorage.getItem("BOT_DEBUG") === "1";
@@ -129,6 +138,16 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
 
   const applyAndNotify = (result: BotActionResult) => {
     setMatch(result.state);
+    if (result.handEnded) {
+      setHandReveal({
+        winner: result.handEnded.winner,
+        reason: result.handEnded.reason,
+        pointsAwarded: result.handEnded.pointsAwarded,
+        loserPips: result.handEnded.loserPips,
+        calcText: result.handEnded.calcText,
+        botRemainingTiles: result.state.players.bot.hand,
+      });
+    }
     const msg = toastFromResult(result);
     if (msg) pushToast(msg);
   };
@@ -171,20 +190,21 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
         setSelectedTile(null);
         applyAndNotify(result);
       }
-    }, 560);
+    }, 760);
 
     return () => clearTimeout(timer);
   }, [match, difficulty]);
 
   useEffect(() => {
-    if (!match.handOver || match.gameOver) return;
+    if (!handReveal || match.gameOver) return;
     const timer = setTimeout(() => {
       setSelectedTile(null);
       setLastBotChoice(null);
+      setHandReveal(null);
       setMatch(prev => (prev.handOver && !prev.gameOver ? startNextBotHand(prev) : prev));
-    }, 1700);
+    }, 4200);
     return () => clearTimeout(timer);
-  }, [match.handOver, match.gameOver]);
+  }, [handReveal, match.gameOver]);
 
   useEffect(() => {
     if (match.currentPlayer !== "you" || match.handOver || match.gameOver) return;
@@ -207,6 +227,27 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
   return (
     <div ref={rootRef} className={`screen game-screen walnut-live theme-${uiTheme} bot-match-screen`}>
       {toast && <div className="toast">{toast}</div>}
+      {handReveal && (
+        <div className="hand-reveal-overlay">
+          <div className="hand-reveal-backdrop" />
+          <div className="hand-reveal-modal">
+            <div className="hand-reveal-card">
+              <h3>Hand Over</h3>
+              <p className="reveal-points">
+                {handReveal.winner === "you" ? "You" : "Bot"} +{handReveal.pointsAwarded}
+                {" · "}
+                {handReveal.reason} ({handReveal.calcText})
+              </p>
+              <p className="reveal-label">Bot remaining tiles</p>
+              <div className="reveal-tiles">
+                {handReveal.botRemainingTiles.map((tile, idx) => (
+                  <DominoTile key={`bot-reveal-${idx}-${tile.low}-${tile.high}`} tile={tile} size={34} className="hand-over-tile" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="wl-top-rail" data-ui="hud">
         <div className={`wl-player-pill ${botTurn ? "is-active" : ""}`}>
@@ -295,6 +336,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                 onClick={() => {
                   setSelectedTile(null);
                   setLastBotChoice(null);
+                  setHandReveal(null);
                   setMatch(createBotMatch(60));
                 }}
               >

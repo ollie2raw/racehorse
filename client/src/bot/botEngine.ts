@@ -38,7 +38,13 @@ export interface BotActionResult {
   scored?: { player: BotPlayerId; points: number };
   drew?: { player: BotPlayerId; tile: Tile };
   passed?: { player: BotPlayerId };
-  handEnded?: { winner: BotPlayerId | null; reason: BotHandEndReason; pointsAwarded: number };
+  handEnded?: {
+    winner: BotPlayerId | null;
+    reason: BotHandEndReason;
+    pointsAwarded: number;
+    loserPips: number;
+    calcText: string;
+  };
 }
 
 export interface BotMovePreview {
@@ -657,12 +663,19 @@ export function applyPlayMove(state: BotMatchState, player: BotPlayerId, move: M
     }
 
     const loser = nextPlayer(player);
+    const loserPips = sumPips(nextState.players[loser].hand);
     const pointsAwarded = computeGoOutBonusPoints(nextState.players[loser].hand);
     nextState = resolveHandEnd(nextState, player, "domino", pointsAwarded);
     return {
       state: nextState,
       scored: scoredPoints > 0 ? { player, points: scoredPoints } : undefined,
-      handEnded: { winner: player, reason: "domino", pointsAwarded },
+      handEnded: {
+        winner: player,
+        reason: "domino",
+        pointsAwarded,
+        loserPips,
+        calcText: `round(${loserPips}/5) = ${pointsAwarded}`,
+      },
     };
   }
 
@@ -717,12 +730,19 @@ export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionRe
     const botPips = sumPips(moved.players.bot.hand);
     const winner: BotPlayerId = youPips <= botPips ? "you" : "bot";
     const loser: BotPlayerId = winner === "you" ? "bot" : "you";
+    const loserPips = sumPips(moved.players[loser].hand);
     const pointsAwarded = computeHandPenalty(moved.players[loser].hand);
     const resolved = resolveHandEnd(moved, winner, "blocked", pointsAwarded);
     return {
       state: resolved,
       passed: { player },
-      handEnded: { winner, reason: "blocked", pointsAwarded },
+      handEnded: {
+        winner,
+        reason: "blocked",
+        pointsAwarded,
+        loserPips,
+        calcText: `ceil(${loserPips}/5)*5 = ${pointsAwarded}`,
+      },
     };
   }
 
