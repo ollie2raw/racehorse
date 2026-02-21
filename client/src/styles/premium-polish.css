@@ -305,7 +305,7 @@
 /* Base card style */
 .player-score {
   padding: 8px 16px !important;
-  border-radius: 0 !important;
+  border-radius: 6px !important;
   border: none !important;
   min-width: 72px !important;
   background: linear-gradient(145deg, rgba(30,34,52,0.9) 0%, rgba(18,20,35,0.95) 100%) !important;
@@ -325,12 +325,12 @@
 .player-label {
   font-size: 0.72rem !important;
   font-weight: 700 !important;
-  letter-spacing: 0.16em !important;
+  letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
   color: rgba(255,255,255,0.45) !important;
 }
 
-/* Score number — idle size; active size set below via .player-score.active */
+/* Score number — idle; tabular so digits don't shift width */
 .score-number {
   font-size: 1.15rem !important;
   font-weight: 800 !important;
@@ -340,23 +340,26 @@
   color: #ffffff !important;
 }
 
-/* Active player card — stable confident state, no animation */
+/* Active player card — stable, no animation, no glow */
 .player-score.active {
   background: rgba(93, 194, 255, 0.12) !important;
+  /* border-top is 2px; nudge padding-top down by 1px to keep content centred */
+  padding-top: 7px !important;
   border-top: 2px solid rgba(93, 194, 255, 0.55) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10) !important;
   transition: none !important;
+  animation: none !important;
 }
 
 .player-score.active .player-label {
   color: rgba(255, 255, 255, 0.65) !important;
 }
 
-/* Active player score: larger than idle to reinforce whose turn it is */
+/* Active score: larger to reinforce turn ownership */
 .player-score.active .score-number {
-  font-size: 1.35rem !important;
+  font-size: 1.38rem !important;
 }
 
 /* ─── 3K. Icon Button (Fullscreen) ───────────────────────────────── */
