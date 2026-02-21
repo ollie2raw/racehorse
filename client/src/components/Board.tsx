@@ -388,8 +388,10 @@ export function Board({
   legalMoves,
   selectedTile,
   onPositionClick,
-  tileSize = 80, // Large tiles for better visibility
+  tileSize = 72,
 }: BoardProps) {
+  const fitPaddingX = 110;
+  const fitPaddingY = 90;
   const containerRef = useRef<HTMLDivElement>(null);
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
@@ -424,9 +426,9 @@ export function Board({
     const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
 
     // Calculate scale to fit
-    const scaleX = (containerWidth - 40) / layoutWidth;
-    const scaleY = (containerHeight - 40) / layoutHeight;
-    const fitScale = Math.min(1.2, Math.max(0.3, Math.min(scaleX, scaleY)));
+    const scaleX = Math.max(240, containerWidth - fitPaddingX) / layoutWidth;
+    const scaleY = Math.max(180, containerHeight - fitPaddingY) / layoutHeight;
+    const fitScale = Math.min(1.45, Math.max(0.42, Math.min(scaleX, scaleY)));
 
     setCamera({ x: 0, y: 0, scale: fitScale });
   }, [layout, unitToPixels]);
@@ -437,7 +439,7 @@ export function Board({
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setCamera(cam => ({
       ...cam,
-      scale: Math.min(1.6, Math.max(0.6, cam.scale * delta)),
+      scale: Math.min(1.8, Math.max(0.5, cam.scale * delta)),
     }));
   }, []);
 
@@ -479,12 +481,12 @@ export function Board({
     const layoutWidth = (layout.maxX - layout.minX) * unitToPixels;
     const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
 
-    const scaleX = (containerWidth - 40) / layoutWidth;
-    const scaleY = (containerHeight - 40) / layoutHeight;
-    const fitScale = Math.min(1.2, Math.max(0.3, Math.min(scaleX, scaleY)));
+    const scaleX = Math.max(240, containerWidth - fitPaddingX) / layoutWidth;
+    const scaleY = Math.max(180, containerHeight - fitPaddingY) / layoutHeight;
+    const fitScale = Math.min(1.45, Math.max(0.42, Math.min(scaleX, scaleY)));
 
     setCamera({ x: 0, y: 0, scale: fitScale });
-  }, [layout, unitToPixels]);
+  }, [layout, unitToPixels, fitPaddingX, fitPaddingY]);
 
   // Calculate board center offset
   const centerX = (layout.minX + layout.maxX) / 2;

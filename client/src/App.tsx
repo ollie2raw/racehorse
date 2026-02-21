@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import "./App.css";
 import { Board, DominoTile } from "./components";
+import { playTileSound } from "./utils/sound";
 import type {
   Tile,
   PlacementPosition,
@@ -27,6 +28,7 @@ interface HandViewProps {
   tileSize: number;
   handScale: number;
   handScrollable: boolean;
+  drawPulseIndex: number | null;
 }
 
 function HandView({
@@ -38,6 +40,7 @@ function HandView({
   tileSize,
   handScale,
   handScrollable,
+  drawPulseIndex,
 }: HandViewProps) {
   const playableTiles = useMemo(() => {
     return legalMoves
@@ -70,69 +73,10 @@ function HandView({
             highlight={canPlay}
             onClick={() => isMyTurn && onSelect(tile)}
             disabled={!isMyTurn}
+            className={drawPulseIndex === idx ? "new-draw" : ""}
           />
         );
       })}
-    </div>
-  );
-}
-
-// ─── Score Display ───────────────────────────────────────────
-
-interface ScoreBoardProps {
-  state: GameState;
-  myId: string;
-  isMyTurn: boolean;
-}
-
-function ScoreBoard({ state, myId, isMyTurn }: ScoreBoardProps) {
-  const [scorePulse, setScorePulse] = useState<Record<string, boolean>>({});
-  const prevScoresRef = useRef<Record<string, number>>({});
-
-  useEffect(() => {
-    const nextScores: Record<string, number> = {};
-    const nextPulse: Record<string, boolean> = {};
-    let changed = false;
-
-    for (const pid of state.playerIds) {
-      const score = state.players[pid]?.score ?? 0;
-      nextScores[pid] = score;
-      if (prevScoresRef.current[pid] !== undefined && prevScoresRef.current[pid] !== score) {
-        nextPulse[pid] = true;
-        changed = true;
-      }
-    }
-
-    prevScoresRef.current = nextScores;
-    if (!changed) return;
-
-    setScorePulse(nextPulse);
-    const timeout = setTimeout(() => setScorePulse({}), 150);
-    return () => clearTimeout(timeout);
-  }, [state.playerIds, state.players]);
-
-  return (
-    <div className={`scoreboard ${isMyTurn ? "my-turn" : ""}`}>
-      <div className="scores-row">
-        {state.playerIds.map((pid, idx) => {
-          const score = state.players[pid]?.score ?? 0;
-          const isWinner = state.winnerId === pid;
-          const isActive = idx === state.currentPlayerIndex;
-
-          return (
-            <div
-              key={pid}
-              className={`player-score ${pid === myId ? "you" : ""} ${isActive ? "active" : ""} ${isWinner ? "winner" : ""} ${scorePulse[pid] ? "score-pulse" : ""}`}
-            >
-              <div className="player-label">
-                {pid === myId ? "You" : "Opponent"}
-                {isWinner && " 👑"}
-              </div>
-              <div className="score-number">{score}</div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -196,6 +140,11 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [uiTheme, setUiTheme] = useState<"green" | "brown">(() => {
+    if (typeof window === "undefined") return "green";
+    const stored = window.localStorage.getItem("racehorse_ui_theme");
+    return stored === "brown" ? "brown" : "green";
+  });
 
   const [roomCode, setRoomCode] = useState("");
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
@@ -217,6 +166,12 @@ export default function App() {
   const handRevealShownRef = useRef<number | null>(null);
   const prevOppCountRef = useRef<number | null>(null);
   const [oppTilePulse, setOppTilePulse] = useState(false);
+  const prevBoardTileCountRef = useRef(0);
+  const prevTurnIdRef = useRef<string | null>(null);
+  const [hudScorePulse, setHudScorePulse] = useState<Record<string, boolean>>({});
+  const prevHudScoresRef = useRef<Record<string, number>>({});
+  const prevMyHandLenRef = useRef(0);
+  const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
 
   const showToast = useCallback((msg: string, duration = 3000) => {
     if (toastTimeoutRef.current) {
@@ -233,6 +188,11 @@ export default function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("racehorse_ui_theme", uiTheme);
+  }, [uiTheme]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -431,6 +391,8 @@ export default function App() {
   const opponentTileCount = state && opponentId
     ? (state.handCounts?.[opponentId] ?? state.players[opponentId]?.hand?.length ?? 0)
     : 0;
+  const myScore = state?.players[you]?.score ?? 0;
+  const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
   const inGame = Boolean(isConnected && joinedRoom && state);
   const canPass = legalMoves.some(m => m.type === "pass");
   const hasPlayMoves = legalMoves.some(m => m.type === "play");
@@ -439,26 +401,29 @@ export default function App() {
     const centerEl = trayCenterRef.current;
     if (!centerEl) return;
 
-    const BASE_TILE_SIZE = 70;
-    const BASE_GAP = 10;
-    const MIN_SCALE = 0.72;
-    const MAX_SCALE = 1.0;
+    const getStableTileSize = () => {
+      const vw = window.innerWidth;
+      if (vw >= 1500) return 104;
+      if (vw >= 1280) return 98;
+      if (vw >= 1100) return 92;
+      if (vw >= 900) return 86;
+      if (vw >= 760) return 80;
+      return 72;
+    };
 
     const updateHandTileSize = () => {
       const count = Math.max(1, myHand.length);
-      const availableWidth = Math.max(0, centerEl.clientWidth - 12);
-      const baseTileWidth = BASE_TILE_SIZE * 2 + 9;
-      const neededBaseWidth = count * baseTileWidth + (count - 1) * BASE_GAP;
-      const rawScale = neededBaseWidth > 0 ? availableWidth / neededBaseWidth : 1;
-      const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, rawScale));
-      const nextSize = Math.max(24, Math.floor(BASE_TILE_SIZE * nextScale));
-      const scaledGap = Math.max(6, Math.round(BASE_GAP * nextScale));
+      const availableWidth = Math.max(0, centerEl.clientWidth - 20);
+
+      // Keep tile size stable during gameplay; only viewport size can change it.
+      const nextSize = getStableTileSize();
+      const scaledGap = Math.max(7, Math.round(nextSize * 0.14));
       const scaledTileWidth = nextSize * 2 + 9;
       const neededScaledWidth = count * scaledTileWidth + (count - 1) * scaledGap;
-      const shouldScroll =
-        nextScale <= MIN_SCALE + 0.001 && neededScaledWidth > availableWidth + 1;
+      const shouldScroll = neededScaledWidth > availableWidth + 1;
+      const nextScale = nextSize / 70;
 
-      setHandScale(prev => (prev === nextScale ? prev : nextScale));
+      setHandScale(prev => (Math.abs(prev - nextScale) < 0.005 ? prev : nextScale));
       setHandScrollable(prev => (prev === shouldScroll ? prev : shouldScroll));
       setHandTileSize(prev => (prev === nextSize ? prev : nextSize));
     };
@@ -473,6 +438,24 @@ export default function App() {
       window.removeEventListener("resize", updateHandTileSize);
     };
   }, [myHand.length]);
+
+  useEffect(() => {
+    if (!inGame) {
+      prevMyHandLenRef.current = 0;
+      setDrawPulseIndex(null);
+      return;
+    }
+
+    if (myHand.length > prevMyHandLenRef.current) {
+      setDrawPulseIndex(myHand.length - 1);
+      const timer = setTimeout(() => setDrawPulseIndex(null), 360);
+      prevMyHandLenRef.current = myHand.length;
+      return () => clearTimeout(timer);
+    }
+
+    prevMyHandLenRef.current = myHand.length;
+    setDrawPulseIndex(null);
+  }, [inGame, myHand.length]);
 
   useEffect(() => {
     if (!inGame || !state || state.gameOver || !state.handOver) return;
@@ -555,6 +538,60 @@ export default function App() {
     }
     prevOppCountRef.current = opponentTileCount;
   }, [opponentTileCount]);
+
+  // Pulse score cards on scoring events and play a short hit cue.
+  useEffect(() => {
+    if (!state) return;
+
+    const nextScores: Record<string, number> = {};
+    const nextPulse: Record<string, boolean> = {};
+    let changed = false;
+
+    for (const pid of state.playerIds) {
+      const score = state.players[pid]?.score ?? 0;
+      nextScores[pid] = score;
+      if (prevHudScoresRef.current[pid] !== undefined && prevHudScoresRef.current[pid] !== score) {
+        nextPulse[pid] = true;
+        changed = true;
+      }
+    }
+
+    prevHudScoresRef.current = nextScores;
+    if (!changed) return;
+
+    playTileSound("slam", false);
+    setHudScorePulse(nextPulse);
+    const timeout = setTimeout(() => setHudScorePulse({}), 260);
+    return () => clearTimeout(timeout);
+  }, [state]);
+
+  // Add tactile audio feedback for turn switches and tile placements.
+  useEffect(() => {
+    if (!inGame || !state) {
+      prevBoardTileCountRef.current = 0;
+      prevTurnIdRef.current = null;
+      return;
+    }
+
+    const currentTileCount = state.board?.mainLine.length ?? 0;
+    if (
+      prevBoardTileCountRef.current > 0 &&
+      currentTileCount > prevBoardTileCountRef.current
+    ) {
+      playTileSound(currentTileCount - prevBoardTileCountRef.current > 1 ? "slam" : "standard", false);
+    }
+    prevBoardTileCountRef.current = currentTileCount;
+
+    const activePlayerId = state.playerIds[state.currentPlayerIndex] ?? null;
+    if (
+      prevTurnIdRef.current !== null &&
+      activePlayerId &&
+      prevTurnIdRef.current !== activePlayerId
+    ) {
+      playTileSound("deal", false);
+    }
+    prevTurnIdRef.current = activePlayerId;
+  }, [inGame, state]);
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -696,7 +733,7 @@ export default function App() {
 
       {/* Game Screen */}
       {isConnected && joinedRoom && state && (
-        <div className="screen game-screen">
+        <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
           {/* Game Over Overlay */}
           {state.gameOver && (
             <GameOverOverlay state={state} myId={you} onNewGame={disconnect} />
@@ -728,44 +765,40 @@ export default function App() {
             </div>
           )}
 
-          <div className="hud-rail" data-ui="hud">
-            <div className="hud-left">
-              <div className={`opponent-tile-card ${!isMyTurn ? "active" : ""} ${oppTilePulse ? "card-updated" : ""}`}>
-                <span className="opponent-tile-label">OPP TILES</span>
-                <span className="opponent-tile-number">{opponentTileCount}</span>
+          <div className="wl-top-rail" data-ui="hud">
+            <div className={`wl-player-pill ${!isMyTurn ? "is-active" : ""} ${opponentId && hudScorePulse[opponentId] ? "score-hit" : ""}`}>
+              <div className="wl-pill-top">
+                <span className="wl-player-label">Rival</span>
+                <span className={`wl-tiles-chip ${oppTilePulse ? "is-pulsing" : ""}`}>{opponentTileCount} tiles</span>
               </div>
+              <span className="wl-player-score">{opponentScore}</span>
             </div>
-            <div className="hud-center">
-              <span className={`turn-label ${isMyTurn ? "your-turn" : "opp-turn"}`}>
-                {isMyTurn ? "Your Turn" : "Opponent's Turn"}
+            <div className="wl-center-status">
+              <span className={`wl-turn-label ${isMyTurn ? "your-turn" : "opp-turn"}`}>
+                {isMyTurn ? "Your move" : "Opponent thinking"}
               </span>
+              <span className="wl-room-code">Room {joinedRoom}</span>
             </div>
-            <div className="hud-right">
-              <ScoreBoard state={state} myId={you} isMyTurn={isMyTurn} />
+            <div className={`wl-player-pill is-you ${isMyTurn ? "is-active" : ""} ${hudScorePulse[you] ? "score-hit" : ""}`}>
+              <span className="wl-player-label">You</span>
+              <span className="wl-player-score">{myScore}</span>
             </div>
           </div>
 
-          <div className="board-area" data-ui="board">
-            <Board
-              board={state.board}
-              legalMoves={legalMoves}
-              selectedTile={selectedTile}
-              onPositionClick={play}
-              tileSize={80}
-            />
+          <div className="wl-stage-shell">
+            <div className="board-area wl-board-area" data-ui="board">
+              <Board
+                board={state.board}
+                legalMoves={legalMoves}
+                selectedTile={selectedTile}
+                onPositionClick={play}
+                tileSize={72}
+              />
+            </div>
           </div>
 
-          <div className="hand-area" data-ui="tray">
+          <div className="hand-area wl-hand-area" data-ui="tray">
             <div className="tray-rail">
-              <div className="tray-left">
-                <h3>Your Hand ({myHand.length})</h3>
-                {selectedTile && (
-                  <span className="selection-info">
-                    [{selectedTile.low}|{selectedTile.high}]
-                  </span>
-                )}
-              </div>
-
               <div className="tray-center" ref={trayCenterRef}>
                 <HandView
                   hand={myHand}
@@ -776,26 +809,36 @@ export default function App() {
                   tileSize={handTileSize}
                   handScale={handScale}
                   handScrollable={handScrollable}
+                  drawPulseIndex={drawPulseIndex}
                 />
               </div>
 
               <div className="tray-right" data-ui="actions">
                 {isMyTurn && !state.handOver && !state.gameOver && hasPlayMoves && canDraw && (
-                  <button className="btn text optional-draw-btn" onClick={draw}>
+                  <button className="btn text optional-draw-btn compact" onClick={draw}>
                     Draw ({state.boneyard.length})
                   </button>
                 )}
-                <button
-                  className="btn text icon-btn fullscreen-btn"
-                  onClick={toggleFullscreen}
-                  aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                  title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                >
-                  <span aria-hidden="true">{isFullscreen ? "🗗" : "⛶"}</span>
-                </button>
-                <button className="btn text leave-btn" onClick={disconnect}>
-                  Leave Game
-                </button>
+                <div className="tray-controls">
+                  <button
+                    className="btn text icon-btn fullscreen-btn"
+                    onClick={toggleFullscreen}
+                    aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                    title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  >
+                    <span aria-hidden="true">{isFullscreen ? "🗗" : "⛶"}</span>
+                  </button>
+                  <button
+                    className="btn text compact"
+                    onClick={() => setUiTheme(prev => (prev === "green" ? "brown" : "green"))}
+                    title={uiTheme === "green" ? "Switch to brown felt + colored pips" : "Switch to green felt + black pips"}
+                  >
+                    Color
+                  </button>
+                  <button className="btn text leave-btn compact" onClick={disconnect}>
+                    Leave
+                  </button>
+                </div>
               </div>
             </div>
           </div>
