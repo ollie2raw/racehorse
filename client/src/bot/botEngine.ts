@@ -10,6 +10,7 @@ import type {
 
 export type BotPlayerId = "you" | "bot";
 export type BotHandEndReason = "domino" | "blocked";
+export type BotDealSize = 7 | 14;
 
 export interface BotPlayerState {
   hand: Tile[];
@@ -31,6 +32,7 @@ export interface BotMatchState {
   winningScore: number;
   lastHandWinner: BotPlayerId | null;
   lastHandReason: BotHandEndReason | null;
+  dealSize: BotDealSize;
 }
 
 export interface BotActionResult {
@@ -105,13 +107,18 @@ function shuffle<T>(arr: readonly T[]): T[] {
   return out;
 }
 
-function createDealtHand(scores: Record<BotPlayerId, number>, handNumber: number, winningScore: number): BotMatchState {
+function createDealtHand(
+  scores: Record<BotPlayerId, number>,
+  handNumber: number,
+  winningScore: number,
+  dealSize: BotDealSize
+): BotMatchState {
   const deck = shuffle(generateDoubleSixSet());
-  const youHand = deck.slice(0, 7);
-  const botHand = deck.slice(7, 14);
-  const remaining = deck.slice(14);
-  const deadTiles = remaining.slice(remaining.length - 2);
-  const boneyard = remaining.slice(0, remaining.length - 2);
+  const youHand = deck.slice(0, dealSize);
+  const botHand = deck.slice(dealSize, dealSize * 2);
+  const remaining = deck.slice(dealSize * 2);
+  const deadTiles = dealSize === 14 ? [] : remaining.slice(remaining.length - 2);
+  const boneyard = dealSize === 14 ? [] : remaining.slice(0, remaining.length - 2);
   const currentPlayer: BotPlayerId = handNumber % 2 === 1 ? "you" : "bot";
 
   return {
@@ -132,18 +139,20 @@ function createDealtHand(scores: Record<BotPlayerId, number>, handNumber: number
     winningScore,
     lastHandWinner: null,
     lastHandReason: null,
+    dealSize,
   };
 }
 
-export function createBotMatch(winningScore = 60): BotMatchState {
-  return createDealtHand({ you: 0, bot: 0 }, 1, winningScore);
+export function createBotMatch(winningScore = 60, dealSize: BotDealSize = 7): BotMatchState {
+  return createDealtHand({ you: 0, bot: 0 }, 1, winningScore, dealSize);
 }
 
 export function startNextBotHand(state: BotMatchState): BotMatchState {
   return createDealtHand(
     { you: state.players.you.score, bot: state.players.bot.score },
     state.handNumber + 1,
-    state.winningScore
+    state.winningScore,
+    state.dealSize
   );
 }
 

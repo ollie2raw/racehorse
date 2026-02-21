@@ -2,16 +2,28 @@
   position: relative;
 }
 
+.bot-match-screen .wl-hand-area .tray-center {
+  padding: 0 6px;
+}
+
 .bot-match-screen .hand-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
   height: 100%;
-  width: 100%;
+  padding: 0 6px;
+}
+
+.bot-match-screen .hand-container.is-scrollable {
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0 4px;
+  scrollbar-width: thin;
+}
+
+.bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar {
+  height: 7px;
+}
+
+.bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
 }
 
 .bot-difficulty {
@@ -34,6 +46,7 @@
   color: rgba(234, 245, 240, 0.92);
   font-size: 0.64rem;
   letter-spacing: 0.05em;
+  max-width: 136px;
 }
 
 .bot-debug-panel {

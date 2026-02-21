@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import "./App.css";
-import { Board, DominoTile } from "./components";
+import { Board, DominoTile, ScoreTrackOverlay } from "./components";
 import { playTileSound } from "./utils/sound";
 import NoBrainerLabScreen from "./practice/NoBrainerLabScreen";
 import BotMatchScreen from "./bot/BotMatchScreen";
@@ -217,6 +217,7 @@ export default function App() {
   const [actionError, setActionError] = useState<string>("");
   const [toast, setToast] = useState<string>("");
   const [handReveal, setHandReveal] = useState<HandEndedPayload | null>(null);
+  const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
@@ -815,6 +816,15 @@ export default function App() {
       {/* Game Screen */}
       {isConnected && joinedRoom && state && (
         <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
+          <ScoreTrackOverlay
+            open={scoreTrackOpen}
+            onClose={() => setScoreTrackOpen(false)}
+            target={60}
+            players={[
+              { label: "Rival", score: opponentScore, tone: "opp" },
+              { label: "You", score: myScore, tone: "you" },
+            ]}
+          />
           {/* Game Over Overlay */}
           {state.gameOver && (
             <GameOverOverlay state={state} myId={you} onNewGame={disconnect} />
@@ -847,7 +857,12 @@ export default function App() {
           )}
 
           <div className="wl-top-rail" data-ui="hud">
-            <div className={`wl-player-pill ${!isMyTurn ? "is-active" : ""} ${opponentId && hudScorePulse[opponentId] ? "score-hit" : ""}`}>
+            <button
+              type="button"
+              className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? "is-active" : ""} ${opponentId && hudScorePulse[opponentId] ? "score-hit" : ""}`}
+              onClick={() => setScoreTrackOpen(true)}
+              aria-label="Open score track"
+            >
               <div className="wl-pill-top">
                 <span className="wl-player-label">Rival</span>
                 <span className={`wl-tiles-chip ${oppTilePulse ? "is-pulsing" : ""}`}>
@@ -856,17 +871,22 @@ export default function App() {
                 </span>
               </div>
               <span className="wl-player-score">{opponentScore}</span>
-            </div>
+            </button>
             <div className="wl-center-status">
               <span className={`wl-turn-label ${isMyTurn ? "your-turn" : "opp-turn"}`}>
                 {isMyTurn ? "Your move" : "Opponent thinking"}
               </span>
               <span className="wl-room-code">Room {joinedRoom}</span>
             </div>
-            <div className={`wl-player-pill is-you ${isMyTurn ? "is-active" : ""} ${hudScorePulse[you] ? "score-hit" : ""}`}>
+            <button
+              type="button"
+              className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? "is-active" : ""} ${hudScorePulse[you] ? "score-hit" : ""}`}
+              onClick={() => setScoreTrackOpen(true)}
+              aria-label="Open score track"
+            >
               <span className="wl-player-label">You</span>
               <span className="wl-player-score">{myScore}</span>
-            </div>
+            </button>
           </div>
 
           <div className="wl-stage-shell">

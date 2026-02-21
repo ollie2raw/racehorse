@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Board, DominoTile } from "../components";
+import { Board, DominoTile, ScoreTrackOverlay } from "../components";
 import type { Move, Tile } from "../types";
 import {
   applyPlayMove,
@@ -9,6 +9,7 @@ import {
   getLegalMoves,
   startNextBotHand,
   type BotActionResult,
+  type BotDealSize,
   type BotMatchState,
 } from "./botEngine";
 import { chooseBotMove, type BotChoice, type BotDifficulty } from "./botHeuristics";
@@ -78,13 +79,15 @@ function toastFromResult(result: BotActionResult): string {
 
 export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60));
+  const [dealSize, setDealSize] = useState<BotDealSize>(7);
+  const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, 7));
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState("");
   const [difficulty, setDifficulty] = useState<BotDifficulty>("standard");
   const [lastBotChoice, setLastBotChoice] = useState<BotChoice | null>(null);
   const [handReveal, setHandReveal] = useState<BotHandReveal | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showDebug = typeof window !== "undefined" && window.localStorage.getItem("BOT_DEBUG") === "1";
 
@@ -216,6 +219,8 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
 
   const handActive = !match.handOver && !match.gameOver;
   const botTurn = match.currentPlayer === "bot" && handActive;
+  const handTileSize = match.dealSize === 14 ? 84 : 92;
+  const handScrollable = match.dealSize === 14;
   const turnLabel = match.handOver
     ? (match.gameOver
       ? (match.winnerId === "you" ? "You win the match" : "Bot wins the match")
@@ -226,6 +231,15 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
 
   return (
     <div ref={rootRef} className={`screen game-screen walnut-live theme-${uiTheme} bot-match-screen`}>
+      <ScoreTrackOverlay
+        open={scoreTrackOpen}
+        onClose={() => setScoreTrackOpen(false)}
+        target={60}
+        players={[
+          { label: "Bot", score: match.players.bot.score, tone: "opp" },
+          { label: "You", score: match.players.you.score, tone: "you" },
+        ]}
+      />
       {toast && <div className="toast">{toast}</div>}
       {handReveal && (
         <div className="hand-reveal-overlay">
@@ -250,7 +264,12 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
       )}
 
       <div className="wl-top-rail" data-ui="hud">
-        <div className={`wl-player-pill ${botTurn ? "is-active" : ""}`}>
+        <button
+          type="button"
+          className={`wl-player-pill wl-player-pill-btn ${botTurn ? "is-active" : ""}`}
+          onClick={() => setScoreTrackOpen(true)}
+          aria-label="Open score track"
+        >
           <div className="wl-pill-top">
             <span className="wl-player-label">Bot</span>
             <span className="wl-tiles-chip">
@@ -259,15 +278,23 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
             </span>
           </div>
           <span className="wl-player-score">{match.players.bot.score}</span>
-        </div>
+        </button>
         <div className="wl-center-status">
           <span className={`wl-turn-label ${botTurn ? "opp-turn" : "your-turn"}`}>{turnLabel}</span>
-          <span className="wl-room-code">Hand {match.handNumber} · Offline vs Bot</span>
+          <span className="wl-room-code">
+            Hand {match.handNumber} · Offline vs Bot · {match.dealSize}-tile
+            {match.dealSize === 14 ? " (no boneyard)" : ""}
+          </span>
         </div>
-        <div className={`wl-player-pill is-you ${!botTurn && handActive ? "is-active" : ""}`}>
+        <button
+          type="button"
+          className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? "is-active" : ""}`}
+          onClick={() => setScoreTrackOpen(true)}
+          aria-label="Open score track"
+        >
           <span className="wl-player-label">You</span>
           <span className="wl-player-score">{match.players.you.score}</span>
-        </div>
+        </button>
       </div>
 
       <div className="wl-stage-shell">
@@ -285,7 +312,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
       <div className="hand-area wl-hand-area" data-ui="tray">
         <div className="tray-rail">
           <div className="tray-center">
-            <div className="hand-container">
+              <div className={`hand-container ${handScrollable ? "is-scrollable" : ""}`}>
               {match.players.you.hand.map((tile, idx) => {
                 const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
                 const playable = userPlayMoves.some(m => m.tile && tileEquals(m.tile, tile));
@@ -293,7 +320,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                   <DominoTile
                     key={`bot-hand-${idx}-${tile.low}-${tile.high}`}
                     tile={tile}
-                    size={92}
+                    size={handTileSize}
                     selected={selected}
                     highlight={playable}
                     disabled={!handActive || botTurn}
@@ -305,7 +332,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                   />
                 );
               })}
-            </div>
+              </div>
           </div>
 
           <div className="tray-right">
@@ -328,6 +355,23 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                   <option value="hard">Hard</option>
                 </select>
               </label>
+              <label className="bot-difficulty">
+                <span>Deal</span>
+                <select
+                  value={dealSize}
+                  onChange={(e) => {
+                    const nextDeal = Number(e.target.value) as BotDealSize;
+                    setDealSize(nextDeal);
+                    setSelectedTile(null);
+                    setLastBotChoice(null);
+                    setHandReveal(null);
+                    setMatch(createBotMatch(60, nextDeal));
+                  }}
+                >
+                  <option value={7}>7 tiles + boneyard</option>
+                  <option value={14}>14 tiles (no boneyard)</option>
+                </select>
+              </label>
               <button className="btn text compact" onClick={() => setUiTheme(prev => (prev === "green" ? "brown" : "green"))}>
                 Color
               </button>
@@ -337,7 +381,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                   setSelectedTile(null);
                   setLastBotChoice(null);
                   setHandReveal(null);
-                  setMatch(createBotMatch(60));
+                  setMatch(createBotMatch(60, dealSize));
                 }}
               >
                 New Match
