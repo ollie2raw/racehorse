@@ -58,8 +58,18 @@ export async function fetchUserStats(user: User): Promise<{ data: StatsSummary |
       .eq("loser_user_id", user.id),
   ]);
 
-  if (winnerResp.error) return { data: null, error: winnerResp.error.message };
-  if (loserResp.error) return { data: null, error: loserResp.error.message };
+  if (winnerResp.error || loserResp.error) {
+    const message = winnerResp.error?.message ?? loserResp.error?.message ?? "Stats unavailable.";
+    const normalized = message.toLowerCase();
+    if (
+      normalized.includes("relation") ||
+      normalized.includes("does not exist") ||
+      normalized.includes("42p01")
+    ) {
+      return { data: null, error: "Stats unavailable (missing table)." };
+    }
+    return { data: null, error: message };
+  }
 
   const wins = winnerResp.data?.length ?? 0;
   const losses = loserResp.data?.length ?? 0;

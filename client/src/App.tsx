@@ -7,7 +7,10 @@ import NoBrainerLabScreen from "./practice/NoBrainerLabScreen";
 import BotMatchScreen from "./bot/BotMatchScreen";
 import DailyPuzzleScreen from "./dailyPuzzle/DailyPuzzleScreen";
 import DailyPuzzleAdminScreen from "./dailyPuzzle/DailyPuzzleAdminScreen";
-import { useAuth } from "./auth/useAuth";
+import AuthModal from "./auth/AuthModal";
+import UsernameModal from "./auth/UsernameModal";
+import { isTemporaryUsername, useAuth } from "./auth/useAuth";
+import StatsScreen from "./stats/StatsScreen";
 import type {
   Tile,
   PlacementPosition,
@@ -221,7 +224,20 @@ export default function App() {
   const [toast, setToast] = useState<string>("");
   const [handReveal, setHandReveal] = useState<HandEndedPayload | null>(null);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
-  const { user: authUser } = useAuth();
+  const {
+    user: authUser,
+    profile: authProfile,
+    loading: authLoading,
+    supabaseEnabled,
+    supabaseConfigError,
+    signIn,
+    signUp,
+    signOut,
+    updateUsername,
+  } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [usernameModalOpen, setUsernameModalOpen] = useState(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
@@ -239,6 +255,11 @@ export default function App() {
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const isAdmin = Boolean(authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase());
+  const needsUsernameOnboarding = Boolean(
+    authUser &&
+    !authLoading &&
+    (!authProfile?.username || isTemporaryUsername(authProfile.username))
+  );
 
   const showToast = useCallback((msg: string, duration = 3000) => {
     if (toastTimeoutRef.current) {
@@ -688,6 +709,36 @@ export default function App() {
   if (appMode === "home") {
     return (
       <div ref={appRootRef} className="app">
+        <div
+          style={{
+            position: "absolute",
+            top: 14,
+            right: 16,
+            zIndex: 120,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          {!authUser && (
+            <button className="mode-inline-btn" onClick={() => setAuthModalOpen(true)}>
+              Sign in
+            </button>
+          )}
+          {authUser && (
+            <>
+              <button className="mode-inline-btn" onClick={() => setUsernameModalOpen(true)}>
+                @{authProfile?.username ?? "player"}
+              </button>
+              <button className="mode-inline-btn" onClick={() => setStatsOpen(true)}>
+                Stats
+              </button>
+              <button className="mode-inline-btn" onClick={() => { void signOut(); }}>
+                Sign out
+              </button>
+            </>
+          )}
+        </div>
         <div className="screen lobby-screen mode-home-screen">
           <div className="mode-home-glow" aria-hidden="true" />
           <div className="card lobby-card mode-card">
@@ -718,8 +769,34 @@ export default function App() {
                 </button>
               )}
             </div>
+            {!supabaseEnabled && (
+              <p className="lobby-server mode-subtitle" style={{ marginTop: 12 }}>
+                {supabaseConfigError ?? "Supabase not configured."}
+              </p>
+            )}
           </div>
         </div>
+        <AuthModal
+          open={authModalOpen}
+          loading={authLoading}
+          supabaseEnabled={supabaseEnabled}
+          supabaseConfigError={supabaseConfigError}
+          onClose={() => setAuthModalOpen(false)}
+          onSignIn={signIn}
+          onSignUp={signUp}
+        />
+        <UsernameModal
+          open={needsUsernameOnboarding || usernameModalOpen}
+          currentUsername={authProfile?.username ?? null}
+          onSave={updateUsername}
+          onClose={() => setUsernameModalOpen(false)}
+        />
+        <StatsScreen
+          open={statsOpen}
+          user={authUser}
+          profile={authProfile}
+          onClose={() => setStatsOpen(false)}
+        />
       </div>
     );
   }
