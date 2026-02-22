@@ -116,7 +116,7 @@ function HandView({
   return (
     <div
       ref={handContainerRef}
-      className={`hand-container ${handScrollable ? "is-scrollable" : ""}`}
+      className="hand-container is-scrollable"
       style={{
         ["--hand-scale" as any]: handScale,
         ["--hand-gap" as any]: `${Math.max(8, Math.round(10 * handScale))}px`,
@@ -519,7 +519,7 @@ export default function App() {
       // Keep tile size stable during gameplay; only viewport size can change it.
       const nextSize = getStableTileSize();
       const scaledGap = Math.max(7, Math.round(nextSize * 0.14));
-      const scaledTileWidth = nextSize * 2 + 9;
+      const scaledTileWidth = nextSize + 9;
       const neededScaledWidth = count * scaledTileWidth + (count - 1) * scaledGap;
       const shouldScroll = neededScaledWidth > availableWidth + 1;
       const nextScale = nextSize / 70;
@@ -690,7 +690,13 @@ export default function App() {
   }
 
   if (appMode === "daily") {
-    return <DailyPuzzleScreen onBack={() => setAppMode("home")} />;
+    return (
+      <DailyPuzzleScreen
+        user={authUser}
+        profile={authProfile}
+        onBack={() => setAppMode("home")}
+      />
+    );
   }
 
   if (appMode === "dailyAdmin") {

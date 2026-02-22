@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import type { UserProfile } from "../auth/useAuth";
 import { Board, DominoTile } from "../components";
 import { applyPlayMove, getDisplayOpenEnds, getLegalMoves } from "../bot/botEngine";
 import type { Move, Tile } from "../types";
 import { getDailyPuzzleForDate, getLocalDateKey } from "./api";
 import { createPuzzleMatchState, validatePuzzle } from "./validator";
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from "./types";
+import { submitPuzzleResult, getTodayLeaderboard, type LeaderboardRow } from "../puzzle/puzzleApi";
 import "./dailyPuzzle.css";
 
 interface DailyPuzzleScreenProps {
+  user: User | null;
+  profile: UserProfile | null;
   onBack: () => void;
 }
 
@@ -50,7 +55,14 @@ function writeProgress(dateSeed: string, progress: DailyProgress): void {
   window.localStorage.setItem(progressKey(dateSeed), JSON.stringify(progress));
 }
 
-export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
+function formatMs(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzleScreenProps) {
   const localDateKey = useMemo(() => getLocalDateKey(), []);
   const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const [puzzle, setPuzzle] = useState<CuratedDailyPuzzle | null>(null);
@@ -66,6 +78,11 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
   const [statusMessage, setStatusMessage] = useState("");
   const [attempts, setAttempts] = useState(0);
   const [bestMoves, setBestMoves] = useState<number | null>(null);
+  const [showLobby, setShowLobby] = useState(true);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const startTimeRef = useRef<number>(0);
+  const submittedRef = useRef(false);
 
   const { match, matchError } = useMemo(() => {
     if (!puzzle) return { match: null, matchError: null as string | null };
@@ -90,6 +107,7 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     const load = async () => {
       setLoading(true);
       setLoadError(null);
+      setShowLobby(true);
       try {
         // eslint-disable-next-line no-console
         console.log("[DailyPuzzle] loading", { localDateKey, timezone });
@@ -122,6 +140,13 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
         writeProgress(today.puzzleDate, { ...progress, attempts: nextAttempts });
         setAttempts(nextAttempts);
         setBestMoves(progress.bestMoves);
+
+        setLeaderboardLoading(true);
+        getTodayLeaderboard(today.id).then((rows) => {
+          if (!active) return;
+          setLeaderboard(rows);
+          setLeaderboardLoading(false);
+        });
       } catch (err) {
         if (!active) return;
         // eslint-disable-next-line no-console
@@ -158,6 +183,8 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     setLastMovePoints(0);
     setFinalScore(null);
     runningScoreRef.current = 0;
+    submittedRef.current = false;
+    startTimeRef.current = Date.now();
     setStatusMessage(
       puzzle.puzzleType === "one_turn_high_score"
         ? "Running score: 0 — keep playing"
@@ -180,6 +207,16 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
       setBestMoves(nextBest);
     } else {
       writeProgress(puzzle.puzzleDate, { ...progress, lastResult: nextStatus });
+    }
+
+    if (nextStatus === "SOLVED" && user && !submittedRef.current) {
+      submittedRef.current = true;
+      const ms = Date.now() - startTimeRef.current;
+      void submitPuzzleResult(puzzle.id, user, {
+        moves: solvedMoves ?? movesUsed,
+        milliseconds: ms,
+        solved: true,
+      });
     }
   };
 
@@ -271,7 +308,7 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
       <div className="app">
         <div className="screen lobby-screen mode-home-screen">
           <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card"><h2>Daily Puzzle</h2><p>Loading today’s curated puzzle...</p></div>
+          <div className="card lobby-card mode-card"><h2>Daily Puzzle</h2><p>Loading today's curated puzzle...</p></div>
         </div>
       </div>
     );
@@ -318,7 +355,7 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
           <div className="mode-home-glow" aria-hidden="true" />
           <div className="card lobby-card mode-card">
             <h2>Daily Puzzle</h2>
-            <p>Today’s puzzle is not posted yet.</p>
+            <p>Today's puzzle is not posted yet.</p>
             <p className="lobby-server">Local date key: {localDateKey}</p>
             <p className="lobby-server">Timezone: {timezone}</p>
             <button className="mode-inline-btn" onClick={onBack}>Back to Home</button>
@@ -330,6 +367,62 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
 
   const solvableWarning = Boolean(validation && !validation.solvable);
   const isOneTurnHighScore = puzzle.puzzleType === "one_turn_high_score";
+
+  if (showLobby) {
+    return (
+      <div className="app">
+        <div className="screen lobby-screen mode-home-screen">
+          <div className="mode-home-glow" aria-hidden="true" />
+          <div className="card lobby-card mode-card daily-puzzle-entry-card">
+            <p className="lobby-kicker">Daily Puzzle</p>
+            <h2>{puzzle.title}</h2>
+            <p className="mode-subtitle">
+              {isOneTurnHighScore
+                ? "Play as many scoring tiles as you can in one turn."
+                : `Reach ${puzzle.targetScore} points in ${puzzle.maxMoves} moves.`}
+            </p>
+            {user
+              ? <p className="lobby-server">Playing as @{profile?.username ?? "player"}</p>
+              : <p className="lobby-server">Guest mode — sign in to submit to leaderboard.</p>}
+            <div className="mode-actions">
+              <button
+                className="mode-option mode-option-primary"
+                onClick={() => {
+                  startTimeRef.current = Date.now();
+                  setShowLobby(false);
+                }}
+              >
+                <span className="mode-option-title">Start Puzzle</span>
+                <span className="mode-option-meta">{puzzle.puzzleDate} · Deal {puzzle.dealSize}</span>
+              </button>
+              <button className="mode-option mode-option-secondary" onClick={onBack}>
+                <span className="mode-option-title">Back to Home</span>
+              </button>
+            </div>
+            <div className="daily-leaderboard-panel">
+              <h3>Today's Leaderboard</h3>
+              {leaderboardLoading && <p className="lobby-server">Loading leaderboard...</p>}
+              {!leaderboardLoading && leaderboard.length === 0 && (
+                <p className="lobby-server">No solved submissions yet — be first!</p>
+              )}
+              {!leaderboardLoading && leaderboard.length > 0 && (
+                <div className="daily-leaderboard-list">
+                  {leaderboard.map((row, idx) => (
+                    <div className="daily-leaderboard-row" key={`${row.userId}-${idx}`}>
+                      <span className="daily-leaderboard-rank">#{idx + 1}</span>
+                      <span className="daily-leaderboard-name">@{row.username}</span>
+                      <span>{row.moves} moves</span>
+                      <span>{formatMs(row.milliseconds)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
@@ -424,6 +517,22 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
                   Score {runtimeState.players.you.score}/{puzzle.targetScore} · Max moves {puzzle.maxMoves}
                 </p>
               </>
+            )}
+            {!user && <p className="lobby-server">Sign in to submit to leaderboard.</p>}
+            {leaderboard.length > 0 && (
+              <div className="daily-leaderboard-panel">
+                <h3>Leaderboard</h3>
+                <div className="daily-leaderboard-list">
+                  {leaderboard.map((row, idx) => (
+                    <div className="daily-leaderboard-row" key={`${row.userId}-${idx}`}>
+                      <span className="daily-leaderboard-rank">#{idx + 1}</span>
+                      <span className="daily-leaderboard-name">@{row.username}</span>
+                      <span>{row.moves} moves</span>
+                      <span>{formatMs(row.milliseconds)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
             <div className="daily-puzzle-modal-actions">
               <button className="mode-inline-btn" onClick={resetAttempt}>Play Again</button>

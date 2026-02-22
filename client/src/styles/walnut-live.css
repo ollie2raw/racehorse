@@ -423,6 +423,7 @@ body {
 .wl-hand-area .tray-center {
   display: flex;
   align-items: center;
+  justify-content: center;
   height: 100%;
   width: 100%;
   padding: 0 2px;
@@ -441,6 +442,15 @@ body {
 
 .wl-hand-area .hand-container.is-scrollable {
   justify-content: flex-start;
+  width: 100%;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wl-hand-area .hand-container:not(.is-scrollable) {
+  justify-content: center !important;
+  width: 100%;
 }
 
 .wl-hand-area .domino-body {
@@ -889,4 +899,9 @@ body {
 .hand-container .domino-tile.highlight:not(.selected) .domino-body {
   box-shadow: 0 0 0 2px rgba(100, 220, 130, 0.65),
               0 4px 12px rgba(0,0,0,0.35);
+}
+
+/* Center tiles when they fit */
+.wl-hand-area .hand-container.is-scrollable {
+  justify-content: safe center;
 }
