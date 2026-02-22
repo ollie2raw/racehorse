@@ -8,9 +8,11 @@
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+VITE_ADMIN_EMAIL=you@example.com
 ```
 
 5. Start the client normally (`npm run dev` in `client/`).
+6. In `supabase/daily_puzzle.sql`, replace `admin@example.com` with the same email as `VITE_ADMIN_EMAIL` before running it.
 
 ## Notes
 - If env vars are missing, the app stays in Guest mode and gameplay still works.

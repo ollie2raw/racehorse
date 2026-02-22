@@ -1,82 +1,62 @@
--- Daily Puzzle v1 schema
+-- Curated Daily Puzzles (v1)
+-- Replace the admin email literal below with your actual admin email
+-- and keep it in sync with VITE_ADMIN_EMAIL in the client.
+
 create extension if not exists pgcrypto;
 
-create table if not exists public.daily_puzzles (
+drop table if exists public.daily_puzzles cascade;
+
+create table public.daily_puzzles (
   id uuid primary key default gen_random_uuid(),
   puzzle_date date unique not null,
-  title text not null default 'Daily Puzzle',
-  seed text,
-  config jsonb not null,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.daily_puzzle_submissions (
-  id uuid primary key default gen_random_uuid(),
-  puzzle_id uuid not null references public.daily_puzzles(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  moves int not null,
-  milliseconds int not null,
-  solved boolean not null,
-  attempt_hash text,
-  constraint daily_puzzle_submissions_puzzle_user_unique unique (puzzle_id, user_id)
+  title text null,
+  starting_board jsonb not null,
+  starting_hand jsonb not null,
+  max_moves int not null default 4,
+  target_score int not null,
+  created_at timestamptz default now()
 );
 
 alter table public.daily_puzzles enable row level security;
-alter table public.daily_puzzle_submissions enable row level security;
 
--- daily puzzles are public read
- drop policy if exists "daily_puzzles_select_public" on public.daily_puzzles;
-create policy "daily_puzzles_select_public"
+-- Read for everyone (anon + authenticated)
+drop policy if exists "daily_puzzles_select_all" on public.daily_puzzles;
+create policy "daily_puzzles_select_all"
   on public.daily_puzzles
   for select
   to anon, authenticated
   using (true);
 
--- submissions: user can insert/update/select own
- drop policy if exists "daily_submissions_insert_own" on public.daily_puzzle_submissions;
-create policy "daily_submissions_insert_own"
-  on public.daily_puzzle_submissions
+-- Write allowed for authenticated admin email only (service role bypasses RLS)
+drop policy if exists "daily_puzzles_insert_admin" on public.daily_puzzles;
+create policy "daily_puzzles_insert_admin"
+  on public.daily_puzzles
   for insert
   to authenticated
-  with check (user_id = auth.uid());
+  with check ((auth.jwt() ->> 'email') = 'admin@example.com');
 
- drop policy if exists "daily_submissions_update_own" on public.daily_puzzle_submissions;
-create policy "daily_submissions_update_own"
-  on public.daily_puzzle_submissions
+drop policy if exists "daily_puzzles_update_admin" on public.daily_puzzles;
+create policy "daily_puzzles_update_admin"
+  on public.daily_puzzles
   for update
   to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  using ((auth.jwt() ->> 'email') = 'admin@example.com')
+  with check ((auth.jwt() ->> 'email') = 'admin@example.com');
 
- drop policy if exists "daily_submissions_select_public" on public.daily_puzzle_submissions;
-create policy "daily_submissions_select_public"
-  on public.daily_puzzle_submissions
-  for select
-  to anon, authenticated
-  using (true);
+drop policy if exists "daily_puzzles_delete_admin" on public.daily_puzzles;
+create policy "daily_puzzles_delete_admin"
+  on public.daily_puzzles
+  for delete
+  to authenticated
+  using ((auth.jwt() ->> 'email') = 'admin@example.com');
 
--- Example insert for today's UTC puzzle (replace config JSON as needed)
-insert into public.daily_puzzles (puzzle_date, title, seed, config)
-values (
-  (now() at time zone 'utc')::date,
-  'Daily Puzzle',
-  'manual-seed-001',
-  jsonb_build_object(
-    'startingHand', jsonb_build_array(
-      jsonb_build_object('low', 0, 'high', 5),
-      jsonb_build_object('low', 1, 'high', 6),
-      jsonb_build_object('low', 2, 'high', 4),
-      jsonb_build_object('low', 3, 'high', 6),
-      jsonb_build_object('low', 0, 'high', 2)
-    ),
-    'startingBoard', jsonb_build_array(),
-    'startingTurn', 'you',
-    'objective', jsonb_build_object('type', 'finish_in_moves', 'maxMoves', 7),
-    'notes', 'Clear your hand within move limit.'
-  )
-)
-on conflict (puzzle_date) do update
-set title = excluded.title,
-    seed = excluded.seed,
-    config = excluded.config;
+-- Example insert (replace with your real puzzle JSON)
+-- insert into public.daily_puzzles (puzzle_date, title, starting_board, starting_hand, max_moves, target_score)
+-- values (
+--   current_date,
+--   'Score Attack',
+--   '{"mainLine":[{"tile":{"low":1,"high":4},"orientation":"horizontal-normal"},{"tile":{"low":4,"high":6},"orientation":"horizontal-normal"}],"leftEnd":1,"rightEnd":6,"leftEndIsDouble":false,"rightEndIsDouble":false,"hubDoubles":[]}'::jsonb,
+--   '[{"low":1,"high":6},{"low":0,"high":1},{"low":2,"high":6}]'::jsonb,
+--   4,
+--   3
+-- );

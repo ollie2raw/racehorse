@@ -5,6 +5,9 @@ import { Board, DominoTile, ScoreTrackOverlay } from "./components";
 import { playTileSound } from "./utils/sound";
 import NoBrainerLabScreen from "./practice/NoBrainerLabScreen";
 import BotMatchScreen from "./bot/BotMatchScreen";
+import DailyPuzzleScreen from "./dailyPuzzle/DailyPuzzleScreen";
+import DailyPuzzleAdminScreen from "./dailyPuzzle/DailyPuzzleAdminScreen";
+import { useAuth } from "./auth/useAuth";
 import type {
   Tile,
   PlacementPosition,
@@ -195,7 +198,7 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [appMode, setAppMode] = useState<"home" | "multiplayer" | "noBrainer" | "bot">("home");
+  const [appMode, setAppMode] = useState<"home" | "multiplayer" | "noBrainer" | "bot" | "daily" | "dailyAdmin">("home");
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("racehorse_muted") === "1";
@@ -218,6 +221,7 @@ export default function App() {
   const [toast, setToast] = useState<string>("");
   const [handReveal, setHandReveal] = useState<HandEndedPayload | null>(null);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
+  const { user: authUser } = useAuth();
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
@@ -233,6 +237,8 @@ export default function App() {
   const prevHudScoresRef = useRef<Record<string, number>>({});
   const prevMyHandLenRef = useRef(0);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
+  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
+  const isAdmin = Boolean(authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase());
 
   const showToast = useCallback((msg: string, duration = 3000) => {
     if (toastTimeoutRef.current) {
@@ -657,6 +663,28 @@ export default function App() {
     return <div className="app"><BotMatchScreen onBack={() => setAppMode("home")} /></div>;
   }
 
+  if (appMode === "daily") {
+    return <DailyPuzzleScreen onBack={() => setAppMode("home")} />;
+  }
+
+  if (appMode === "dailyAdmin") {
+    if (!isAdmin) {
+      return (
+        <div className="app">
+          <div className="screen lobby-screen mode-home-screen">
+            <div className="mode-home-glow" aria-hidden="true" />
+            <div className="card lobby-card mode-card">
+              <h2>Admin: Daily Puzzles</h2>
+              <p>You are not authorized to access the puzzle editor.</p>
+              <button className="mode-inline-btn" onClick={() => setAppMode("home")}>Back to Home</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return <DailyPuzzleAdminScreen onBack={() => setAppMode("home")} />;
+  }
+
   if (appMode === "home") {
     return (
       <div ref={appRootRef} className="app">
@@ -679,6 +707,16 @@ export default function App() {
                 <span className="mode-option-title">Practice → Play vs Bot</span>
                 <span className="mode-option-meta">Offline match vs a simple but strong bot (no server)</span>
               </button>
+              <button className="mode-option mode-option-secondary" onClick={() => setAppMode("daily")}>
+                <span className="mode-option-title">Daily Puzzle</span>
+                <span className="mode-option-meta">Curated puzzle from today’s board situation</span>
+              </button>
+              {isAdmin && (
+                <button className="mode-option mode-option-secondary" onClick={() => setAppMode("dailyAdmin")}>
+                  <span className="mode-option-title">Admin: Daily Puzzles</span>
+                  <span className="mode-option-meta">Create or edit curated daily puzzle entries</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
