@@ -45,8 +45,6 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
     };
   }, [open, user]);
 
-  if (!open) return null;
-
   return (
     <div
       role="dialog"
@@ -61,7 +59,11 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
         placeItems: "center",
         background: "rgba(6, 10, 18, 0.62)",
         backdropFilter: "blur(4px)",
-        pointerEvents: "auto",
+        pointerEvents: open ? "auto" : "none",
+        opacity: open ? 1 : 0,
+        visibility: open ? "visible" : "hidden",
+        transform: open ? "scale(1)" : "scale(0.97)",
+        transition: "opacity 180ms ease, transform 180ms ease",
       }}
     >
       <div
@@ -99,6 +101,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
               display: "grid",
               gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
               gap: "10px",
+              minHeight: "180px",
             }}
           >
             {[

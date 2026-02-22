@@ -5,25 +5,18 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __SUPABASE__: SupabaseClient | undefined;
-}
-
 function makeClient(): SupabaseClient {
   return createClient(supabaseUrl!, supabaseAnonKey!, {
     auth: {
-      // IMPORTANT: Daily puzzle reads don't need auth.
-      // Turning this off avoids Navigator Lock / multi-instance issues during dev + HMR.
-      persistSession: false,
-      autoRefreshToken: false,
+      persistSession: true,
+      autoRefreshToken: true,
       detectSessionInUrl: false,
     },
   });
 }
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? (globalThis.__SUPABASE__ ?? (globalThis.__SUPABASE__ = makeClient()))
+  ? makeClient()
   : null;
 
 export function getSupabaseConfigError(): string | null {

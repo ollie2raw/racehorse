@@ -169,7 +169,7 @@ export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuz
         .select("id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at")
         .eq("puzzle_date", seed)
         .maybeSingle())(),
-    20000
+    8000
   );
   const ms = Math.round(performance.now() - t0);
   // eslint-disable-next-line no-console
@@ -195,7 +195,7 @@ export async function getDailyPuzzleByDateSeed(dateSeed: string): Promise<Curate
         .select("id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at")
         .eq("puzzle_date", canonicalDate)
         .maybeSingle())(),
-    20000
+    8000
   );
   const ms = Math.round(performance.now() - t0);
   // eslint-disable-next-line no-console

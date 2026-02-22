@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Board, DominoTile } from "../components";
 import { applyPlayMove, getDisplayOpenEnds, getLegalMoves } from "../bot/botEngine";
 import type { Move, Tile } from "../types";
@@ -62,6 +62,7 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
   const [movesUsed, setMovesUsed] = useState(0);
   const [lastMovePoints, setLastMovePoints] = useState(0);
   const [finalScore, setFinalScore] = useState<number | null>(null);
+  const runningScoreRef = useRef(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [attempts, setAttempts] = useState(0);
   const [bestMoves, setBestMoves] = useState<number | null>(null);
@@ -109,9 +110,10 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
         setMovesUsed(0);
         setLastMovePoints(0);
         setFinalScore(null);
+        runningScoreRef.current = 0;
         setStatusMessage(
           today.puzzleType === "one_turn_high_score"
-            ? "High Score — 1 move."
+            ? "Running score: 0 — keep playing"
             : `Score Attack — Reach ${today.targetScore} in ${today.maxMoves} moves.`
         );
 
@@ -155,9 +157,10 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     setMovesUsed(0);
     setLastMovePoints(0);
     setFinalScore(null);
+    runningScoreRef.current = 0;
     setStatusMessage(
       puzzle.puzzleType === "one_turn_high_score"
-        ? "High Score — 1 move."
+        ? "Running score: 0 — keep playing"
         : `Score Attack — Reach ${puzzle.targetScore} in ${puzzle.maxMoves} moves.`
     );
 
@@ -206,9 +209,20 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     console.log("[DailyPuzzle]", { beforeEnds, afterEnds, pointsAwarded, totalScore });
 
     if (puzzle.puzzleType === "one_turn_high_score") {
-      setFinalScore(pointsAwarded);
-      setStatus("SOLVED");
-      setStatusMessage(`Final score: ${pointsAwarded}`);
+      const isDouble = move.tile!.low === move.tile!.high;
+      const newRunningScore = runningScoreRef.current + pointsAwarded;
+      const upcoming = getLegalMoves(nextState, "you").filter((c) => c.type === "play");
+
+      if ((pointsAwarded === 0 && !isDouble) || upcoming.length === 0) {
+        runningScoreRef.current = newRunningScore;
+        setFinalScore(newRunningScore);
+        setStatus("SOLVED");
+        setStatusMessage(`Final score: ${newRunningScore}`);
+        finalizeResult("SOLVED", nextMoves);
+      } else {
+        runningScoreRef.current = newRunningScore;
+        setStatusMessage(`Running score: ${newRunningScore} — keep playing`);
+      }
       return;
     }
 
@@ -325,11 +339,11 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
           <span className="wl-player-score">{runtimeState.players.you.score}</span>
         </div>
         <div className="wl-center-status">
-          <span className="wl-turn-label your-turn">{puzzle.title}</span>
+          <span className="wl-turn-label your-turn">{isOneTurnHighScore ? "Daily Puzzle" : puzzle.title}</span>
           <span className="wl-room-code">
             {isOneTurnHighScore
-              ? `${puzzle.puzzleDate} · High Score — 1 move · Deal ${puzzle.dealSize}`
-              : `${puzzle.puzzleDate} · Type ${puzzle.puzzleType} · Deal ${puzzle.dealSize} · Moves ${movesUsed}/${puzzle.maxMoves} · Target ${puzzle.targetScore}`}
+              ? `${puzzle.puzzleDate} · Deal ${puzzle.dealSize}`
+              : `${puzzle.puzzleDate} · Deal ${puzzle.dealSize} · Moves ${movesUsed}/${puzzle.maxMoves}`}
           </span>
         </div>
         <div className="wl-player-pill is-you">
@@ -347,20 +361,15 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
             onPositionClick={onPositionClick}
             tileSize={72}
           />
-          <div className="daily-puzzle-hud-note">
-            {isOneTurnHighScore
-              ? `${statusMessage} · Type ${puzzle.puzzleType} · Deal ${puzzle.dealSize} · Last +${lastMovePoints} · Open ends ${openEnds.join(", ")} · Local date key: ${localDateKey} · Timezone: ${timezone}`
-              : `${statusMessage} · Type ${puzzle.puzzleType} · Deal ${puzzle.dealSize} · Last +${lastMovePoints} · Open ends ${openEnds.join(", ")} · Attempts ${attempts} · Best moves ${bestMoves ?? "--"} · Local date key: ${localDateKey} · Timezone: ${timezone}`}
-          </div>
           {solvableWarning && (
-            <>
-              <div className="daily-puzzle-warning-banner">
-                Puzzle warning: {validation?.reason} (best score {validation?.bestScore}). You can still play this puzzle.
-              </div>
-              <div className="daily-puzzle-dev-warning">
-                Dev: puzzle invalid · solvable={String(validation?.solvable)} · bestScore={validation?.bestScore} · hasScoringMove={String(validation?.hasScoringMove)} · explored={validation?.exploredStates}
-              </div>
-            </>
+            <div className="daily-puzzle-warning-banner">
+              Puzzle warning: {validation?.reason} (best score {validation?.bestScore}). You can still play this puzzle.
+            </div>
+          )}
+          {import.meta.env.DEV && solvableWarning && (
+            <div className="daily-puzzle-dev-warning">
+              Dev: puzzle invalid · solvable={String(validation?.solvable)} · bestScore={validation?.bestScore} · hasScoringMove={String(validation?.hasScoringMove)} · explored={validation?.exploredStates}
+            </div>
           )}
         </div>
       </div>

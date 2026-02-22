@@ -91,7 +91,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showDebug = typeof window !== "undefined" && window.localStorage.getItem("BOT_DEBUG") === "1";
-  const showDevCapture = import.meta.env.DEV;
+  const showDevCapture = true;
 
   const [uiTheme, setUiTheme] = useState<"green" | "brown">(() => {
     if (typeof window === "undefined") return "green";
@@ -145,10 +145,12 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
     const payload = {
       title: "Captured Puzzle",
       puzzle_date: getLocalDateKey(),
+      puzzle_type: "one_turn_high_score",
+      max_moves: 1,
+      target_score: 1,
+      deal_size: match.dealSize,
       starting_board: match.board,
       starting_hand: match.players.you.hand,
-      max_moves: 3,
-      target_score: 1,
     };
 
     try {

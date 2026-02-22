@@ -22,6 +22,7 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validation, setValidation] = useState<PuzzleValidationResult | null>(null);
+  const [pasteJson, setPasteJson] = useState("");
 
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
 
@@ -194,6 +195,25 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     }
   };
 
+  const handlePasteCaptured = () => {
+    setError(null);
+    setMessage(null);
+    try {
+      const raw = JSON.parse(pasteJson);
+      if (raw.puzzle_date) setDateValue(raw.puzzle_date);
+      if (raw.title) setTitle(raw.title);
+      if (raw.puzzle_type) setPuzzleType(raw.puzzle_type as DailyPuzzleType);
+      if (Number.isFinite(raw.max_moves)) setMaxMoves(raw.max_moves);
+      if (Number.isFinite(raw.target_score)) setTargetScore(raw.target_score);
+      if (Number.isFinite(raw.deal_size)) setDealSize(raw.deal_size);
+      if (raw.starting_board) setBoardJson(JSON.stringify(raw.starting_board, null, 2));
+      if (raw.starting_hand) setHandJson(JSON.stringify(raw.starting_hand, null, 2));
+      setMessage("Captured JSON loaded. Review and Save.");
+    } catch {
+      setError("Invalid JSON. Paste the full output from Copy Puzzle JSON.");
+    }
+  };
+
   const handleLoad = async () => {
     setError(null);
     setMessage(null);
@@ -313,6 +333,17 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
               <input type="number" min={1} value={dealSize} onChange={(e) => setDealSize(Number(e.target.value))} />
             </label>
           </div>
+
+          <label className="daily-admin-textarea">
+            Paste Captured Puzzle JSON
+            <textarea
+              rows={5}
+              value={pasteJson}
+              onChange={(e) => setPasteJson(e.target.value)}
+              placeholder='Paste output from "Copy Puzzle JSON" button here...'
+            />
+          </label>
+          <button className="mode-inline-btn" onClick={handlePasteCaptured}>Load from Capture</button>
 
           <label className="daily-admin-textarea">
             starting_board JSON

@@ -258,7 +258,12 @@ export default function App() {
   const needsUsernameOnboarding = Boolean(
     authUser &&
     !authLoading &&
-    (!authProfile?.username || isTemporaryUsername(authProfile.username))
+    authProfile !== null &&
+    isTemporaryUsername(authProfile.username)
+  );
+  const onboardingDismissed = Boolean(
+    typeof window !== "undefined" &&
+    window.localStorage.getItem("username_onboarding_dismissed")
   );
 
   const showToast = useCallback((msg: string, duration = 3000) => {
@@ -786,10 +791,20 @@ export default function App() {
           onSignUp={signUp}
         />
         <UsernameModal
-          open={needsUsernameOnboarding || usernameModalOpen}
+          open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
           currentUsername={authProfile?.username ?? null}
-          onSave={updateUsername}
-          onClose={() => setUsernameModalOpen(false)}
+          onSave={async (username) => {
+            const result = await updateUsername(username);
+            if (!result.error) {
+              window.localStorage.removeItem("username_onboarding_dismissed");
+              setUsernameModalOpen(false);
+            }
+            return result;
+          }}
+          onClose={() => {
+            window.localStorage.setItem("username_onboarding_dismissed", Date.now().toString());
+            setUsernameModalOpen(false);
+          }}
         />
         <StatsScreen
           open={statsOpen}
