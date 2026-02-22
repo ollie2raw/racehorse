@@ -91,7 +91,19 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showDebug = typeof window !== "undefined" && window.localStorage.getItem("BOT_DEBUG") === "1";
-  const showDevCapture = true;
+  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
+  const showDevCapture = Boolean(
+    adminEmail &&
+    typeof window !== "undefined" &&
+    window.localStorage.getItem("sb-fisfadjqllojdzibcdfx-auth-token") &&
+    (() => {
+      try {
+        const raw = window.localStorage.getItem("sb-fisfadjqllojdzibcdfx-auth-token");
+        const parsed = JSON.parse(raw ?? "{}");
+        return parsed?.user?.email?.toLowerCase() === adminEmail.toLowerCase();
+      } catch { return false; }
+    })()
+  );
 
   const [uiTheme, setUiTheme] = useState<"green" | "brown">(() => {
     if (typeof window === "undefined") return "green";
@@ -328,6 +340,8 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
       )}
 
       <div className="wl-top-rail bot-top-rail" data-ui="hud">
+
+        {/* Left: Bot score pill */}
         <button
           type="button"
           className={`wl-player-pill wl-player-pill-btn ${botTurn ? "is-active" : ""}`}
@@ -343,17 +357,14 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
           </div>
           <span className="wl-player-score">{match.players.bot.score}</span>
         </button>
-        <div className="wl-center-status">
-          <span className={`wl-turn-label ${botTurn ? "opp-turn" : "your-turn"}`}>{turnLabel}</span>
-          <span className="wl-room-code">
-            Hand {match.handNumber} · Offline vs Bot · {match.dealSize}-tile
-            {match.dealSize === 14 ? " (no boneyard)" : ""}
-          </span>
-        </div>
-        <div className="bot-top-controls bot-top-controls-inline">
-          <div className="tray-controls bot-tray-controls">
+
+        {/* Center zone: left-controls | status | right-controls */}
+        <div className="bot-center-zone">
+
+          {/* Left controls: fullscreen + Bot difficulty + Deal */}
+          <div className="bot-controls-left">
             <button
-              className="btn text icon-btn fullscreen-btn"
+              className="btn text icon-btn fullscreen-btn bot-chip-control"
               onClick={toggleFullscreen}
               aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -385,7 +396,21 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                 <option value={14}>14 tiles (no boneyard)</option>
               </select>
             </label>
-            <button className="btn text compact bot-chip-control" onClick={() => setUiTheme(prev => (prev === "green" ? "brown" : "green"))}>
+          </div>
+
+          {/* Center status */}
+          <div className="wl-center-status">
+            <span className={`wl-turn-label ${botTurn ? "opp-turn" : "your-turn"}`}>{turnLabel}</span>
+            <span className="wl-room-code">
+              Hand {match.handNumber} · Offline vs Bot · {match.dealSize}-tile
+              {match.dealSize === 14 ? " (no boneyard)" : ""}
+            </span>
+          </div>
+
+          {/* Right controls: Color + New Match + Copy JSON + Home */}
+          <div className="bot-controls-right">
+            <button className="btn text compact bot-chip-control"
+              onClick={() => setUiTheme(prev => (prev === "green" ? "brown" : "green"))}>
               Color
             </button>
             <button className="btn text compact bot-chip-control" onClick={startFreshMatch}>
@@ -400,7 +425,10 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
               Home
             </button>
           </div>
+
         </div>
+
+        {/* Right: You score pill */}
         <button
           type="button"
           className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? "is-active" : ""}`}
@@ -410,6 +438,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
           <span className="wl-player-label">You</span>
           <span className="wl-player-score">{match.players.you.score}</span>
         </button>
+
       </div>
 
       <div className="wl-stage-shell">
