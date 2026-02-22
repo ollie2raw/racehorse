@@ -1,5 +1,7 @@
 import type { BoardState, Tile } from "../types";
 
+export type DailyPuzzleType = "reach_target" | "one_turn_high_score";
+
 export interface CuratedDailyPuzzleRow {
   id: string;
   puzzle_date: string;
@@ -8,6 +10,8 @@ export interface CuratedDailyPuzzleRow {
   starting_hand: unknown;
   max_moves: number;
   target_score: number;
+  puzzle_type?: string | null;
+  deal_size?: number | null;
   created_at: string;
 }
 
@@ -19,6 +23,8 @@ export interface CuratedDailyPuzzle {
   startingHand: Tile[];
   maxMoves: number;
   targetScore: number;
+  puzzleType: DailyPuzzleType;
+  dealSize: number;
 }
 
 export interface PuzzleValidationResult {

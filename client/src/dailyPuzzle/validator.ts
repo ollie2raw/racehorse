@@ -21,6 +21,7 @@ function cloneState(state: BotMatchState): BotMatchState {
 }
 
 export function createPuzzleMatchState(puzzle: CuratedDailyPuzzle): BotMatchState {
+  const normalizedDealSize = puzzle.dealSize === 14 ? 14 : 7;
   return {
     players: {
       you: { hand: [...puzzle.startingHand], score: 0 },
@@ -43,7 +44,7 @@ export function createPuzzleMatchState(puzzle: CuratedDailyPuzzle): BotMatchStat
     winningScore: 999,
     lastHandWinner: null,
     lastHandReason: null,
-    dealSize: 7,
+    dealSize: normalizedDealSize,
   };
 }
 

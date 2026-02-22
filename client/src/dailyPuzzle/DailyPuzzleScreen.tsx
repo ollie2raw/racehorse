@@ -61,11 +61,22 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [movesUsed, setMovesUsed] = useState(0);
   const [lastMovePoints, setLastMovePoints] = useState(0);
+  const [finalScore, setFinalScore] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [attempts, setAttempts] = useState(0);
   const [bestMoves, setBestMoves] = useState<number | null>(null);
 
-  const match = useMemo(() => (puzzle ? createPuzzleMatchState(puzzle) : null), [puzzle]);
+  const { match, matchError } = useMemo(() => {
+    if (!puzzle) return { match: null, matchError: null as string | null };
+    try {
+      return { match: createPuzzleMatchState(puzzle), matchError: null as string | null };
+    } catch (err) {
+      return {
+        match: null,
+        matchError: err instanceof Error ? err.message : "Invalid puzzle board configuration.",
+      };
+    }
+  }, [puzzle]);
   const [runtimeState, setRuntimeState] = useState(match);
 
   useEffect(() => {
@@ -90,14 +101,19 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
           return;
         }
 
-        const check = validatePuzzle(today);
+        const check = today.puzzleType === "reach_target" ? validatePuzzle(today) : null;
         setPuzzle(today);
         setValidation(check);
         setStatus("IN_PROGRESS");
         setSelectedTile(null);
         setMovesUsed(0);
         setLastMovePoints(0);
-        setStatusMessage(`Score Attack — Reach ${today.targetScore} in ${today.maxMoves} moves.`);
+        setFinalScore(null);
+        setStatusMessage(
+          today.puzzleType === "one_turn_high_score"
+            ? "High Score — 1 move."
+            : `Score Attack — Reach ${today.targetScore} in ${today.maxMoves} moves.`
+        );
 
         const progress = readProgress(today.puzzleDate);
         const nextAttempts = progress.attempts + 1;
@@ -138,7 +154,12 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     setSelectedTile(null);
     setMovesUsed(0);
     setLastMovePoints(0);
-    setStatusMessage(`Score Attack — Reach ${puzzle.targetScore} in ${puzzle.maxMoves} moves.`);
+    setFinalScore(null);
+    setStatusMessage(
+      puzzle.puzzleType === "one_turn_high_score"
+        ? "High Score — 1 move."
+        : `Score Attack — Reach ${puzzle.targetScore} in ${puzzle.maxMoves} moves.`
+    );
 
     const progress = readProgress(puzzle.puzzleDate);
     const nextAttempts = progress.attempts + 1;
@@ -184,6 +205,13 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     // eslint-disable-next-line no-console
     console.log("[DailyPuzzle]", { beforeEnds, afterEnds, pointsAwarded, totalScore });
 
+    if (puzzle.puzzleType === "one_turn_high_score") {
+      setFinalScore(pointsAwarded);
+      setStatus("SOLVED");
+      setStatusMessage(`Final score: ${pointsAwarded}`);
+      return;
+    }
+
     if (totalScore >= puzzle.targetScore && nextMoves <= puzzle.maxMoves) {
       setStatus("SOLVED");
       setStatusMessage(`Solved: ${totalScore}/${puzzle.targetScore} in ${nextMoves} moves.`);
@@ -216,6 +244,14 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     setStatusMessage(`+${pointsAwarded} this move · total ${totalScore}/${puzzle.targetScore}`);
   };
 
+  useEffect(() => {
+    if (!puzzle || status !== "IN_PROGRESS" || puzzle.puzzleType !== "one_turn_high_score") return;
+    if (legalMoves.length > 0) return;
+    setFinalScore(0);
+    setStatus("FAILED");
+    setStatusMessage("Final score: 0");
+  }, [puzzle, status, legalMoves.length]);
+
   if (loading) {
     return (
       <div className="app">
@@ -244,6 +280,23 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     );
   }
 
+  if (matchError) {
+    return (
+      <div className="app">
+        <div className="screen lobby-screen mode-home-screen">
+          <div className="mode-home-glow" aria-hidden="true" />
+          <div className="card lobby-card mode-card">
+            <h2>Daily Puzzle</h2>
+            <p className="auth-inline-error">{matchError}</p>
+            <p className="lobby-server">Local date key: {localDateKey}</p>
+            <p className="lobby-server">Timezone: {timezone}</p>
+            <button className="mode-inline-btn" onClick={onBack}>Back to Home</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!puzzle || !runtimeState) {
     return (
       <div className="app">
@@ -261,7 +314,8 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     );
   }
 
-  const invalid = Boolean(validation && !validation.solvable);
+  const solvableWarning = Boolean(validation && !validation.solvable);
+  const isOneTurnHighScore = puzzle.puzzleType === "one_turn_high_score";
 
   return (
     <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
@@ -273,7 +327,9 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
         <div className="wl-center-status">
           <span className="wl-turn-label your-turn">{puzzle.title}</span>
           <span className="wl-room-code">
-            {puzzle.puzzleDate} · Moves {movesUsed}/{puzzle.maxMoves} · Target {puzzle.targetScore}
+            {isOneTurnHighScore
+              ? `${puzzle.puzzleDate} · High Score — 1 move · Deal ${puzzle.dealSize}`
+              : `${puzzle.puzzleDate} · Type ${puzzle.puzzleType} · Deal ${puzzle.dealSize} · Moves ${movesUsed}/${puzzle.maxMoves} · Target ${puzzle.targetScore}`}
           </span>
         </div>
         <div className="wl-player-pill is-you">
@@ -286,16 +342,26 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
         <div className="board-area wl-board-area" data-ui="board">
           <Board
             board={runtimeState.board}
-            legalMoves={invalid ? [] : legalMoves}
+            legalMoves={legalMoves}
             selectedTile={selectedTile}
             onPositionClick={onPositionClick}
             tileSize={72}
           />
           <div className="daily-puzzle-hud-note">
-            {invalid
-              ? `Puzzle invalid: ${validation?.reason} (best score ${validation?.bestScore})`
-              : `${statusMessage} · Last +${lastMovePoints} · Open ends ${openEnds.join(", ")} · Attempts ${attempts} · Best moves ${bestMoves ?? "--"} · Local date key: ${localDateKey} · Timezone: ${timezone}`}
+            {isOneTurnHighScore
+              ? `${statusMessage} · Type ${puzzle.puzzleType} · Deal ${puzzle.dealSize} · Last +${lastMovePoints} · Open ends ${openEnds.join(", ")} · Local date key: ${localDateKey} · Timezone: ${timezone}`
+              : `${statusMessage} · Type ${puzzle.puzzleType} · Deal ${puzzle.dealSize} · Last +${lastMovePoints} · Open ends ${openEnds.join(", ")} · Attempts ${attempts} · Best moves ${bestMoves ?? "--"} · Local date key: ${localDateKey} · Timezone: ${timezone}`}
           </div>
+          {solvableWarning && (
+            <>
+              <div className="daily-puzzle-warning-banner">
+                Puzzle warning: {validation?.reason} (best score {validation?.bestScore}). You can still play this puzzle.
+              </div>
+              <div className="daily-puzzle-dev-warning">
+                Dev: puzzle invalid · solvable={String(validation?.solvable)} · bestScore={validation?.bestScore} · hasScoringMove={String(validation?.hasScoringMove)} · explored={validation?.exploredStates}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -304,7 +370,7 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
           <div className="tray-center">
             <div className="hand-container">
               {runtimeState.players.you.hand.map((tile, idx) => {
-                const playable = !invalid && legalMoves.some((candidate) => candidate.tile && tileEquals(candidate.tile, tile));
+                const playable = legalMoves.some((candidate) => candidate.tile && tileEquals(candidate.tile, tile));
                 const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
 
                 return (
@@ -314,9 +380,9 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
                     size={92}
                     selected={isSelected}
                     highlight={playable && status === "IN_PROGRESS"}
-                    disabled={status !== "IN_PROGRESS" || !playable || invalid}
+                    disabled={status !== "IN_PROGRESS" || !playable}
                     onClick={() => {
-                      if (status !== "IN_PROGRESS" || !playable || invalid) return;
+                      if (status !== "IN_PROGRESS" || !playable) return;
                       setSelectedTile(tile);
                     }}
                   />
@@ -334,13 +400,22 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
         </div>
       </div>
 
-      {status !== "IN_PROGRESS" && !invalid && (
+      {status !== "IN_PROGRESS" && (
         <div className="daily-puzzle-overlay" role="dialog" aria-modal="true">
           <div className="daily-puzzle-modal">
-            <h3>{status === "SOLVED" ? `Solved in ${movesUsed} moves` : "No legal moves remaining"}</h3>
-            <p>
-              Score {runtimeState.players.you.score}/{puzzle.targetScore} · Max moves {puzzle.maxMoves}
-            </p>
+            {isOneTurnHighScore ? (
+              <>
+                <h3>Final score: {finalScore ?? 0}</h3>
+                <p>High Score — 1 move · Deal {puzzle.dealSize}</p>
+              </>
+            ) : (
+              <>
+                <h3>{status === "SOLVED" ? `Solved in ${movesUsed} moves` : "No legal moves remaining"}</h3>
+                <p>
+                  Score {runtimeState.players.you.score}/{puzzle.targetScore} · Max moves {puzzle.maxMoves}
+                </p>
+              </>
+            )}
             <div className="daily-puzzle-modal-actions">
               <button className="mode-inline-btn" onClick={resetAttempt}>Play Again</button>
               <button className="mode-inline-btn" onClick={onBack}>Back to Home</button>

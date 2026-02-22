@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import type { BoardState, Tile } from "../types";
+import type { BoardState, PlacedTile, Tile, TileOrientation } from "../types";
 import { getDailyPuzzleByDateSeed, getLocalDateKey, normalizeDateInputToLocalKey, upsertDailyPuzzle } from "./api";
 import { validatePuzzle } from "./validator";
-import type { CuratedDailyPuzzle, PuzzleValidationResult } from "./types";
+import type { CuratedDailyPuzzle, DailyPuzzleType, PuzzleValidationResult } from "./types";
 import "./dailyPuzzle.css";
 
 interface DailyPuzzleAdminScreenProps {
@@ -14,6 +14,8 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
   const [title, setTitle] = useState("Daily Puzzle");
   const [maxMoves, setMaxMoves] = useState(4);
   const [targetScore, setTargetScore] = useState(3);
+  const [puzzleType, setPuzzleType] = useState<DailyPuzzleType>("one_turn_high_score");
+  const [dealSize, setDealSize] = useState(7);
   const [boardJson, setBoardJson] = useState<string>("{\n  \"mainLine\": [],\n  \"leftEnd\": 0,\n  \"rightEnd\": 0,\n  \"leftEndIsDouble\": false,\n  \"rightEndIsDouble\": false,\n  \"hubDoubles\": []\n}");
   const [handJson, setHandJson] = useState<string>("[]");
   const [saving, setSaving] = useState(false);
@@ -24,14 +26,160 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
 
   const canSave = useMemo(
-    () => dateValue.trim().length === 10 && Number.isFinite(maxMoves) && Number.isFinite(targetScore),
-    [dateValue, maxMoves, targetScore]
+    () =>
+      dateValue.trim().length === 10 &&
+      Number.isFinite(maxMoves) &&
+      Number.isFinite(targetScore) &&
+      Number.isFinite(dealSize) &&
+      dealSize > 0 &&
+      (puzzleType === "one_turn_high_score" || puzzleType === "reach_target"),
+    [dateValue, maxMoves, targetScore, dealSize, puzzleType]
   );
 
+  const normalizeTile = (value: unknown, fieldName: string): Tile => {
+    // Accept [a,b]
+    if (Array.isArray(value)) {
+      if (value.length !== 2 || !Number.isFinite(value[0]) || !Number.isFinite(value[1])) {
+        throw new Error(`${fieldName} must be a tile tuple [a,b] or object {low,high}.`);
+      }
+      const a = Number(value[0]);
+      const b = Number(value[1]);
+      return { low: Math.min(a, b), high: Math.max(a, b) };
+    }
+
+    // Accept {low,high} and also legacy {left,right}
+    if (value && typeof value === "object") {
+      const rec = value as Record<string, unknown>;
+      const lowRaw = rec.low ?? rec.left;
+      const highRaw = rec.high ?? rec.right;
+      if (!Number.isFinite(lowRaw) || !Number.isFinite(highRaw)) {
+        throw new Error(`${fieldName} must be a tile tuple [a,b] or object {low,high}.`);
+      }
+      const low = Number(lowRaw);
+      const high = Number(highRaw);
+      return { low: Math.min(low, high), high: Math.max(low, high) };
+    }
+
+    throw new Error(`${fieldName} must be a tile tuple [a,b] or object {low,high}.`);
+  };
+
+  const normalizePlacement = (value: unknown, fieldName: string): PlacedTile => {
+    // placement form: { tile: ..., orientation: ... }
+    if (value && typeof value === "object" && "tile" in (value as Record<string, unknown>)) {
+      const rec = value as Record<string, unknown>;
+      const tile = normalizeTile(rec.tile, `${fieldName}.tile`);
+      const orientation = typeof rec.orientation === "string"
+        ? (rec.orientation as TileOrientation)
+        : "horizontal-normal";
+      return { tile, orientation };
+    }
+
+    // bare tile form gets wrapped automatically
+    return {
+      tile: normalizeTile(value, fieldName),
+      orientation: "horizontal-normal",
+    };
+  };
+
+  const endpointFromPlacement = (placement: PlacedTile, side: "left" | "right"): number => {
+    const { tile, orientation } = placement;
+    if (tile.low === tile.high) return tile.high;
+    if (orientation === "horizontal-flipped" || orientation === "vertical-flipped") {
+      return side === "left" ? tile.high : tile.low;
+    }
+    return side === "left" ? tile.low : tile.high;
+  };
+
+  const normalizeHubDoubles = (rawHubDoubles: unknown): BoardState["hubDoubles"] => {
+    if (!Array.isArray(rawHubDoubles)) return [];
+    return rawHubDoubles.map((hub, hubIdx) => {
+      if (!hub || typeof hub !== "object") {
+        throw new Error(`starting_board.hubDoubles[${hubIdx}] must be an object.`);
+      }
+      const rec = hub as Record<string, unknown>;
+      const rawBranches = Array.isArray(rec.branches) ? rec.branches : [];
+      const branches = rawBranches.map((branch, branchIdx) => {
+        if (!branch || typeof branch !== "object") {
+          throw new Error(`starting_board.hubDoubles[${hubIdx}].branches[${branchIdx}] must be an object.`);
+        }
+        const branchRec = branch as Record<string, unknown>;
+        const rawTiles = Array.isArray(branchRec.tiles) ? branchRec.tiles : [];
+        const tiles = rawTiles.map((tileValue, tileIdx) =>
+          normalizePlacement(tileValue, `starting_board.hubDoubles[${hubIdx}].branches[${branchIdx}].tiles[${tileIdx}]`)
+        );
+        return {
+          ...branchRec,
+          tiles,
+        };
+      });
+      return {
+        ...rec,
+        branches,
+      } as BoardState["hubDoubles"][number];
+    });
+  };
+
   const parseDraft = (): { board: BoardState; hand: Tile[] } => {
-    const board = JSON.parse(boardJson) as BoardState;
-    const hand = JSON.parse(handJson) as Tile[];
-    if (!Array.isArray(hand)) throw new Error("starting_hand JSON must be an array.");
+    let parsedBoard: unknown;
+    let parsedHand: unknown;
+    try {
+      parsedBoard = JSON.parse(boardJson);
+    } catch {
+      throw new Error("starting_board JSON is not valid JSON.");
+    }
+    try {
+      parsedHand = JSON.parse(handJson);
+    } catch {
+      throw new Error("starting_hand JSON is not valid JSON.");
+    }
+
+    if (!parsedBoard || typeof parsedBoard !== "object") {
+      throw new Error("starting_board JSON must be an object.");
+    }
+    if (!Array.isArray(parsedHand)) {
+      throw new Error("starting_hand JSON must be an array.");
+    }
+
+    const hand = parsedHand.map((entry, idx) => normalizeTile(entry, `starting_hand[${idx}]`));
+
+    const boardRec = parsedBoard as Record<string, unknown>;
+    if (!Array.isArray(boardRec.mainLine)) {
+      throw new Error("mainLine must be placements with { tile:{low,high}, orientation } (bare tiles are accepted and will be wrapped).");
+    }
+
+    const mainLine = boardRec.mainLine.map((entry, idx) =>
+      normalizePlacement(
+        entry,
+        `starting_board.mainLine[${idx}]`
+      )
+    );
+
+    if (mainLine.length === 0) {
+      throw new Error("mainLine must be placements with { tile:{low,high}, orientation } (bare tiles are accepted and will be wrapped).");
+    }
+
+    const leftEnd = Number.isFinite(boardRec.leftEnd)
+      ? Number(boardRec.leftEnd)
+      : endpointFromPlacement(mainLine[0], "left");
+    const rightEnd = Number.isFinite(boardRec.rightEnd)
+      ? Number(boardRec.rightEnd)
+      : endpointFromPlacement(mainLine[mainLine.length - 1], "right");
+    const leftEndIsDouble = typeof boardRec.leftEndIsDouble === "boolean"
+      ? boardRec.leftEndIsDouble
+      : mainLine[0].tile.low === mainLine[0].tile.high;
+    const rightEndIsDouble = typeof boardRec.rightEndIsDouble === "boolean"
+      ? boardRec.rightEndIsDouble
+      : mainLine[mainLine.length - 1].tile.low === mainLine[mainLine.length - 1].tile.high;
+
+    const board: BoardState = {
+      mainLine,
+      leftEnd,
+      rightEnd,
+      leftEndIsDouble,
+      rightEndIsDouble,
+      hubDoubles: normalizeHubDoubles(boardRec.hubDoubles),
+    };
+
     return { board, hand };
   };
 
@@ -64,6 +212,8 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
       setTitle(existing.title);
       setMaxMoves(existing.maxMoves);
       setTargetScore(existing.targetScore);
+      setPuzzleType(existing.puzzleType ?? "one_turn_high_score");
+      setDealSize(existing.dealSize ?? 7);
       setBoardJson(JSON.stringify(existing.startingBoard, null, 2));
       setHandJson(JSON.stringify(existing.startingHand, null, 2));
       runValidation(existing);
@@ -81,11 +231,33 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
       const canonicalDate = normalizeDateInputToLocalKey(dateValue);
       setDateValue(canonicalDate);
       const parsed = parseDraft();
+      const draftPuzzle: CuratedDailyPuzzle = {
+        id: "draft",
+        puzzleDate: canonicalDate,
+        title,
+        maxMoves,
+        targetScore,
+        puzzleType,
+        dealSize,
+        startingBoard: parsed.board,
+        startingHand: parsed.hand,
+      };
+      const draftValidation = validatePuzzle(draftPuzzle);
+      setValidation(draftValidation);
+      if (!draftValidation.solvable) {
+        setError(
+          `Cannot save puzzle: ${draftValidation.reason}. bestScore=${draftValidation.bestScore}, hasScoringMove=${draftValidation.hasScoringMove}, explored=${draftValidation.exploredStates}`
+        );
+        return;
+      }
+
       await upsertDailyPuzzle({
         puzzleDate: canonicalDate,
         title,
         maxMoves,
         targetScore,
+        puzzleType,
+        dealSize,
         startingBoard: parsed.board,
         startingHand: parsed.hand,
       });
@@ -128,6 +300,17 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
             <label>
               Target Score
               <input type="number" min={1} value={targetScore} onChange={(e) => setTargetScore(Number(e.target.value))} />
+            </label>
+            <label>
+              Puzzle Type
+              <select value={puzzleType} onChange={(e) => setPuzzleType(e.target.value as DailyPuzzleType)}>
+                <option value="one_turn_high_score">High Score (1 move)</option>
+                <option value="reach_target">Reach Target (legacy)</option>
+              </select>
+            </label>
+            <label>
+              Deal Size
+              <input type="number" min={1} value={dealSize} onChange={(e) => setDealSize(Number(e.target.value))} />
             </label>
           </div>
 

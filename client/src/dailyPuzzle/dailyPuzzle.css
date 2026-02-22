@@ -13,6 +13,41 @@
   pointer-events: none;
 }
 
+.daily-puzzle-warning-banner {
+  position: absolute;
+  top: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(92vw, 880px);
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.62);
+  background: linear-gradient(180deg, rgba(58, 37, 7, 0.9), rgba(37, 25, 8, 0.92));
+  color: rgba(255, 232, 196, 0.96);
+  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+  text-align: center;
+  padding: 8px 12px;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.33);
+}
+
+.daily-puzzle-dev-warning {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(92vw, 880px);
+  border-radius: 9px;
+  border: 1px dashed rgba(245, 158, 11, 0.52);
+  background: rgba(19, 14, 6, 0.74);
+  color: rgba(252, 211, 124, 0.95);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  text-align: center;
+  padding: 5px 10px;
+}
+
 .daily-puzzle-overlay {
   position: fixed;
   inset: 0;
@@ -68,6 +103,7 @@
 }
 
 .daily-admin-grid input,
+.daily-admin-grid select,
 .daily-admin-textarea textarea {
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.18);

@@ -13,6 +13,7 @@ import {
   type BotMatchState,
 } from "./botEngine";
 import { chooseBotMove, type BotChoice, type BotDifficulty } from "./botHeuristics";
+import { getLocalDateKey } from "../dailyPuzzle/date";
 import "./botMatch.css";
 
 interface BotMatchScreenProps {
@@ -90,6 +91,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showDebug = typeof window !== "undefined" && window.localStorage.getItem("BOT_DEBUG") === "1";
+  const showDevCapture = import.meta.env.DEV;
 
   const [uiTheme, setUiTheme] = useState<"green" | "brown">(() => {
     if (typeof window === "undefined") return "green";
@@ -132,6 +134,29 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(msg);
     toastTimerRef.current = setTimeout(() => setToast(""), ms);
+  };
+
+  const copyAsDailyPuzzleJson = async () => {
+    if (!match.board) {
+      pushToast("Open the hand first to capture a puzzle state");
+      return;
+    }
+
+    const payload = {
+      title: "Captured Puzzle",
+      puzzle_date: getLocalDateKey(),
+      starting_board: match.board,
+      starting_hand: match.players.you.hand,
+      max_moves: 3,
+      target_score: 1,
+    };
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      pushToast("Copied puzzle JSON");
+    } catch {
+      pushToast("Copy failed");
+    }
   };
 
   const startFreshMatch = () => {
@@ -364,6 +389,11 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
             <button className="btn text compact bot-chip-control" onClick={startFreshMatch}>
               New Match
             </button>
+            {showDevCapture && (
+              <button className="btn text compact bot-chip-control" onClick={copyAsDailyPuzzleJson}>
+                Copy Puzzle JSON
+              </button>
+            )}
             <button className="btn text leave-btn compact bot-chip-control" onClick={onBack}>
               Home
             </button>
