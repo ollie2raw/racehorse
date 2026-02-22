@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { BoardState, Tile } from "../types";
-import { getDailyPuzzleByDateSeed, upsertDailyPuzzle } from "./api";
+import { getDailyPuzzleByDateSeed, getLocalDateKey, normalizeDateInputToLocalKey, upsertDailyPuzzle } from "./api";
 import { validatePuzzle } from "./validator";
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from "./types";
 import "./dailyPuzzle.css";
@@ -9,16 +9,8 @@ interface DailyPuzzleAdminScreenProps {
   onBack: () => void;
 }
 
-function todaySeed(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScreenProps) {
-  const [dateValue, setDateValue] = useState(todaySeed);
+  const [dateValue, setDateValue] = useState(getLocalDateKey());
   const [title, setTitle] = useState("Daily Puzzle");
   const [maxMoves, setMaxMoves] = useState(4);
   const [targetScore, setTargetScore] = useState(3);
@@ -58,7 +50,11 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     setError(null);
     setMessage(null);
     try {
-      const existing = await getDailyPuzzleByDateSeed(dateValue);
+      const canonicalDate = normalizeDateInputToLocalKey(dateValue);
+      setDateValue(canonicalDate);
+      // eslint-disable-next-line no-console
+      console.log("[DailyPuzzleAdmin] load", { canonicalDate });
+      const existing = await getDailyPuzzleByDateSeed(canonicalDate);
       if (!existing) {
         setMessage("No puzzle exists for that date yet.");
         setValidation(null);
@@ -82,9 +78,11 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     setMessage(null);
 
     try {
+      const canonicalDate = normalizeDateInputToLocalKey(dateValue);
+      setDateValue(canonicalDate);
       const parsed = parseDraft();
       await upsertDailyPuzzle({
-        puzzleDate: dateValue,
+        puzzleDate: canonicalDate,
         title,
         maxMoves,
         targetScore,
@@ -92,7 +90,9 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
         startingHand: parsed.hand,
       });
 
-      const saved = await getDailyPuzzleByDateSeed(dateValue);
+      // eslint-disable-next-line no-console
+      console.log("[DailyPuzzleAdmin] save", { canonicalDate });
+      const saved = await getDailyPuzzleByDateSeed(canonicalDate);
       if (!saved) throw new Error("Saved puzzle but failed to reload.");
       runValidation(saved);
       setMessage("Puzzle saved.");

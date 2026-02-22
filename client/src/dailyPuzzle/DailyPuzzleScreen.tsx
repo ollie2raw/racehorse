@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Board, DominoTile } from "../components";
 import { applyPlayMove, getDisplayOpenEnds, getLegalMoves } from "../bot/botEngine";
 import type { Move, Tile } from "../types";
-import { getDailyPuzzleForDate } from "./api";
+import { getDailyPuzzleForDate, getLocalDateKey } from "./api";
 import { createPuzzleMatchState, validatePuzzle } from "./validator";
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from "./types";
 import "./dailyPuzzle.css";
@@ -51,6 +51,8 @@ function writeProgress(dateSeed: string, progress: DailyProgress): void {
 }
 
 export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
+  const localDateKey = useMemo(() => getLocalDateKey(), []);
+  const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const [puzzle, setPuzzle] = useState<CuratedDailyPuzzle | null>(null);
   const [validation, setValidation] = useState<PuzzleValidationResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,6 +79,8 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
       setLoading(true);
       setLoadError(null);
       try {
+        // eslint-disable-next-line no-console
+        console.log("[DailyPuzzle] loading", { localDateKey, timezone });
         const today = await getDailyPuzzleForDate(new Date());
         if (!active) return;
         if (!today) {
@@ -102,6 +106,8 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
         setBestMoves(progress.bestMoves);
       } catch (err) {
         if (!active) return;
+        // eslint-disable-next-line no-console
+        console.error("[DailyPuzzle] load error", { localDateKey, timezone, err });
         setLoadError(err instanceof Error ? err.message : "Failed to load daily puzzle.");
       } finally {
         if (active) setLoading(false);
@@ -112,7 +118,7 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [localDateKey, timezone]);
 
   const legalMoves = useMemo(() => {
     if (!runtimeState || status !== "IN_PROGRESS") return [] as Move[];
@@ -229,6 +235,8 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
           <div className="card lobby-card mode-card">
             <h2>Daily Puzzle</h2>
             <p className="auth-inline-error">{loadError}</p>
+            <p className="lobby-server">Local date key: {localDateKey}</p>
+            <p className="lobby-server">Timezone: {timezone}</p>
             <button className="mode-inline-btn" onClick={onBack}>Back to Home</button>
           </div>
         </div>
@@ -244,6 +252,8 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
           <div className="card lobby-card mode-card">
             <h2>Daily Puzzle</h2>
             <p>Today’s puzzle is not posted yet.</p>
+            <p className="lobby-server">Local date key: {localDateKey}</p>
+            <p className="lobby-server">Timezone: {timezone}</p>
             <button className="mode-inline-btn" onClick={onBack}>Back to Home</button>
           </div>
         </div>
@@ -284,7 +294,7 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
           <div className="daily-puzzle-hud-note">
             {invalid
               ? `Puzzle invalid: ${validation?.reason} (best score ${validation?.bestScore})`
-              : `${statusMessage} · Last +${lastMovePoints} · Open ends ${openEnds.join(", ")} · Attempts ${attempts} · Best moves ${bestMoves ?? "--"}`}
+              : `${statusMessage} · Last +${lastMovePoints} · Open ends ${openEnds.join(", ")} · Attempts ${attempts} · Best moves ${bestMoves ?? "--"} · Local date key: ${localDateKey} · Timezone: ${timezone}`}
           </div>
         </div>
       </div>

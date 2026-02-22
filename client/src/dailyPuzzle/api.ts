@@ -1,13 +1,7 @@
 import type { BoardState, Tile } from "../types";
 import { supabase } from "../lib/supabase";
 import type { CuratedDailyPuzzle, CuratedDailyPuzzleRow } from "./types";
-
-function localDateSeed(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+import { getLocalDateKey, normalizeDateInputToLocalKey } from "./date";
 
 function isTile(value: unknown): value is Tile {
   if (!value || typeof value !== "object") return false;
@@ -48,15 +42,34 @@ function coercePuzzleRow(row: CuratedDailyPuzzleRow): CuratedDailyPuzzle {
   };
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs = 10000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(() => reject(new Error("Request timed out. Try again.")), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(id);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(id);
+        reject(err);
+      });
+  });
+}
+
 export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuzzle | null> {
   if (!supabase) return null;
 
-  const seed = localDateSeed(date);
-  const { data, error } = await supabase
-    .from("daily_puzzles")
-    .select("id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, created_at")
-    .eq("puzzle_date", seed)
-    .maybeSingle();
+  const seed = getLocalDateKey(date);
+  const { data, error } = await withTimeout(
+    Promise.resolve(
+      supabase
+        .from("daily_puzzles")
+        .select("id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, created_at")
+        .eq("puzzle_date", seed)
+        .maybeSingle()
+    )
+  );
 
   if (error) {
     throw new Error(error.message);
@@ -69,11 +82,16 @@ export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuz
 export async function getDailyPuzzleByDateSeed(dateSeed: string): Promise<CuratedDailyPuzzle | null> {
   if (!supabase) return null;
 
-  const { data, error } = await supabase
-    .from("daily_puzzles")
-    .select("id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, created_at")
-    .eq("puzzle_date", dateSeed)
-    .maybeSingle();
+  const canonicalDate = normalizeDateInputToLocalKey(dateSeed);
+  const { data, error } = await withTimeout(
+    Promise.resolve(
+      supabase
+        .from("daily_puzzles")
+        .select("id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, created_at")
+        .eq("puzzle_date", canonicalDate)
+        .maybeSingle()
+    )
+  );
 
   if (error) {
     throw new Error(error.message);
@@ -97,23 +115,28 @@ export async function upsertDailyPuzzle(input: UpsertPuzzleInput): Promise<void>
     throw new Error("Supabase is not configured.");
   }
 
-  const { error } = await supabase
-    .from("daily_puzzles")
-    .upsert(
-      {
-        puzzle_date: input.puzzleDate,
-        title: input.title,
-        starting_board: input.startingBoard,
-        starting_hand: input.startingHand,
-        max_moves: input.maxMoves,
-        target_score: input.targetScore,
-      },
-      { onConflict: "puzzle_date" }
-    );
+  const canonicalDate = normalizeDateInputToLocalKey(input.puzzleDate);
+  const { error } = await withTimeout(
+    Promise.resolve(
+      supabase
+        .from("daily_puzzles")
+        .upsert(
+          {
+            puzzle_date: canonicalDate,
+            title: input.title,
+            starting_board: input.startingBoard,
+            starting_hand: input.startingHand,
+            max_moves: input.maxMoves,
+            target_score: input.targetScore,
+          },
+          { onConflict: "puzzle_date" }
+        )
+    )
+  );
 
   if (error) {
     throw new Error(error.message);
   }
 }
 
-export { localDateSeed };
+export { getLocalDateKey, normalizeDateInputToLocalKey };
