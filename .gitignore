@@ -1,5 +1,11 @@
-
-# deps
-server/node_modules/
-client/node_modules/
 **/node_modules/
+**/dist/
+**/build/
+**/.vite/
+**/*.bak*
+**/.vercel/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
