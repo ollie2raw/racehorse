@@ -447,13 +447,24 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
               </button>
             </div>
             <div className="daily-leaderboard-panel">
-              <h3>Today's Leaderboard</h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <h3 style={{ margin: 0 }}>Today's Leaderboard</h3>
+                <button className="mode-inline-btn" onClick={() => {}} style={{ whiteSpace: 'nowrap' }}>
+                  View
+                </button>
+              </div>
               {leaderboardLoading && <p className="lobby-server">Loading leaderboard...</p>}
               {!leaderboardLoading && leaderboard.length === 0 && (
                 <p className="lobby-server">No solved submissions yet — be first!</p>
               )}
               {!leaderboardLoading && leaderboard.length > 0 && (
                 <div className="daily-leaderboard-list">
+                  <div className="daily-leaderboard-head" aria-hidden="true">
+                    <span>Rank</span>
+                    <span>Player</span>
+                    <span>Score</span>
+                    <span>Moves</span>
+                  </div>
                   {leaderboard.slice(0, 3).map((row, idx) => (
                     <div className="daily-leaderboard-row" key={`${row.userId}-${idx}`}>
                       <span className="daily-leaderboard-rank">#{idx + 1}</span>

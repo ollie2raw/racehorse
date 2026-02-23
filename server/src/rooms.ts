@@ -17,6 +17,7 @@ export type Room = {
   state: GameState | null; // null until game started
   config: Partial<Config>;
   nextHandReady: Set<string>;
+  rematchReady: Set<string>;
   lastHandEndedNotifiedHand: number | null;
   lastBroadcastScores: Record<string, number>;
 };
@@ -42,6 +43,7 @@ export function createRoom(hostSocketId: string, config: Partial<Config> = {}): 
     state: null,
     config,
     nextHandReady: new Set<string>(),
+    rematchReady: new Set<string>(),
     lastHandEndedNotifiedHand: null,
     lastBroadcastScores: {},
   };
@@ -94,6 +96,7 @@ export function startGame(code: string): Room {
 
   room.state = state2;
   room.nextHandReady.clear();
+  room.rematchReady.clear();
   room.lastHandEndedNotifiedHand = null;
   room.lastBroadcastScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),

@@ -27,6 +27,10 @@ interface LayoutZone {
   y: number;
   width: number;
   height: number;
+  // Outward direction from endpoint center in layout lane coordinates.
+  dirX: number;
+  dirY: number;
+  lane: 'horizontal' | 'vertical';
   key: string;
 }
 
@@ -70,6 +74,9 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
         y: 0,
         width: TILE_UNIT * 2,
         height: TILE_UNIT,
+        dirX: 0,
+        dirY: 0,
+        lane: 'horizontal',
         key: 'zone-opening',
       });
     }
@@ -120,6 +127,7 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
     hubId: number,
     hubX: number,
     hubY: number,
+    laneHorizontal: boolean,
   ) => {
     if (laidOutHubIds.has(hubId)) {
       return { tiles: [] as LayoutTile[], zones: [] as LayoutZone[], minY: hubY, maxY: hubY };
@@ -135,6 +143,7 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
       hubLookup,
       hubCenters,
       layoutHubBranches,
+      laneHorizontal,
     );
   };
 
@@ -182,7 +191,8 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
 
     // Layout branches from this hub
     if (hub && hub.isCrossed && typeof hub.hubId === 'number') {
-      const branchResult = layoutHubBranches(hub, hub.hubId, centerX, mainY);
+      // Mainline is horizontal.
+      const branchResult = layoutHubBranches(hub, hub.hubId, centerX, mainY, true);
       tiles.push(...branchResult.tiles);
       zones.push(...branchResult.zones);
       minY = Math.min(minY, branchResult.minY);
@@ -205,6 +215,9 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
       y: mainY,
       width: TILE_UNIT * 2,
       height: TILE_UNIT,
+      dirX: -1,
+      dirY: 0,
+      lane: 'horizontal',
       key: 'zone-left',
     });
     minX = Math.min(minX, leftX - TILE_UNIT);
@@ -218,6 +231,9 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
       y: mainY,
       width: TILE_UNIT * 2,
       height: TILE_UNIT,
+      dirX: 1,
+      dirY: 0,
+      lane: 'horizontal',
       key: 'zone-right',
     });
     maxX = Math.max(maxX, rightX + TILE_UNIT);
@@ -246,7 +262,9 @@ function layoutBranches(
     hubId: number,
     hubX: number,
     hubY: number,
+    laneHorizontal: boolean,
   ) => { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number },
+  laneHorizontal: boolean,
 ): { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number } {
   const tiles: LayoutTile[] = [];
   const zones: LayoutZone[] = [];
@@ -255,11 +273,11 @@ function layoutBranches(
   let minX = hubX - TILE_UNIT / 2;
   let maxX = hubX + TILE_UNIT / 2;
 
-  const laneType = hub.laneType ?? 'mainline';
-  const verticalArms = laneType === 'mainline';
+  // Branch arms are always perpendicular to the lane this hub is on.
+  const verticalArms = laneHorizontal;
 
-  // arm 0: up (mainline lane) / left (branch lane)
-  // arm 1: down (mainline lane) / right (branch lane)
+  // arm 0: up (horizontal lane) / left (vertical lane)
+  // arm 1: down (horizontal lane) / right (vertical lane)
   const directions = [-1, 1];
 
   for (let armIdx = 0; armIdx < 2; armIdx++) {
@@ -302,7 +320,14 @@ function layoutBranches(
             hubCenters.set(childHubId, { x: centerX, y: centerY });
             const childHub = hubLookup.byId.get(childHubId);
             if (childHub && childHub.isCrossed) {
-              const nested = layoutHubBranches(childHub, childHubId, centerX, centerY);
+              // Child hub is on this branch lane (perpendicular to parent lane).
+              const nested = layoutHubBranches(
+                childHub,
+                childHubId,
+                centerX,
+                centerY,
+                !laneHorizontal,
+              );
               tiles.push(...nested.tiles);
               zones.push(...nested.zones);
               minX = Math.min(minX, ...nested.tiles.map((t) => t.x));
@@ -335,6 +360,9 @@ function layoutBranches(
           y: zoneY,
           width: verticalArms ? TILE_UNIT : TILE_UNIT * 2,
           height: verticalArms ? TILE_UNIT * 2 : TILE_UNIT,
+          dirX: verticalArms ? 0 : direction,
+          dirY: verticalArms ? direction : 0,
+          lane: verticalArms ? 'vertical' : 'horizontal',
           key: `zone-branch-${hubId}-${armIdx}`,
         });
         minX = Math.min(minX, zoneX - (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
@@ -354,6 +382,9 @@ function layoutBranches(
           y: zoneY,
           width: verticalArms ? TILE_UNIT : TILE_UNIT * 2,
           height: verticalArms ? TILE_UNIT * 2 : TILE_UNIT,
+          dirX: verticalArms ? 0 : direction,
+          dirY: verticalArms ? direction : 0,
+          lane: verticalArms ? 'vertical' : 'horizontal',
           key: `zone-branch-${hubId}-${armIdx}`,
         });
         minX = Math.min(minX, zoneX - (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
@@ -390,6 +421,8 @@ export function Board({
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
+  const showTargetDebug =
+    typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
 
   // Get valid positions for the selected tile
   const validPositions = useMemo((): PlacementPosition[] => {
@@ -542,22 +575,23 @@ export function Board({
 
         {/* Render placement zones */}
         {layout.zones.map((zone) => {
-          const x = (zone.x - centerX) * unitToPixels;
-          const y = (zone.y - centerY) * unitToPixels;
+          const outwardPx = tileSize * 0.16;
+          const x = (zone.x - centerX) * unitToPixels + zone.dirX * outwardPx;
+          const y = (zone.y - centerY) * unitToPixels + zone.dirY * outwardPx;
           const width = zone.width * unitToPixels;
           const height = zone.height * unitToPixels;
 
-          // Determine arrow direction
+          // Determine arrow direction from computed endpoint direction.
           let arrow = '+';
-          if (zone.position === 'left') arrow = '←';
-          else if (zone.position === 'right') arrow = '→';
-          else if (zone.position.includes('-0')) arrow = '↑';
-          else if (zone.position.includes('-1')) arrow = '↓';
+          if (zone.dirX < 0) arrow = '←';
+          else if (zone.dirX > 0) arrow = '→';
+          else if (zone.dirY < 0) arrow = '↑';
+          else if (zone.dirY > 0) arrow = '↓';
 
           return (
             <div
               key={zone.key}
-              className="placement-zone active"
+              className={`placement-zone active${showTargetDebug ? ' debug' : ''}`}
               style={{
                 position: 'absolute',
                 left: `calc(50% + ${x}px)`,
@@ -570,8 +604,15 @@ export function Board({
                 e.stopPropagation();
                 onPositionClick(zone.position);
               }}
+              data-lane={zone.lane}
+              data-dir={`${zone.dirX},${zone.dirY}`}
             >
               <span className="placement-arrow">{arrow}</span>
+              {showTargetDebug && (
+                <span className="placement-debug-label">
+                  {zone.lane} ({zone.dirX},{zone.dirY})
+                </span>
+              )}
             </div>
           );
         })}

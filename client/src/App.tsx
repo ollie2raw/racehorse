@@ -9,6 +9,7 @@ import NoBrainerLabScreen from './practice/NoBrainerLabScreen';
 import BotMatchScreen from './bot/BotMatchScreen';
 import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
 import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
+import GameOverModal from './components/GameOverModal';
 import AuthModal from './auth/AuthModal';
 import UsernameModal from './auth/UsernameModal';
 import { isTemporaryUsername, useAuth } from './auth/useAuth';
@@ -167,7 +168,11 @@ function HandView({
 interface GameOverOverlayProps {
   state: GameState;
   myId: string;
-  onNewGame: () => void;
+  onPrimary: () => void;
+  primaryLabel: string;
+  onExit: () => void;
+  secondaryLabel: string;
+  waitingText?: string;
   players: RoomPlayer[];
 }
 
@@ -182,7 +187,16 @@ interface HandEndedPayload {
 
 const HAND_OVER_REVEAL_MS = 5000;
 
-function GameOverOverlay({ state, myId, onNewGame, players }: GameOverOverlayProps) {
+function GameOverOverlay({
+  state,
+  myId,
+  onPrimary,
+  primaryLabel,
+  onExit,
+  secondaryLabel,
+  waitingText,
+  players,
+}: GameOverOverlayProps) {
   const winner = state.winnerId;
   const iWon = winner === myId;
   const getName = (pid: string, idx: number) => {
@@ -198,23 +212,27 @@ function GameOverOverlay({ state, myId, onNewGame, players }: GameOverOverlayPro
       : 'You Lose';
 
   return (
-    <div className="game-over-overlay">
-      <div className="game-over-card">
-        <h2 className="victory-title">{victoryTitle}</h2>
-        <div className="final-scores">
-          {state.playerIds.map((pid, idx) => (
-            <div key={pid} className={`final-score ${pid === winner ? 'winner' : ''}`}>
-              <span className="player-name">{getName(pid, idx)}</span>
-              <span className="score">{state.players[pid]?.score ?? 0}</span>
-              {pid === winner && <span className="crown">👑</span>}
-            </div>
-          ))}
-        </div>
-        <button className="btn primary victory-cta" onClick={onNewGame}>
-          New Game
-        </button>
-      </div>
-    </div>
+    <GameOverModal
+      open
+      ariaLabel="Game over"
+      title={victoryTitle}
+      subtitle="Final score"
+      scores={state.playerIds.map((pid, idx) => ({
+        label: getName(pid, idx),
+        value: state.players[pid]?.score ?? 0,
+        winner: pid === winner,
+        showCrown: pid === winner,
+      }))}
+      primaryLabel={primaryLabel}
+      onPrimary={onPrimary}
+      secondaryLabel={secondaryLabel}
+      onSecondary={onExit}
+      onClose={onExit}
+    >
+      {waitingText && (
+        <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', fontSize: '0.92rem' }}>{waitingText}</p>
+      )}
+    </GameOverModal>
   );
 }
 
@@ -392,6 +410,8 @@ export default function App() {
   const [actionError, setActionError] = useState<string>('');
   const [toast, setToast] = useState<string>('');
   const [handReveal, setHandReveal] = useState<HandEndedPayload | null>(null);
+  const [rematchRequested, setRematchRequested] = useState(false);
+  const [rematchReadyIds, setRematchReadyIds] = useState<string[]>([]);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const {
     user: authUser,
@@ -522,6 +542,8 @@ export default function App() {
       setCanDraw(false);
       setError('');
       setActionError('');
+      setRematchRequested(false);
+      setRematchReadyIds([]);
     });
 
     s.on('state:update', (update: StateUpdate) => {
@@ -530,6 +552,10 @@ export default function App() {
       setCanDraw(update.canDraw);
       setSelectedTile(null);
       setActionError('');
+      if (!update.state.gameOver) {
+        setRematchRequested(false);
+        setRematchReadyIds([]);
+      }
       if (update.state.handOver && !update.state.gameOver) {
         showToast('Hand over', 1200);
       }
@@ -598,6 +624,20 @@ export default function App() {
       handRevealShownRef.current = payload.handNumber;
     });
 
+    s.on('game:rematch:status', (payload: any) => {
+      const readyPlayerIds = Array.isArray(payload?.readyPlayerIds)
+        ? payload.readyPlayerIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+      setRematchReadyIds(readyPlayerIds);
+      setRematchRequested(readyPlayerIds.includes(s.id ?? ''));
+    });
+
+    s.on('game:rematch:started', () => {
+      setRematchRequested(false);
+      setRematchReadyIds([]);
+      showToast('Rematch started.', 1200);
+    });
+
     s.on('connect_error', (e) => {
       setIsConnecting(false);
       setError(`Connection error: ${e.message}`);
@@ -663,6 +703,8 @@ export default function App() {
     setIsConnecting(false);
     setPlayers([]);
     setHandReveal(null);
+    setRematchRequested(false);
+    setRematchReadyIds([]);
     handRevealShownRef.current = null;
     setAppMode('home');
     autoConnectAttemptedRef.current = false;
@@ -681,6 +723,8 @@ export default function App() {
     setSelectedTile(null);
     setActionError('');
     setHandReveal(null);
+    setRematchRequested(false);
+    setRematchReadyIds([]);
     setAppMode('tournament');
   }, [disconnect, tournamentId, tournamentState?.status]);
 
@@ -696,6 +740,8 @@ export default function App() {
     setSelectedTile(null);
     setActionError('');
     setHandReveal(null);
+    setRematchRequested(false);
+    setRematchReadyIds([]);
     setAppMode('tournament');
   }, [socket, joinedRoom]);
 
@@ -760,6 +806,16 @@ export default function App() {
     });
   }, [socket, joinedRoom]);
 
+  const requestRematch = useCallback(() => {
+    if (!socket || !joinedRoom || !state?.gameOver || rematchRequested) return;
+    setRematchRequested(true);
+    socket.emit('game:rematch', joinedRoom, (resp: any) => {
+      if (resp?.ok) return;
+      setRematchRequested(false);
+      showToast(resp?.error ?? 'Rematch failed.');
+    });
+  }, [socket, joinedRoom, state?.gameOver, rematchRequested, showToast]);
+
   // Game actions
   const draw = useCallback(() => {
     setActionError('');
@@ -819,6 +875,7 @@ export default function App() {
       : '@player';
   const inGame = Boolean(isConnected && joinedRoom && state);
   const isSpectatingMatch = Boolean(tournamentId && joinedRoom && state && !state.playerIds.includes(you));
+  const isTournamentMatch = Boolean(tournamentId || tournamentState?.status === 'running');
   const spectateRightPlayerId = isSpectatingMatch ? (state?.playerIds?.[1] ?? null) : null;
   const spectateRightPlayer = spectateRightPlayerId ? players.find((pl) => pl.id === spectateRightPlayerId) ?? null : null;
   const hudRightLabel = isSpectatingMatch
@@ -829,6 +886,26 @@ export default function App() {
   const hudRightScorePulse = isSpectatingMatch && spectateRightPlayerId ? Boolean(hudScorePulse[spectateRightPlayerId]) : Boolean(hudScorePulse[you]);
   const canPass = legalMoves.some((m) => m.type === 'pass');
   const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
+  const canUseRematch = Boolean(
+    state?.gameOver && joinedRoom && !isSpectatingMatch && !isTournamentMatch && state.playerIds.includes(you),
+  );
+  const rematchWaitingText = rematchRequested
+    ? (() => {
+        const readyNames = rematchReadyIds
+          .map((pid) => {
+            if (pid === you) return 'You';
+            const player = players.find((pl) => pl.id === pid);
+            return player?.username ? `@${player.username}` : 'Opponent';
+          })
+          .join(', ');
+        return readyNames ? `Waiting for opponent... Ready: ${readyNames}` : 'Waiting for opponent...';
+      })()
+    : undefined;
+
+  useEffect(() => {
+    setRematchRequested(false);
+    setRematchReadyIds([]);
+  }, [joinedRoom]);
 
   useEffect(() => {
     const centerEl = trayCenterRef.current;
@@ -1828,7 +1905,16 @@ export default function App() {
           />
           {/* Game Over Overlay */}
           {state.gameOver && (
-            <GameOverOverlay state={state} myId={you} onNewGame={handlePostGame} players={players} />
+            <GameOverOverlay
+              state={state}
+              myId={you}
+              onPrimary={canUseRematch ? requestRematch : handlePostGame}
+              primaryLabel={canUseRematch ? (rematchRequested ? 'Rematch Requested' : 'Rematch') : 'New Game'}
+              onExit={handlePostGame}
+              secondaryLabel={canUseRematch ? 'Home' : 'Back'}
+              waitingText={canUseRematch ? rematchWaitingText : undefined}
+              players={players}
+            />
           )}
           {handReveal && !state.gameOver && (
             <div className="hand-reveal-overlay">

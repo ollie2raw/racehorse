@@ -64,6 +64,33 @@ function getRoomPlayersWithFallback(roomCode: string, socketIds: string[]): Room
   return next;
 }
 
+function emitRematchStatus(roomCode: string) {
+  let room;
+  try {
+    room = getRoom(roomCode);
+  } catch {
+    return;
+  }
+  const readyPlayerIds = room.players.filter((pid) => room.rematchReady.has(pid));
+  io.to(room.code).emit('game:rematch:status', {
+    roomCode: room.code,
+    readyPlayerIds,
+    readyCount: readyPlayerIds.length,
+    needed: room.players.length,
+  });
+}
+
+function clearSocketRematchReady(roomCode: string | undefined, socketId: string) {
+  if (!roomCode) return;
+  try {
+    const room = getRoom(roomCode);
+    const changed = room.rematchReady.delete(socketId);
+    if (changed) emitRematchStatus(room.code);
+  } catch {
+    // room no longer exists
+  }
+}
+
 /**
  * Send state update to all players in a room.
  * Each player receives:
@@ -580,6 +607,7 @@ io.on('connection', (socket: Socket) => {
     } = config as Record<string, unknown>;
     console.log(`[room:create] socket=${socket.id}`);
     try {
+      clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       const room = createRoom(socket.id, roomConfig as Record<string, unknown>);
       socket.join(room.code);
       socket.data.roomId = room.code;
@@ -608,6 +636,7 @@ io.on('connection', (socket: Socket) => {
     const code = String(argCode ?? '').trim().toUpperCase();
     try {
       if (!code) return cb?.({ ok: false, error: 'missing_code' });
+      clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
 
       let room;
       try {
@@ -686,6 +715,7 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
       .toUpperCase();
     console.log(`[room:join] socket=${socket.id}, code=${roomCode}`);
     try {
+      clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       const room = joinRoom(roomCode, socket.id);
       socket.join(room.code);
       socket.data.roomId = room.code;
@@ -803,7 +833,55 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     }
   });
 
+  socket.on('game:rematch', (code: unknown, cb?: AckFn) => {
+    const roomCode = String(code ?? '').trim().toUpperCase();
+    try {
+      const room = getRoom(roomCode);
+      const cfg = (room as any).config ?? {};
+
+      if (cfg.tournamentId) {
+        return cb?.({ ok: false, error: 'Rematch is unavailable in tournament rooms.' });
+      }
+      if (!room.players.includes(socket.id)) {
+        return cb?.({ ok: false, error: 'Only room players can request rematch.' });
+      }
+      if (!room.state) {
+        return cb?.({ ok: false, error: 'Game not started.' });
+      }
+      if (!room.state.gameOver) {
+        return cb?.({ ok: false, error: 'Rematch is only available after game over.' });
+      }
+
+      room.rematchReady.add(socket.id);
+      emitRematchStatus(room.code);
+
+      const bothReady =
+        room.players.length === 2 && room.players.every((playerId) => room.rematchReady.has(playerId));
+      if (!bothReady) {
+        return cb?.({ ok: true, started: false });
+      }
+
+      room.rematchReady.clear();
+      (room as any)._matchLogged = false;
+      (room as any)._leadTracker = {
+        aId: room.players[0],
+        bId: room.players[1],
+        maxLeadA: 0,
+        maxLeadB: 0,
+      };
+      startGame(room.code);
+      broadcastStateUpdate(room.code);
+      io.to(room.code).emit('game:rematch:started', { roomCode: room.code });
+      emitRematchStatus(room.code);
+      cb?.({ ok: true, started: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      cb?.({ ok: false, error: message });
+    }
+  });
+
   socket.on('disconnect', () => {
+    clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
     console.log('Client disconnected:', socket.id);
   });
 });

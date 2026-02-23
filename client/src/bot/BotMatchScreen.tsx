@@ -6,6 +6,7 @@ import {
   upsertDailyPuzzleBestScore,
   type DailyPuzzleLeaderboardEntry,
 } from '../dailyPuzzle/api';
+import GameOverModal from '../components/GameOverModal';
 import {
   applyPlayMove,
   createBotMatch,
@@ -400,88 +401,86 @@ export default function BotMatchScreen({
         </div>
       )}
       {match.gameOver && (
-        <div className="game-over-overlay">
-          <div className="game-over-card bot-victory-card">
-            <h2 className="victory-title">{match.winnerId === 'you' ? 'Champion!' : 'Bot Wins'}</h2>
-            <p className="bot-victory-meta">
-              Final hand {match.handNumber} · {match.dealSize}-tile mode
-            </p>
-            <div className="final-scores">
-              <div className={`final-score ${match.winnerId === 'you' ? 'winner' : ''}`}>
-                <span className="player-name">You</span>
-                <span className="score">{match.players.you.score}</span>
-                {match.winnerId === 'you' && <span className="crown">👑</span>}
-              </div>
-              <div className={`final-score ${match.winnerId === 'bot' ? 'winner' : ''}`}>
-                <span className="player-name">Bot</span>
-                <span className="score">{match.players.bot.score}</span>
-                {match.winnerId === 'bot' && <span className="crown">👑</span>}
-              </div>
-            </div>
-            {isDailyPuzzleRun && (
-              <div style={{ margin: '12px 0 8px', textAlign: 'left' }}>
-                <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Today&apos;s Top Scores</h3>
-                {!userId && (
-                  <p className="lobby-server" style={{ margin: '0 0 8px' }}>
-                    Log in to submit your score.
-                  </p>
-                )}
-                {dailyLeaderboardLoading && (
+        <GameOverModal
+          open
+          ariaLabel="Bot match over"
+          title={match.winnerId === 'you' ? 'Champion!' : 'Bot Wins'}
+          subtitle={`Final hand ${match.handNumber} · ${match.dealSize}-tile mode`}
+          scores={[
+            {
+              label: 'You',
+              value: match.players.you.score,
+              winner: match.winnerId === 'you',
+              showCrown: match.winnerId === 'you',
+            },
+            {
+              label: 'Bot',
+              value: match.players.bot.score,
+              winner: match.winnerId === 'bot',
+              showCrown: match.winnerId === 'bot',
+            },
+          ]}
+          primaryLabel="New Match"
+          onPrimary={startFreshMatch}
+          secondaryLabel="Home"
+          onSecondary={onBack}
+          onClose={onBack}
+        >
+          {isDailyPuzzleRun && (
+            <div style={{ margin: '2px 0 4px', textAlign: 'left' }}>
+              <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Today&apos;s Top Scores</h3>
+              {!userId && (
+                <p className="lobby-server" style={{ margin: '0 0 8px' }}>
+                  Log in to submit your score.
+                </p>
+              )}
+              {dailyLeaderboardLoading && (
+                <p className="lobby-server" style={{ margin: 0 }}>
+                  Loading leaderboard...
+                </p>
+              )}
+              {!dailyLeaderboardLoading && dailyLeaderboardError && (
+                <p className="lobby-server" style={{ margin: 0 }}>
+                  {dailyLeaderboardError}
+                </p>
+              )}
+              {!dailyLeaderboardLoading &&
+                !dailyLeaderboardError &&
+                dailyLeaderboard.length === 0 && (
                   <p className="lobby-server" style={{ margin: 0 }}>
-                    Loading leaderboard...
+                    No scores posted yet.
                   </p>
                 )}
-                {!dailyLeaderboardLoading && dailyLeaderboardError && (
-                  <p className="lobby-server" style={{ margin: 0 }}>
-                    {dailyLeaderboardError}
-                  </p>
-                )}
-                {!dailyLeaderboardLoading &&
-                  !dailyLeaderboardError &&
-                  dailyLeaderboard.length === 0 && (
-                    <p className="lobby-server" style={{ margin: 0 }}>
-                      No scores posted yet.
-                    </p>
-                  )}
-                {!dailyLeaderboardLoading && dailyLeaderboard.length > 0 && (
-                  <div style={{ display: 'grid', gap: 6 }}>
-                    {dailyLeaderboard.map((entry, idx) => {
-                      const isCurrentUser = Boolean(userId) && entry.userId === userId;
-                      return (
-                        <div
-                          key={`${entry.userId}-${idx}`}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '52px 1fr auto',
-                            gap: 8,
-                            alignItems: 'center',
-                            borderRadius: 8,
-                            padding: '6px 8px',
-                            background: isCurrentUser
-                              ? 'rgba(255, 215, 0, 0.16)'
-                              : 'rgba(255, 255, 255, 0.04)',
-                          }}
-                        >
-                          <span>#{idx + 1}</span>
-                          <span>@{entry.username}</span>
-                          <span>{entry.bestScore}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="bot-victory-actions">
-              <button className="btn primary victory-cta" onClick={startFreshMatch}>
-                New Match
-              </button>
-              <button className="btn text compact" onClick={onBack}>
-                Home
-              </button>
+              {!dailyLeaderboardLoading && dailyLeaderboard.length > 0 && (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {dailyLeaderboard.map((entry, idx) => {
+                    const isCurrentUser = Boolean(userId) && entry.userId === userId;
+                    return (
+                      <div
+                        key={`${entry.userId}-${idx}`}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '52px 1fr auto',
+                          gap: 8,
+                          alignItems: 'center',
+                          borderRadius: 8,
+                          padding: '6px 8px',
+                          background: isCurrentUser
+                            ? 'rgba(255, 215, 0, 0.16)'
+                            : 'rgba(255, 255, 255, 0.04)',
+                        }}
+                      >
+                        <span>#{idx + 1}</span>
+                        <span>@{entry.username}</span>
+                        <span>{entry.bestScore}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        </div>
+          )}
+        </GameOverModal>
       )}
 
       <div className="wl-top-rail bot-top-rail" data-ui="hud">

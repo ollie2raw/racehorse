@@ -903,6 +903,11 @@ body {
   animation: zone-glow 1.5s ease-in-out infinite;
 }
 
+.placement-zone.debug {
+  outline: 1px dashed rgba(255, 170, 120, 0.65);
+  outline-offset: 2px;
+}
+
 @keyframes zone-glow {
   0%,
   100% {
@@ -923,6 +928,18 @@ body {
   font-weight: 700;
   color: var(--tile-highlight);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.placement-debug-label {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  color: rgba(248, 253, 250, 0.94);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
 /* ─── Domino Tiles ──────────────────────────────────────────── */
@@ -1298,18 +1315,12 @@ body {
 
 .game-over-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(25, 44, 36, 0.2) 0%, rgba(0, 0, 0, 0) 48%),
-    radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.2) 20%, rgba(0, 0, 0, 0.72) 100%);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
+  inset: 0;
+  background: rgba(6, 10, 18, 0.62);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 1900;
   animation: fade-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -1324,16 +1335,35 @@ body {
 
 .game-over-card {
   position: relative;
-  background: linear-gradient(180deg, rgba(30, 39, 54, 0.92), rgba(18, 24, 36, 0.95));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
-  padding: 34px 34px 28px;
-  text-align: center;
-  box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  width: min(520px, calc(100vw - 24px));
+  border-radius: 16px;
+  border: 1px solid rgba(236, 252, 245, 0.2);
+  background: linear-gradient(170deg, rgba(18, 26, 39, 0.92), rgba(9, 15, 26, 0.96));
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.42);
+  padding: 18px;
+  color: rgba(235, 245, 242, 0.96);
   animation: victory-enter 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  min-width: min(460px, calc(100vw - 32px));
+}
+
+.game-over-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.game-over-close {
+  min-width: 40px;
+  padding: 10px 12px;
+  line-height: 1;
+}
+
+.game-over-meta {
+  margin: 2px 0 12px;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(223, 238, 245, 0.72);
 }
 
 @keyframes victory-enter {
@@ -1350,67 +1380,51 @@ body {
 .victory-title {
   position: relative;
   font-size: 2rem;
-  margin: 0 0 22px;
-  background: linear-gradient(135deg, var(--accent-warning), var(--accent-secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  margin: 0;
+  color: rgba(244, 250, 247, 0.97);
 }
 
 .victory-title::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 52%;
-  width: 210px;
-  height: 70px;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 20% 50%, rgba(255, 232, 145, 0.45), rgba(255, 232, 145, 0) 42%),
-    radial-gradient(circle at 50% 50%, rgba(98, 255, 214, 0.28), rgba(98, 255, 214, 0) 44%),
-    radial-gradient(circle at 80% 50%, rgba(255, 232, 145, 0.4), rgba(255, 232, 145, 0) 42%);
-  filter: blur(7px);
-  opacity: 0.65;
-  pointer-events: none;
-  z-index: -1;
+  display: none;
 }
 
 .final-scores {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .final-score {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
-  background: rgba(22, 30, 44, 0.82);
-  border-radius: var(--radius-md);
-  min-width: 240px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(8, 14, 24, 0.35);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .final-score.winner {
-  border: 1px solid rgba(245, 191, 82, 0.5);
-  background: linear-gradient(135deg, rgba(38, 47, 62, 0.92), rgba(245, 158, 11, 0.22));
+  border: 1px solid rgba(80, 220, 170, 0.55);
+  background: rgba(14, 26, 42, 0.45);
   box-shadow:
-    0 0 0 1px rgba(245, 191, 82, 0.15),
-    0 10px 24px rgba(245, 191, 82, 0.16);
+    inset 0 0 0 1px rgba(80, 220, 170, 0.18),
+    0 10px 24px rgba(12, 22, 36, 0.35);
 }
 
 .final-score .player-name {
   font-size: 1rem;
-  color: var(--text-primary);
+  color: rgba(238, 247, 243, 0.98);
+  min-width: 0;
 }
 
 .final-score .score {
-  font-size: 1.6rem;
+  font-size: 1.2rem;
   font-weight: 700;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .final-score .crown {
@@ -1432,17 +1446,24 @@ body {
 }
 
 .victory-cta {
-  margin-top: 6px;
-  min-width: 180px;
+  min-width: 140px;
   min-height: 44px;
-  font-size: 1rem;
-  font-weight: 700;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #3f8cff, #2563eb);
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 14px;
+  background: rgba(14, 24, 39, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow:
-    0 12px 28px rgba(37, 99, 235, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.game-over-actions,
+.bot-victory-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
 
 .victory-cta:hover:not(:disabled) {
@@ -1462,6 +1483,21 @@ body {
   .final-score .crown {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .game-over-card {
+    padding: 16px;
+  }
+
+  .victory-title {
+    font-size: 1.75rem;
+  }
+
+  .game-over-actions,
+  .bot-victory-actions {
+    justify-content: stretch;
   }
 }
 
