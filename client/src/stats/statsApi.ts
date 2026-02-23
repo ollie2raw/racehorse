@@ -1,11 +1,11 @@
-import type { User } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
-export type MatchMode = "bot" | "online" | "practice";
+export type MatchMode = 'bot' | 'online' | 'practice';
 
 export interface RecordMatchInput {
   mode: MatchMode;
-  opponentType: "bot" | "online" | "guest";
+  opponentType: 'bot' | 'online' | 'guest';
   winnerUserId: string | null;
   loserUserId: string | null;
   winnerScore: number | null;
@@ -15,7 +15,9 @@ export interface RecordMatchInput {
   metadata?: Record<string, unknown>;
 }
 
-export async function recordMatchResult(input: RecordMatchInput): Promise<{ error: string | null }> {
+export async function recordMatchResult(
+  input: RecordMatchInput,
+): Promise<{ error: string | null }> {
   if (!supabase) return { error: null };
 
   const payload = {
@@ -32,7 +34,7 @@ export async function recordMatchResult(input: RecordMatchInput): Promise<{ erro
     },
   };
 
-  const { error } = await supabase.from("matches").insert(payload);
+  const { error } = await supabase.from('matches').insert(payload);
   return { error: error?.message ?? null };
 }
 
@@ -44,29 +46,25 @@ export interface StatsSummary {
   botLosses: number;
 }
 
-export async function fetchUserStats(user: User): Promise<{ data: StatsSummary | null; error: string | null }> {
-  if (!supabase) return { data: null, error: "Supabase not configured." };
+export async function fetchUserStats(
+  user: User,
+): Promise<{ data: StatsSummary | null; error: string | null }> {
+  if (!supabase) return { data: null, error: 'Supabase not configured.' };
 
   const [winnerResp, loserResp] = await Promise.all([
-    supabase
-      .from("matches")
-      .select("mode, metadata")
-      .eq("winner_user_id", user.id),
-    supabase
-      .from("matches")
-      .select("mode, metadata")
-      .eq("loser_user_id", user.id),
+    supabase.from('matches').select('mode, metadata').eq('winner_user_id', user.id),
+    supabase.from('matches').select('mode, metadata').eq('loser_user_id', user.id),
   ]);
 
   if (winnerResp.error || loserResp.error) {
-    const message = winnerResp.error?.message ?? loserResp.error?.message ?? "Stats unavailable.";
+    const message = winnerResp.error?.message ?? loserResp.error?.message ?? 'Stats unavailable.';
     const normalized = message.toLowerCase();
     if (
-      normalized.includes("relation") ||
-      normalized.includes("does not exist") ||
-      normalized.includes("42p01")
+      normalized.includes('relation') ||
+      normalized.includes('does not exist') ||
+      normalized.includes('42p01')
     ) {
-      return { data: null, error: "Stats unavailable (missing table)." };
+      return { data: null, error: 'Stats unavailable (missing table).' };
     }
     return { data: null, error: message };
   }
@@ -76,8 +74,8 @@ export async function fetchUserStats(user: User): Promise<{ data: StatsSummary |
   const winners = winnerResp.data ?? [];
   const losers = loserResp.data ?? [];
 
-  const botWins = winners.filter((row) => row.mode === "bot").length;
-  const botLosses = losers.filter((row) => row.mode === "bot").length;
+  const botWins = winners.filter((row) => row.mode === 'bot').length;
+  const botLosses = losers.filter((row) => row.mode === 'bot').length;
 
   return {
     data: {

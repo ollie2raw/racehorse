@@ -1,22 +1,22 @@
-import type { BoardState, Tile } from "../types";
-import { supabase } from "../lib/supabase";
-import type { CuratedDailyPuzzle, CuratedDailyPuzzleRow, DailyPuzzleType } from "./types";
-import { getLocalDateKey, normalizeDateInputToLocalKey } from "./date";
+import type { BoardState, Tile } from '../types';
+import { supabase } from '../lib/supabase';
+import type { CuratedDailyPuzzle, CuratedDailyPuzzleRow, DailyPuzzleType } from './types';
+import { getLocalDateKey, normalizeDateInputToLocalKey } from './date';
 
 function isTile(value: unknown): value is Tile {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== 'object') return false;
   const v = value as { low?: unknown; high?: unknown };
   return Number.isInteger(v.low) && Number.isInteger(v.high);
 }
 
 function normalizePlacement(
   value: unknown,
-  defaultOrientation: "horizontal-normal" | "vertical-normal"
+  defaultOrientation: 'horizontal-normal' | 'vertical-normal',
 ): { tile: Tile; orientation: string } | null {
-  if (!value || typeof value !== "object") return null;
+  if (!value || typeof value !== 'object') return null;
   const rec = value as Record<string, unknown>;
 
-  if (isTile(rec.tile) && typeof rec.orientation === "string") {
+  if (isTile(rec.tile) && typeof rec.orientation === 'string') {
     return { tile: rec.tile, orientation: rec.orientation };
   }
 
@@ -31,53 +31,74 @@ function normalizePlacement(
 }
 
 function isBoardState(value: unknown): value is BoardState {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== 'object') return false;
   const board = value as BoardState;
 
-  const placementsValid = Array.isArray(board.mainLine)
-    && board.mainLine.every((placement) => Boolean(placement) && isTile(placement.tile) && typeof placement.orientation === "string");
-  const hubsValid = Array.isArray(board.hubDoubles)
-    && board.hubDoubles.every((hub) => Array.isArray(hub.branches)
-      && hub.branches.every((branch) => Array.isArray(branch.tiles)
-        && branch.tiles.every((placement) => Boolean(placement) && isTile(placement.tile) && typeof placement.orientation === "string")));
+  const placementsValid =
+    Array.isArray(board.mainLine) &&
+    board.mainLine.every(
+      (placement) =>
+        Boolean(placement) && isTile(placement.tile) && typeof placement.orientation === 'string',
+    );
+  const hubsValid =
+    Array.isArray(board.hubDoubles) &&
+    board.hubDoubles.every(
+      (hub) =>
+        Array.isArray(hub.branches) &&
+        hub.branches.every(
+          (branch) =>
+            Array.isArray(branch.tiles) &&
+            branch.tiles.every(
+              (placement) =>
+                Boolean(placement) &&
+                isTile(placement.tile) &&
+                typeof placement.orientation === 'string',
+            ),
+        ),
+    );
 
-  return placementsValid
-    && typeof board.leftEnd === "number"
-    && typeof board.rightEnd === "number"
-    && typeof board.leftEndIsDouble === "boolean"
-    && typeof board.rightEndIsDouble === "boolean"
-    && hubsValid;
+  return (
+    placementsValid &&
+    typeof board.leftEnd === 'number' &&
+    typeof board.rightEnd === 'number' &&
+    typeof board.leftEndIsDouble === 'boolean' &&
+    typeof board.rightEndIsDouble === 'boolean' &&
+    hubsValid
+  );
 }
 
 function normalizeBoardState(raw: unknown): BoardState | null {
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== 'object') return null;
   const board = raw as Record<string, unknown>;
 
   if (
-    !Array.isArray(board.mainLine)
-    || typeof board.leftEnd !== "number"
-    || typeof board.rightEnd !== "number"
-    || typeof board.leftEndIsDouble !== "boolean"
-    || typeof board.rightEndIsDouble !== "boolean"
-    || !Array.isArray(board.hubDoubles)
+    !Array.isArray(board.mainLine) ||
+    typeof board.leftEnd !== 'number' ||
+    typeof board.rightEnd !== 'number' ||
+    typeof board.leftEndIsDouble !== 'boolean' ||
+    typeof board.rightEndIsDouble !== 'boolean' ||
+    !Array.isArray(board.hubDoubles)
   ) {
     return null;
   }
 
-  const mainLine = board.mainLine
-    .map((placement) => normalizePlacement(placement, "horizontal-normal"));
+  const mainLine = board.mainLine.map((placement) =>
+    normalizePlacement(placement, 'horizontal-normal'),
+  );
   if (mainLine.some((placement) => !placement)) return null;
 
   const hubDoubles = board.hubDoubles.map((hubRaw) => {
-    if (!hubRaw || typeof hubRaw !== "object") return null;
+    if (!hubRaw || typeof hubRaw !== 'object') return null;
     const hub = hubRaw as Record<string, unknown>;
     if (!Array.isArray(hub.branches)) return null;
 
     const branches = hub.branches.map((branchRaw) => {
-      if (!branchRaw || typeof branchRaw !== "object") return null;
+      if (!branchRaw || typeof branchRaw !== 'object') return null;
       const branch = branchRaw as Record<string, unknown>;
       if (!Array.isArray(branch.tiles)) return null;
-      const tiles = branch.tiles.map((placement) => normalizePlacement(placement, "vertical-normal"));
+      const tiles = branch.tiles.map((placement) =>
+        normalizePlacement(placement, 'vertical-normal'),
+      );
       if (tiles.some((placement) => !placement)) return null;
       return {
         ...branch,
@@ -88,19 +109,19 @@ function normalizeBoardState(raw: unknown): BoardState | null {
     if (branches.some((branch) => !branch)) return null;
     return {
       ...hub,
-      branches: branches as BoardState["hubDoubles"][number]["branches"],
-    } as BoardState["hubDoubles"][number];
+      branches: branches as BoardState['hubDoubles'][number]['branches'],
+    } as BoardState['hubDoubles'][number];
   });
 
   if (hubDoubles.some((hub) => !hub)) return null;
 
   const normalized: BoardState = {
-    mainLine: mainLine as BoardState["mainLine"],
+    mainLine: mainLine as BoardState['mainLine'],
     leftEnd: board.leftEnd,
     rightEnd: board.rightEnd,
     leftEndIsDouble: board.leftEndIsDouble,
     rightEndIsDouble: board.rightEndIsDouble,
-    hubDoubles: hubDoubles as BoardState["hubDoubles"],
+    hubDoubles: hubDoubles as BoardState['hubDoubles'],
   };
 
   return isBoardState(normalized) ? normalized : null;
@@ -110,29 +131,30 @@ function coercePuzzleRow(row: CuratedDailyPuzzleRow): CuratedDailyPuzzle {
   const board = normalizeBoardState(row.starting_board);
   if (!board) {
     throw new Error(
-      "Invalid puzzle: starting_board must include valid placements (tile {low,high} + orientation) in mainLine and hub branches."
+      'Invalid puzzle: starting_board must include valid placements (tile {low,high} + orientation) in mainLine and hub branches.',
     );
   }
 
   if (!Array.isArray(row.starting_hand) || !row.starting_hand.every(isTile)) {
-    throw new Error("Invalid puzzle: starting_hand must be an array of tiles.");
+    throw new Error('Invalid puzzle: starting_hand must be an array of tiles.');
   }
 
   if (board.mainLine.some((placement) => !placement?.tile || !isTile(placement.tile))) {
-    throw new Error("Invalid puzzle: every mainLine placement must include tile {low,high}.");
+    throw new Error('Invalid puzzle: every mainLine placement must include tile {low,high}.');
   }
 
   const puzzleTypeRaw = row.puzzle_type;
   const puzzleType: DailyPuzzleType =
-    puzzleTypeRaw === "reach_target" || puzzleTypeRaw === "one_turn_high_score"
+    puzzleTypeRaw === 'reach_target' || puzzleTypeRaw === 'one_turn_high_score'
       ? puzzleTypeRaw
-      : "one_turn_high_score";
-  const dealSize = typeof row.deal_size === "number" && Number.isFinite(row.deal_size) ? row.deal_size : 7;
+      : 'one_turn_high_score';
+  const dealSize =
+    typeof row.deal_size === 'number' && Number.isFinite(row.deal_size) ? row.deal_size : 7;
 
   return {
     id: row.id,
     puzzleDate: row.puzzle_date,
-    title: row.title?.trim() || "Daily Puzzle",
+    title: row.title?.trim() || 'Daily Puzzle',
     startingBoard: board,
     startingHand: row.starting_hand,
     maxMoves: row.max_moves,
@@ -144,7 +166,10 @@ function coercePuzzleRow(row: CuratedDailyPuzzleRow): CuratedDailyPuzzle {
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs = 10000): Promise<T> {
   return new Promise((resolve, reject) => {
-    const id = setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms. Try again.`)), timeoutMs);
+    const id = setTimeout(
+      () => reject(new Error(`Request timed out after ${timeoutMs}ms. Try again.`)),
+      timeoutMs,
+    );
     promise
       .then((value) => {
         clearTimeout(id);
@@ -165,15 +190,17 @@ export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuz
   const { data, error } = await withTimeout(
     (async () =>
       await supabase
-        .from("daily_puzzles")
-        .select("id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at")
-        .eq("puzzle_date", seed)
+        .from('daily_puzzles')
+        .select(
+          'id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at',
+        )
+        .eq('puzzle_date', seed)
         .maybeSingle())(),
-    8000
+    8000,
   );
   const ms = Math.round(performance.now() - t0);
   // eslint-disable-next-line no-console
-  console.log("[DailyPuzzle] select finished", { ms, seed, error, hasData: Boolean(data) });
+  console.log('[DailyPuzzle] select finished', { ms, seed, error, hasData: Boolean(data) });
 
   if (error) {
     throw new Error(error.message);
@@ -183,7 +210,9 @@ export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuz
   return coercePuzzleRow(data as CuratedDailyPuzzleRow);
 }
 
-export async function getDailyPuzzleByDateSeed(dateSeed: string): Promise<CuratedDailyPuzzle | null> {
+export async function getDailyPuzzleByDateSeed(
+  dateSeed: string,
+): Promise<CuratedDailyPuzzle | null> {
   if (!supabase) return null;
 
   const canonicalDate = normalizeDateInputToLocalKey(dateSeed);
@@ -191,15 +220,22 @@ export async function getDailyPuzzleByDateSeed(dateSeed: string): Promise<Curate
   const { data, error } = await withTimeout(
     (async () =>
       await supabase
-        .from("daily_puzzles")
-        .select("id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at")
-        .eq("puzzle_date", canonicalDate)
+        .from('daily_puzzles')
+        .select(
+          'id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at',
+        )
+        .eq('puzzle_date', canonicalDate)
         .maybeSingle())(),
-    8000
+    8000,
   );
   const ms = Math.round(performance.now() - t0);
   // eslint-disable-next-line no-console
-  console.log("[DailyPuzzleAdmin] select finished", { ms, canonicalDate, error, hasData: Boolean(data) });
+  console.log('[DailyPuzzleAdmin] select finished', {
+    ms,
+    canonicalDate,
+    error,
+    hasData: Boolean(data),
+  });
 
   if (error) {
     throw new Error(error.message);
@@ -222,33 +258,31 @@ export interface UpsertPuzzleInput {
 
 export async function upsertDailyPuzzle(input: UpsertPuzzleInput): Promise<void> {
   if (!supabase) {
-    throw new Error("Supabase is not configured.");
+    throw new Error('Supabase is not configured.');
   }
 
   const canonicalDate = normalizeDateInputToLocalKey(input.puzzleDate);
   const t0 = performance.now();
   const { error } = await withTimeout(
     (async () =>
-      await supabase
-        .from("daily_puzzles")
-        .upsert(
-          {
-            puzzle_date: canonicalDate,
-            title: input.title,
-            starting_board: input.startingBoard,
-            starting_hand: input.startingHand,
-            max_moves: input.maxMoves,
-            target_score: input.targetScore,
-            puzzle_type: input.puzzleType,
-            deal_size: input.dealSize,
-          },
-          { onConflict: "puzzle_date" }
-        ))(),
-    20000
+      await supabase.from('daily_puzzles').upsert(
+        {
+          puzzle_date: canonicalDate,
+          title: input.title,
+          starting_board: input.startingBoard,
+          starting_hand: input.startingHand,
+          max_moves: input.maxMoves,
+          target_score: input.targetScore,
+          puzzle_type: input.puzzleType,
+          deal_size: input.dealSize,
+        },
+        { onConflict: 'puzzle_date' },
+      ))(),
+    20000,
   );
   const ms = Math.round(performance.now() - t0);
   // eslint-disable-next-line no-console
-  console.log("[DailyPuzzleAdmin] upsert finished", { ms, canonicalDate, error });
+  console.log('[DailyPuzzleAdmin] upsert finished', { ms, canonicalDate, error });
 
   if (error) {
     throw new Error(error.message);
@@ -274,15 +308,17 @@ export interface DailyPuzzleLeaderboardEntry {
 }
 
 function sanitizeLeaderboardUsername(storedUsername: string | null | undefined): string {
-  const storedName = (storedUsername ?? "").trim();
+  const storedName = (storedUsername ?? '').trim();
   if (storedName && !/^user_[a-f0-9]{8}$/i.test(storedName)) return storedName;
 
-  return "Player";
+  return 'Player';
 }
 
-export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestScoreInput): Promise<void> {
+export async function upsertDailyPuzzleBestScore(
+  input: UpsertDailyPuzzleBestScoreInput,
+): Promise<void> {
   if (!supabase) {
-    throw new Error("Supabase is not configured.");
+    throw new Error('Supabase is not configured.');
   }
 
   const canonicalDate = normalizeDateInputToLocalKey(input.puzzleDate);
@@ -290,12 +326,12 @@ export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestSco
   const { data: existing, error: selectError } = await withTimeout(
     Promise.resolve(
       supabase
-        .from("daily_puzzle_scores")
-        .select("best_score, best_moves_used, best_seconds")
-        .eq("puzzle_date", canonicalDate)
-        .eq("user_id", input.userId)
-        .maybeSingle()
-    )
+        .from('daily_puzzle_scores')
+        .select('best_score, best_moves_used, best_seconds')
+        .eq('puzzle_date', canonicalDate)
+        .eq('user_id', input.userId)
+        .maybeSingle(),
+    ),
   );
 
   if (selectError) {
@@ -305,23 +341,21 @@ export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestSco
   if (!existing) {
     const { error: insertError } = await withTimeout(
       Promise.resolve(
-        supabase
-          .from("daily_puzzle_scores")
-          .insert({
-            puzzle_date: canonicalDate,
-            user_id: input.userId,
-            username: input.username,
-            
-            // legacy columns (keep compatible)
-            score: input.score,
-            moves_used: input.movesUsed,
+        supabase.from('daily_puzzle_scores').insert({
+          puzzle_date: canonicalDate,
+          user_id: input.userId,
+          username: input.username,
 
-            best_score: input.score,
-            best_moves_used: input.movesUsed,
-            best_seconds: nextSeconds,
-            updated_at: new Date().toISOString(),
-          })
-      )
+          // legacy columns (keep compatible)
+          score: input.score,
+          moves_used: input.movesUsed,
+
+          best_score: input.score,
+          best_moves_used: input.movesUsed,
+          best_seconds: nextSeconds,
+          updated_at: new Date().toISOString(),
+        }),
+      ),
     );
     if (insertError) {
       throw new Error(insertError.message);
@@ -334,18 +368,19 @@ export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestSco
   const currentBestSeconds = Number(existing.best_seconds ?? Number.MAX_SAFE_INTEGER);
 
   const shouldUpdate =
-    input.score > currentBestScore
-    || (input.score === currentBestScore && input.movesUsed < currentBestMoves)
-    || (input.score === currentBestScore && input.movesUsed === currentBestMoves && nextSeconds < currentBestSeconds);
+    input.score > currentBestScore ||
+    (input.score === currentBestScore && input.movesUsed < currentBestMoves) ||
+    (input.score === currentBestScore &&
+      input.movesUsed === currentBestMoves &&
+      nextSeconds < currentBestSeconds);
 
   if (!shouldUpdate) return;
 
   const { error: updateError } = await withTimeout(
     Promise.resolve(
       supabase
-        .from("daily_puzzle_scores")
+        .from('daily_puzzle_scores')
         .update({
-          
           // legacy columns (keep compatible)
           score: input.score,
           moves_used: input.movesUsed,
@@ -356,9 +391,9 @@ export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestSco
           username: input.username,
           updated_at: new Date().toISOString(),
         })
-        .eq("puzzle_date", canonicalDate)
-        .eq("user_id", input.userId)
-    )
+        .eq('puzzle_date', canonicalDate)
+        .eq('user_id', input.userId),
+    ),
   );
 
   if (updateError) {
@@ -368,7 +403,7 @@ export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestSco
 
 export async function fetchDailyPuzzleLeaderboard(
   puzzleDate: string,
-  limit = 25
+  limit = 25,
 ): Promise<DailyPuzzleLeaderboardEntry[]> {
   if (!supabase) return [];
 
@@ -376,21 +411,21 @@ export async function fetchDailyPuzzleLeaderboard(
   const { data, error } = await withTimeout(
     Promise.resolve(
       supabase
-        .from("daily_puzzle_scores")
-        .select("user_id, username, best_score, best_moves_used, best_seconds, updated_at")
-        .eq("puzzle_date", canonicalDate)
-        .order("best_score", { ascending: false })
-        .order("best_moves_used", { ascending: true })
-        .order("best_seconds", { ascending: true })
-        .order("updated_at", { ascending: true })
-        .limit(limit)
-    )
+        .from('daily_puzzle_scores')
+        .select('user_id, username, best_score, best_moves_used, best_seconds, updated_at')
+        .eq('puzzle_date', canonicalDate)
+        .order('best_score', { ascending: false })
+        .order('best_moves_used', { ascending: true })
+        .order('best_seconds', { ascending: true })
+        .order('updated_at', { ascending: true })
+        .limit(limit),
+    ),
   );
 
   if (error) {
-    if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
       // eslint-disable-next-line no-console
-      console.error("[DailyPuzzleLeaderboard] fetch error", error);
+      console.error('[DailyPuzzleLeaderboard] fetch error', error);
     }
     throw new Error(error.message);
   }

@@ -1,7 +1,7 @@
 :root {
   --hud-bg: rgba(8, 12, 18, 0.62);
   --hud-bg-strong: rgba(8, 12, 18, 0.84);
-  --hud-border: rgba(255, 255, 255, 0.10);
+  --hud-border: rgba(255, 255, 255, 0.1);
   --hud-border-strong: rgba(255, 255, 255, 0.18);
   --hud-highlight: rgba(255, 255, 255, 0.22);
   --hud-shadow: 0 22px 70px rgba(0, 0, 0, 0.72);
@@ -25,15 +25,16 @@ body {
 }
 
 .uiPanelWood {
-  background:
-    linear-gradient(180deg, var(--hud-highlight), transparent 34%),
-    var(--hud-bg);
+  background: linear-gradient(180deg, var(--hud-highlight), transparent 34%), var(--hud-bg);
   border: 1px solid var(--hud-border);
   border-radius: var(--hud-radius);
   box-shadow: var(--hud-inset), var(--hud-shadow);
   -webkit-backdrop-filter: blur(var(--hud-blur));
   backdrop-filter: blur(var(--hud-blur));
-  transition: background 140ms ease-out, border-color 140ms ease-out, box-shadow 140ms ease-out;
+  transition:
+    background 140ms ease-out,
+    border-color 140ms ease-out,
+    box-shadow 140ms ease-out;
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
@@ -47,7 +48,9 @@ body {
   border-top: 0;
   border-left: 0;
   border-right: 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 18px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 18px rgba(0, 0, 0, 0.22);
   padding-top: 6px;
   padding-bottom: 6px;
 }
@@ -97,7 +100,9 @@ body {
 
 .game-top-bar {
   border-radius: var(--hud-radius);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 22px rgba(0, 0, 0, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 22px rgba(0, 0, 0, 0.32);
   padding: 8px 14px;
   background: rgba(6, 10, 16, 0.72);
   -webkit-backdrop-filter: blur(12px);
@@ -123,15 +128,11 @@ body {
 }
 
 .scoreboard {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.11),
-    rgba(255, 255, 255, 0.04)
-  );
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04));
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   box-shadow:
-    0 18px 50px rgba(0, 0, 0, 0.60),
+    0 18px 50px rgba(0, 0, 0, 0.6),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   -webkit-backdrop-filter: blur(var(--hud-blur));
   backdrop-filter: blur(var(--hud-blur));
@@ -154,9 +155,14 @@ body {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--hud-border-strong);
   border-radius: var(--hud-radius-sm);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24);
   min-width: 68px;
-  transition: opacity 130ms ease-out, box-shadow 130ms ease-out, transform 130ms ease-out;
+  transition:
+    opacity 130ms ease-out,
+    box-shadow 130ms ease-out,
+    transform 130ms ease-out;
 }
 
 .player-label {
@@ -178,9 +184,15 @@ body {
 }
 
 @keyframes score-pop {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .scoreboard.my-turn .player-score.you {
@@ -204,17 +216,25 @@ body {
   border: 1px solid var(--btn-border);
   color: var(--hud-text);
   border-radius: 999px;
-  box-shadow: var(--hud-inset), 0 4px 12px rgba(0, 0, 0, 0.24);
+  box-shadow:
+    var(--hud-inset),
+    0 4px 12px rgba(0, 0, 0, 0.24);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   min-height: 32px;
-  transition: background 130ms ease-out, border-color 130ms ease-out, transform 130ms ease-out, box-shadow 130ms ease-out;
+  transition:
+    background 130ms ease-out,
+    border-color 130ms ease-out,
+    transform 130ms ease-out,
+    box-shadow 130ms ease-out;
 }
 
 .btn:hover:not(:disabled) {
   background: var(--btn-bg-hover);
   border-color: var(--hud-border-strong);
-  box-shadow: var(--hud-inset), 0 6px 14px rgba(0, 0, 0, 0.26);
+  box-shadow:
+    var(--hud-inset),
+    0 6px 14px rgba(0, 0, 0, 0.26);
   transform: translateY(-1px);
   filter: brightness(1.04);
 }
@@ -240,7 +260,7 @@ body {
 .hand-area {
   border-radius: var(--hud-radius);
   background: rgba(6, 10, 16, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow:
     0 22px 70px rgba(0, 0, 0, 0.72),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -255,7 +275,7 @@ body {
 }
 
 .hand-header h3 {
-  color: rgba(255, 255, 255, 0.70);
+  color: rgba(255, 255, 255, 0.7);
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
   font-size: 0.76rem;
   text-transform: uppercase;
@@ -270,7 +290,7 @@ body {
   flex-wrap: wrap;
   justify-content: flex-end;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
   border-radius: 12px;
   padding: 5px 8px;
@@ -291,8 +311,7 @@ body {
 
 .screen .card {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 34%),
-    var(--hud-bg-strong);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 34%), var(--hud-bg-strong);
   border: 1px solid var(--hud-border-strong);
   border-radius: var(--hud-radius);
   box-shadow: var(--hud-inset), var(--hud-shadow);
@@ -328,44 +347,42 @@ body {
 }
 
 .board-area::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 45%,
-    rgba(255,255,255,0.18) 0%,
-    rgba(255,255,255,0.08) 25%,
-    rgba(0,0,0,0.00) 55%,
-    rgba(0,0,0,0.45) 100%);
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.08) 25%,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(0, 0, 0, 0.45) 100%
+  );
   mix-blend-mode: soft-light;
 }
 
 .board-area::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.10),
-    inset 0 0 0 1px rgba(255,255,255,0.06),
-    inset 0 30px 80px rgba(0,0,0,0.40),
-    inset 0 -30px 80px rgba(0,0,0,0.40);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 30px 80px rgba(0, 0, 0, 0.4),
+    inset 0 -30px 80px rgba(0, 0, 0, 0.4);
 }
 
 .room-label,
 .hand-number {
-  color: rgba(255, 255, 255, 0.70);
+  color: rgba(255, 255, 255, 0.7);
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
 }
 
 .hand-controls {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.07),
-    rgba(255, 255, 255, 0.03)
-  );
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);

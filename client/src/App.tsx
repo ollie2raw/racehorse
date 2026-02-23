@@ -1,24 +1,18 @@
-import { useMemo, useState, useCallback, useEffect, useRef } from "react";
-import { io, Socket } from "socket.io-client";
-import "./App.css";
-import { Board, DominoTile, ScoreTrackOverlay } from "./components";
-import { playTileSound } from "./utils/sound";
-import NoBrainerLabScreen from "./practice/NoBrainerLabScreen";
-import BotMatchScreen from "./bot/BotMatchScreen";
-import DailyPuzzleScreen from "./dailyPuzzle/DailyPuzzleScreen";
-import DailyPuzzleAdminScreen from "./dailyPuzzle/DailyPuzzleAdminScreen";
-import AuthModal from "./auth/AuthModal";
-import UsernameModal from "./auth/UsernameModal";
-import { isTemporaryUsername, useAuth } from "./auth/useAuth";
-import StatsScreen from "./stats/StatsScreen";
-import { recordMatchResult } from "./stats/statsApi";
-import type {
-  Tile,
-  PlacementPosition,
-  GameState,
-  Move,
-  StateUpdate,
-} from "./types";
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
+import './App.css';
+import { Board, DominoTile, ScoreTrackOverlay } from './components';
+import { playTileSound } from './utils/sound';
+import NoBrainerLabScreen from './practice/NoBrainerLabScreen';
+import BotMatchScreen from './bot/BotMatchScreen';
+import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
+import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
+import AuthModal from './auth/AuthModal';
+import UsernameModal from './auth/UsernameModal';
+import { isTemporaryUsername, useAuth } from './auth/useAuth';
+import StatsScreen from './stats/StatsScreen';
+import { recordMatchResult } from './stats/statsApi';
+import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 
 // ─── Utilities ───────────────────────────────────────────────
 type RoomPlayer = { id: string; username: string; userId: string | null };
@@ -28,24 +22,26 @@ function tileEquals(a: Tile, b: Tile): boolean {
 }
 
 function normalizeUsername(value: unknown): string {
-  const raw = typeof value === "string" ? value.trim() : "";
-  return raw || "Guest";
+  const raw = typeof value === 'string' ? value.trim() : '';
+  return raw || 'Guest';
 }
 
 function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
   if (!Array.isArray(value)) return [];
-  return value.map((entry) => {
-    if (typeof entry === "string") {
-      return { id: entry, username: "Guest", userId: null };
-    }
-    if (entry && typeof entry === "object") {
-      const rec = entry as { id?: unknown; username?: unknown; userId?: unknown };
-      const id = typeof rec.id === "string" ? rec.id : "";
-      const userId = typeof rec.userId === "string" ? rec.userId.trim() || null : null;
-      return { id, username: normalizeUsername(rec.username), userId };
-    }
-    return { id: "", username: "Guest", userId: null };
-  }).filter((p) => Boolean(p.id));
+  return value
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return { id: entry, username: 'Guest', userId: null };
+      }
+      if (entry && typeof entry === 'object') {
+        const rec = entry as { id?: unknown; username?: unknown; userId?: unknown };
+        const id = typeof rec.id === 'string' ? rec.id : '';
+        const userId = typeof rec.userId === 'string' ? rec.userId.trim() || null : null;
+        return { id, username: normalizeUsername(rec.username), userId };
+      }
+      return { id: '', username: 'Guest', userId: null };
+    })
+    .filter((p) => Boolean(p.id));
 }
 
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
@@ -113,13 +109,11 @@ function HandView({
   const handContainerRef = useRef<HTMLDivElement>(null);
 
   const playableTiles = useMemo(() => {
-    return legalMoves
-      .filter(m => m.type === "play" && m.tile)
-      .map(m => m.tile!);
+    return legalMoves.filter((m) => m.type === 'play' && m.tile).map((m) => m.tile!);
   }, [legalMoves]);
 
   const canPlayTile = (tile: Tile) => {
-    return playableTiles.some(t => tileEquals(t, tile));
+    return playableTiles.some((t) => tileEquals(t, tile));
   };
 
   useEffect(() => {
@@ -141,8 +135,8 @@ function HandView({
       ref={handContainerRef}
       className="hand-container is-scrollable"
       style={{
-        ["--hand-scale" as any]: handScale,
-        ["--hand-gap" as any]: `${Math.max(8, Math.round(10 * handScale))}px`,
+        ['--hand-scale' as any]: handScale,
+        ['--hand-gap' as any]: `${Math.max(8, Math.round(10 * handScale))}px`,
       }}
     >
       {hand.map((tile, idx) => {
@@ -158,7 +152,7 @@ function HandView({
             highlight={canPlay}
             onClick={() => isMyTurn && onSelect(tile)}
             disabled={!isMyTurn}
-            className={drawPulseIndex === idx ? "new-draw" : ""}
+            className={drawPulseIndex === idx ? 'new-draw' : ''}
           />
         );
       })}
@@ -190,14 +184,16 @@ function GameOverOverlay({ state, myId, onNewGame, players }: GameOverOverlayPro
   const winner = state.winnerId;
   const iWon = winner === myId;
   const getName = (pid: string, idx: number) => {
-    const p = players.find(pl => pl.id === pid);
+    const p = players.find((pl) => pl.id === pid);
     if (p?.username) return `@${p.username}`;
-    return pid === myId ? "You" : `Player ${idx + 1}`;
+    return pid === myId ? 'You' : `Player ${idx + 1}`;
   };
   const winnerIdx = winner ? state.playerIds.indexOf(winner) : -1;
   const victoryTitle = winner
     ? `${getName(winner, winnerIdx >= 0 ? winnerIdx : 0)} wins!`
-    : (iWon ? "You Win!" : "You Lose");
+    : iWon
+      ? 'You Win!'
+      : 'You Lose';
 
   return (
     <div className="game-over-overlay">
@@ -205,10 +201,8 @@ function GameOverOverlay({ state, myId, onNewGame, players }: GameOverOverlayPro
         <h2 className="victory-title">{victoryTitle}</h2>
         <div className="final-scores">
           {state.playerIds.map((pid, idx) => (
-            <div key={pid} className={`final-score ${pid === winner ? "winner" : ""}`}>
-              <span className="player-name">
-                {getName(pid, idx)}
-              </span>
+            <div key={pid} className={`final-score ${pid === winner ? 'winner' : ''}`}>
+              <span className="player-name">{getName(pid, idx)}</span>
               <span className="score">{state.players[pid]?.score ?? 0}</span>
               {pid === winner && <span className="crown">👑</span>}
             </div>
@@ -229,32 +223,34 @@ export default function App() {
   const trayCenterRef = useRef<HTMLDivElement>(null);
   const autoConnectAttemptedRef = useRef(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [serverUrl] = useState(import.meta.env.VITE_SERVER_URL || "http://localhost:3001");
+  const [serverUrl] = useState(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001');
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [appMode, setAppMode] = useState<"home" | "multiplayer" | "noBrainer" | "bot" | "daily" | "dailyAdmin">("home");
+  const [appMode, setAppMode] = useState<
+    'home' | 'multiplayer' | 'noBrainer' | 'bot' | 'daily' | 'dailyAdmin'
+  >('home');
   const [isMuted, setIsMuted] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("racehorse_muted") === "1";
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('racehorse_muted') === '1';
   });
-  const [uiTheme, setUiTheme] = useState<"green" | "brown">(() => {
-    if (typeof window === "undefined") return "green";
-    const stored = window.localStorage.getItem("racehorse_ui_theme");
-    return stored === "brown" ? "brown" : "green";
+  const [uiTheme, setUiTheme] = useState<'green' | 'brown'>(() => {
+    if (typeof window === 'undefined') return 'green';
+    const stored = window.localStorage.getItem('racehorse_ui_theme');
+    return stored === 'brown' ? 'brown' : 'green';
   });
 
-  const [roomCode, setRoomCode] = useState("");
+  const [roomCode, setRoomCode] = useState('');
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
-  const [you, setYou] = useState<string>("");
+  const [you, setYou] = useState<string>('');
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
   const [state, setState] = useState<GameState | null>(null);
   const [legalMoves, setLegalMoves] = useState<Move[]>([]);
   const [canDraw, setCanDraw] = useState(false);
-  const [error, setError] = useState<string>("");
-  const [actionError, setActionError] = useState<string>("");
-  const [toast, setToast] = useState<string>("");
+  const [error, setError] = useState<string>('');
+  const [actionError, setActionError] = useState<string>('');
+  const [toast, setToast] = useState<string>('');
   const [handReveal, setHandReveal] = useState<HandEndedPayload | null>(null);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const {
@@ -277,7 +273,7 @@ export default function App() {
   const [handTileSize, setHandTileSize] = useState(70);
   const [handScale, setHandScale] = useState(1);
   const [handScrollable, setHandScrollable] = useState(false);
-  const autoTurnActionKeyRef = useRef<string>("");
+  const autoTurnActionKeyRef = useRef<string>('');
   const handRevealShownRef = useRef<number | null>(null);
   const prevOppCountRef = useRef<number | null>(null);
   const [oppTilePulse, setOppTilePulse] = useState(false);
@@ -287,19 +283,17 @@ export default function App() {
   const prevHudScoresRef = useRef<Record<string, number>>({});
   const prevMyHandLenRef = useRef(0);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
-  const matchRecordKeyRef = useRef("");
+  const matchRecordKeyRef = useRef('');
   const prevGameOverRef = useRef(false);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
-  const isAdmin = Boolean(authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase());
+  const isAdmin = Boolean(
+    authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
+  );
   const needsUsernameOnboarding = Boolean(
-    authUser &&
-    !authLoading &&
-    authProfile !== null &&
-    isTemporaryUsername(authProfile.username)
+    authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
   );
   const onboardingDismissed = Boolean(
-    typeof window !== "undefined" &&
-    window.localStorage.getItem("username_onboarding_dismissed")
+    typeof window !== 'undefined' && window.localStorage.getItem('username_onboarding_dismissed'),
   );
 
   const showToast = useCallback((msg: string, duration = 3000) => {
@@ -307,7 +301,7 @@ export default function App() {
       clearTimeout(toastTimeoutRef.current);
     }
     setToast(msg);
-    toastTimeoutRef.current = setTimeout(() => setToast(""), duration);
+    toastTimeoutRef.current = setTimeout(() => setToast(''), duration);
   }, []);
 
   useEffect(() => {
@@ -319,13 +313,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("racehorse_ui_theme", uiTheme);
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('racehorse_ui_theme', uiTheme);
   }, [uiTheme]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("racehorse_muted", isMuted ? "1" : "0");
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('racehorse_muted', isMuted ? '1' : '0');
   }, [isMuted]);
 
   useEffect(() => {
@@ -333,11 +327,11 @@ export default function App() {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
 
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
     handleFullscreenChange();
 
     return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
   }, []);
 
@@ -349,7 +343,7 @@ export default function App() {
         await appRootRef.current.requestFullscreen();
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to toggle fullscreen.";
+      const message = err instanceof Error ? err.message : 'Unable to toggle fullscreen.';
       setError(`Fullscreen error: ${message}`);
     }
   }, []);
@@ -357,51 +351,51 @@ export default function App() {
   // Connection
   const connect = useCallback(() => {
     if (isConnecting || socket?.connected) return;
-    setError("");
+    setError('');
     setIsConnecting(true);
-    const s = io(serverUrl, { transports: ["websocket"] });
+    const s = io(serverUrl, { transports: ['websocket'] });
 
-    s.on("connect", () => {
+    s.on('connect', () => {
       setIsConnected(true);
-      setYou(s.id ?? "");
+      setYou(s.id ?? '');
       setIsConnecting(false);
     });
 
-    s.on("disconnect", () => {
+    s.on('disconnect', () => {
       setIsConnected(false);
       setIsConnecting(false);
       setJoinedRoom(null);
       setState(null);
       setLegalMoves([]);
       setCanDraw(false);
-      setError("");
-      setActionError("");
+      setError('');
+      setActionError('');
     });
 
-    s.on("state:update", (update: StateUpdate) => {
+    s.on('state:update', (update: StateUpdate) => {
       setState(update.state);
       setLegalMoves(update.legalMoves);
       setCanDraw(update.canDraw);
       setSelectedTile(null);
-      setActionError("");
+      setActionError('');
       if (update.state.handOver && !update.state.gameOver) {
-        showToast("Hand over", 1200);
+        showToast('Hand over', 1200);
       }
       if (update.state.gameOver) {
-        showToast(update.state.winnerId === s.id ? "You win!" : "Game over!");
+        showToast(update.state.winnerId === s.id ? 'You win!' : 'Game over!');
       }
     });
 
-    s.on("room:update", (data: { players: RoomPlayer[] }) => {
+    s.on('room:update', (data: { players: RoomPlayer[] }) => {
       setPlayers(normalizeRoomPlayers(data?.players));
     });
 
-    s.on("hand:ended", (payload: HandEndedPayload) => {
+    s.on('hand:ended', (payload: HandEndedPayload) => {
       setHandReveal(payload);
       handRevealShownRef.current = payload.handNumber;
     });
 
-    s.on("connect_error", (e) => {
+    s.on('connect_error', (e) => {
       setIsConnecting(false);
       setError(`Connection error: ${e.message}`);
     });
@@ -410,7 +404,7 @@ export default function App() {
   }, [isConnecting, socket, serverUrl, showToast]);
 
   useEffect(() => {
-    if (appMode !== "multiplayer") return;
+    if (appMode !== 'multiplayer') return;
     if (autoConnectAttemptedRef.current) return;
     if (!serverUrl) return;
     autoConnectAttemptedRef.current = true;
@@ -424,129 +418,139 @@ export default function App() {
     setState(null);
     setLegalMoves([]);
     setCanDraw(false);
-    setError("");
-    setActionError("");
-    setYou("");
+    setError('');
+    setActionError('');
+    setYou('');
     setSelectedTile(null);
     setIsConnected(false);
     setIsConnecting(false);
     setPlayers([]);
     setHandReveal(null);
     handRevealShownRef.current = null;
-    setAppMode("home");
+    setAppMode('home');
     autoConnectAttemptedRef.current = false;
   }, [socket]);
 
   // Room actions
   const createRoom = useCallback(() => {
-    setError("");
-    setActionError("");
-    if (!socket) return setError("Not connected to server.");
-    socket.emit("room:create", {
-      username: authProfile?.username ?? "Guest",
-      userId: authUser?.id ?? null,
-    }, (resp: any) => {
-      if (!resp.ok) return setError(resp.error);
-      setError("");
-      setActionError("");
-      setState(null);
-      setLegalMoves([]);
-      setCanDraw(false);
-      setSelectedTile(null);
-      setJoinedRoom(resp.roomCode);
-      setRoomCode(resp.roomCode);
-      setPlayers(normalizeRoomPlayers(resp.players));
-    });
+    setError('');
+    setActionError('');
+    if (!socket) return setError('Not connected to server.');
+    socket.emit(
+      'room:create',
+      {
+        username: authProfile?.username ?? 'Guest',
+        userId: authUser?.id ?? null,
+      },
+      (resp: any) => {
+        if (!resp.ok) return setError(resp.error);
+        setError('');
+        setActionError('');
+        setState(null);
+        setLegalMoves([]);
+        setCanDraw(false);
+        setSelectedTile(null);
+        setJoinedRoom(resp.roomCode);
+        setRoomCode(resp.roomCode);
+        setPlayers(normalizeRoomPlayers(resp.players));
+      },
+    );
   }, [socket, authProfile?.username, authUser?.id]);
 
   const joinRoom = useCallback(() => {
-    setError("");
-    setActionError("");
-    if (!socket) return setError("Not connected to server.");
-    socket.emit("room:join", roomCode.trim().toUpperCase(), {
-      username: authProfile?.username ?? "Guest",
-      userId: authUser?.id ?? null,
-    }, (resp: any) => {
-      if (!resp.ok) return setError(resp.error);
-      setError("");
-      setActionError("");
-      setJoinedRoom(resp.roomCode);
-      setState(resp.state ?? null);
-      setPlayers(normalizeRoomPlayers(resp.players));
-      setSelectedTile(null);
-      setLegalMoves([]);
-      setCanDraw(false);
-    });
+    setError('');
+    setActionError('');
+    if (!socket) return setError('Not connected to server.');
+    socket.emit(
+      'room:join',
+      roomCode.trim().toUpperCase(),
+      {
+        username: authProfile?.username ?? 'Guest',
+        userId: authUser?.id ?? null,
+      },
+      (resp: any) => {
+        if (!resp.ok) return setError(resp.error);
+        setError('');
+        setActionError('');
+        setJoinedRoom(resp.roomCode);
+        setState(resp.state ?? null);
+        setPlayers(normalizeRoomPlayers(resp.players));
+        setSelectedTile(null);
+        setLegalMoves([]);
+        setCanDraw(false);
+      },
+    );
   }, [socket, roomCode, authProfile?.username, authUser?.id]);
 
   const startGame = useCallback(() => {
-    setError("");
-    setActionError("");
-    if (!socket || !joinedRoom) return setError("Not in a room.");
-    socket.emit("game:start", joinedRoom, (resp: any) => {
+    setError('');
+    setActionError('');
+    if (!socket || !joinedRoom) return setError('Not in a room.');
+    socket.emit('game:start', joinedRoom, (resp: any) => {
       if (!resp.ok) return setError(resp.error);
     });
   }, [socket, joinedRoom]);
 
   // Game actions
   const draw = useCallback(() => {
-    setActionError("");
+    setActionError('');
     if (!socket || !joinedRoom) return;
-    socket.emit("game:action", joinedRoom, { type: "DRAW" }, (resp: any) => {
+    socket.emit('game:action', joinedRoom, { type: 'DRAW' }, (resp: any) => {
       if (!resp.ok) setActionError(resp.error);
     });
   }, [socket, joinedRoom]);
 
   const pass = useCallback(() => {
-    setActionError("");
+    setActionError('');
     if (!socket || !joinedRoom) return;
-    socket.emit("game:action", joinedRoom, { type: "PASS" }, (resp: any) => {
+    socket.emit('game:action', joinedRoom, { type: 'PASS' }, (resp: any) => {
       if (!resp.ok) setActionError(resp.error);
     });
   }, [socket, joinedRoom]);
 
   const play = useCallback(
     (position: PlacementPosition) => {
-      setActionError("");
+      setActionError('');
       if (!socket || !joinedRoom || !selectedTile) return;
 
       socket.emit(
-        "game:action",
+        'game:action',
         joinedRoom,
         {
-          type: "MOVE",
+          type: 'MOVE',
           move: { tile: selectedTile, position },
         },
         (resp: any) => {
           if (!resp.ok) setActionError(resp.error);
           setSelectedTile(null);
-        }
+        },
       );
     },
-    [socket, joinedRoom, selectedTile]
+    [socket, joinedRoom, selectedTile],
   );
 
   // Derived state
   const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
   const isMyTurn = currentTurnId === you;
   const myHand = state?.players[you]?.hand ?? [];
-  const opponentId = state?.playerIds.find(pid => pid !== you) ?? null;
-  const opponentTileCount = state && opponentId
-    ? (state.handCounts?.[opponentId] ?? state.players[opponentId]?.hand?.length ?? 0)
-    : 0;
+  const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
+  const opponentTileCount =
+    state && opponentId
+      ? (state.handCounts?.[opponentId] ?? state.players[opponentId]?.hand?.length ?? 0)
+      : 0;
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
   const opponent = players.find((pl) => pl.id !== you) ?? null;
-  const opponentName = opponent?.username ? `@${opponent.username}` : "Rival";
-  const myName = authProfile?.username ? `You · @${authProfile.username}` : "You";
+  const opponentName = opponent?.username ? `@${opponent.username}` : 'Rival';
+  const myName = authProfile?.username ? `You · @${authProfile.username}` : 'You';
   const myHandle = authProfile?.username
     ? `@${authProfile.username}`
     : authUser?.email
-      ? `@${authUser.email.split("@")[0]}`
-      : "@player";
+      ? `@${authUser.email.split('@')[0]}`
+      : '@player';
   const inGame = Boolean(isConnected && joinedRoom && state);
-  const canPass = legalMoves.some(m => m.type === "pass");
-  const hasPlayMoves = legalMoves.some(m => m.type === "play");
+  const canPass = legalMoves.some((m) => m.type === 'pass');
+  const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
 
   useEffect(() => {
     const centerEl = trayCenterRef.current;
@@ -574,19 +578,19 @@ export default function App() {
       const shouldScroll = neededScaledWidth > availableWidth + 1;
       const nextScale = nextSize / 70;
 
-      setHandScale(prev => (Math.abs(prev - nextScale) < 0.005 ? prev : nextScale));
-      setHandScrollable(prev => (prev === shouldScroll ? prev : shouldScroll));
-      setHandTileSize(prev => (prev === nextSize ? prev : nextSize));
+      setHandScale((prev) => (Math.abs(prev - nextScale) < 0.005 ? prev : nextScale));
+      setHandScrollable((prev) => (prev === shouldScroll ? prev : shouldScroll));
+      setHandTileSize((prev) => (prev === nextSize ? prev : nextSize));
     };
 
     updateHandTileSize();
     const observer = new ResizeObserver(updateHandTileSize);
     observer.observe(centerEl);
-    window.addEventListener("resize", updateHandTileSize);
+    window.addEventListener('resize', updateHandTileSize);
 
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", updateHandTileSize);
+      window.removeEventListener('resize', updateHandTileSize);
     };
   }, [myHand.length]);
 
@@ -614,7 +618,9 @@ export default function App() {
     const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
     setHandReveal({
       handNumber: state.handNumber,
-      opponentRemainingTiles: opponentIdFromState ? state.players[opponentIdFromState]?.hand ?? [] : [],
+      opponentRemainingTiles: opponentIdFromState
+        ? (state.players[opponentIdFromState]?.hand ?? [])
+        : [],
       pointsAwarded: { you: 0, opponent: 0 },
     });
     handRevealShownRef.current = state.handNumber;
@@ -628,7 +634,7 @@ export default function App() {
     }
 
     const timer = setTimeout(() => {
-      socket.emit("hand:ready", joinedRoom, () => {});
+      socket.emit('hand:ready', joinedRoom, () => {});
       setHandReveal(null);
     }, HAND_OVER_REVEAL_MS);
 
@@ -638,32 +644,23 @@ export default function App() {
   useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
     if (!handActive || !isMyTurn || hasPlayMoves) {
-      autoTurnActionKeyRef.current = "";
+      autoTurnActionKeyRef.current = '';
       return;
     }
 
-    const autoAction: "draw" | "pass" | null = canDraw ? "draw" : canPass ? "pass" : null;
+    const autoAction: 'draw' | 'pass' | null = canDraw ? 'draw' : canPass ? 'pass' : null;
     if (!autoAction) return;
 
     const turnKey = `${state?.handNumber ?? 0}:${state?.currentPlayerIndex ?? -1}:${myHand.length}:${state?.boneyard.length ?? 0}:${autoAction}`;
     if (autoTurnActionKeyRef.current === turnKey) return;
 
     autoTurnActionKeyRef.current = turnKey;
-    if (autoAction === "draw") {
+    if (autoAction === 'draw') {
       draw();
     } else {
       pass();
     }
-  }, [
-    state,
-    isMyTurn,
-    hasPlayMoves,
-    canDraw,
-    canPass,
-    myHand.length,
-    draw,
-    pass,
-  ]);
+  }, [state, isMyTurn, hasPlayMoves, canDraw, canPass, myHand.length, draw, pass]);
 
   // Pulse the opp-tile card whenever the count changes
   useEffect(() => {
@@ -695,7 +692,7 @@ export default function App() {
     prevHudScoresRef.current = nextScores;
     if (!changed) return;
 
-    playTileSound("slam", isMuted);
+    playTileSound('slam', isMuted);
     setHudScorePulse(nextPulse);
     const timeout = setTimeout(() => setHudScorePulse({}), 260);
     return () => clearTimeout(timeout);
@@ -710,11 +707,11 @@ export default function App() {
     }
 
     const currentTileCount = state.board?.mainLine.length ?? 0;
-    if (
-      prevBoardTileCountRef.current > 0 &&
-      currentTileCount > prevBoardTileCountRef.current
-    ) {
-      playTileSound(currentTileCount - prevBoardTileCountRef.current > 1 ? "slam" : "standard", isMuted);
+    if (prevBoardTileCountRef.current > 0 && currentTileCount > prevBoardTileCountRef.current) {
+      playTileSound(
+        currentTileCount - prevBoardTileCountRef.current > 1 ? 'slam' : 'standard',
+        isMuted,
+      );
     }
     prevBoardTileCountRef.current = currentTileCount;
 
@@ -724,7 +721,7 @@ export default function App() {
       activePlayerId &&
       prevTurnIdRef.current !== activePlayerId
     ) {
-      playTileSound("deal", isMuted);
+      playTileSound('deal', isMuted);
     }
     prevTurnIdRef.current = activePlayerId;
   }, [inGame, state, isMuted]);
@@ -734,7 +731,7 @@ export default function App() {
     const isGameOver = Boolean(finalState?.gameOver);
     if (!isGameOver) {
       prevGameOverRef.current = false;
-      matchRecordKeyRef.current = "";
+      matchRecordKeyRef.current = '';
       return;
     }
     if (!finalState) return;
@@ -772,9 +769,9 @@ export default function App() {
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
 
-        if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
       // eslint-disable-next-line no-console
-      console.log("[StatsDebug] about to record match", {
+      console.log('[StatsDebug] about to record match', {
         joinedRoom,
         you,
         winnerSocketId,
@@ -787,8 +784,8 @@ export default function App() {
     }
 
     void recordMatchResult({
-      mode: "online",
-      opponentType: "online",
+      mode: 'online',
+      opponentType: 'online',
       winnerUserId,
       loserUserId,
       winnerScore,
@@ -797,29 +794,29 @@ export default function App() {
       roomCode: joinedRoom,
       metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
     }).then(({ error }) => {
-      if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+      if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
         // eslint-disable-next-line no-console
-        console.log("[StatsDebug] recordMatchResult response", { error });
+        console.log('[StatsDebug] recordMatchResult response', { error });
       }
 
-      if (error && typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+      if (error && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
         // eslint-disable-next-line no-console
-        console.error("[Stats] recordMatchResult failed:", error);
+        console.error('[Stats] recordMatchResult failed:', error);
       }
     });
   }, [state, joinedRoom, players, supabaseEnabled, authUser, you]);
 
   // ─── Render ───────────────────────────────────────────────
 
-  if (appMode === "noBrainer") {
-    return <NoBrainerLabScreen onBack={() => setAppMode("home")} />;
+  if (appMode === 'noBrainer') {
+    return <NoBrainerLabScreen onBack={() => setAppMode('home')} />;
   }
 
-  if (appMode === "bot") {
+  if (appMode === 'bot') {
     return (
       <div className="app">
         <BotMatchScreen
-          onBack={() => setAppMode("home")}
+          onBack={() => setAppMode('home')}
           userId={authUser?.id ?? null}
           username={authProfile?.username ?? null}
         />
@@ -827,17 +824,13 @@ export default function App() {
     );
   }
 
-  if (appMode === "daily") {
+  if (appMode === 'daily') {
     return (
-      <DailyPuzzleScreen
-        user={authUser}
-        profile={authProfile}
-        onBack={() => setAppMode("home")}
-      />
+      <DailyPuzzleScreen user={authUser} profile={authProfile} onBack={() => setAppMode('home')} />
     );
   }
 
-  if (appMode === "dailyAdmin") {
+  if (appMode === 'dailyAdmin') {
     if (!isAdmin) {
       return (
         <div className="app">
@@ -846,26 +839,28 @@ export default function App() {
             <div className="card lobby-card mode-card">
               <h2>Admin: Daily Puzzles</h2>
               <p>You are not authorized to access the puzzle editor.</p>
-              <button className="mode-inline-btn" onClick={() => setAppMode("home")}>Back to Home</button>
+              <button className="mode-inline-btn" onClick={() => setAppMode('home')}>
+                Back to Home
+              </button>
             </div>
           </div>
         </div>
       );
     }
-    return <DailyPuzzleAdminScreen onBack={() => setAppMode("home")} />;
+    return <DailyPuzzleAdminScreen onBack={() => setAppMode('home')} />;
   }
 
-  if (appMode === "home") {
+  if (appMode === 'home') {
     return (
       <div ref={appRootRef} className="app">
         <div
           style={{
-            position: "absolute",
+            position: 'absolute',
             top: 14,
             right: 16,
             zIndex: 120,
-            display: "flex",
-            alignItems: "center",
+            display: 'flex',
+            alignItems: 'center',
             gap: 8,
           }}
         >
@@ -892,7 +887,7 @@ export default function App() {
                   } catch {
                     // no-op: always force local UI reset below
                   } finally {
-                    setAppMode("home");
+                    setAppMode('home');
                     setJoinedRoom(null);
                     setState(null);
                     setPlayers([]);
@@ -901,13 +896,13 @@ export default function App() {
                     setSelectedTile(null);
                     setHandReveal(null);
                     setScoreTrackOpen(false);
-                    setError("");
-                    setActionError("");
+                    setError('');
+                    setActionError('');
                     setSigningOut(false);
                   }
                 }}
               >
-                {signingOut ? "Signing out..." : "Sign out"}
+                {signingOut ? 'Signing out...' : 'Sign out'}
               </button>
             </>
           )}
@@ -917,34 +912,57 @@ export default function App() {
           <div className="card lobby-card mode-card">
             <p className="lobby-kicker">Racehorse Dominoes</p>
             <h2>Choose Game Mode</h2>
-            <p className="lobby-server mode-subtitle">Pick online multiplayer or a local no-brainer practice run.</p>
+            <p className="lobby-server mode-subtitle">
+              Pick online multiplayer or a local no-brainer practice run.
+            </p>
             <div className="mode-actions">
-              <button className="mode-option mode-option-primary" onClick={() => setAppMode("multiplayer")}>
+              <button
+                className="mode-option mode-option-primary"
+                onClick={() => setAppMode('multiplayer')}
+              >
                 <span className="mode-option-title">Multiplayer Online</span>
                 <span className="mode-option-meta">Play live in private rooms</span>
               </button>
-              <button className="mode-option mode-option-secondary" onClick={() => setAppMode("noBrainer")}>
+              <button
+                className="mode-option mode-option-secondary"
+                onClick={() => setAppMode('noBrainer')}
+              >
                 <span className="mode-option-title">Practice → No-Brainer Lab</span>
                 <span className="mode-option-meta">Offline puzzle mode, no server needed</span>
               </button>
-              <button className="mode-option mode-option-secondary" onClick={() => setAppMode("bot")}>
+              <button
+                className="mode-option mode-option-secondary"
+                onClick={() => setAppMode('bot')}
+              >
                 <span className="mode-option-title">Practice → Play vs Bot</span>
-                <span className="mode-option-meta">Offline match vs a simple but strong bot (no server)</span>
+                <span className="mode-option-meta">
+                  Offline match vs a simple but strong bot (no server)
+                </span>
               </button>
-              <button className="mode-option mode-option-secondary" onClick={() => setAppMode("daily")}>
+              <button
+                className="mode-option mode-option-secondary"
+                onClick={() => setAppMode('daily')}
+              >
                 <span className="mode-option-title">Daily Puzzle</span>
-                <span className="mode-option-meta">Curated puzzle from today’s board situation</span>
+                <span className="mode-option-meta">
+                  Curated puzzle from today’s board situation
+                </span>
               </button>
               {isAdmin && (
-                <button className="mode-option mode-option-secondary" onClick={() => setAppMode("dailyAdmin")}>
+                <button
+                  className="mode-option mode-option-secondary"
+                  onClick={() => setAppMode('dailyAdmin')}
+                >
                   <span className="mode-option-title">Admin: Daily Puzzles</span>
-                  <span className="mode-option-meta">Create or edit curated daily puzzle entries</span>
+                  <span className="mode-option-meta">
+                    Create or edit curated daily puzzle entries
+                  </span>
                 </button>
               )}
             </div>
             {!supabaseEnabled && (
               <p className="lobby-server mode-subtitle" style={{ marginTop: 12 }}>
-                {supabaseConfigError ?? "Supabase not configured."}
+                {supabaseConfigError ?? 'Supabase not configured.'}
               </p>
             )}
           </div>
@@ -964,13 +982,13 @@ export default function App() {
           onSave={async (username) => {
             const result = await updateUsername(username);
             if (!result.error) {
-              window.localStorage.removeItem("username_onboarding_dismissed");
+              window.localStorage.removeItem('username_onboarding_dismissed');
               setUsernameModalOpen(false);
             }
             return result;
           }}
           onClose={() => {
-            window.localStorage.setItem("username_onboarding_dismissed", Date.now().toString());
+            window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
             setUsernameModalOpen(false);
           }}
         />
@@ -993,7 +1011,7 @@ export default function App() {
       {error && (
         <div className="error-banner">
           {error}
-          <button onClick={() => setError("")}>×</button>
+          <button onClick={() => setError('')}>×</button>
         </div>
       )}
 
@@ -1001,7 +1019,7 @@ export default function App() {
       {actionError && state && !state.handOver && !state.gameOver && (
         <div className="error-banner">
           {actionError}
-          <button onClick={() => setActionError("")}>×</button>
+          <button onClick={() => setActionError('')}>×</button>
         </div>
       )}
 
@@ -1012,11 +1030,19 @@ export default function App() {
           <div className="card lobby-card mode-card multiplayer-menu-card">
             <p className="lobby-kicker">Racehorse Dominoes</p>
             <h2>Multiplayer Online</h2>
-            <p className="lobby-server mode-subtitle">Connect to create a room or join a friend using a room code.</p>
+            <p className="lobby-server mode-subtitle">
+              Connect to create a room or join a friend using a room code.
+            </p>
             <p className="lobby-server mode-server-line">Server: {serverUrl}</p>
             <div className="mode-actions">
-              <button className="mode-option mode-option-primary" onClick={connect} disabled={isConnecting}>
-                <span className="mode-option-title">{isConnecting ? "Connecting..." : "Connect"}</span>
+              <button
+                className="mode-option mode-option-primary"
+                onClick={connect}
+                disabled={isConnecting}
+              >
+                <span className="mode-option-title">
+                  {isConnecting ? 'Connecting...' : 'Connect'}
+                </span>
                 <span className="mode-option-meta">Enable room creation and room joins</span>
               </button>
               <button className="mode-option mode-option-secondary" onClick={createRoom} disabled>
@@ -1049,7 +1075,9 @@ export default function App() {
           <div className="card lobby-card mode-card multiplayer-menu-card">
             <p className="lobby-kicker">Racehorse Dominoes</p>
             <h2>Join or Create a Room</h2>
-            <p className="lobby-server mode-subtitle">Create a new room or enter a code to join your friend instantly.</p>
+            <p className="lobby-server mode-subtitle">
+              Create a new room or enter a code to join your friend instantly.
+            </p>
             <div className="mode-actions">
               <button className="mode-option mode-option-primary" onClick={createRoom}>
                 <span className="mode-option-title">Create New Room</span>
@@ -1084,21 +1112,26 @@ export default function App() {
           <div className="card lobby-card mode-card multiplayer-menu-card">
             <p className="lobby-kicker">Racehorse Dominoes</p>
             <h2>Room: {joinedRoom}</h2>
-            <p className="lobby-server mode-subtitle">Waiting for all players to join before starting the hand.</p>
+            <p className="lobby-server mode-subtitle">
+              Waiting for all players to join before starting the hand.
+            </p>
             <div className="players-list mode-room-list">
               <h3>Players ({players.length}/2)</h3>
               {players.map((p) => (
-                <div key={p.id} className={`player-item mode-room-item ${p.id === you ? "you" : ""}`}>
+                <div
+                  key={p.id}
+                  className={`player-item mode-room-item ${p.id === you ? 'you' : ''}`}
+                >
                   <div className="mode-room-item-label">
-                    <span className="mode-room-item-title">{p.id === you ? "You" : `@${p.username}`}</span>
+                    <span className="mode-room-item-title">
+                      {p.id === you ? 'You' : `@${p.username}`}
+                    </span>
                     {p.id === you && <span className="mode-room-item-sub">@{p.username}</span>}
                   </div>
                   {p.id === you && <span className="badge">Host</span>}
                 </div>
               ))}
-              {players.length < 2 && (
-                <div className="waiting">Waiting for another player...</div>
-              )}
+              {players.length < 2 && <div className="waiting">Waiting for another player...</div>}
             </div>
             {players.length === 2 && (
               <button className="mode-option mode-option-primary" onClick={startGame}>
@@ -1122,8 +1155,8 @@ export default function App() {
             onClose={() => setScoreTrackOpen(false)}
             target={60}
             players={[
-              { label: opponentName, score: opponentScore, tone: "opp" },
-              { label: myName, score: myScore, tone: "you" },
+              { label: opponentName, score: opponentScore, tone: 'opp' },
+              { label: myName, score: myScore, tone: 'you' },
             ]}
           />
           {/* Game Over Overlay */}
@@ -1137,9 +1170,15 @@ export default function App() {
                 <div className="hand-reveal-card">
                   <h3>Hand Over</h3>
                   <p className="reveal-points">
-                    You: {handReveal.pointsAwarded.you >= 0 ? `+${handReveal.pointsAwarded.you}` : handReveal.pointsAwarded.you}
-                    {" · "}
-                    Opponent: {handReveal.pointsAwarded.opponent >= 0 ? `+${handReveal.pointsAwarded.opponent}` : handReveal.pointsAwarded.opponent}
+                    You:{' '}
+                    {handReveal.pointsAwarded.you >= 0
+                      ? `+${handReveal.pointsAwarded.you}`
+                      : handReveal.pointsAwarded.you}
+                    {' · '}
+                    Opponent:{' '}
+                    {handReveal.pointsAwarded.opponent >= 0
+                      ? `+${handReveal.pointsAwarded.opponent}`
+                      : handReveal.pointsAwarded.opponent}
                   </p>
                   <p className="reveal-label">Opponent remaining tiles</p>
                   <div className="reveal-tiles">
@@ -1160,13 +1199,13 @@ export default function App() {
           <div className="wl-top-rail" data-ui="hud">
             <button
               type="button"
-              className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? "is-active" : ""} ${opponentId && hudScorePulse[opponentId] ? "score-hit" : ""}`}
+              className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
             >
               <div className="wl-pill-top">
                 <span className="wl-player-label">{opponentName}</span>
-                <span className={`wl-tiles-chip ${oppTilePulse ? "is-pulsing" : ""}`}>
+                <span className={`wl-tiles-chip ${oppTilePulse ? 'is-pulsing' : ''}`}>
                   <span className="wl-tiles-count">{opponentTileCount}</span>
                   <span className="wl-tiles-text">tiles</span>
                 </span>
@@ -1174,14 +1213,14 @@ export default function App() {
               <span className="wl-player-score">{opponentScore}</span>
             </button>
             <div className="wl-center-status">
-              <span className={`wl-turn-label ${isMyTurn ? "your-turn" : "opp-turn"}`}>
-                {isMyTurn ? "Your move" : "Opponent thinking"}
+              <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
+                {isMyTurn ? 'Your move' : 'Opponent thinking'}
               </span>
               <span className="wl-room-code">Room {joinedRoom}</span>
             </div>
             <button
               type="button"
-              className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? "is-active" : ""} ${hudScorePulse[you] ? "score-hit" : ""}`}
+              className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? 'is-active' : ''} ${hudScorePulse[you] ? 'score-hit' : ''}`}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
             >
@@ -1229,24 +1268,28 @@ export default function App() {
                     <button
                       className="btn text icon-btn fullscreen-btn"
                       onClick={toggleFullscreen}
-                      aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                      title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                      aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                      title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                     >
                       <FullscreenIcon isFullscreen={isFullscreen} />
                     </button>
                     <button
                       className="btn text icon-btn volume-btn"
-                      onClick={() => setIsMuted(prev => !prev)}
-                      aria-label={isMuted ? "Unmute" : "Mute"}
-                      title={isMuted ? "Unmute" : "Mute"}
+                      onClick={() => setIsMuted((prev) => !prev)}
+                      aria-label={isMuted ? 'Unmute' : 'Mute'}
+                      title={isMuted ? 'Unmute' : 'Mute'}
                     >
                       <VolumeIcon isMuted={isMuted} />
                     </button>
                   </div>
                   <button
                     className="btn text compact"
-                    onClick={() => setUiTheme(prev => (prev === "green" ? "brown" : "green"))}
-                    title={uiTheme === "green" ? "Switch to brown felt + colored pips" : "Switch to green felt + black pips"}
+                    onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
+                    title={
+                      uiTheme === 'green'
+                        ? 'Switch to brown felt + colored pips'
+                        : 'Switch to green felt + black pips'
+                    }
                   >
                     Color
                   </button>

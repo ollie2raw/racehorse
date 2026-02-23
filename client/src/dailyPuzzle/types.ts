@@ -1,6 +1,6 @@
-import type { BoardState, Tile } from "../types";
+import type { BoardState, Tile } from '../types';
 
-export type DailyPuzzleType = "reach_target" | "one_turn_high_score";
+export type DailyPuzzleType = 'reach_target' | 'one_turn_high_score';
 
 export interface CuratedDailyPuzzleRow {
   id: string;

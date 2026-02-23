@@ -6,10 +6,10 @@ import type {
   PlacementPosition,
   Move,
   TileOrientation,
-} from "../types";
+} from '../types';
 
 export interface NoBrainerPracticeState {
-  status: "playing" | "won" | "failed";
+  status: 'playing' | 'won' | 'failed';
   message: string;
   handOpen: boolean;
   remainingHand: Tile[];
@@ -39,19 +39,21 @@ function tileMatchesEnd(tile: Tile, endValue: number): boolean {
 }
 
 function removeTileOnce(hand: Tile[], tile: Tile): Tile[] {
-  const idx = hand.findIndex(t => tileEquals(t, tile));
+  const idx = hand.findIndex((t) => tileEquals(t, tile));
   if (idx === -1) return [...hand];
   return [...hand.slice(0, idx), ...hand.slice(idx + 1)];
 }
 
-function parseBranchPosition(pos: PlacementPosition): { hubIndex: number; armIndex: number } | null {
-  if (pos === "left" || pos === "right") return null;
+function parseBranchPosition(
+  pos: PlacementPosition,
+): { hubIndex: number; armIndex: number } | null {
+  if (pos === 'left' || pos === 'right') return null;
   const match = pos.match(/^branch-(\d+)-(\d+)$/);
   if (!match) return null;
   return { hubIndex: Number(match[1]), armIndex: Number(match[2]) };
 }
 
-function hubIdAt(hub: BoardState["hubDoubles"][number], fallbackIdx: number): number {
+function hubIdAt(hub: BoardState['hubDoubles'][number], fallbackIdx: number): number {
   return hub.hubId ?? fallbackIdx;
 }
 
@@ -63,18 +65,18 @@ function nextHubId(board: BoardState): number {
 function getPlacementOrientation(
   tile: Tile,
   matchValue: number,
-  placementSide: "left" | "right" | "branch"
+  placementSide: 'left' | 'right' | 'branch',
 ): TileOrientation {
   if (isDouble(tile)) {
-    return "vertical-normal";
+    return 'vertical-normal';
   }
-  if (placementSide === "left") {
-    return tile.high === matchValue ? "horizontal-normal" : "horizontal-flipped";
+  if (placementSide === 'left') {
+    return tile.high === matchValue ? 'horizontal-normal' : 'horizontal-flipped';
   }
-  if (placementSide === "right") {
-    return tile.low === matchValue ? "horizontal-normal" : "horizontal-flipped";
+  if (placementSide === 'right') {
+    return tile.low === matchValue ? 'horizontal-normal' : 'horizontal-flipped';
   }
-  return tile.high === matchValue ? "vertical-flipped" : "vertical-normal";
+  return tile.high === matchValue ? 'vertical-flipped' : 'vertical-normal';
 }
 
 function exposedPip(tile: Tile, matchValue: number): number {
@@ -84,12 +86,12 @@ function exposedPip(tile: Tile, matchValue: number): number {
 }
 
 function recomputeBranchLaneHubStates(
-  hubDoubles: BoardState["hubDoubles"],
+  hubDoubles: BoardState['hubDoubles'],
   laneRef: string,
-  branchTiles: readonly PlacedTile[]
-): BoardState["hubDoubles"] {
-  return hubDoubles.map(h => {
-    if (h.laneType !== "branch" || h.laneRef !== laneRef || typeof h.branchDepth !== "number") {
+  branchTiles: readonly PlacedTile[],
+): BoardState['hubDoubles'] {
+  return hubDoubles.map((h) => {
+    if (h.laneType !== 'branch' || h.laneRef !== laneRef || typeof h.branchDepth !== 'number') {
       return h;
     }
     const depth = h.branchDepth;
@@ -104,12 +106,8 @@ function recomputeBranchLaneHubStates(
   });
 }
 
-function placeTileOnMainLine(
-  board: BoardState,
-  tile: Tile,
-  end: "left" | "right"
-): BoardState {
-  const matchValue = end === "left" ? board.leftEnd : board.rightEnd;
+function placeTileOnMainLine(board: BoardState, tile: Tile, end: 'left' | 'right'): BoardState {
+  const matchValue = end === 'left' ? board.leftEnd : board.rightEnd;
   const newExposedEnd = exposedPip(tile, matchValue);
   const tileIsDouble = isDouble(tile);
 
@@ -118,24 +116,23 @@ function placeTileOnMainLine(
     orientation: getPlacementOrientation(tile, matchValue, end),
   };
 
-  const newMainLine = end === "left"
-    ? [placedTile, ...board.mainLine]
-    : [...board.mainLine, placedTile];
+  const newMainLine =
+    end === 'left' ? [placedTile, ...board.mainLine] : [...board.mainLine, placedTile];
 
-  const newLeftEnd = end === "left" ? newExposedEnd : board.leftEnd;
-  const newRightEnd = end === "right" ? newExposedEnd : board.rightEnd;
-  const newLeftEndIsDouble = end === "left" ? tileIsDouble : board.leftEndIsDouble;
-  const newRightEndIsDouble = end === "right" ? tileIsDouble : board.rightEndIsDouble;
+  const newLeftEnd = end === 'left' ? newExposedEnd : board.leftEnd;
+  const newRightEnd = end === 'right' ? newExposedEnd : board.rightEnd;
+  const newLeftEndIsDouble = end === 'left' ? tileIsDouble : board.leftEndIsDouble;
+  const newRightEndIsDouble = end === 'right' ? tileIsDouble : board.rightEndIsDouble;
 
   let newHubDoubles = [...board.hubDoubles];
-  const endpointIndex = end === "left" ? 0 : board.mainLine.length - 1;
+  const endpointIndex = end === 'left' ? 0 : board.mainLine.length - 1;
   newHubDoubles = newHubDoubles.map((hub) => {
     const hubIndex = hub.mainlineIndex ?? hub.tileIndex;
     if (hubIndex !== endpointIndex) return hub;
     const leftSideFilled = hub.leftSideFilled ?? false;
     const rightSideFilled = hub.rightSideFilled ?? false;
-    const updatedLeft = end === "left" ? true : leftSideFilled;
-    const updatedRight = end === "right" ? true : rightSideFilled;
+    const updatedLeft = end === 'left' ? true : leftSideFilled;
+    const updatedRight = end === 'right' ? true : rightSideFilled;
     return {
       ...hub,
       leftSideFilled: updatedLeft,
@@ -144,8 +141,8 @@ function placeTileOnMainLine(
     };
   });
 
-  if (end === "left") {
-    newHubDoubles = newHubDoubles.map(h => {
+  if (end === 'left') {
+    newHubDoubles = newHubDoubles.map((h) => {
       const nextIndex = (h.mainlineIndex ?? h.tileIndex) + 1;
       return {
         ...h,
@@ -154,21 +151,21 @@ function placeTileOnMainLine(
       };
     });
   } else {
-    newHubDoubles = newHubDoubles.map(h => ({
+    newHubDoubles = newHubDoubles.map((h) => ({
       ...h,
       mainlineIndex: h.mainlineIndex ?? h.tileIndex,
     }));
   }
 
   if (tileIsDouble) {
-    const newHubIndex = end === "left" ? 0 : newMainLine.length - 1;
+    const newHubIndex = end === 'left' ? 0 : newMainLine.length - 1;
     const hubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
-    const leftSideFilled = end === "right";
-    const rightSideFilled = end === "left";
+    const leftSideFilled = end === 'right';
+    const rightSideFilled = end === 'left';
     newHubDoubles.push({
       hubId,
-      laneType: "mainline",
-      laneRef: "mainline",
+      laneType: 'mainline',
+      laneRef: 'mainline',
       tileIndex: newHubIndex,
       mainlineIndex: newHubIndex,
       hubValue: tile.high,
@@ -193,12 +190,12 @@ function placeTileOnBranch(
   board: BoardState,
   tile: Tile,
   hubRef: number,
-  armIndex: number
+  armIndex: number,
 ): BoardState {
   const hubIndex = board.hubDoubles.findIndex((h, idx) => hubIdAt(h, idx) === hubRef);
   const hub = hubIndex >= 0 ? board.hubDoubles[hubIndex] : null;
   if (!hub || !hub.isCrossed || armIndex >= 2) {
-    throw new Error("Invalid branch placement.");
+    throw new Error('Invalid branch placement.');
   }
 
   const tileIsDouble = isDouble(tile);
@@ -214,7 +211,7 @@ function placeTileOnBranch(
 
     const placedTile: PlacedTile = {
       tile,
-      orientation: getPlacementOrientation(tile, branchMatchValue, "branch"),
+      orientation: getPlacementOrientation(tile, branchMatchValue, 'branch'),
     };
 
     newBranches = hub.branches.map((b, i) =>
@@ -224,14 +221,14 @@ function placeTileOnBranch(
             openEnd: branchNewEnd,
             openEndIsDouble: tileIsDouble,
           }
-        : b
+        : b,
     );
 
     if (tileIsDouble) {
       const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
       newHubDoubles.push({
         hubId: newHubId,
-        laneType: "branch",
+        laneType: 'branch',
         laneRef,
         branchDepth: depthBeforeAppend,
         tileIndex: -1,
@@ -244,13 +241,15 @@ function placeTileOnBranch(
       });
     }
 
-    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
+    newHubDoubles = [
+      ...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []),
+    ];
   } else {
     const matchValue = hub.hubValue;
     const newExposedEnd = exposedPip(tile, matchValue);
     const placedTile: PlacedTile = {
       tile,
-      orientation: getPlacementOrientation(tile, matchValue, "branch"),
+      orientation: getPlacementOrientation(tile, matchValue, 'branch'),
     };
 
     newBranches = [...hub.branches];
@@ -264,7 +263,7 @@ function placeTileOnBranch(
       const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
       newHubDoubles.push({
         hubId: newHubId,
-        laneType: "branch",
+        laneType: 'branch',
         laneRef,
         branchDepth: 0,
         tileIndex: -1,
@@ -277,11 +276,13 @@ function placeTileOnBranch(
       });
     }
 
-    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
+    newHubDoubles = [
+      ...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []),
+    ];
   }
 
   newHubDoubles = newHubDoubles.map((h, i) =>
-    i === hubIndex ? { ...h, branches: newBranches } : h
+    i === hubIndex ? { ...h, branches: newBranches } : h,
   );
 
   return {
@@ -293,12 +294,12 @@ function placeTileOnBranch(
 function simulatePlacement(
   board: BoardState | null,
   tile: Tile,
-  position: PlacementPosition
+  position: PlacementPosition,
 ): BoardState {
   if (board === null) {
     const placedTile: PlacedTile = {
       tile,
-      orientation: isDouble(tile) ? "vertical-normal" : "horizontal-normal",
+      orientation: isDouble(tile) ? 'vertical-normal' : 'horizontal-normal',
     };
     const newBoard: BoardState = {
       mainLine: [placedTile],
@@ -312,18 +313,20 @@ function simulatePlacement(
       const hubId = nextHubId(newBoard);
       return {
         ...newBoard,
-        hubDoubles: [{
-          hubId,
-          laneType: "mainline",
-          laneRef: "mainline",
-          tileIndex: 0,
-          mainlineIndex: 0,
-          hubValue: tile.high,
-          isCrossed: false,
-          leftSideFilled: false,
-          rightSideFilled: false,
-          branches: [],
-        }],
+        hubDoubles: [
+          {
+            hubId,
+            laneType: 'mainline',
+            laneRef: 'mainline',
+            tileIndex: 0,
+            mainlineIndex: 0,
+            hubValue: tile.high,
+            isCrossed: false,
+            leftSideFilled: false,
+            rightSideFilled: false,
+            branches: [],
+          },
+        ],
       };
     }
     return newBoard;
@@ -333,17 +336,19 @@ function simulatePlacement(
   if (branchPos !== null) {
     return placeTileOnBranch(board, tile, branchPos.hubIndex, branchPos.armIndex);
   }
-  return placeTileOnMainLine(board, tile, position as "left" | "right");
+  return placeTileOnMainLine(board, tile, position as 'left' | 'right');
 }
 
-function getOpenEnds(board: BoardState | null): Array<{ position: PlacementPosition; matchValue: number }> {
+function getOpenEnds(
+  board: BoardState | null,
+): Array<{ position: PlacementPosition; matchValue: number }> {
   if (board === null) {
-    return [{ position: "left", matchValue: -1 }];
+    return [{ position: 'left', matchValue: -1 }];
   }
 
   const ends: Array<{ position: PlacementPosition; matchValue: number }> = [
-    { position: "left", matchValue: board.leftEnd },
-    { position: "right", matchValue: board.rightEnd },
+    { position: 'left', matchValue: board.leftEnd },
+    { position: 'right', matchValue: board.rightEnd },
   ];
 
   for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
@@ -362,34 +367,31 @@ function getOpenEnds(board: BoardState | null): Array<{ position: PlacementPosit
   return ends;
 }
 
-function endpointMatchFromOrientation(
-  board: BoardState,
-  side: "left" | "right"
-): number {
-  const placed = side === "left"
-    ? board.mainLine[0]
-    : board.mainLine[board.mainLine.length - 1];
-  if (!placed) return side === "left" ? board.leftEnd : board.rightEnd;
+function endpointMatchFromOrientation(board: BoardState, side: 'left' | 'right'): number {
+  const placed = side === 'left' ? board.mainLine[0] : board.mainLine[board.mainLine.length - 1];
+  if (!placed) return side === 'left' ? board.leftEnd : board.rightEnd;
   const tile = placed.tile;
   if (isDouble(tile)) return tile.high;
-  if (placed.orientation === "horizontal-normal") {
-    return side === "left" ? tile.low : tile.high;
+  if (placed.orientation === 'horizontal-normal') {
+    return side === 'left' ? tile.low : tile.high;
   }
-  if (placed.orientation === "horizontal-flipped") {
-    return side === "left" ? tile.high : tile.low;
+  if (placed.orientation === 'horizontal-flipped') {
+    return side === 'left' ? tile.high : tile.low;
   }
-  return side === "left" ? board.leftEnd : board.rightEnd;
+  return side === 'left' ? board.leftEnd : board.rightEnd;
 }
 
-function getMatchableOpenEnds(board: BoardState | null): Array<{ position: PlacementPosition; matchValue: number }> {
+function getMatchableOpenEnds(
+  board: BoardState | null,
+): Array<{ position: PlacementPosition; matchValue: number }> {
   const openEndsRaw = getOpenEnds(board);
   if (!board) return openEndsRaw;
-  return openEndsRaw.map(end => {
-    if (end.position === "left") {
-      return { ...end, matchValue: endpointMatchFromOrientation(board, "left") };
+  return openEndsRaw.map((end) => {
+    if (end.position === 'left') {
+      return { ...end, matchValue: endpointMatchFromOrientation(board, 'left') };
     }
-    if (end.position === "right") {
-      return { ...end, matchValue: endpointMatchFromOrientation(board, "right") };
+    if (end.position === 'right') {
+      return { ...end, matchValue: endpointMatchFromOrientation(board, 'right') };
     }
     return end;
   });
@@ -422,17 +424,17 @@ function computePlayScore(board: BoardState): number {
 function getLegalMovesForState(
   remainingHand: Tile[],
   board: BoardState | null,
-  handOpen: boolean
+  handOpen: boolean,
 ): Move[] {
   const moves: Move[] = [];
 
   if (!handOpen) {
     for (const tile of remainingHand) {
-      const simBoard = simulatePlacement(null, tile, "left");
+      const simBoard = simulatePlacement(null, tile, 'left');
       const scores = computePlayScore(simBoard) > 0;
       const double = isDouble(tile);
       if (double || scores) {
-        moves.push({ type: "play", tile, position: "left" });
+        moves.push({ type: 'play', tile, position: 'left' });
       }
     }
     return moves;
@@ -448,7 +450,7 @@ function getLegalMovesForState(
     }
     const uniquePositions = [...new Set(matchingPositions)];
     for (const position of uniquePositions) {
-      moves.push({ type: "play", tile, position });
+      moves.push({ type: 'play', tile, position });
     }
   }
   return moves;
@@ -458,7 +460,7 @@ function toDerived(board: BoardState | null) {
   if (!board) {
     return { openEnds: [], openSum: 0 };
   }
-  const openEnds = getMatchableOpenEnds(board).map(end => end.matchValue);
+  const openEnds = getMatchableOpenEnds(board).map((end) => end.matchValue);
   const openSum = computeOpenEndsSum(board);
   return { openEnds, openSum };
 }
@@ -470,8 +472,8 @@ export function createPracticeState(hand: Tile[]): NoBrainerPracticeState {
 
   if (legalMoves.length === 0) {
     return {
-      status: "failed",
-      message: "No legal opening move (must open with a double or scoring tile).",
+      status: 'failed',
+      message: 'No legal opening move (must open with a double or scoring tile).',
       handOpen: false,
       remainingHand,
       board,
@@ -484,8 +486,8 @@ export function createPracticeState(hand: Tile[]): NoBrainerPracticeState {
   }
 
   return {
-    status: "playing",
-    message: "Play all 7 tiles in one turn. Doubles or scoring plays let you continue.",
+    status: 'playing',
+    message: 'Play all 7 tiles in one turn. Doubles or scoring plays let you continue.',
     handOpen: false,
     remainingHand,
     board,
@@ -500,15 +502,19 @@ export function createPracticeState(hand: Tile[]): NoBrainerPracticeState {
 export function playPracticeMove(
   state: NoBrainerPracticeState,
   tile: Tile,
-  position: PlacementPosition
+  position: PlacementPosition,
 ): NoBrainerPracticeState {
-  if (state.status !== "playing") return state;
+  if (state.status !== 'playing') return state;
 
   const isLegal = state.legalMoves.some(
-    move => move.type === "play" && move.position === position && move.tile && tileEquals(move.tile, tile)
+    (move) =>
+      move.type === 'play' &&
+      move.position === position &&
+      move.tile &&
+      tileEquals(move.tile, tile),
   );
   if (!isLegal) {
-    return { ...state, message: "Illegal move for selected position." };
+    return { ...state, message: 'Illegal move for selected position.' };
   }
 
   const nextBoard = simulatePlacement(state.board, tile, position);
@@ -523,8 +529,8 @@ export function playPracticeMove(
     if (playedDouble || scored) {
       return {
         ...state,
-        status: "failed",
-        message: "Final tile cannot be a double or scoring tile.",
+        status: 'failed',
+        message: 'Final tile cannot be a double or scoring tile.',
         handOpen: true,
         remainingHand: nextHand,
         board: nextBoard,
@@ -537,8 +543,8 @@ export function playPracticeMove(
     }
     return {
       ...state,
-      status: "won",
-      message: "Perfect run. Hand cleared legally.",
+      status: 'won',
+      message: 'Perfect run. Hand cleared legally.',
       handOpen: true,
       remainingHand: nextHand,
       board: nextBoard,
@@ -553,8 +559,8 @@ export function playPracticeMove(
   if (!mustContinue) {
     return {
       ...state,
-      status: "failed",
-      message: "Turn ended: move was neither a double nor a scoring play.",
+      status: 'failed',
+      message: 'Turn ended: move was neither a double nor a scoring play.',
       handOpen: true,
       remainingHand: nextHand,
       board: nextBoard,
@@ -570,8 +576,8 @@ export function playPracticeMove(
   if (legalMoves.length === 0) {
     return {
       ...state,
-      status: "failed",
-      message: "No legal continuation move available.",
+      status: 'failed',
+      message: 'No legal continuation move available.',
       handOpen: true,
       remainingHand: nextHand,
       board: nextBoard,
@@ -585,8 +591,8 @@ export function playPracticeMove(
 
   return {
     ...state,
-    status: "playing",
-    message: playedDouble ? "Double played. Continue your turn." : "Scored! Continue your turn.",
+    status: 'playing',
+    message: playedDouble ? 'Double played. Continue your turn.' : 'Scored! Continue your turn.',
     handOpen: true,
     remainingHand: nextHand,
     board: nextBoard,
@@ -598,16 +604,13 @@ export function playPracticeMove(
   };
 }
 
-export function hintForState(
-  state: NoBrainerPracticeState,
-  example: Tile[]
-): PracticeHint | null {
-  if (state.status !== "playing") return null;
+export function hintForState(state: NoBrainerPracticeState, example: Tile[]): PracticeHint | null {
+  if (state.status !== 'playing') return null;
   for (const candidate of example) {
-    const inHand = state.remainingHand.some(t => tileEquals(t, candidate));
+    const inHand = state.remainingHand.some((t) => tileEquals(t, candidate));
     if (!inHand) continue;
     const legal = state.legalMoves.find(
-      move => move.type === "play" && move.tile && tileEquals(move.tile, candidate)
+      (move) => move.type === 'play' && move.tile && tileEquals(move.tile, candidate),
     );
     if (legal && legal.position) {
       return { tile: legal.tile!, position: legal.position };

@@ -12,16 +12,25 @@
 
 html,
 body {
-  background: radial-gradient(circle at top center, rgba(20,30,40,0.9), rgba(5,10,15,1));
+  background: radial-gradient(circle at top center, rgba(20, 30, 40, 0.9), rgba(5, 10, 15, 1));
   transition: background 240ms ease;
 }
 
 .app {
-  background: radial-gradient(circle at 50% 20%, var(--premium-bg-top) 0%, var(--premium-bg-mid) 60%, var(--premium-bg-bottom) 100%);
+  background: radial-gradient(
+    circle at 50% 20%,
+    var(--premium-bg-top) 0%,
+    var(--premium-bg-mid) 60%,
+    var(--premium-bg-bottom) 100%
+  );
 }
 
 .game-screen {
-  background: radial-gradient(circle at 50% 38%, rgba(10, 16, 24, 0.42) 0%, rgba(3, 5, 9, 0.82) 100%);
+  background: radial-gradient(
+    circle at 50% 38%,
+    rgba(10, 16, 24, 0.42) 0%,
+    rgba(3, 5, 9, 0.82) 100%
+  );
 }
 
 .board-area {
@@ -29,30 +38,32 @@ body {
   max-width: 94vw;
   margin: 32px auto 24px;
   border-radius: 24px;
-  outline: 1px solid rgba(255,255,255,0.06);
+  outline: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow:
-    0 60px 120px rgba(0,0,0,0.75),
-    0 0 60px rgba(0,255,140,0.18),
+    0 60px 120px rgba(0, 0, 0, 0.75),
+    0 0 60px rgba(0, 255, 140, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
 
 .board-area::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 45%,
+  background: radial-gradient(
+    circle at 50% 45%,
     rgba(255, 255, 255, 0.18) 0%,
     rgba(255, 255, 255, 0.08) 25%,
     rgba(0, 0, 0, 0) 55%,
-    rgba(0, 0, 0, 0.42) 100%);
+    rgba(0, 0, 0, 0.42) 100%
+  );
   mix-blend-mode: soft-light;
 }
 
 .board-area::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -88,7 +99,9 @@ body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 24px 72px rgba(0, 0, 0, 0.72);
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .scoreboard:hover {
@@ -110,7 +123,10 @@ body {
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
-  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .player-score:hover {
@@ -165,7 +181,11 @@ body {
   color: rgba(255, 255, 255, 0.95);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
-  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  transition:
+    transform 160ms ease,
+    filter 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
 }
 
 .btn:hover:not(:disabled) {

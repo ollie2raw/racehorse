@@ -7,12 +7,12 @@ export interface Tile {
 }
 
 export type TileOrientation =
-  | "horizontal-normal"
-  | "horizontal-flipped"
-  | "vertical-normal"
-  | "vertical-flipped";
+  | 'horizontal-normal'
+  | 'horizontal-flipped'
+  | 'vertical-normal'
+  | 'vertical-flipped';
 
-export type PlacementPosition = "left" | "right" | `branch-${number}-${number}`;
+export type PlacementPosition = 'left' | 'right' | `branch-${number}-${number}`;
 
 export interface PlacedTile {
   tile: Tile;
@@ -27,7 +27,7 @@ export interface BranchArm {
 
 export interface HubDouble {
   hubId?: number;
-  laneType?: "mainline" | "branch";
+  laneType?: 'mainline' | 'branch';
   laneRef?: string;
   branchDepth?: number;
   tileIndex: number;
@@ -66,7 +66,7 @@ export interface GameState {
 }
 
 export interface Move {
-  type: "play" | "pass";
+  type: 'play' | 'pass';
   tile?: Tile;
   position?: PlacementPosition;
 }

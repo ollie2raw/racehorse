@@ -6,10 +6,10 @@ import type {
   PlacedTile,
   Tile,
   TileOrientation,
-} from "../types";
+} from '../types';
 
-export type BotPlayerId = "you" | "bot";
-export type BotHandEndReason = "domino" | "blocked";
+export type BotPlayerId = 'you' | 'bot';
+export type BotHandEndReason = 'domino' | 'blocked';
 export type BotDealSize = 7 | 14;
 
 export interface BotPlayerState {
@@ -71,15 +71,17 @@ function tileMatchesEnd(tile: Tile, endValue: number): boolean {
   return tile.high === endValue || tile.low === endValue;
 }
 
-function parseBranchPosition(pos: PlacementPosition): { hubIndex: number; armIndex: number } | null {
-  if (pos === "left" || pos === "right") return null;
+function parseBranchPosition(
+  pos: PlacementPosition,
+): { hubIndex: number; armIndex: number } | null {
+  if (pos === 'left' || pos === 'right') return null;
   const match = pos.match(/^branch-(\d+)-(\d+)$/);
   if (!match) return null;
   return { hubIndex: Number(match[1]), armIndex: Number(match[2]) };
 }
 
 function removeTileOnce(hand: Tile[], tile: Tile): Tile[] {
-  const idx = hand.findIndex(t => tileEquals(t, tile));
+  const idx = hand.findIndex((t) => tileEquals(t, tile));
   if (idx === -1) return [...hand];
   return [...hand.slice(0, idx), ...hand.slice(idx + 1)];
 }
@@ -111,7 +113,7 @@ function createDealtHand(
   scores: Record<BotPlayerId, number>,
   handNumber: number,
   winningScore: number,
-  dealSize: BotDealSize
+  dealSize: BotDealSize,
 ): BotMatchState {
   const deck = shuffle(generateDoubleSixSet());
   const youHand = deck.slice(0, dealSize);
@@ -119,7 +121,7 @@ function createDealtHand(
   const remaining = deck.slice(dealSize * 2);
   const deadTiles = dealSize === 14 ? [] : remaining.slice(remaining.length - 2);
   const boneyard = dealSize === 14 ? [] : remaining.slice(0, remaining.length - 2);
-  const currentPlayer: BotPlayerId = handNumber % 2 === 1 ? "you" : "bot";
+  const currentPlayer: BotPlayerId = handNumber % 2 === 1 ? 'you' : 'bot';
 
   return {
     players: {
@@ -152,11 +154,11 @@ export function startNextBotHand(state: BotMatchState): BotMatchState {
     { you: state.players.you.score, bot: state.players.bot.score },
     state.handNumber + 1,
     state.winningScore,
-    state.dealSize
+    state.dealSize,
   );
 }
 
-function hubIdAt(hub: BoardState["hubDoubles"][number], fallbackIdx: number): number {
+function hubIdAt(hub: BoardState['hubDoubles'][number], fallbackIdx: number): number {
   return hub.hubId ?? fallbackIdx;
 }
 
@@ -168,18 +170,18 @@ function nextHubId(board: BoardState): number {
 function getPlacementOrientation(
   tile: Tile,
   matchValue: number,
-  placementSide: "left" | "right" | "branch"
+  placementSide: 'left' | 'right' | 'branch',
 ): TileOrientation {
   if (isDouble(tile)) {
-    return "vertical-normal";
+    return 'vertical-normal';
   }
-  if (placementSide === "left") {
-    return tile.high === matchValue ? "horizontal-normal" : "horizontal-flipped";
+  if (placementSide === 'left') {
+    return tile.high === matchValue ? 'horizontal-normal' : 'horizontal-flipped';
   }
-  if (placementSide === "right") {
-    return tile.low === matchValue ? "horizontal-normal" : "horizontal-flipped";
+  if (placementSide === 'right') {
+    return tile.low === matchValue ? 'horizontal-normal' : 'horizontal-flipped';
   }
-  return tile.high === matchValue ? "vertical-flipped" : "vertical-normal";
+  return tile.high === matchValue ? 'vertical-flipped' : 'vertical-normal';
 }
 
 function exposedPip(tile: Tile, matchValue: number): number {
@@ -189,12 +191,12 @@ function exposedPip(tile: Tile, matchValue: number): number {
 }
 
 function recomputeBranchLaneHubStates(
-  hubDoubles: BoardState["hubDoubles"],
+  hubDoubles: BoardState['hubDoubles'],
   laneRef: string,
-  branchTiles: readonly PlacedTile[]
-): BoardState["hubDoubles"] {
-  return hubDoubles.map(h => {
-    if (h.laneType !== "branch" || h.laneRef !== laneRef || typeof h.branchDepth !== "number") {
+  branchTiles: readonly PlacedTile[],
+): BoardState['hubDoubles'] {
+  return hubDoubles.map((h) => {
+    if (h.laneType !== 'branch' || h.laneRef !== laneRef || typeof h.branchDepth !== 'number') {
       return h;
     }
     const depth = h.branchDepth;
@@ -209,8 +211,8 @@ function recomputeBranchLaneHubStates(
   });
 }
 
-function placeTileOnMainLine(board: BoardState, tile: Tile, end: "left" | "right"): BoardState {
-  const matchValue = end === "left" ? board.leftEnd : board.rightEnd;
+function placeTileOnMainLine(board: BoardState, tile: Tile, end: 'left' | 'right'): BoardState {
+  const matchValue = end === 'left' ? board.leftEnd : board.rightEnd;
   const newExposedEnd = exposedPip(tile, matchValue);
   const tileIsDouble = isDouble(tile);
 
@@ -219,24 +221,23 @@ function placeTileOnMainLine(board: BoardState, tile: Tile, end: "left" | "right
     orientation: getPlacementOrientation(tile, matchValue, end),
   };
 
-  const newMainLine = end === "left"
-    ? [placedTile, ...board.mainLine]
-    : [...board.mainLine, placedTile];
+  const newMainLine =
+    end === 'left' ? [placedTile, ...board.mainLine] : [...board.mainLine, placedTile];
 
-  const newLeftEnd = end === "left" ? newExposedEnd : board.leftEnd;
-  const newRightEnd = end === "right" ? newExposedEnd : board.rightEnd;
-  const newLeftEndIsDouble = end === "left" ? tileIsDouble : board.leftEndIsDouble;
-  const newRightEndIsDouble = end === "right" ? tileIsDouble : board.rightEndIsDouble;
+  const newLeftEnd = end === 'left' ? newExposedEnd : board.leftEnd;
+  const newRightEnd = end === 'right' ? newExposedEnd : board.rightEnd;
+  const newLeftEndIsDouble = end === 'left' ? tileIsDouble : board.leftEndIsDouble;
+  const newRightEndIsDouble = end === 'right' ? tileIsDouble : board.rightEndIsDouble;
 
   let newHubDoubles = [...board.hubDoubles];
-  const endpointIndex = end === "left" ? 0 : board.mainLine.length - 1;
+  const endpointIndex = end === 'left' ? 0 : board.mainLine.length - 1;
   newHubDoubles = newHubDoubles.map((hub) => {
     const hubIndex = hub.mainlineIndex ?? hub.tileIndex;
     if (hubIndex !== endpointIndex) return hub;
     const leftSideFilled = hub.leftSideFilled ?? false;
     const rightSideFilled = hub.rightSideFilled ?? false;
-    const updatedLeft = end === "left" ? true : leftSideFilled;
-    const updatedRight = end === "right" ? true : rightSideFilled;
+    const updatedLeft = end === 'left' ? true : leftSideFilled;
+    const updatedRight = end === 'right' ? true : rightSideFilled;
     return {
       ...hub,
       leftSideFilled: updatedLeft,
@@ -245,8 +246,8 @@ function placeTileOnMainLine(board: BoardState, tile: Tile, end: "left" | "right
     };
   });
 
-  if (end === "left") {
-    newHubDoubles = newHubDoubles.map(h => {
+  if (end === 'left') {
+    newHubDoubles = newHubDoubles.map((h) => {
       const nextIndex = (h.mainlineIndex ?? h.tileIndex) + 1;
       return {
         ...h,
@@ -255,21 +256,21 @@ function placeTileOnMainLine(board: BoardState, tile: Tile, end: "left" | "right
       };
     });
   } else {
-    newHubDoubles = newHubDoubles.map(h => ({
+    newHubDoubles = newHubDoubles.map((h) => ({
       ...h,
       mainlineIndex: h.mainlineIndex ?? h.tileIndex,
     }));
   }
 
   if (tileIsDouble) {
-    const newHubIndex = end === "left" ? 0 : newMainLine.length - 1;
+    const newHubIndex = end === 'left' ? 0 : newMainLine.length - 1;
     const hubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
-    const leftSideFilled = end === "right";
-    const rightSideFilled = end === "left";
+    const leftSideFilled = end === 'right';
+    const rightSideFilled = end === 'left';
     newHubDoubles.push({
       hubId,
-      laneType: "mainline",
-      laneRef: "mainline",
+      laneType: 'mainline',
+      laneRef: 'mainline',
       tileIndex: newHubIndex,
       mainlineIndex: newHubIndex,
       hubValue: tile.high,
@@ -294,12 +295,12 @@ function placeTileOnBranch(
   board: BoardState,
   tile: Tile,
   hubRef: number,
-  armIndex: number
+  armIndex: number,
 ): BoardState {
   const hubIndex = board.hubDoubles.findIndex((h, idx) => hubIdAt(h, idx) === hubRef);
   const hub = hubIndex >= 0 ? board.hubDoubles[hubIndex] : null;
   if (!hub || !hub.isCrossed || armIndex >= 2) {
-    throw new Error("Invalid branch placement.");
+    throw new Error('Invalid branch placement.');
   }
 
   const tileIsDouble = isDouble(tile);
@@ -315,7 +316,7 @@ function placeTileOnBranch(
 
     const placedTile: PlacedTile = {
       tile,
-      orientation: getPlacementOrientation(tile, branchMatchValue, "branch"),
+      orientation: getPlacementOrientation(tile, branchMatchValue, 'branch'),
     };
 
     newBranches = hub.branches.map((b, i) =>
@@ -325,14 +326,14 @@ function placeTileOnBranch(
             openEnd: branchNewEnd,
             openEndIsDouble: tileIsDouble,
           }
-        : b
+        : b,
     );
 
     if (tileIsDouble) {
       const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
       newHubDoubles.push({
         hubId: newHubId,
-        laneType: "branch",
+        laneType: 'branch',
         laneRef,
         branchDepth: depthBeforeAppend,
         tileIndex: -1,
@@ -345,13 +346,15 @@ function placeTileOnBranch(
       });
     }
 
-    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
+    newHubDoubles = [
+      ...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []),
+    ];
   } else {
     const matchValue = hub.hubValue;
     const newExposedEnd = exposedPip(tile, matchValue);
     const placedTile: PlacedTile = {
       tile,
-      orientation: getPlacementOrientation(tile, matchValue, "branch"),
+      orientation: getPlacementOrientation(tile, matchValue, 'branch'),
     };
 
     newBranches = [...hub.branches];
@@ -365,7 +368,7 @@ function placeTileOnBranch(
       const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
       newHubDoubles.push({
         hubId: newHubId,
-        laneType: "branch",
+        laneType: 'branch',
         laneRef,
         branchDepth: 0,
         tileIndex: -1,
@@ -378,11 +381,13 @@ function placeTileOnBranch(
       });
     }
 
-    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
+    newHubDoubles = [
+      ...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []),
+    ];
   }
 
   newHubDoubles = newHubDoubles.map((h, i) =>
-    i === hubIndex ? { ...h, branches: newBranches } : h
+    i === hubIndex ? { ...h, branches: newBranches } : h,
   );
 
   return {
@@ -391,11 +396,15 @@ function placeTileOnBranch(
   };
 }
 
-function simulatePlacement(board: BoardState | null, tile: Tile, position: PlacementPosition): BoardState {
+function simulatePlacement(
+  board: BoardState | null,
+  tile: Tile,
+  position: PlacementPosition,
+): BoardState {
   if (board === null) {
     const placedTile: PlacedTile = {
       tile,
-      orientation: isDouble(tile) ? "vertical-normal" : "horizontal-normal",
+      orientation: isDouble(tile) ? 'vertical-normal' : 'horizontal-normal',
     };
     const nextBoard: BoardState = {
       mainLine: [placedTile],
@@ -409,18 +418,20 @@ function simulatePlacement(board: BoardState | null, tile: Tile, position: Place
       const hubId = nextHubId(nextBoard);
       return {
         ...nextBoard,
-        hubDoubles: [{
-          hubId,
-          laneType: "mainline",
-          laneRef: "mainline",
-          tileIndex: 0,
-          mainlineIndex: 0,
-          hubValue: tile.high,
-          isCrossed: false,
-          leftSideFilled: false,
-          rightSideFilled: false,
-          branches: [],
-        }],
+        hubDoubles: [
+          {
+            hubId,
+            laneType: 'mainline',
+            laneRef: 'mainline',
+            tileIndex: 0,
+            mainlineIndex: 0,
+            hubValue: tile.high,
+            isCrossed: false,
+            leftSideFilled: false,
+            rightSideFilled: false,
+            branches: [],
+          },
+        ],
       };
     }
     return nextBoard;
@@ -430,32 +441,32 @@ function simulatePlacement(board: BoardState | null, tile: Tile, position: Place
   if (branchPos) {
     return placeTileOnBranch(board, tile, branchPos.hubIndex, branchPos.armIndex);
   }
-  return placeTileOnMainLine(board, tile, position as "left" | "right");
+  return placeTileOnMainLine(board, tile, position as 'left' | 'right');
 }
 
-function endpointMatchFromOrientation(board: BoardState, side: "left" | "right"): number {
-  const placed = side === "left"
-    ? board.mainLine[0]
-    : board.mainLine[board.mainLine.length - 1];
-  if (!placed) return side === "left" ? board.leftEnd : board.rightEnd;
+function endpointMatchFromOrientation(board: BoardState, side: 'left' | 'right'): number {
+  const placed = side === 'left' ? board.mainLine[0] : board.mainLine[board.mainLine.length - 1];
+  if (!placed) return side === 'left' ? board.leftEnd : board.rightEnd;
   const tile = placed.tile;
   if (isDouble(tile)) return tile.high;
-  if (placed.orientation === "horizontal-normal") {
-    return side === "left" ? tile.low : tile.high;
+  if (placed.orientation === 'horizontal-normal') {
+    return side === 'left' ? tile.low : tile.high;
   }
-  if (placed.orientation === "horizontal-flipped") {
-    return side === "left" ? tile.high : tile.low;
+  if (placed.orientation === 'horizontal-flipped') {
+    return side === 'left' ? tile.high : tile.low;
   }
-  return side === "left" ? board.leftEnd : board.rightEnd;
+  return side === 'left' ? board.leftEnd : board.rightEnd;
 }
 
-function getOpenEnds(board: BoardState | null): Array<{ position: PlacementPosition; matchValue: number }> {
+function getOpenEnds(
+  board: BoardState | null,
+): Array<{ position: PlacementPosition; matchValue: number }> {
   if (!board) {
-    return [{ position: "left", matchValue: -1 }];
+    return [{ position: 'left', matchValue: -1 }];
   }
   const ends: Array<{ position: PlacementPosition; matchValue: number }> = [
-    { position: "left", matchValue: board.leftEnd },
-    { position: "right", matchValue: board.rightEnd },
+    { position: 'left', matchValue: board.leftEnd },
+    { position: 'right', matchValue: board.rightEnd },
   ];
 
   for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
@@ -473,15 +484,17 @@ function getOpenEnds(board: BoardState | null): Array<{ position: PlacementPosit
   return ends;
 }
 
-function getMatchableOpenEnds(board: BoardState | null): Array<{ position: PlacementPosition; matchValue: number }> {
+function getMatchableOpenEnds(
+  board: BoardState | null,
+): Array<{ position: PlacementPosition; matchValue: number }> {
   const raw = getOpenEnds(board);
   if (!board) return raw;
-  return raw.map(end => {
-    if (end.position === "left") {
-      return { ...end, matchValue: endpointMatchFromOrientation(board, "left") };
+  return raw.map((end) => {
+    if (end.position === 'left') {
+      return { ...end, matchValue: endpointMatchFromOrientation(board, 'left') };
     }
-    if (end.position === "right") {
-      return { ...end, matchValue: endpointMatchFromOrientation(board, "right") };
+    if (end.position === 'right') {
+      return { ...end, matchValue: endpointMatchFromOrientation(board, 'right') };
     }
     return end;
   });
@@ -512,16 +525,16 @@ export function computePlayScore(board: BoardState): number {
 
 export function getDisplayOpenEnds(state: BotMatchState): number[] {
   if (!state.board) return [];
-  return getMatchableOpenEnds(state.board).map(end => end.matchValue);
+  return getMatchableOpenEnds(state.board).map((end) => end.matchValue);
 }
 
 function nextPlayer(player: BotPlayerId): BotPlayerId {
-  return player === "you" ? "bot" : "you";
+  return player === 'you' ? 'bot' : 'you';
 }
 
 function winnerFromScores(scores: Record<BotPlayerId, number>, target: number): BotPlayerId | null {
   if (scores.you < target && scores.bot < target) return null;
-  return scores.you >= scores.bot ? "you" : "bot";
+  return scores.you >= scores.bot ? 'you' : 'bot';
 }
 
 function computeHandPenalty(hand: Tile[]): number {
@@ -541,10 +554,10 @@ function getPlayMoves(state: BotMatchState, player: BotPlayerId): Move[] {
 
   if (!state.handOpen) {
     for (const tile of hand) {
-      const simBoard = simulatePlacement(null, tile, "left");
+      const simBoard = simulatePlacement(null, tile, 'left');
       const scores = computePlayScore(simBoard) > 0;
       if (isDouble(tile) || scores) {
-        playMoves.push({ type: "play", tile, position: "left" });
+        playMoves.push({ type: 'play', tile, position: 'left' });
       }
     }
     return playMoves;
@@ -560,7 +573,7 @@ function getPlayMoves(state: BotMatchState, player: BotPlayerId): Move[] {
     }
     const uniquePositions = [...new Set(matching)];
     for (const position of uniquePositions) {
-      playMoves.push({ type: "play", tile, position });
+      playMoves.push({ type: 'play', tile, position });
     }
   }
   return playMoves;
@@ -570,16 +583,21 @@ export function getLegalMoves(state: BotMatchState, player: BotPlayerId): Move[]
   if (state.currentPlayer !== player || state.handOver || state.gameOver) return [];
   const playMoves = getPlayMoves(state, player);
   if (playMoves.length === 0 && state.boneyard.length === 0) {
-    return [{ type: "pass" }];
+    return [{ type: 'pass' }];
   }
   return playMoves;
 }
 
-export function previewPlayMove(state: BotMatchState, player: BotPlayerId, move: Move): BotMovePreview | null {
-  if (move.type !== "play" || !move.tile || !move.position) return null;
+export function previewPlayMove(
+  state: BotMatchState,
+  player: BotPlayerId,
+  move: Move,
+): BotMovePreview | null {
+  if (move.type !== 'play' || !move.tile || !move.position) return null;
   if (state.currentPlayer !== player) return null;
   const legal = getPlayMoves(state, player).some(
-    m => m.type === "play" && m.tile && m.position === move.position && tileEquals(m.tile, move.tile!)
+    (m) =>
+      m.type === 'play' && m.tile && m.position === move.position && tileEquals(m.tile, move.tile!),
   );
   if (!legal) return null;
 
@@ -594,7 +612,7 @@ export function previewPlayMove(state: BotMatchState, player: BotPlayerId, move:
     immediateScore,
     isDouble: isDouble(move.tile),
     turnContinues: isDouble(move.tile) || immediateScore > 0,
-    openEnds: getMatchableOpenEnds(nextBoard).map(end => end.matchValue),
+    openEnds: getMatchableOpenEnds(nextBoard).map((end) => end.matchValue),
     openSum,
   };
 }
@@ -603,7 +621,7 @@ function resolveHandEnd(
   state: BotMatchState,
   winner: BotPlayerId,
   reason: BotHandEndReason,
-  pointsAwarded: number
+  pointsAwarded: number,
 ): BotMatchState {
   const nextScores = {
     you: state.players.you.score,
@@ -626,8 +644,12 @@ function resolveHandEnd(
   };
 }
 
-export function applyPlayMove(state: BotMatchState, player: BotPlayerId, move: Move): BotActionResult {
-  if (move.type !== "play" || !move.tile || !move.position) return { state };
+export function applyPlayMove(
+  state: BotMatchState,
+  player: BotPlayerId,
+  move: Move,
+): BotActionResult {
+  if (move.type !== 'play' || !move.tile || !move.position) return { state };
   if (state.currentPlayer !== player || state.handOver || state.gameOver) return { state };
 
   const preview = previewPlayMove(state, player, move);
@@ -674,13 +696,13 @@ export function applyPlayMove(state: BotMatchState, player: BotPlayerId, move: M
     const loser = nextPlayer(player);
     const loserPips = sumPips(nextState.players[loser].hand);
     const pointsAwarded = computeGoOutBonusPoints(nextState.players[loser].hand);
-    nextState = resolveHandEnd(nextState, player, "domino", pointsAwarded);
+    nextState = resolveHandEnd(nextState, player, 'domino', pointsAwarded);
     return {
       state: nextState,
       scored: scoredPoints > 0 ? { player, points: scoredPoints } : undefined,
       handEnded: {
         winner: player,
-        reason: "domino",
+        reason: 'domino',
         pointsAwarded,
         loserPips,
         calcText: `round(${loserPips}/5) = ${pointsAwarded}`,
@@ -702,7 +724,12 @@ export function applyPlayMove(state: BotMatchState, player: BotPlayerId, move: M
 }
 
 export function drawOne(state: BotMatchState, player: BotPlayerId): BotActionResult {
-  if (state.currentPlayer !== player || state.handOver || state.gameOver || state.boneyard.length === 0) {
+  if (
+    state.currentPlayer !== player ||
+    state.handOver ||
+    state.gameOver ||
+    state.boneyard.length === 0
+  ) {
     return { state };
   }
   const [drawn, ...rest] = state.boneyard;
@@ -737,17 +764,17 @@ export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionRe
   if (moved.boneyard.length === 0 && nextConsecutive >= 2) {
     const youPips = sumPips(moved.players.you.hand);
     const botPips = sumPips(moved.players.bot.hand);
-    const winner: BotPlayerId = youPips <= botPips ? "you" : "bot";
-    const loser: BotPlayerId = winner === "you" ? "bot" : "you";
+    const winner: BotPlayerId = youPips <= botPips ? 'you' : 'bot';
+    const loser: BotPlayerId = winner === 'you' ? 'bot' : 'you';
     const loserPips = sumPips(moved.players[loser].hand);
     const pointsAwarded = computeHandPenalty(moved.players[loser].hand);
-    const resolved = resolveHandEnd(moved, winner, "blocked", pointsAwarded);
+    const resolved = resolveHandEnd(moved, winner, 'blocked', pointsAwarded);
     return {
       state: resolved,
       passed: { player },
       handEnded: {
         winner,
-        reason: "blocked",
+        reason: 'blocked',
         pointsAwarded,
         loserPips,
         calcText: `ceil(${loserPips}/5)*5 = ${pointsAwarded}`,
@@ -761,7 +788,10 @@ export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionRe
   };
 }
 
-export function drawUntilPlayableOrEmpty(state: BotMatchState, player: BotPlayerId): BotActionResult {
+export function drawUntilPlayableOrEmpty(
+  state: BotMatchState,
+  player: BotPlayerId,
+): BotActionResult {
   if (state.currentPlayer !== player || state.handOver || state.gameOver) return { state };
   if (getPlayMoves(state, player).length > 0) return { state };
 

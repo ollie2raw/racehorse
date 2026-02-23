@@ -1,25 +1,50 @@
 // client/src/components/DominoTile.tsx
-import type { Tile } from "../types";
+import type { Tile } from '../types';
 
 // ─── Pip Layouts ─────────────────────────────────────────────
 
 const pipLayouts: Record<number, [number, number][]> = {
   0: [],
   1: [[1, 1]],
-  2: [[0, 0], [2, 2]],
-  3: [[0, 0], [1, 1], [2, 2]],
-  4: [[0, 0], [0, 2], [2, 0], [2, 2]],
-  5: [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]],
-  6: [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2]],
+  2: [
+    [0, 0],
+    [2, 2],
+  ],
+  3: [
+    [0, 0],
+    [1, 1],
+    [2, 2],
+  ],
+  4: [
+    [0, 0],
+    [0, 2],
+    [2, 0],
+    [2, 2],
+  ],
+  5: [
+    [0, 0],
+    [0, 2],
+    [1, 1],
+    [2, 0],
+    [2, 2],
+  ],
+  6: [
+    [0, 0],
+    [0, 2],
+    [1, 0],
+    [1, 2],
+    [2, 0],
+    [2, 2],
+  ],
 };
 
 const PIP_COLORS: Record<number, string> = {
-  1: "#1e3a8a",
-  2: "#0B5A3C",
-  3: "#38bdf8",
-  4: "#f97316",
-  5: "#22c55e",
-  6: "#dc2626",
+  1: '#1e3a8a',
+  2: '#0B5A3C',
+  3: '#38bdf8',
+  4: '#f97316',
+  5: '#22c55e',
+  6: '#dc2626',
 };
 
 // ─── Pip Half Component ──────────────────────────────────────
@@ -33,7 +58,7 @@ function PipHalf({ value, size }: PipHalfProps) {
   const positions = pipLayouts[value] || [];
   const pipSize = Math.max(6, size / 4.5);
   const cellSize = size / 3;
-  const pipColor = PIP_COLORS[value] ?? "#1f2937";
+  const pipColor = PIP_COLORS[value] ?? '#1f2937';
 
   return (
     <div
@@ -41,7 +66,7 @@ function PipHalf({ value, size }: PipHalfProps) {
       style={{
         width: size,
         height: size,
-        position: "relative",
+        position: 'relative',
         flexShrink: 0,
       }}
     >
@@ -50,13 +75,13 @@ function PipHalf({ value, size }: PipHalfProps) {
           key={idx}
           className="pip"
           style={{
-            position: "absolute",
+            position: 'absolute',
             width: pipSize,
             height: pipSize,
-            borderRadius: "50%",
+            borderRadius: '50%',
             backgroundColor: pipColor,
-            boxShadow: "none",
-            border: "1px solid rgba(0,0,0,0.18)",
+            boxShadow: 'none',
+            border: '1px solid rgba(0,0,0,0.18)',
             left: col * cellSize + cellSize / 2 - pipSize / 2,
             top: row * cellSize + cellSize / 2 - pipSize / 2,
           }}
@@ -88,7 +113,7 @@ export function DominoTile({
   highlight = false,
   onClick,
   disabled = false,
-  className = "",
+  className = '',
   flipped = false,
   rotation = 0,
   style,
@@ -96,13 +121,15 @@ export function DominoTile({
   const isDouble = tile.high === tile.low;
 
   const tileClass = [
-    "domino-tile",
-    isDouble ? "double" : "",
-    selected ? "selected" : "",
-    highlight ? "highlight" : "",
-    disabled ? "disabled" : "",
+    'domino-tile',
+    isDouble ? 'double' : '',
+    selected ? 'selected' : '',
+    highlight ? 'highlight' : '',
+    disabled ? 'disabled' : '',
     className,
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   // Determine which pip to show first based on flipped flag
   // When flipped=false: low on left/top, high on right/bottom
@@ -118,11 +145,11 @@ export function DominoTile({
       onClick={onClick}
       disabled={disabled}
       style={{
-        display: "block",
+        display: 'block',
         padding: 0,
-        border: "none",
-        background: "none",
-        cursor: disabled ? "default" : onClick ? "pointer" : "default",
+        border: 'none',
+        background: 'none',
+        cursor: disabled ? 'default' : onClick ? 'pointer' : 'default',
         transform: `rotate(${rotation}deg)`,
         ...style,
       }}
@@ -130,8 +157,8 @@ export function DominoTile({
       <div
         className="domino-body"
         style={{
-          display: "flex",
-          flexDirection: "row",
+          display: 'flex',
+          flexDirection: 'row',
         }}
       >
         <PipHalf value={firstPip} size={size} />

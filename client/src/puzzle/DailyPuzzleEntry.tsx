@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import type { UserProfile } from "../auth/useAuth";
-import DailyPuzzlePlay from "./DailyPuzzlePlay";
-import { getTodayLeaderboard, getTodayPuzzle, type DailyPuzzle, type LeaderboardRow } from "./puzzleApi";
+import { useEffect, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+import type { UserProfile } from '../auth/useAuth';
+import DailyPuzzlePlay from './DailyPuzzlePlay';
+import {
+  getTodayLeaderboard,
+  getTodayPuzzle,
+  type DailyPuzzle,
+  type LeaderboardRow,
+} from './puzzleApi';
 
 interface DailyPuzzleEntryProps {
   user: User | null;
@@ -14,14 +19,14 @@ function formatMs(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function objectiveLabel(puzzle: DailyPuzzle | null): string {
-  if (!puzzle) return "";
+  if (!puzzle) return '';
   const obj = puzzle.config.objective;
-  if (obj.type === "finish_in_moves") return `Finish hand in ${obj.maxMoves} moves`;
-  return "Finish the hand";
+  if (obj.type === 'finish_in_moves') return `Finish hand in ${obj.maxMoves} moves`;
+  return 'Finish the hand';
 }
 
 export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleEntryProps) {
@@ -41,7 +46,7 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
       if (!active) return;
       setPuzzle(todayPuzzle);
       if (!todayPuzzle) {
-        setError("No puzzle published for today yet.");
+        setError('No puzzle published for today yet.');
         setLeaderboard([]);
         setLoading(false);
         return;
@@ -84,7 +89,9 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
         <div className="card lobby-card mode-card daily-puzzle-entry-card">
           <p className="lobby-kicker">Racehorse Dominoes</p>
           <h2>Daily Puzzle</h2>
-          <p className="mode-subtitle">Solve today’s challenge with the fewest moves and fastest time.</p>
+          <p className="mode-subtitle">
+            Solve today’s challenge with the fewest moves and fastest time.
+          </p>
 
           {loading && <p className="lobby-server">Loading today’s puzzle...</p>}
           {!loading && error && <p className="auth-inline-error">{error}</p>}
@@ -92,14 +99,23 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
           {!loading && puzzle && (
             <>
               <div className="daily-puzzle-summary">
-                <p><strong>{puzzle.title}</strong> · {puzzle.puzzle_date}</p>
+                <p>
+                  <strong>{puzzle.title}</strong> · {puzzle.puzzle_date}
+                </p>
                 <p>Objective: {objectiveLabel(puzzle)}</p>
                 {puzzle.config.notes && <p>{puzzle.config.notes}</p>}
-                <p>{user ? `Signed in as @${profile?.username ?? "player"}` : "Guest mode: you can play, but submissions are disabled."}</p>
+                <p>
+                  {user
+                    ? `Signed in as @${profile?.username ?? 'player'}`
+                    : 'Guest mode: you can play, but submissions are disabled.'}
+                </p>
               </div>
 
               <div className="mode-actions">
-                <button className="mode-option mode-option-primary" onClick={() => setPlaying(true)}>
+                <button
+                  className="mode-option mode-option-primary"
+                  onClick={() => setPlaying(true)}
+                >
                   <span className="mode-option-title">Start Puzzle</span>
                   <span className="mode-option-meta">Play now using today’s puzzle setup</span>
                 </button>

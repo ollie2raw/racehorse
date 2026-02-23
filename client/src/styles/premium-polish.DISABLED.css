@@ -4,27 +4,34 @@
    - No duplicate .app blocks
 */
 
-html, body, #root { height: 100%; }
-body { margin: 0; overflow: hidden; }
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+}
 
-:root{
-  --outer-1:#08160f;
-  --outer-2:#06110c;
+:root {
+  --outer-1: #08160f;
+  --outer-2: #06110c;
 
-  --felt-1:#1f7f4b;
-  --felt-2:#166a3d;
+  --felt-1: #1f7f4b;
+  --felt-2: #166a3d;
 
-  --walnut-1: rgba(30,18,9,.92);
-  --walnut-2: rgba(18,10,5,.92);
+  --walnut-1: rgba(30, 18, 9, 0.92);
+  --walnut-2: rgba(18, 10, 5, 0.92);
 
-  --text: rgba(255,247,234,.85);
-  --muted: rgba(255,247,234,.55);
+  --text: rgba(255, 247, 234, 0.85);
+  --muted: rgba(255, 247, 234, 0.55);
 
   --r: 22px;
 }
 
 /* OUTER SURROUND */
-.app{
+.app {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
@@ -37,12 +44,12 @@ body { margin: 0; overflow: hidden; }
   box-sizing: border-box;
 
   background:
-    radial-gradient(1200px 700px at 50% 15%, rgba(255,255,255,.04), transparent 60%),
+    radial-gradient(1200px 700px at 50% 15%, rgba(255, 255, 255, 0.04), transparent 60%),
     linear-gradient(180deg, var(--outer-1) 0%, var(--outer-2) 100%);
 }
 
 /* CENTERED TABLE SURFACE */
-.game-shell{
+.game-shell {
   width: 100%;
   max-width: 1700px;
   height: 100%;
@@ -52,12 +59,12 @@ body { margin: 0; overflow: hidden; }
 
   border-radius: var(--r);
   overflow: hidden; /* keep clean rounded corners */
-  border: 1px solid rgba(255,255,255,.08);
-  box-shadow: 0 26px 90px rgba(0,0,0,.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.65);
 }
 
 /* TOP HUD */
-.header{
+.header {
   height: 64px;
   padding: 10px 12px;
   box-sizing: border-box;
@@ -67,69 +74,78 @@ body { margin: 0; overflow: hidden; }
   justify-content: space-between;
 
   background: linear-gradient(180deg, var(--walnut-1) 0%, var(--walnut-2) 100%);
-  border-bottom: 1px solid rgba(255,255,255,.10);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.10),
-    0 10px 28px rgba(0,0,0,.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
 /* center room text */
-.header .room-info{
+.header .room-info {
   color: var(--text);
-  letter-spacing: .16em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   font-weight: 800;
-  font-size: .68rem;
-  opacity: .95;
+  font-size: 0.68rem;
+  opacity: 0.95;
 }
 
 /* BOARD */
 /* BOTTOM TRAY */
-.hand-area{
+.hand-area {
   flex: 0 0 auto;
   padding: 14px 14px 16px;
 
-  background: linear-gradient(180deg, rgba(28,16,8,.92) 0%, rgba(14,8,4,.94) 100%);
-  border-top: 1px solid rgba(255,255,255,.10);
+  background: linear-gradient(180deg, rgba(28, 16, 8, 0.92) 0%, rgba(14, 8, 4, 0.94) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 
   box-shadow:
-    0 -18px 52px rgba(0,0,0,.45),
-    inset 0 1px 0 rgba(255,255,255,.08);
+    0 -18px 52px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.tray-center{
-  background: linear-gradient(180deg, rgba(0,0,0,.22) 0%, rgba(0,0,0,.14) 100%);
-  border: 1px solid rgba(255,255,255,.08);
+.tray-center {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.14) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 12px 14px;
-  box-shadow: inset 0 10px 26px rgba(0,0,0,.30);
+  box-shadow: inset 0 10px 26px rgba(0, 0, 0, 0.3);
 }
 
-.tray-left h3{
+.tray-left h3 {
   color: var(--muted);
-  letter-spacing: .18em;
-  font-size: .58rem;
+  letter-spacing: 0.18em;
+  font-size: 0.58rem;
   text-transform: uppercase;
 }
 
 /* Buttons: quiet */
-.leave-btn, .icon-btn, .fullscreen-btn{
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.14);
-  color: rgba(255,247,234,.75);
+.leave-btn,
+.icon-btn,
+.fullscreen-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 247, 234, 0.75);
   border-radius: 10px;
 }
-.leave-btn:hover, .icon-btn:hover, .fullscreen-btn:hover{
-  background: rgba(255,255,255,.10);
-  border-color: rgba(255,255,255,.22);
-  color: rgba(255,247,234,.92);
+.leave-btn:hover,
+.icon-btn:hover,
+.fullscreen-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 247, 234, 0.92);
 }
 
 /* Responsive */
-@media (max-width: 1100px){
-  .app{ padding: 12px; }
-  .game-shell{ max-width: none; border-radius: 16px; }
+@media (max-width: 1100px) {
+  .app {
+    padding: 12px;
+  }
+  .game-shell {
+    max-width: none;
+    border-radius: 16px;
+  }
 }
 
 /* ==================================================
@@ -137,7 +153,7 @@ body { margin: 0; overflow: hidden; }
    (App.css can keep its styles; these will beat them)
    ================================================== */
 
-.app.premium{
+.app.premium {
   height: 100vh !important;
   width: 100vw !important;
   overflow: hidden !important;
@@ -150,11 +166,11 @@ body { margin: 0; overflow: hidden; }
   box-sizing: border-box !important;
 
   background:
-    radial-gradient(1200px 700px at 50% 15%, rgba(255,255,255,.04), transparent 60%),
+    radial-gradient(1200px 700px at 50% 15%, rgba(255, 255, 255, 0.04), transparent 60%),
     linear-gradient(180deg, #08160f 0%, #06110c 100%) !important;
 }
 
-.app.premium .game-shell{
+.app.premium .game-shell {
   width: 100% !important;
   max-width: 1700px !important;
   height: 100% !important;
@@ -165,12 +181,12 @@ body { margin: 0; overflow: hidden; }
   border-radius: 22px !important;
   overflow: hidden !important;
 
-  border: 1px solid rgba(255,255,255,.08) !important;
-  box-shadow: 0 26px 90px rgba(0,0,0,.65) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.65) !important;
 }
 
 /* Top HUD */
-.app.premium .header{
+.app.premium .header {
   height: 64px !important;
   padding: 10px 12px !important;
   box-sizing: border-box !important;
@@ -179,43 +195,51 @@ body { margin: 0; overflow: hidden; }
   align-items: center !important;
   justify-content: space-between !important;
 
-  background: linear-gradient(180deg, rgba(30,18,9,.92) 0%, rgba(18,10,5,.92) 100%) !important;
-  border-bottom: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(30, 18, 9, 0.92) 0%,
+    rgba(18, 10, 5, 0.92) 100%
+  ) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
 
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.10),
-    0 10px 28px rgba(0,0,0,.28) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 10px 28px rgba(0, 0, 0, 0.28) !important;
 }
 
 /* Board */
 /* Bottom tray */
-.app.premium .hand-area{
+.app.premium .hand-area {
   padding: 14px 14px 16px !important;
 
-  background: linear-gradient(180deg, rgba(28,16,8,.92) 0%, rgba(14,8,4,.94) 100%) !important;
-  border-top: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(28, 16, 8, 0.92) 0%,
+    rgba(14, 8, 4, 0.94) 100%
+  ) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
 
   box-shadow:
-    0 -18px 52px rgba(0,0,0,.45),
-    inset 0 1px 0 rgba(255,255,255,.08) !important;
+    0 -18px 52px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Tray well */
-.app.premium .tray-center{
-  background: linear-gradient(180deg, rgba(0,0,0,.22) 0%, rgba(0,0,0,.14) 100%) !important;
-  border: 1px solid rgba(255,255,255,.08) !important;
+.app.premium .tray-center {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.14) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 14px !important;
   padding: 12px 14px !important;
-  box-shadow: inset 0 10px 26px rgba(0,0,0,.30) !important;
+  box-shadow: inset 0 10px 26px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* ===== PREMIUM OVERRIDES: STOP FIXED TRAY FROM ESCAPING ===== */
-.app.premium .hand-area{
-  position: static !important;  /* cancels position: fixed */
+.app.premium .hand-area {
+  position: static !important; /* cancels position: fixed */
   left: auto !important;
   right: auto !important;
   bottom: auto !important;
-  height: auto !important;      /* let it be sized by content/padding */
+  height: auto !important; /* let it be sized by content/padding */
   flex: 0 0 auto !important;
   width: 100% !important;
 }
@@ -224,7 +248,7 @@ body { margin: 0; overflow: hidden; }
 .app.premium .tray-rail,
 .app.premium .tray-left,
 .app.premium .tray-center,
-.app.premium .tray-right{
+.app.premium .tray-right {
   position: static !important;
   left: auto !important;
   right: auto !important;
@@ -243,17 +267,16 @@ body { margin: 0; overflow: hidden; }
 .app.premium .game-screen,
 .app.premium .board-wrapper,
 /* If any wrapper uses calc(100vh - tray-height), kill it */
-.app.premium *{
+.app.premium * {
   max-height: none !important;
 }
 
-
 /* ===== ABSOLUTE CENTERING: beats any App.css flex/layout ===== */
-.app.premium{
+.app.premium {
   position: relative !important;
 }
 
-.app.premium .game-shell{
+.app.premium .game-shell {
   position: absolute !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
@@ -269,7 +292,7 @@ body { margin: 0; overflow: hidden; }
    =========================== */
 
 /* Tighten the top bar */
-.app.premium .header{
+.app.premium .header {
   height: 52px !important;
   padding: 8px 10px !important;
 }
@@ -278,103 +301,105 @@ body { margin: 0; overflow: hidden; }
 .app.premium .opptiles,
 .app.premium .opp-tiles,
 .app.premium .opp-tiles-box,
-.app.premium .opp-tiles-pill{
-  background: rgba(0,0,0,.28) !important;
-  border: 1px solid rgba(255,255,255,.14) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.08) !important;
+.app.premium .opp-tiles-pill {
+  background: rgba(0, 0, 0, 0.28) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   border-radius: 14px !important;
 }
 
 /* Scoreboard chips (targets common class names) */
 .app.premium .scoreboard,
 .app.premium .player-score,
-.app.premium .scores-row{
+.app.premium .scores-row {
   background: transparent !important;
 }
 
-.app.premium .player-score{
-  background: rgba(0,0,0,.24) !important;
-  border: 1px solid rgba(255,255,255,.14) !important;
+.app.premium .player-score {
+  background: rgba(0, 0, 0, 0.24) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
   border-radius: 14px !important;
   padding: 8px 10px !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Remove the “blue glow” look */
-.app.premium .player-score.you{
-  background: rgba(0,0,0,.28) !important;
-  border-color: rgba(255,255,255,.18) !important;
+.app.premium .player-score.you {
+  background: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
 }
 
 /* Typography polish */
-.app.premium .player-label{
-  color: rgba(255,247,234,.65) !important;
-  letter-spacing: .12em !important;
+.app.premium .player-label {
+  color: rgba(255, 247, 234, 0.65) !important;
+  letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
   font-weight: 800 !important;
-  font-size: .62rem !important;
+  font-size: 0.62rem !important;
 }
 
-.app.premium .score-number{
-  color: rgba(255,247,234,.92) !important;
+.app.premium .score-number {
+  color: rgba(255, 247, 234, 0.92) !important;
   font-weight: 900 !important;
   font-size: 1.05rem !important;
 }
 
 /* Center room text more subtle */
-.app.premium .header .room-info{
-  opacity: .80 !important;
-  font-size: .62rem !important;
+.app.premium .header .room-info {
+  opacity: 0.8 !important;
+  font-size: 0.62rem !important;
 }
 
 /* ===========================
    TRAY = REAL RACK FEEL
    =========================== */
 
-.app.premium .tray-center{
+.app.premium .tray-center {
   position: relative !important;
   overflow: hidden !important;
 }
 
-.app.premium .tray-center::before{
-  content:"";
-  position:absolute;
-  left:0; right:0; top:0;
+.app.premium .tray-center::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
   height: 10px;
-  background: linear-gradient(180deg, rgba(255,255,255,.10), transparent);
-  pointer-events:none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent);
+  pointer-events: none;
 }
 
-.app.premium .tray-center::after{
-  content:"";
-  position:absolute;
-  left:0; right:0; bottom:0;
+.app.premium .tray-center::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 18px;
-  background: linear-gradient(180deg, transparent, rgba(0,0,0,.28));
-  pointer-events:none;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.28));
+  pointer-events: none;
 }
-
 
 /* Put left chips in a tidy cluster */
-.app.premium .header > *{
+.app.premium .header > * {
   align-items: center !important;
 }
 
-
-
-
 /* add a front “lip” */
-.app.premium .tray-center::before{
-  content:"";
-  position:absolute;
-  left:0; right:0; bottom:0;
+.app.premium .tray-center::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 12px;
-  background: linear-gradient(180deg, transparent, rgba(0,0,0,.35));
-  pointer-events:none;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.35));
+  pointer-events: none;
 }
 
 /* make tiles feel seated */
-.app.premium .hand-container{
+.app.premium .hand-container {
   padding: 6px 2px !important;
 }
 
@@ -384,25 +409,25 @@ body { margin: 0; overflow: hidden; }
 .app.premium .leave-btn,
 .app.premium button.leave-btn,
 .app.premium .btn.leave-btn,
-.app.premium .tray-right .btn{
-  background: rgba(255,255,255,.06) !important;
-  border: 1px solid rgba(255,255,255,.14) !important;
-  color: rgba(255,247,234,.78) !important;
+.app.premium .tray-right .btn {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 247, 234, 0.78) !important;
   border-radius: 12px !important;
   padding: 10px 14px !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
 }
 .app.premium .leave-btn:hover,
-.app.premium .tray-right .btn:hover{
-  background: rgba(255,255,255,.10) !important;
-  border-color: rgba(255,255,255,.22) !important;
-  color: rgba(255,247,234,.92) !important;
+.app.premium .tray-right .btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: rgba(255, 247, 234, 0.92) !important;
 }
 
 /* ===== TOP HUD: stop pileup, enforce premium layout ===== */
 
 /* Header = 3-column layout: left HUD | center room text | right controls */
-.app.premium .header{
+.app.premium .header {
   display: grid !important;
   grid-template-columns: auto 1fr auto !important;
   align-items: center !important;
@@ -412,7 +437,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Room info always centered */
-.app.premium .room-info{
+.app.premium .room-info {
   grid-column: 2 !important;
   justify-self: center !important;
   text-align: center !important;
@@ -423,7 +448,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Scoreboard lives in left column and MUST be a single row */
-.app.premium .scoreboard{
+.app.premium .scoreboard {
   grid-column: 1 !important;
   justify-self: start !important;
   align-self: center !important;
@@ -440,12 +465,12 @@ body { margin: 0; overflow: hidden; }
 /* Kill any internal header/title that might be creating a second line */
 .app.premium .scoreboard-header,
 .app.premium .scoreboard-title,
-.app.premium .turn-indicator{
+.app.premium .turn-indicator {
   display: none !important;
 }
 
 /* Players chips should NEVER stack */
-.app.premium .scores-row{
+.app.premium .scores-row {
   display: flex !important;
   flex-direction: row !important;
   gap: 10px !important;
@@ -454,7 +479,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Each player chip */
-.app.premium .player-score{
+.app.premium .player-score {
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
@@ -467,16 +492,15 @@ body { margin: 0; overflow: hidden; }
 /* Any right-side buttons (fullscreen/menu) stay right */
 .app.premium .header .fullscreen-btn,
 .app.premium .header .icon-btn,
-.app.premium .header .btn{
+.app.premium .header .btn {
   grid-column: 3 !important;
   justify-self: end !important;
 }
 
-
 /* ===== TOP HUD: stop pileup, enforce premium layout ===== */
 
 /* Header = 3-column layout: left HUD | center room text | right controls */
-.app.premium .header{
+.app.premium .header {
   display: grid !important;
   grid-template-columns: auto 1fr auto !important;
   align-items: center !important;
@@ -486,7 +510,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Room info always centered */
-.app.premium .room-info{
+.app.premium .room-info {
   grid-column: 2 !important;
   justify-self: center !important;
   text-align: center !important;
@@ -497,7 +521,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Scoreboard lives in left column and MUST be a single row */
-.app.premium .scoreboard{
+.app.premium .scoreboard {
   grid-column: 1 !important;
   justify-self: start !important;
   align-self: center !important;
@@ -514,12 +538,12 @@ body { margin: 0; overflow: hidden; }
 /* Kill any internal header/title that might be creating a second line */
 .app.premium .scoreboard-header,
 .app.premium .scoreboard-title,
-.app.premium .turn-indicator{
+.app.premium .turn-indicator {
   display: none !important;
 }
 
 /* Players chips should NEVER stack */
-.app.premium .scores-row{
+.app.premium .scores-row {
   display: flex !important;
   flex-direction: row !important;
   gap: 10px !important;
@@ -528,7 +552,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Each player chip */
-.app.premium .player-score{
+.app.premium .player-score {
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
@@ -541,16 +565,15 @@ body { margin: 0; overflow: hidden; }
 /* Any right-side buttons (fullscreen/menu) stay right */
 .app.premium .header .fullscreen-btn,
 .app.premium .header .icon-btn,
-.app.premium .header .btn{
+.app.premium .header .btn {
   grid-column: 3 !important;
   justify-self: end !important;
 }
 
-
 /* ===== TOP HUD: stop pileup, enforce premium layout ===== */
 
 /* Header = 3-column layout: left HUD | center room text | right controls */
-.app.premium .header{
+.app.premium .header {
   display: grid !important;
   grid-template-columns: auto 1fr auto !important;
   align-items: center !important;
@@ -560,7 +583,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Room info always centered */
-.app.premium .room-info{
+.app.premium .room-info {
   grid-column: 2 !important;
   justify-self: center !important;
   text-align: center !important;
@@ -571,7 +594,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Scoreboard lives in left column and MUST be a single row */
-.app.premium .scoreboard{
+.app.premium .scoreboard {
   grid-column: 1 !important;
   justify-self: start !important;
   align-self: center !important;
@@ -588,12 +611,12 @@ body { margin: 0; overflow: hidden; }
 /* Kill any internal header/title that might be creating a second line */
 .app.premium .scoreboard-header,
 .app.premium .scoreboard-title,
-.app.premium .turn-indicator{
+.app.premium .turn-indicator {
   display: none !important;
 }
 
 /* Players chips should NEVER stack */
-.app.premium .scores-row{
+.app.premium .scores-row {
   display: flex !important;
   flex-direction: row !important;
   gap: 10px !important;
@@ -602,7 +625,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* Each player chip */
-.app.premium .player-score{
+.app.premium .player-score {
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
@@ -615,23 +638,22 @@ body { margin: 0; overflow: hidden; }
 /* Any right-side buttons (fullscreen/menu) stay right */
 .app.premium .header .fullscreen-btn,
 .app.premium .header .icon-btn,
-.app.premium .header .btn{
+.app.premium .header .btn {
   grid-column: 3 !important;
   justify-self: end !important;
 }
-
 
 /* ===== IN-GAME HUD LAYOUT FIX (premium) ===== */
 
 /* Find the actual HUD container by targeting its children */
 .app.premium .hud-room-code,
 .app.premium .hud-hand-number,
-.app.premium .hud-turn-status{
+.app.premium .hud-turn-status {
   white-space: nowrap !important;
 }
 
 /* Whatever wrapper contains those spans: make it a real bar */
-.app.premium :has(> .hud-room-code){
+.app.premium :has(> .hud-room-code) {
   position: relative !important;
   display: grid !important;
   grid-template-columns: auto 1fr auto !important;
@@ -645,27 +667,27 @@ body { margin: 0; overflow: hidden; }
 /* Center stack (room/hand/turn) */
 .app.premium :has(> .hud-room-code) .hud-room-code,
 .app.premium :has(> .hud-room-code) .hud-hand-number,
-.app.premium :has(> .hud-room-code) .hud-turn-status{
+.app.premium :has(> .hud-room-code) .hud-turn-status {
   justify-self: center !important;
   text-align: center !important;
   display: inline-block !important;
 }
 
 /* Put the three text spans in one centered line */
-.app.premium :has(> .hud-room-code){
+.app.premium :has(> .hud-room-code) {
   place-items: center !important;
 }
-.app.premium :has(> .hud-room-code) .hud-room-code::after{
-  content: " · " !important;
-  opacity: .6 !important;
+.app.premium :has(> .hud-room-code) .hud-room-code::after {
+  content: ' · ' !important;
+  opacity: 0.6 !important;
 }
-.app.premium :has(> .hud-room-code) .hud-hand-number::after{
-  content: " · " !important;
-  opacity: .6 !important;
+.app.premium :has(> .hud-room-code) .hud-hand-number::after {
+  content: ' · ' !important;
+  opacity: 0.6 !important;
 }
 
 /* Scoreboard should be a single row */
-.app.premium .scoreboard{
+.app.premium .scoreboard {
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
@@ -677,21 +699,20 @@ body { margin: 0; overflow: hidden; }
   box-shadow: none !important;
   backdrop-filter: none !important;
 }
-.app.premium .scores-row{
-  display:flex !important;
+.app.premium .scores-row {
+  display: flex !important;
   flex-wrap: nowrap !important;
   gap: 10px !important;
 }
-.app.premium .player-score{
+.app.premium .player-score {
   white-space: nowrap !important;
 }
-
 
 /* ============================================================
    HUD FIX — lock in a clean 3-zone top bar (premium)
    ============================================================ */
 
-.screen.game-screen.premium{
+.screen.game-screen.premium {
   /* make the in-game screen a stable layout container */
   position: relative !important;
   width: 100vw !important;
@@ -705,18 +726,18 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* The HUD bar */
-.screen.game-screen.premium > .hud{
+.screen.game-screen.premium > .hud {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.screen.game-screen.premium .hud-left{
+.screen.game-screen.premium .hud-left {
   position: relative;
   z-index: 2;
 }
 
-.screen.game-screen.premium .hud-center{
+.screen.game-screen.premium .hud-center {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -728,17 +749,17 @@ body { margin: 0; overflow: hidden; }
   z-index: 1;
 }
 
-.screen.game-screen.premium .hud-divider{
-  opacity: .55 !important;
+.screen.game-screen.premium .hud-divider {
+  opacity: 0.55 !important;
 }
 
-.screen.game-screen.premium .hud-right{
+.screen.game-screen.premium .hud-right {
   position: relative;
   z-index: 2;
 }
 
 /* Make ScoreBoard behave like a compact chip row inside HUD */
-.screen.game-screen.premium .scoreboard{
+.screen.game-screen.premium .scoreboard {
   display: flex !important;
   align-items: center !important;
   gap: 10px !important;
@@ -750,13 +771,13 @@ body { margin: 0; overflow: hidden; }
   backdrop-filter: none !important;
 }
 
-.screen.game-screen.premium .scores-row{
+.screen.game-screen.premium .scores-row {
   display: flex !important;
   gap: 10px !important;
   flex-wrap: nowrap !important;
 }
 
-.screen.game-screen.premium .player-score{
+.screen.game-screen.premium .player-score {
   min-width: 58px !important;
   padding: 6px 10px !important;
   white-space: nowrap !important;
@@ -764,80 +785,74 @@ body { margin: 0; overflow: hidden; }
 
 /* Board area should fill the remaining height cleanly */
 /* === HOTFIX: OPP TILES card sizing/spacing (wins over App.css) === */
-.hud-left{
+.hud-left {
   position: relative;
   z-index: 2;
 }
 
-.opponent-tile-card{
-  display:grid !important;
-  gap:4px !important;
-  padding:10px 12px !important;
-  min-width:86px !important;
-  border-radius:14px !important;
-  justify-items:start !important;
+.opponent-tile-card {
+  display: grid !important;
+  gap: 4px !important;
+  padding: 10px 12px !important;
+  min-width: 86px !important;
+  border-radius: 14px !important;
+  justify-items: start !important;
 }
 
-
-.opponent-tile-label{
-  font-size:11px !important;
-  letter-spacing:.12em !important;
-  opacity:.85 !important;
-  line-height:1 !important;
+.opponent-tile-label {
+  font-size: 11px !important;
+  letter-spacing: 0.12em !important;
+  opacity: 0.85 !important;
+  line-height: 1 !important;
 }
 
-
-.opponent-tile-number{
-  font-size:26px !important;
-  line-height:1 !important;
-  font-weight:800 !important;
-}
-
-
-
-/* ===== FINAL OVERRIDES (must be LAST) ===== */
-.app.premium .hud-left .opponent-tile-card{
-  display:grid !important;
-  gap:4px !important;
-  padding:10px 12px !important;
-  min-width:92px !important;
-  border-radius:14px !important;
-  justify-items:start !important;
-}
-.app.premium .hud-left .opponent-tile-label{
-  font-size:11px !important;
-  letter-spacing:.12em !important;
-  opacity:.85 !important;
-  line-height:1 !important;
-}
-.app.premium .hud-left .opponent-tile-number{
-  font-size:26px !important;
-  line-height:1 !important;
-  font-weight:800 !important;
+.opponent-tile-number {
+  font-size: 26px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
 }
 
 /* ===== FINAL OVERRIDES (must be LAST) ===== */
-.app.premium .hud-left .opponent-tile-card{
-  display:grid !important;
-  gap:4px !important;
-  padding:10px 12px !important;
-  min-width:92px !important;
-  border-radius:14px !important;
-  justify-items:start !important;
+.app.premium .hud-left .opponent-tile-card {
+  display: grid !important;
+  gap: 4px !important;
+  padding: 10px 12px !important;
+  min-width: 92px !important;
+  border-radius: 14px !important;
+  justify-items: start !important;
 }
-.app.premium .hud-left .opponent-tile-label{
-  font-size:11px !important;
-  letter-spacing:.12em !important;
-  opacity:.85 !important;
-  line-height:1 !important;
+.app.premium .hud-left .opponent-tile-label {
+  font-size: 11px !important;
+  letter-spacing: 0.12em !important;
+  opacity: 0.85 !important;
+  line-height: 1 !important;
 }
-.app.premium .hud-left .opponent-tile-number{
-  font-size:26px !important;
-  line-height:1 !important;
-  font-weight:800 !important;
+.app.premium .hud-left .opponent-tile-number {
+  font-size: 26px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
 }
 
-
+/* ===== FINAL OVERRIDES (must be LAST) ===== */
+.app.premium .hud-left .opponent-tile-card {
+  display: grid !important;
+  gap: 4px !important;
+  padding: 10px 12px !important;
+  min-width: 92px !important;
+  border-radius: 14px !important;
+  justify-items: start !important;
+}
+.app.premium .hud-left .opponent-tile-label {
+  font-size: 11px !important;
+  letter-spacing: 0.12em !important;
+  opacity: 0.85 !important;
+  line-height: 1 !important;
+}
+.app.premium .hud-left .opponent-tile-number {
+  font-size: 26px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+}
 
 /* ===== FIX: BOARD LAYOUT (ensure Board gets real size + centers) ===== */
 .app.premium .screen.game-screen {
@@ -850,12 +865,19 @@ body { margin: 0; overflow: hidden; }
 /* If Board has an internal wrapper, ensure it can scale */
 
 /* === HUD: true centered turn label === */
-.hud{
+.hud {
   display: grid !important;
   grid-template-columns: auto 1fr auto !important;
   align-items: center !important;
 }
 
-.hud-left{ justify-self: start !important; }
-.hud-center{ justify-self: center !important; text-align: center !important; }
-.hud-right{ justify-self: end !important; }
+.hud-left {
+  justify-self: start !important;
+}
+.hud-center {
+  justify-self: center !important;
+  text-align: center !important;
+}
+.hud-right {
+  justify-self: end !important;
+}

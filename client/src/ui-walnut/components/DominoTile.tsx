@@ -1,23 +1,48 @@
-import type { CSSProperties } from "react";
-import type { Tile } from "../../types";
+import type { CSSProperties } from 'react';
+import type { Tile } from '../../types';
 
 const pipLayouts: Record<number, [number, number][]> = {
   0: [],
   1: [[1, 1]],
-  2: [[0, 0], [2, 2]],
-  3: [[0, 0], [1, 1], [2, 2]],
-  4: [[0, 0], [0, 2], [2, 0], [2, 2]],
-  5: [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]],
-  6: [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2]],
+  2: [
+    [0, 0],
+    [2, 2],
+  ],
+  3: [
+    [0, 0],
+    [1, 1],
+    [2, 2],
+  ],
+  4: [
+    [0, 0],
+    [0, 2],
+    [2, 0],
+    [2, 2],
+  ],
+  5: [
+    [0, 0],
+    [0, 2],
+    [1, 1],
+    [2, 0],
+    [2, 2],
+  ],
+  6: [
+    [0, 0],
+    [0, 2],
+    [1, 0],
+    [1, 2],
+    [2, 0],
+    [2, 2],
+  ],
 };
 
 const pipColors: Record<number, string> = {
-  1: "#1e3a8a",
-  2: "#0b5a3c",
-  3: "#38bdf8",
-  4: "#f97316",
-  5: "#22c55e",
-  6: "#dc2626",
+  1: '#1e3a8a',
+  2: '#0b5a3c',
+  3: '#38bdf8',
+  4: '#f97316',
+  5: '#22c55e',
+  6: '#dc2626',
 };
 
 interface PipHalfProps {
@@ -47,7 +72,7 @@ function PipHalf({ value, size }: PipHalfProps) {
             height: pipSize,
             left: col * cellSize + cellSize / 2 - pipSize / 2,
             top: row * cellSize + cellSize / 2 - pipSize / 2,
-            background: pipColors[value] ?? "#1f2937",
+            background: pipColors[value] ?? '#1f2937',
           }}
         />
       ))}
@@ -72,7 +97,7 @@ export default function DominoTile({
   selected = false,
   disabled = false,
   onClick,
-  className = "",
+  className = '',
   flipped = false,
   style,
 }: WalnutDominoTileProps) {
@@ -85,7 +110,7 @@ export default function DominoTile({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`walnut-domino ${selected ? "is-selected" : ""} ${interactive ? "is-interactive" : ""} ${className}`.trim()}
+      className={`walnut-domino ${selected ? 'is-selected' : ''} ${interactive ? 'is-interactive' : ''} ${className}`.trim()}
       style={style}
       aria-pressed={selected}
     >

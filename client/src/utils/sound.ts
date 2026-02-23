@@ -28,7 +28,7 @@ function getCtx(): AudioContext {
   if (!ctx) {
     ctx = new AudioContext();
   }
-  if (ctx.state === "suspended") {
+  if (ctx.state === 'suspended') {
     ctx.resume();
   }
   return ctx;
@@ -71,13 +71,13 @@ function buildThwack(
   lpQ: number,
   noiseGain: number,
   noiseDuration: number,
-  startDelay = 0
+  startDelay = 0,
 ): void {
   const t0 = now + startDelay;
 
   // ── Lowpass filter (shared by osc + noise) ───────────────────────────────
   const lp = ac.createBiquadFilter();
-  lp.type = "lowpass";
+  lp.type = 'lowpass';
   lp.frequency.setValueAtTime(lpFreq, t0);
   lp.Q.setValueAtTime(lpQ, t0);
 
@@ -89,7 +89,7 @@ function buildThwack(
   master.connect(ac.destination);
 
   // ── Oscillator body ───────────────────────────────────────────────────────
-  const pitchedFreq = bodyFreq * jitter(0.02);   // ±2% human variation
+  const pitchedFreq = bodyFreq * jitter(0.02); // ±2% human variation
 
   const osc = ac.createOscillator();
   osc.type = oscType;
@@ -103,20 +103,20 @@ function buildThwack(
   // Web Audio spec and causes a discontinuity pop in some browsers.
   // A 150ms soft tail (ramp continuing past decayTime) ensures no abrupt cutoff.
   oscGain.gain.setValueAtTime(peakGain * jitter(0.02), t0);
-  oscGain.gain.exponentialRampToValueAtTime(0.001, t0 + decayTime + 0.060);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, t0 + decayTime + 0.06);
 
   osc.connect(oscGain);
   oscGain.connect(lp);
 
   osc.start(t0);
-  osc.stop(t0 + decayTime + 0.010);
+  osc.stop(t0 + decayTime + 0.01);
 
   // ── White noise friction burst ────────────────────────────────────────────
   // Simulates the tile surface scraping across felt at the moment of contact.
   // A short burst mixed in at the very start gives the sound its tactile
   // 'grain' — without it the oscillator alone sounds purely synthetic.
   if (noiseGain > 0 && noiseDuration > 0) {
-    const bufLen = Math.ceil(ac.sampleRate * (noiseDuration + 0.010));
+    const bufLen = Math.ceil(ac.sampleRate * (noiseDuration + 0.01));
     const buf = ac.createBuffer(1, bufLen, ac.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < bufLen; i++) {
@@ -134,16 +134,16 @@ function buildThwack(
     noiseEnv.gain.exponentialRampToValueAtTime(0.001, t0 + noiseDuration);
 
     noise.connect(noiseEnv);
-    noiseEnv.connect(lp);  // noise shares the same lowpass — keeps it warm
+    noiseEnv.connect(lp); // noise shares the same lowpass — keeps it warm
 
     noise.start(t0);
-    noise.stop(t0 + noiseDuration + 0.010);
+    noise.stop(t0 + noiseDuration + 0.01);
   }
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
-export type TileSoundType = "standard" | "slam" | "deal";
+export type TileSoundType = 'standard' | 'slam' | 'deal';
 
 /**
  * Play a synthesized tile sound.
@@ -183,89 +183,93 @@ export function playTileSound(type: TileSoundType, isMuted: boolean): void {
   const now = ac.currentTime;
 
   switch (type) {
-
-    case "standard": {
+    case 'standard': {
       // Domino click + short body thud.
       const stdDecay1 = 0.056 + (Math.random() * 0.014 - 0.007);
       buildThwack(
-        ac, now,
-        /* bodyFreq */    760,
-        /* oscType */     "triangle",
-        /* pitchDrop */   0.58,
-        /* peakGain */    0.24,
-        /* decayTime */   stdDecay1,
-        /* lpFreq */      780,
-        /* lpQ */         0.9,
-        /* noiseGain */   0.20,
-        /* noiseDur */    0.015,
-        /* startDelay */  0
+        ac,
+        now,
+        /* bodyFreq */ 760,
+        /* oscType */ 'triangle',
+        /* pitchDrop */ 0.58,
+        /* peakGain */ 0.24,
+        /* decayTime */ stdDecay1,
+        /* lpFreq */ 780,
+        /* lpQ */ 0.9,
+        /* noiseGain */ 0.2,
+        /* noiseDur */ 0.015,
+        /* startDelay */ 0,
       );
       // Low body resonance.
       const stdDecay2 = 0.102 + (Math.random() * 0.016 - 0.008);
       buildThwack(
-        ac, now,
-        /* bodyFreq */    158,
-        /* oscType */     "sine",
-        /* pitchDrop */   0.72,
-        /* peakGain */    0.18,
-        /* decayTime */   stdDecay2,
-        /* lpFreq */      520,
-        /* lpQ */         1.1,
-        /* noiseGain */   0,
-        /* noiseDur */    0,
-        /* startDelay */  0.003
+        ac,
+        now,
+        /* bodyFreq */ 158,
+        /* oscType */ 'sine',
+        /* pitchDrop */ 0.72,
+        /* peakGain */ 0.18,
+        /* decayTime */ stdDecay2,
+        /* lpFreq */ 520,
+        /* lpQ */ 1.1,
+        /* noiseGain */ 0,
+        /* noiseDur */ 0,
+        /* startDelay */ 0.003,
       );
       break;
     }
 
-    case "slam": {
+    case 'slam': {
       // Heavier domino slap.
       const slamDecay1 = 0.145 + (Math.random() * 0.02 - 0.01);
       buildThwack(
-        ac, now,
-        /* bodyFreq */    230,
-        /* oscType */     "triangle",
-        /* pitchDrop */   0.46,
-        /* peakGain */    0.48,
-        /* decayTime */   slamDecay1,
-        /* lpFreq */      560,
-        /* lpQ */         0.72,
-        /* noiseGain */   0.34,
-        /* noiseDur */    0.024,
-        /* startDelay */  0
+        ac,
+        now,
+        /* bodyFreq */ 230,
+        /* oscType */ 'triangle',
+        /* pitchDrop */ 0.46,
+        /* peakGain */ 0.48,
+        /* decayTime */ slamDecay1,
+        /* lpFreq */ 560,
+        /* lpQ */ 0.72,
+        /* noiseGain */ 0.34,
+        /* noiseDur */ 0.024,
+        /* startDelay */ 0,
       );
       // Sharp click on impact.
       const slamDecay2 = 0.048 + (Math.random() * 0.012 - 0.006);
       buildThwack(
-        ac, now,
-        /* bodyFreq */    860,
-        /* oscType */     "triangle",
-        /* pitchDrop */   0.63,
-        /* peakGain */    0.18,
-        /* decayTime */   slamDecay2,
-        /* lpFreq */      920,
-        /* lpQ */         0.8,
-        /* noiseGain */   0.12,
-        /* noiseDur */    0.012,
-        /* startDelay */  0
+        ac,
+        now,
+        /* bodyFreq */ 860,
+        /* oscType */ 'triangle',
+        /* pitchDrop */ 0.63,
+        /* peakGain */ 0.18,
+        /* decayTime */ slamDecay2,
+        /* lpFreq */ 920,
+        /* lpQ */ 0.8,
+        /* noiseGain */ 0.12,
+        /* noiseDur */ 0.012,
+        /* startDelay */ 0,
       );
       break;
     }
 
-    case "deal": {
+    case 'deal': {
       // Soft draw/deal tick.
       buildThwack(
-        ac, now,
-        /* bodyFreq */    1600,
-        /* oscType */     "triangle",
-        /* pitchDrop */   0.70,
-        /* peakGain */    0.07,
-        /* decayTime */   0.028,
-        /* lpFreq */      980,
-        /* lpQ */         0.8,
-        /* noiseGain */   0.04,
-        /* noiseDur */    0.010,
-        /* startDelay */  0
+        ac,
+        now,
+        /* bodyFreq */ 1600,
+        /* oscType */ 'triangle',
+        /* pitchDrop */ 0.7,
+        /* peakGain */ 0.07,
+        /* decayTime */ 0.028,
+        /* lpFreq */ 980,
+        /* lpQ */ 0.8,
+        /* noiseGain */ 0.04,
+        /* noiseDur */ 0.01,
+        /* startDelay */ 0,
       );
       break;
     }

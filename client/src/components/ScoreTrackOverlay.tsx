@@ -1,9 +1,9 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type ReactNode } from 'react';
 
 interface TrackPlayer {
   label: string;
   score: number;
-  tone: "you" | "opp";
+  tone: 'you' | 'opp';
 }
 
 interface ScoreTrackOverlayProps {
@@ -24,10 +24,10 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === 'Escape') onClose();
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
   if (!open) return null;
@@ -40,24 +40,20 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
     values: number[],
     pegValue: number | null,
     player: TrackPlayer,
-    lane: "outer" | "inner"
+    lane: 'outer' | 'inner',
   ) => {
     const nodes: ReactNode[] = [];
     values.forEach((n, idx) => {
       nodes.push(
         <div
           key={`${player.label}-${lane}-hole-${n}`}
-          className={`score-hole ${pegValue === n ? `is-peg ${player.tone}` : ""} ${n % 5 === 0 ? "is-mark" : ""} ${n % 15 === 0 ? "is-major" : ""}`}
+          className={`score-hole ${pegValue === n ? `is-peg ${player.tone}` : ''} ${n % 5 === 0 ? 'is-mark' : ''} ${n % 15 === 0 ? 'is-major' : ''}`}
           title={`${player.label}: ${n}`}
-        />
+        />,
       );
       if (idx < values.length - 1 && (idx + 1) % 5 === 0) {
         nodes.push(
-          <div
-            key={`${player.label}-${lane}-gap-${n}`}
-            className="score-gap"
-            aria-hidden="true"
-          />
+          <div key={`${player.label}-${lane}-gap-${n}`} className="score-gap" aria-hidden="true" />,
         );
       }
     });
@@ -89,18 +85,18 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
                 </div>
                 <div className="score-track-lane-grid">
                   <div className="score-track-holes">
-                    {renderLane(topMainLane, topMainPeg, player, "outer")}
+                    {renderLane(topMainLane, topMainPeg, player, 'outer')}
                     <div className="score-gap score-gap-solo" aria-hidden="true" />
                     <div
-                      className={`score-hole score-hole-solo ${topSoloPeg ? `is-peg ${player.tone}` : ""}`}
+                      className={`score-hole score-hole-solo ${topSoloPeg ? `is-peg ${player.tone}` : ''}`}
                       title={`${player.label}: start`}
                     />
                   </div>
                   <div className="score-track-holes">
-                    {renderLane(bottomMainLane, bottomMainPeg, player, "inner")}
+                    {renderLane(bottomMainLane, bottomMainPeg, player, 'inner')}
                     <div className="score-gap score-gap-solo" aria-hidden="true" />
                     <div
-                      className={`score-hole score-hole-solo ${bottomSoloPeg ? `is-peg ${player.tone}` : ""}`}
+                      className={`score-hole score-hole-solo ${bottomSoloPeg ? `is-peg ${player.tone}` : ''}`}
                       title={`${player.label}: finish`}
                     />
                   </div>

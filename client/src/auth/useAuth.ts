@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import { getSupabaseConfigError, isSupabaseConfigured, supabase } from "../lib/supabase";
+import { useCallback, useEffect, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
 
 export interface UserProfile {
   id: string;
@@ -12,7 +12,7 @@ interface AuthResult {
   error: string | null;
 }
 
-const TEMP_USERNAME_PREFIX = "user_";
+const TEMP_USERNAME_PREFIX = 'user_';
 const USERNAME_REQUEST_TIMEOUT_MS = 10000;
 const SIGN_OUT_TIMEOUT_MS = 8000;
 
@@ -23,10 +23,10 @@ export function isTemporaryUsername(username: string | null | undefined): boolea
 
 async function ensureProfile(userId: string): Promise<void> {
   if (!supabase) return;
-  const tempUsername = `${TEMP_USERNAME_PREFIX}${userId.replace(/-/g, "").slice(0, 8)}`;
+  const tempUsername = `${TEMP_USERNAME_PREFIX}${userId.replace(/-/g, '').slice(0, 8)}`;
   const { error } = await supabase
-    .from("profiles")
-    .upsert({ id: userId, username: tempUsername }, { onConflict: "id", ignoreDuplicates: true });
+    .from('profiles')
+    .upsert({ id: userId, username: tempUsername }, { onConflict: 'id', ignoreDuplicates: true });
   if (error) {
     throw error;
   }
@@ -35,7 +35,7 @@ async function ensureProfile(userId: string): Promise<void> {
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      reject(new Error("Request timed out. Try again."));
+      reject(new Error('Request timed out. Try again.'));
     }, timeoutMs);
 
     promise
@@ -51,11 +51,11 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 }
 
 function clearLocalSupabaseAuthTokens(): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
   try {
     const keys = Object.keys(window.localStorage);
     for (const key of keys) {
-      if (key.startsWith("sb-") && key.includes("auth-token")) {
+      if (key.startsWith('sb-') && key.includes('auth-token')) {
         window.localStorage.removeItem(key);
       }
     }
@@ -76,9 +76,9 @@ export function useAuth() {
     }
 
     const { data, error } = await supabase
-      .from("profiles")
-      .select("id, username, created_at")
-      .eq("id", userId)
+      .from('profiles')
+      .select('id, username, created_at')
+      .eq('id', userId)
       .maybeSingle();
 
     if (error) {
@@ -126,9 +126,10 @@ export function useAuth() {
 
     init();
 
-    if (!supabase) return () => {
-      active = false;
-    };
+    if (!supabase)
+      return () => {
+        active = false;
+      };
 
     const {
       data: { subscription },
@@ -153,7 +154,7 @@ export function useAuth() {
     });
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && supabase) {
+      if (document.visibilityState === 'visible' && supabase) {
         supabase.auth.getSession().then(({ data: { session } }) => {
           const nextUser = session?.user ?? null;
           setUser(nextUser);
@@ -166,58 +167,64 @@ export function useAuth() {
       }
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       active = false;
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       subscription.unsubscribe();
     };
   }, [refreshProfile]);
 
-  const signUp = useCallback(async (email: string, password: string): Promise<AuthResult> => {
-    if (!supabase) return { error: getSupabaseConfigError() };
+  const signUp = useCallback(
+    async (email: string, password: string): Promise<AuthResult> => {
+      if (!supabase) return { error: getSupabaseConfigError() };
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error: error.message };
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) return { error: error.message };
 
-    if (data.user) {
-      try {
-        await ensureProfile(data.user.id);
-        await refreshProfile(data.user.id);
-      } catch {
-        // Ignore profile bootstrap failures here; user can retry via username update.
+      if (data.user) {
+        try {
+          await ensureProfile(data.user.id);
+          await refreshProfile(data.user.id);
+        } catch {
+          // Ignore profile bootstrap failures here; user can retry via username update.
+        }
       }
-    }
 
-    return { error: null };
-  }, [refreshProfile]);
+      return { error: null };
+    },
+    [refreshProfile],
+  );
 
-  const signIn = useCallback(async (email: string, password: string): Promise<AuthResult> => {
-    if (!supabase) return { error: getSupabaseConfigError() };
+  const signIn = useCallback(
+    async (email: string, password: string): Promise<AuthResult> => {
+      if (!supabase) return { error: getSupabaseConfigError() };
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { error: error.message };
 
-    if (data.user) {
-      try {
-        await ensureProfile(data.user.id);
-        await refreshProfile(data.user.id);
-      } catch {
-        // Keep auth session even if profile fetch fails.
+      if (data.user) {
+        try {
+          await ensureProfile(data.user.id);
+          await refreshProfile(data.user.id);
+        } catch {
+          // Keep auth session even if profile fetch fails.
+        }
       }
-    }
 
-    return { error: null };
-  }, [refreshProfile]);
+      return { error: null };
+    },
+    [refreshProfile],
+  );
 
   const signOut = useCallback(async (): Promise<AuthResult> => {
     if (!supabase) return { error: getSupabaseConfigError() };
 
-    const isDev = typeof import.meta !== "undefined" && import.meta.env?.DEV;
+    const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
     if (isDev) {
       // eslint-disable-next-line no-console
-      console.log("[Auth] signOut start");
+      console.log('[Auth] signOut start');
     }
 
     let errorMessage: string | null = null;
@@ -225,25 +232,25 @@ export function useAuth() {
 
     try {
       const signOutPromise = supabase.auth.signOut().then(({ error }) => ({
-        kind: "signout" as const,
+        kind: 'signout' as const,
         error,
       }));
-      const timeoutPromise = new Promise<{ kind: "timeout" }>((resolve) => {
-        setTimeout(() => resolve({ kind: "timeout" }), SIGN_OUT_TIMEOUT_MS);
+      const timeoutPromise = new Promise<{ kind: 'timeout' }>((resolve) => {
+        setTimeout(() => resolve({ kind: 'timeout' }), SIGN_OUT_TIMEOUT_MS);
       });
 
       const result = await Promise.race([signOutPromise, timeoutPromise]);
-      if (result.kind === "timeout") {
+      if (result.kind === 'timeout') {
         usedTimeoutFallback = true;
         if (isDev) {
           // eslint-disable-next-line no-console
-          console.warn("[Auth] signOut timed out; forcing local token clear");
+          console.warn('[Auth] signOut timed out; forcing local token clear');
         }
 
         // IMPORTANT: do not await anything that can hang here. We want UI to recover.
         try {
           await Promise.race([
-            supabase.auth.signOut({ scope: "local" }),
+            supabase.auth.signOut({ scope: 'local' }),
             new Promise((resolve) => setTimeout(resolve, 800)),
           ]);
         } catch {
@@ -255,56 +262,65 @@ export function useAuth() {
         errorMessage = result.error.message;
       }
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Unable to sign out.";
+      errorMessage = err instanceof Error ? err.message : 'Unable to sign out.';
     } finally {
       setProfile(null);
       setUser(null);
       if (isDev) {
         // eslint-disable-next-line no-console
-        console.log("[Auth] signOut end", { usedTimeoutFallback, error: errorMessage });
+        console.log('[Auth] signOut end', { usedTimeoutFallback, error: errorMessage });
       }
     }
 
     return { error: errorMessage };
   }, []);
 
-  const updateUsername = useCallback(async (username: string): Promise<AuthResult> => {
-    if (!supabase) return { error: getSupabaseConfigError() };
-    if (!user) return { error: "You must be signed in." };
+  const updateUsername = useCallback(
+    async (username: string): Promise<AuthResult> => {
+      if (!supabase) return { error: getSupabaseConfigError() };
+      if (!user) return { error: 'You must be signed in.' };
 
-    const normalized = username.trim().toLowerCase();
-    if (normalized.length < 3) return { error: "Username must be at least 3 characters." };
-    if (!/^[a-z0-9_]+$/.test(normalized)) {
-      return { error: "Use lowercase letters, numbers, and underscores only." };
-    }
+      const normalized = username.trim().toLowerCase();
+      if (normalized.length < 3) return { error: 'Username must be at least 3 characters.' };
+      if (!/^[a-z0-9_]+$/.test(normalized)) {
+        return { error: 'Use lowercase letters, numbers, and underscores only.' };
+      }
 
-    try {
-      const request = supabase
-        .from("profiles")
-        .upsert({ id: user.id, username: normalized }, { onConflict: "id" })
-        .select("id, username, created_at")
-        .single();
+      try {
+        const request = supabase
+          .from('profiles')
+          .upsert({ id: user.id, username: normalized }, { onConflict: 'id' })
+          .select('id, username, created_at')
+          .single();
 
-      const { data, error } = await withTimeout(Promise.resolve(request), USERNAME_REQUEST_TIMEOUT_MS);
+        const { data, error } = await withTimeout(
+          Promise.resolve(request),
+          USERNAME_REQUEST_TIMEOUT_MS,
+        );
 
-      if (error) {
-        const message = error.message.toLowerCase();
-        if (message.includes("duplicate key") || message.includes("unique")) {
-          return { error: "Username already taken. Try another one." };
+        if (error) {
+          const message = error.message.toLowerCase();
+          if (message.includes('duplicate key') || message.includes('unique')) {
+            return { error: 'Username already taken. Try another one.' };
+          }
+          return { error: error.message };
         }
-        return { error: error.message };
-      }
 
-      setProfile(data as UserProfile);
-      return { error: null };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to save username.";
-      if (message.toLowerCase().includes("duplicate key") || message.toLowerCase().includes("unique")) {
-        return { error: "Username already taken. Try another one." };
+        setProfile(data as UserProfile);
+        return { error: null };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to save username.';
+        if (
+          message.toLowerCase().includes('duplicate key') ||
+          message.toLowerCase().includes('unique')
+        ) {
+          return { error: 'Username already taken. Try another one.' };
+        }
+        return { error: message };
       }
-      return { error: message };
-    }
-  }, [user]);
+    },
+    [user],
+  );
 
   return {
     user,

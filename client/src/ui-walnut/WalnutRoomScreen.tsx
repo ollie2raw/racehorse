@@ -1,14 +1,9 @@
-import { useState, type CSSProperties } from "react";
-import type { Tile } from "../types";
-import HandTray from "./components/HandTray";
-import DominoTile from "./components/DominoTile";
-import { fadeIn, hoverLift, tileSettle, turnPulse } from "./motion";
-import {
-  walnutFeltTexture,
-  walnutNoiseBackground,
-  walnutTheme,
-  walnutThemeVars,
-} from "./theme";
+import { useState, type CSSProperties } from 'react';
+import type { Tile } from '../types';
+import HandTray from './components/HandTray';
+import DominoTile from './components/DominoTile';
+import { fadeIn, hoverLift, tileSettle, turnPulse } from './motion';
+import { walnutFeltTexture, walnutNoiseBackground, walnutTheme, walnutThemeVars } from './theme';
 
 const mockBoard: Tile[] = [
   { low: 1, high: 6 },
@@ -36,13 +31,13 @@ export default function WalnutRoomScreen() {
 
   const rootStyle = {
     ...walnutThemeVars,
-    "--noise-texture": walnutNoiseBackground,
-    "--felt-texture": walnutFeltTexture,
-    "--fade-duration": `${fadeIn.transition.duration ?? 0.26}s`,
-    "--hover-duration": `${hoverLift.transition.duration ?? 0.2}s`,
-    "--turn-pulse-duration": `${turnPulse.transition.duration ?? 2.2}s`,
-    "--tile-settle-duration": `${tileSettle.transition.type === "spring" ? 0.52 : 0.45}s`,
-    "--lift-y": `${hoverLift.animate.y}px`,
+    '--noise-texture': walnutNoiseBackground,
+    '--felt-texture': walnutFeltTexture,
+    '--fade-duration': `${fadeIn.transition.duration ?? 0.26}s`,
+    '--hover-duration': `${hoverLift.transition.duration ?? 0.2}s`,
+    '--turn-pulse-duration': `${turnPulse.transition.duration ?? 2.2}s`,
+    '--tile-settle-duration': `${tileSettle.transition.type === 'spring' ? 0.52 : 0.45}s`,
+    '--lift-y': `${hoverLift.animate.y}px`,
     fontFamily: walnutTheme.fontStack,
   } as CSSProperties;
 
@@ -54,8 +49,10 @@ export default function WalnutRoomScreen() {
       <div className="walnut-atmo walnut-atmo-b" aria-hidden="true" />
 
       <section className="walnut-top-rail" aria-label="Players and score">
-        <article className={`walnut-player-card you ${isYourTurn ? "is-active" : "is-inactive"}`}>
-          <span className="walnut-avatar" aria-hidden="true">YU</span>
+        <article className={`walnut-player-card you ${isYourTurn ? 'is-active' : 'is-inactive'}`}>
+          <span className="walnut-avatar" aria-hidden="true">
+            YU
+          </span>
           <div className="walnut-player-meta">
             <p className="walnut-player-label">YOU</p>
             <p className="walnut-player-name">Racer</p>
@@ -66,8 +63,10 @@ export default function WalnutRoomScreen() {
 
         <span className="walnut-vs-chip">VS</span>
 
-        <article className={`walnut-player-card opp ${!isYourTurn ? "is-active" : "is-inactive"}`}>
-          <span className="walnut-avatar walnut-avatar-opp" aria-hidden="true">OP</span>
+        <article className={`walnut-player-card opp ${!isYourTurn ? 'is-active' : 'is-inactive'}`}>
+          <span className="walnut-avatar walnut-avatar-opp" aria-hidden="true">
+            OP
+          </span>
           <div className="walnut-player-meta">
             <p className="walnut-player-label">OPP</p>
             <p className="walnut-player-name">Rival</p>

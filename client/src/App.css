@@ -74,7 +74,13 @@ body {
   min-height: 100dvh;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   display: flex;
   flex-direction: column;
 }
@@ -174,7 +180,11 @@ body {
 .connect-screen {
   position: relative;
   justify-content: center;
-  background: radial-gradient(circle at 50% 38%, rgba(37, 117, 74, 0.3) 0%, rgba(7, 14, 20, 0.9) 72%);
+  background: radial-gradient(
+    circle at 50% 38%,
+    rgba(37, 117, 74, 0.3) 0%,
+    rgba(7, 14, 20, 0.9) 72%
+  );
 }
 
 .lobby-card {
@@ -354,8 +364,7 @@ body {
   max-width: none;
   border-radius: 18px;
   border: 1px solid rgba(236, 252, 245, 0.2);
-  background:
-    linear-gradient(175deg, rgba(17, 25, 39, 0.78) 0%, rgba(8, 12, 24, 0.93) 100%);
+  background: linear-gradient(175deg, rgba(17, 25, 39, 0.78) 0%, rgba(8, 12, 24, 0.93) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
     0 26px 68px rgba(0, 0, 0, 0.48);
@@ -413,7 +422,11 @@ body {
   display: grid;
   gap: 4px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, background 180ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    background 180ms ease;
 }
 
 .mode-option:hover {
@@ -502,7 +515,9 @@ body {
   font-weight: 600;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .mode-inline-btn:hover:not(:disabled) {
@@ -674,9 +689,9 @@ body {
   background: rgba(20, 30, 40, 0.65);
   border-radius: var(--radius-md);
   padding: 10px 14px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.24);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);
 }
 
 .scoreboard-header {
@@ -709,7 +724,7 @@ body {
   border-radius: var(--radius-sm);
   min-width: 64px;
   text-align: center;
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .player-score.you {
@@ -721,7 +736,9 @@ body {
   box-shadow:
     0 0 0 1px rgba(93, 194, 255, 0.3),
     0 8px 18px rgba(37, 99, 235, 0.24);
-  transition: box-shadow 180ms ease, background 180ms ease;
+  transition:
+    box-shadow 180ms ease,
+    background 180ms ease;
 }
 
 .player-score.winner {
@@ -789,8 +806,13 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.8; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 
 /* ─── Board Area ────────────────────────────────────────────── */
@@ -808,7 +830,7 @@ body {
 }
 
 .board-area::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   background: var(--bg-board-pattern);
@@ -817,7 +839,7 @@ body {
 }
 
 .board-area::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -848,7 +870,7 @@ body {
   position: absolute;
   /* Prevent tiles from causing layout jitter */
   will-change: transform;
-  animation: board-tile-enter 220ms cubic-bezier(.2,.8,.2,1);
+  animation: board-tile-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes board-tile-enter {
@@ -882,7 +904,8 @@ body {
 }
 
 @keyframes zone-glow {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
   }
   50% {
@@ -947,12 +970,16 @@ body {
 
 .domino-tile.selected .domino-body {
   border-color: var(--tile-selected);
-  box-shadow: 0 0 0 4px var(--tile-selected), var(--tile-shadow);
+  box-shadow:
+    0 0 0 4px var(--tile-selected),
+    var(--tile-shadow);
 }
 
 .domino-tile.highlight .domino-body {
   border-color: var(--tile-highlight);
-  box-shadow: 0 0 0 4px var(--tile-highlight), var(--tile-shadow);
+  box-shadow:
+    0 0 0 4px var(--tile-highlight),
+    var(--tile-shadow);
 }
 
 .domino-tile.disabled:not(.board-tile) {
@@ -1134,7 +1161,7 @@ body {
 
 .hand-container .domino-tile {
   flex: 0 0 auto;
-  animation: hand-tile-enter 220ms cubic-bezier(.2,.8,.2,1);
+  animation: hand-tile-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes hand-tile-enter {
@@ -1283,12 +1310,16 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 100;
-  animation: fade-in 260ms cubic-bezier(.2,.8,.2,1);
+  animation: fade-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .game-over-card {
@@ -1301,7 +1332,7 @@ body {
   box-shadow:
     0 24px 60px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  animation: victory-enter 280ms cubic-bezier(.2,.8,.2,1);
+  animation: victory-enter 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
   min-width: min(460px, calc(100vw - 32px));
 }
 
@@ -1327,7 +1358,7 @@ body {
 }
 
 .victory-title::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 50%;
   top: 52%;
@@ -1389,8 +1420,15 @@ body {
 }
 
 @keyframes crown-pulse {
-  0%, 100% { transform: translateY(0); opacity: 0.9; }
-  50% { transform: translateY(-1px); opacity: 1; }
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-1px);
+    opacity: 1;
+  }
 }
 
 .victory-cta {

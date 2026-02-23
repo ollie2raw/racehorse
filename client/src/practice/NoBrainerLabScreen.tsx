@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
-import { Board, DominoTile } from "../components";
-import type { PlacementPosition, Tile } from "../types";
+import { useCallback, useEffect, useState } from 'react';
+import { Board, DominoTile } from '../components';
+import type { PlacementPosition, Tile } from '../types';
 import {
   loadNoBrainerDataset,
   pickNoBrainerHand,
   type NoBrainerHandRecord,
-} from "./noBrainerDataset";
+} from './noBrainerDataset';
 import {
   createPracticeState,
   hintForState,
   playPracticeMove,
   type NoBrainerPracticeState,
-} from "./noBrainerLogic";
-import "./noBrainerLab.css";
+} from './noBrainerLogic';
+import './noBrainerLab.css';
 
 interface NoBrainerLabScreenProps {
   onBack: () => void;
@@ -31,22 +31,23 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
   const [record, setRecord] = useState<NoBrainerHandRecord | null>(null);
   const [practiceState, setPracticeState] = useState<NoBrainerPracticeState | null>(null);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
-  const [hintText, setHintText] = useState<string>("");
+  const [hintText, setHintText] = useState<string>('');
   const [showSolution, setShowSolution] = useState(false);
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState<string>('');
 
-  const showDebug = typeof window !== "undefined" && window.localStorage.getItem("PRACTICE_DEBUG") === "1";
+  const showDebug =
+    typeof window !== 'undefined' && window.localStorage.getItem('PRACTICE_DEBUG') === '1';
 
   useEffect(() => {
     let active = true;
     loadNoBrainerDataset()
-      .then(rows => {
+      .then((rows) => {
         if (!active) return;
         setDataset(rows);
       })
       .catch((err) => {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load dataset.");
+        setError(err instanceof Error ? err.message : 'Failed to load dataset.');
       });
     return () => {
       active = false;
@@ -57,13 +58,13 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
 
   const startHand = useCallback(() => {
     if (!dataset || dataset.length === 0) return;
-    const nextRecord = pickNoBrainerHand(dataset, "random");
+    const nextRecord = pickNoBrainerHand(dataset, 'random');
     setRecord(nextRecord);
     setPracticeState(createPracticeState(nextRecord.hand));
     setSelectedTile(null);
-    setHintText("");
+    setHintText('');
     setShowSolution(false);
-    setError("");
+    setError('');
   }, [dataset]);
 
   useEffect(() => {
@@ -73,18 +74,18 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
   }, [canStart, record, startHand]);
 
   const onPositionClick = (position: PlacementPosition) => {
-    if (!practiceState || !selectedTile || practiceState.status !== "playing") return;
+    if (!practiceState || !selectedTile || practiceState.status !== 'playing') return;
     const next = playPracticeMove(practiceState, selectedTile, position);
     setPracticeState(next);
     setSelectedTile(null);
-    setHintText("");
+    setHintText('');
   };
 
   const onHint = () => {
     if (!practiceState || !record) return;
     const hint = hintForState(practiceState, record.example);
     if (!hint) {
-      setHintText("No hint available from solution sequence right now.");
+      setHintText('No hint available from solution sequence right now.');
       return;
     }
     setSelectedTile(hint.tile);
@@ -120,22 +121,31 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
       <section className="practice-toolbar">
         <div className="practice-title-wrap">
           <h2>No-Brainer Lab</h2>
-          <p>Play all 7 tiles in one turn. Continue only after a double or scoring play. Final tile must be non-double and non-scoring.</p>
+          <p>
+            Play all 7 tiles in one turn. Continue only after a double or scoring play. Final tile
+            must be non-double and non-scoring.
+          </p>
         </div>
         <div className="practice-controls">
-          <button className="btn text" onClick={startHand}>New Hand</button>
-          <button className="btn text" onClick={onHint}>Hint</button>
-          <button className="btn text" onClick={() => setShowSolution(prev => !prev)}>
-            {showSolution ? "Hide Solution" : "Show Solution"}
+          <button className="btn text" onClick={startHand}>
+            New Hand
           </button>
-          <button className="btn text" onClick={onBack}>Back to Home</button>
+          <button className="btn text" onClick={onHint}>
+            Hint
+          </button>
+          <button className="btn text" onClick={() => setShowSolution((prev) => !prev)}>
+            {showSolution ? 'Hide Solution' : 'Show Solution'}
+          </button>
+          <button className="btn text" onClick={onBack}>
+            Back to Home
+          </button>
         </div>
       </section>
 
       <section className="practice-status-row">
         <div className={`practice-status ${practiceState.status}`}>
-          {practiceState.status === "playing" && (practiceState.board?.mainLine.length ?? 0) === 0
-            ? "Select a legal opening tile."
+          {practiceState.status === 'playing' && (practiceState.board?.mainLine.length ?? 0) === 0
+            ? 'Select a legal opening tile.'
             : practiceState.message}
         </div>
         {hintText && <div className="practice-hint">{hintText}</div>}
@@ -164,11 +174,11 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
                 size={78}
                 selected={selected}
                 highlight={false}
-                disabled={practiceState.status !== "playing"}
+                disabled={practiceState.status !== 'playing'}
                 onClick={() => {
-                  if (practiceState.status !== "playing") return;
+                  if (practiceState.status !== 'playing') return;
                   const isPlayable = practiceState.legalMoves.some(
-                    m => m.type === "play" && m.tile && tileEquals(m.tile, tile)
+                    (m) => m.type === 'play' && m.tile && tileEquals(m.tile, tile),
                   );
                   if (!isPlayable) return;
                   setSelectedTile(tile);
@@ -184,7 +194,12 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
           <h4>Solution sequence</h4>
           <div className="practice-solution-tiles">
             {record.example.map((tile, idx) => (
-              <DominoTile key={`sol-${idx}-${tile.low}-${tile.high}`} tile={tile} size={48} disabled />
+              <DominoTile
+                key={`sol-${idx}-${tile.low}-${tile.high}`}
+                tile={tile}
+                size={48}
+                disabled
+              />
             ))}
           </div>
         </section>
@@ -192,10 +207,18 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
 
       {showDebug && (
         <aside className="practice-debug">
-          <div><strong>open ends:</strong> {practiceState.openEnds.join(", ") || "(none)"}</div>
-          <div><strong>open sum:</strong> {practiceState.openSum}</div>
-          <div><strong>scored:</strong> {practiceState.scored ? "yes" : "no"}</div>
-          <div><strong>must continue:</strong> {practiceState.mustContinue ? "yes" : "no"}</div>
+          <div>
+            <strong>open ends:</strong> {practiceState.openEnds.join(', ') || '(none)'}
+          </div>
+          <div>
+            <strong>open sum:</strong> {practiceState.openSum}
+          </div>
+          <div>
+            <strong>scored:</strong> {practiceState.scored ? 'yes' : 'no'}
+          </div>
+          <div>
+            <strong>must continue:</strong> {practiceState.mustContinue ? 'yes' : 'no'}
+          </div>
         </aside>
       )}
     </div>

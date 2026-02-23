@@ -1,5 +1,5 @@
-import type { Tile } from "../../types";
-import DominoTile from "./DominoTile";
+import type { Tile } from '../../types';
+import DominoTile from './DominoTile';
 
 interface HandAction {
   id: string;
@@ -37,7 +37,11 @@ export default function HandTray({
           const selected = selectedTile ? tileEquals(tile, selectedTile) : false;
 
           return (
-            <div key={`${tile.low}-${tile.high}-${idx}`} role="listitem" className="walnut-hand-item">
+            <div
+              key={`${tile.low}-${tile.high}-${idx}`}
+              role="listitem"
+              className="walnut-hand-item"
+            >
               <DominoTile
                 tile={tile}
                 size={tileSize}
@@ -53,7 +57,12 @@ export default function HandTray({
       {hasActions && (
         <div className="walnut-hand-actions" aria-label="Turn actions">
           {actions.map((action) => (
-            <button key={action.id} type="button" className="walnut-action-ghost" onClick={action.onClick}>
+            <button
+              key={action.id}
+              type="button"
+              className="walnut-action-ghost"
+              onClick={action.onClick}
+            >
               {action.label}
             </button>
           ))}

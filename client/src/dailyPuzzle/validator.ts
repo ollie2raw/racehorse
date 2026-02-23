@@ -1,5 +1,10 @@
-import { applyPlayMove, getDisplayOpenEnds, getLegalMoves, type BotMatchState } from "../bot/botEngine";
-import type { CuratedDailyPuzzle, PuzzleValidationResult } from "./types";
+import {
+  applyPlayMove,
+  getDisplayOpenEnds,
+  getLegalMoves,
+  type BotMatchState,
+} from '../bot/botEngine';
+import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
 
 function cloneState(state: BotMatchState): BotMatchState {
   return {
@@ -35,7 +40,7 @@ export function createPuzzleMatchState(puzzle: CuratedDailyPuzzle): BotMatchStat
     boneyard: [],
     deadTiles: [],
     handOpen: true,
-    currentPlayer: "you",
+    currentPlayer: 'you',
     consecutivePasses: 0,
     handNumber: 1,
     handOver: false,
@@ -50,7 +55,7 @@ export function createPuzzleMatchState(puzzle: CuratedDailyPuzzle): BotMatchStat
 
 export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResult {
   const initial = createPuzzleMatchState(puzzle);
-  const firstMoves = getLegalMoves(initial, "you").filter((move) => move.type === "play");
+  const firstMoves = getLegalMoves(initial, 'you').filter((move) => move.type === 'play');
 
   let bestScore = 0;
   let exploredStates = 0;
@@ -58,7 +63,7 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
   const seen = new Set<string>();
 
   for (const move of firstMoves) {
-    const res = applyPlayMove(initial, "you", move);
+    const res = applyPlayMove(initial, 'you', move);
     if ((res.scored?.points ?? 0) > 0) {
       hasScoringMove = true;
       break;
@@ -69,10 +74,10 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
     const handKey = [...state.players.you.hand]
       .map((t) => `${t.low}-${t.high}`)
       .sort()
-      .join(",");
+      .join(',');
     const boardKey = state.board
-      ? state.board.mainLine.map((p) => `${p.tile.low}-${p.tile.high}-${p.orientation}`).join("|")
-      : "empty";
+      ? state.board.mainLine.map((p) => `${p.tile.low}-${p.tile.high}-${p.orientation}`).join('|')
+      : 'empty';
     return `${movesUsed}::${state.currentPlayer}::${state.players.you.score}::${handKey}::${boardKey}`;
   };
 
@@ -88,17 +93,17 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
       return false;
     }
 
-    if (state.currentPlayer !== "you") {
+    if (state.currentPlayer !== 'you') {
       return false;
     }
 
-    const legal = getLegalMoves(state, "you").filter((move) => move.type === "play");
+    const legal = getLegalMoves(state, 'you').filter((move) => move.type === 'play');
     if (legal.length === 0) {
       return false;
     }
 
     for (const move of legal) {
-      const next = applyPlayMove(state, "you", move).state;
+      const next = applyPlayMove(state, 'you', move).state;
       const key = keyOf(next, movesUsed + 1);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -112,16 +117,16 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
 
   const solvable = dfs(initial, 0);
 
-  let reason = "OK";
+  let reason = 'OK';
   if (firstMoves.length === 0) {
-    reason = "No legal opening moves.";
+    reason = 'No legal opening moves.';
   } else if (!solvable) {
-    reason = "Target score unreachable within max moves under racehorse turn flow.";
+    reason = 'Target score unreachable within max moves under racehorse turn flow.';
   }
 
   if (!solvable) {
     // eslint-disable-next-line no-console
-    console.error("[DailyPuzzleValidator] invalid puzzle", {
+    console.error('[DailyPuzzleValidator] invalid puzzle', {
       puzzleId: puzzle.id,
       date: puzzle.puzzleDate,
       bestScore,

@@ -1,7 +1,7 @@
 // client/src/components/Board.tsx
-import { useMemo, useRef, useEffect, useState, useCallback } from "react";
-import { DominoTile } from "./DominoTile";
-import type { Tile, BoardState, PlacementPosition, Move } from "../types";
+import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { DominoTile } from './DominoTile';
+import type { Tile, BoardState, PlacementPosition, Move } from '../types';
 
 // ─── Layout Constants ────────────────────────────────────────
 
@@ -50,30 +50,27 @@ function tileEquals(a: Tile, b: Tile): boolean {
 }
 
 interface HubLookup {
-  byMainIndex: Map<number, BoardState["hubDoubles"][number]>;
+  byMainIndex: Map<number, BoardState['hubDoubles'][number]>;
   byLaneDepth: Map<string, number>;
-  byId: Map<number, BoardState["hubDoubles"][number]>;
+  byId: Map<number, BoardState['hubDoubles'][number]>;
 }
 
 // ─── Layout Engine ───────────────────────────────────────────
 
-function computeLayout(
-  board: BoardState | null,
-  validPositions: PlacementPosition[]
-): BoardLayout {
+function computeLayout(board: BoardState | null, validPositions: PlacementPosition[]): BoardLayout {
   const tiles: LayoutTile[] = [];
   const zones: LayoutZone[] = [];
 
   if (!board) {
     // Empty board - opening placement zone
-    if (validPositions.includes("left")) {
+    if (validPositions.includes('left')) {
       zones.push({
-        position: "left",
+        position: 'left',
         x: 0,
         y: 0,
         width: TILE_UNIT * 2,
         height: TILE_UNIT,
-        key: "zone-opening",
+        key: 'zone-opening',
       });
     }
 
@@ -91,22 +88,26 @@ function computeLayout(
 
   // Build hub lookup
   const hubLookup: HubLookup = {
-    byMainIndex: new Map<number, BoardState["hubDoubles"][number]>(),
+    byMainIndex: new Map<number, BoardState['hubDoubles'][number]>(),
     byLaneDepth: new Map<string, number>(),
-    byId: new Map<number, BoardState["hubDoubles"][number]>(),
+    byId: new Map<number, BoardState['hubDoubles'][number]>(),
   };
   for (let idx = 0; idx < hubDoubles.length; idx++) {
     const hub = hubDoubles[idx];
     const stableHubId = hub.hubId;
-    if (typeof stableHubId !== "number") continue;
+    if (typeof stableHubId !== 'number') continue;
     hubLookup.byId.set(stableHubId, hub);
 
-    if ((hub.laneType ?? "mainline") === "mainline") {
+    if ((hub.laneType ?? 'mainline') === 'mainline') {
       const mainIndex = hub.mainlineIndex ?? hub.tileIndex;
       hubLookup.byMainIndex.set(mainIndex, hub);
     }
 
-    if ((hub.laneType ?? "mainline") === "branch" && hub.laneRef && typeof hub.branchDepth === "number") {
+    if (
+      (hub.laneType ?? 'mainline') === 'branch' &&
+      hub.laneRef &&
+      typeof hub.branchDepth === 'number'
+    ) {
       hubLookup.byLaneDepth.set(`${hub.laneRef}|${hub.branchDepth}`, stableHubId);
     }
   }
@@ -115,10 +116,10 @@ function computeLayout(
   const laidOutHubIds = new Set<number>();
 
   const layoutHubBranches = (
-    hub: BoardState["hubDoubles"][number],
+    hub: BoardState['hubDoubles'][number],
     hubId: number,
     hubX: number,
-    hubY: number
+    hubY: number,
   ) => {
     if (laidOutHubIds.has(hubId)) {
       return { tiles: [] as LayoutTile[], zones: [] as LayoutZone[], minY: hubY, maxY: hubY };
@@ -133,7 +134,7 @@ function computeLayout(
       validPositions,
       hubLookup,
       hubCenters,
-      layoutHubBranches
+      layoutHubBranches,
     );
   };
 
@@ -168,7 +169,7 @@ function computeLayout(
 
     // Doubles are perpendicular (90 deg rotation)
     const rotation = double ? 90 : 0;
-    const flipped = pt.orientation.endsWith("flipped");
+    const flipped = pt.orientation.endsWith('flipped');
 
     tiles.push({
       tile: pt.tile,
@@ -180,13 +181,8 @@ function computeLayout(
     });
 
     // Layout branches from this hub
-    if (hub && hub.isCrossed && typeof hub.hubId === "number") {
-      const branchResult = layoutHubBranches(
-        hub,
-        hub.hubId,
-        centerX,
-        mainY
-      );
+    if (hub && hub.isCrossed && typeof hub.hubId === 'number') {
+      const branchResult = layoutHubBranches(hub, hub.hubId, centerX, mainY);
       tiles.push(...branchResult.tiles);
       zones.push(...branchResult.zones);
       minY = Math.min(minY, branchResult.minY);
@@ -201,28 +197,28 @@ function computeLayout(
   maxX = totalWidth / 2 + 3;
 
   // Main line placement zones
-  if (validPositions.includes("left")) {
+  if (validPositions.includes('left')) {
     const leftX = -totalWidth / 2 - TILE_GAP - TILE_UNIT;
     zones.push({
-      position: "left",
+      position: 'left',
       x: leftX,
       y: mainY,
       width: TILE_UNIT * 2,
       height: TILE_UNIT,
-      key: "zone-left",
+      key: 'zone-left',
     });
     minX = Math.min(minX, leftX - TILE_UNIT);
   }
 
-  if (validPositions.includes("right")) {
+  if (validPositions.includes('right')) {
     const rightX = totalWidth / 2 + TILE_GAP + TILE_UNIT;
     zones.push({
-      position: "right",
+      position: 'right',
       x: rightX,
       y: mainY,
       width: TILE_UNIT * 2,
       height: TILE_UNIT,
-      key: "zone-right",
+      key: 'zone-right',
     });
     maxX = Math.max(maxX, rightX + TILE_UNIT);
   }
@@ -238,7 +234,7 @@ function computeLayout(
 }
 
 function layoutBranches(
-  hub: BoardState["hubDoubles"][number],
+  hub: BoardState['hubDoubles'][number],
   hubId: number,
   hubX: number,
   hubY: number,
@@ -246,11 +242,11 @@ function layoutBranches(
   hubLookup: HubLookup,
   hubCenters: Map<number, { x: number; y: number }>,
   layoutHubBranches: (
-    hub: BoardState["hubDoubles"][number],
+    hub: BoardState['hubDoubles'][number],
     hubId: number,
     hubX: number,
-    hubY: number
-  ) => { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number }
+    hubY: number,
+  ) => { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number },
 ): { tiles: LayoutTile[]; zones: LayoutZone[]; minY: number; maxY: number } {
   const tiles: LayoutTile[] = [];
   const zones: LayoutZone[] = [];
@@ -259,8 +255,8 @@ function layoutBranches(
   let minX = hubX - TILE_UNIT / 2;
   let maxX = hubX + TILE_UNIT / 2;
 
-  const laneType = hub.laneType ?? "mainline";
-  const verticalArms = laneType === "mainline";
+  const laneType = hub.laneType ?? 'mainline';
+  const verticalArms = laneType === 'mainline';
 
   // arm 0: up (mainline lane) / left (branch lane)
   // arm 1: down (mainline lane) / right (branch lane)
@@ -281,12 +277,10 @@ function layoutBranches(
         const double = isDouble(pt.tile);
 
         const tileSpan = double ? TILE_UNIT : TILE_UNIT * 2;
-        const rotation = verticalArms
-          ? (double ? 0 : 90)
-          : (double ? 90 : 0);
+        const rotation = verticalArms ? (double ? 0 : 90) : double ? 90 : 0;
 
         // Arm-0 needs inverted flip relative to arm-1 for both vertical and horizontal lanes.
-        const serverFlipped = pt.orientation.endsWith("flipped");
+        const serverFlipped = pt.orientation.endsWith('flipped');
         const flipped = armIdx === 0 ? !serverFlipped : serverFlipped;
 
         const centerX = verticalArms ? currentX : currentX + direction * (tileSpan / 2);
@@ -304,15 +298,15 @@ function layoutBranches(
         if (double) {
           const laneRef = `branch-${hubId}-${armIdx}`;
           const childHubId = hubLookup.byLaneDepth.get(`${laneRef}|${i}`);
-          if (typeof childHubId === "number") {
+          if (typeof childHubId === 'number') {
             hubCenters.set(childHubId, { x: centerX, y: centerY });
             const childHub = hubLookup.byId.get(childHubId);
             if (childHub && childHub.isCrossed) {
               const nested = layoutHubBranches(childHub, childHubId, centerX, centerY);
               tiles.push(...nested.tiles);
               zones.push(...nested.zones);
-              minX = Math.min(minX, ...nested.tiles.map(t => t.x));
-              maxX = Math.max(maxX, ...nested.tiles.map(t => t.x));
+              minX = Math.min(minX, ...nested.tiles.map((t) => t.x));
+              maxX = Math.max(maxX, ...nested.tiles.map((t) => t.x));
               minY = Math.min(minY, nested.minY);
               maxY = Math.max(maxY, nested.maxY);
             }
@@ -401,8 +395,8 @@ export function Board({
   const validPositions = useMemo((): PlacementPosition[] => {
     if (!selectedTile) return [];
     return legalMoves
-      .filter(m => m.type === "play" && m.tile && tileEquals(m.tile, selectedTile))
-      .map(m => m.position!)
+      .filter((m) => m.type === 'play' && m.tile && tileEquals(m.tile, selectedTile))
+      .map((m) => m.position!)
       .filter(Boolean);
   }, [selectedTile, legalMoves]);
 
@@ -437,34 +431,40 @@ export function Board({
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setCamera(cam => ({
+    setCamera((cam) => ({
       ...cam,
       scale: Math.min(1.8, Math.max(0.5, cam.scale * delta)),
     }));
   }, []);
 
   // Pan handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    setIsDragging(true);
-    dragStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      camX: camera.x,
-      camY: camera.y,
-    };
-  }, [camera.x, camera.y]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      setIsDragging(true);
+      dragStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        camX: camera.x,
+        camY: camera.y,
+      };
+    },
+    [camera.x, camera.y],
+  );
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return;
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    setCamera(cam => ({
-      ...cam,
-      x: dragStart.current.camX + dx,
-      y: dragStart.current.camY + dy,
-    }));
-  }, [isDragging]);
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStart.current.x;
+      const dy = e.clientY - dragStart.current.y;
+      setCamera((cam) => ({
+        ...cam,
+        x: dragStart.current.camX + dx,
+        y: dragStart.current.camY + dy,
+      }));
+    },
+    [isDragging],
+  );
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -502,13 +502,13 @@ export function Board({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onDoubleClick={handleDoubleClick}
-      style={{ cursor: isDragging ? "grabbing" : "grab" }}
+      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
     >
       <div
         className="board-canvas"
         style={{
           transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
-          transformOrigin: "center center",
+          transformOrigin: 'center center',
         }}
       >
         {/* Render tiles */}
@@ -522,10 +522,10 @@ export function Board({
               key={lt.key}
               className="board-tile-wrapper"
               style={{
-                position: "absolute",
+                position: 'absolute',
                 left: `calc(50% + ${x}px)`,
                 top: `calc(50% + ${y}px)`,
-                transform: "translate(-50%, -50%)",
+                transform: 'translate(-50%, -50%)',
               }}
             >
               <DominoTile
@@ -534,7 +534,7 @@ export function Board({
                 rotation={lt.rotation}
                 flipped={lt.flipped}
                 disabled
-                className={`board-tile ${tileIsDouble ? "hub-double" : ""}`}
+                className={`board-tile ${tileIsDouble ? 'hub-double' : ''}`}
               />
             </div>
           );
@@ -548,23 +548,23 @@ export function Board({
           const height = zone.height * unitToPixels;
 
           // Determine arrow direction
-          let arrow = "+";
-          if (zone.position === "left") arrow = "←";
-          else if (zone.position === "right") arrow = "→";
-          else if (zone.position.includes("-0")) arrow = "↑";
-          else if (zone.position.includes("-1")) arrow = "↓";
+          let arrow = '+';
+          if (zone.position === 'left') arrow = '←';
+          else if (zone.position === 'right') arrow = '→';
+          else if (zone.position.includes('-0')) arrow = '↑';
+          else if (zone.position.includes('-1')) arrow = '↓';
 
           return (
             <div
               key={zone.key}
               className="placement-zone active"
               style={{
-                position: "absolute",
+                position: 'absolute',
                 left: `calc(50% + ${x}px)`,
                 top: `calc(50% + ${y}px)`,
                 width,
                 height,
-                transform: "translate(-50%, -50%)",
+                transform: 'translate(-50%, -50%)',
               }}
               onClick={(e) => {
                 e.stopPropagation();

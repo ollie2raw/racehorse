@@ -1,8 +1,8 @@
-import type { Move } from "../types";
-import type { BotMatchState } from "./botEngine";
-import { getLegalMoves, previewPlayMove } from "./botEngine";
+import type { Move } from '../types';
+import type { BotMatchState } from './botEngine';
+import { getLegalMoves, previewPlayMove } from './botEngine';
 
-export type BotDifficulty = "casual" | "standard" | "hard";
+export type BotDifficulty = 'casual' | 'standard' | 'hard';
 
 export interface BotChoice {
   move: Move;
@@ -29,7 +29,7 @@ function pipExposureLikelihood(openEnds: number[]): number {
 function estimateMobility(remaining: { low: number; high: number }[], openEnds: number[]): number {
   let mobility = 0;
   for (const tile of remaining) {
-    if (openEnds.some(p => p === tile.low || p === tile.high)) {
+    if (openEnds.some((p) => p === tile.low || p === tile.high)) {
       mobility += 1;
     }
   }
@@ -54,20 +54,20 @@ function estimateReplyRisk(openEnds: number[], openSum: number): number {
 function tiebreak(move: Move): string {
   const tile = move.tile!;
   const total = tile.low + tile.high;
-  const pos = move.position ?? "";
+  const pos = move.position ?? '';
   return `${99 - total}-${99 - tile.high}-${99 - tile.low}-${pos}`;
 }
 
 export function chooseBotMove(
   state: BotMatchState,
-  difficulty: BotDifficulty = "standard"
+  difficulty: BotDifficulty = 'standard',
 ): BotChoice | null {
-  const candidates: Move[] = getLegalMoves(state, "bot").filter(m => m.type === "play");
+  const candidates: Move[] = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
 
   if (candidates.length === 0) return null;
 
   const scored = candidates.map((move) => {
-    const preview = previewPlayMove(state, "bot", move)!;
+    const preview = previewPlayMove(state, 'bot', move)!;
     const immediate = preview.immediateScore;
     const doubleBias = preview.isDouble ? 1 : 0;
     const mobility = estimateMobility(preview.nextHand, preview.openEnds);
@@ -76,13 +76,13 @@ export function chooseBotMove(
     const replyRisk = estimateReplyRisk(preview.openEnds, preview.openSum);
 
     let score = immediate * 100 + unload * 0.5;
-    if (difficulty !== "casual") {
+    if (difficulty !== 'casual') {
       score += mobility * 8 + denial * 0.35;
       score += doubleBias * 2;
     } else {
       score += doubleBias * 4;
     }
-    if (difficulty === "hard" && !preview.turnContinues) {
+    if (difficulty === 'hard' && !preview.turnContinues) {
       score -= replyRisk * 3.25;
     }
 

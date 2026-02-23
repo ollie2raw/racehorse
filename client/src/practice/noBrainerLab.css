@@ -26,7 +26,9 @@
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: linear-gradient(145deg, rgba(235, 250, 243, 0.1), rgba(124, 153, 145, 0.08));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 12px 28px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 12px 28px rgba(0, 0, 0, 0.3);
 }
 
 .practice-title-wrap h2 {
@@ -88,8 +90,12 @@
   color: rgba(232, 242, 237, 0.92);
 }
 
-.practice-status.won { color: #97f1cd; }
-.practice-status.failed { color: #f3a6a6; }
+.practice-status.won {
+  color: #97f1cd;
+}
+.practice-status.failed {
+  color: #f3a6a6;
+}
 
 .practice-hint {
   font-size: 0.78rem;

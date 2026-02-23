@@ -1,15 +1,13 @@
-import type { User } from "@supabase/supabase-js";
-import type { BoardState, PlacedTile, Tile } from "../types";
-import { supabase } from "../lib/supabase";
+import type { User } from '@supabase/supabase-js';
+import type { BoardState, PlacedTile, Tile } from '../types';
+import { supabase } from '../lib/supabase';
 
-export type DailyObjective =
-  | { type: "finish_in_moves"; maxMoves: number }
-  | { type: "win_hand" };
+export type DailyObjective = { type: 'finish_in_moves'; maxMoves: number } | { type: 'win_hand' };
 
 export interface DailyPuzzleConfig {
   startingHand: Tile[];
   startingBoard: BoardState | PlacedTile[] | null;
-  startingTurn?: "you";
+  startingTurn?: 'you';
   objective: DailyObjective;
   notes?: string;
 }
@@ -32,14 +30,16 @@ export interface LeaderboardRow {
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs = 10000): Promise<T> {
   return new Promise((resolve, reject) => {
-    const id = setTimeout(() => reject(new Error("Request timed out. Try again.")), timeoutMs);
-    promise.then((v) => {
-      clearTimeout(id);
-      resolve(v);
-    }).catch((err) => {
-      clearTimeout(id);
-      reject(err);
-    });
+    const id = setTimeout(() => reject(new Error('Request timed out. Try again.')), timeoutMs);
+    promise
+      .then((v) => {
+        clearTimeout(id);
+        resolve(v);
+      })
+      .catch((err) => {
+        clearTimeout(id);
+        reject(err);
+      });
   });
 }
 
@@ -53,11 +53,11 @@ export async function getTodayPuzzle(): Promise<DailyPuzzle | null> {
     const { data, error } = await withTimeout(
       Promise.resolve(
         supabase
-          .from("daily_puzzles")
-          .select("id, puzzle_date, title, seed, config")
-          .eq("puzzle_date", todayUtcDate())
-          .maybeSingle()
-      )
+          .from('daily_puzzles')
+          .select('id, puzzle_date, title, seed, config')
+          .eq('puzzle_date', todayUtcDate())
+          .maybeSingle(),
+      ),
     );
     if (error || !data) return null;
     return data as DailyPuzzle;
@@ -69,32 +69,30 @@ export async function getTodayPuzzle(): Promise<DailyPuzzle | null> {
 export async function submitPuzzleResult(
   puzzleId: string,
   user: User,
-  payload: { moves: number; milliseconds: number; solved: boolean; attemptHash?: string }
+  payload: { moves: number; milliseconds: number; solved: boolean; attemptHash?: string },
 ): Promise<{ error: string | null }> {
-  if (!supabase) return { error: "Supabase not configured." };
+  if (!supabase) return { error: 'Supabase not configured.' };
 
   try {
     const { error } = await withTimeout(
       Promise.resolve(
-        supabase
-          .from("daily_puzzle_submissions")
-          .upsert(
-            {
-              puzzle_id: puzzleId,
-              user_id: user.id,
-              moves: payload.moves,
-              milliseconds: payload.milliseconds,
-              solved: payload.solved,
-              attempt_hash: payload.attemptHash ?? null,
-            },
-            { onConflict: "puzzle_id,user_id" }
-          )
-      )
+        supabase.from('daily_puzzle_submissions').upsert(
+          {
+            puzzle_id: puzzleId,
+            user_id: user.id,
+            moves: payload.moves,
+            milliseconds: payload.milliseconds,
+            solved: payload.solved,
+            attempt_hash: payload.attemptHash ?? null,
+          },
+          { onConflict: 'puzzle_id,user_id' },
+        ),
+      ),
     );
 
     return { error: error?.message ?? null };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : "Unable to submit puzzle result." };
+    return { error: err instanceof Error ? err.message : 'Unable to submit puzzle result.' };
   }
 }
 
@@ -104,14 +102,14 @@ export async function getTodayLeaderboard(puzzleId: string): Promise<Leaderboard
     const { data, error } = await withTimeout(
       Promise.resolve(
         supabase
-          .from("daily_puzzle_submissions")
-          .select("user_id, moves, milliseconds, solved")
-          .eq("puzzle_id", puzzleId)
-          .eq("solved", true)
-          .order("moves", { ascending: true })
-          .order("milliseconds", { ascending: true })
-          .limit(20)
-      )
+          .from('daily_puzzle_submissions')
+          .select('user_id, moves, milliseconds, solved')
+          .eq('puzzle_id', puzzleId)
+          .eq('solved', true)
+          .order('moves', { ascending: true })
+          .order('milliseconds', { ascending: true })
+          .limit(20),
+      ),
     );
 
     if (error || !data) return [];
@@ -121,25 +119,24 @@ export async function getTodayLeaderboard(puzzleId: string): Promise<Leaderboard
 
     if (userIds.length > 0) {
       const profileResp = await withTimeout(
-        Promise.resolve(
-          supabase
-            .from("profiles")
-            .select("id, username")
-            .in("id", userIds)
-        )
+        Promise.resolve(supabase.from('profiles').select('id, username').in('id', userIds)),
       );
 
       if (!profileResp.error && profileResp.data) {
-        usernameMap = new Map((profileResp.data as Array<{ id: string; username: string }>).map((p) => [p.id, p.username]));
+        usernameMap = new Map(
+          (profileResp.data as Array<{ id: string; username: string }>).map((p) => [
+            p.id,
+            p.username,
+          ]),
+        );
       }
     }
 
     return data.map((row) => {
       const uid = row.user_id as string;
       const rawUsername = usernameMap.get(uid)?.trim();
-      const username = rawUsername && !/^user_[a-f0-9]{8}$/i.test(rawUsername)
-        ? rawUsername
-        : "Player";
+      const username =
+        rawUsername && !/^user_[a-f0-9]{8}$/i.test(rawUsername) ? rawUsername : 'Player';
       return {
         userId: uid,
         username,
