@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { traceSocketEvent } from "./debug/socketTrace";
 import { io, Socket } from 'socket.io-client';
 import './App.css';
 import { Board, DominoTile, ScoreTrackOverlay } from './components';
@@ -354,6 +355,7 @@ export default function App() {
     setError('');
     setIsConnecting(true);
     const s = io(serverUrl, { transports: ['websocket'] });
+    s.onAny((event, ...args) => traceSocketEvent(String(event), args.length <= 1 ? args[0] : args));
 
     s.on('connect', () => {
       setIsConnected(true);
