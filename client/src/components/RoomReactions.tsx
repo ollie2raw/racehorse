@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import { createPortal } from 'react-dom';
 import './roomReactions.css';
 
@@ -25,11 +25,41 @@ type Props = {
 export function RoomReactions({ feed, onSendChat, onSendEmote }: Props) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
+
+  // RR_CLOSE_HANDLERS_REFS
+  const rootRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const emotes = useMemo(() => ['👍', '😂', '😮', '❤️', '😡', '🎉'], []);
   const last = feed.slice(-10);
 
+  // RR_CLOSE_HANDLERS_EFFECT
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setOpen(false);
+    };
+
+    const onPointerDown = (ev: PointerEvent) => {
+      const t = ev.target as Node | null;
+      const root = rootRef.current;
+      const pop = popRef.current;
+      if (!t || !root || !pop) return;
+      // If click is outside both the button area (root) and the popover, close.
+      if (!root.contains(t) && !pop.contains(t)) setOpen(false);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [open]);
+
+
   const ui = (
-    <div className="rr-root">
+    <div className="rr-root" ref={rootRef}>
       <button
         type="button"
         className="rr-pill"
@@ -41,7 +71,7 @@ export function RoomReactions({ feed, onSendChat, onSendEmote }: Props) {
       </button>
 
       {open && (
-        <div className="rr-pop" role="dialog" aria-label="Room chat">
+        <div className="rr-pop" ref={popRef} role="dialog" aria-label="Room chat">
           <div className="rr-head">
             <div className="rr-title"></div>
             <button type="button" className="rr-x" onClick={() => setOpen(false)} aria-label="Close">
