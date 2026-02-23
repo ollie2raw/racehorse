@@ -157,6 +157,24 @@ function broadcastStateUpdate(roomCode: string) {
     room.lastHandEndedNotifiedHand = null;
   }
   room.lastBroadcastScores = currentScores;
+
+  // TOURNAMENT_SPECTATE_BROADCAST
+  // Spectator-safe broadcast to anyone in the Socket.IO room (hands hidden)
+  if (room.state) {
+    const stateForSpectators = {
+      ...room.state,
+      players: Object.fromEntries(
+        room.state.playerIds.map((pid) => {
+          const ps = room.state!.players[pid];
+          return [pid, { ...ps, hand: [] }];
+        }),
+      ),
+      handCounts: Object.fromEntries(
+        room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
+      ),
+    };
+    io.to(room.code).emit('state:spectate', { state: stateForSpectators });
+  }
 }
 
 io.on('connection', (socket: Socket) => {
