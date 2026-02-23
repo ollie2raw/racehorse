@@ -237,15 +237,18 @@ export function useAuth() {
         usedTimeoutFallback = true;
         if (isDev) {
           // eslint-disable-next-line no-console
-          console.warn("[Auth] signOut timed out; using local fallback");
+          console.warn("[Auth] signOut timed out; forcing local token clear");
         }
 
+        // IMPORTANT: do not await anything that can hang here. We want UI to recover.
         try {
-          const { error: localError } = await supabase.auth.signOut({ scope: "local" });
-          if (localError) {
-            clearLocalSupabaseAuthTokens();
-          }
+          await Promise.race([
+            supabase.auth.signOut({ scope: "local" }),
+            new Promise((resolve) => setTimeout(resolve, 800)),
+          ]);
         } catch {
+          // ignore
+        } finally {
           clearLocalSupabaseAuthTokens();
         }
       } else if (result.error) {

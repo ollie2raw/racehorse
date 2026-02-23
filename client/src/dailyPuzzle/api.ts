@@ -311,6 +311,11 @@ export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestSco
             puzzle_date: canonicalDate,
             user_id: input.userId,
             username: input.username,
+            
+            // legacy columns (keep compatible)
+            score: input.score,
+            moves_used: input.movesUsed,
+
             best_score: input.score,
             best_moves_used: input.movesUsed,
             best_seconds: nextSeconds,
@@ -340,6 +345,11 @@ export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestSco
       supabase
         .from("daily_puzzle_scores")
         .update({
+          
+          // legacy columns (keep compatible)
+          score: input.score,
+          moves_used: input.movesUsed,
+
           best_score: input.score,
           best_moves_used: input.movesUsed,
           best_seconds: nextSeconds,
