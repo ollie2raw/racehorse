@@ -320,7 +320,6 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
 
   useEffect(() => {
     if (!puzzle || status !== "IN_PROGRESS" || puzzle.puzzleType !== "one_turn_high_score") return;
-    if (showLobby) return;
     if (legalMoves.length > 0) return;
     setFinalScore(0);
     setStatus("FAILED");
