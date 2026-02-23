@@ -767,20 +767,6 @@ export default function App() {
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
 
-        if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-      // eslint-disable-next-line no-console
-      console.log("[StatsDebug] about to record match", {
-        joinedRoom,
-        you,
-        winnerSocketId,
-        loserSocketId,
-        winnerUserId,
-        loserUserId,
-        winnerScore,
-        loserScore,
-      });
-    }
-
     void recordMatchResult({
       mode: "online",
       opponentType: "online",
@@ -792,11 +778,6 @@ export default function App() {
       roomCode: joinedRoom,
       metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
     }).then(({ error }) => {
-      if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-        // eslint-disable-next-line no-console
-        console.log("[StatsDebug] recordMatchResult response", { error });
-      }
-
       if (error && typeof import.meta !== "undefined" && import.meta.env?.DEV) {
         // eslint-disable-next-line no-console
         console.error("[Stats] recordMatchResult failed:", error);
