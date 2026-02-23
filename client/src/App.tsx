@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import { traceSocketEvent } from "./debug/socketTrace";
 import { io, Socket } from 'socket.io-client';
 import './App.css';
@@ -243,6 +244,7 @@ export default function App() {
   });
 
   const [roomCode, setRoomCode] = useState('');
+  const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
   const [you, setYou] = useState<string>('');
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
@@ -390,6 +392,20 @@ export default function App() {
 
     s.on('room:update', (data: { players: RoomPlayer[] }) => {
       setPlayers(normalizeRoomPlayers(data?.players));
+    // ROOM_REACTIONS_LISTENERS
+    s.on('room:chat', (msg: RoomChatEvent) => {
+      setRoomReactions((prev) => {
+        const next = prev.concat(msg);
+        return next.length > 50 ? next.slice(next.length - 50) : next;
+      });
+    });
+
+    s.on('room:emote', (evt: RoomEmoteEvent) => {
+      setRoomReactions((prev) => {
+        const next = prev.concat(evt);
+        return next.length > 50 ? next.slice(next.length - 50) : next;
+      });
+    });
     });
 
     s.on('hand:ended', (payload: HandEndedPayload) => {
@@ -488,6 +504,10 @@ export default function App() {
     setError('');
     setActionError('');
     if (!socket || !joinedRoom) return setError('Not in a room.');
+
+    // ROOM_REACTIONS_SENDERS
+    const sendRoomChat = (text: string) => socket.emit('room:chat:send', { text });
+    const sendRoomEmote = (emote: string) => socket.emit('room:emote:send', { emote });
     socket.emit('game:start', joinedRoom, (resp: any) => {
       if (!resp.ok) return setError(resp.error);
     });
@@ -1219,6 +1239,7 @@ export default function App() {
                 {isMyTurn ? 'Your move' : 'Opponent thinking'}
               </span>
               <span className="wl-room-code">Room {joinedRoom}</span>
+              <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
             </div>
             <button
               type="button"
