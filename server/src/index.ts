@@ -150,6 +150,80 @@ function broadcastStateUpdate(roomCode: string) {
 }
 
 io.on('connection', (socket: Socket) => {
+/* ROOM_REACTIONS_CHAT_EMOTE */
+  const nowMs = () => Date.now();
+  const clampString = (s: string, max: number) => {
+    const t = (s ?? '').trim();
+    return t.length > max ? t.slice(0, max) : t;
+  };
+
+  const makeRateLimiter = (burst: number, perMs: number) => {
+    let tokens = burst;
+    let last = nowMs();
+    return () => {
+      const t = nowMs();
+      const refill = ((t - last) / perMs) * burst;
+      tokens = Math.min(burst, tokens + refill);
+      last = t;
+      if (tokens < 1) return false;
+      tokens -= 1;
+      return true;
+    };
+  };
+
+  const canSendChat = makeRateLimiter(6, 10_000);
+  const canSendEmote = makeRateLimiter(10, 10_000);
+
+  socket.on('room:chat:send', (payload: { text: string }) => {
+    try {
+      if (!canSendChat()) return;
+      const roomId = (socket.data?.roomId as string | undefined) ?? undefined;
+      if (!roomId) return;
+
+      const text = clampString(String(payload?.text ?? ''), 200);
+      if (!text) return;
+
+      const msg = {
+        id: `${nowMs()}-${Math.random().toString(16).slice(2)}`,
+        t: nowMs(),
+        from: {
+          userId: (socket.data?.userId as string | undefined) ?? null,
+          username: (socket.data?.username as string | undefined) ?? 'Player',
+        },
+        text,
+      };
+
+      io.to(roomId).emit('room:chat', msg);
+    } catch (e) {
+      console.warn('room:chat:send failed', e);
+    }
+  });
+
+  socket.on('room:emote:send', (payload: { emote: string }) => {
+    try {
+      if (!canSendEmote()) return;
+      const roomId = (socket.data?.roomId as string | undefined) ?? undefined;
+      if (!roomId) return;
+
+      const emote = clampString(String(payload?.emote ?? ''), 16);
+      if (!emote) return;
+
+      const evt = {
+        id: `${nowMs()}-${Math.random().toString(16).slice(2)}`,
+        t: nowMs(),
+        from: {
+          userId: (socket.data?.userId as string | undefined) ?? null,
+          username: (socket.data?.username as string | undefined) ?? 'Player',
+        },
+        emote,
+      };
+
+      io.to(roomId).emit('room:emote', evt);
+    } catch (e) {
+      console.warn('room:emote:send failed', e);
+    }
+  });
+
   console.log('Client connected:', socket.id);
 
   socket.on('room:create', (arg1?: unknown, arg2?: unknown) => {
@@ -168,6 +242,7 @@ io.on('connection', (socket: Socket) => {
     try {
       const room = createRoom(socket.id, roomConfig as Record<string, unknown>);
       socket.join(room.code);
+      socket.data.roomId = room.code;
       const roomPlayers: RoomPlayer[] = [{ id: socket.id, username, userId }];
       roomPlayersByCode.set(room.code, roomPlayers);
       console.log(`[room:create] created room=${room.code}, players=${room.players.length}`);
@@ -207,6 +282,7 @@ io.on('connection', (socket: Socket) => {
     try {
       const room = joinRoom(roomCode, socket.id);
       socket.join(room.code);
+      socket.data.roomId = room.code;
       const roomPlayers = getRoomPlayersWithFallback(room.code, room.players);
       const existingIdx = roomPlayers.findIndex((p) => p.id === socket.id);
       if (existingIdx >= 0) {
