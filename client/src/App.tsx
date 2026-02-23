@@ -244,6 +244,11 @@ export default function App() {
   });
 
   const [roomCode, setRoomCode] = useState('');
+  const [tournamentCode, setTournamentCode] = useState('');
+  const [tournamentId, setTournamentId] = useState<string | null>(null);
+  const [tournamentState, setTournamentState] = useState<any>(null);
+  const [tournamentActiveRoom, setTournamentActiveRoom] = useState<string | null>(null);
+  const [tournamentAssigned, setTournamentAssigned] = useState<any>(null);
   const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
   const sendRoomChat = (text: string) => {
     const t = String(text ?? '').trim();
@@ -433,6 +438,26 @@ export default function App() {
 
     s.on('room:update', (data: { players: RoomPlayer[] }) => {
       setPlayers(normalizeRoomPlayers(data?.players));
+    // TOURNAMENT_LISTENERS
+    s.on('tournament:lobby:update', (data: any) => {
+      if (typeof data?.lobbyCode === 'string') setTournamentCode(data.lobbyCode);
+    });
+    s.on('tournament:state', (data: any) => {
+      setTournamentState(data);
+      if (typeof data?.id === 'string') setTournamentId(data.id);
+      setTournamentActiveRoom(typeof data?.activeRoomCode === 'string' ? data.activeRoomCode : null);
+    });
+    s.on('tournament:match:assigned', (data: any) => {
+      setTournamentAssigned(data);
+      if (typeof data?.roomCode === 'string') setTournamentActiveRoom(data.roomCode);
+      // Auto-pull players into their match
+      if (data?.roomCode && (data?.a === s.id || data?.b === s.id)) {
+        const code = String(data.roomCode).trim().toUpperCase();
+        setJoinedRoom(code);
+        setRoomCode(code);
+        setAppMode('multiplayer');
+      }
+    });
     // ROOM_REACTIONS_LISTENERS
     s.on('room:chat', (msg: RoomChatEvent) => {
       setRoomReactions((prev) => {
