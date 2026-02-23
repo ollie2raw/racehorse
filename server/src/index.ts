@@ -483,6 +483,7 @@ io.on('connection', (socket: Socket) => {
     try {
       const room = act(roomCode, socket.id, action);
       broadcastStateUpdate(room.code);
+      maybeFinalizeTournamentMatch(room.code);
       cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
@@ -498,6 +499,7 @@ io.on('connection', (socket: Socket) => {
       const room = nextHand(roomCode);
       console.log(`[hand:next] new hand started, handNumber=${room.state?.handNumber}`);
       broadcastStateUpdate(room.code);
+      maybeFinalizeTournamentMatch(room.code);
       cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
@@ -512,6 +514,7 @@ io.on('connection', (socket: Socket) => {
       const result = readyForNextHand(roomCode, socket.id);
       if (result.started) {
         broadcastStateUpdate(result.room.code);
+        maybeFinalizeTournamentMatch(result.room.code);
       }
       cb?.({ ok: true, started: result.started });
     } catch (err: unknown) {
