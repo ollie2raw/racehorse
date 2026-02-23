@@ -2,8 +2,8 @@
 
 .rr-root {
   position: fixed;
-  left: 10px;
-  top: 38px; /* tweak if needed: aligns around center of left score box */
+  top: 28px;
+  right: 180px;
   z-index: 9999;
   pointer-events: auto;
 }
