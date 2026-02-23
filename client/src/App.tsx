@@ -255,39 +255,6 @@ export default function App() {
       t: Date.now(),
       from: { userId: null as string | null, username: 'you' },
       text: t,
-    };
-
-    setRoomReactions((prev) => {
-      const next = prev.concat(localMsg as any);
-      return next.length > 50 ? next.slice(next.length - 50) : next;
-    });
-
-    if (!socket) return;
-    socket.emit('room:chat:send', { text: t });
-  };
-    setRoomReactions((prev) => {
-      const next = prev.concat(localMsg as any);
-      return next.length > 50 ? next.slice(next.length - 50) : next;
-    });
-  };
-  const sendRoomEmote = (emote: string) => {
-    const e = String(emote ?? '').trim();
-    if (!e) return;
-
-    const localEvt = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      t: Date.now(),
-      from: { userId: null as string | null, username: 'you' },
-      emote: e,
-    };
-
-    setRoomReactions((prev) => {
-      const next = prev.concat(localEvt as any);
-      return next.length > 50 ? next.slice(next.length - 50) : next;
-    });
-
-    if (!socket) return;
-    socket.emit('room:emote:send', { emote: e });
   };
     setRoomReactions((prev) => {
       const next = prev.concat(localEvt as any);
