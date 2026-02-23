@@ -488,7 +488,7 @@ export default function App() {
   }, [isConnecting, socket, serverUrl, showToast]);
 
   useEffect(() => {
-    if (appMode !== 'multiplayer') return;
+    if (appMode !== 'multiplayer' && appMode !== 'tournament') return;
     if (autoConnectAttemptedRef.current) return;
     if (!serverUrl) return;
     autoConnectAttemptedRef.current = true;
