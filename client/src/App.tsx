@@ -314,6 +314,19 @@ export default function App() {
   } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
+  const [weeklyAwardsLoading, setWeeklyAwardsLoading] = useState(false);
+
+  const loadWeeklyAwards = useCallback(() => {
+    if (!socket || !socket.connected) return;
+    setWeeklyAwardsLoading(true);
+    socket.emit("stats:weekly", (resp: any) => {
+      setWeeklyAwardsLoading(false);
+      if (!resp?.ok) return;
+      setWeeklyAwards(resp.awards ?? null);
+    });
+  }, [socket]);
+
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -1484,6 +1497,36 @@ export default function App() {
                 </button>
               )}
             </div>
+
+            <div className="mode-option" style={{ cursor: "default" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <span className="mode-option-title">Weekly Stats</span>
+                <button
+                  className="mode-inline-btn"
+                  onClick={() => loadWeeklyAwards()}
+                  disabled={!socket || !socket.connected || weeklyAwardsLoading}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  {weeklyAwardsLoading ? "Loading…" : "Refresh"}
+                </button>
+              </div>
+              <span className="mode-option-meta">Friendly weekly leaderboard — wins, streaks, and biggest blowouts.</span>
+              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+                {weeklyAwards?.awards ? (
+                  weeklyAwards.awards.map((a: any) => (
+                    <div key={a.key} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                      <span style={{ opacity: 0.9 }}>{a.title}</span>
+                      <span style={{ opacity: 0.9, whiteSpace: "nowrap" }}>
+                        {a.leader ? ` ()` : "—"}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ opacity: 0.75 }}>Tap Refresh to load this week’s highlights.</div>
+                )}
+              </div>
+            </div>
+
             {!supabaseEnabled && (
               <p className="lobby-server mode-subtitle" style={{ marginTop: 12 }}>
                 {supabaseConfigError ?? 'Supabase not configured.'}
