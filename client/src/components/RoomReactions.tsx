@@ -43,7 +43,7 @@ export function RoomReactions({ feed, onSendChat, onSendEmote }: Props) {
       {open && (
         <div className="rr-pop" role="dialog" aria-label="Room chat">
           <div className="rr-head">
-            <div className="rr-title">Reactions</div>
+            <div className="rr-title"></div>
             <button type="button" className="rr-x" onClick={() => setOpen(false)} aria-label="Close">
               ✕
             </button>
