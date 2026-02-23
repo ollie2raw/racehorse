@@ -1,0 +1,145 @@
+/* Small, non-invasive popover for multiplayer reactions. Matches dark/glass UI. */
+
+.rr-root {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 90;
+}
+
+.rr-pill {
+  height: 34px;
+  min-width: 42px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+.rr-pop {
+  margin-top: 10px;
+  width: 320px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 50px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.rr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.rr-title {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.rr-x {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px;
+  border-radius: 10px;
+}
+.rr-x:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rr-feed {
+  max-height: 170px;
+  overflow: auto;
+  padding: 10px 12px;
+}
+
+.rr-empty {
+  opacity: 0.65;
+  font-size: 13px;
+}
+
+.rr-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.rr-name {
+  opacity: 0.85;
+  font-weight: 600;
+}
+
+.rr-text {
+  opacity: 0.9;
+  word-break: break-word;
+}
+
+.rr-emote {
+  font-size: 16px;
+}
+
+.rr-emotes {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 12px 10px 12px;
+}
+
+.rr-emo {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  padding: 6px 10px;
+}
+.rr-emo:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.rr-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.rr-input {
+  flex: 1;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 8px 10px;
+  outline: none;
+}
+.rr-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.rr-send {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  padding: 8px 12px;
+}
+.rr-send:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
