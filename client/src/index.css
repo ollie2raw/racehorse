@@ -2,13 +2,12 @@
 *,
 *::before,
 *::after {
-  box-sizing: inherit;
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
 html {
-  box-sizing: border-box;
   height: 100%;
   min-height: 100dvh;
   font-size: 16px;
@@ -29,7 +28,6 @@ body {
   line-height: 1.5;
   margin: 0;
   overflow: hidden;
-  overflow-x: hidden;
 }
 
 #root {

@@ -1115,13 +1115,11 @@ export default function App() {
     return (
       <div
         className="screen lobby-screen mode-home-screen"
-        style={{ width: '100%', maxWidth: '100%', minHeight: '100vh', overflowX: 'hidden' }}
-      >
+>
         <div className="mode-home-glow" aria-hidden="true" />
         <div
           className="card lobby-card mode-card multiplayer-menu-card"
-          style={{ width: '100%', maxWidth: 1500, margin: '0 auto', padding: 24, boxSizing: 'border-box' }}
-        >
+>
           <p className="lobby-kicker">Racehorse Dominoes</p>
           <h2>{tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}</h2>
           <p className="lobby-server mode-subtitle">
