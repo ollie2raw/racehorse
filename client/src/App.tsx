@@ -245,6 +245,22 @@ export default function App() {
 
   const [roomCode, setRoomCode] = useState('');
   const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
+
+  const sendRoomChat = (text: string) => {
+    if (!socket || !joinedRoom) {
+      setError('Not in a room.');
+      return;
+    }
+    socket.emit('room:chat:send', { text });
+  };
+
+  const sendRoomEmote = (emote: string) => {
+    if (!socket || !joinedRoom) {
+      setError('Not in a room.');
+      return;
+    }
+    socket.emit('room:emote:send', { emote });
+  };
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
   const [you, setYou] = useState<string>('');
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
@@ -504,10 +520,6 @@ export default function App() {
     setError('');
     setActionError('');
     if (!socket || !joinedRoom) return setError('Not in a room.');
-
-    // ROOM_REACTIONS_SENDERS
-    const sendRoomChat = (text: string) => socket.emit('room:chat:send', { text });
-    const sendRoomEmote = (emote: string) => socket.emit('room:emote:send', { emote });
     socket.emit('game:start', joinedRoom, (resp: any) => {
       if (!resp.ok) return setError(resp.error);
     });
