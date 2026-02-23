@@ -269,6 +269,7 @@ io.on('connection', (socket: Socket) => {
     const standings = sortedStandings(t.standings);
     io.to(`tourn:${t.id}`).emit('tournament:state', {
       id: t.id,
+      hostSocketId: t.hostSocketId,
       lobbyCode: t.lobbyCode,
       status: t.status,
       players: t.players,
@@ -383,10 +384,15 @@ io.on('connection', (socket: Socket) => {
 
 // TOURNAMENT_HANDLERS
   socket.on('tournament:create', (arg1?: unknown, arg2?: unknown) => {
+    const config = (
+      arg1 && typeof arg1 === 'object' && !Array.isArray(arg1) ? arg1 : {}
+    ) as { username?: unknown; userId?: unknown };
     const cb = (typeof arg1 === 'function' ? arg1 : arg2) as any;
     try {
-      const username = (socket.data?.username as string | undefined) ?? 'Player';
-      const userId = (socket.data?.userId as string | undefined) ?? null;
+            const username = normalizeUsername(config.username ?? socket.data?.username);
+      const userId = normalizeUserId(config.userId ?? socket.data?.userId);
+      socket.data.username = username;
+      socket.data.userId = userId;
 
       const id = makeId('t');
       const lobbyCode = makeCode(4);
@@ -418,13 +424,18 @@ io.on('connection', (socket: Socket) => {
 
       cb?.({ ok: true, id, lobbyCode });
       // broadcast lobby state
-      io.to(`tourn:${id}`).emit('tournament:lobby:update', { players: t.players, lobbyCode });
+      io.to(`tourn:${id}`).emit('tournament:lobby:update', { players: t.players, lobbyCode, hostSocketId: t.hostSocketId });
     } catch (e) {
       cb?.({ ok: false, error: 'create_failed' });
     }
   });
 
-  socket.on('tournament:join', (lobbyCode: string, cb?: any) => {
+  socket.on('tournament:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
+    const lobbyCode = String(argCode ?? '');
+    const config = (
+      arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? arg2 : {}
+    ) as { username?: unknown; userId?: unknown };
+    const cb = (typeof arg2 === 'function' ? arg2 : arg3) as any;
     try {
       const code = String(lobbyCode ?? '').trim().toUpperCase();
       const tid = (globalThis as any).__tournamentsByCode.get(code) as string | undefined;
@@ -435,8 +446,10 @@ io.on('connection', (socket: Socket) => {
       if (t.status !== 'lobby') return cb?.({ ok: false, error: 'already_started' });
 
       if (!t.players.some((p) => p.socketId === socket.id)) {
-        const username = (socket.data?.username as string | undefined) ?? 'Player';
-        const userId = (socket.data?.userId as string | undefined) ?? null;
+                const username = normalizeUsername(config.username ?? socket.data?.username);
+        const userId = normalizeUserId(config.userId ?? socket.data?.userId);
+        socket.data.username = username;
+        socket.data.userId = userId;
         t.players.push({ socketId: socket.id, username, userId });
         t.standings[socket.id] = {
           socketId: socket.id,
@@ -453,7 +466,7 @@ io.on('connection', (socket: Socket) => {
       socket.join(`tourn:${tid}`);
 
       cb?.({ ok: true, id: tid, lobbyCode: t.lobbyCode });
-      io.to(`tourn:${tid}`).emit('tournament:lobby:update', { players: t.players, lobbyCode: t.lobbyCode });
+      io.to(`tourn:${tid}`).emit('tournament:lobby:update', { players: t.players, lobbyCode: t.lobbyCode, hostSocketId: t.hostSocketId });
     } catch (e) {
       cb?.({ ok: false, error: 'join_failed' });
     }
