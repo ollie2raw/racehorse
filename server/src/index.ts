@@ -253,6 +253,138 @@ io.on('connection', (socket: Socket) => {
   });
 
   console.log('Client connected:', socket.id);
+
+  // TOURNAMENT_HELPERS
+  // Global in-memory tournament storage (per server process).
+  const tournamentsById = ((globalThis as any).__tournamentsById ??= new Map<string, Tournament>()) as Map<
+    string,
+    Tournament
+  >;
+  const tournamentsByCode = ((globalThis as any).__tournamentsByCode ??= new Map<string, string>()) as Map<
+    string,
+    string
+  >;
+
+  const emitTournament = (t: Tournament) => {
+    const standings = sortedStandings(t.standings);
+    io.to(`tourn:${t.id}`).emit('tournament:state', {
+      id: t.id,
+      lobbyCode: t.lobbyCode,
+      status: t.status,
+      players: t.players,
+      matches: t.matches,
+      currentMatchIndex: t.currentMatchIndex,
+      activeMatchId: t.activeMatchId ?? null,
+      activeRoomCode: t.activeRoomCode ?? null,
+      standings,
+    });
+  };
+
+  const getTournamentForSocket = (): Tournament | null => {
+    const tid = (socket.data?.tournamentId as string | undefined) ?? undefined;
+    if (!tid) return null;
+    return tournamentsById.get(tid) ?? null;
+  };
+
+  const startNextMatch = (t: Tournament) => {
+    // advance to next pending match
+    while (t.currentMatchIndex < t.matches.length && t.matches[t.currentMatchIndex].status === 'done') {
+      t.currentMatchIndex += 1;
+    }
+    if (t.currentMatchIndex >= t.matches.length) {
+      t.status = 'complete';
+      t.activeMatchId = null;
+      t.activeRoomCode = null;
+      emitTournament(t);
+      return;
+    }
+
+    const m = t.matches[t.currentMatchIndex];
+    m.status = 'active';
+    t.activeMatchId = m.id;
+
+    // Create a normal 2-player room for this match with a 30-point winning score.
+    // Attach tournament metadata so we can record results later on gameOver.
+    const room = createRoom(m.a, {
+      winningScore: 30,
+      tournamentId: t.id,
+      tournamentMatchId: m.id,
+      tournamentMode: 'round_robin',
+    } as any);
+
+    // Defensive: ensure config is accessible later even if createRoom doesn't persist arbitrary config
+    (room as any).config = { ...(room as any).config, winningScore: 30, tournamentId: t.id, tournamentMatchId: m.id };
+
+    m.roomCode = room.code;
+    t.activeRoomCode = room.code;
+
+    // Join the second player in the engine + socket room
+    joinRoom(room.code, m.b);
+    io.sockets.sockets.get(m.a)?.join(room.code);
+    io.sockets.sockets.get(m.b)?.join(room.code);
+
+    // Spectators: everyone in tournament lobby joins the socket room (read-only)
+    io.in(`tourn:${t.id}`).socketsJoin(room.code);
+
+    // Room roster for UI
+    const pa = t.players.find((p) => p.socketId === m.a);
+    const pb = t.players.find((p) => p.socketId === m.b);
+    const roomPlayers = [
+      { id: m.a, username: pa?.username ?? 'Player', userId: pa?.userId ?? null },
+      { id: m.b, username: pb?.username ?? 'Player', userId: pb?.userId ?? null },
+    ];
+    roomPlayersByCode.set(room.code, roomPlayers);
+    io.to(room.code).emit('room:update', { players: roomPlayers });
+
+    // Announce active match (players + spectators)
+    io.to(`tourn:${t.id}`).emit('tournament:match:assigned', {
+      matchId: m.id,
+      roomCode: room.code,
+      a: m.a,
+      b: m.b,
+      aName: roomPlayers[0].username,
+      bName: roomPlayers[1].username,
+    });
+
+    // Start match now
+    startGame(room.code);
+    broadcastStateUpdate(room.code);
+
+    emitTournament(t);
+  };
+
+  const maybeFinalizeTournamentMatch = (roomCode: string) => {
+    const room = roomsByCode.get(roomCode);
+    if (!room?.state?.gameOver) return;
+
+    const cfg = ((room as any).config ?? {}) as any;
+    const tid = cfg.tournamentId as string | undefined;
+    const mid = cfg.tournamentMatchId as string | undefined;
+    if (!tid || !mid) return;
+
+    const t = tournamentsById.get(tid);
+    if (!t) return;
+
+    const match = t.matches.find((mm) => mm.id === mid);
+    if (!match || match.status === 'done') return;
+
+    const a = match.a;
+    const b = match.b;
+    const scoreA = room.state.players[a]?.score ?? 0;
+    const scoreB = room.state.players[b]?.score ?? 0;
+    const winner = scoreA >= scoreB ? a : b;
+
+    applyResult(t, mid, winner, scoreA, scoreB);
+
+    // advance (one match at a time)
+    t.currentMatchIndex += 1;
+    t.activeMatchId = null;
+    t.activeRoomCode = null;
+
+    emitTournament(t);
+    startNextMatch(t);
+  };
+
 // TOURNAMENT_HANDLERS
   socket.on('tournament:create', (arg1?: unknown, cb?: any) => {
     try {
