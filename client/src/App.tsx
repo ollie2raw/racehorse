@@ -245,21 +245,45 @@ export default function App() {
 
   const [roomCode, setRoomCode] = useState('');
   const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
-
   const sendRoomChat = (text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    const username = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'You';
+    const localMsg = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      t: Date.now(),
+      from: { userId: authUser?.id ?? null, username },
+      text: t,
+    };
+    setRoomReactions((prev) => {
+      const next = prev.concat(localMsg as any);
+      return next.length > 50 ? next.slice(next.length - 50) : next;
+    });
     if (!socket || !joinedRoom) {
       setError('Not in a room.');
       return;
     }
-    socket.emit('room:chat:send', { text });
+    socket.emit('room:chat:send', { text: t });
   };
-
   const sendRoomEmote = (emote: string) => {
+    const e = String(emote ?? '').trim();
+    if (!e) return;
+    const username = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'You';
+    const localEvt = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      t: Date.now(),
+      from: { userId: authUser?.id ?? null, username },
+      emote: e,
+    };
+    setRoomReactions((prev) => {
+      const next = prev.concat(localEvt as any);
+      return next.length > 50 ? next.slice(next.length - 50) : next;
+    });
     if (!socket || !joinedRoom) {
       setError('Not in a room.');
       return;
     }
-    socket.emit('room:emote:send', { emote });
+    socket.emit('room:emote:send', { emote: e });
   };
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
   const [you, setYou] = useState<string>('');
