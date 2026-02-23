@@ -999,6 +999,19 @@ export default function App() {
             Round robin • 4+ players • Matches to 30 • Auto-assign matches
           </p>
 
+          {/* TOURNAMENT_STATUS */}
+          <div style={{ opacity: 0.75, marginTop: 6 }}>
+            Socket: {' '}{socket ? 'connected' : 'not connected'}
+            {tournamentId ? ` • Tournament: ${tournamentId}` : ''}
+            {tournamentCode ? ` • Code: ${tournamentCode}` : ''}
+          </div>
+          {error && (
+            <div style={{ marginTop: 10, opacity: 0.9 }}>
+              {error}
+            </div>
+          )}
+
+
           <div className="mode-option-list">
             <div className="mode-option" style={{ cursor: 'default' }}>
               <span className="mode-option-title">Lobby</span>
