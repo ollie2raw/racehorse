@@ -323,9 +323,6 @@ io.on('connection', (socket: Socket) => {
     io.sockets.sockets.get(m.a)?.join(room.code);
     io.sockets.sockets.get(m.b)?.join(room.code);
 
-    // Spectators: everyone in tournament lobby joins the socket room (read-only)
-    io.in(`tourn:${t.id}`).socketsJoin(room.code);
-
     // Room roster for UI
     const pa = t.players.find((p) => p.socketId === m.a);
     const pb = t.players.find((p) => p.socketId === m.b);
@@ -385,7 +382,8 @@ io.on('connection', (socket: Socket) => {
   };
 
 // TOURNAMENT_HANDLERS
-  socket.on('tournament:create', (arg1?: unknown, cb?: any) => {
+  socket.on('tournament:create', (arg1?: unknown, arg2?: unknown) => {
+    const cb = (typeof arg1 === 'function' ? arg1 : arg2) as any;
     try {
       const username = (socket.data?.username as string | undefined) ?? 'Player';
       const userId = (socket.data?.userId as string | undefined) ?? null;

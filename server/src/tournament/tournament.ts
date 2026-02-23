@@ -77,7 +77,7 @@ export function buildRoundRobinMatches(players: TournamentPlayer[]): Match[] {
 
   const n = list.length;
   const rounds = n - 1;
-  const half = n // 2;
+  const half = n / 2;
 
   const matches: Match[] = [];
   let arr = list.slice();
