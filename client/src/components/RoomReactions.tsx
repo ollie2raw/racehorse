@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import './roomReactions.css';
 
 export type RoomChatEvent = {
@@ -24,16 +25,15 @@ type Props = {
 export function RoomReactions({ feed, onSendChat, onSendEmote }: Props) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
-
   const emotes = useMemo(() => ['👍', '😂', '😮', '❤️', '😡', '🎉'], []);
   const last = feed.slice(-10);
 
-  return (
+  const ui = (
     <div className="rr-root">
       <button
         type="button"
         className="rr-pill"
-        aria-label="Open chat"
+        aria-label="Open reactions"
         onClick={() => setOpen((v) => !v)}
         title="Reactions"
       >
@@ -104,4 +104,6 @@ export function RoomReactions({ feed, onSendChat, onSendEmote }: Props) {
       )}
     </div>
   );
+
+  return createPortal(ui, document.body);
 }

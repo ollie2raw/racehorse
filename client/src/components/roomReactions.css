@@ -1,11 +1,11 @@
-/* Walnut-ish reactions popover that stays out of the play area. */
+/* Reactions widget: anchored near left score HUD, portal-rendered so always clickable. */
 
 .rr-root {
   position: fixed;
-  /* below your top HUD, so it doesn't sit on the score pills */
-  top: 64px;
-  right: 18px;
-  z-index: 60;
+  left: 10px;
+  top: 38px; /* tweak if needed: aligns around center of left score box */
+  z-index: 9999;
+  pointer-events: auto;
 }
 
 .rr-pill {
@@ -23,9 +23,8 @@
 
 .rr-pop {
   position: absolute;
-  /* open downward from the button, but small */
   top: 42px;
-  right: 0;
+  left: 0;
   width: 280px;
   max-height: 280px;
   border-radius: 16px;
@@ -147,10 +146,4 @@
 }
 .rr-send:hover {
   background: rgba(255, 255, 255, 0.14);
-}
-
-/* If viewport is short, tuck even tighter */
-@media (max-height: 700px) {
-  .rr-root { top: 52px; right: 12px; }
-  .rr-pop { width: 260px; }
 }
