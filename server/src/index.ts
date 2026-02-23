@@ -12,6 +12,7 @@ import {
   type Tournament,
   type TournamentPlayer,
 } from './tournament/tournament';
+import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 
 import {
   createRoom,
@@ -73,6 +74,62 @@ function getRoomPlayersWithFallback(roomCode: string, socketIds: string[]): Room
 function broadcastStateUpdate(roomCode: string) {
   const room = getRoom(roomCode);
   if (!room.state) return;
+
+  // WEEKLY_STATS_LOGGING (non-tournament only)
+  const cfg = (room as any).config ?? {};
+  const isTournamentRoom = Boolean(cfg.tournamentId);
+  // WEEKLY_STATS_LEAD_TRACKER (score-based comeback)
+  const pidsForLead = room.state.playerIds;
+  if (Array.isArray(pidsForLead) && pidsForLead.length === 2) {
+    const aId = pidsForLead[0];
+    const bId = pidsForLead[1];
+    const scoreA = room.state.players[aId]?.score ?? 0;
+    const scoreB = room.state.players[bId]?.score ?? 0;
+    const diff = scoreA - scoreB; // + means A is leading
+    const t = ((room as any)._leadTracker ??= { aId, bId, maxLeadA: 0, maxLeadB: 0 });
+    if (t.aId !== aId || t.bId !== bId) {
+      (room as any)._leadTracker = { aId, bId, maxLeadA: 0, maxLeadB: 0 };
+    } else {
+      if (diff > 0) t.maxLeadA = Math.max(t.maxLeadA, diff);
+      if (diff < 0) t.maxLeadB = Math.max(t.maxLeadB, -diff);
+    }
+  }
+
+  if (room.state.gameOver && !isTournamentRoom && !(room as any)._matchLogged) {
+    const pids = room.state.playerIds;
+    if (Array.isArray(pids) && pids.length === 2) {
+      const roster = roomPlayersByCode.get(room.code) ?? [];
+      const byId = new Map(roster.map((p) => [p.id, p]));
+      const aId = pids[0];
+      const bId = pids[1];
+      const a = byId.get(aId) ?? { id: aId, username: "Guest", userId: null };
+      const b = byId.get(bId) ?? { id: bId, username: "Guest", userId: null };
+      const scoreA = room.state.players[aId]?.score ?? 0;
+      const scoreB = room.state.players[bId]?.score ?? 0;
+      const winnerSocketId = room.state.winnerId ?? (scoreA >= scoreB ? aId : bId);
+
+      appendMatch({
+        endedAtMs: Date.now(),
+        roomCode: room.code,
+        tournamentId: typeof cfg.tournamentId === 'string' ? cfg.tournamentId : undefined,
+        tournamentMatchId: typeof cfg.tournamentMatchId === 'string' ? cfg.tournamentMatchId : undefined,
+        maxDeficitWinner: (() => {
+          const t = (room as any)._leadTracker;
+          if (!t) return 0;
+          if (winnerSocketId === aId) return t.maxLeadB ?? 0;
+          if (winnerSocketId === bId) return t.maxLeadA ?? 0;
+          return 0;
+        })(),
+        a: { socketId: a.id, userId: a.userId, username: a.username },
+        b: { socketId: b.id, userId: b.userId, username: b.username },
+        scoreA,
+        scoreB,
+        winnerSocketId,
+        pointDiff: Math.abs(scoreA - scoreB),
+      });
+      (room as any)._matchLogged = true;
+    }
+  }
 
   const sockets = io.sockets.adapter.rooms.get(roomCode);
   if (!sockets) return;
@@ -253,6 +310,17 @@ io.on('connection', (socket: Socket) => {
       console.warn('room:emote:send failed', e);
     }
   });
+
+  // WEEKLY_STATS
+  socket.on("stats:weekly", (cb?: any) => {
+    try {
+      const awards = computeWeeklyAwards(Date.now());
+      cb?.({ ok: true, awards });
+    } catch {
+      cb?.({ ok: false, error: "stats_failed" });
+    }
+  });
+
 
   console.log('Client connected:', socket.id);
 
@@ -696,9 +764,6 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
       const room = act(roomCode, socket.id, action);
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
-      maybeFinalizeTournamentMatch(room);
-      maybeFinalizeTournamentMatch(room);
-      maybeFinalizeTournamentMatch(room);
       cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
@@ -715,9 +780,6 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
       console.log(`[hand:next] new hand started, handNumber=${room.state?.handNumber}`);
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
-      maybeFinalizeTournamentMatch(room);
-      maybeFinalizeTournamentMatch(room);
-      maybeFinalizeTournamentMatch(room);
       cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
@@ -732,9 +794,6 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
       const result = readyForNextHand(roomCode, socket.id);
       if (result.started) {
         broadcastStateUpdate(result.room.code);
-        maybeFinalizeTournamentMatch(result.room);
-        maybeFinalizeTournamentMatch(result.room);
-        maybeFinalizeTournamentMatch(result.room);
         maybeFinalizeTournamentMatch(result.room);
       }
       cb?.({ ok: true, started: result.started });

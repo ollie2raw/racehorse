@@ -60,12 +60,6 @@ function writeProgress(dateSeed: string, progress: DailyProgress): void {
   window.localStorage.setItem(progressKey(dateSeed), JSON.stringify(progress));
 }
 
-function formatSeconds(seconds: number): string {
-  const totalSeconds = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(totalSeconds / 60);
-  const remainder = totalSeconds % 60;
-  return `${minutes}:${String(remainder).padStart(2, '0')}`;
-}
 
 function getDisplayName(username: string | null | undefined): string {
   const value = (username ?? '').trim();
@@ -466,9 +460,6 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
                       <span className="daily-leaderboard-name">@{row.username}</span>
                       <span className="daily-leaderboard-stat">{row.bestScore}</span>
                       <span className="daily-leaderboard-stat">{row.bestMovesUsed}</span>
-                      <span className="daily-leaderboard-stat">
-                        {formatSeconds(row.bestSeconds)}
-                      </span>
                     </div>
                   ))}
                 </div>
@@ -602,7 +593,6 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
                 <span>Player</span>
                 <span>Score</span>
                 <span>Moves</span>
-                <span>Time</span>
               </div>
               {leaderboardLoading && (
                 <p className="daily-leaderboard-loading">
@@ -628,10 +618,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
                         </span>
                         <span className="daily-leaderboard-stat">{row.bestScore}</span>
                         <span className="daily-leaderboard-stat">{row.bestMovesUsed}</span>
-                        <span className="daily-leaderboard-stat">
-                          {formatSeconds(row.bestSeconds)}
-                        </span>
-                      </div>
+</div>
                     );
                   })}
                 </div>

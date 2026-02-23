@@ -218,6 +218,98 @@ function GameOverOverlay({ state, myId, onNewGame, players }: GameOverOverlayPro
   );
 }
 
+
+function WeeklyStatsScreen({
+  open,
+  onClose,
+  awards,
+}: {
+  open: boolean;
+  onClose: () => void;
+  awards: any | null;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Weekly stats"
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1900,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'rgba(6, 10, 18, 0.62)',
+        backdropFilter: 'blur(4px)',
+        pointerEvents: open ? 'auto' : 'none',
+        opacity: open ? 1 : 0,
+        visibility: open ? 'visible' : 'hidden',
+        transform: open ? 'scale(1)' : 'scale(0.97)',
+        transition: 'opacity 180ms ease, transform 180ms ease',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          zIndex: 1901,
+          pointerEvents: 'auto',
+          width: 'min(720px, calc(100vw - 24px))',
+          borderRadius: '16px',
+          border: '1px solid rgba(236,252,245,0.2)',
+          background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
+          padding: '18px',
+          color: 'rgba(235,245,242,0.96)',
+          display: 'grid',
+          gap: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ display: 'grid', gap: 4 }}>
+            <h3 style={{ margin: 0 }}>Weekly Stats</h3>
+            <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
+              Mon–Sun highlights (wins, streaks, blowouts)
+            </p>
+          </div>
+          <button className="mode-inline-btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        {awards?.awards ? (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {awards.awards.map((a: any) => (
+              <div
+                key={a.key}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  background: 'rgba(12,20,34,0.68)',
+                  padding: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <span style={{ fontSize: '0.92rem', color: 'rgba(191,213,223,0.92)' }}>{a.title}</span>
+                <strong style={{ fontSize: '1.02rem', whiteSpace: 'nowrap' }}>
+                  {a.leader ? `${a.leader.username} (${a.leader.value})` : '—'}
+                </strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Tap Refresh to load this week’s highlights.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Main App ────────────────────────────────────────────────
 
 export default function App() {
@@ -314,14 +406,12 @@ export default function App() {
   } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
   const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
-  const [weeklyAwardsLoading, setWeeklyAwardsLoading] = useState(false);
 
   const loadWeeklyAwards = useCallback(() => {
     if (!socket || !socket.connected) return;
-    setWeeklyAwardsLoading(true);
     socket.emit("stats:weekly", (resp: any) => {
-      setWeeklyAwardsLoading(false);
       if (!resp?.ok) return;
       setWeeklyAwards(resp.awards ?? null);
     });
@@ -515,6 +605,32 @@ export default function App() {
 
     setSocket(s);
   }, [isConnecting, socket, serverUrl, showToast]);
+
+  useEffect(() => {
+    if (!weeklyStatsOpen) return;
+
+    if (!socket || !socket.connected) {
+      connect();
+      window.setTimeout(() => loadWeeklyAwards(), 250);
+      return;
+    }
+
+    loadWeeklyAwards();
+  }, [weeklyStatsOpen, socket, connect, loadWeeklyAwards]);
+
+
+  useEffect(() => {
+    if (!weeklyStatsOpen) return;
+
+    if (!socket || !socket.connected) {
+      connect();
+      window.setTimeout(() => loadWeeklyAwards(), 250);
+      return;
+    }
+
+    loadWeeklyAwards();
+  }, [weeklyStatsOpen, socket, connect, loadWeeklyAwards]);
+
 
   useEffect(() => {
     if (appMode !== 'multiplayer' && appMode !== 'tournament') return;
@@ -1485,6 +1601,14 @@ export default function App() {
                   Curated puzzle from today’s board situation
                 </span>
               </button>
+
+              <button
+                className="mode-option mode-option-secondary"
+                onClick={() => setWeeklyStatsOpen(true)}
+              >
+                <span className="mode-option-title">Weekly Stats</span>
+                <span className="mode-option-meta">Fun weekly awards and mini leaderboards</span>
+              </button>
               {isAdmin && (
                 <button
                   className="mode-option mode-option-secondary"
@@ -1496,35 +1620,6 @@ export default function App() {
                   </span>
                 </button>
               )}
-            </div>
-
-            <div className="mode-option" style={{ cursor: "default" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <span className="mode-option-title">Weekly Stats</span>
-                <button
-                  className="mode-inline-btn"
-                  onClick={() => loadWeeklyAwards()}
-                  disabled={!socket || !socket.connected || weeklyAwardsLoading}
-                  style={{ whiteSpace: "nowrap" }}
-                >
-                  {weeklyAwardsLoading ? "Loading…" : "Refresh"}
-                </button>
-              </div>
-              <span className="mode-option-meta">Friendly weekly leaderboard — wins, streaks, and biggest blowouts.</span>
-              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-                {weeklyAwards?.awards ? (
-                  weeklyAwards.awards.map((a: any) => (
-                    <div key={a.key} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                      <span style={{ opacity: 0.9 }}>{a.title}</span>
-                      <span style={{ opacity: 0.9, whiteSpace: "nowrap" }}>
-                        {a.leader ? ` ()` : "—"}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ opacity: 0.75 }}>Tap Refresh to load this week’s highlights.</div>
-                )}
-              </div>
             </div>
 
             {!supabaseEnabled && (
@@ -1565,7 +1660,12 @@ export default function App() {
           profile={authProfile}
           onClose={() => setStatsOpen(false)}
         />
-      </div>
+              <WeeklyStatsScreen
+          open={weeklyStatsOpen}
+          onClose={() => setWeeklyStatsOpen(false)}
+          awards={weeklyAwards}
+        />
+</div>
     );
   }
 
