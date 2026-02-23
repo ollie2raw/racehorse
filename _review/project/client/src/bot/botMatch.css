@@ -1,0 +1,139 @@
+.bot-match-screen .wl-hand-area {
+  height: 120px !important;
+  min-height: 120px !important;
+  max-height: 120px !important;
+  border-radius: 16px 16px 0 0 !important;
+}
+
+.bot-match-screen .tray-center {
+  padding: 0 8px !important;
+}
+
+.bot-match-screen .bot-tray-controls {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 6px !important;
+  border-radius: 12px !important;
+}
+
+.bot-match-screen .bot-top-rail {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  position: relative;
+}
+
+.bot-match-screen .bot-center-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.bot-match-screen .bot-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bot-match-screen .bot-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bot-match-screen .wl-center-status {
+  flex: 1;
+  text-align: center;
+  min-width: 0;
+}
+
+.bot-match-screen .bot-chip-control {
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.bot-match-screen .hand-container.is-scrollable {
+  scrollbar-width: thin;
+}
+
+.bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar {
+  height: 6px;
+}
+
+.bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+}
+
+.bot-difficulty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(230, 240, 236, 0.85);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bot-difficulty select {
+  border: none;
+  background: transparent;
+  color: rgba(234, 245, 240, 0.92);
+  font-size: 0.64rem;
+  letter-spacing: 0.05em;
+  max-width: 136px;
+}
+
+.bot-debug-panel {
+  position: fixed;
+  left: 12px;
+  bottom: 120px;
+  z-index: 1400;
+  max-width: min(760px, calc(100vw - 24px));
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(9, 12, 20, 0.9);
+  color: rgba(230, 240, 236, 0.92);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  display: grid;
+  gap: 4px;
+}
+
+.bot-victory-card {
+  width: min(560px, calc(100vw - 28px));
+}
+
+.bot-victory-meta {
+  margin: -10px 0 16px;
+  color: rgba(229, 239, 248, 0.78);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bot-victory-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}

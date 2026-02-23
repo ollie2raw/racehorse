@@ -1,0 +1,801 @@
+import type {
+  BoardState,
+  BranchArm,
+  Move,
+  PlacementPosition,
+  PlacedTile,
+  Tile,
+  TileOrientation,
+} from "../types";
+
+export type BotPlayerId = "you" | "bot";
+export type BotHandEndReason = "domino" | "blocked";
+export type BotDealSize = 7 | 14;
+
+export interface BotPlayerState {
+  hand: Tile[];
+  score: number;
+}
+
+export interface BotMatchState {
+  players: Record<BotPlayerId, BotPlayerState>;
+  board: BoardState | null;
+  boneyard: Tile[];
+  deadTiles: Tile[];
+  handOpen: boolean;
+  currentPlayer: BotPlayerId;
+  consecutivePasses: number;
+  handNumber: number;
+  handOver: boolean;
+  gameOver: boolean;
+  winnerId: BotPlayerId | null;
+  winningScore: number;
+  lastHandWinner: BotPlayerId | null;
+  lastHandReason: BotHandEndReason | null;
+  dealSize: BotDealSize;
+}
+
+export interface BotActionResult {
+  state: BotMatchState;
+  scored?: { player: BotPlayerId; points: number };
+  drew?: { player: BotPlayerId; tile: Tile };
+  passed?: { player: BotPlayerId };
+  handEnded?: {
+    winner: BotPlayerId | null;
+    reason: BotHandEndReason;
+    pointsAwarded: number;
+    loserPips: number;
+    calcText: string;
+  };
+}
+
+export interface BotMovePreview {
+  nextBoard: BoardState;
+  nextHand: Tile[];
+  immediateScore: number;
+  isDouble: boolean;
+  turnContinues: boolean;
+  openEnds: number[];
+  openSum: number;
+}
+
+function tileEquals(a: Tile, b: Tile): boolean {
+  return a.high === b.high && a.low === b.low;
+}
+
+function isDouble(tile: Tile): boolean {
+  return tile.high === tile.low;
+}
+
+function tileMatchesEnd(tile: Tile, endValue: number): boolean {
+  return tile.high === endValue || tile.low === endValue;
+}
+
+function parseBranchPosition(pos: PlacementPosition): { hubIndex: number; armIndex: number } | null {
+  if (pos === "left" || pos === "right") return null;
+  const match = pos.match(/^branch-(\d+)-(\d+)$/);
+  if (!match) return null;
+  return { hubIndex: Number(match[1]), armIndex: Number(match[2]) };
+}
+
+function removeTileOnce(hand: Tile[], tile: Tile): Tile[] {
+  const idx = hand.findIndex(t => tileEquals(t, tile));
+  if (idx === -1) return [...hand];
+  return [...hand.slice(0, idx), ...hand.slice(idx + 1)];
+}
+
+function sumPips(hand: Tile[]): number {
+  return hand.reduce((sum, t) => sum + t.low + t.high, 0);
+}
+
+function generateDoubleSixSet(): Tile[] {
+  const tiles: Tile[] = [];
+  for (let high = 0; high <= 6; high++) {
+    for (let low = 0; low <= high; low++) {
+      tiles.push({ low, high });
+    }
+  }
+  return tiles;
+}
+
+function shuffle<T>(arr: readonly T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function createDealtHand(
+  scores: Record<BotPlayerId, number>,
+  handNumber: number,
+  winningScore: number,
+  dealSize: BotDealSize
+): BotMatchState {
+  const deck = shuffle(generateDoubleSixSet());
+  const youHand = deck.slice(0, dealSize);
+  const botHand = deck.slice(dealSize, dealSize * 2);
+  const remaining = deck.slice(dealSize * 2);
+  const deadTiles = dealSize === 14 ? [] : remaining.slice(remaining.length - 2);
+  const boneyard = dealSize === 14 ? [] : remaining.slice(0, remaining.length - 2);
+  const currentPlayer: BotPlayerId = handNumber % 2 === 1 ? "you" : "bot";
+
+  return {
+    players: {
+      you: { hand: youHand, score: scores.you },
+      bot: { hand: botHand, score: scores.bot },
+    },
+    board: null,
+    boneyard,
+    deadTiles,
+    handOpen: false,
+    currentPlayer,
+    consecutivePasses: 0,
+    handNumber,
+    handOver: false,
+    gameOver: false,
+    winnerId: null,
+    winningScore,
+    lastHandWinner: null,
+    lastHandReason: null,
+    dealSize,
+  };
+}
+
+export function createBotMatch(winningScore = 60, dealSize: BotDealSize = 7): BotMatchState {
+  return createDealtHand({ you: 0, bot: 0 }, 1, winningScore, dealSize);
+}
+
+export function startNextBotHand(state: BotMatchState): BotMatchState {
+  return createDealtHand(
+    { you: state.players.you.score, bot: state.players.bot.score },
+    state.handNumber + 1,
+    state.winningScore,
+    state.dealSize
+  );
+}
+
+function hubIdAt(hub: BoardState["hubDoubles"][number], fallbackIdx: number): number {
+  return hub.hubId ?? fallbackIdx;
+}
+
+function nextHubId(board: BoardState): number {
+  if (board.hubDoubles.length === 0) return 0;
+  return Math.max(...board.hubDoubles.map((h, idx) => hubIdAt(h, idx))) + 1;
+}
+
+function getPlacementOrientation(
+  tile: Tile,
+  matchValue: number,
+  placementSide: "left" | "right" | "branch"
+): TileOrientation {
+  if (isDouble(tile)) {
+    return "vertical-normal";
+  }
+  if (placementSide === "left") {
+    return tile.high === matchValue ? "horizontal-normal" : "horizontal-flipped";
+  }
+  if (placementSide === "right") {
+    return tile.low === matchValue ? "horizontal-normal" : "horizontal-flipped";
+  }
+  return tile.high === matchValue ? "vertical-flipped" : "vertical-normal";
+}
+
+function exposedPip(tile: Tile, matchValue: number): number {
+  if (tile.high === matchValue) return tile.low;
+  if (tile.low === matchValue) return tile.high;
+  return tile.high;
+}
+
+function recomputeBranchLaneHubStates(
+  hubDoubles: BoardState["hubDoubles"],
+  laneRef: string,
+  branchTiles: readonly PlacedTile[]
+): BoardState["hubDoubles"] {
+  return hubDoubles.map(h => {
+    if (h.laneType !== "branch" || h.laneRef !== laneRef || typeof h.branchDepth !== "number") {
+      return h;
+    }
+    const depth = h.branchDepth;
+    const leftSideFilled = depth === 0 ? true : depth > 0 && Boolean(branchTiles[depth - 1]);
+    const rightSideFilled = Boolean(branchTiles[depth + 1]);
+    return {
+      ...h,
+      leftSideFilled,
+      rightSideFilled,
+      isCrossed: leftSideFilled && rightSideFilled,
+    };
+  });
+}
+
+function placeTileOnMainLine(board: BoardState, tile: Tile, end: "left" | "right"): BoardState {
+  const matchValue = end === "left" ? board.leftEnd : board.rightEnd;
+  const newExposedEnd = exposedPip(tile, matchValue);
+  const tileIsDouble = isDouble(tile);
+
+  const placedTile: PlacedTile = {
+    tile,
+    orientation: getPlacementOrientation(tile, matchValue, end),
+  };
+
+  const newMainLine = end === "left"
+    ? [placedTile, ...board.mainLine]
+    : [...board.mainLine, placedTile];
+
+  const newLeftEnd = end === "left" ? newExposedEnd : board.leftEnd;
+  const newRightEnd = end === "right" ? newExposedEnd : board.rightEnd;
+  const newLeftEndIsDouble = end === "left" ? tileIsDouble : board.leftEndIsDouble;
+  const newRightEndIsDouble = end === "right" ? tileIsDouble : board.rightEndIsDouble;
+
+  let newHubDoubles = [...board.hubDoubles];
+  const endpointIndex = end === "left" ? 0 : board.mainLine.length - 1;
+  newHubDoubles = newHubDoubles.map((hub) => {
+    const hubIndex = hub.mainlineIndex ?? hub.tileIndex;
+    if (hubIndex !== endpointIndex) return hub;
+    const leftSideFilled = hub.leftSideFilled ?? false;
+    const rightSideFilled = hub.rightSideFilled ?? false;
+    const updatedLeft = end === "left" ? true : leftSideFilled;
+    const updatedRight = end === "right" ? true : rightSideFilled;
+    return {
+      ...hub,
+      leftSideFilled: updatedLeft,
+      rightSideFilled: updatedRight,
+      isCrossed: updatedLeft && updatedRight,
+    };
+  });
+
+  if (end === "left") {
+    newHubDoubles = newHubDoubles.map(h => {
+      const nextIndex = (h.mainlineIndex ?? h.tileIndex) + 1;
+      return {
+        ...h,
+        tileIndex: nextIndex,
+        mainlineIndex: nextIndex,
+      };
+    });
+  } else {
+    newHubDoubles = newHubDoubles.map(h => ({
+      ...h,
+      mainlineIndex: h.mainlineIndex ?? h.tileIndex,
+    }));
+  }
+
+  if (tileIsDouble) {
+    const newHubIndex = end === "left" ? 0 : newMainLine.length - 1;
+    const hubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
+    const leftSideFilled = end === "right";
+    const rightSideFilled = end === "left";
+    newHubDoubles.push({
+      hubId,
+      laneType: "mainline",
+      laneRef: "mainline",
+      tileIndex: newHubIndex,
+      mainlineIndex: newHubIndex,
+      hubValue: tile.high,
+      isCrossed: leftSideFilled && rightSideFilled,
+      leftSideFilled,
+      rightSideFilled,
+      branches: [],
+    });
+  }
+
+  return {
+    mainLine: newMainLine,
+    leftEnd: newLeftEnd,
+    rightEnd: newRightEnd,
+    leftEndIsDouble: newLeftEndIsDouble,
+    rightEndIsDouble: newRightEndIsDouble,
+    hubDoubles: newHubDoubles,
+  };
+}
+
+function placeTileOnBranch(
+  board: BoardState,
+  tile: Tile,
+  hubRef: number,
+  armIndex: number
+): BoardState {
+  const hubIndex = board.hubDoubles.findIndex((h, idx) => hubIdAt(h, idx) === hubRef);
+  const hub = hubIndex >= 0 ? board.hubDoubles[hubIndex] : null;
+  if (!hub || !hub.isCrossed || armIndex >= 2) {
+    throw new Error("Invalid branch placement.");
+  }
+
+  const tileIsDouble = isDouble(tile);
+  const laneRef = `branch-${hubRef}-${armIndex}`;
+  let newBranches: BranchArm[];
+  let newHubDoubles = [...board.hubDoubles];
+
+  if (hub.branches[armIndex]) {
+    const existingBranch = hub.branches[armIndex];
+    const branchMatchValue = existingBranch.openEnd;
+    const branchNewEnd = exposedPip(tile, branchMatchValue);
+    const depthBeforeAppend = existingBranch.tiles.length;
+
+    const placedTile: PlacedTile = {
+      tile,
+      orientation: getPlacementOrientation(tile, branchMatchValue, "branch"),
+    };
+
+    newBranches = hub.branches.map((b, i) =>
+      i === armIndex
+        ? {
+            tiles: [...b.tiles, placedTile],
+            openEnd: branchNewEnd,
+            openEndIsDouble: tileIsDouble,
+          }
+        : b
+    );
+
+    if (tileIsDouble) {
+      const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
+      newHubDoubles.push({
+        hubId: newHubId,
+        laneType: "branch",
+        laneRef,
+        branchDepth: depthBeforeAppend,
+        tileIndex: -1,
+        mainlineIndex: undefined,
+        hubValue: tile.high,
+        leftSideFilled: true,
+        rightSideFilled: false,
+        isCrossed: false,
+        branches: [],
+      });
+    }
+
+    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
+  } else {
+    const matchValue = hub.hubValue;
+    const newExposedEnd = exposedPip(tile, matchValue);
+    const placedTile: PlacedTile = {
+      tile,
+      orientation: getPlacementOrientation(tile, matchValue, "branch"),
+    };
+
+    newBranches = [...hub.branches];
+    newBranches[armIndex] = {
+      tiles: [placedTile],
+      openEnd: newExposedEnd,
+      openEndIsDouble: tileIsDouble,
+    };
+
+    if (tileIsDouble) {
+      const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });
+      newHubDoubles.push({
+        hubId: newHubId,
+        laneType: "branch",
+        laneRef,
+        branchDepth: 0,
+        tileIndex: -1,
+        mainlineIndex: undefined,
+        hubValue: tile.high,
+        leftSideFilled: true,
+        rightSideFilled: false,
+        isCrossed: false,
+        branches: [],
+      });
+    }
+
+    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
+  }
+
+  newHubDoubles = newHubDoubles.map((h, i) =>
+    i === hubIndex ? { ...h, branches: newBranches } : h
+  );
+
+  return {
+    ...board,
+    hubDoubles: newHubDoubles,
+  };
+}
+
+function simulatePlacement(board: BoardState | null, tile: Tile, position: PlacementPosition): BoardState {
+  if (board === null) {
+    const placedTile: PlacedTile = {
+      tile,
+      orientation: isDouble(tile) ? "vertical-normal" : "horizontal-normal",
+    };
+    const nextBoard: BoardState = {
+      mainLine: [placedTile],
+      leftEnd: tile.low,
+      rightEnd: tile.high,
+      leftEndIsDouble: isDouble(tile),
+      rightEndIsDouble: isDouble(tile),
+      hubDoubles: [],
+    };
+    if (isDouble(tile)) {
+      const hubId = nextHubId(nextBoard);
+      return {
+        ...nextBoard,
+        hubDoubles: [{
+          hubId,
+          laneType: "mainline",
+          laneRef: "mainline",
+          tileIndex: 0,
+          mainlineIndex: 0,
+          hubValue: tile.high,
+          isCrossed: false,
+          leftSideFilled: false,
+          rightSideFilled: false,
+          branches: [],
+        }],
+      };
+    }
+    return nextBoard;
+  }
+
+  const branchPos = parseBranchPosition(position);
+  if (branchPos) {
+    return placeTileOnBranch(board, tile, branchPos.hubIndex, branchPos.armIndex);
+  }
+  return placeTileOnMainLine(board, tile, position as "left" | "right");
+}
+
+function endpointMatchFromOrientation(board: BoardState, side: "left" | "right"): number {
+  const placed = side === "left"
+    ? board.mainLine[0]
+    : board.mainLine[board.mainLine.length - 1];
+  if (!placed) return side === "left" ? board.leftEnd : board.rightEnd;
+  const tile = placed.tile;
+  if (isDouble(tile)) return tile.high;
+  if (placed.orientation === "horizontal-normal") {
+    return side === "left" ? tile.low : tile.high;
+  }
+  if (placed.orientation === "horizontal-flipped") {
+    return side === "left" ? tile.high : tile.low;
+  }
+  return side === "left" ? board.leftEnd : board.rightEnd;
+}
+
+function getOpenEnds(board: BoardState | null): Array<{ position: PlacementPosition; matchValue: number }> {
+  if (!board) {
+    return [{ position: "left", matchValue: -1 }];
+  }
+  const ends: Array<{ position: PlacementPosition; matchValue: number }> = [
+    { position: "left", matchValue: board.leftEnd },
+    { position: "right", matchValue: board.rightEnd },
+  ];
+
+  for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
+    const hub = board.hubDoubles[hubIdx];
+    const hubId = hubIdAt(hub, hubIdx);
+    if (!hub.isCrossed) continue;
+    for (let armIdx = 0; armIdx < 2; armIdx++) {
+      const branch = hub.branches[armIdx];
+      ends.push({
+        position: `branch-${hubId}-${armIdx}`,
+        matchValue: branch ? branch.openEnd : hub.hubValue,
+      });
+    }
+  }
+  return ends;
+}
+
+function getMatchableOpenEnds(board: BoardState | null): Array<{ position: PlacementPosition; matchValue: number }> {
+  const raw = getOpenEnds(board);
+  if (!board) return raw;
+  return raw.map(end => {
+    if (end.position === "left") {
+      return { ...end, matchValue: endpointMatchFromOrientation(board, "left") };
+    }
+    if (end.position === "right") {
+      return { ...end, matchValue: endpointMatchFromOrientation(board, "right") };
+    }
+    return end;
+  });
+}
+
+export function computeOpenEndsSum(board: BoardState): number {
+  if (board.mainLine.length === 1) {
+    const t = board.mainLine[0].tile;
+    return t.low + t.high;
+  }
+
+  let sum = 0;
+  sum += board.leftEndIsDouble ? board.leftEnd * 2 : board.leftEnd;
+  sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
+  for (const hub of board.hubDoubles) {
+    for (const branch of hub.branches) {
+      if (!branch) continue;
+      sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
+    }
+  }
+  return sum;
+}
+
+export function computePlayScore(board: BoardState): number {
+  const sum = computeOpenEndsSum(board);
+  return sum !== 0 && sum % 5 === 0 ? sum / 5 : 0;
+}
+
+export function getDisplayOpenEnds(state: BotMatchState): number[] {
+  if (!state.board) return [];
+  return getMatchableOpenEnds(state.board).map(end => end.matchValue);
+}
+
+function nextPlayer(player: BotPlayerId): BotPlayerId {
+  return player === "you" ? "bot" : "you";
+}
+
+function winnerFromScores(scores: Record<BotPlayerId, number>, target: number): BotPlayerId | null {
+  if (scores.you < target && scores.bot < target) return null;
+  return scores.you >= scores.bot ? "you" : "bot";
+}
+
+function computeHandPenalty(hand: Tile[]): number {
+  const total = sumPips(hand);
+  return Math.ceil(total / 5) * 5;
+}
+
+function computeGoOutBonusPoints(hand: Tile[]): number {
+  const total = sumPips(hand);
+  return Math.round(total / 5);
+}
+
+function getPlayMoves(state: BotMatchState, player: BotPlayerId): Move[] {
+  if (state.handOver || state.gameOver || state.currentPlayer !== player) return [];
+  const hand = state.players[player].hand;
+  const playMoves: Move[] = [];
+
+  if (!state.handOpen) {
+    for (const tile of hand) {
+      const simBoard = simulatePlacement(null, tile, "left");
+      const scores = computePlayScore(simBoard) > 0;
+      if (isDouble(tile) || scores) {
+        playMoves.push({ type: "play", tile, position: "left" });
+      }
+    }
+    return playMoves;
+  }
+
+  const openEnds = getMatchableOpenEnds(state.board);
+  for (const tile of hand) {
+    const matching: PlacementPosition[] = [];
+    for (const end of openEnds) {
+      if (tileMatchesEnd(tile, end.matchValue)) {
+        matching.push(end.position);
+      }
+    }
+    const uniquePositions = [...new Set(matching)];
+    for (const position of uniquePositions) {
+      playMoves.push({ type: "play", tile, position });
+    }
+  }
+  return playMoves;
+}
+
+export function getLegalMoves(state: BotMatchState, player: BotPlayerId): Move[] {
+  if (state.currentPlayer !== player || state.handOver || state.gameOver) return [];
+  const playMoves = getPlayMoves(state, player);
+  if (playMoves.length === 0 && state.boneyard.length === 0) {
+    return [{ type: "pass" }];
+  }
+  return playMoves;
+}
+
+export function previewPlayMove(state: BotMatchState, player: BotPlayerId, move: Move): BotMovePreview | null {
+  if (move.type !== "play" || !move.tile || !move.position) return null;
+  if (state.currentPlayer !== player) return null;
+  const legal = getPlayMoves(state, player).some(
+    m => m.type === "play" && m.tile && m.position === move.position && tileEquals(m.tile, move.tile!)
+  );
+  if (!legal) return null;
+
+  const nextBoard = simulatePlacement(state.board, move.tile, move.position);
+  const nextHand = removeTileOnce(state.players[player].hand, move.tile);
+  const immediateScore = computePlayScore(nextBoard);
+  const openSum = computeOpenEndsSum(nextBoard);
+
+  return {
+    nextBoard,
+    nextHand,
+    immediateScore,
+    isDouble: isDouble(move.tile),
+    turnContinues: isDouble(move.tile) || immediateScore > 0,
+    openEnds: getMatchableOpenEnds(nextBoard).map(end => end.matchValue),
+    openSum,
+  };
+}
+
+function resolveHandEnd(
+  state: BotMatchState,
+  winner: BotPlayerId,
+  reason: BotHandEndReason,
+  pointsAwarded: number
+): BotMatchState {
+  const nextScores = {
+    you: state.players.you.score,
+    bot: state.players.bot.score,
+  };
+  nextScores[winner] += pointsAwarded;
+  const finalWinner = winnerFromScores(nextScores, state.winningScore);
+
+  return {
+    ...state,
+    players: {
+      you: { ...state.players.you, score: nextScores.you },
+      bot: { ...state.players.bot, score: nextScores.bot },
+    },
+    handOver: true,
+    gameOver: finalWinner !== null,
+    winnerId: finalWinner,
+    lastHandWinner: winner,
+    lastHandReason: reason,
+  };
+}
+
+export function applyPlayMove(state: BotMatchState, player: BotPlayerId, move: Move): BotActionResult {
+  if (move.type !== "play" || !move.tile || !move.position) return { state };
+  if (state.currentPlayer !== player || state.handOver || state.gameOver) return { state };
+
+  const preview = previewPlayMove(state, player, move);
+  if (!preview) return { state };
+
+  const updatedHand = preview.nextHand;
+  const scoredPoints = preview.immediateScore;
+  let nextState: BotMatchState = {
+    ...state,
+    board: preview.nextBoard,
+    handOpen: true,
+    players: {
+      ...state.players,
+      [player]: {
+        ...state.players[player],
+        hand: updatedHand,
+        score: state.players[player].score + scoredPoints,
+      },
+    },
+    consecutivePasses: 0,
+  };
+
+  if (updatedHand.length === 0) {
+    if ((preview.isDouble || preview.immediateScore > 0) && nextState.boneyard.length > 0) {
+      const [drawnTile, ...remainingBoneyard] = nextState.boneyard;
+      nextState = {
+        ...nextState,
+        boneyard: remainingBoneyard,
+        players: {
+          ...nextState.players,
+          [player]: {
+            ...nextState.players[player],
+            hand: [drawnTile],
+          },
+        },
+      };
+      return {
+        state: nextState,
+        scored: scoredPoints > 0 ? { player, points: scoredPoints } : undefined,
+        drew: { player, tile: drawnTile },
+      };
+    }
+
+    const loser = nextPlayer(player);
+    const loserPips = sumPips(nextState.players[loser].hand);
+    const pointsAwarded = computeGoOutBonusPoints(nextState.players[loser].hand);
+    nextState = resolveHandEnd(nextState, player, "domino", pointsAwarded);
+    return {
+      state: nextState,
+      scored: scoredPoints > 0 ? { player, points: scoredPoints } : undefined,
+      handEnded: {
+        winner: player,
+        reason: "domino",
+        pointsAwarded,
+        loserPips,
+        calcText: `round(${loserPips}/5) = ${pointsAwarded}`,
+      },
+    };
+  }
+
+  if (!preview.turnContinues) {
+    nextState = {
+      ...nextState,
+      currentPlayer: nextPlayer(player),
+    };
+  }
+
+  return {
+    state: nextState,
+    scored: scoredPoints > 0 ? { player, points: scoredPoints } : undefined,
+  };
+}
+
+export function drawOne(state: BotMatchState, player: BotPlayerId): BotActionResult {
+  if (state.currentPlayer !== player || state.handOver || state.gameOver || state.boneyard.length === 0) {
+    return { state };
+  }
+  const [drawn, ...rest] = state.boneyard;
+  return {
+    state: {
+      ...state,
+      boneyard: rest,
+      players: {
+        ...state.players,
+        [player]: {
+          ...state.players[player],
+          hand: [...state.players[player].hand, drawn],
+        },
+      },
+    },
+    drew: { player, tile: drawn },
+  };
+}
+
+export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionResult {
+  if (state.currentPlayer !== player || state.handOver || state.gameOver) return { state };
+  if (getPlayMoves(state, player).length > 0) return { state };
+  if (state.boneyard.length > 0) return { state };
+
+  const nextConsecutive = state.consecutivePasses + 1;
+  const moved = {
+    ...state,
+    currentPlayer: nextPlayer(player),
+    consecutivePasses: nextConsecutive,
+  };
+
+  if (moved.boneyard.length === 0 && nextConsecutive >= 2) {
+    const youPips = sumPips(moved.players.you.hand);
+    const botPips = sumPips(moved.players.bot.hand);
+    const winner: BotPlayerId = youPips <= botPips ? "you" : "bot";
+    const loser: BotPlayerId = winner === "you" ? "bot" : "you";
+    const loserPips = sumPips(moved.players[loser].hand);
+    const pointsAwarded = computeHandPenalty(moved.players[loser].hand);
+    const resolved = resolveHandEnd(moved, winner, "blocked", pointsAwarded);
+    return {
+      state: resolved,
+      passed: { player },
+      handEnded: {
+        winner,
+        reason: "blocked",
+        pointsAwarded,
+        loserPips,
+        calcText: `ceil(${loserPips}/5)*5 = ${pointsAwarded}`,
+      },
+    };
+  }
+
+  return {
+    state: moved,
+    passed: { player },
+  };
+}
+
+export function drawUntilPlayableOrEmpty(state: BotMatchState, player: BotPlayerId): BotActionResult {
+  if (state.currentPlayer !== player || state.handOver || state.gameOver) return { state };
+  if (getPlayMoves(state, player).length > 0) return { state };
+
+  let current = state;
+  let lastDrawn: Tile | null = null;
+  while (current.boneyard.length > 0) {
+    const [drawn, ...rest] = current.boneyard;
+    lastDrawn = drawn;
+    current = {
+      ...current,
+      boneyard: rest,
+      players: {
+        ...current.players,
+        [player]: {
+          ...current.players[player],
+          hand: [...current.players[player].hand, drawn],
+        },
+      },
+    };
+    if (getPlayMoves(current, player).length > 0) {
+      break;
+    }
+  }
+
+  if (getPlayMoves(current, player).length === 0) {
+    const passResult = passTurn(current, player);
+    return {
+      ...passResult,
+      drew: lastDrawn ? { player, tile: lastDrawn } : undefined,
+    };
+  }
+
+  return {
+    state: current,
+    drew: lastDrawn ? { player, tile: lastDrawn } : undefined,
+  };
+}
