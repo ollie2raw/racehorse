@@ -288,6 +288,7 @@ export default function App() {
   const prevMyHandLenRef = useRef(0);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
   const matchRecordKeyRef = useRef("");
+  const prevGameOverRef = useRef(false);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const isAdmin = Boolean(authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase());
   const needsUsernameOnboarding = Boolean(
@@ -724,18 +725,24 @@ export default function App() {
   }, [inGame, state, isMuted]);
 
   useEffect(() => {
-    if (!state?.gameOver) {
+    const finalState = state;
+    const isGameOver = Boolean(finalState?.gameOver);
+    if (!isGameOver) {
+      prevGameOverRef.current = false;
       matchRecordKeyRef.current = "";
       return;
     }
+    if (!finalState) return;
+    if (prevGameOverRef.current) return;
+    prevGameOverRef.current = true;
     if (!joinedRoom) return;
 
-    const winnerSocketId = state.winnerId ?? null;
+    const winnerSocketId = finalState?.winnerId ?? null;
     if (!winnerSocketId) return;
-    const loserSocketId = state.playerIds.find((pid) => pid !== winnerSocketId) ?? null;
+    const loserSocketId = finalState.playerIds.find((pid) => pid !== winnerSocketId) ?? null;
     if (!loserSocketId) return;
 
-    const key = `${joinedRoom}:${winnerSocketId}:${loserSocketId}:${state.handNumber}`;
+    const key = `${joinedRoom}:${winnerSocketId}:${loserSocketId}`;
     if (matchRecordKeyRef.current === key) return;
     matchRecordKeyRef.current = key;
 
@@ -757,9 +764,8 @@ export default function App() {
       }
     }
 
-    const winnerScore = state.players[winnerSocketId]?.score ?? null;
-    const loserScore = state.players[loserSocketId]?.score ?? null;
-    const moveCount = Array.isArray((state as any).moves) ? (state as any).moves.length : null;
+    const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
+    const loserScore = finalState.players[loserSocketId]?.score ?? null;
 
     void recordMatchResult({
       mode: "online",
@@ -768,7 +774,7 @@ export default function App() {
       loserUserId,
       winnerScore,
       loserScore,
-      moveCount,
+      moveCount: null,
       roomCode: joinedRoom,
       metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
     }).then(({ error }) => {

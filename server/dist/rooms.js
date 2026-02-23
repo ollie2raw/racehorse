@@ -5,6 +5,7 @@ exports.joinRoom = joinRoom;
 exports.getRoom = getRoom;
 exports.startGame = startGame;
 exports.nextHand = nextHand;
+exports.readyForNextHand = readyForNextHand;
 exports.act = act;
 exports.getRoomLegalMoves = getRoomLegalMoves;
 exports.getRoomCanDraw = getRoomCanDraw;
@@ -28,6 +29,9 @@ function createRoom(hostSocketId, config = {}) {
         players: [hostSocketId],
         state: null,
         config,
+        nextHandReady: new Set(),
+        lastHandEndedNotifiedHand: null,
+        lastBroadcastScores: {},
     };
     rooms.set(code, room);
     return room;
@@ -68,6 +72,9 @@ function startGame(code) {
     const currentPlayerId = state1.playerIds[state1.currentPlayerIndex];
     const { state: state2 } = (0, engine_1.drawUntilPlayableOrEmpty)(state1, currentPlayerId);
     room.state = state2;
+    room.nextHandReady.clear();
+    room.lastHandEndedNotifiedHand = null;
+    room.lastBroadcastScores = Object.fromEntries(room.state.playerIds.map((pid) => [pid, room.state.players[pid]?.score ?? 0]));
     return room;
 }
 function nextHand(code) {
@@ -86,7 +93,28 @@ function nextHand(code) {
     const currentPlayerId = state1.playerIds[state1.currentPlayerIndex];
     const { state: state2 } = (0, engine_1.drawUntilPlayableOrEmpty)(state1, currentPlayerId);
     room.state = state2;
+    room.nextHandReady.clear();
+    room.lastHandEndedNotifiedHand = null;
+    room.lastBroadcastScores = Object.fromEntries(room.state.playerIds.map((pid) => [pid, room.state.players[pid]?.score ?? 0]));
     return room;
+}
+function readyForNextHand(code, socketId) {
+    const room = getRoom(code);
+    if (!room.state)
+        throw new Error("Game not started.");
+    if (room.state.gameOver)
+        return { started: false, room };
+    if (!room.state.handOver)
+        return { started: false, room };
+    if (!room.players.includes(socketId))
+        throw new Error("Player not in room.");
+    room.nextHandReady.add(socketId);
+    if (room.nextHandReady.size >= room.players.length) {
+        room.nextHandReady.clear();
+        const startedRoom = nextHand(code);
+        return { started: true, room: startedRoom };
+    }
+    return { started: false, room };
 }
 function act(code, socketId, action) {
     const room = getRoom(code);

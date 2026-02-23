@@ -189,11 +189,6 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     return getLegalMoves(runtimeState, "you").filter((move) => move.type === "play");
   }, [runtimeState, status]);
 
-  const openEnds = useMemo(() => {
-    if (!runtimeState) return [] as number[];
-    return getDisplayOpenEnds(runtimeState);
-  }, [runtimeState]);
-
   const resetAttempt = () => {
     if (!puzzle) return;
     const start = createPuzzleMatchState(puzzle);

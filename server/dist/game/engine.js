@@ -47,40 +47,23 @@ function assertCurrentPlayer(state, playerId) {
  * Check if any player has reached the winning score.
  */
 function checkForGameWinner(state) {
-    for (const id of state.playerIds) {
-        if (state.players[id].score >= state.config.winningScore) {
-            return id;
-        }
-    }
-    return null;
+    const target = state.config.winningScore;
+    const qualified = state.playerIds.filter(id => state.players[id].score >= target);
+    if (qualified.length === 0)
+        return null;
+    return qualified.reduce((best, id) => state.players[id].score > state.players[best].score ? id : best);
 }
 /**
  * A player cannot go out (play their last tile) if that tile is a double
  * OR if that final play would score.
  */
 function isGoingOutIllegal(state, playerId, tile, position) {
-    const hand = state.players[playerId].hand;
-    if (hand.length !== 1 || !(0, types_1.tileEquals)(hand[0], tile))
-        return false;
-    // Doubles can never be the going-out tile
-    if ((0, types_1.isDouble)(tile))
-        return true;
-    // Check if this position is valid (tile matches the end)
-    const openEnds = (0, scoring_1.getOpenEnds)(state.board);
-    const targetEnd = openEnds.find(e => e.position === position);
-    if (!targetEnd)
-        return false;
-    // For opening move
-    if (targetEnd.matchValue === -1) {
-        const simBoard = (0, scoring_1.simulatePlacement)(null, tile, position);
-        return (0, scoring_1.computePlayScore)(simBoard, state.config) > 0;
-    }
-    // Check if tile matches
-    if (!(0, types_1.tileMatchesEnd)(tile, targetEnd.matchValue)) {
-        return false;
-    }
-    const simBoard = (0, scoring_1.simulatePlacement)(state.board, tile, position);
-    return (0, scoring_1.computePlayScore)(simBoard, state.config) > 0;
+    void state;
+    void playerId;
+    void tile;
+    void position;
+    // Last-tile constraints are enforced after applyMove (forced draw), not in legal generation.
+    return false;
 }
 function validateConfig(playerCount, cfg) {
     const total = (0, types_1.totalTilesInSet)(cfg.maxPips);
@@ -90,6 +73,58 @@ function validateConfig(playerCount, cfg) {
             `${cfg.deadTileCount} dead tiles = ${needed}, but a double-${cfg.maxPips} ` +
             `set only has ${total} tiles.`);
     }
+}
+function canonicalTileId(tile) {
+    const low = Math.min(tile.low, tile.high);
+    const high = Math.max(tile.low, tile.high);
+    return `${low}|${high}`;
+}
+function positionSortKey(position) {
+    if (position === 'left')
+        return [0, 0, 0];
+    if (position === 'right')
+        return [1, 0, 0];
+    const parsed = (0, types_1.parseBranchPosition)(position);
+    if (!parsed)
+        return [9, 0, 0];
+    return [2, parsed.hubIndex, parsed.armIndex];
+}
+function sortLegalMoves(moves) {
+    const plays = moves.filter((m) => m.type === 'play');
+    const passes = moves.filter(m => m.type === 'pass');
+    plays.sort((a, b) => {
+        const aId = canonicalTileId(a.tile);
+        const bId = canonicalTileId(b.tile);
+        if (aId < bId)
+            return -1;
+        if (aId > bId)
+            return 1;
+        const aPos = positionSortKey(a.position);
+        const bPos = positionSortKey(b.position);
+        if (aPos[0] !== bPos[0])
+            return aPos[0] - bPos[0];
+        if (aPos[1] !== bPos[1])
+            return aPos[1] - bPos[1];
+        return aPos[2] - bPos[2];
+    });
+    return [...plays, ...passes];
+}
+function endpointMatchFromOrientation(board, side) {
+    const placed = side === 'left'
+        ? board.mainLine[0]
+        : board.mainLine[board.mainLine.length - 1];
+    if (!placed)
+        return side === 'left' ? board.leftEnd : board.rightEnd;
+    const tile = placed.tile;
+    if ((0, types_1.isDouble)(tile))
+        return tile.high;
+    if (placed.orientation === 'horizontal-normal') {
+        return side === 'left' ? tile.low : tile.high;
+    }
+    if (placed.orientation === 'horizontal-flipped') {
+        return side === 'left' ? tile.high : tile.low;
+    }
+    return side === 'left' ? board.leftEnd : board.rightEnd;
 }
 // ─── Blocked hand resolution ──────────────────────────────
 function resolveBlockedHand(state) {
@@ -143,7 +178,7 @@ function resolveGoOut(state, goOutPlayerId) {
     const bonus = cfg.endHandBonus === 'sumOpponentPenalties'
         ? state.playerIds
             .filter(id => id !== goOutPlayerId)
-            .reduce((sum, id) => sum + (0, scoring_1.computeHandPenalty)(state.players[id].hand, cfg), 0)
+            .reduce((sum, id) => sum + (0, scoring_1.computeGoOutBonusPoints)(state.players[id].hand, cfg), 0)
         : 0;
     const updatedPlayers = { ...state.players };
     updatedPlayers[goOutPlayerId] = {
@@ -244,7 +279,18 @@ function getLegalMoves(state, playerId) {
     }
     else {
         // ── Hand is open: must match an open end ──
-        const openEnds = (0, scoring_1.getOpenEnds)(state.board);
+        const openEndsRaw = (0, scoring_1.getOpenEnds)(state.board);
+        const openEnds = state.board
+            ? openEndsRaw.map(end => {
+                if (end.position === 'left') {
+                    return { ...end, matchValue: endpointMatchFromOrientation(state.board, 'left') };
+                }
+                if (end.position === 'right') {
+                    return { ...end, matchValue: endpointMatchFromOrientation(state.board, 'right') };
+                }
+                return end;
+            })
+            : openEndsRaw;
         for (const tile of hand) {
             const matchingPositions = [];
             for (const end of openEnds) {
@@ -260,12 +306,13 @@ function getLegalMoves(state, playerId) {
                 }
             }
         }
+        // Pending doubles do not restrict legal move generation.
     }
     // Pass is only legal when no play moves exist AND drawable boneyard is empty
     if (moves.length === 0 && state.boneyard.length === 0) {
         moves.push({ type: 'pass' });
     }
-    return moves;
+    return sortLegalMoves(moves);
 }
 /**
  * Check if drawing is allowed for the current player.
@@ -399,16 +446,22 @@ function applyMove(state, playerId, move) {
     };
     // Check if player went out (hand is empty)
     if (newHand.length === 0) {
+        // House rule: scoring or double last tile must draw 1 and continue (if boneyard has tiles).
+        if ((playedDouble || scored > 0) && newState.boneyard.length > 0) {
+            const [drawnTile, ...remainingBoneyard] = newState.boneyard;
+            return {
+                ...newState,
+                players: {
+                    ...newState.players,
+                    [playerId]: {
+                        ...newState.players[playerId],
+                        hand: [drawnTile],
+                    },
+                },
+                boneyard: remainingBoneyard,
+            };
+        }
         return resolveGoOut(newState, playerId);
-    }
-    // Check if player reached winning score (game ends immediately)
-    const gameWinnerId = checkForGameWinner(newState);
-    if (gameWinnerId !== null) {
-        return {
-            ...newState,
-            gameOver: true,
-            winnerId: gameWinnerId,
-        };
     }
     // Extra turn: doubles or scoring plays grant another turn (can chain)
     if (playedDouble || scored > 0) {
