@@ -10,8 +10,8 @@ export type MatchStatus = 'pending' | 'active' | 'done';
 
 export type Match = {
   id: string;
-  a: string;
-  b: string;
+  a: string; // socketId
+  b: string; // socketId
   roomCode?: string;
   status: MatchStatus;
   winner?: string;
@@ -38,10 +38,12 @@ export type Tournament = {
   matches: Match[];
   currentMatchIndex: number;
   standings: Record<string, Standing>;
+  activeMatchId?: string | null;
+  activeRoomCode?: string | null;
 };
 
-export function makeLobbyCode(): string {
-  return Math.random().toString(36).slice(2, 6).toUpperCase();
+export function makeCode(len = 4): string {
+  return Math.random().toString(36).slice(2, 2 + len).toUpperCase();
 }
 
 export function makeId(prefix: string): string {
@@ -65,22 +67,21 @@ export function initStandings(players: TournamentPlayer[]): Record<string, Stand
 }
 
 /**
- * Round-robin schedule using circle method.
- * Returns list of matches in play order.
+ * Circle method round-robin.
+ * If odd players, adds BYE.
  */
 export function buildRoundRobinMatches(players: TournamentPlayer[]): Match[] {
   const ids = players.map((p) => p.socketId);
   const list: Array<string | null> = ids.slice();
-
-  if (list.length % 2 === 1) list.push(null); // BYE
+  if (list.length % 2 === 1) list.push(null);
 
   const n = list.length;
   const rounds = n - 1;
   const half = n // 2;
 
   const matches: Match[] = [];
-
   let arr = list.slice();
+
   for (let r = 0; r < rounds; r++) {
     const left = arr.slice(0, half);
     const right = arr.slice(half).reverse();
@@ -92,7 +93,6 @@ export function buildRoundRobinMatches(players: TournamentPlayer[]): Match[] {
       matches.push({ id: makeId('m'), a, b, status: 'pending' });
     }
 
-    // rotate all except first element
     const fixed = arr[0];
     const rest = arr.slice(1);
     rest.unshift(rest.pop()!);
@@ -102,32 +102,24 @@ export function buildRoundRobinMatches(players: TournamentPlayer[]): Match[] {
   return matches;
 }
 
-export function sortStandings(standings: Record<string, Standing>): Standing[] {
-  return Object.values(standings).sort((x, y) => {
-    if (y.wins !== x.wins) return y.wins - x.wins;
-    const dx = (y.pointsFor - y.pointsAgainst) - (x.pointsFor - x.pointsAgainst);
-    if (dx !== 0) return dx;
-    return y.pointsFor - x.pointsFor;
-  });
-}
-
-export function applyMatchResult(
+export function applyResult(
   t: Tournament,
   matchId: string,
-  winnerSocketId: string,
+  winner: string,
   scoreA: number,
   scoreB: number,
-): Tournament {
-  const m = t.matches.find((mm) => mm.id === matchId);
-  if (!m || m.status === 'done') return t;
+): void {
+  const m = t.matches.find((x) => x.id === matchId);
+  if (!m || m.status === 'done') return;
 
   m.status = 'done';
-  m.winner = winnerSocketId;
+  m.winner = winner;
   m.scoreA = scoreA;
   m.scoreB = scoreB;
 
   const sa = t.standings[m.a];
   const sb = t.standings[m.b];
+  if (!sa || !sb) return;
 
   sa.played += 1;
   sb.played += 1;
@@ -137,13 +129,20 @@ export function applyMatchResult(
   sb.pointsFor += scoreB;
   sb.pointsAgainst += scoreA;
 
-  if (winnerSocketId === m.a) {
+  if (winner === m.a) {
     sa.wins += 1;
     sb.losses += 1;
   } else {
     sb.wins += 1;
     sa.losses += 1;
   }
+}
 
-  return t;
+export function sortedStandings(s: Record<string, Standing>): Standing[] {
+  return Object.values(s).sort((x, y) => {
+    if (y.wins !== x.wins) return y.wins - x.wins;
+    const d = (y.pointsFor - y.pointsAgainst) - (x.pointsFor - x.pointsAgainst);
+    if (d !== 0) return d;
+    return y.pointsFor - x.pointsFor;
+  });
 }
