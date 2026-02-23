@@ -248,7 +248,6 @@ export default function App() {
   const [tournamentId, setTournamentId] = useState<string | null>(null);
   const [tournamentState, setTournamentState] = useState<any>(null);
   const [tournamentActiveRoom, setTournamentActiveRoom] = useState<string | null>(null);
-  const [tournamentAssigned, setTournamentAssigned] = useState<any>(null);
   const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
   const sendRoomChat = (text: string) => {
     const t = String(text ?? '').trim();
@@ -438,9 +437,29 @@ export default function App() {
 
     s.on('room:update', (data: { players: RoomPlayer[] }) => {
       setPlayers(normalizeRoomPlayers(data?.players));
+    });
     // TOURNAMENT_LISTENERS
     s.on('tournament:lobby:update', (data: any) => {
-      if (typeof data?.lobbyCode === 'string') setTournamentCode(data.lobbyCode);
+      const lobbyCode = typeof data?.lobbyCode === 'string' ? data.lobbyCode : null;
+      if (lobbyCode) setTournamentCode(lobbyCode);
+
+      const players = Array.isArray(data?.players) ? data.players : null;
+      if (players) {
+        const inferredHostSocketId =
+          typeof data?.hostSocketId === 'string'
+            ? data.hostSocketId
+            : typeof players?.[0]?.socketId === 'string'
+              ? players[0].socketId
+              : null;
+
+        setTournamentState((prev: any) => ({
+          ...(prev ?? {}),
+          status: 'lobby',
+          lobbyCode: lobbyCode ?? (prev?.lobbyCode ?? null),
+          players,
+          hostSocketId: inferredHostSocketId ?? prev?.hostSocketId ?? null,
+        }));
+      }
     });
     s.on('tournament:state', (data: any) => {
       setTournamentState(data);
@@ -448,7 +467,6 @@ export default function App() {
       setTournamentActiveRoom(typeof data?.activeRoomCode === 'string' ? data.activeRoomCode : null);
     });
     s.on('tournament:match:assigned', (data: any) => {
-      setTournamentAssigned(data);
       if (typeof data?.roomCode === 'string') setTournamentActiveRoom(data.roomCode);
       // Auto-pull players into their match
       if (data?.roomCode && (data?.a === s.id || data?.b === s.id)) {
@@ -471,7 +489,6 @@ export default function App() {
         const next = prev.concat(evt);
         return next.length > 50 ? next.slice(next.length - 50) : next;
       });
-    });
     });
 
     s.on('hand:ended', (payload: HandEndedPayload) => {
@@ -522,6 +539,23 @@ export default function App() {
     setAppMode('home');
     autoConnectAttemptedRef.current = false;
   }, [socket]);
+
+  const handlePostGame = useCallback(() => {
+    // Tournament matches should return to tournament lobby, not disconnect to Home.
+    const inTournament = Boolean(tournamentId) || tournamentState?.status === 'running';
+    if (!inTournament) return disconnect();
+
+    setJoinedRoom(null);
+    setRoomCode('');
+    setState(null);
+    setLegalMoves([]);
+    setCanDraw(false);
+    setSelectedTile(null);
+    setActionError('');
+    setHandReveal(null);
+    setAppMode('tournament');
+  }, [disconnect, tournamentId, tournamentState?.status]);
+
 
   // Room actions
   const createRoom = useCallback(() => {
@@ -943,15 +977,21 @@ export default function App() {
   }
   if (appMode === 'tournament') {
     const players = tournamentState?.players ?? [];
-    const standings = tournamentState?.standings ?? [];
-    const matches = tournamentState?.matches ?? [];
+    const standingsRaw = (tournamentState as any)?.standings;
+    const standings = Array.isArray(standingsRaw)
+      ? standingsRaw
+      : standingsRaw && typeof standingsRaw === 'object'
+        ? Object.values(standingsRaw)
+        : [];
+    const matchesRaw = (tournamentState as any)?.matches;
+    const matches = Array.isArray(matchesRaw) ? matchesRaw : [];
     const activeRoom = tournamentActiveRoom ?? tournamentState?.activeRoomCode ?? null;
     const activeMatchId = tournamentState?.activeMatchId ?? null;
     const isHost = Boolean(tournamentState?.hostSocketId && socket?.id && tournamentState.hostSocketId === socket.id);
 
     const createLobby = () => {
       if (!socket) return setError('Not connected.');
-      socket.emit('tournament:create', (resp: any) => {
+      socket.emit('tournament:create', { username: authProfile?.username, userId: authUser?.id }, (resp: any) => {
         if (!resp?.ok) return setError('Failed to create lobby.');
         setTournamentId(resp.id);
         setTournamentCode(resp.lobbyCode);
@@ -982,141 +1022,97 @@ export default function App() {
     const spectate = () => {
       if (!socket) return setError('Not connected.');
       if (!activeRoom) return setError('No active match yet.');
-      const code = String(activeRoom).trim().toUpperCase();
-      // For now, join as normal room join; we'll add room:spectate later.
-      socket.emit('room:join', code, { username: authProfile?.username, userId: authUser?.id }, () => {});
-      setJoinedRoom(code);
-      setRoomCode(code);
-      setAppMode('multiplayer');
-      setError('');
+      // Spectator flow is implemented next (room:spectate). For now, keep spectators in tournament view.
+      return setError('Spectate not implemented yet (next step).');
+
     };
 
     return (
-      <div className="screen room-screen mode-home-screen">
-        <div className="mode-home">
-          <h2>Tournament Mode</h2>
-          <p style={{ opacity: 0.85 }}>
-            Round robin • 4+ players • Matches to 30 • Auto-assign matches
+      <div className="screen lobby-screen mode-home-screen">
+        <div className="mode-home-glow" aria-hidden="true" />
+        <div className="card lobby-card mode-card multiplayer-menu-card">
+          <p className="lobby-kicker">Racehorse Dominoes</p>
+          <h2>Join or Create a Lobby</h2>
+          <p className="lobby-server mode-subtitle">
+            Create a new lobby or enter a code to join your friends instantly.
           </p>
 
-          {/* TOURNAMENT_STATUS */}
-          <div style={{ opacity: 0.75, marginTop: 6 }}>
-            Socket: {' '}{socket ? 'connected' : 'not connected'}
-            {tournamentId ? ` • Tournament: ${tournamentId}` : ''}
-            {tournamentCode ? ` • Code: ${tournamentCode}` : ''}
-          </div>
           {error && (
-            <div style={{ marginTop: 10, opacity: 0.9 }}>
+            <div className="error-banner">
               {error}
+              <button onClick={() => setError('')}>×</button>
             </div>
           )}
 
+          <div className="mode-actions">
+            <button
+              className="mode-option mode-option-primary"
+              onClick={createLobby}
+              disabled={Boolean(tournamentId)}
+            >
+              <span className="mode-option-title">Create New Lobby</span>
+              <span className="mode-option-meta">Start a lobby and share the code</span>
+            </button>
 
-          <div className="mode-option-list">
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">Lobby</span>
-              <span className="mode-option-meta">
-                {tournamentCode ? `Code: ${tournamentCode}` : 'Create or join a lobby'}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
-              <button className="mode-option" onClick={createLobby}>
-                <span className="mode-option-title">Create Lobby</span>
-                <span className="mode-option-meta">Share the code</span>
+            <div className="mode-join-row">
+              <input
+                className="mode-join-input"
+                type="text"
+                placeholder="Lobby Code"
+                value={tournamentCode}
+                onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
+                maxLength={6}
+              />
+              <button className="mode-inline-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
+                Join Room
               </button>
-
-              <div className="mode-option" style={{ flex: 1, minWidth: 260, cursor: 'default' }}>
-                <span className="mode-option-title">Join Lobby</span>
-                <span className="mode-option-meta">Enter a code</span>
-                <input
-                  value={tournamentCode}
-                  onChange={(e) => setTournamentCode(e.target.value)}
-                  placeholder="ABCD"
-                  style={{ marginTop: 10 }}
-                />
-                <button style={{ marginTop: 10 }} onClick={joinLobby}>
-                  Join
-                </button>
-              </div>
             </div>
+
+            {tournamentCode && (
+              <div className="mode-option" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Lobby Code</span>
+                <span className="mode-option-meta">Share this code to invite players</span>
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ fontSize: 22, letterSpacing: 1, opacity: 0.95 }}>
+                    {tournamentCode}
+                  </div>
+                  <button
+                    className="btn text compact"
+                    onClick={() => navigator.clipboard?.writeText(String(tournamentCode))}
+                    title="Copy lobby code"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mode-option" style={{ cursor: 'default' }}>
               <span className="mode-option-title">Players ({players.length})</span>
               <span className="mode-option-meta">
                 {players.length < 4 ? 'Need 4+ to start' : isHost ? 'You are host' : 'Waiting for host'}
               </span>
-              <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {players.map((p: any) => (
-                  <span key={p.socketId} style={{ opacity: 0.9 }}>
-                    {p.username ?? 'Player'}
-                  </span>
+              <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+                {players.map((pp: any) => (
+                  <div key={pp.socketId} style={{ opacity: 0.92 }}>
+                    {pp.username ?? 'Player'}
+                  </div>
                 ))}
               </div>
             </div>
 
             {isHost && tournamentState?.status !== 'running' && (
-              <button className="mode-option" onClick={start} disabled={players.length < 4}>
+              <button className="mode-option mode-option-primary" onClick={start} disabled={players.length < 4}>
                 <span className="mode-option-title">Start Tournament</span>
-                <span className="mode-option-meta">Generate full schedule</span>
+                <span className="mode-option-meta">
+                  {players.length < 4 ? 'Need 4+ players to start' : 'Generate schedule and begin first match'}
+                </span>
               </button>
             )}
 
-            {tournamentState?.status === 'running' && (
-              <div className="mode-option" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Active Match</span>
-                <span className="mode-option-meta">
-                  {activeRoom ? `Room ${activeRoom}` : 'Assigning...'}
-                </span>
-                <button style={{ marginTop: 10 }} onClick={spectate} disabled={!activeRoom}>
-                  Spectate
-                </button>
-              </div>
-            )}
-
-            {Array.isArray(matches) && matches.length > 0 && (
-              <div className="mode-option" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Schedule</span>
-                <span className="mode-option-meta">
-                  {activeMatchId ? `Active match: ${activeMatchId}` : 'Not started'}
-                </span>
-                <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
-                  {matches.map((m: any) => (
-                    <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <span style={{ opacity: 0.9 }}>
-                        {(players.find((p: any) => p.socketId === m.a)?.username ?? 'Player')} vs{' '}
-                        {(players.find((p: any) => p.socketId === m.b)?.username ?? 'Player')}
-                      </span>
-                      <span style={{ opacity: 0.7 }}>
-                        {m.status === 'done' ? 'Done' : m.status === 'active' ? 'Playing' : 'Queued'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {Array.isArray(standings) && standings.length > 0 && (
-              <div className="mode-option" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Standings</span>
-                <span className="mode-option-meta">Wins + point diff</span>
-                <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
-                  {standings.map((st: any) => (
-                    <div key={st.socketId} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <span>{st.username}</span>
-                      <span>
-                        {st.wins}-{st.losses} ({(st.pointsFor - st.pointsAgainst) >= 0 ? '+' : ''}
-                        {st.pointsFor - st.pointsAgainst})
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button className="mode-option" onClick={() => setAppMode('home')}>
-              <span className="mode-option-title">Back</span>
-              <span className="mode-option-meta">Return home</span>
+            <button className="mode-option mode-option-secondary" onClick={() => setAppMode('home')}>
+              <span className="mode-option-title">Disconnect</span>
+              <span className="mode-option-meta">Return to offline mode selector</span>
             </button>
           </div>
         </div>
@@ -1449,7 +1445,7 @@ export default function App() {
           />
           {/* Game Over Overlay */}
           {state.gameOver && (
-            <GameOverOverlay state={state} myId={you} onNewGame={disconnect} players={players} />
+            <GameOverOverlay state={state} myId={you} onNewGame={handlePostGame} players={players} />
           )}
           {handReveal && !state.gameOver && (
             <div className="hand-reveal-overlay">
