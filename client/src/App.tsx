@@ -245,6 +245,11 @@ export default function App() {
 
   const [roomCode, setRoomCode] = useState('');
   const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
+// ROOM_REACTIONS_RESET
+  useEffect(() => {
+    setRoomReactions([]);
+  }, [joinedRoom]);
+
   const sendRoomChat = (text: string) => {
     const t = text.trim();
     if (!t) return;
