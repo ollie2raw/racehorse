@@ -495,6 +495,14 @@ export default function App() {
     connect();
   }, [appMode, connect, serverUrl]);
 
+// TOURNAMENT_CONNECT_EFFECT
+  useEffect(() => {
+    // Ensure tournament mode has an active socket (create/join requires it)
+    if (appMode !== 'tournament') return;
+    if (socket) return;
+    connect();
+  }, [appMode, socket, connect]);
+
   const disconnect = useCallback(() => {
     socket?.disconnect();
     setSocket(null);
