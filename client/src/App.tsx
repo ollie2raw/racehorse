@@ -989,6 +989,43 @@ export default function App() {
     const activeMatchId = tournamentState?.activeMatchId ?? null;
     const isHost = Boolean(tournamentState?.hostSocketId && socket?.id && tournamentState.hostSocketId === socket.id);
 
+    const mySocketId = socket?.id ?? null;
+    const nameFor = (sid: string) =>
+      (players.find((p: any) => p.socketId === sid)?.username as string | undefined) ?? 'Player';
+
+    const activeMatch =
+      (activeMatchId ? matches.find((m: any) => m.id === activeMatchId) : null) ??
+      matches.find((m: any) => m.status === 'active') ??
+      null;
+
+    const doneCount = matches.filter((m: any) => m.status === 'done').length;
+    const totalMatches = matches.length;
+
+    const youArePlaying = Boolean(
+      activeMatch && mySocketId && (activeMatch.a === mySocketId || activeMatch.b === mySocketId),
+    );
+
+    const nextForYou =
+      mySocketId
+        ? matches.find(
+            (m: any) =>
+              m.status !== 'done' &&
+              (m.a === mySocketId || m.b === mySocketId) &&
+              (!activeMatch || m.id !== activeMatch.id),
+          ) ?? null
+        : null;
+
+    const yourStatus =
+      tournamentState?.status === 'complete'
+        ? 'Tournament complete'
+        : youArePlaying
+          ? 'Playing now'
+          : nextForYou
+            ? 'Waiting for your next match'
+            : tournamentState?.status === 'running'
+              ? 'Waiting for assignment'
+              : 'Lobby';
+
     const createLobby = () => {
       if (!socket) return setError('Not connected.');
       socket.emit('tournament:create', { username: authProfile?.username, userId: authUser?.id }, (resp: any) => {
@@ -1022,9 +1059,14 @@ export default function App() {
     const spectate = () => {
       if (!socket) return setError('Not connected.');
       if (!activeRoom) return setError('No active match yet.');
-      // Spectator flow is implemented next (room:spectate). For now, keep spectators in tournament view.
-      return setError('Spectate not implemented yet (next step).');
-
+      const code = String(activeRoom).trim().toUpperCase();
+      socket.emit('room:spectate', code, (resp: any) => {
+        if (!resp?.ok) return setError('Spectate failed.');
+        setJoinedRoom(code);
+        setRoomCode(code);
+        setAppMode('multiplayer');
+        setError('');
+      });
     };
 
     return (
@@ -1032,9 +1074,11 @@ export default function App() {
         <div className="mode-home-glow" aria-hidden="true" />
         <div className="card lobby-card mode-card multiplayer-menu-card">
           <p className="lobby-kicker">Racehorse Dominoes</p>
-          <h2>Join or Create a Lobby</h2>
+          <h2>{tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}</h2>
           <p className="lobby-server mode-subtitle">
-            Create a new lobby or enter a code to join your friends instantly.
+            {tournamentId
+              ? 'Finish your match, then wait here for the next round. Watch live games and track the standings.'
+              : 'Create a new lobby or enter a code to join your friends instantly.'}
           </p>
 
           {error && (
@@ -1044,63 +1088,10 @@ export default function App() {
             </div>
           )}
 
-          <div className="mode-actions">
-            <button
-              className="mode-option mode-option-primary"
-              onClick={createLobby}
-              disabled={Boolean(tournamentId)}
-            >
-              <span className="mode-option-title">Create New Lobby</span>
-              <span className="mode-option-meta">Start a lobby and share the code</span>
-            </button>
-
-            <div className="mode-join-row">
-              <input
-                className="mode-join-input"
-                type="text"
-                placeholder="Lobby Code"
-                value={tournamentCode}
-                onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
-                maxLength={6}
-              />
-              <button className="mode-inline-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
-                Join Room
-              </button>
-            </div>
-
-            {tournamentCode && (
-              <div className="mode-option" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Lobby Code</span>
-                <span className="mode-option-meta">Share this code to invite players</span>
-                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ fontSize: 22, letterSpacing: 1, opacity: 0.95 }}>
-                    {tournamentCode}
-                  </div>
-                  <button
-                    className="btn text compact"
-                    onClick={() => navigator.clipboard?.writeText(String(tournamentCode))}
-                    title="Copy lobby code"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">Players ({players.length})</span>
-              <span className="mode-option-meta">
-                {players.length < 4 ? 'Need 4+ to start' : isHost ? 'You are host' : 'Waiting for host'}
-              </span>
-              <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
-                {players.map((pp: any) => (
-                  <div key={pp.socketId} style={{ opacity: 0.92 }}>
-                    {pp.username ?? 'Player'}
-                  </div>
-                ))}
-              </div>
-            </div>
-
+          <div className="mode-actions" style={{ width: '100%', maxWidth: '100%' }}>
+            {/* TOURNAMENT_TWO_COL_LAYOUT */}
+            <div style={{ display: 'flex', width: '100%', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div style={{ width: '100%', display: 'grid', gap: 14 }}>
             {isHost && tournamentState?.status !== 'running' && (
               <button className="mode-option mode-option-primary" onClick={start} disabled={players.length < 4}>
                 <span className="mode-option-title">Start Tournament</span>
@@ -1110,7 +1101,163 @@ export default function App() {
               </button>
             )}
 
-            <button className="mode-option mode-option-secondary" onClick={() => setAppMode('home')}>
+
+            {/* Tournament Hub (waiting room) */}
+                        {/* TOURNAMENT_TWO_COL_LAYOUT (grid) */}
+            <div
+              style={{
+                display: 'grid',
+                width: '100%',
+                gridTemplateColumns: 'minmax(340px, 360px) minmax(0, 1fr)',
+                gap: 16,
+                alignItems: 'start',
+              }}
+            >
+              <div style={{ display: 'grid', gap: 14 }}>
+{tournamentId && (
+              <div className="mode-option" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Status</span>
+                <span className="mode-option-meta">
+                  {yourStatus}
+                  {totalMatches ? ` • ${doneCount}/${totalMatches} complete` : ''}
+                </span>
+
+                <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <span style={{ opacity: 0.9 }}>Now Playing</span>
+                    <span style={{ opacity: 0.9 }}>
+                      {activeMatch ? `${nameFor(activeMatch.a)} vs ${nameFor(activeMatch.b)}` : 'Waiting…'}
+                    </span>
+                  </div>
+
+                  {!!nextForYou && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <span style={{ opacity: 0.9 }}>Up Next</span>
+                      <span style={{ opacity: 0.9 }}>
+                        {nextForYou.a === mySocketId ? nameFor(nextForYou.b) : nameFor(nextForYou.a)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {tournamentState?.status === 'running' && activeRoom && !youArePlaying && (
+                  <button
+                    className="btn text compact"
+                    style={{ marginTop: 12 }}
+                    onClick={spectate}
+                    disabled={!activeRoom}
+                    title="Watch the current match"
+                  >
+                    Watch match
+                  </button>
+                )}
+              </div>
+            )}
+
+            
+              </div>
+              <div style={{ width: '100%', display: 'grid', gap: 14 }}>
+{tournamentId && matches.length > 0 && (
+              <div className="mode-option" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Bracket</span>
+                <span className="mode-option-meta">Round robin schedule</span>
+
+                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                  {matches.map((m: any, i: number) => {
+                    const isActive = Boolean(activeMatch && m.id === activeMatch.id);
+                    const involvesYou = Boolean(mySocketId && (m.a === mySocketId || m.b === mySocketId));
+                    const rowOpacity = m.status === 'done' ? 0.7 : 0.92;
+
+                    const left = nameFor(m.a);
+                    const right = nameFor(m.b);
+
+                    const label =
+                      m.status === 'done' ? 'Done' : m.status === 'active' ? 'Playing' : 'Queued';
+
+                    const winnerName =
+                      m.status === 'done' && m.winner ? nameFor(m.winner) : null;
+
+                    return (
+                      <div
+                        key={m.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: '8px 10px',
+                          borderRadius: 12,
+                          opacity: rowOpacity,
+                          outline: isActive ? '2px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.06)',
+                          background: involvesYou ? 'rgba(255,255,255,0.04)' : 'transparent',
+                        }}
+                      >
+                        <div style={{ display: 'grid', gap: 2 }}>
+                          <div style={{ opacity: 0.95 }}>
+                            {left} <span style={{ opacity: 0.65 }}>vs</span> {right}
+                          </div>
+                          {winnerName && (
+                            <div style={{ opacity: 0.75, fontSize: 12 }}>
+                              Winner: {winnerName}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                          <span style={{ opacity: 0.7, fontSize: 12 }}>#{i + 1}</span>
+                          <span style={{ opacity: 0.85 }}>{label}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+{tournamentId && Array.isArray(standings) && standings.length > 0 && (
+              <div className="mode-option" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Standings</span>
+                <span className="mode-option-meta">Wins • point diff</span>
+
+                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                  {standings.map((st: any, idx: number) => {
+                    const diff = (st.pointsFor ?? 0) - (st.pointsAgainst ?? 0);
+                    const me = Boolean(mySocketId && st.socketId === mySocketId);
+
+                    return (
+                      <div
+                        key={st.socketId}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: '8px 10px',
+                          borderRadius: 12,
+                          outline: '1px solid rgba(255,255,255,0.06)',
+                          background: me ? 'rgba(255,255,255,0.05)' : 'transparent',
+                        }}
+                      >
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                          <span style={{ opacity: 0.65, width: 18, textAlign: 'right' }}>{idx + 1}</span>
+                          <span style={{ opacity: 0.95 }}>{st.username ?? 'Player'}</span>
+                        </div>
+                        <span style={{ opacity: 0.9 }}>
+                          {st.wins ?? 0}-{st.losses ?? 0} ({diff >= 0 ? '+' : ''}{diff})
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            
+
+              </div>
+            </div>
+              </div>
+            </div>
+
+<button className="mode-option mode-option-secondary" onClick={() => setAppMode('home')}>
               <span className="mode-option-title">Disconnect</span>
               <span className="mode-option-meta">Return to offline mode selector</span>
             </button>

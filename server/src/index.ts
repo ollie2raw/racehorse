@@ -526,7 +526,33 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
-  socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
+  
+  socket.on('room:spectate', (argCode: unknown, cb?: any) => {
+    const code = String(argCode ?? '').trim().toUpperCase();
+    try {
+      if (!code) return cb?.({ ok: false, error: 'missing_code' });
+
+      const room = roomsByCode.get(code);
+      if (!room) return cb?.({ ok: false, error: 'not_found' });
+
+      // Socket room only — DO NOT join the game engine.
+      socket.join(code);
+
+      // Send roster snapshot
+      const roster = roomPlayersByCode.get(code) ?? [];
+      socket.emit('room:update', { players: roster });
+
+      // Send a state snapshot to just this socket.
+      // (broadcastStateUpdate uses io.to(code); we join first, so spectator receives it)
+      broadcastStateUpdate(code);
+
+      cb?.({ ok: true });
+    } catch (e) {
+      cb?.({ ok: false, error: 'spectate_failed' });
+    }
+  });
+
+socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     const cb = (
       typeof arg3 === 'function' ? arg3 : typeof arg2 === 'function' ? arg2 : undefined
     ) as AckFn | undefined;
