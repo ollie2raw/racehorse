@@ -84,12 +84,12 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
   const [status, setStatus] = useState<PlayStatus>('IN_PROGRESS');
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [movesUsed, setMovesUsed] = useState(0);
-  const [lastMovePoints, setLastMovePoints] = useState(0);
+  const [_lastMovePoints, setLastMovePoints] = useState(0);
   const [finalScore, setFinalScore] = useState<number | null>(null);
   const runningScoreRef = useRef(0);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [attempts, setAttempts] = useState(0);
-  const [bestMoves, setBestMoves] = useState<number | null>(null);
+  const [_statusMessage, setStatusMessage] = useState('');
+  const [_attempts, setAttempts] = useState(0);
+  const [_bestMoves, setBestMoves] = useState<number | null>(null);
   const [showLobby, setShowLobby] = useState(true);
   const [leaderboard, setLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
