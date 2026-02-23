@@ -96,7 +96,7 @@
 .daily-leaderboard-head,
 .daily-leaderboard-row {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 66px 64px 64px;
+  grid-template-columns: 60px minmax(0, 1fr) 80px 80px;
   gap: 8px;
   align-items: center;
 }
@@ -106,7 +106,13 @@
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 2px 8px 4px;
+  padding: 10px 12px;
+}
+
+.daily-leaderboard-head span:nth-child(3),
+.daily-leaderboard-head span:nth-child(4) {
+  text-align: right;
+  justify-self: end;
 }
 
 .daily-leaderboard-list {
@@ -148,6 +154,8 @@
 
 .daily-leaderboard-stat {
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  justify-self: end;
   font-variant-numeric: tabular-nums;
   color: rgba(208, 224, 233, 0.94);
 }
@@ -238,7 +246,7 @@
 @media (max-width: 760px) {
   .daily-leaderboard-head,
   .daily-leaderboard-row {
-    grid-template-columns: 44px minmax(0, 1fr) 56px 56px 56px;
+    grid-template-columns: 52px minmax(0, 1fr) 64px 64px;
     gap: 6px;
   }
 
@@ -284,7 +292,7 @@
 
 .daily-leaderboard-head {
   display: grid;
-  grid-template-columns: 70px 1fr 90px 90px 90px;
+  grid-template-columns: 70px 1fr 90px 90px;
   gap: 8px;
   padding: 8px 10px;
   margin-bottom: 6px;
@@ -303,7 +311,7 @@
 
 .daily-leaderboard-row {
   display: grid;
-  grid-template-columns: 70px 1fr 90px 90px 90px;
+  grid-template-columns: 70px 1fr 90px 90px;
   gap: 8px;
   align-items: center;
   padding: 10px 10px;
@@ -367,7 +375,7 @@
   }
   .daily-leaderboard-head,
   .daily-leaderboard-row {
-    grid-template-columns: 54px 1fr 70px 70px 70px;
+    grid-template-columns: 54px 1fr 70px 70px;
   }
 }
 
