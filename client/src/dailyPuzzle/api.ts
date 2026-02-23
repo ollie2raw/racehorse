@@ -255,4 +255,148 @@ export async function upsertDailyPuzzle(input: UpsertPuzzleInput): Promise<void>
   }
 }
 
+export interface UpsertDailyPuzzleBestScoreInput {
+  puzzleDate: string;
+  userId: string;
+  username: string;
+  score: number;
+  movesUsed: number;
+  seconds?: number;
+}
+
+export interface DailyPuzzleLeaderboardEntry {
+  userId: string;
+  username: string;
+  bestScore: number;
+  bestMovesUsed: number;
+  bestSeconds: number;
+  updatedAt: string;
+}
+
+function sanitizeLeaderboardUsername(storedUsername: string | null | undefined): string {
+  const storedName = (storedUsername ?? "").trim();
+  if (storedName && !/^user_[a-f0-9]{8}$/i.test(storedName)) return storedName;
+
+  return "Player";
+}
+
+export async function upsertDailyPuzzleBestScore(input: UpsertDailyPuzzleBestScoreInput): Promise<void> {
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const canonicalDate = normalizeDateInputToLocalKey(input.puzzleDate);
+  const nextSeconds = Math.max(0, Math.floor(input.seconds ?? 0));
+  const { data: existing, error: selectError } = await withTimeout(
+    Promise.resolve(
+      supabase
+        .from("daily_puzzle_scores")
+        .select("best_score, best_moves_used, best_seconds")
+        .eq("puzzle_date", canonicalDate)
+        .eq("user_id", input.userId)
+        .maybeSingle()
+    )
+  );
+
+  if (selectError) {
+    throw new Error(selectError.message);
+  }
+
+  if (!existing) {
+    const { error: insertError } = await withTimeout(
+      Promise.resolve(
+        supabase
+          .from("daily_puzzle_scores")
+          .insert({
+            puzzle_date: canonicalDate,
+            user_id: input.userId,
+            username: input.username,
+            best_score: input.score,
+            best_moves_used: input.movesUsed,
+            best_seconds: nextSeconds,
+            updated_at: new Date().toISOString(),
+          })
+      )
+    );
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+    return;
+  }
+
+  const currentBestScore = Number(existing.best_score ?? 0);
+  const currentBestMoves = Number(existing.best_moves_used ?? Number.MAX_SAFE_INTEGER);
+  const currentBestSeconds = Number(existing.best_seconds ?? Number.MAX_SAFE_INTEGER);
+
+  const shouldUpdate =
+    input.score > currentBestScore
+    || (input.score === currentBestScore && input.movesUsed < currentBestMoves)
+    || (input.score === currentBestScore && input.movesUsed === currentBestMoves && nextSeconds < currentBestSeconds);
+
+  if (!shouldUpdate) return;
+
+  const { error: updateError } = await withTimeout(
+    Promise.resolve(
+      supabase
+        .from("daily_puzzle_scores")
+        .update({
+          best_score: input.score,
+          best_moves_used: input.movesUsed,
+          best_seconds: nextSeconds,
+          username: input.username,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("puzzle_date", canonicalDate)
+        .eq("user_id", input.userId)
+    )
+  );
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+}
+
+export async function fetchDailyPuzzleLeaderboard(
+  puzzleDate: string,
+  limit = 25
+): Promise<DailyPuzzleLeaderboardEntry[]> {
+  if (!supabase) return [];
+
+  const canonicalDate = normalizeDateInputToLocalKey(puzzleDate);
+  const { data, error } = await withTimeout(
+    Promise.resolve(
+      supabase
+        .from("daily_puzzle_scores")
+        .select("user_id, username, best_score, best_moves_used, best_seconds, updated_at")
+        .eq("puzzle_date", canonicalDate)
+        .order("best_score", { ascending: false })
+        .order("best_moves_used", { ascending: true })
+        .order("best_seconds", { ascending: true })
+        .order("updated_at", { ascending: true })
+        .limit(limit)
+    )
+  );
+
+  if (error) {
+    if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+      // eslint-disable-next-line no-console
+      console.error("[DailyPuzzleLeaderboard] fetch error", error);
+    }
+    throw new Error(error.message);
+  }
+
+  if (!data) return [];
+  return data.map((row) => {
+    const storedUsername = row.username as string | null;
+    return {
+      userId: row.user_id as string,
+      username: sanitizeLeaderboardUsername(storedUsername),
+      bestScore: Number(row.best_score ?? 0),
+      bestMovesUsed: Number(row.best_moves_used ?? 0),
+      bestSeconds: Number(row.best_seconds ?? 0),
+      updatedAt: row.updated_at as string,
+    };
+  });
+}
+
 export { getLocalDateKey, normalizeDateInputToLocalKey };

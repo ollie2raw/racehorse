@@ -238,6 +238,7 @@ export default function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
@@ -686,7 +687,15 @@ export default function App() {
   }
 
   if (appMode === "bot") {
-    return <div className="app"><BotMatchScreen onBack={() => setAppMode("home")} /></div>;
+    return (
+      <div className="app">
+        <BotMatchScreen
+          onBack={() => setAppMode("home")}
+          userId={authUser?.id ?? null}
+          username={authProfile?.username ?? null}
+        />
+      </div>
+    );
   }
 
   if (appMode === "daily") {
@@ -744,8 +753,32 @@ export default function App() {
               <button className="mode-inline-btn" onClick={() => setStatsOpen(true)}>
                 Stats
               </button>
-              <button className="mode-inline-btn" onClick={() => { void signOut(); }}>
-                Sign out
+              <button
+                className="mode-inline-btn"
+                disabled={signingOut}
+                onClick={async () => {
+                  try {
+                    setSigningOut(true);
+                    await signOut();
+                  } catch {
+                    // no-op: always force local UI reset below
+                  } finally {
+                    setAppMode("home");
+                    setJoinedRoom(null);
+                    setState(null);
+                    setPlayers([]);
+                    setLegalMoves([]);
+                    setCanDraw(false);
+                    setSelectedTile(null);
+                    setHandReveal(null);
+                    setScoreTrackOpen(false);
+                    setError("");
+                    setActionError("");
+                    setSigningOut(false);
+                  }
+                }}
+              >
+                {signingOut ? "Signing out..." : "Sign out"}
               </button>
             </>
           )}

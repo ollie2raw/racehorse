@@ -14,6 +14,7 @@ interface AuthResult {
 
 const TEMP_USERNAME_PREFIX = "user_";
 const USERNAME_REQUEST_TIMEOUT_MS = 10000;
+const SIGN_OUT_TIMEOUT_MS = 8000;
 
 export function isTemporaryUsername(username: string | null | undefined): boolean {
   if (!username) return true;
@@ -47,6 +48,20 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
         reject(err);
       });
   });
+}
+
+function clearLocalSupabaseAuthTokens(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const keys = Object.keys(window.localStorage);
+    for (const key of keys) {
+      if (key.startsWith("sb-") && key.includes("auth-token")) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // no-op
+  }
 }
 
 export function useAuth() {
@@ -137,8 +152,25 @@ export function useAuth() {
       setLoading(false);
     });
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && supabase) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          const nextUser = session?.user ?? null;
+          setUser(nextUser);
+          if (nextUser) {
+            void refreshProfile(nextUser.id);
+          } else {
+            setProfile(null);
+          }
+        });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       active = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       subscription.unsubscribe();
     };
   }, [refreshProfile]);
@@ -181,10 +213,56 @@ export function useAuth() {
 
   const signOut = useCallback(async (): Promise<AuthResult> => {
     if (!supabase) return { error: getSupabaseConfigError() };
-    const { error } = await supabase.auth.signOut();
-    if (error) return { error: error.message };
-    setProfile(null);
-    return { error: null };
+
+    const isDev = typeof import.meta !== "undefined" && import.meta.env?.DEV;
+    if (isDev) {
+      // eslint-disable-next-line no-console
+      console.log("[Auth] signOut start");
+    }
+
+    let errorMessage: string | null = null;
+    let usedTimeoutFallback = false;
+
+    try {
+      const signOutPromise = supabase.auth.signOut().then(({ error }) => ({
+        kind: "signout" as const,
+        error,
+      }));
+      const timeoutPromise = new Promise<{ kind: "timeout" }>((resolve) => {
+        setTimeout(() => resolve({ kind: "timeout" }), SIGN_OUT_TIMEOUT_MS);
+      });
+
+      const result = await Promise.race([signOutPromise, timeoutPromise]);
+      if (result.kind === "timeout") {
+        usedTimeoutFallback = true;
+        if (isDev) {
+          // eslint-disable-next-line no-console
+          console.warn("[Auth] signOut timed out; using local fallback");
+        }
+
+        try {
+          const { error: localError } = await supabase.auth.signOut({ scope: "local" });
+          if (localError) {
+            clearLocalSupabaseAuthTokens();
+          }
+        } catch {
+          clearLocalSupabaseAuthTokens();
+        }
+      } else if (result.error) {
+        errorMessage = result.error.message;
+      }
+    } catch (err) {
+      errorMessage = err instanceof Error ? err.message : "Unable to sign out.";
+    } finally {
+      setProfile(null);
+      setUser(null);
+      if (isDev) {
+        // eslint-disable-next-line no-console
+        console.log("[Auth] signOut end", { usedTimeoutFallback, error: errorMessage });
+      }
+    }
+
+    return { error: errorMessage };
   }, []);
 
   const updateUsername = useCallback(async (username: string): Promise<AuthResult> => {

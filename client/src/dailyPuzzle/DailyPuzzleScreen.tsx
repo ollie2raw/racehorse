@@ -1,13 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { UserProfile } from "../auth/useAuth";
 import { Board, DominoTile } from "../components";
 import { applyPlayMove, getDisplayOpenEnds, getLegalMoves } from "../bot/botEngine";
 import type { Move, Tile } from "../types";
-import { getDailyPuzzleForDate, getLocalDateKey } from "./api";
+import {
+  fetchDailyPuzzleLeaderboard,
+  getDailyPuzzleForDate,
+  getLocalDateKey,
+  type DailyPuzzleLeaderboardEntry,
+  upsertDailyPuzzleBestScore,
+} from "./api";
 import { createPuzzleMatchState, validatePuzzle } from "./validator";
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from "./types";
-import { submitPuzzleResult, getTodayLeaderboard, type LeaderboardRow } from "../puzzle/puzzleApi";
 import "./dailyPuzzle.css";
 
 interface DailyPuzzleScreenProps {
@@ -55,11 +60,18 @@ function writeProgress(dateSeed: string, progress: DailyProgress): void {
   window.localStorage.setItem(progressKey(dateSeed), JSON.stringify(progress));
 }
 
-function formatMs(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
+function formatSeconds(seconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  const remainder = totalSeconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function getDisplayName(username: string | null | undefined): string {
+  const value = (username ?? "").trim();
+  if (!value) return "Player";
+  if (/^user_[a-f0-9]{8}$/i.test(value)) return "Player";
+  return value;
 }
 
 export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzleScreenProps) {
@@ -79,10 +91,22 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
   const [attempts, setAttempts] = useState(0);
   const [bestMoves, setBestMoves] = useState<number | null>(null);
   const [showLobby, setShowLobby] = useState(true);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
+  const [leaderboard, setLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const startTimeRef = useRef<number>(0);
   const submittedRef = useRef(false);
+
+  const refreshLeaderboard = useCallback(async (puzzleDate: string) => {
+    setLeaderboardLoading(true);
+    try {
+      const rows = await fetchDailyPuzzleLeaderboard(puzzleDate, 20);
+      setLeaderboard(rows);
+    } catch {
+      setLeaderboard([]);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, []);
 
   const { match, matchError } = useMemo(() => {
     if (!puzzle) return { match: null, matchError: null as string | null };
@@ -141,12 +165,9 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
         setAttempts(nextAttempts);
         setBestMoves(progress.bestMoves);
 
-        setLeaderboardLoading(true);
-        getTodayLeaderboard(today.id).then((rows) => {
-          if (!active) return;
-          setLeaderboard(rows);
-          setLeaderboardLoading(false);
-        });
+        if (active) {
+          void refreshLeaderboard(today.puzzleDate);
+        }
       } catch (err) {
         if (!active) return;
         // eslint-disable-next-line no-console
@@ -161,7 +182,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     return () => {
       active = false;
     };
-  }, [localDateKey, timezone]);
+  }, [localDateKey, timezone, refreshLeaderboard]);
 
   const legalMoves = useMemo(() => {
     if (!runtimeState || status !== "IN_PROGRESS") return [] as Move[];
@@ -197,7 +218,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     setAttempts(nextAttempts);
   };
 
-  const finalizeResult = (nextStatus: PlayStatus, solvedMoves: number | null) => {
+  const finalizeResult = (nextStatus: PlayStatus, solvedMoves: number | null, finalScoreValue: number) => {
     if (!puzzle) return;
     const progress = readProgress(puzzle.puzzleDate);
 
@@ -209,14 +230,21 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
       writeProgress(puzzle.puzzleDate, { ...progress, lastResult: nextStatus });
     }
 
-    if (nextStatus === "SOLVED" && user && !submittedRef.current) {
+    if (user && !submittedRef.current) {
       submittedRef.current = true;
-      const ms = Date.now() - startTimeRef.current;
-      void submitPuzzleResult(puzzle.id, user, {
-        moves: solvedMoves ?? movesUsed,
-        milliseconds: ms,
-        solved: true,
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000));
+      void upsertDailyPuzzleBestScore({
+        puzzleDate: puzzle.puzzleDate,
+        userId: user.id,
+        username: profile?.username ?? user.email?.split("@")[0] ?? "Player",
+        score: finalScoreValue,
+        movesUsed: solvedMoves ?? movesUsed,
+        seconds: elapsedSeconds,
+      }).finally(() => {
+        void refreshLeaderboard(puzzle.puzzleDate);
       });
+    } else {
+      void refreshLeaderboard(puzzle.puzzleDate);
     }
   };
 
@@ -255,7 +283,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
         setFinalScore(newRunningScore);
         setStatus("SOLVED");
         setStatusMessage(`Final score: ${newRunningScore}`);
-        finalizeResult("SOLVED", nextMoves);
+        finalizeResult("SOLVED", nextMoves, newRunningScore);
       } else {
         runningScoreRef.current = newRunningScore;
         setStatusMessage(`Running score: ${newRunningScore} — keep playing`);
@@ -266,21 +294,21 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     if (totalScore >= puzzle.targetScore && nextMoves <= puzzle.maxMoves) {
       setStatus("SOLVED");
       setStatusMessage(`Solved: ${totalScore}/${puzzle.targetScore} in ${nextMoves} moves.`);
-      finalizeResult("SOLVED", nextMoves);
+      finalizeResult("SOLVED", nextMoves, totalScore);
       return;
     }
 
     if (nextMoves >= puzzle.maxMoves && totalScore < puzzle.targetScore) {
       setStatus("FAILED");
       setStatusMessage(`Failed: ${totalScore}/${puzzle.targetScore} after ${nextMoves} moves.`);
-      finalizeResult("FAILED", null);
+      finalizeResult("FAILED", null, totalScore);
       return;
     }
 
     if (nextState.currentPlayer !== "you") {
       setStatus("FAILED");
       setStatusMessage("Failed: Turn ended before reaching target score.");
-      finalizeResult("FAILED", null);
+      finalizeResult("FAILED", null, totalScore);
       return;
     }
 
@@ -288,7 +316,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     if (upcoming.length === 0) {
       setStatus("FAILED");
       setStatusMessage("Failed: No legal moves remaining.");
-      finalizeResult("FAILED", null);
+      finalizeResult("FAILED", null, totalScore);
       return;
     }
 
@@ -301,6 +329,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     setFinalScore(0);
     setStatus("FAILED");
     setStatusMessage("Final score: 0");
+    finalizeResult("FAILED", null, 0);
   }, [puzzle, status, legalMoves.length]);
 
   if (loading) {
@@ -367,6 +396,8 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
 
   const solvableWarning = Boolean(validation && !validation.solvable);
   const isOneTurnHighScore = puzzle.puzzleType === "one_turn_high_score";
+  const modalLeaderboard = leaderboard.slice(0, 20);
+  const currentUserId = user?.id ?? null;
 
   if (showLobby) {
     return (
@@ -411,8 +442,9 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
                     <div className="daily-leaderboard-row" key={`${row.userId}-${idx}`}>
                       <span className="daily-leaderboard-rank">#{idx + 1}</span>
                       <span className="daily-leaderboard-name">@{row.username}</span>
-                      <span>{row.moves} moves</span>
-                      <span>{formatMs(row.milliseconds)}</span>
+                      <span className="daily-leaderboard-stat">{row.bestScore}</span>
+                      <span className="daily-leaderboard-stat">{row.bestMovesUsed}</span>
+                      <span className="daily-leaderboard-stat">{formatSeconds(row.bestSeconds)}</span>
                     </div>
                   ))}
                 </div>
@@ -508,7 +540,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
             {isOneTurnHighScore ? (
               <>
                 <h3>Final score: {finalScore ?? 0}</h3>
-                <p>High Score — 1 move · Deal {puzzle.dealSize}</p>
+                <p>High Score — One turn · Deal {puzzle.dealSize}</p>
               </>
             ) : (
               <>
@@ -519,21 +551,44 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
               </>
             )}
             {!user && <p className="lobby-server">Sign in to submit to leaderboard.</p>}
-            {leaderboard.length > 0 && (
-              <div className="daily-leaderboard-panel">
-                <h3>Leaderboard</h3>
-                <div className="daily-leaderboard-list">
-                  {leaderboard.map((row, idx) => (
-                    <div className="daily-leaderboard-row" key={`${row.userId}-${idx}`}>
-                      <span className="daily-leaderboard-rank">#{idx + 1}</span>
-                      <span className="daily-leaderboard-name">@{row.username}</span>
-                      <span>{row.moves} moves</span>
-                      <span>{formatMs(row.milliseconds)}</span>
-                    </div>
-                  ))}
-                </div>
+            <div className="daily-leaderboard-panel daily-leaderboard-panel-modal">
+              <h3>Today&apos;s Top Scores</h3>
+              <div className="daily-leaderboard-head" aria-hidden="true">
+                <span>Rank</span>
+                <span>Player</span>
+                <span>Score</span>
+                <span>Moves</span>
+                <span>Time</span>
               </div>
-            )}
+              {leaderboardLoading && (
+                <p className="daily-leaderboard-loading">
+                  <span className="daily-inline-spinner" aria-hidden="true" />
+                  Loading leaderboard...
+                </p>
+              )}
+              {!leaderboardLoading && modalLeaderboard.length === 0 && (
+                <p className="lobby-server">No solved submissions yet.</p>
+              )}
+              {!leaderboardLoading && modalLeaderboard.length > 0 && (
+                <div className="daily-leaderboard-list">
+                  {modalLeaderboard.map((row, idx) => {
+                    const isCurrentUser = Boolean(currentUserId) && row.userId === currentUserId;
+                    return (
+                      <div
+                        className={`daily-leaderboard-row ${isCurrentUser ? "is-current-user" : ""}`}
+                        key={`${row.userId}-${idx}`}
+                      >
+                        <span className="daily-leaderboard-rank">#{idx + 1}</span>
+                        <span className="daily-leaderboard-name">@{getDisplayName(row.username)}</span>
+                        <span className="daily-leaderboard-stat">{row.bestScore}</span>
+                        <span className="daily-leaderboard-stat">{row.bestMovesUsed}</span>
+                        <span className="daily-leaderboard-stat">{formatSeconds(row.bestSeconds)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <div className="daily-puzzle-modal-actions">
               <button className="mode-inline-btn" onClick={resetAttempt}>Play Again</button>
               <button className="mode-inline-btn" onClick={onBack}>Back to Home</button>

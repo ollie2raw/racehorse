@@ -136,9 +136,13 @@ export async function getTodayLeaderboard(puzzleId: string): Promise<Leaderboard
 
     return data.map((row) => {
       const uid = row.user_id as string;
+      const rawUsername = usernameMap.get(uid)?.trim();
+      const username = rawUsername && !/^user_[a-f0-9]{8}$/i.test(rawUsername)
+        ? rawUsername
+        : "Player";
       return {
         userId: uid,
-        username: usernameMap.get(uid) ?? `user_${uid.slice(0, 8)}`,
+        username,
         moves: row.moves as number,
         milliseconds: row.milliseconds as number,
         solved: row.solved as boolean,

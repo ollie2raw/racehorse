@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Board, DominoTile, ScoreTrackOverlay } from "../components";
 import type { Move, Tile } from "../types";
+import { fetchDailyPuzzleLeaderboard, upsertDailyPuzzleBestScore, type DailyPuzzleLeaderboardEntry } from "../dailyPuzzle/api";
 import {
   applyPlayMove,
   createBotMatch,
@@ -18,6 +19,9 @@ import "./botMatch.css";
 
 interface BotMatchScreenProps {
   onBack: () => void;
+  dailyPuzzleDate?: string | null;
+  userId?: string | null;
+  username?: string | null;
 }
 
 interface BotHandReveal {
@@ -78,7 +82,12 @@ function toastFromResult(result: BotActionResult): string {
   return "";
 }
 
-export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
+export default function BotMatchScreen({
+  onBack,
+  dailyPuzzleDate = null,
+  userId = null,
+  username = null,
+}: BotMatchScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [dealSize, setDealSize] = useState<BotDealSize>(7);
   const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, 7));
@@ -89,7 +98,13 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
   const [handReveal, setHandReveal] = useState<BotHandReveal | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
+  const [movesUsed, setMovesUsed] = useState(0);
+  const [dailyLeaderboard, setDailyLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
+  const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
+  const [dailyLeaderboardError, setDailyLeaderboardError] = useState<string | null>(null);
+  const dailyResultSyncKeyRef = useRef("");
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const showDebug = typeof window !== "undefined" && window.localStorage.getItem("BOT_DEBUG") === "1";
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const showDevCapture = Boolean(
@@ -177,6 +192,11 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
     setSelectedTile(null);
     setLastBotChoice(null);
     setHandReveal(null);
+    setMovesUsed(0);
+    setDailyLeaderboard([]);
+    setDailyLeaderboardError(null);
+    setDailyLeaderboardLoading(false);
+    dailyResultSyncKeyRef.current = "";
     setMatch(createBotMatch(60, dealSize));
   };
 
@@ -206,6 +226,7 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
     const move = findMoveForSelection(userPlayMoves, selectedTile, position);
     if (!move) return;
     const result = applyPlayMove(match, "you", move);
+    setMovesUsed(prev => prev + 1);
     setSelectedTile(null);
     applyAndNotify(result);
   };
@@ -262,6 +283,45 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
     setSelectedTile(null);
     applyAndNotify(result);
   }, [match, userPlayMoves.length]);
+
+  useEffect(() => {
+    if (!isDailyPuzzleRun || !dailyPuzzleDate || !match.gameOver) return;
+
+    const syncKey = `${dailyPuzzleDate}|${userId ?? "guest"}|${movesUsed}|${match.players.you.score}`;
+    if (dailyResultSyncKeyRef.current === syncKey) return;
+    dailyResultSyncKeyRef.current = syncKey;
+
+    let active = true;
+    const syncLeaderboard = async () => {
+      setDailyLeaderboardLoading(true);
+      setDailyLeaderboardError(null);
+      try {
+        if (userId) {
+          await upsertDailyPuzzleBestScore({
+            puzzleDate: dailyPuzzleDate,
+            userId,
+            username: username?.trim() || `user_${userId.slice(0, 8)}`,
+            score: match.players.you.score,
+            movesUsed,
+          });
+        }
+        const rows = await fetchDailyPuzzleLeaderboard(dailyPuzzleDate, 25);
+        if (active) setDailyLeaderboard(rows);
+      } catch (err) {
+        if (active) {
+          setDailyLeaderboardError(err instanceof Error ? err.message : "Unable to load leaderboard.");
+          setDailyLeaderboard([]);
+        }
+      } finally {
+        if (active) setDailyLeaderboardLoading(false);
+      }
+    };
+
+    void syncLeaderboard();
+    return () => {
+      active = false;
+    };
+  }, [dailyPuzzleDate, isDailyPuzzleRun, match.gameOver, match.players.you.score, movesUsed, userId, username]);
 
   const handActive = !match.handOver && !match.gameOver;
   const botTurn = match.currentPlayer === "bot" && handActive;
@@ -327,6 +387,48 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                 {match.winnerId === "bot" && <span className="crown">👑</span>}
               </div>
             </div>
+            {isDailyPuzzleRun && (
+              <div style={{ margin: "12px 0 8px", textAlign: "left" }}>
+                <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>Today&apos;s Top Scores</h3>
+                {!userId && (
+                  <p className="lobby-server" style={{ margin: "0 0 8px" }}>Log in to submit your score.</p>
+                )}
+                {dailyLeaderboardLoading && (
+                  <p className="lobby-server" style={{ margin: 0 }}>Loading leaderboard...</p>
+                )}
+                {!dailyLeaderboardLoading && dailyLeaderboardError && (
+                  <p className="lobby-server" style={{ margin: 0 }}>{dailyLeaderboardError}</p>
+                )}
+                {!dailyLeaderboardLoading && !dailyLeaderboardError && dailyLeaderboard.length === 0 && (
+                  <p className="lobby-server" style={{ margin: 0 }}>No scores posted yet.</p>
+                )}
+                {!dailyLeaderboardLoading && dailyLeaderboard.length > 0 && (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {dailyLeaderboard.map((entry, idx) => {
+                      const isCurrentUser = Boolean(userId) && entry.userId === userId;
+                      return (
+                        <div
+                          key={`${entry.userId}-${idx}`}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "52px 1fr auto",
+                            gap: 8,
+                            alignItems: "center",
+                            borderRadius: 8,
+                            padding: "6px 8px",
+                            background: isCurrentUser ? "rgba(255, 215, 0, 0.16)" : "rgba(255, 255, 255, 0.04)",
+                          }}
+                        >
+                          <span>#{idx + 1}</span>
+                          <span>@{entry.username}</span>
+                          <span>{entry.bestScore}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="bot-victory-actions">
               <button className="btn primary victory-cta" onClick={startFreshMatch}>
                 New Match
@@ -389,6 +491,11 @@ export default function BotMatchScreen({ onBack }: BotMatchScreenProps) {
                   setSelectedTile(null);
                   setLastBotChoice(null);
                   setHandReveal(null);
+                  setMovesUsed(0);
+                  setDailyLeaderboard([]);
+                  setDailyLeaderboardError(null);
+                  setDailyLeaderboardLoading(false);
+                  dailyResultSyncKeyRef.current = "";
                   setMatch(createBotMatch(60, nextDeal));
                 }}
               >
