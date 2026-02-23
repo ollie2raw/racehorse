@@ -235,6 +235,106 @@ io.on('connection', (socket: Socket) => {
   });
 
   console.log('Client connected:', socket.id);
+// TOURNAMENT_HANDLERS
+  socket.on('tournament:create', (arg1?: unknown, cb?: any) => {
+    try {
+      const username = (socket.data?.username as string | undefined) ?? 'Player';
+      const userId = (socket.data?.userId as string | undefined) ?? null;
+
+      const id = makeId('t');
+      const lobbyCode = makeCode(4);
+
+      const players: TournamentPlayer[] = [{
+        socketId: socket.id,
+        username,
+        userId,
+      }];
+
+      const t: Tournament = {
+        id,
+        lobbyCode,
+        hostSocketId: socket.id,
+        status: 'lobby',
+        players,
+        matches: [],
+        currentMatchIndex: 0,
+        standings: initStandings(players),
+        activeMatchId: null,
+        activeRoomCode: null,
+      };
+
+      (globalThis as any).__tournamentsById.set(id, t);
+      (globalThis as any).__tournamentsByCode.set(lobbyCode, id);
+
+      socket.data.tournamentId = id;
+      socket.join(`tourn:${id}`);
+
+      cb?.({ ok: true, id, lobbyCode });
+      // broadcast lobby state
+      io.to(`tourn:${id}`).emit('tournament:lobby:update', { players: t.players, lobbyCode });
+    } catch (e) {
+      cb?.({ ok: false, error: 'create_failed' });
+    }
+  });
+
+  socket.on('tournament:join', (lobbyCode: string, cb?: any) => {
+    try {
+      const code = String(lobbyCode ?? '').trim().toUpperCase();
+      const tid = (globalThis as any).__tournamentsByCode.get(code) as string | undefined;
+      if (!tid) return cb?.({ ok: false, error: 'not_found' });
+
+      const t = (globalThis as any).__tournamentsById.get(tid) as Tournament | undefined;
+      if (!t) return cb?.({ ok: false, error: 'not_found' });
+      if (t.status !== 'lobby') return cb?.({ ok: false, error: 'already_started' });
+
+      if (!t.players.some((p) => p.socketId === socket.id)) {
+        const username = (socket.data?.username as string | undefined) ?? 'Player';
+        const userId = (socket.data?.userId as string | undefined) ?? null;
+        t.players.push({ socketId: socket.id, username, userId });
+        t.standings[socket.id] = {
+          socketId: socket.id,
+          username,
+          played: 0,
+          wins: 0,
+          losses: 0,
+          pointsFor: 0,
+          pointsAgainst: 0,
+        };
+      }
+
+      socket.data.tournamentId = tid;
+      socket.join(`tourn:${tid}`);
+
+      cb?.({ ok: true, id: tid, lobbyCode: t.lobbyCode });
+      io.to(`tourn:${tid}`).emit('tournament:lobby:update', { players: t.players, lobbyCode: t.lobbyCode });
+    } catch (e) {
+      cb?.({ ok: false, error: 'join_failed' });
+    }
+  });
+
+  socket.on('tournament:start', (cb?: any) => {
+    try {
+      const t = getTournamentForSocket();
+      if (!t) return cb?.({ ok: false, error: 'no_tournament' });
+      if (socket.id != t.hostSocketId) return cb?.({ ok: false, error: 'not_host' });
+      if (t.status !== 'lobby') return cb?.({ ok: false, error: 'already_started' });
+      if (t.players.length < 4) return cb?.({ ok: false, error: 'need_4' });
+
+      t.status = 'running';
+      t.matches = buildRoundRobinMatches(t.players);
+      t.currentMatchIndex = 0;
+      t.activeMatchId = null;
+      t.activeRoomCode = null;
+
+      emitTournament(t);
+      startNextMatch(t);
+
+      cb?.({ ok: true });
+    } catch (e) {
+      cb?.({ ok: false, error: 'start_failed' });
+    }
+  });
+
 
   socket.on('room:create', (arg1?: unknown, arg2?: unknown) => {
     const config = (
