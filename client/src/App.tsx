@@ -269,11 +269,6 @@ export default function App() {
       const next = prev.concat(localMsg as any);
       return next.length > 50 ? next.slice(next.length - 50) : next;
     });
-    if (!socket || !joinedRoom) {
-      setError('Not in a room.');
-      return;
-    }
-    socket.emit('room:chat:send', { text: t });
   };
   const sendRoomEmote = (emote: string) => {
     const e = String(emote ?? '').trim();
@@ -298,11 +293,6 @@ export default function App() {
       const next = prev.concat(localEvt as any);
       return next.length > 50 ? next.slice(next.length - 50) : next;
     });
-    if (!socket || !joinedRoom) {
-      setError('Not in a room.');
-      return;
-    }
-    socket.emit('room:emote:send', { emote: e });
   };
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
   const [you, setYou] = useState<string>('');
