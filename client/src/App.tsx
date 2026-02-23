@@ -231,7 +231,7 @@ export default function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [appMode, setAppMode] = useState<
-    'home' | 'multiplayer' | 'noBrainer' | 'bot' | 'daily' | 'dailyAdmin'
+    'home' | 'multiplayer' | 'noBrainer' | 'bot' | 'daily' | 'dailyAdmin' | 'tournament'
   >('home');
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -982,6 +982,18 @@ export default function App() {
                 <span className="mode-option-title">Multiplayer Online</span>
                 <span className="mode-option-meta">Play live in private rooms</span>
               </button>
+            <button
+              className="mode-option"
+              onClick={() => {
+                setError('');
+                setAppMode('tournament');
+              }}
+            >
+              <span className="mode-option-title">Tournament Mode</span>
+              <span className="mode-option-meta">Round robin (4+), first to 30</span>
+            </button>
+
+
               <button
                 className="mode-option mode-option-secondary"
                 onClick={() => setAppMode('noBrainer')}
