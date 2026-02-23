@@ -539,11 +539,6 @@ export default function App() {
   const opponent = players.find((pl) => pl.id !== you) ?? null;
   const opponentName = opponent?.username ? `@${opponent.username}` : "Rival";
   const myName = authProfile?.username ? `You · @${authProfile.username}` : "You";
-  const myHandle = authProfile?.username
-    ? `@${authProfile.username}`
-    : authUser?.email
-      ? `@${authUser.email.split("@")[0]}`
-      : "@player";
   const inGame = Boolean(isConnected && joinedRoom && state);
   const canPass = legalMoves.some(m => m.type === "pass");
   const hasPlayMoves = legalMoves.some(m => m.type === "play");
@@ -877,7 +872,7 @@ export default function App() {
           {authUser && (
             <>
               <button className="mode-inline-btn" onClick={() => setUsernameModalOpen(true)}>
-                {myHandle}
+                @{authProfile?.username ?? "player"}
               </button>
               <button className="mode-inline-btn" onClick={() => setStatsOpen(true)}>
                 Stats
