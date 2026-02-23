@@ -24,9 +24,9 @@ function nextHubId(board: BoardState): number {
 function recomputeBranchLaneHubStates(
   hubDoubles: BoardState['hubDoubles'],
   laneRef: string,
-  branchTiles: readonly PlacedTile[]
+  branchTiles: readonly PlacedTile[],
 ): BoardState['hubDoubles'] {
-  return hubDoubles.map(h => {
+  return hubDoubles.map((h) => {
     if (h.laneType !== 'branch' || h.laneRef !== laneRef || typeof h.branchDepth !== 'number') {
       return h;
     }
@@ -52,7 +52,7 @@ function recomputeBranchLaneHubStates(
 function getPlacementOrientation(
   tile: Tile,
   matchValue: number,
-  placementSide: 'left' | 'right' | 'branch'
+  placementSide: 'left' | 'right' | 'branch',
 ): TileOrientation {
   // Doubles are always vertical
   if (isDouble(tile)) {
@@ -143,10 +143,7 @@ export function computeOpenEndsSum(board: BoardState): number {
  * POINTS scoring:
  * if sum divisible by scoringMultiple (5), points = sum / 5, else 0
  */
-export function computePlayScore(
-  board: BoardState,
-  config: Config = DEFAULT_CONFIG
-): number {
+export function computePlayScore(board: BoardState, config: Config = DEFAULT_CONFIG): number {
   const sum = computeOpenEndsSum(board);
   return sum % config.scoringMultiple === 0 ? sum / config.scoringMultiple : 0;
 }
@@ -155,10 +152,7 @@ export function computePlayScore(
  * Hand penalty for end-of-hand bonus calculation.
  * Sum of pips rounded UP to nearest scoringMultiple.
  */
-export function computeHandPenalty(
-  hand: readonly Tile[],
-  config: Config = DEFAULT_CONFIG
-): number {
+export function computeHandPenalty(hand: readonly Tile[], config: Config = DEFAULT_CONFIG): number {
   const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
   const multiple = config.scoringMultiple;
   return Math.ceil(total / multiple) * multiple;
@@ -170,7 +164,7 @@ export function computeHandPenalty(
  */
 export function computeGoOutBonusPoints(
   hand: readonly Tile[],
-  config: Config = DEFAULT_CONFIG
+  config: Config = DEFAULT_CONFIG,
 ): number {
   const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
   return Math.round(total / config.scoringMultiple);
@@ -193,7 +187,7 @@ export function computeGoOutBonusPoints(
 export function simulatePlacement(
   board: BoardState | null,
   tile: Tile,
-  position: PlacementPosition
+  position: PlacementPosition,
 ): BoardState {
   // ─── First tile on empty board ───
   if (board === null) {
@@ -216,18 +210,20 @@ export function simulatePlacement(
       const hubId = nextHubId(newBoard);
       return {
         ...newBoard,
-        hubDoubles: [{
-          hubId,
-          laneType: 'mainline',
-          laneRef: 'mainline',
-          tileIndex: 0,
-          mainlineIndex: 0,
-          hubValue: tile.high,
-          isCrossed: false,
-          leftSideFilled: false,
-          rightSideFilled: false,
-          branches: [],
-        }],
+        hubDoubles: [
+          {
+            hubId,
+            laneType: 'mainline',
+            laneRef: 'mainline',
+            tileIndex: 0,
+            mainlineIndex: 0,
+            hubValue: tile.high,
+            isCrossed: false,
+            leftSideFilled: false,
+            rightSideFilled: false,
+            branches: [],
+          },
+        ],
       };
     }
 
@@ -247,11 +243,7 @@ export function simulatePlacement(
 /**
  * Place a tile on the main line (left or right end).
  */
-function placeTileOnMainLine(
-  board: BoardState,
-  tile: Tile,
-  end: 'left' | 'right'
-): BoardState {
+function placeTileOnMainLine(board: BoardState, tile: Tile, end: 'left' | 'right'): BoardState {
   const matchValue = end === 'left' ? board.leftEnd : board.rightEnd;
   const newExposedEnd = exposedPip(tile, matchValue);
   const tileIsDouble = isDouble(tile);
@@ -263,9 +255,8 @@ function placeTileOnMainLine(
   };
 
   // Update main line
-  const newMainLine = end === 'left'
-    ? [placedTile, ...board.mainLine]
-    : [...board.mainLine, placedTile];
+  const newMainLine =
+    end === 'left' ? [placedTile, ...board.mainLine] : [...board.mainLine, placedTile];
 
   const newLeftEnd = end === 'left' ? newExposedEnd : board.leftEnd;
   const newRightEnd = end === 'right' ? newExposedEnd : board.rightEnd;
@@ -292,7 +283,7 @@ function placeTileOnMainLine(
 
   // Adjust hub indices if we prepended to the left
   if (end === 'left') {
-    newHubDoubles = newHubDoubles.map(h => {
+    newHubDoubles = newHubDoubles.map((h) => {
       const nextIndex = (h.mainlineIndex ?? h.tileIndex) + 1;
       return {
         ...h,
@@ -301,7 +292,7 @@ function placeTileOnMainLine(
       };
     });
   } else {
-    newHubDoubles = newHubDoubles.map(h => ({
+    newHubDoubles = newHubDoubles.map((h) => ({
       ...h,
       mainlineIndex: h.mainlineIndex ?? h.tileIndex,
     }));
@@ -344,7 +335,7 @@ function placeTileOnBranch(
   board: BoardState,
   tile: Tile,
   hubRef: number,
-  armIndex: number
+  armIndex: number,
 ): BoardState {
   const hubIndex = board.hubDoubles.findIndex((h, idx) => hubIdAt(h, idx) === hubRef);
   const hub = hubIndex >= 0 ? board.hubDoubles[hubIndex] : null;
@@ -384,7 +375,7 @@ function placeTileOnBranch(
             openEnd: branchNewEnd,
             openEndIsDouble: tileIsDouble,
           }
-        : b
+        : b,
     );
 
     // A new double at the branch tip becomes a new branch-lane hub.
@@ -405,7 +396,9 @@ function placeTileOnBranch(
       });
     }
 
-    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
+    newHubDoubles = [
+      ...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []),
+    ];
   } else if (armIndex === 0 || armIndex === 1) {
     // Create requested arm directly (0 or 1) while preserving existing sibling arm if any.
     const matchValue = hub.hubValue;
@@ -440,13 +433,15 @@ function placeTileOnBranch(
       });
     }
 
-    newHubDoubles = [...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? [])];
+    newHubDoubles = [
+      ...recomputeBranchLaneHubStates(newHubDoubles, laneRef, newBranches[armIndex]?.tiles ?? []),
+    ];
   } else {
     throw new Error(`Cannot create branch ${armIndex}`);
   }
 
   newHubDoubles = newHubDoubles.map((h, i) =>
-    i === hubIndex ? { ...h, branches: newBranches } : h
+    i === hubIndex ? { ...h, branches: newBranches } : h,
   );
 
   return {
@@ -502,10 +497,10 @@ export function getOpenEnds(board: BoardState | null): OpenEnd[] {
 export function canPlaceTileAt(
   board: BoardState | null,
   tile: Tile,
-  position: PlacementPosition
+  position: PlacementPosition,
 ): boolean {
   const ends = getOpenEnds(board);
-  const end = ends.find(e => e.position === position);
+  const end = ends.find((e) => e.position === position);
 
   if (!end) return false;
   if (end.matchValue === -1) return true;

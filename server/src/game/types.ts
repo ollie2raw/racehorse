@@ -70,10 +70,7 @@ export interface PlayerState {
 //   hubIndex: the index of the hub double in the board's hubDoubles array
 //   armIndex: 0 or 1 (max 2 branch arms per hub)
 
-export type PlacementPosition =
-  | 'left'
-  | 'right'
-  | `branch-${number}-${number}`;
+export type PlacementPosition = 'left' | 'right' | `branch-${number}-${number}`;
 
 // ─── Moves ───────────────────────────────────────────────────
 
@@ -98,10 +95,10 @@ export interface PlacedTile {
 }
 
 export type TileOrientation =
-  | 'horizontal-normal'    // low on left, high on right
-  | 'horizontal-flipped'   // high on left, low on right
-  | 'vertical-normal'      // low on top, high on bottom
-  | 'vertical-flipped';    // high on top, low on bottom
+  | 'horizontal-normal' // low on left, high on right
+  | 'horizontal-flipped' // high on left, low on right
+  | 'vertical-normal' // low on top, high on bottom
+  | 'vertical-flipped'; // high on top, low on bottom
 
 // ─── Board State ─────────────────────────────────────────────
 // The board is modeled as:
@@ -111,31 +108,31 @@ export type TileOrientation =
 //    - Branches are independent chains extending from the hub
 
 export interface BranchArm {
-  readonly tiles: readonly PlacedTile[];  // tiles on this branch with orientation
-  readonly openEnd: number;               // exposed pip value at the end of this branch
-  readonly openEndIsDouble: boolean;      // whether the open end tile is a double
+  readonly tiles: readonly PlacedTile[]; // tiles on this branch with orientation
+  readonly openEnd: number; // exposed pip value at the end of this branch
+  readonly openEndIsDouble: boolean; // whether the open end tile is a double
 }
 
 export interface HubDouble {
-  readonly hubId?: number;              // stable hub id
+  readonly hubId?: number; // stable hub id
   readonly laneType?: 'mainline' | 'branch';
   readonly laneRef?: string;
   readonly branchDepth?: number;
-  readonly tileIndex: number;           // legacy index in mainLine where this double sits
-  readonly mainlineIndex?: number;      // preferred index in mainLine where this double sits
-  readonly hubValue: number;            // the pip value of the double (e.g., 3 for [3|3])
-  readonly leftSideFilled?: boolean;    // tile exists on the left side of this hub
-  readonly rightSideFilled?: boolean;   // tile exists on the right side of this hub
-  readonly isCrossed: boolean;          // true once both sides are filled
+  readonly tileIndex: number; // legacy index in mainLine where this double sits
+  readonly mainlineIndex?: number; // preferred index in mainLine where this double sits
+  readonly hubValue: number; // the pip value of the double (e.g., 3 for [3|3])
+  readonly leftSideFilled?: boolean; // tile exists on the left side of this hub
+  readonly rightSideFilled?: boolean; // tile exists on the right side of this hub
+  readonly isCrossed: boolean; // true once both sides are filled
   readonly branches: readonly BranchArm[]; // 0-2 branch arms
 }
 
 export interface BoardState {
-  readonly mainLine: readonly PlacedTile[];  // tiles on the main spine with orientation
-  readonly leftEnd: number;                  // exposed left pip
-  readonly rightEnd: number;                 // exposed right pip
-  readonly leftEndIsDouble: boolean;         // whether left end tile is a double
-  readonly rightEndIsDouble: boolean;        // whether right end tile is a double
+  readonly mainLine: readonly PlacedTile[]; // tiles on the main spine with orientation
+  readonly leftEnd: number; // exposed left pip
+  readonly rightEnd: number; // exposed right pip
+  readonly leftEndIsDouble: boolean; // whether left end tile is a double
+  readonly rightEndIsDouble: boolean; // whether right end tile is a double
   readonly hubDoubles: readonly HubDouble[]; // doubles that can/have spawned branches
 }
 
@@ -159,7 +156,9 @@ export interface GameState {
 
 // ─── Position Utilities ──────────────────────────────────────
 
-export function parseBranchPosition(pos: PlacementPosition): { hubIndex: number; armIndex: number } | null {
+export function parseBranchPosition(
+  pos: PlacementPosition,
+): { hubIndex: number; armIndex: number } | null {
   if (pos === 'left' || pos === 'right') return null;
   const match = pos.match(/^branch-(\d+)-(\d+)$/);
   if (!match) return null;

@@ -15,11 +15,5 @@
     "sourceMap": true
   },
   "include": ["src"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/game/**tests**",
-    "**/*.test.ts",
-    "**/*.spec.ts"
-  ]
+  "exclude": ["node_modules", "dist", "src/game/**tests**", "**/*.test.ts", "**/*.spec.ts"]
 }

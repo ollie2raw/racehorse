@@ -47,21 +47,19 @@ function shuffle<T>(arr: readonly T[]): T[] {
 }
 
 function removeTileFromArray(tiles: readonly Tile[], tile: Tile): Tile[] {
-  const idx = tiles.findIndex(t => tileEquals(t, tile));
+  const idx = tiles.findIndex((t) => tileEquals(t, tile));
   if (idx === -1) return [...tiles];
   return [...tiles.slice(0, idx), ...tiles.slice(idx + 1)];
 }
 
 function playerHasTile(state: GameState, playerId: string, tile: Tile): boolean {
-  return state.players[playerId].hand.some(t => tileEquals(t, tile));
+  return state.players[playerId].hand.some((t) => tileEquals(t, tile));
 }
 
 function assertCurrentPlayer(state: GameState, playerId: string): void {
   const currentId = state.playerIds[state.currentPlayerIndex];
   if (currentId !== playerId) {
-    throw new Error(
-      `It is not ${playerId}'s turn. Current player: ${currentId}.`
-    );
+    throw new Error(`It is not ${playerId}'s turn. Current player: ${currentId}.`);
   }
 }
 
@@ -70,10 +68,10 @@ function assertCurrentPlayer(state: GameState, playerId: string): void {
  */
 function checkForGameWinner(state: GameState): string | null {
   const target = state.config.winningScore;
-  const qualified = state.playerIds.filter(id => state.players[id].score >= target);
+  const qualified = state.playerIds.filter((id) => state.players[id].score >= target);
   if (qualified.length === 0) return null;
   return qualified.reduce((best, id) =>
-    state.players[id].score > state.players[best].score ? id : best
+    state.players[id].score > state.players[best].score ? id : best,
   );
 }
 
@@ -85,7 +83,7 @@ function isGoingOutIllegal(
   state: GameState,
   playerId: string,
   tile: Tile,
-  position: PlacementPosition
+  position: PlacementPosition,
 ): boolean {
   void state;
   void playerId;
@@ -101,8 +99,8 @@ function validateConfig(playerCount: number, cfg: Config): void {
   if (needed > total) {
     throw new Error(
       `Config impossible: ${playerCount} players × ${cfg.tilesPerPlayer} tiles + ` +
-      `${cfg.deadTileCount} dead tiles = ${needed}, but a double-${cfg.maxPips} ` +
-      `set only has ${total} tiles.`
+        `${cfg.deadTileCount} dead tiles = ${needed}, but a double-${cfg.maxPips} ` +
+        `set only has ${total} tiles.`,
     );
   }
 }
@@ -123,7 +121,7 @@ function positionSortKey(position: PlacementPosition): [number, number, number] 
 
 function sortLegalMoves(moves: Move[]): Move[] {
   const plays = moves.filter((m): m is PlayMove => m.type === 'play');
-  const passes = moves.filter(m => m.type === 'pass');
+  const passes = moves.filter((m) => m.type === 'pass');
   plays.sort((a, b) => {
     const aId = canonicalTileId(a.tile);
     const bId = canonicalTileId(b.tile);
@@ -138,13 +136,8 @@ function sortLegalMoves(moves: Move[]): Move[] {
   return [...plays, ...passes];
 }
 
-function endpointMatchFromOrientation(
-  board: BoardState,
-  side: 'left' | 'right'
-): number {
-  const placed = side === 'left'
-    ? board.mainLine[0]
-    : board.mainLine[board.mainLine.length - 1];
+function endpointMatchFromOrientation(board: BoardState, side: 'left' | 'right'): number {
+  const placed = side === 'left' ? board.mainLine[0] : board.mainLine[board.mainLine.length - 1];
   if (!placed) return side === 'left' ? board.leftEnd : board.rightEnd;
   const tile = placed.tile;
   if (isDouble(tile)) return tile.high;
@@ -177,20 +170,19 @@ function resolveBlockedHand(state: GameState): GameState {
   let handWinnerId = state.playerIds[0];
 
   for (const id of state.playerIds) {
-    const pips = state.players[id].hand.reduce(
-      (sum, t) => sum + t.high + t.low, 0
-    );
+    const pips = state.players[id].hand.reduce((sum, t) => sum + t.high + t.low, 0);
     if (pips < lowestPips) {
       lowestPips = pips;
       handWinnerId = id;
     }
   }
 
-  const bonus = cfg.endHandBonus === 'sumOpponentPenalties'
-    ? state.playerIds
-        .filter(id => id !== handWinnerId)
-        .reduce((sum, id) => sum + computeHandPenalty(state.players[id].hand, cfg), 0)
-    : 0;
+  const bonus =
+    cfg.endHandBonus === 'sumOpponentPenalties'
+      ? state.playerIds
+          .filter((id) => id !== handWinnerId)
+          .reduce((sum, id) => sum + computeHandPenalty(state.players[id].hand, cfg), 0)
+      : 0;
 
   const updatedPlayers = { ...state.players };
   updatedPlayers[handWinnerId] = {
@@ -219,11 +211,12 @@ function resolveBlockedHand(state: GameState): GameState {
 function resolveGoOut(state: GameState, goOutPlayerId: string): GameState {
   const cfg = state.config;
 
-  const bonus = cfg.endHandBonus === 'sumOpponentPenalties'
-    ? state.playerIds
-        .filter(id => id !== goOutPlayerId)
-        .reduce((sum, id) => sum + computeGoOutBonusPoints(state.players[id].hand, cfg), 0)
-    : 0;
+  const bonus =
+    cfg.endHandBonus === 'sumOpponentPenalties'
+      ? state.playerIds
+          .filter((id) => id !== goOutPlayerId)
+          .reduce((sum, id) => sum + computeGoOutBonusPoints(state.players[id].hand, cfg), 0)
+      : 0;
 
   const updatedPlayers = { ...state.players };
   updatedPlayers[goOutPlayerId] = {
@@ -248,10 +241,7 @@ function resolveGoOut(state: GameState, goOutPlayerId: string): GameState {
 
 // ─── Core exported functions ──────────────────────────────
 
-export function createInitialState(
-  players: string[],
-  config?: Partial<Config>
-): GameState {
+export function createInitialState(players: string[], config?: Partial<Config>): GameState {
   if (players.length < 2 || players.length > 4) {
     throw new Error('Dominoes requires 2–4 players.');
   }
@@ -345,7 +335,7 @@ export function getLegalMoves(state: GameState, playerId: string): Move[] {
     // ── Hand is open: must match an open end ──
     const openEndsRaw = getOpenEnds(state.board);
     const openEnds = state.board
-      ? openEndsRaw.map(end => {
+      ? openEndsRaw.map((end) => {
           if (end.position === 'left') {
             return { ...end, matchValue: endpointMatchFromOrientation(state.board!, 'left') };
           }
@@ -402,20 +392,20 @@ export function canDraw(state: GameState, playerId: string): boolean {
   if (state.boneyard.length === 0) return false;
 
   const moves = getLegalMoves(state, playerId);
-  const hasPlay = moves.some(m => m.type === 'play');
+  const hasPlay = moves.some((m) => m.type === 'play');
 
   return !hasPlay;
 }
 
 export function drawUntilPlayableOrEmpty(
   state: GameState,
-  playerId: string
+  playerId: string,
 ): { state: GameState; drew: number } {
   assertCurrentPlayer(state, playerId);
 
   // If player already has a legal play, no need to draw
   const moves = getLegalMoves(state, playerId);
-  const hasPlay = moves.some(m => m.type === 'play');
+  const hasPlay = moves.some((m) => m.type === 'play');
   if (hasPlay) {
     return { state, drew: 0 };
   }
@@ -440,17 +430,13 @@ export function drawUntilPlayableOrEmpty(
 
     // Check if the player now has any play move
     const newMoves = getLegalMoves(current, playerId);
-    if (newMoves.some(m => m.type === 'play')) break;
+    if (newMoves.some((m) => m.type === 'play')) break;
   }
 
   return { state: current, drew };
 }
 
-export function applyMove(
-  state: GameState,
-  playerId: string,
-  move: Move
-): GameState {
+export function applyMove(state: GameState, playerId: string, move: Move): GameState {
   assertCurrentPlayer(state, playerId);
 
   if (state.handOver) {
@@ -466,10 +452,10 @@ export function applyMove(
     if (state.boneyard.length > 0) {
       throw new Error(
         'Cannot pass while there are drawable tiles in the boneyard. ' +
-        'Call drawUntilPlayableOrEmpty() first.'
+          'Call drawUntilPlayableOrEmpty() first.',
       );
     }
-    const playMoves = getLegalMoves(state, playerId).filter(m => m.type === 'play');
+    const playMoves = getLegalMoves(state, playerId).filter((m) => m.type === 'play');
     if (playMoves.length > 0) {
       throw new Error('Cannot pass when you have a legal play available.');
     }
@@ -496,45 +482,41 @@ export function applyMove(
   const { tile, position } = move as PlayMove;
 
   if (!playerHasTile(state, playerId, tile)) {
-    throw new Error(
-      `Player ${playerId} does not have tile ${tileId(tile)} in hand.`
-    );
+    throw new Error(`Player ${playerId} does not have tile ${tileId(tile)} in hand.`);
   }
 
   // Validate against legal moves
   const legalMoves = getLegalMoves(state, playerId);
   const isLegal = legalMoves.some(
-    m => m.type === 'play' && tileEquals(m.tile, tile) && m.position === position
+    (m) => m.type === 'play' && tileEquals(m.tile, tile) && m.position === position,
   );
 
   if (!isLegal) {
     if (!state.handOpen) {
       throw new Error(
         `Illegal opening move: ${tileId(tile)} cannot open the hand. ` +
-        `You must play a double or a tile whose placement scores ` +
-        `(open-ends sum divisible by ${state.config.scoringMultiple}).`
+          `You must play a double or a tile whose placement scores ` +
+          `(open-ends sum divisible by ${state.config.scoringMultiple}).`,
       );
     }
     if (isGoingOutIllegal(state, playerId, tile, position)) {
       throw new Error(
         `Illegal move: cannot go out with ${tileId(tile)} because ` +
-        `${isDouble(tile) ? 'it is a double' : 'the play scores'}. ` +
-        `You must keep at least one tile in hand.`
+          `${isDouble(tile) ? 'it is a double' : 'the play scores'}. ` +
+          `You must keep at least one tile in hand.`,
       );
     }
 
     const branchPos = parseBranchPosition(position);
     if (branchPos) {
-      throw new Error(
-        `Illegal move: ${tileId(tile)} cannot be placed on branch ${position}.`
-      );
+      throw new Error(`Illegal move: ${tileId(tile)} cannot be placed on branch ${position}.`);
     }
 
     const boardLeft = state.board?.leftEnd ?? '?';
     const boardRight = state.board?.rightEnd ?? '?';
     throw new Error(
       `Illegal move: ${tileId(tile)} on ${position} does not match ` +
-      `the board (left=${boardLeft}, right=${boardRight}).`
+        `the board (left=${boardLeft}, right=${boardRight}).`,
     );
   }
 
