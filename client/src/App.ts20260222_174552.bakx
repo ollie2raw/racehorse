@@ -11,7 +11,6 @@ import AuthModal from "./auth/AuthModal";
 import UsernameModal from "./auth/UsernameModal";
 import { isTemporaryUsername, useAuth } from "./auth/useAuth";
 import StatsScreen from "./stats/StatsScreen";
-import { recordMatchResult } from "./stats/statsApi";
 import type {
   Tile,
   PlacementPosition,
@@ -21,7 +20,7 @@ import type {
 } from "./types";
 
 // ─── Utilities ───────────────────────────────────────────────
-type RoomPlayer = { id: string; username: string; userId: string | null };
+type RoomPlayer = { id: string; username: string };
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
@@ -36,15 +35,14 @@ function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => {
     if (typeof entry === "string") {
-      return { id: entry, username: "Guest", userId: null };
+      return { id: entry, username: "Guest" };
     }
     if (entry && typeof entry === "object") {
-      const rec = entry as { id?: unknown; username?: unknown; userId?: unknown };
+      const rec = entry as { id?: unknown; username?: unknown };
       const id = typeof rec.id === "string" ? rec.id : "";
-      const userId = typeof rec.userId === "string" ? rec.userId.trim() || null : null;
-      return { id, username: normalizeUsername(rec.username), userId };
+      return { id, username: normalizeUsername(rec.username) };
     }
-    return { id: "", username: "Guest", userId: null };
+    return { id: "", username: "Guest" };
   }).filter((p) => Boolean(p.id));
 }
 
@@ -172,7 +170,6 @@ interface GameOverOverlayProps {
   state: GameState;
   myId: string;
   onNewGame: () => void;
-  players: RoomPlayer[];
 }
 
 interface HandEndedPayload {
@@ -186,28 +183,19 @@ interface HandEndedPayload {
 
 const HAND_OVER_REVEAL_MS = 5000;
 
-function GameOverOverlay({ state, myId, onNewGame, players }: GameOverOverlayProps) {
+function GameOverOverlay({ state, myId, onNewGame }: GameOverOverlayProps) {
   const winner = state.winnerId;
   const iWon = winner === myId;
-  const getName = (pid: string, idx: number) => {
-    const p = players.find(pl => pl.id === pid);
-    if (p?.username) return `@${p.username}`;
-    return pid === myId ? "You" : `Player ${idx + 1}`;
-  };
-  const winnerIdx = winner ? state.playerIds.indexOf(winner) : -1;
-  const victoryTitle = winner
-    ? `${getName(winner, winnerIdx >= 0 ? winnerIdx : 0)} wins!`
-    : (iWon ? "You Win!" : "You Lose");
 
   return (
     <div className="game-over-overlay">
       <div className="game-over-card">
-        <h2 className="victory-title">{victoryTitle}</h2>
+        <h2 className="victory-title">{iWon ? "You Win!" : "You Lose"}</h2>
         <div className="final-scores">
           {state.playerIds.map((pid, idx) => (
             <div key={pid} className={`final-score ${pid === winner ? "winner" : ""}`}>
               <span className="player-name">
-                {getName(pid, idx)}
+                {pid === myId ? "You" : `Player ${idx + 1}`}
               </span>
               <span className="score">{state.players[pid]?.score ?? 0}</span>
               {pid === winner && <span className="crown">👑</span>}
@@ -287,7 +275,6 @@ export default function App() {
   const prevHudScoresRef = useRef<Record<string, number>>({});
   const prevMyHandLenRef = useRef(0);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
-  const matchRecordKeyRef = useRef("");
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const isAdmin = Boolean(authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase());
   const needsUsernameOnboarding = Boolean(
@@ -441,10 +428,7 @@ export default function App() {
     setError("");
     setActionError("");
     if (!socket) return setError("Not connected to server.");
-    socket.emit("room:create", {
-      username: authProfile?.username ?? "Guest",
-      userId: authUser?.id ?? null,
-    }, (resp: any) => {
+    socket.emit("room:create", { username: authProfile?.username ?? "Guest" }, (resp: any) => {
       if (!resp.ok) return setError(resp.error);
       setError("");
       setActionError("");
@@ -456,16 +440,13 @@ export default function App() {
       setRoomCode(resp.roomCode);
       setPlayers(normalizeRoomPlayers(resp.players));
     });
-  }, [socket, authProfile?.username, authUser?.id]);
+  }, [socket, authProfile?.username]);
 
   const joinRoom = useCallback(() => {
     setError("");
     setActionError("");
     if (!socket) return setError("Not connected to server.");
-    socket.emit("room:join", roomCode.trim().toUpperCase(), {
-      username: authProfile?.username ?? "Guest",
-      userId: authUser?.id ?? null,
-    }, (resp: any) => {
+    socket.emit("room:join", roomCode.trim().toUpperCase(), { username: authProfile?.username ?? "Guest" }, (resp: any) => {
       if (!resp.ok) return setError(resp.error);
       setError("");
       setActionError("");
@@ -476,7 +457,7 @@ export default function App() {
       setLegalMoves([]);
       setCanDraw(false);
     });
-  }, [socket, roomCode, authProfile?.username, authUser?.id]);
+  }, [socket, roomCode, authProfile?.username]);
 
   const startGame = useCallback(() => {
     setError("");
@@ -722,62 +703,6 @@ export default function App() {
     }
     prevTurnIdRef.current = activePlayerId;
   }, [inGame, state, isMuted]);
-
-  useEffect(() => {
-    if (!state?.gameOver) {
-      matchRecordKeyRef.current = "";
-      return;
-    }
-    if (!joinedRoom) return;
-
-    const winnerSocketId = state.winnerId ?? null;
-    if (!winnerSocketId) return;
-    const loserSocketId = state.playerIds.find((pid) => pid !== winnerSocketId) ?? null;
-    if (!loserSocketId) return;
-
-    const key = `${joinedRoom}:${winnerSocketId}:${loserSocketId}:${state.handNumber}`;
-    if (matchRecordKeyRef.current === key) return;
-    matchRecordKeyRef.current = key;
-
-    if (!supabaseEnabled || !authUser) return;
-
-    const bySocketId = new Map(players.map((p) => [p.id, p.userId ?? null] as const));
-    let winnerUserId = bySocketId.get(winnerSocketId) ?? null;
-    let loserUserId = bySocketId.get(loserSocketId) ?? null;
-
-    if (winnerUserId !== authUser.id && loserUserId !== authUser.id) {
-      if (winnerSocketId === you) {
-        winnerUserId = authUser.id;
-      } else if (loserSocketId === you) {
-        loserUserId = authUser.id;
-      } else if (!winnerUserId) {
-        winnerUserId = authUser.id;
-      } else {
-        loserUserId = authUser.id;
-      }
-    }
-
-    const winnerScore = state.players[winnerSocketId]?.score ?? null;
-    const loserScore = state.players[loserSocketId]?.score ?? null;
-    const moveCount = Array.isArray((state as any).moves) ? (state as any).moves.length : null;
-
-    void recordMatchResult({
-      mode: "online",
-      opponentType: "online",
-      winnerUserId,
-      loserUserId,
-      winnerScore,
-      loserScore,
-      moveCount,
-      roomCode: joinedRoom,
-      metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
-    }).then(({ error }) => {
-      if (error && typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-        // eslint-disable-next-line no-console
-        console.error("[Stats] recordMatchResult failed:", error);
-      }
-    });
-  }, [state, joinedRoom, players, supabaseEnabled, authUser, you]);
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -1098,7 +1023,7 @@ export default function App() {
           />
           {/* Game Over Overlay */}
           {state.gameOver && (
-            <GameOverOverlay state={state} myId={you} onNewGame={disconnect} players={players} />
+            <GameOverOverlay state={state} myId={you} onNewGame={disconnect} />
           )}
           {handReveal && !state.gameOver && (
             <div className="hand-reveal-overlay">

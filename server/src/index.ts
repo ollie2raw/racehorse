@@ -28,6 +28,31 @@ const io = new Server(server, {
   cors: { origin: "*" },
 });
 
+type RoomPlayer = { id: string; username: string; userId: string | null };
+type RoomJoinConfig = { username?: string; userId?: string | null };
+type AckFn = (payload: any) => void;
+
+const roomPlayersByCode = new Map<string, RoomPlayer[]>();
+
+function normalizeUsername(value: unknown): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw || "Guest";
+}
+
+function normalizeUserId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  return raw || null;
+}
+
+function getRoomPlayersWithFallback(roomCode: string, socketIds: string[]): RoomPlayer[] {
+  const existing = roomPlayersByCode.get(roomCode) ?? [];
+  const byId = new Map(existing.map((p) => [p.id, p]));
+  const next = socketIds.map((id) => byId.get(id) ?? { id, username: "Guest", userId: null });
+  roomPlayersByCode.set(roomCode, next);
+  return next;
+}
+
 /**
  * Send state update to all players in a room.
  * Each player receives:
@@ -125,27 +150,65 @@ function broadcastStateUpdate(roomCode: string) {
 io.on("connection", (socket: Socket) => {
   console.log("Client connected:", socket.id);
 
-  socket.on("room:create", (config, cb) => {
+  socket.on("room:create", (arg1?: unknown, arg2?: unknown) => {
+    const config = (arg1 && typeof arg1 === "object" && !Array.isArray(arg1) ? arg1 : {}) as RoomJoinConfig;
+    const cb = (typeof arg1 === "function" ? arg1 : arg2) as AckFn | undefined;
+    const username = normalizeUsername(config.username);
+    const userId = normalizeUserId(config.userId);
+    const {
+      username: _ignoredUsername,
+      userId: _ignoredUserId,
+      ...roomConfig
+    } = (config as Record<string, unknown>);
     console.log(`[room:create] socket=${socket.id}`);
     try {
-      const room = createRoom(socket.id, config ?? {});
+      const room = createRoom(socket.id, roomConfig as Record<string, unknown>);
       socket.join(room.code);
+      const roomPlayers: RoomPlayer[] = [{ id: socket.id, username, userId }];
+      roomPlayersByCode.set(room.code, roomPlayers);
       console.log(`[room:create] created room=${room.code}, players=${room.players.length}`);
-      cb({ ok: true, roomCode: room.code, you: socket.id, players: room.players });
+      cb?.({ ok: true, roomCode: room.code, you: socket.id, players: roomPlayers });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "unknown error";
       console.log(`[room:create] ERROR: ${message}`);
-      cb({ ok: false, error: message });
+      cb?.({ ok: false, error: message });
     }
   });
 
-  socket.on("room:join", (code, cb) => {
-    const roomCode = String(code).trim().toUpperCase();
+  socket.on("room:join", (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
+    const cb = (typeof arg3 === "function"
+      ? arg3
+      : typeof arg2 === "function"
+        ? arg2
+        : undefined) as AckFn | undefined;
+    const explicitConfig = (arg2 && typeof arg2 === "object" && !Array.isArray(arg2)) ? arg2 as RoomJoinConfig : null;
+    const codeFromObject = (argCode && typeof argCode === "object" && !Array.isArray(argCode))
+      ? (argCode as { roomCode?: unknown; username?: unknown; userId?: unknown })
+      : null;
+    const configFromCodeObject: RoomJoinConfig | null = codeFromObject
+      ? {
+          username: typeof codeFromObject.username === "string" ? codeFromObject.username : undefined,
+          userId: typeof codeFromObject.userId === "string" ? codeFromObject.userId : null,
+        }
+      : null;
+    const config = explicitConfig ?? configFromCodeObject ?? {};
+    const username = normalizeUsername(config.username);
+    const userId = normalizeUserId(config.userId);
+    const rawCode = codeFromObject?.roomCode ?? argCode;
+    const roomCode = String(rawCode ?? "").trim().toUpperCase();
     console.log(`[room:join] socket=${socket.id}, code=${roomCode}`);
     try {
       const room = joinRoom(roomCode, socket.id);
       socket.join(room.code);
-      io.to(room.code).emit("room:update", { players: room.players });
+      const roomPlayers = getRoomPlayersWithFallback(room.code, room.players);
+      const existingIdx = roomPlayers.findIndex((p) => p.id === socket.id);
+      if (existingIdx >= 0) {
+        roomPlayers[existingIdx] = { id: socket.id, username, userId };
+      } else {
+        roomPlayers.push({ id: socket.id, username, userId });
+      }
+      roomPlayersByCode.set(room.code, roomPlayers);
+      io.to(room.code).emit("room:update", { players: roomPlayers });
       console.log(`[room:join] joined room=${room.code}, players=${room.players.length}`);
       const stateWithCounts = room.state
         ? {
@@ -168,11 +231,11 @@ io.on("connection", (socket: Socket) => {
             ),
           }
         : null;
-      cb({ ok: true, roomCode: room.code, you: socket.id, players: room.players, state: stateWithCounts });
+      cb?.({ ok: true, roomCode: room.code, you: socket.id, players: roomPlayers, state: stateWithCounts });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "unknown error";
       console.log(`[room:join] ERROR: ${message}`);
-      cb({ ok: false, error: message });
+      cb?.({ ok: false, error: message });
     }
   });
 
