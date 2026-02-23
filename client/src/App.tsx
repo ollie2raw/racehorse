@@ -256,6 +256,26 @@ export default function App() {
       from: { userId: null as string | null, username: 'you' },
       text: t,
   };
+  const sendRoomEmote = (emote: string) => {
+    const e = String(emote ?? '').trim();
+    if (!e) return;
+
+    const localEvt = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      t: Date.now(),
+      from: { userId: null as string | null, username: 'you' },
+      emote: e,
+    };
+
+    setRoomReactions((prev) => {
+      const next = prev.concat(localEvt as any);
+      return next.length > 50 ? next.slice(next.length - 50) : next;
+    });
+
+    if (!socket) return;
+    socket.emit('room:emote:send', { emote: e });
+  };
+
     setRoomReactions((prev) => {
       const next = prev.concat(localEvt as any);
       return next.length > 50 ? next.slice(next.length - 50) : next;
