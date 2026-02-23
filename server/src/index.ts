@@ -2,6 +2,16 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
+import {
+  makeCode,
+  makeId,
+  initStandings,
+  buildRoundRobinMatches,
+  sortedStandings,
+  applyResult,
+  type Tournament,
+  type TournamentPlayer,
+} from './tournament/tournament';
 
 import {
   createRoom,
