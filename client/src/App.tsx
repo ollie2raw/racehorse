@@ -441,7 +441,6 @@ export default function App() {
     // TOURNAMENT_LISTENERS
     s.on('tournament:lobby:update', (data: any) => {
       const lobbyCode = typeof data?.lobbyCode === 'string' ? data.lobbyCode : null;
-      if (lobbyCode) setTournamentCode(lobbyCode);
 
       const players = Array.isArray(data?.players) ? data.players : null;
       if (players) {
@@ -555,6 +554,21 @@ export default function App() {
     setHandReveal(null);
     setAppMode('tournament');
   }, [disconnect, tournamentId, tournamentState?.status]);
+
+  const backToTournamentHub = useCallback(() => {
+    if (socket && joinedRoom) {
+      socket.emit('room:leave', joinedRoom);
+    }
+    setJoinedRoom(null);
+    setRoomCode('');
+    setState(null);
+    setLegalMoves([]);
+    setCanDraw(false);
+    setSelectedTile(null);
+    setActionError('');
+    setHandReveal(null);
+    setAppMode('tournament');
+  }, [socket, joinedRoom]);
 
 
   // Room actions
@@ -675,6 +689,15 @@ export default function App() {
       ? `@${authUser.email.split('@')[0]}`
       : '@player';
   const inGame = Boolean(isConnected && joinedRoom && state);
+  const isSpectatingMatch = Boolean(tournamentId && joinedRoom && state && !state.playerIds.includes(you));
+  const spectateRightPlayerId = isSpectatingMatch ? (state?.playerIds?.[1] ?? null) : null;
+  const spectateRightPlayer = spectateRightPlayerId ? players.find((pl) => pl.id === spectateRightPlayerId) ?? null : null;
+  const hudRightLabel = isSpectatingMatch
+    ? (spectateRightPlayer?.username ? `@${spectateRightPlayer.username}` : 'Spectating')
+    : myName;
+  const hudRightScore =
+    isSpectatingMatch && spectateRightPlayerId ? (state?.players[spectateRightPlayerId]?.score ?? 0) : myScore;
+  const hudRightScorePulse = isSpectatingMatch && spectateRightPlayerId ? Boolean(hudScorePulse[spectateRightPlayerId]) : Boolean(hudScorePulse[you]);
   const canPass = legalMoves.some((m) => m.type === 'pass');
   const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
 
@@ -1025,27 +1048,39 @@ export default function App() {
             : tournamentState?.status === 'running'
               ? 'Waiting for assignment'
               : 'Lobby';
+    const showLobbySetup = !tournamentId || tournamentState?.status === 'lobby';
 
     const createLobby = () => {
       if (!socket) return setError('Not connected.');
-      socket.emit('tournament:create', { username: authProfile?.username, userId: authUser?.id }, (resp: any) => {
-        if (!resp?.ok) return setError('Failed to create lobby.');
-        setTournamentId(resp.id);
-        setTournamentCode(resp.lobbyCode);
-        setError('');
-      });
+      socket.emit(
+        'tournament:create',
+        { username: authProfile?.username ?? 'Guest', userId: authUser?.id ?? null },
+        (resp: any) => {
+          if (!resp?.ok) return setError('Failed to create lobby.');
+          setTournamentId(resp.id);
+          setTournamentCode(resp.lobbyCode);
+          setError('');
+        },
+      );
     };
 
     const joinLobby = () => {
       if (!socket) return setError('Not connected.');
       const code = tournamentCode.trim().toUpperCase();
       if (!code) return setError('Enter a lobby code.');
-      socket.emit('tournament:join', code, (resp: any) => {
-        if (!resp?.ok) return setError(resp?.error === 'already_started' ? 'Tournament already started.' : 'Join failed.');
-        setTournamentId(resp.id);
-        setTournamentCode(resp.lobbyCode);
-        setError('');
-      });
+      socket.emit(
+        'tournament:join',
+        code,
+        { username: authProfile?.username ?? 'Guest', userId: authUser?.id ?? null },
+        (resp: any) => {
+          if (!resp?.ok) {
+            return setError(resp?.error === 'already_started' ? 'Tournament already started.' : 'Join failed.');
+          }
+          setTournamentId(resp.id);
+          setTournamentCode(resp.lobbyCode);
+          setError('');
+        },
+      );
     };
 
     const start = () => {
@@ -1060,19 +1095,33 @@ export default function App() {
       if (!socket) return setError('Not connected.');
       if (!activeRoom) return setError('No active match yet.');
       const code = String(activeRoom).trim().toUpperCase();
-      socket.emit('room:spectate', code, (resp: any) => {
-        if (!resp?.ok) return setError('Spectate failed.');
-        setJoinedRoom(code);
-        setRoomCode(code);
-        setAppMode('multiplayer');
-        setError('');
-      });
+      socket.emit(
+        'room:spectate',
+        code,
+        {
+          username: authProfile?.username ?? 'Guest',
+          userId: authUser?.id ?? null,
+        },
+        (resp: any) => {
+          if (!resp?.ok) return setError('Spectate failed.');
+          setJoinedRoom(code);
+          setRoomCode(code);
+          setAppMode('multiplayer');
+          setError('');
+        },
+      );
     };
 
     return (
-      <div className="screen lobby-screen mode-home-screen">
+      <div
+        className="screen lobby-screen mode-home-screen"
+        style={{ width: '100%', maxWidth: '100%', minHeight: '100vh', overflowX: 'hidden' }}
+      >
         <div className="mode-home-glow" aria-hidden="true" />
-        <div className="card lobby-card mode-card multiplayer-menu-card">
+        <div
+          className="card lobby-card mode-card multiplayer-menu-card"
+          style={{ width: '100%', maxWidth: 1500, margin: '0 auto', padding: 24, boxSizing: 'border-box' }}
+        >
           <p className="lobby-kicker">Racehorse Dominoes</p>
           <h2>{tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}</h2>
           <p className="lobby-server mode-subtitle">
@@ -1088,10 +1137,51 @@ export default function App() {
             </div>
           )}
 
-          <div className="mode-actions" style={{ width: '100%', maxWidth: '100%' }}>
+          <div className="mode-actions" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
             {/* TOURNAMENT_TWO_COL_LAYOUT */}
-            <div style={{ display: 'flex', width: '100%', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div style={{ width: '100%', display: 'grid', gap: 14 }}>
+            <div style={{ display: 'flex', width: '100%', minWidth: 0, gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div style={{ width: '100%', minWidth: 0, display: 'grid', gap: 14 }}>
+            {showLobbySetup && (
+              <>
+                <button className="mode-option mode-option-primary" onClick={createLobby}>
+                  <span className="mode-option-title">Create Lobby</span>
+                  <span className="mode-option-meta">Start a tournament lobby and share the code</span>
+                </button>
+                <div className="mode-option" style={{ cursor: 'default' }}>
+                  <span className="mode-option-title">Join Lobby</span>
+                  <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
+                  <div className="mode-join-row" style={{ marginTop: 10 }}>
+                    <input
+                      className="mode-join-input"
+                      type="text"
+                      placeholder="Lobby Code"
+                      value={tournamentCode}
+                      onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
+                      maxLength={6}
+                    />
+                    <button className="mode-inline-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
+                      Join Lobby
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+            {!!tournamentCode && (
+              <div className="mode-option" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Lobby Code</span>
+                <span className="mode-option-meta">Share this code to invite players</span>
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ fontSize: 22, letterSpacing: 1, opacity: 0.95 }}>{tournamentCode}</div>
+                  <button
+                    className="btn text compact"
+                    onClick={() => navigator.clipboard?.writeText(String(tournamentCode))}
+                    title="Copy lobby code"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
             {isHost && tournamentState?.status !== 'running' && (
               <button className="mode-option mode-option-primary" onClick={start} disabled={players.length < 4}>
                 <span className="mode-option-title">Start Tournament</span>
@@ -1108,12 +1198,13 @@ export default function App() {
               style={{
                 display: 'grid',
                 width: '100%',
+                minWidth: 0,
                 gridTemplateColumns: 'minmax(340px, 360px) minmax(0, 1fr)',
                 gap: 16,
                 alignItems: 'start',
               }}
             >
-              <div style={{ display: 'grid', gap: 14 }}>
+              <div style={{ display: 'grid', minWidth: 0, gap: 14 }}>
 {tournamentId && (
               <div className="mode-option" style={{ cursor: 'default' }}>
                 <span className="mode-option-title">Status</span>
@@ -1156,7 +1247,7 @@ export default function App() {
 
             
               </div>
-              <div style={{ width: '100%', display: 'grid', gap: 14 }}>
+              <div style={{ width: '100%', minWidth: 0, display: 'grid', gap: 14 }}>
 {tournamentId && matches.length > 0 && (
               <div className="mode-option" style={{ cursor: 'default' }}>
                 <span className="mode-option-title">Bracket</span>
@@ -1257,7 +1348,11 @@ export default function App() {
               </div>
             </div>
 
-<button className="mode-option mode-option-secondary" onClick={() => setAppMode('home')}>
+<button
+              className="mode-option mode-option-secondary"
+              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+              onClick={() => setAppMode('home')}
+            >
               <span className="mode-option-title">Disconnect</span>
               <span className="mode-option-meta">Return to offline mode selector</span>
             </button>
@@ -1652,12 +1747,12 @@ export default function App() {
             </div>
             <button
               type="button"
-              className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? 'is-active' : ''} ${hudScorePulse[you] ? 'score-hit' : ''}`}
+              className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? 'is-active' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
             >
-              <span className="wl-player-label">{myName}</span>
-              <span className="wl-player-score">{myScore}</span>
+              <span className="wl-player-label">{hudRightLabel}</span>
+              <span className="wl-player-score">{hudRightScore}</span>
             </button>
           </div>
 
@@ -1725,9 +1820,20 @@ export default function App() {
                   >
                     Color
                   </button>
-                  <button className="btn text leave-btn compact" onClick={disconnect}>
-                    Leave
-                  </button>
+                  {isSpectatingMatch ? (
+                    <button
+                      className="btn text leave-btn compact"
+                      onClick={backToTournamentHub}
+                      title="Back to Hub"
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      Hub
+                    </button>
+                  ) : (
+                    <button className="btn text leave-btn compact" onClick={disconnect}>
+                      Leave
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

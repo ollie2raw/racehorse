@@ -341,12 +341,14 @@ body {
   position: relative;
   justify-content: center;
   align-items: stretch;
+  box-sizing: border-box;
   padding: 8px;
   background:
     radial-gradient(circle at 50% 18%, rgba(149, 240, 202, 0.14), transparent 44%),
     radial-gradient(circle at 20% 80%, rgba(216, 181, 111, 0.08), transparent 40%),
     linear-gradient(162deg, #060b14 0%, #0c1826 52%, #0a1322 100%);
   overflow: hidden;
+  overflow-x: hidden;
 }
 
 .mode-home-glow {
@@ -359,9 +361,10 @@ body {
 .mode-card {
   position: relative;
   z-index: 1;
-  width: calc(100vw - 16px);
+  box-sizing: border-box;
+  width: 100%;
   min-height: calc(100vh - 16px);
-  max-width: none;
+  max-width: min(1200px, calc(100vw - 24px));
   border-radius: 18px;
   border: 1px solid rgba(236, 252, 245, 0.2);
   background: linear-gradient(175deg, rgba(17, 25, 39, 0.78) 0%, rgba(8, 12, 24, 0.93) 100%);
@@ -373,6 +376,10 @@ body {
   padding: clamp(30px, 4vw, 64px);
   display: grid;
   align-content: center;
+}
+
+.mode-home-screen .lobby-card.mode-card {
+  overflow-x: hidden;
 }
 
 .mode-card .lobby-kicker {

@@ -85,8 +85,9 @@ function broadcastStateUpdate(roomCode: string) {
   for (const socketId of sockets) {
     const socket = io.sockets.sockets.get(socketId);
     if (socket) {
-      const legalMoves = getRoomLegalMoves(roomCode, socketId);
-      const canDraw = getRoomCanDraw(roomCode, socketId);
+      const isPlayer = room.state.playerIds.includes(socketId);
+      const legalMoves = isPlayer ? getRoomLegalMoves(roomCode, socketId) : [];
+      const canDraw = isPlayer ? getRoomCanDraw(roomCode, socketId) : false;
 
       // DEBUG: Log legal moves info
       const branchMoves = legalMoves.filter(
@@ -126,6 +127,7 @@ function broadcastStateUpdate(roomCode: string) {
       });
 
       if (
+        isPlayer &&
         room.state.handOver &&
         !room.state.gameOver &&
         room.lastHandEndedNotifiedHand !== room.state.handNumber
@@ -527,26 +529,64 @@ io.on('connection', (socket: Socket) => {
   });
 
   
-  socket.on('room:spectate', (argCode: unknown, cb?: any) => {
+  socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
+    const cb = (
+      typeof arg3 === 'function' ? arg3 : typeof arg2 === 'function' ? arg2 : undefined
+    ) as AckFn | undefined;
+    const config =
+      arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? (arg2 as RoomJoinConfig) : {};
+    const username = normalizeUsername(config.username);
+    const userId = normalizeUserId(config.userId);
     const code = String(argCode ?? '').trim().toUpperCase();
     try {
       if (!code) return cb?.({ ok: false, error: 'missing_code' });
 
-      const room = roomsByCode.get(code);
-      if (!room) return cb?.({ ok: false, error: 'not_found' });
+      let room;
+      try {
+        room = getRoom(code);
+      } catch {
+        return cb?.({ ok: false, error: 'not_found' });
+      }
 
       // Socket room only — DO NOT join the game engine.
       socket.join(code);
+      socket.data.roomId = code;
+      socket.data.username = username;
+      socket.data.userId = userId;
 
       // Send roster snapshot
       const roster = roomPlayersByCode.get(code) ?? [];
       socket.emit('room:update', { players: roster });
 
-      // Send a state snapshot to just this socket.
-      // (broadcastStateUpdate uses io.to(code); we join first, so spectator receives it)
-      broadcastStateUpdate(code);
+      // Send a spectator-safe snapshot to just this socket.
+      if (room.state) {
+        const stateWithCounts = {
+          ...room.state,
+          players: Object.fromEntries(
+            room.state.playerIds.map((pid: string) => {
+              const playerState = room.state!.players[pid];
+              const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id;
+              return [
+                pid,
+                {
+                  ...playerState,
+                  hand: canReveal ? playerState.hand : [],
+                },
+              ];
+            }),
+          ),
+          handCounts: Object.fromEntries(
+            room.state.playerIds.map((pid: string) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
+          ),
+        };
+        socket.emit('state:update', {
+          state: stateWithCounts,
+          legalMoves: [],
+          canDraw: false,
+        });
+      }
 
-      cb?.({ ok: true });
+      cb?.({ ok: true, roomCode: code, players: roster });
     } catch (e) {
       cb?.({ ok: false, error: 'spectate_failed' });
     }
@@ -649,6 +689,10 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     const roomCode = String(code).trim().toUpperCase();
     console.log(`[game:action] socket=${socket.id}, code=${roomCode}, action=${action?.type}`);
     try {
+      const existingRoom = getRoom(roomCode);
+      if (!existingRoom.players.includes(socket.id)) {
+        return cb({ ok: false, error: 'Spectators cannot act.' });
+      }
       const room = act(roomCode, socket.id, action);
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
