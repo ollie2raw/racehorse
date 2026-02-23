@@ -6,9 +6,12 @@ export type DebugEvent = {
 
 export class RingBuffer<T> {
   private readonly items: T[] = [];
-  constructor(private readonly capacity: number) {}
+  private readonly capacity: number;
 
-  push(item: T) {
+  constructor(capacity: number) {
+    this.capacity = capacity;
+  }
+push(item: T) {
     this.items.push(item);
     if (this.items.length > this.capacity) this.items.shift();
   }
