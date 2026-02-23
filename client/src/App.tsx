@@ -933,6 +933,177 @@ export default function App() {
     }
     return <DailyPuzzleAdminScreen onBack={() => setAppMode('home')} />;
   }
+  if (appMode === 'tournament') {
+    const players = tournamentState?.players ?? [];
+    const standings = tournamentState?.standings ?? [];
+    const matches = tournamentState?.matches ?? [];
+    const activeRoom = tournamentActiveRoom ?? tournamentState?.activeRoomCode ?? null;
+    const activeMatchId = tournamentState?.activeMatchId ?? null;
+    const isHost = Boolean(tournamentState?.hostSocketId && socket?.id && tournamentState.hostSocketId === socket.id);
+
+    const createLobby = () => {
+      if (!socket) return setError('Not connected.');
+      socket.emit('tournament:create', (resp: any) => {
+        if (!resp?.ok) return setError('Failed to create lobby.');
+        setTournamentId(resp.id);
+        setTournamentCode(resp.lobbyCode);
+        setError('');
+      });
+    };
+
+    const joinLobby = () => {
+      if (!socket) return setError('Not connected.');
+      const code = tournamentCode.trim().toUpperCase();
+      if (!code) return setError('Enter a lobby code.');
+      socket.emit('tournament:join', code, (resp: any) => {
+        if (!resp?.ok) return setError(resp?.error === 'already_started' ? 'Tournament already started.' : 'Join failed.');
+        setTournamentId(resp.id);
+        setTournamentCode(resp.lobbyCode);
+        setError('');
+      });
+    };
+
+    const start = () => {
+      if (!socket) return setError('Not connected.');
+      socket.emit('tournament:start', (resp: any) => {
+        if (!resp?.ok) return setError(resp?.error === 'need_4' ? 'Need 4+ players.' : 'Start failed.');
+        setError('');
+      });
+    };
+
+    const spectate = () => {
+      if (!socket) return setError('Not connected.');
+      if (!activeRoom) return setError('No active match yet.');
+      const code = String(activeRoom).trim().toUpperCase();
+      // For now, join as normal room join; we'll add room:spectate later.
+      socket.emit('room:join', code, { username: authProfile?.username, userId: authUser?.id }, () => {});
+      setJoinedRoom(code);
+      setRoomCode(code);
+      setAppMode('multiplayer');
+      setError('');
+    };
+
+    return (
+      <div className="screen room-screen mode-home-screen">
+        <div className="mode-home">
+          <h2>Tournament Mode</h2>
+          <p style={{ opacity: 0.85 }}>
+            Round robin • 4+ players • Matches to 30 • Auto-assign matches
+          </p>
+
+          <div className="mode-option-list">
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">Lobby</span>
+              <span className="mode-option-meta">
+                {tournamentCode ? `Code: ${tournamentCode}` : 'Create or join a lobby'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
+              <button className="mode-option" onClick={createLobby}>
+                <span className="mode-option-title">Create Lobby</span>
+                <span className="mode-option-meta">Share the code</span>
+              </button>
+
+              <div className="mode-option" style={{ flex: 1, minWidth: 260, cursor: 'default' }}>
+                <span className="mode-option-title">Join Lobby</span>
+                <span className="mode-option-meta">Enter a code</span>
+                <input
+                  value={tournamentCode}
+                  onChange={(e) => setTournamentCode(e.target.value)}
+                  placeholder="ABCD"
+                  style={{ marginTop: 10 }}
+                />
+                <button style={{ marginTop: 10 }} onClick={joinLobby}>
+                  Join
+                </button>
+              </div>
+            </div>
+
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">Players ({players.length})</span>
+              <span className="mode-option-meta">
+                {players.length < 4 ? 'Need 4+ to start' : isHost ? 'You are host' : 'Waiting for host'}
+              </span>
+              <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {players.map((p: any) => (
+                  <span key={p.socketId} style={{ opacity: 0.9 }}>
+                    {p.username ?? 'Player'}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {isHost && tournamentState?.status !== 'running' && (
+              <button className="mode-option" onClick={start} disabled={players.length < 4}>
+                <span className="mode-option-title">Start Tournament</span>
+                <span className="mode-option-meta">Generate full schedule</span>
+              </button>
+            )}
+
+            {tournamentState?.status === 'running' && (
+              <div className="mode-option" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Active Match</span>
+                <span className="mode-option-meta">
+                  {activeRoom ? `Room ${activeRoom}` : 'Assigning...'}
+                </span>
+                <button style={{ marginTop: 10 }} onClick={spectate} disabled={!activeRoom}>
+                  Spectate
+                </button>
+              </div>
+            )}
+
+            {Array.isArray(matches) && matches.length > 0 && (
+              <div className="mode-option" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Schedule</span>
+                <span className="mode-option-meta">
+                  {activeMatchId ? `Active match: ${activeMatchId}` : 'Not started'}
+                </span>
+                <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+                  {matches.map((m: any) => (
+                    <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <span style={{ opacity: 0.9 }}>
+                        {(players.find((p: any) => p.socketId === m.a)?.username ?? 'Player')} vs{' '}
+                        {(players.find((p: any) => p.socketId === m.b)?.username ?? 'Player')}
+                      </span>
+                      <span style={{ opacity: 0.7 }}>
+                        {m.status === 'done' ? 'Done' : m.status === 'active' ? 'Playing' : 'Queued'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {Array.isArray(standings) && standings.length > 0 && (
+              <div className="mode-option" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Standings</span>
+                <span className="mode-option-meta">Wins + point diff</span>
+                <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+                  {standings.map((st: any) => (
+                    <div key={st.socketId} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <span>{st.username}</span>
+                      <span>
+                        {st.wins}-{st.losses} ({(st.pointsFor - st.pointsAgainst) >= 0 ? '+' : ''}
+                        {st.pointsFor - st.pointsAgainst})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button className="mode-option" onClick={() => setAppMode('home')}>
+              <span className="mode-option-title">Back</span>
+              <span className="mode-option-meta">Return home</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
 
   if (appMode === 'home') {
     return (
