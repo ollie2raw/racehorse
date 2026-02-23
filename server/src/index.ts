@@ -193,7 +193,7 @@ io.on('connection', (socket: Socket) => {
         text,
       };
 
-      io.to(roomId).emit('room:chat', msg);
+      socket.to(roomId).emit('room:chat', msg);
     } catch (e) {
       console.warn('room:chat:send failed', e);
     }
@@ -218,7 +218,7 @@ io.on('connection', (socket: Socket) => {
         emote,
       };
 
-      io.to(roomId).emit('room:emote', evt);
+      socket.to(roomId).emit('room:emote', evt);
     } catch (e) {
       console.warn('room:emote:send failed', e);
     }
@@ -243,6 +243,8 @@ io.on('connection', (socket: Socket) => {
       const room = createRoom(socket.id, roomConfig as Record<string, unknown>);
       socket.join(room.code);
       socket.data.roomId = room.code;
+      socket.data.username = username;
+      socket.data.userId = userId;
       const roomPlayers: RoomPlayer[] = [{ id: socket.id, username, userId }];
       roomPlayersByCode.set(room.code, roomPlayers);
       console.log(`[room:create] created room=${room.code}, players=${room.players.length}`);
@@ -283,6 +285,8 @@ io.on('connection', (socket: Socket) => {
       const room = joinRoom(roomCode, socket.id);
       socket.join(room.code);
       socket.data.roomId = room.code;
+      socket.data.username = username;
+      socket.data.userId = userId;
       const roomPlayers = getRoomPlayersWithFallback(room.code, room.players);
       const existingIdx = roomPlayers.findIndex((p) => p.id === socket.id);
       if (existingIdx >= 0) {
