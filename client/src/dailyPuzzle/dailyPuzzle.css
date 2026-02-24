@@ -13,6 +13,81 @@
   pointer-events: none;
 }
 
+.daily-puzzle-screen .daily-top-rail {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.daily-puzzle-screen .daily-hud-pill {
+  width: min(220px, calc(100vw - 20px));
+  min-height: 64px;
+  border-radius: 18px;
+  padding: 8px 14px 7px;
+}
+
+.daily-puzzle-screen .daily-hud-pill .wl-player-score {
+  font-size: 0.92rem;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.daily-puzzle-screen .daily-top-rail > .daily-hud-pill:first-child {
+  justify-self: start;
+}
+
+.daily-puzzle-screen .daily-right-cluster {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  width: auto;
+}
+
+.daily-puzzle-screen .wl-center-status {
+  position: relative;
+  text-align: center;
+  justify-self: center;
+}
+
+.daily-puzzle-screen .daily-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.daily-puzzle-screen .daily-chip-control {
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .daily-puzzle-screen .daily-top-rail {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .daily-puzzle-screen .daily-right-cluster {
+    justify-self: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .daily-puzzle-screen .daily-controls-right {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
 .daily-puzzle-warning-banner {
   position: absolute;
   top: 46px;

@@ -1667,7 +1667,7 @@ export default function App() {
               >
                 <span className="mode-option-title">Practice → Play vs Bot</span>
                 <span className="mode-option-meta">
-                  Sharpen your game offline against a solid AI opponent
+                  Sharpen your game offline against an AI opponent
                 </span>
               </button>
               <button

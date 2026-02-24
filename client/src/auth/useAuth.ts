@@ -14,8 +14,10 @@ interface AuthResult {
 
 const TEMP_USERNAME_PREFIX = 'user_';
 const USERNAME_REQUEST_TIMEOUT_MS = 10000;
-const AUTH_REQUEST_TIMEOUT_MS = 10000;
+const AUTH_REQUEST_TIMEOUT_MS = 15000;
+const SESSION_BOOTSTRAP_TIMEOUT_MS = 8000;
 const SIGN_OUT_TIMEOUT_MS = 1200;
+const AUTH_RETRY_DELAY_MS = 350;
 
 export function isTemporaryUsername(username: string | null | undefined): boolean {
   if (!username) return true;
@@ -48,6 +50,27 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
         clearTimeout(timeoutId);
         reject(err);
       });
+  });
+}
+
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof Error && err.message.toLowerCase().includes('timed out');
+}
+
+function isRetryableAuthError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const message = err.message.toLowerCase();
+  return (
+    message.includes('timed out') ||
+    message.includes('network') ||
+    message.includes('failed to fetch') ||
+    message.includes('request failed')
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
 }
 
@@ -121,7 +144,7 @@ export function useAuth() {
       try {
         const {
           data: { session },
-        } = await supabase.auth.getSession();
+        } = await withTimeout(supabase.auth.getSession(), SESSION_BOOTSTRAP_TIMEOUT_MS);
         await syncSession(session?.user ?? null);
       } catch {
         if (active) {
@@ -182,11 +205,19 @@ export function useAuth() {
   const signUp = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
       if (!supabase) return { error: getSupabaseConfigError() };
+      const client = supabase;
+      const runSignUp = async () =>
+        withTimeout(client.auth.signUp({ email, password }), AUTH_REQUEST_TIMEOUT_MS);
       try {
-        const { data, error } = await withTimeout(
-          supabase.auth.signUp({ email, password }),
-          AUTH_REQUEST_TIMEOUT_MS,
-        );
+        let result: Awaited<ReturnType<typeof runSignUp>>;
+        try {
+          result = await runSignUp();
+        } catch (firstErr) {
+          if (!isRetryableAuthError(firstErr)) throw firstErr;
+          await delay(AUTH_RETRY_DELAY_MS);
+          result = await runSignUp();
+        }
+        const { data, error } = result;
         if (error) return { error: error.message };
 
         if (data.user) {
@@ -200,6 +231,19 @@ export function useAuth() {
 
         return { error: null };
       } catch (err) {
+        if (isTimeoutError(err)) {
+          try {
+            const {
+              data: { session },
+            } = await withTimeout(supabase.auth.getSession(), 3000);
+            if (session?.user) {
+              await refreshProfile(session.user.id);
+              return { error: null };
+            }
+          } catch {
+            // ignore
+          }
+        }
         return { error: err instanceof Error ? err.message : 'Unable to sign up.' };
       }
     },
@@ -209,11 +253,19 @@ export function useAuth() {
   const signIn = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
       if (!supabase) return { error: getSupabaseConfigError() };
+      const client = supabase;
+      const runSignIn = async () =>
+        withTimeout(client.auth.signInWithPassword({ email, password }), AUTH_REQUEST_TIMEOUT_MS);
       try {
-        const { data, error } = await withTimeout(
-          supabase.auth.signInWithPassword({ email, password }),
-          AUTH_REQUEST_TIMEOUT_MS,
-        );
+        let result: Awaited<ReturnType<typeof runSignIn>>;
+        try {
+          result = await runSignIn();
+        } catch (firstErr) {
+          if (!isRetryableAuthError(firstErr)) throw firstErr;
+          await delay(AUTH_RETRY_DELAY_MS);
+          result = await runSignIn();
+        }
+        const { data, error } = result;
         if (error) return { error: error.message };
 
         if (data.user) {
@@ -227,6 +279,19 @@ export function useAuth() {
 
         return { error: null };
       } catch (err) {
+        if (isTimeoutError(err)) {
+          try {
+            const {
+              data: { session },
+            } = await withTimeout(supabase.auth.getSession(), 3000);
+            if (session?.user) {
+              await refreshProfile(session.user.id);
+              return { error: null };
+            }
+          } catch {
+            // ignore
+          }
+        }
         return { error: err instanceof Error ? err.message : 'Unable to sign in.' };
       }
     },

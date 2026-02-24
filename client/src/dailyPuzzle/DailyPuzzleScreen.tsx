@@ -522,28 +522,34 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
 
   return (
     <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
-      <div className="wl-top-rail" data-ui="hud">
-        <div className="wl-player-pill is-active">
-          <div className="wl-pill-top">
-            <span className="wl-player-label">Daily Puzzle</span>
-          </div>
+      <div className="wl-top-rail daily-top-rail" data-ui="hud">
+        <div className="wl-player-pill is-active daily-hud-pill">
+          <span className="wl-player-label">Daily Puzzle</span>
           <span className="wl-player-score">{runtimeState.players.you.score}</span>
         </div>
-        <div className="wl-center-status">
-          <span className="wl-turn-label your-turn">
-            {isOneTurnHighScore ? 'Daily Puzzle' : puzzle.title}
-          </span>
-          <span className="wl-room-code">
-            {isOneTurnHighScore
-              ? `${puzzle.puzzleDate} · Deal ${puzzle.dealSize}`
-              : `${puzzle.puzzleDate} · Deal ${puzzle.dealSize} · Moves ${movesUsed}/${puzzle.maxMoves}`}
-          </span>
+        <div className="daily-center-zone">
+          <div className="wl-center-status">
+            <span className="wl-turn-label your-turn">
+              {isOneTurnHighScore ? 'Daily Puzzle' : puzzle.title}
+            </span>
+            <span className="wl-room-code">
+              {isOneTurnHighScore
+                ? `${puzzle.puzzleDate} · Deal ${puzzle.dealSize}`
+                : `${puzzle.puzzleDate} · Deal ${puzzle.dealSize} · Moves ${movesUsed}/${puzzle.maxMoves}`}
+            </span>
+          </div>
+          <div className="daily-controls-right">
+            <button className="btn text compact daily-chip-control" onClick={resetAttempt}>
+              Play Again
+            </button>
+            <button className="btn text compact daily-chip-control" onClick={onBack}>
+              Back to Home
+            </button>
+          </div>
         </div>
-        <div className="wl-player-pill is-you">
+        <div className="wl-player-pill is-you daily-hud-pill">
           <span className="wl-player-label">Status</span>
-          <span className="wl-player-score" style={{ fontSize: '0.92rem' }}>
-            {status.replace('_', ' ')}
-          </span>
+          <span className="wl-player-score">{status.replace('_', ' ')}</span>
         </div>
       </div>
 
@@ -600,16 +606,6 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
             </div>
           </div>
 
-          <div className="tray-right" data-ui="actions">
-            <div className="tray-controls">
-              <button className="btn text compact" onClick={resetAttempt}>
-                Play Again
-              </button>
-              <button className="btn text compact" onClick={onBack}>
-                Back to Home
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-const AUTH_MODAL_SUBMIT_TIMEOUT_MS = 11000;
+const AUTH_MODAL_SUBMIT_TIMEOUT_MS = 16000;
 
 interface AuthModalProps {
   open: boolean;
@@ -38,7 +38,7 @@ export default function AuthModal({
     if (!open || !submitting) return;
     const timeoutId = window.setTimeout(() => {
       setSubmitting(false);
-      setError('Request timed out. Please try again.');
+      setError('Request timed out. Check your connection and try again.');
     }, AUTH_MODAL_SUBMIT_TIMEOUT_MS);
     return () => window.clearTimeout(timeoutId);
   }, [open, submitting]);
@@ -145,7 +145,7 @@ export default function AuthModal({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            disabled={submitting}
+            autoComplete="email"
             style={{
               borderRadius: '10px',
               border: '1px solid rgba(255,255,255,0.18)',
@@ -163,7 +163,7 @@ export default function AuthModal({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Minimum 6 characters"
-            disabled={submitting}
+            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
             style={{
               borderRadius: '10px',
               border: '1px solid rgba(255,255,255,0.18)',
@@ -190,7 +190,6 @@ export default function AuthModal({
         <button
           className="mode-inline-btn"
           onClick={() => setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))}
-          disabled={submitting}
         >
           {mode === 'signin' ? 'Need an account? Create one' : 'Already have an account? Sign in'}
         </button>
