@@ -27,6 +27,23 @@ import {
 import { recordMatchResult } from './stats/statsApi';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 
+function emitWithAck<TResp>(
+  socket: { emit: (...args: any[]) => void },
+  event: string,
+  ...argsWithoutAck: any[]
+): Promise<TResp> {
+  return new Promise((resolve, reject) => {
+    const t = window.setTimeout(
+      () => reject(new Error(`${event} timed out after 8000ms`)),
+      8000,
+    );
+    socket.emit(event, ...argsWithoutAck, (resp: TResp) => {
+      window.clearTimeout(t);
+      resolve(resp);
+    });
+  });
+}
+
 // ─── Utilities ───────────────────────────────────────────────
 type RoomPlayer = { id: string; username: string; userId: string | null };
 
@@ -488,6 +505,8 @@ export default function App() {
   const reconnectShouldJoinRef = useRef(false);
   const preventAutoRejoinRef = useRef(false);
   const autoJoinAttemptedRef = useRef(false);
+  const joinInFlightRef = useRef(false);
+  const createInFlightRef = useRef(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
@@ -619,38 +638,45 @@ export default function App() {
   }, []);
 
   const emitCreateRoom = useCallback(
-    (targetSocket: Socket) => {
+    async (targetSocket: Socket) => {
       setError('');
       setActionError('');
-      targetSocket.emit(
-        'room:create',
-        {
-          username: authProfile?.username ?? 'Guest',
-          userId: authUser?.id ?? null,
-        },
-        (resp: any) => {
-          setPendingUiAction((prev) => (prev === 'create' ? null : prev));
-          if (!resp?.ok) {
-            setError(resp?.error ?? 'Unable to create room.');
-            resolvePendingCreate(null);
-            return;
-          }
-          setError('');
-          setActionError('');
-          setState(null);
-          setLegalMoves([]);
-          setCanDraw(false);
-          setSelectedTile(null);
-          setJoinedRoom(resp.roomCode);
-          setRoomCode(resp.roomCode);
-          setPlayers(normalizeRoomPlayers(resp.players));
-          autoJoinAttemptedRef.current = false;
-          preventAutoRejoinRef.current = false;
-          resolvePendingCreate(resp.roomCode);
-        },
-      );
+      try {
+        const resp = await emitWithAck<any>(
+          targetSocket,
+          'room:create',
+          {
+            username: authProfile?.username ?? 'Guest',
+            userId: authUser?.id ?? null,
+          },
+        );
+        if (!resp?.ok) {
+          setError(resp?.error ?? 'Unable to create room.');
+          resolvePendingCreate(null);
+          return null;
+        }
+        setError('');
+        setActionError('');
+        setState(null);
+        setLegalMoves([]);
+        setCanDraw(false);
+        setSelectedTile(null);
+        setJoinedRoom(resp.roomCode);
+        setRoomCode(resp.roomCode);
+        setPlayers(normalizeRoomPlayers(resp.players));
+        autoJoinAttemptedRef.current = false;
+        preventAutoRejoinRef.current = false;
+        resolvePendingCreate(resp.roomCode);
+        return resp.roomCode as string;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Action failed';
+        setError(message);
+        showToast(message, 2000);
+        resolvePendingCreate(null);
+        return null;
+      }
     },
-    [authProfile?.username, authUser?.id, resolvePendingCreate],
+    [authProfile?.username, authUser?.id, resolvePendingCreate, showToast],
   );
 
   useEffect(() => {
@@ -716,8 +742,16 @@ export default function App() {
       timeout: 20000,
     });
     s.onAny((event, ...args) => traceSocketEvent(String(event), args.length <= 1 ? args[0] : args));
+    const isDevSocketLogging = import.meta.env.DEV;
+    if (isDevSocketLogging) {
+      s.on('connect', () => console.log('[socket] connect', s.id));
+      s.on('disconnect', (r) => console.log('[socket] disconnect', r));
+      s.on('connect_error', (e) => console.log('[socket] connect_error', e?.message));
+      s.io.on('reconnect_attempt', (n) => console.log('[socket] reconnect_attempt', n));
+      s.io.on('reconnect', (n) => console.log('[socket] reconnect', n));
+    }
 
-    s.on('connect', () => {
+    s.on('connect', async () => {
       setIsConnected(true);
       setYou(s.id ?? '');
       setIsConnecting(false);
@@ -738,28 +772,31 @@ export default function App() {
         reconnectRoomCodeRef.current ?? joinedRoomRef.current ?? '',
       );
       if (reconnectShouldJoinRef.current && reconnectCode) {
-        s.emit(
-          'room:join',
-          reconnectCode,
-          {
-            username: authProfileRef.current?.username ?? 'Guest',
-            userId: authUserRef.current?.id ?? null,
-          },
-          (resp: any) => {
-            if (!resp?.ok) return;
-            setJoinedRoom(resp.roomCode);
-            setRoomCode(resp.roomCode);
-            setState(resp.state ?? null);
-            setPlayers(normalizeRoomPlayers(resp.players));
-            setSelectedTile(null);
-            setLegalMoves([]);
-            setCanDraw(false);
-            setAppMode('multiplayer');
-            reconnectShouldJoinRef.current = false;
-            reconnectRoomCodeRef.current = resp.roomCode;
-            showToast('Reconnected to room.', 1200);
-          },
-        );
+        try {
+          const resp = await emitWithAck<any>(
+            s,
+            'room:join',
+            reconnectCode,
+            {
+              username: authProfileRef.current?.username ?? 'Guest',
+              userId: authUserRef.current?.id ?? null,
+            },
+          );
+          if (!resp?.ok) return;
+          setJoinedRoom(resp.roomCode);
+          setRoomCode(resp.roomCode);
+          setState(resp.state ?? null);
+          setPlayers(normalizeRoomPlayers(resp.players));
+          setSelectedTile(null);
+          setLegalMoves([]);
+          setCanDraw(false);
+          setAppMode('multiplayer');
+          reconnectShouldJoinRef.current = false;
+          reconnectRoomCodeRef.current = resp.roomCode;
+          showToast('Reconnected to room.', 1200);
+        } catch (e) {
+          showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+        }
         return;
       }
       if (preventAutoRejoinRef.current || autoJoinAttemptedRef.current) return;
@@ -768,14 +805,17 @@ export default function App() {
       );
       if (!savedCode || joinedRoomRef.current) return;
       autoJoinAttemptedRef.current = true;
-      s.emit(
-        'room:join',
-        savedCode,
-        {
-          username: authProfile?.username ?? 'Guest',
-          userId: authUser?.id ?? null,
-        },
-        (resp: any) => {
+      (async () => {
+        try {
+          const resp = await emitWithAck<any>(
+            s,
+            'room:join',
+            savedCode,
+            {
+              username: authProfile?.username ?? 'Guest',
+              userId: authUser?.id ?? null,
+            },
+          );
           if (!resp?.ok) return;
           setJoinedRoom(resp.roomCode);
           setRoomCode(resp.roomCode);
@@ -785,8 +825,10 @@ export default function App() {
           setLegalMoves([]);
           setCanDraw(false);
           showToast('Rejoined room.', 1200);
-        },
-      );
+        } catch (e) {
+          showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+        }
+      })();
     });
 
     s.on('disconnect', () => {
@@ -1081,45 +1123,61 @@ export default function App() {
 
 
   // Room actions
-  const createRoom = useCallback(() => {
+  const createRoom = useCallback(async () => {
     setError('');
     setActionError('');
     if (!socket) return setError('Not connected to server.');
+    if (createInFlightRef.current) return;
+    createInFlightRef.current = true;
     setPendingUiAction('create');
-    emitCreateRoom(socket);
-    window.setTimeout(() => {
+    try {
+      await emitCreateRoom(socket);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+    } finally {
+      createInFlightRef.current = false;
       setPendingUiAction((prev) => (prev === 'create' ? null : prev));
-    }, 1500);
-  }, [socket, emitCreateRoom]);
+    }
+  }, [socket, emitCreateRoom, showToast]);
 
-  const joinRoom = useCallback(() => {
+  const joinRoom = useCallback(async () => {
     setError('');
     setActionError('');
     if (!socket) return setError('Not connected to server.');
+    if (joinInFlightRef.current) return;
+    joinInFlightRef.current = true;
     setPendingUiAction('join');
-    socket.emit(
-      'room:join',
-      roomCode.trim().toUpperCase(),
-      {
-        username: authProfile?.username ?? 'Guest',
-        userId: authUser?.id ?? null,
-      },
-      (resp: any) => {
-        setPendingUiAction((prev) => (prev === 'join' ? null : prev));
-        if (!resp.ok) return setError(resp.error);
-        setError('');
-        setActionError('');
-        setJoinedRoom(resp.roomCode);
-        setState(resp.state ?? null);
-        setPlayers(normalizeRoomPlayers(resp.players));
-        setSelectedTile(null);
-        setLegalMoves([]);
-        setCanDraw(false);
-        autoJoinAttemptedRef.current = false;
-        preventAutoRejoinRef.current = false;
-      },
-    );
-  }, [socket, roomCode, authProfile?.username, authUser?.id]);
+    try {
+      const resp = await emitWithAck<any>(
+        socket,
+        'room:join',
+        roomCode.trim().toUpperCase(),
+        {
+          username: authProfile?.username ?? 'Guest',
+          userId: authUser?.id ?? null,
+        },
+      );
+      if (!resp?.ok) {
+        setError(resp?.error ?? 'Unable to join room.');
+        return;
+      }
+      setError('');
+      setActionError('');
+      setJoinedRoom(resp.roomCode);
+      setState(resp.state ?? null);
+      setPlayers(normalizeRoomPlayers(resp.players));
+      setSelectedTile(null);
+      setLegalMoves([]);
+      setCanDraw(false);
+      autoJoinAttemptedRef.current = false;
+      preventAutoRejoinRef.current = false;
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+    } finally {
+      joinInFlightRef.current = false;
+      setPendingUiAction((prev) => (prev === 'join' ? null : prev));
+    }
+  }, [socket, roomCode, authProfile?.username, authUser?.id, showToast]);
 
   useEffect(() => {
     if (!socket || !socket.connected || joinedRoom || autoJoinAttemptedRef.current) return;
@@ -1130,14 +1188,17 @@ export default function App() {
     if (!linkedCode) return;
     autoJoinAttemptedRef.current = true;
     setRoomCode(linkedCode);
-    socket.emit(
-      'room:join',
-      linkedCode,
-      {
-        username: authProfile?.username ?? 'Guest',
-        userId: authUser?.id ?? null,
-      },
-      (resp: any) => {
+    (async () => {
+      try {
+        const resp = await emitWithAck<any>(
+          socket,
+          'room:join',
+          linkedCode,
+          {
+            username: authProfile?.username ?? 'Guest',
+            userId: authUser?.id ?? null,
+          },
+        );
         if (!resp?.ok) {
           setError(resp?.error ?? 'Unable to join room from invite link.');
           return;
@@ -1148,11 +1209,13 @@ export default function App() {
         setSelectedTile(null);
         setLegalMoves([]);
         setCanDraw(false);
-      },
-    );
-  }, [socket, joinedRoom, authProfile?.username, authUser?.id]);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+      }
+    })();
+  }, [socket, joinedRoom, authProfile?.username, authUser?.id, showToast]);
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback(async () => {
     setError('');
     setActionError('');
     if (!socket || !joinedRoom) return setError('Not in a room.');
@@ -1160,11 +1223,15 @@ export default function App() {
     setMultiplayerMoveLog([]);
     multiplayerMoveCounterRef.current = 1;
     previousStateForAnalysisRef.current = null;
-    socket.emit('game:start', joinedRoom, (resp: any) => {
+    try {
+      const resp = await emitWithAck<any>(socket, 'game:start', joinedRoom);
+      if (!resp?.ok) return setError(resp?.error ?? 'Unable to start game.');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+    } finally {
       setPendingUiAction((prev) => (prev === 'start' ? null : prev));
-      if (!resp.ok) return setError(resp.error);
-    });
-  }, [socket, joinedRoom]);
+    }
+  }, [socket, joinedRoom, showToast]);
 
   const requestRematch = useCallback(() => {
     if (!socket || !joinedRoom || !state?.gameOver || rematchRequested) return;
@@ -1203,7 +1270,7 @@ export default function App() {
   );
 
   // Game actions
-  const draw = useCallback(() => {
+  const draw = useCallback(async () => {
     setActionError('');
     if (!socket || !joinedRoom) return;
     emitDraggingState(false);
@@ -1213,10 +1280,10 @@ export default function App() {
     const validMoves = legalMoves
       .filter((m) => m.type === 'play' && m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
-    socket.emit('game:action', joinedRoom, { type: 'DRAW' }, (resp: any) => {
-      setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
-      if (!resp.ok) {
-        setActionError(resp.error);
+    try {
+      const resp = await emitWithAck<any>(socket, 'game:action', joinedRoom, { type: 'DRAW' });
+      if (!resp?.ok) {
+        setActionError(resp?.error ?? 'Unable to draw.');
         return;
       }
       appendMultiplayerMove({
@@ -1237,10 +1304,14 @@ export default function App() {
           handBefore,
         ),
       });
-    });
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState]);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+    } finally {
+      setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
+    }
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast]);
 
-  const pass = useCallback(() => {
+  const pass = useCallback(async () => {
     setActionError('');
     if (!socket || !joinedRoom) return;
     emitDraggingState(false);
@@ -1250,10 +1321,10 @@ export default function App() {
     const validMoves = legalMoves
       .filter((m) => m.type === 'play' && m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
-    socket.emit('game:action', joinedRoom, { type: 'PASS' }, (resp: any) => {
-      setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
-      if (!resp.ok) {
-        setActionError(resp.error);
+    try {
+      const resp = await emitWithAck<any>(socket, 'game:action', joinedRoom, { type: 'PASS' });
+      if (!resp?.ok) {
+        setActionError(resp?.error ?? 'Unable to pass.');
         return;
       }
       appendMultiplayerMove({
@@ -1274,11 +1345,15 @@ export default function App() {
           handBefore,
         ),
       });
-    });
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState]);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+    } finally {
+      setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
+    }
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast]);
 
   const play = useCallback(
-    (position: PlacementPosition) => {
+    async (position: PlacementPosition) => {
       setActionError('');
       if (!socket || !joinedRoom || !selectedTile) return;
       emitDraggingState(false);
@@ -1290,44 +1365,48 @@ export default function App() {
         .map((m) => toTileTuple(m.tile as Tile));
       const playedTile = toTileTuple(selectedTile);
 
-      socket.emit(
-        'game:action',
-        joinedRoom,
-        {
-          type: 'MOVE',
-          move: { tile: selectedTile, position },
-        },
-        (resp: any) => {
-          setPendingUiAction((prev) => (prev === 'play' ? null : prev));
-          if (!resp.ok) {
-            setActionError(resp.error);
-            setSelectedTile(null);
-            return;
-          }
-          appendMultiplayerMove({
-            player: 'you',
-            action: 'place',
-            tile: playedTile,
+      try {
+        const resp = await emitWithAck<any>(
+          socket,
+          'game:action',
+          joinedRoom,
+          {
+            type: 'MOVE',
+            move: { tile: selectedTile, position },
+          },
+        );
+        if (!resp?.ok) {
+          setActionError(resp?.error ?? 'Unable to play tile.');
+          setSelectedTile(null);
+          return;
+        }
+        appendMultiplayerMove({
+          player: 'you',
+          action: 'place',
+          tile: playedTile,
+          boardEnds,
+          handBefore,
+          validMoves,
+          pipDelta: -(playedTile[0] + playedTile[1]),
+          boardState: snapshotBoardState(state?.board ?? null),
+          boardRenderState: cloneBoardState(state?.board ?? null),
+          handSnapshot: handBefore,
+          engineBestMove: pickEngineBestMove(
+            legalMoves
+              .filter((m) => m.type === 'play' && m.tile)
+              .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
             boardEnds,
             handBefore,
-            validMoves,
-            pipDelta: -(playedTile[0] + playedTile[1]),
-            boardState: snapshotBoardState(state?.board ?? null),
-            boardRenderState: cloneBoardState(state?.board ?? null),
-            handSnapshot: handBefore,
-            engineBestMove: pickEngineBestMove(
-              legalMoves
-                .filter((m) => m.type === 'play' && m.tile)
-                .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-              boardEnds,
-              handBefore,
-            ),
-          });
-          setSelectedTile(null);
-        },
-      );
+          ),
+        });
+        setSelectedTile(null);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+      } finally {
+        setPendingUiAction((prev) => (prev === 'play' ? null : prev));
+      }
     },
-    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove, emitDraggingState],
+    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast],
   );
 
   // Derived state
