@@ -45,6 +45,9 @@ export interface StatsSummary {
   botWins: number;
   botLosses: number;
   longestWinStreak: number;
+  winRate: number;
+  currentWinStreak: number;
+  gamesThisWeek: number;
 }
 
 type MatchSummaryRow = {
@@ -67,23 +70,46 @@ function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummar
   const botLosses = botRows.filter((row) => row.loser_user_id === userId).length;
 
   let longestWinStreak = 0;
-  let currentWinStreak = 0;
+  let streakTracker = 0;
   for (const match of onlineRows) {
     if (match.winner_user_id === userId) {
-      currentWinStreak += 1;
-      if (currentWinStreak > longestWinStreak) longestWinStreak = currentWinStreak;
+      streakTracker += 1;
+      if (streakTracker > longestWinStreak) longestWinStreak = streakTracker;
     } else if (match.loser_user_id === userId) {
-      currentWinStreak = 0;
+      streakTracker = 0;
     }
   }
 
+  let currentWinStreak = 0;
+  for (let i = onlineRows.length - 1; i >= 0; i--) {
+    const match = onlineRows[i];
+    if (match.winner_user_id === userId) {
+      currentWinStreak += 1;
+      continue;
+    }
+    if (match.loser_user_id === userId) break;
+  }
+
+  const onlineGamesPlayed = wins + losses;
+  const winRate =
+    onlineGamesPlayed > 0 ? Math.round((wins / onlineGamesPlayed) * 1000) / 10 : 0;
+  const nowMs = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const gamesThisWeek = onlineRows.filter((row) => {
+    const createdMs = new Date(row.created_at ?? 0).getTime();
+    return Number.isFinite(createdMs) && nowMs - createdMs <= sevenDaysMs;
+  }).length;
+
   return {
-    onlineGamesPlayed: wins + losses,
+    onlineGamesPlayed,
     wins,
     losses,
     botWins,
     botLosses,
     longestWinStreak,
+    winRate,
+    currentWinStreak,
+    gamesThisWeek,
   };
 }
 

@@ -17,6 +17,9 @@ const EMPTY_STATS: StatsSummary = {
   botWins: 0,
   botLosses: 0,
   longestWinStreak: 0,
+  winRate: 0,
+  currentWinStreak: 0,
+  gamesThisWeek: 0,
 };
 
 export default function StatsScreen({ open, user, profile, onClose }: StatsScreenProps) {
@@ -102,6 +105,40 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           {profile?.username ? `@${profile.username}` : 'Guest'}
         </p>
 
+        <div
+          style={{
+            display: 'grid',
+            justifyItems: 'center',
+            gap: 8,
+            padding: '4px 0 2px',
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              display: 'grid',
+              placeItems: 'center',
+              background: 'linear-gradient(140deg, #34d399, #0ea5a3)',
+              color: '#04211c',
+              fontSize: '2rem',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              border: '1px solid rgba(236,252,245,0.34)',
+              boxShadow: '0 10px 24px rgba(14, 116, 102, 0.28)',
+            }}
+          >
+            {(profile?.username?.[0] ?? user?.email?.[0] ?? 'G').toUpperCase()}
+          </div>
+          <strong style={{ fontSize: '1.08rem' }}>
+            {profile?.username ? `@${profile.username}` : user?.email ?? 'Guest'}
+          </strong>
+          <span style={{ fontSize: '0.8rem', color: 'rgba(188, 212, 222, 0.72)', letterSpacing: '0.04em' }}>
+            Member
+          </span>
+        </div>
+
         {loading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading stats...</p>}
         {error && <p className="auth-inline-error">{error}</p>}
 
@@ -109,21 +146,24 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
               gap: '12px',
               minHeight: '220px',
             }}
           >
             {[
-              ['Online Games', stats.onlineGamesPlayed],
-              ['Wins', stats.wins],
-              ['Losses', stats.losses],
-              ['Longest Win Streak', stats.longestWinStreak],
-              ['Bot Wins', stats.botWins],
-              ['Bot Losses', stats.botLosses],
-            ].map(([label, value]) => (
+              { label: 'Wins', value: stats.wins, icon: '🏆', tone: 'teal' },
+              { label: 'Losses', value: stats.losses, icon: '📉', tone: 'red' },
+              { label: 'Current Streak', value: stats.currentWinStreak, icon: '🔥', tone: 'teal' },
+              { label: 'Best Streak', value: stats.longestWinStreak, icon: '⚡', tone: 'teal' },
+              { label: 'This Week', value: stats.gamesThisWeek, icon: '🎮', tone: 'neutral' },
+              { label: 'Win Rate', value: `${stats.winRate}%`, icon: '📊', tone: 'neutral' },
+              { label: 'Online Games', value: stats.onlineGamesPlayed, icon: '🧩', tone: 'neutral' },
+              { label: 'Bot Wins', value: stats.botWins, icon: '🤖', tone: 'neutral' },
+              { label: 'Bot Losses', value: stats.botLosses, icon: '🛠️', tone: 'neutral' },
+            ].map((item) => (
               <div
-                key={String(label)}
+                key={item.label}
                 style={{
                   borderRadius: '10px',
                   border: '1px solid rgba(255,255,255,0.16)',
@@ -131,14 +171,53 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
                   padding: '12px',
                   display: 'grid',
                   gap: '6px',
+                  alignContent: 'start',
+                  boxShadow:
+                    item.tone === 'teal'
+                      ? 'inset 0 0 0 1px rgba(52,211,153,0.2)'
+                      : item.tone === 'red'
+                        ? 'inset 0 0 0 1px rgba(248,113,113,0.2)'
+                        : 'none',
                 }}
               >
                 <span style={{ fontSize: '0.86rem', color: 'rgba(191,213,223,0.86)' }}>
-                  {label}
+                  {item.icon} {item.label}
                 </span>
-                <strong style={{ fontSize: '1.4rem', lineHeight: 1.05, letterSpacing: '0.01em' }}>
-                  {value}
+                <strong
+                  style={{
+                    fontSize: '1.4rem',
+                    lineHeight: 1.05,
+                    letterSpacing: '0.01em',
+                    color:
+                      item.tone === 'teal'
+                        ? '#5eead4'
+                        : item.tone === 'red'
+                          ? '#fca5a5'
+                          : 'rgba(236,248,245,0.95)',
+                  }}
+                >
+                  {item.value}
                 </strong>
+                {item.label === 'Win Rate' && (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      height: 6,
+                      borderRadius: 999,
+                      background: 'rgba(236,248,245,0.18)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.max(0, Math.min(100, stats.winRate))}%`,
+                        height: '100%',
+                        background: '#34d399',
+                        transition: 'width 180ms ease',
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

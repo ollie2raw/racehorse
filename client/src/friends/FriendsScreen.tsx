@@ -30,6 +30,9 @@ const EMPTY_STATS: StatsSummary = {
   botWins: 0,
   botLosses: 0,
   longestWinStreak: 0,
+  winRate: 0,
+  currentWinStreak: 0,
+  gamesThisWeek: 0,
 };
 
 export default function FriendsScreen({

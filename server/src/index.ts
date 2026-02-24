@@ -282,25 +282,31 @@ function broadcastStateUpdate(roomCode: string) {
       const scoreB = room.state.players[bId]?.score ?? 0;
       const winnerSocketId = room.state.winnerId ?? (scoreA >= scoreB ? aId : bId);
 
-      appendMatch({
-        endedAtMs: Date.now(),
-        roomCode: room.code,
-        tournamentId: typeof cfg.tournamentId === 'string' ? cfg.tournamentId : undefined,
-        tournamentMatchId: typeof cfg.tournamentMatchId === 'string' ? cfg.tournamentMatchId : undefined,
-        maxDeficitWinner: (() => {
-          const t = (room as any)._leadTracker;
-          if (!t) return 0;
-          if (winnerSocketId === aId) return t.maxLeadB ?? 0;
-          if (winnerSocketId === bId) return t.maxLeadA ?? 0;
-          return 0;
-        })(),
-        a: { socketId: a.id, userId: a.userId, username: a.username },
-        b: { socketId: b.id, userId: b.userId, username: b.username },
-        scoreA,
-        scoreB,
-        winnerSocketId,
-        pointDiff: Math.abs(scoreA - scoreB),
-      });
+      void (async () => {
+        try {
+          await appendMatch({
+            endedAtMs: Date.now(),
+            roomCode: room.code,
+            tournamentId: typeof cfg.tournamentId === 'string' ? cfg.tournamentId : undefined,
+            tournamentMatchId: typeof cfg.tournamentMatchId === 'string' ? cfg.tournamentMatchId : undefined,
+            maxDeficitWinner: (() => {
+              const t = (room as any)._leadTracker;
+              if (!t) return 0;
+              if (winnerSocketId === aId) return t.maxLeadB ?? 0;
+              if (winnerSocketId === bId) return t.maxLeadA ?? 0;
+              return 0;
+            })(),
+            a: { socketId: a.id, userId: a.userId, username: a.username },
+            b: { socketId: b.id, userId: b.userId, username: b.username },
+            scoreA,
+            scoreB,
+            winnerSocketId,
+            pointDiff: Math.abs(scoreA - scoreB),
+          });
+        } catch (err) {
+          console.warn('appendMatch failed', err);
+        }
+      })();
       (room as any)._matchLogged = true;
     }
   }
@@ -560,9 +566,9 @@ io.on('connection', (socket: Socket) => {
   });
 
   // WEEKLY_STATS
-  socket.on("stats:weekly", (cb?: any) => {
+  socket.on("stats:weekly", async (cb?: any) => {
     try {
-      const awards = computeWeeklyAwards(Date.now());
+      const awards = await computeWeeklyAwards(Date.now());
       cb?.({ ok: true, awards });
     } catch {
       cb?.({ ok: false, error: "stats_failed" });

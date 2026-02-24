@@ -19,24 +19,36 @@ export type MatchLogEntry = {
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const FILE_PATH = path.join(DATA_DIR, 'matches.jsonl');
+const WEEKLY_AWARDS_CACHE_MS = 60_000;
 
-function ensureDir(): void {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+let weeklyAwardsCache:
+  | {
+      weekKey: string;
+      expiresAtMs: number;
+      value: WeeklyAwards;
+    }
+  | null = null;
+
+async function ensureDir(): Promise<void> {
+  await fs.promises.mkdir(DATA_DIR, { recursive: true });
 }
 
-export function appendMatch(entry: Omit<MatchLogEntry, 'id'> & { id?: string }): MatchLogEntry {
-  ensureDir();
+export async function appendMatch(
+  entry: Omit<MatchLogEntry, 'id'> & { id?: string },
+): Promise<MatchLogEntry> {
+  await ensureDir();
   const full: MatchLogEntry = {
     id: entry.id ?? randomUUID(),
     ...entry,
   };
-  fs.appendFileSync(FILE_PATH, JSON.stringify(full) + '\n', 'utf8');
+  await fs.promises.appendFile(FILE_PATH, JSON.stringify(full) + '\n', 'utf8');
+  weeklyAwardsCache = null;
   return full;
 }
 
-export function readMatches(): MatchLogEntry[] {
+export async function readMatches(): Promise<MatchLogEntry[]> {
   try {
-    const raw = fs.readFileSync(FILE_PATH, 'utf8').trim();
+    const raw = (await fs.promises.readFile(FILE_PATH, 'utf8')).trim();
     if (!raw) return [];
     return raw
       .split('\n')
@@ -76,9 +88,18 @@ function sortDesc<T>(arr: T[], get: (x: T) => number): T[] {
   return [...arr].sort((a, b) => get(b) - get(a));
 }
 
-export function computeWeeklyAwards(nowMs: number): WeeklyAwards {
+export async function computeWeeklyAwards(nowMs: number): Promise<WeeklyAwards> {
   const { startMs, endMs } = getWeekWindowMs(nowMs);
-  const matches = readMatches().filter((m) => m.endedAtMs >= startMs && m.endedAtMs < endMs);
+  const weekKey = `${startMs}-${endMs}`;
+  if (
+    weeklyAwardsCache &&
+    weeklyAwardsCache.weekKey === weekKey &&
+    nowMs < weeklyAwardsCache.expiresAtMs
+  ) {
+    return weeklyAwardsCache.value;
+  }
+
+  const matches = (await readMatches()).filter((m) => m.endedAtMs >= startMs && m.endedAtMs < endMs);
 
   const iso = (ms: number) => new Date(ms).toISOString();
   const weekStartISO = iso(startMs);
@@ -165,7 +186,7 @@ export function computeWeeklyAwards(nowMs: number): WeeklyAwards {
     leaderboard: leaderboard.slice(0, 5),
   });
 
-  return {
+  const result: WeeklyAwards = {
     weekStartISO,
     weekEndISO,
     awards: [
@@ -177,4 +198,10 @@ export function computeWeeklyAwards(nowMs: number): WeeklyAwards {
       mk('longestWinStreak', 'Longest win streak', streakBoard),
     ],
   };
+  weeklyAwardsCache = {
+    weekKey,
+    expiresAtMs: nowMs + WEEKLY_AWARDS_CACHE_MS,
+    value: result,
+  };
+  return result;
 }

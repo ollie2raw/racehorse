@@ -477,6 +477,7 @@ export default function App() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [serverWaking, setServerWaking] = useState(false);
   const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
   const [friendInvite, setFriendInvite] = useState<{
     fromUsername: string;
@@ -495,6 +496,9 @@ export default function App() {
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const joinedRoomRef = useRef<string | null>(null);
+  const stateRef = useRef<GameState | null>(state);
+  const reconnectRoomCodeRef = useRef<string | null>(null);
+  const reconnectShouldJoinRef = useRef(false);
   const preventAutoRejoinRef = useRef(false);
   const autoJoinAttemptedRef = useRef(false);
 
@@ -568,6 +572,10 @@ export default function App() {
   useEffect(() => {
     socketRef.current = socket;
   }, [socket]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     if (!socket || !authUser?.id) return;
@@ -714,6 +722,11 @@ export default function App() {
     const s = io(serverUrl, {
       transports: ['polling', 'websocket'],
       upgrade: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
+      timeout: 20000,
     });
     s.onAny((event, ...args) => traceSocketEvent(String(event), args.length <= 1 ? args[0] : args));
 
@@ -721,6 +734,7 @@ export default function App() {
       setIsConnected(true);
       setYou(s.id ?? '');
       setIsConnecting(false);
+      setServerWaking(false);
       const userId = authUserRef.current?.id;
       const username =
         authProfileRef.current?.username ?? authUserRef.current?.email?.split('@')[0] ?? 'player';
@@ -731,6 +745,34 @@ export default function App() {
       if (pendingCreateOnConnectRef.current) {
         pendingCreateOnConnectRef.current = false;
         emitCreateRoom(s);
+        return;
+      }
+      const reconnectCode = normalizeRoomCode(
+        reconnectRoomCodeRef.current ?? joinedRoomRef.current ?? '',
+      );
+      if (reconnectShouldJoinRef.current && reconnectCode) {
+        s.emit(
+          'room:join',
+          reconnectCode,
+          {
+            username: authProfileRef.current?.username ?? 'Guest',
+            userId: authUserRef.current?.id ?? null,
+          },
+          (resp: any) => {
+            if (!resp?.ok) return;
+            setJoinedRoom(resp.roomCode);
+            setRoomCode(resp.roomCode);
+            setState(resp.state ?? null);
+            setPlayers(normalizeRoomPlayers(resp.players));
+            setSelectedTile(null);
+            setLegalMoves([]);
+            setCanDraw(false);
+            setAppMode('multiplayer');
+            reconnectShouldJoinRef.current = false;
+            reconnectRoomCodeRef.current = resp.roomCode;
+            showToast('Reconnected to room.', 1200);
+          },
+        );
         return;
       }
       if (preventAutoRejoinRef.current || autoJoinAttemptedRef.current) return;
@@ -761,6 +803,12 @@ export default function App() {
     });
 
     s.on('disconnect', () => {
+      const roomBeforeDisconnect = joinedRoomRef.current;
+      const stateBeforeDisconnect = stateRef.current;
+      if (roomBeforeDisconnect && stateBeforeDisconnect && !stateBeforeDisconnect.gameOver) {
+        reconnectRoomCodeRef.current = roomBeforeDisconnect;
+        reconnectShouldJoinRef.current = true;
+      }
       setIsConnected(false);
       setIsConnecting(false);
       setJoinedRoom(null);
@@ -880,9 +928,10 @@ export default function App() {
       setOpponentDragging(Boolean(payload.dragging));
     });
 
-    s.on('connect_error', (e) => {
+    s.on('connect_error', () => {
       setIsConnecting(false);
-      setError(`Connection error: ${e.message}`);
+      setServerWaking(true);
+      setError('');
     });
 
     setSocket(s);
@@ -975,6 +1024,8 @@ export default function App() {
   }, [authUser?.id, serverUrl, socket, isConnecting, connect]);
 
   const disconnect = useCallback(() => {
+    reconnectRoomCodeRef.current = null;
+    reconnectShouldJoinRef.current = false;
     preventAutoRejoinRef.current = true;
     autoJoinAttemptedRef.current = false;
     if (typeof window !== 'undefined') {
@@ -2328,6 +2379,11 @@ export default function App() {
                   Join Room
                 </button>
               </div>
+              {serverWaking && (
+                <p className="mode-subtitle" style={{ margin: '2px 0 0' }}>
+                  Connecting to server... (this may take up to 60 seconds on first load)
+                </p>
+              )}
             </div>
           </div>
         </div>
