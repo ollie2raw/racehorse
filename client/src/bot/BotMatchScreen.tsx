@@ -608,21 +608,10 @@ export default function BotMatchScreen({
           onPrimary={startFreshMatch}
           secondaryLabel="Home"
           onSecondary={onBack}
+          extraActionLabel="Analyze Game"
+          onExtraAction={openAnalyzer}
           onClose={onBack}
         >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              width: '100%',
-              marginTop: 24,
-              gridColumn: '1 / -1',
-            }}
-          >
-            <button className="mode-inline-btn" onClick={openAnalyzer}>
-              Analyze Game
-            </button>
-          </div>
           {isDailyPuzzleRun && (
             <div style={{ margin: '2px 0 4px', textAlign: 'left' }}>
               <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Today&apos;s Top Scores</h3>

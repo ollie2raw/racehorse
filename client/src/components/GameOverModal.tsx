@@ -17,6 +17,8 @@ interface GameOverModalProps {
   onPrimary: () => void;
   secondaryLabel?: string;
   onSecondary?: () => void;
+  extraActionLabel?: string;
+  onExtraAction?: () => void;
   onClose?: () => void;
   children?: ReactNode;
 }
@@ -31,6 +33,8 @@ export default function GameOverModal({
   onPrimary,
   secondaryLabel,
   onSecondary,
+  extraActionLabel,
+  onExtraAction,
   onClose,
   children,
 }: GameOverModalProps) {
@@ -125,8 +129,22 @@ export default function GameOverModal({
 
         {children}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn primary victory-cta" onClick={onPrimary}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexWrap: 'nowrap',
+            gap: 12,
+            width: '100%',
+          }}
+        >
+          {extraActionLabel && onExtraAction && (
+            <button className="mode-inline-btn" onClick={onExtraAction}>
+              {extraActionLabel}
+            </button>
+          )}
+          <button className="btn primary victory-cta" onClick={onPrimary} style={{ minWidth: 0 }}>
             {primaryLabel}
           </button>
           {secondaryLabel && onSecondary && (

@@ -247,25 +247,12 @@ function GameOverOverlay({
       onPrimary={onPrimary}
       secondaryLabel={secondaryLabel}
       onSecondary={onExit}
+      extraActionLabel={extraActionLabel}
+      onExtraAction={onExtraAction}
       onClose={onExit}
     >
       {waitingText && (
         <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', fontSize: '0.92rem' }}>{waitingText}</p>
-      )}
-      {extraActionLabel && onExtraAction && (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            width: '100%',
-            marginTop: 15,
-            gridColumn: '1 / -1',
-          }}
-        >
-          <button className="mode-inline-btn" onClick={onExtraAction}>
-            {extraActionLabel}
-          </button>
-        </div>
       )}
     </GameOverModal>
   );
