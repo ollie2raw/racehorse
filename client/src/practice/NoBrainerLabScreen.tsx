@@ -34,12 +34,14 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
   const [hintText, setHintText] = useState<string>('');
   const [showSolution, setShowSolution] = useState(false);
   const [error, setError] = useState<string>('');
+  const [reloadTick, setReloadTick] = useState(0);
 
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('PRACTICE_DEBUG') === '1';
 
   useEffect(() => {
     let active = true;
+    setError('');
     loadNoBrainerDataset()
       .then((rows) => {
         if (!active) return;
@@ -52,7 +54,7 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
     return () => {
       active = false;
     };
-  }, []);
+  }, [reloadTick]);
 
   const canStart = Boolean(dataset && dataset.length > 0);
 
@@ -103,7 +105,22 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
   if (error && !record) {
     return (
       <div className="app">
-        <div className="screen practice-loading">{error}</div>
+        <div className="screen practice-loading">
+          <div style={{ display: 'grid', gap: 10, justifyItems: 'center', textAlign: 'center', padding: 20 }}>
+            <div>{error}</div>
+            <div style={{ opacity: 0.85, fontSize: '0.92rem' }}>
+              To regenerate validated hands: `npm --prefix ../server run nobrainer:validate`
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button className="btn text" onClick={() => setReloadTick((n) => n + 1)}>
+                Retry
+              </button>
+              <button className="btn text" onClick={onBack}>
+                Back to Home
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

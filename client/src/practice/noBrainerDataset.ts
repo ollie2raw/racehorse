@@ -10,6 +10,7 @@ export interface NoBrainerHandRecord {
 }
 
 let cachedDatasetPromise: Promise<NoBrainerHandRecord[]> | null = null;
+const DATASET_URLS = ['/data/noBrainers.valid.json', '/data/noBrainers.generated.json'];
 
 function parseTile(raw: string): Tile | null {
   const match = raw.trim().match(/^(\d)\|(\d)$/);
@@ -39,46 +40,49 @@ function classifyDifficulty(key: string): Exclude<PracticeDifficulty, 'random'> 
 export async function loadNoBrainerDataset(): Promise<NoBrainerHandRecord[]> {
   if (cachedDatasetPromise) return cachedDatasetPromise;
 
-  cachedDatasetPromise = fetch('/no_brainer_hands.jsonl').then(async (res) => {
-    if (!res.ok) {
-      throw new Error(`Unable to load dataset: ${res.status}`);
-    }
-    const text = await res.text();
-    const lines = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const rows: NoBrainerHandRecord[] = [];
-
-    for (const line of lines) {
+  cachedDatasetPromise = (async () => {
+    for (const url of DATASET_URLS) {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      let parsed: unknown;
       try {
-        const parsed = JSON.parse(line) as { hand?: string[]; example?: string[] };
-        const handRaw = Array.isArray(parsed.hand) ? parsed.hand : [];
-        const exampleRaw = Array.isArray(parsed.example) ? parsed.example : [];
-        const hand = handRaw.map(parseTile).filter((t): t is Tile => Boolean(t));
-        const example = exampleRaw.map(parseTile).filter((t): t is Tile => Boolean(t));
-        if (hand.length !== 7 || example.length !== 7) continue;
+        parsed = await res.json();
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(parsed)) continue;
+
+      const rows: NoBrainerHandRecord[] = [];
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object') continue;
+        const rec = item as { hand?: unknown; example?: unknown };
+        const handRaw = Array.isArray(rec.hand) ? rec.hand : [];
+        const exampleRaw = Array.isArray(rec.example) ? rec.example : [];
+        const hand = handRaw.map((value) => parseTile(String(value))).filter((t): t is Tile => Boolean(t));
+        const example = exampleRaw
+          .map((value) => parseTile(String(value)))
+          .filter((t): t is Tile => Boolean(t));
+        if (hand.length !== 7) continue;
+        const normalizedExample = example.length === 7 ? example : hand;
         const key = hand
           .map((t) => `${t.low}|${t.high}`)
           .sort()
           .join(',');
         rows.push({
           hand,
-          example,
+          example: normalizedExample,
           key,
           difficulty: classifyDifficulty(key),
         });
-      } catch {
-        // Skip malformed lines.
       }
+
+      if (rows.length > 0) return rows;
     }
 
-    if (rows.length === 0) {
-      throw new Error('Dataset is empty or malformed.');
-    }
-
-    return rows;
-  });
+    throw new Error(
+      'Validated no-brainer dataset is missing. Run: npm --prefix ../server run nobrainer:validate',
+    );
+  })();
 
   return cachedDatasetPromise;
 }

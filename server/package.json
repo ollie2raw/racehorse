@@ -8,7 +8,9 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "nobrainer:validate": "node -e \"require('ts-node/register/transpile-only'); require('./scripts/validateNoBrainers.ts')\"",
+    "nobrainer:generate": "node -e \"require('ts-node/register/transpile-only'); require('./scripts/generateNoBrainers.ts')\""
   },
   "keywords": [],
   "author": "",
