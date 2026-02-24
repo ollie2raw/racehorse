@@ -160,14 +160,14 @@ export function computeHandPenalty(hand: readonly Tile[], config: Config = DEFAU
 
 /**
  * Go-out bonus points:
- * sum opponent pips, divide by scoringMultiple, round to nearest integer points.
+ * sum opponent pips, round to nearest scoringMultiple.
  */
 export function computeGoOutBonusPoints(
   hand: readonly Tile[],
   config: Config = DEFAULT_CONFIG,
 ): number {
   const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
-  return Math.round(total / config.scoringMultiple);
+  return Math.round(total / config.scoringMultiple) * config.scoringMultiple;
 }
 
 // ─── Board Placement ─────────────────────────────────────────

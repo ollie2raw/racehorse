@@ -7,6 +7,8 @@ import {
   type DailyPuzzleLeaderboardEntry,
 } from '../dailyPuzzle/api';
 import GameOverModal from '../components/GameOverModal';
+import AnalyzerModal from '../analyzer/AnalyzerModal';
+import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis, type MoveEntry } from '../analyzer/moveAnalyzer';
 import {
   applyPlayMove,
   createBotMatch,
@@ -64,6 +66,14 @@ function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
 
+function toTileTuple(tile: Tile): [number, number] {
+  return [tile.low, tile.high];
+}
+
+function sumTilePips(hand: Tile[]): number {
+  return hand.reduce((sum, tile) => sum + tile.low + tile.high, 0);
+}
+
 function findMoveForSelection(moves: Move[], tile: Tile, position: Move['position']): Move | null {
   return (
     moves.find(
@@ -109,6 +119,12 @@ export default function BotMatchScreen({
   const [dailyLeaderboard, setDailyLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
   const [dailyLeaderboardError, setDailyLeaderboardError] = useState<string | null>(null);
+  const [moveLog, setMoveLog] = useState<MoveEntry[]>([]);
+  const [handTileSize, setHandTileSize] = useState(56);
+  const [handCompactStacked, setHandCompactStacked] = useState(false);
+  const moveCounterRef = useRef(1);
+  const [analyzerOpen, setAnalyzerOpen] = useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
   const dailyResultSyncKeyRef = useRef('');
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
@@ -173,6 +189,18 @@ export default function BotMatchScreen({
     toastTimerRef.current = setTimeout(() => setToast(''), ms);
   };
 
+  const appendMove = (entry: Omit<MoveEntry, 'moveNumber'>) => {
+    const moveNumber = moveCounterRef.current++;
+    setMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
+  };
+
+  const openAnalyzer = () => {
+    const analysis = analyzeMoveLog(moveLog);
+    setCurrentAnalysis(analysis);
+    saveGameAnalysis('bot', analysis);
+    setAnalyzerOpen(true);
+  };
+
   const copyAsDailyPuzzleJson = async () => {
     if (!match.board) {
       pushToast('Open the hand first to capture a puzzle state');
@@ -206,6 +234,10 @@ export default function BotMatchScreen({
     setDailyLeaderboard([]);
     setDailyLeaderboardError(null);
     setDailyLeaderboardLoading(false);
+    setMoveLog([]);
+    moveCounterRef.current = 1;
+    setCurrentAnalysis(null);
+    setAnalyzerOpen(false);
     dailyResultSyncKeyRef.current = '';
     setMatch(createBotMatch(60, dealSize));
   };
@@ -235,9 +267,26 @@ export default function BotMatchScreen({
     if (match.currentPlayer !== 'you' || !selectedTile || match.handOver || match.gameOver) return;
     const move = findMoveForSelection(userPlayMoves, selectedTile, position);
     if (!move) return;
+    const boardEndsRaw = getDisplayOpenEnds(match);
+    const boardEnds: [number, number] = [boardEndsRaw[0] ?? -1, boardEndsRaw[1] ?? -1];
+    const handBefore = match.players.you.hand.map(toTileTuple);
+    const validMoves = userPlayMoves
+      .filter((m) => m.tile)
+      .map((m) => toTileTuple(m.tile as Tile));
+    const beforePips = sumTilePips(match.players.you.hand);
     const result = applyPlayMove(match, 'you', move);
+    const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
     setSelectedTile(null);
+    appendMove({
+      player: 'you',
+      action: 'place',
+      tile: toTileTuple(selectedTile),
+      boardEnds,
+      handBefore,
+      validMoves,
+      pipDelta: beforePips - afterPips,
+    });
     applyAndNotify(result);
   };
 
@@ -248,11 +297,33 @@ export default function BotMatchScreen({
       let working = match;
       let result: BotActionResult | null = null;
       let chosen: BotChoice | null = null;
+      const beforeEndsRaw = getDisplayOpenEnds(match);
+      const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
 
       const botPlayable = asPlayMoves(getLegalMoves(working, 'bot'));
       if (botPlayable.length === 0) {
         const drawPass = drawUntilPlayableOrEmpty(working, 'bot');
         working = drawPass.state;
+        if (drawPass.drew) {
+          appendMove({
+            player: 'opponent',
+            action: 'draw',
+            boardEnds,
+            handBefore: [],
+            validMoves: [],
+            pipDelta: 0,
+          });
+        }
+        if (drawPass.passed) {
+          appendMove({
+            player: 'opponent',
+            action: 'pass',
+            boardEnds,
+            handBefore: [],
+            validMoves: [],
+            pipDelta: 0,
+          });
+        }
         const afterDraw = asPlayMoves(getLegalMoves(working, 'bot'));
         if (afterDraw.length === 0) {
           result = drawPass;
@@ -268,6 +339,17 @@ export default function BotMatchScreen({
       if (chosen) setLastBotChoice(chosen);
       if (result) {
         setSelectedTile(null);
+        if (chosen?.move?.tile) {
+          appendMove({
+            player: 'opponent',
+            action: 'place',
+            tile: toTileTuple(chosen.move.tile),
+            boardEnds,
+            handBefore: [],
+            validMoves: [],
+            pipDelta: 0,
+          });
+        }
         applyAndNotify(result);
       }
     }, 760);
@@ -289,8 +371,31 @@ export default function BotMatchScreen({
   useEffect(() => {
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
     if (userPlayMoves.length > 0) return;
+    const beforeEndsRaw = getDisplayOpenEnds(match);
+    const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
+    const handBefore = match.players.you.hand.map(toTileTuple);
     const result = drawUntilPlayableOrEmpty(match, 'you');
     setSelectedTile(null);
+    if (result.drew) {
+      appendMove({
+        player: 'you',
+        action: 'draw',
+        boardEnds,
+        handBefore,
+        validMoves: [],
+        pipDelta: 0,
+      });
+    }
+    if (result.passed) {
+      appendMove({
+        player: 'you',
+        action: 'pass',
+        boardEnds,
+        handBefore,
+        validMoves: [],
+        pipDelta: 0,
+      });
+    }
     applyAndNotify(result);
   }, [match, userPlayMoves.length]);
 
@@ -343,10 +448,26 @@ export default function BotMatchScreen({
     username,
   ]);
 
+  useEffect(() => {
+    const updateHandTileSize = () => {
+      const tileCount = Math.max(1, match.players.you.hand.length);
+      const MAX_TRAY_WIDTH = window.innerWidth - 32;
+      const BASE_TILE_WIDTH = 56;
+      const MIN_TILE_WIDTH = 32;
+      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / tileCount);
+      const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
+      const useVertical = tileWidth <= MIN_TILE_WIDTH || tileCount > 14;
+      setHandTileSize(tileWidth);
+      setHandCompactStacked(useVertical);
+    };
+
+    updateHandTileSize();
+    window.addEventListener('resize', updateHandTileSize);
+    return () => window.removeEventListener('resize', updateHandTileSize);
+  }, [match.players.you.hand.length]);
+
   const handActive = !match.handOver && !match.gameOver;
   const botTurn = match.currentPlayer === 'bot' && handActive;
-  const handTileSize = match.dealSize === 14 ? 84 : 92;
-  const handScrollable = match.dealSize === 14 || match.players.you.hand.length > 7;
   const turnLabel = match.handOver
     ? match.gameOver
       ? match.winnerId === 'you'
@@ -396,6 +517,11 @@ export default function BotMatchScreen({
                   />
                 ))}
               </div>
+              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
+                <button className="mode-inline-btn" onClick={openAnalyzer}>
+                  Analyze Game
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -426,6 +552,11 @@ export default function BotMatchScreen({
           onSecondary={onBack}
           onClose={onBack}
         >
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <button className="mode-inline-btn" onClick={openAnalyzer}>
+              Analyze Game
+            </button>
+          </div>
           {isDailyPuzzleRun && (
             <div style={{ margin: '2px 0 4px', textAlign: 'left' }}>
               <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Today&apos;s Top Scores</h3>
@@ -538,6 +669,10 @@ export default function BotMatchScreen({
                   setDailyLeaderboard([]);
                   setDailyLeaderboardError(null);
                   setDailyLeaderboardLoading(false);
+                  setMoveLog([]);
+                  moveCounterRef.current = 1;
+                  setCurrentAnalysis(null);
+                  setAnalyzerOpen(false);
                   dailyResultSyncKeyRef.current = '';
                   setMatch(createBotMatch(60, nextDeal));
                 }}
@@ -595,6 +730,27 @@ export default function BotMatchScreen({
 
       <div className="wl-stage-shell">
         <div className="board-area wl-board-area" data-ui="board">
+          {!match.gameOver && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                zIndex: 8,
+                borderRadius: 999,
+                border: '1px solid rgba(236,252,245,0.24)',
+                background: 'rgba(10,16,28,0.78)',
+                color: 'rgba(232,245,240,0.95)',
+                padding: '5px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                pointerEvents: 'none',
+              }}
+            >
+              Boneyard: {match.boneyard.length > 0 ? `${match.boneyard.length} left` : 'Empty'}
+            </div>
+          )}
           <Board
             board={match.board}
             legalMoves={userPlayMoves}
@@ -608,7 +764,7 @@ export default function BotMatchScreen({
       <div className="hand-area wl-hand-area" data-ui="tray">
         <div className="tray-rail">
           <div className="tray-center">
-            <div className={`hand-container ${handScrollable ? 'is-scrollable' : ''}`}>
+            <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
               {match.players.you.hand.map((tile, idx) => {
                 const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
                 const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
@@ -617,6 +773,7 @@ export default function BotMatchScreen({
                     key={`bot-hand-${idx}-${tile.low}-${tile.high}`}
                     tile={tile}
                     size={handTileSize}
+                    rotation={handCompactStacked ? 90 : 0}
                     selected={selected}
                     highlight={playable}
                     disabled={!handActive || botTurn}
@@ -632,6 +789,13 @@ export default function BotMatchScreen({
           </div>
         </div>
       </div>
+
+      <AnalyzerModal
+        open={analyzerOpen}
+        onClose={() => setAnalyzerOpen(false)}
+        analysis={currentAnalysis}
+        title="Analyze Game"
+      />
 
       {showDebug && (
         <aside className="bot-debug-panel">

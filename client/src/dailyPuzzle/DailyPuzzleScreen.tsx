@@ -88,6 +88,8 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
   const [dailyLeaderboardOpen, setDailyLeaderboardOpen] = useState(false);
   const [leaderboard, setLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [handTileSize, setHandTileSize] = useState(56);
+  const [handCompactStacked, setHandCompactStacked] = useState(false);
   const startTimeRef = useRef<number>(0);
   const submittedRef = useRef(false);
 
@@ -183,6 +185,25 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     if (!runtimeState || status !== 'IN_PROGRESS') return [] as Move[];
     return getLegalMoves(runtimeState, 'you').filter((move) => move.type === 'play');
   }, [runtimeState, status]);
+
+  useEffect(() => {
+    if (!runtimeState) return;
+    const updateHandTileSize = () => {
+      const tileCount = Math.max(1, runtimeState.players.you.hand.length);
+      const MAX_TRAY_WIDTH = window.innerWidth - 32;
+      const BASE_TILE_WIDTH = 56;
+      const MIN_TILE_WIDTH = 32;
+      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / tileCount);
+      const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
+      const useVertical = tileWidth <= MIN_TILE_WIDTH || tileCount > 14;
+      setHandTileSize(tileWidth);
+      setHandCompactStacked(useVertical);
+    };
+
+    updateHandTileSize();
+    window.addEventListener('resize', updateHandTileSize);
+    return () => window.removeEventListener('resize', updateHandTileSize);
+  }, [runtimeState?.players.you.hand.length]);
 
   const resetAttempt = () => {
     if (!puzzle) return;
@@ -555,6 +576,27 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
 
       <div className="wl-stage-shell">
         <div className="board-area wl-board-area" data-ui="board">
+          {status === 'IN_PROGRESS' && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                zIndex: 8,
+                borderRadius: 999,
+                border: '1px solid rgba(236,252,245,0.24)',
+                background: 'rgba(10,16,28,0.78)',
+                color: 'rgba(232,245,240,0.95)',
+                padding: '5px 10px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                pointerEvents: 'none',
+              }}
+            >
+              Boneyard: {runtimeState.boneyard.length > 0 ? `${runtimeState.boneyard.length} left` : 'Empty'}
+            </div>
+          )}
           <Board
             board={runtimeState.board}
             legalMoves={legalMoves}
@@ -581,7 +623,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
       <div className="hand-area wl-hand-area" data-ui="tray">
         <div className="tray-rail">
           <div className="tray-center">
-            <div className="hand-container">
+            <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
               {runtimeState.players.you.hand.map((tile, idx) => {
                 const playable = legalMoves.some(
                   (candidate) => candidate.tile && tileEquals(candidate.tile, tile),
@@ -592,7 +634,8 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
                   <DominoTile
                     key={`daily-curated-${idx}-${tile.low}-${tile.high}`}
                     tile={tile}
-                    size={92}
+                    size={handTileSize}
+                    rotation={handCompactStacked ? 90 : 0}
                     selected={isSelected}
                     highlight={playable && status === 'IN_PROGRESS'}
                     disabled={status !== 'IN_PROGRESS' || !playable}

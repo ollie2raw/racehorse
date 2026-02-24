@@ -1,3 +1,5 @@
+import tileTapUrl from '../assets/sounds/tile-tap.wav';
+
 /**
  * sound.ts — Racehorse Dominoes audio synthesis
  *
@@ -23,6 +25,7 @@
 // ─── Singleton AudioContext ────────────────────────────────────────────────
 
 let ctx: AudioContext | null = null;
+let tileTapAudio: HTMLAudioElement | null = null;
 
 function getCtx(): AudioContext {
   if (!ctx) {
@@ -32,6 +35,15 @@ function getCtx(): AudioContext {
     ctx.resume();
   }
   return ctx;
+}
+
+function getTileTapAudio(): HTMLAudioElement | null {
+  if (typeof Audio === 'undefined') return null;
+  if (!tileTapAudio) {
+    tileTapAudio = new Audio(tileTapUrl);
+    tileTapAudio.preload = 'auto';
+  }
+  return tileTapAudio;
 }
 
 // ─── Randomisation helper ──────────────────────────────────────────────────
@@ -172,6 +184,18 @@ export type TileSoundType = 'standard' | 'slam' | 'deal';
  */
 export function playTileSound(type: TileSoundType, isMuted: boolean): void {
   if (isMuted) return;
+
+  const sample = getTileTapAudio();
+  if (sample) {
+    try {
+      const instance = sample.cloneNode() as HTMLAudioElement;
+      instance.volume = type === 'slam' ? 0.78 : type === 'deal' ? 0.42 : 0.64;
+      void instance.play();
+      return;
+    } catch {
+      // Fall back to synth if sample playback fails.
+    }
+  }
 
   let ac: AudioContext;
   try {

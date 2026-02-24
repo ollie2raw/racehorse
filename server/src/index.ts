@@ -22,6 +22,7 @@ import {
   nextHand,
   readyForNextHand,
   getRoom,
+  deleteRoom,
   getRoomLegalMoves,
   getRoomCanDraw,
 } from './rooms';
@@ -45,6 +46,7 @@ type AckFn = (payload: any) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
 const RECONNECT_GRACE_MS = 90_000;
+const ROOM_CLEANUP_GRACE_MS = 60_000;
 type ReconnectSeat = {
   oldSocketId: string;
   username: string;
@@ -53,6 +55,7 @@ type ReconnectSeat = {
 };
 const reconnectSeatsByCode = new Map<string, ReconnectSeat[]>();
 const socketsByUserId = new Map<string, Set<string>>();
+const roomCleanupTimersByCode = new Map<string, ReturnType<typeof setTimeout>>();
 
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -85,6 +88,71 @@ function reserveReconnectSeat(roomCode: string, seat: Omit<ReconnectSeat, 'expir
   const seats = pruneReconnectSeats(roomCode).filter((s) => s.oldSocketId !== seat.oldSocketId);
   seats.push({ ...seat, expiresAt: Date.now() + RECONNECT_GRACE_MS });
   reconnectSeatsByCode.set(roomCode, seats);
+}
+
+function clearRoomMetadata(roomCode: string) {
+  roomPlayersByCode.delete(roomCode);
+  reconnectSeatsByCode.delete(roomCode);
+}
+
+function cancelRoomCleanup(roomCode: string) {
+  const timer = roomCleanupTimersByCode.get(roomCode);
+  if (timer) {
+    clearTimeout(timer);
+    roomCleanupTimersByCode.delete(roomCode);
+  }
+}
+
+function scheduleRoomCleanup(roomCode: string) {
+  if (!roomCode || roomCleanupTimersByCode.has(roomCode)) return;
+  const timer = setTimeout(() => {
+    roomCleanupTimersByCode.delete(roomCode);
+    let room;
+    try {
+      room = getRoom(roomCode);
+    } catch {
+      clearRoomMetadata(roomCode);
+      return;
+    }
+    const activePlayers = room.players.filter((pid) => io.sockets.sockets.has(pid));
+    if (activePlayers.length > 0) return;
+    deleteRoom(roomCode);
+    clearRoomMetadata(roomCode);
+  }, ROOM_CLEANUP_GRACE_MS);
+  roomCleanupTimersByCode.set(roomCode, timer);
+}
+
+function evaluateRoomLifecycle(roomCode: string | undefined) {
+  if (!roomCode) return;
+  let room;
+  try {
+    room = getRoom(roomCode);
+  } catch {
+    clearRoomMetadata(roomCode);
+    cancelRoomCleanup(roomCode);
+    return;
+  }
+  const activePlayers = room.players.filter((pid) => io.sockets.sockets.has(pid));
+  if (activePlayers.length === 0 || room.state?.gameOver) {
+    scheduleRoomCleanup(roomCode);
+    return;
+  }
+  cancelRoomCleanup(roomCode);
+}
+
+function joinSocketToRoom(socketId: string, roomCode: string, preservePrefixes: string[] = []) {
+  const target = io.sockets.sockets.get(socketId);
+  if (!target) return;
+  const currentRooms = [...target.rooms].filter(
+    (joined) =>
+      joined !== target.id && !preservePrefixes.some((prefix) => joined.startsWith(prefix)),
+  );
+  currentRooms.forEach((joined) => {
+    target.leave(joined);
+    evaluateRoomLifecycle(joined);
+  });
+  target.join(roomCode);
+  target.data.roomId = roomCode;
 }
 
 function identityMatchesReconnectSeat(
@@ -256,10 +324,12 @@ function broadcastStateUpdate(roomCode: string) {
       const branchMoves = legalMoves.filter(
         (m: any) => m.type === 'play' && m.position?.startsWith('branch-'),
       );
-      console.log(
-        `[DEBUG broadcastStateUpdate] socket=${socketId}, legalMoves=${legalMoves.length}, branchMoves=${branchMoves.length}`,
-        branchMoves.length > 0 ? branchMoves.map((m: any) => m.position) : '',
-      );
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(
+          `[DEBUG broadcastStateUpdate] socket=${socketId}, legalMoves=${legalMoves.length}, branchMoves=${branchMoves.length}`,
+          branchMoves.length > 0 ? branchMoves.map((m: any) => m.position) : '',
+        );
+      }
 
       const handCounts = Object.fromEntries(
         room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
@@ -340,10 +410,23 @@ function broadcastStateUpdate(roomCode: string) {
     };
     io.to(room.code).emit('state:spectate', { state: stateForSpectators });
   }
+
+  if (room.state.gameOver) {
+    evaluateRoomLifecycle(room.code);
+  }
 }
 
 io.on('connection', (socket: Socket) => {
 /* ROOM_REACTIONS_CHAT_EMOTE */
+  const leaveExistingSocketRooms = () => {
+    const previousRooms = [...socket.rooms].filter((roomId) => roomId !== socket.id);
+    previousRooms.forEach((roomId) => {
+      socket.leave(roomId);
+      evaluateRoomLifecycle(roomId);
+    });
+    socket.data.roomId = undefined;
+  };
+
   const removeSocketPresence = () => {
     const userId = normalizeUserId(socket.data?.userId);
     if (!userId) return;
@@ -556,8 +639,8 @@ io.on('connection', (socket: Socket) => {
 
     // Join the second player in the engine + socket room
     joinRoom(room.code, m.b);
-    io.sockets.sockets.get(m.a)?.join(room.code);
-    io.sockets.sockets.get(m.b)?.join(room.code);
+    joinSocketToRoom(m.a, room.code, ['tourn:']);
+    joinSocketToRoom(m.b, room.code, ['tourn:']);
 
     // Room roster for UI
     const pa = t.players.find((p) => p.socketId === m.a);
@@ -746,6 +829,7 @@ io.on('connection', (socket: Socket) => {
     console.log(`[room:create] socket=${socket.id}`);
     try {
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
+      leaveExistingSocketRooms();
       const room = createRoom(socket.id, roomConfig as Record<string, unknown>);
       socket.join(room.code);
       socket.data.roomId = room.code;
@@ -763,7 +847,7 @@ io.on('connection', (socket: Socket) => {
   });
 
   
-  socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
+socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     const cb = (
       typeof arg3 === 'function' ? arg3 : typeof arg2 === 'function' ? arg2 : undefined
     ) as AckFn | undefined;
@@ -775,6 +859,7 @@ io.on('connection', (socket: Socket) => {
     try {
       if (!code) return cb?.({ ok: false, error: 'missing_code' });
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
+      leaveExistingSocketRooms();
 
       let room;
       try {
@@ -854,6 +939,7 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     console.log(`[room:join] socket=${socket.id}, code=${roomCode}`);
     try {
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
+      leaveExistingSocketRooms();
       let room;
       try {
         room = joinRoom(roomCode, socket.id);
@@ -935,11 +1021,11 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
         `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,
       );
       broadcastStateUpdate(room.code);
-      cb({ ok: true });
+      if (typeof cb === 'function') cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[game:start] ERROR: ${message}`);
-      cb({ ok: false, error: message });
+      if (typeof cb === 'function') cb({ ok: false, error: message });
     }
   });
 
@@ -949,16 +1035,17 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     try {
       const existingRoom = getRoom(roomCode);
       if (!existingRoom.players.includes(socket.id)) {
-        return cb({ ok: false, error: 'Spectators cannot act.' });
+        if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.' });
+        return;
       }
       const room = act(roomCode, socket.id, action);
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
-      cb({ ok: true });
+      if (typeof cb === 'function') cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[game:action] ERROR: ${message}`);
-      cb({ ok: false, error: message });
+      if (typeof cb === 'function') cb({ ok: false, error: message });
     }
   });
 
@@ -970,11 +1057,11 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
       console.log(`[hand:next] new hand started, handNumber=${room.state?.handNumber}`);
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
-      cb({ ok: true });
+      if (typeof cb === 'function') cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[hand:next] ERROR: ${message}`);
-      cb({ ok: false, error: message });
+      if (typeof cb === 'function') cb({ ok: false, error: message });
     }
   });
 
@@ -1058,6 +1145,7 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
       }
     }
     clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
+    evaluateRoomLifecycle(roomCode);
     console.log('Client disconnected:', socket.id);
   });
 });

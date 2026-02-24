@@ -64,6 +64,8 @@
   font-size: 0.6rem;
   letter-spacing: 0.08em;
   white-space: nowrap;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, background 180ms ease;
+  touch-action: manipulation;
 }
 
 .bot-match-screen .hand-container.is-scrollable {
@@ -99,6 +101,7 @@
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
 .bot-difficulty select {
@@ -108,6 +111,11 @@
   font-size: 0.64rem;
   letter-spacing: 0.05em;
   max-width: 136px;
+  transition: color 180ms ease;
+}
+
+.bot-match-screen button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .bot-debug-panel {

@@ -72,6 +72,10 @@ export function getRoom(code: string): Room {
   return room;
 }
 
+export function deleteRoom(code: string): boolean {
+  return rooms.delete(code);
+}
+
 export function startGame(code: string): Room {
   const room = getRoom(code);
 

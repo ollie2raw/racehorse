@@ -10,11 +10,13 @@ import BotMatchScreen from './bot/BotMatchScreen';
 import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
 import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
 import GameOverModal from './components/GameOverModal';
+import AnalyzerModal from './analyzer/AnalyzerModal';
 import AuthModal from './auth/AuthModal';
 import UsernameModal from './auth/UsernameModal';
 import { isTemporaryUsername, useAuth } from './auth/useAuth';
 import StatsScreen from './stats/StatsScreen';
 import FriendsScreen from './friends/FriendsScreen';
+import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis, type MoveEntry } from './analyzer/moveAnalyzer';
 import { recordMatchResult } from './stats/statsApi';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 
@@ -53,6 +55,15 @@ function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
 }
 
 const LAST_ROOM_STORAGE_KEY = 'racehorse_last_room_code';
+
+function toTileTuple(tile: Tile): [number, number] {
+  return [tile.low, tile.high];
+}
+
+function getBoardEnds(board: GameState['board']): [number, number] {
+  if (!board) return [-1, -1];
+  return [board.leftEnd, board.rightEnd];
+}
 
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
   return (
@@ -100,8 +111,7 @@ interface HandViewProps {
   isMyTurn: boolean;
   legalMoves: Move[];
   tileSize: number;
-  handScale: number;
-  handScrollable: boolean;
+  compactStacked: boolean;
   drawPulseIndex: number | null;
 }
 
@@ -112,12 +122,9 @@ function HandView({
   isMyTurn,
   legalMoves,
   tileSize,
-  handScale,
-  handScrollable,
+  compactStacked,
   drawPulseIndex,
 }: HandViewProps) {
-  const handContainerRef = useRef<HTMLDivElement>(null);
-
   const playableTiles = useMemo(() => {
     return legalMoves.filter((m) => m.type === 'play' && m.tile).map((m) => m.tile!);
   }, [legalMoves]);
@@ -126,27 +133,15 @@ function HandView({
     return playableTiles.some((t) => tileEquals(t, tile));
   };
 
-  useEffect(() => {
-    const el = handContainerRef.current;
-    if (!el) return;
-
-    // Keep hand visually centered and avoid stale left offsets from previous scroll states.
-    if (!handScrollable) {
-      el.scrollLeft = 0;
-      return;
-    }
-
-    const overflow = el.scrollWidth - el.clientWidth;
-    el.scrollLeft = overflow > 0 ? Math.round(overflow / 2) : 0;
-  }, [handScrollable, hand.length, tileSize, handScale]);
-
   return (
     <div
-      ref={handContainerRef}
-      className="hand-container is-scrollable"
+      className={`hand-container ${compactStacked ? 'is-stacked' : ''}`}
       style={{
-        ['--hand-scale' as any]: handScale,
-        ['--hand-gap' as any]: `${Math.max(8, Math.round(10 * handScale))}px`,
+        display: 'flex',
+        flexWrap: compactStacked ? 'wrap' : 'nowrap',
+        justifyContent: 'center',
+        overflow: 'visible',
+        width: '100%',
       }}
     >
       {hand.map((tile, idx) => {
@@ -181,6 +176,8 @@ interface GameOverOverlayProps {
   secondaryLabel: string;
   waitingText?: string;
   players: RoomPlayer[];
+  extraActionLabel?: string;
+  onExtraAction?: () => void;
 }
 
 interface HandEndedPayload {
@@ -203,6 +200,8 @@ function GameOverOverlay({
   secondaryLabel,
   waitingText,
   players,
+  extraActionLabel,
+  onExtraAction,
 }: GameOverOverlayProps) {
   const winner = state.winnerId;
   const iWon = winner === myId;
@@ -238,6 +237,13 @@ function GameOverOverlay({
     >
       {waitingText && (
         <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', fontSize: '0.92rem' }}>{waitingText}</p>
+      )}
+      {extraActionLabel && onExtraAction && (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <button className="mode-inline-btn" onClick={onExtraAction}>
+            {extraActionLabel}
+          </button>
+        </div>
       )}
     </GameOverModal>
   );
@@ -424,6 +430,14 @@ export default function App() {
   const [rematchRequested, setRematchRequested] = useState(false);
   const [rematchReadyIds, setRematchReadyIds] = useState<string[]>([]);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
+  const [multiplayerMoveLog, setMultiplayerMoveLog] = useState<MoveEntry[]>([]);
+  const multiplayerMoveCounterRef = useRef(1);
+  const previousStateForAnalysisRef = useRef<GameState | null>(null);
+  const [analyzerOpen, setAnalyzerOpen] = useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
+  const [pendingUiAction, setPendingUiAction] = useState<
+    null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'
+  >(null);
   const {
     user: authUser,
     profile: authProfile,
@@ -464,8 +478,7 @@ export default function App() {
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
-  const [handScale, setHandScale] = useState(1);
-  const [handScrollable, setHandScrollable] = useState(false);
+  const [handCompactStacked, setHandCompactStacked] = useState(false);
   const autoTurnActionKeyRef = useRef<string>('');
   const handRevealShownRef = useRef<number | null>(null);
   const prevOppCountRef = useRef<number | null>(null);
@@ -592,6 +605,7 @@ export default function App() {
           userId: authUser?.id ?? null,
         },
         (resp: any) => {
+          setPendingUiAction((prev) => (prev === 'create' ? null : prev));
           if (!resp?.ok) {
             setError(resp?.error ?? 'Unable to create room.');
             resolvePendingCreate(null);
@@ -895,19 +909,6 @@ export default function App() {
 
 
   useEffect(() => {
-    if (!weeklyStatsOpen) return;
-
-    if (!socket || !socket.connected) {
-      connect();
-      window.setTimeout(() => loadWeeklyAwards(), 250);
-      return;
-    }
-
-    loadWeeklyAwards();
-  }, [weeklyStatsOpen, socket, connect, loadWeeklyAwards]);
-
-
-  useEffect(() => {
     if (appMode !== 'multiplayer' && appMode !== 'tournament') return;
     if (autoConnectAttemptedRef.current) return;
     if (!serverUrl) return;
@@ -951,6 +952,7 @@ export default function App() {
     setHandReveal(null);
     setRematchRequested(false);
     setRematchReadyIds([]);
+    setPendingUiAction(null);
     handRevealShownRef.current = null;
     setAppMode('home');
     autoConnectAttemptedRef.current = false;
@@ -997,13 +999,18 @@ export default function App() {
     setError('');
     setActionError('');
     if (!socket) return setError('Not connected to server.');
+    setPendingUiAction('create');
     emitCreateRoom(socket);
+    window.setTimeout(() => {
+      setPendingUiAction((prev) => (prev === 'create' ? null : prev));
+    }, 1500);
   }, [socket, emitCreateRoom]);
 
   const joinRoom = useCallback(() => {
     setError('');
     setActionError('');
     if (!socket) return setError('Not connected to server.');
+    setPendingUiAction('join');
     socket.emit(
       'room:join',
       roomCode.trim().toUpperCase(),
@@ -1012,6 +1019,7 @@ export default function App() {
         userId: authUser?.id ?? null,
       },
       (resp: any) => {
+        setPendingUiAction((prev) => (prev === 'join' ? null : prev));
         if (!resp.ok) return setError(resp.error);
         setError('');
         setActionError('');
@@ -1062,7 +1070,12 @@ export default function App() {
     setError('');
     setActionError('');
     if (!socket || !joinedRoom) return setError('Not in a room.');
+    setPendingUiAction('start');
+    setMultiplayerMoveLog([]);
+    multiplayerMoveCounterRef.current = 1;
+    previousStateForAnalysisRef.current = null;
     socket.emit('game:start', joinedRoom, (resp: any) => {
+      setPendingUiAction((prev) => (prev === 'start' ? null : prev));
       if (!resp.ok) return setError(resp.error);
     });
   }, [socket, joinedRoom]);
@@ -1077,27 +1090,82 @@ export default function App() {
     });
   }, [socket, joinedRoom, state?.gameOver, rematchRequested, showToast]);
 
+  const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber'>) => {
+    const moveNumber = multiplayerMoveCounterRef.current++;
+    setMultiplayerMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
+  }, []);
+
+  const openMultiplayerAnalyzer = useCallback(() => {
+    const analysis = analyzeMoveLog(multiplayerMoveLog);
+    setCurrentAnalysis(analysis);
+    saveGameAnalysis('multiplayer', analysis);
+    setAnalyzerOpen(true);
+  }, [multiplayerMoveLog]);
+
   // Game actions
   const draw = useCallback(() => {
     setActionError('');
     if (!socket || !joinedRoom) return;
+    setPendingUiAction('draw');
+    const boardEnds = getBoardEnds(state?.board ?? null);
+    const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
+    const validMoves = legalMoves
+      .filter((m) => m.type === 'play' && m.tile)
+      .map((m) => toTileTuple(m.tile as Tile));
     socket.emit('game:action', joinedRoom, { type: 'DRAW' }, (resp: any) => {
-      if (!resp.ok) setActionError(resp.error);
+      setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
+      if (!resp.ok) {
+        setActionError(resp.error);
+        return;
+      }
+      appendMultiplayerMove({
+        player: 'you',
+        action: 'draw',
+        boardEnds,
+        handBefore,
+        validMoves,
+        pipDelta: 0,
+      });
     });
-  }, [socket, joinedRoom]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove]);
 
   const pass = useCallback(() => {
     setActionError('');
     if (!socket || !joinedRoom) return;
+    setPendingUiAction('pass');
+    const boardEnds = getBoardEnds(state?.board ?? null);
+    const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
+    const validMoves = legalMoves
+      .filter((m) => m.type === 'play' && m.tile)
+      .map((m) => toTileTuple(m.tile as Tile));
     socket.emit('game:action', joinedRoom, { type: 'PASS' }, (resp: any) => {
-      if (!resp.ok) setActionError(resp.error);
+      setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
+      if (!resp.ok) {
+        setActionError(resp.error);
+        return;
+      }
+      appendMultiplayerMove({
+        player: 'you',
+        action: 'pass',
+        boardEnds,
+        handBefore,
+        validMoves,
+        pipDelta: 0,
+      });
     });
-  }, [socket, joinedRoom]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove]);
 
   const play = useCallback(
     (position: PlacementPosition) => {
       setActionError('');
       if (!socket || !joinedRoom || !selectedTile) return;
+      setPendingUiAction('play');
+      const boardEnds = getBoardEnds(state?.board ?? null);
+      const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
+      const validMoves = legalMoves
+        .filter((m) => m.type === 'play' && m.tile)
+        .map((m) => toTileTuple(m.tile as Tile));
+      const playedTile = toTileTuple(selectedTile);
 
       socket.emit(
         'game:action',
@@ -1107,12 +1175,26 @@ export default function App() {
           move: { tile: selectedTile, position },
         },
         (resp: any) => {
-          if (!resp.ok) setActionError(resp.error);
+          setPendingUiAction((prev) => (prev === 'play' ? null : prev));
+          if (!resp.ok) {
+            setActionError(resp.error);
+            setSelectedTile(null);
+            return;
+          }
+          appendMultiplayerMove({
+            player: 'you',
+            action: 'place',
+            tile: playedTile,
+            boardEnds,
+            handBefore,
+            validMoves,
+            pipDelta: -(playedTile[0] + playedTile[1]),
+          });
           setSelectedTile(null);
         },
       );
     },
-    [socket, joinedRoom, selectedTile],
+    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove],
   );
 
   // Derived state
@@ -1166,48 +1248,27 @@ export default function App() {
   useEffect(() => {
     setRematchRequested(false);
     setRematchReadyIds([]);
+    setMultiplayerMoveLog([]);
+    multiplayerMoveCounterRef.current = 1;
+    previousStateForAnalysisRef.current = null;
   }, [joinedRoom]);
 
   useEffect(() => {
-    const centerEl = trayCenterRef.current;
-    if (!centerEl) return;
-
-    const getStableTileSize = () => {
-      const vw = window.innerWidth;
-      if (vw >= 1500) return 96;
-      if (vw >= 1280) return 92;
-      if (vw >= 1100) return 92;
-      if (vw >= 900) return 86;
-      if (vw >= 760) return 80;
-      return 72;
-    };
-
     const updateHandTileSize = () => {
-      const count = Math.max(1, myHand.length);
-      const availableWidth = Math.max(0, centerEl.clientWidth - 20);
-
-      // Keep tile size stable during gameplay; only viewport size can change it.
-      const nextSize = getStableTileSize();
-      const scaledGap = Math.max(7, Math.round(nextSize * 0.14));
-      const scaledTileWidth = nextSize + 9;
-      const neededScaledWidth = count * scaledTileWidth + (count - 1) * scaledGap;
-      const shouldScroll = neededScaledWidth > availableWidth + 1;
-      const nextScale = nextSize / 70;
-
-      setHandScale((prev) => (Math.abs(prev - nextScale) < 0.005 ? prev : nextScale));
-      setHandScrollable((prev) => (prev === shouldScroll ? prev : shouldScroll));
-      setHandTileSize((prev) => (prev === nextSize ? prev : nextSize));
+      const tileCount = Math.max(1, myHand.length);
+      const MAX_TRAY_WIDTH = window.innerWidth - 32;
+      const BASE_TILE_WIDTH = 56;
+      const MIN_TILE_WIDTH = 32;
+      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / tileCount);
+      const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
+      const useVertical = tileWidth <= MIN_TILE_WIDTH || tileCount > 14;
+      setHandTileSize(tileWidth);
+      setHandCompactStacked(useVertical);
     };
 
     updateHandTileSize();
-    const observer = new ResizeObserver(updateHandTileSize);
-    observer.observe(centerEl);
     window.addEventListener('resize', updateHandTileSize);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateHandTileSize);
-    };
+    return () => window.removeEventListener('resize', updateHandTileSize);
   }, [myHand.length]);
 
   useEffect(() => {
@@ -1277,6 +1338,34 @@ export default function App() {
       pass();
     }
   }, [state, isMyTurn, hasPlayMoves, canDraw, canPass, myHand.length, draw, pass]);
+
+  useEffect(() => {
+    if (!state) {
+      previousStateForAnalysisRef.current = null;
+      return;
+    }
+    const prev = previousStateForAnalysisRef.current;
+    previousStateForAnalysisRef.current = state;
+    if (!prev) return;
+    if (state.handNumber !== prev.handNumber) return;
+    const actorId = prev.playerIds[prev.currentPlayerIndex] ?? null;
+    if (!actorId || actorId === you) return;
+
+    const prevBoardCount = prev.board?.mainLine.length ?? 0;
+    const nextBoardCount = state.board?.mainLine.length ?? 0;
+    let action: MoveEntry['action'] = 'pass';
+    if (nextBoardCount > prevBoardCount) action = 'place';
+    else if ((state.boneyard?.length ?? 0) < (prev.boneyard?.length ?? 0)) action = 'draw';
+
+    appendMultiplayerMove({
+      player: 'opponent',
+      action,
+      boardEnds: getBoardEnds(prev.board),
+      handBefore: [],
+      validMoves: [],
+      pipDelta: 0,
+    });
+  }, [state, you, appendMultiplayerMove]);
 
   // Pulse the opp-tile card whenever the count changes
   useEffect(() => {
@@ -2138,8 +2227,12 @@ export default function App() {
               Create a new room or enter a code to join your friend instantly.
             </p>
             <div className="mode-actions">
-              <button className="mode-option mode-option-primary" onClick={createRoom}>
-                <span className="mode-option-title">Create New Room</span>
+              <button
+                className={`mode-option mode-option-primary ${pendingUiAction === 'create' ? 'is-loading' : ''}`}
+                onClick={createRoom}
+                disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
+              >
+                <span className="mode-option-title">{pendingUiAction === 'create' ? 'Creating…' : 'Create New Room'}</span>
                 <span className="mode-option-meta">Start a room and share the code</span>
               </button>
               <div className="mode-join-row">
@@ -2150,9 +2243,14 @@ export default function App() {
                   value={roomCode}
                   onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                   maxLength={6}
+                  disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
                 />
-                <button className="mode-inline-btn" onClick={joinRoom}>
-                  Join Room
+                <button
+                  className={`mode-inline-btn ${pendingUiAction === 'join' ? 'is-loading' : ''}`}
+                  onClick={joinRoom}
+                  disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
+                >
+                  {pendingUiAction === 'join' ? 'Joining…' : 'Join Room'}
                 </button>
               </div>
               <button className="mode-option mode-option-secondary" onClick={disconnect}>
@@ -2193,8 +2291,12 @@ export default function App() {
               {players.length < 2 && <div className="waiting">Waiting for another player...</div>}
             </div>
             {players.length === 2 && (
-              <button className="mode-option mode-option-primary" onClick={startGame}>
-                <span className="mode-option-title">Start Game</span>
+              <button
+                className={`mode-option mode-option-primary ${pendingUiAction === 'start' ? 'is-loading' : ''}`}
+                onClick={startGame}
+                disabled={pendingUiAction === 'start'}
+              >
+                <span className="mode-option-title">{pendingUiAction === 'start' ? 'Starting…' : 'Start Game'}</span>
                 <span className="mode-option-meta">Begin the live multiplayer hand</span>
               </button>
             )}
@@ -2233,6 +2335,8 @@ export default function App() {
               secondaryLabel={canUseRematch ? 'Home' : 'Back'}
               waitingText={canUseRematch ? rematchWaitingText : undefined}
               players={players}
+              extraActionLabel="Analyze Game"
+              onExtraAction={openMultiplayerAnalyzer}
             />
           )}
           {handReveal && !state.gameOver && (
@@ -2262,6 +2366,11 @@ export default function App() {
                         className="hand-over-tile"
                       />
                     ))}
+                  </div>
+                  <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
+                    <button className="mode-inline-btn" onClick={openMultiplayerAnalyzer}>
+                      Analyze Game
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2304,6 +2413,27 @@ export default function App() {
 
           <div className="wl-stage-shell">
             <div className="board-area wl-board-area" data-ui="board">
+              {!state.gameOver && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 10,
+                    right: 10,
+                    zIndex: 8,
+                    borderRadius: 999,
+                    border: '1px solid rgba(236,252,245,0.24)',
+                    background: 'rgba(10,16,28,0.78)',
+                    color: 'rgba(232,245,240,0.95)',
+                    padding: '5px 10px',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  Boneyard: {state.boneyard.length > 0 ? `${state.boneyard.length} left` : 'Empty'}
+                </div>
+              )}
               <Board
                 board={state.board}
                 legalMoves={legalMoves}
@@ -2324,16 +2454,19 @@ export default function App() {
                   isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
                   legalMoves={legalMoves}
                   tileSize={handTileSize}
-                  handScale={handScale}
-                  handScrollable={handScrollable}
+                  compactStacked={handCompactStacked}
                   drawPulseIndex={drawPulseIndex}
                 />
               </div>
 
               <div className="tray-right" data-ui="actions">
                 {isMyTurn && !state.handOver && !state.gameOver && hasPlayMoves && canDraw && (
-                  <button className="btn text optional-draw-btn compact" onClick={draw}>
-                    Draw ({state.boneyard.length})
+                  <button
+                    className={`btn text optional-draw-btn compact ${pendingUiAction === 'draw' ? 'is-loading' : ''}`}
+                    onClick={draw}
+                    disabled={pendingUiAction === 'draw'}
+                  >
+                    {pendingUiAction === 'draw' ? 'Drawing…' : `Draw (${state.boneyard.length})`}
                   </button>
                 )}
                 <div className="tray-controls">
@@ -2386,6 +2519,12 @@ export default function App() {
           </div>
         </div>
       )}
+      <AnalyzerModal
+        open={analyzerOpen}
+        onClose={() => setAnalyzerOpen(false)}
+        analysis={currentAnalysis}
+        title="Analyze Game"
+      />
     </div>
   );
 }
