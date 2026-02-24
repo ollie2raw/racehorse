@@ -289,7 +289,7 @@ export default function BotMatchScreen({
         },
         currentPlayer: 'bot',
       },
-      difficulty,
+      'hard',
     );
     setMovesUsed((prev) => prev + 1);
     setSelectedTile(null);

@@ -210,13 +210,17 @@ function resolveBlockedHand(state: GameState): GameState {
  */
 function resolveGoOut(state: GameState, goOutPlayerId: string): GameState {
   const cfg = state.config;
-
-  const bonus =
+  const bonusBreakdown =
     cfg.endHandBonus === 'sumOpponentPenalties'
       ? state.playerIds
           .filter((id) => id !== goOutPlayerId)
-          .reduce((sum, id) => sum + computeGoOutBonusPoints(state.players[id].hand, cfg), 0)
-      : 0;
+          .map((id) => {
+            const hand = state.players[id].hand;
+            const awarded = computeGoOutBonusPoints(hand, cfg);
+            return { awarded };
+          })
+      : [];
+  const bonus = bonusBreakdown.reduce((sum, item) => sum + item.awarded, 0);
 
   const updatedPlayers = { ...state.players };
   updatedPlayers[goOutPlayerId] = {

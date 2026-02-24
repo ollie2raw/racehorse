@@ -150,12 +150,12 @@ export function computePlayScore(board: BoardState, config: Config = DEFAULT_CON
 
 /**
  * Hand penalty for end-of-hand bonus calculation.
- * Sum of pips rounded UP to nearest scoringMultiple.
+ * Sum of pips converted to game points (nearest /5).
  */
 export function computeHandPenalty(hand: readonly Tile[], config: Config = DEFAULT_CONFIG): number {
+  void config;
   const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
-  const multiple = config.scoringMultiple;
-  return Math.ceil(total / multiple) * multiple;
+  return Math.round(total / 5);
 }
 
 /**
@@ -168,8 +168,7 @@ export function computeGoOutBonusPoints(
 ): number {
   void config;
   const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
-  const awarded = Math.round(total / 5) * 5;
-  console.log(`[scoring] Hand Total: ${total}, Awarded: ${awarded}`);
+  const awarded = Math.round(total / 5);
   return awarded;
 }
 

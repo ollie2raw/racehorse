@@ -81,10 +81,10 @@ export function snapshotBoardState(board: BoardState | null): BoardSnapshotEntry
 }
 
 function immediatePoints(ends: [number, number]): number {
-  return ends[0] + ends[1];
+  return (ends[0] + ends[1]) / 5;
 }
 
-function nextEndsForTile(tile: TileTuple, boardEnds: [number, number]): Array<[number, number]> {
+export function nextEndsForTile(tile: TileTuple, boardEnds: [number, number]): Array<[number, number]> {
   const [left, right] = boardEnds;
   if (left < 0 || right < 0) return [[tile[0], tile[1]]];
 
@@ -96,7 +96,7 @@ function nextEndsForTile(tile: TileTuple, boardEnds: [number, number]): Array<[n
   return out;
 }
 
-function setupScore(remaining: TileTuple[], ends: [number, number]): number {
+export function setupScore(remaining: TileTuple[], ends: [number, number]): number {
   let score = 0;
   for (const tile of remaining) {
     const matchesLeft = tile[0] === ends[0] || tile[1] === ends[0];
@@ -107,7 +107,7 @@ function setupScore(remaining: TileTuple[], ends: [number, number]): number {
   return score;
 }
 
-function remainingHandAfterPlay(handBefore: TileTuple[], played: TileTuple): TileTuple[] {
+export function remainingHandAfterPlay(handBefore: TileTuple[], played: TileTuple): TileTuple[] {
   const playedKey = keyOf(played);
   let removed = false;
   return handBefore.filter((tile) => {
@@ -119,7 +119,11 @@ function remainingHandAfterPlay(handBefore: TileTuple[], played: TileTuple): Til
   });
 }
 
-function valueForTile(tile: TileTuple, boardEnds: [number, number], handBefore: TileTuple[]): number {
+export function valueForTile(
+  tile: TileTuple,
+  boardEnds: [number, number],
+  handBefore: TileTuple[],
+): number {
   const possibilities = nextEndsForTile(tile, boardEnds);
   if (possibilities.length === 0) return Number.NEGATIVE_INFINITY;
   const remaining = remainingHandAfterPlay(handBefore, tile);

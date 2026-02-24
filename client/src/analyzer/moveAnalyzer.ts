@@ -1,19 +1,19 @@
-import type { MoveEntry } from './moveLogger';
-import { sameTileTuple } from './moveLogger';
+import type { MoveEntry, TileTuple } from './moveLogger';
+import { sameTileTuple, valueForTile } from './moveLogger';
 
 export type MoveRating = 'Brilliant' | 'Great' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder';
 
 export type AnalyzedMove = {
   moveNumber: number;
   action: MoveEntry['action'];
-  playedTile?: [number, number];
-  bestTile?: [number, number];
+  playedTile?: TileTuple;
+  bestTile?: TileTuple;
   bestPosition?: string;
   score: number;
   rating: MoveRating;
   explanation: string;
-  handBefore: [number, number][];
-  validMoves: [number, number][];
+  handBefore: TileTuple[];
+  validMoves: TileTuple[];
   boardEnds: [number, number];
   boardState: MoveEntry['boardState'];
   boardRenderState: MoveEntry['boardRenderState'];
@@ -38,19 +38,19 @@ type StoredAnalysisItem = {
 
 const ANALYSIS_HISTORY_KEY = 'racehorse_move_analysis_history_v1';
 
-function tileKey(tile: [number, number]): string {
+function tileKey(tile: TileTuple): string {
   const a = Math.min(tile[0], tile[1]);
   const b = Math.max(tile[0], tile[1]);
   return `${a}|${b}`;
 }
 
-function tileLabel(tile: [number, number]): string {
+function tileLabel(tile: TileTuple): string {
   return `${tile[0]}|${tile[1]}`;
 }
 
-function uniqueTiles(tiles: [number, number][]): [number, number][] {
+function uniqueTiles(tiles: TileTuple[]): TileTuple[] {
   const seen = new Set<string>();
-  const out: [number, number][] = [];
+  const out: TileTuple[] = [];
   for (const tile of tiles) {
     const key = tileKey(tile);
     if (seen.has(key)) continue;
@@ -58,79 +58,6 @@ function uniqueTiles(tiles: [number, number][]): [number, number][] {
     out.push(tile);
   }
   return out;
-}
-
-function remainingHandAfterPlay(
-  handBefore: [number, number][],
-  played: [number, number],
-): [number, number][] {
-  const key = tileKey(played);
-  let removed = false;
-  return handBefore.filter((tile) => {
-    if (!removed && tileKey(tile) === key) {
-      removed = true;
-      return false;
-    }
-    return true;
-  });
-}
-
-function nextEndsForTile(
-  tile: [number, number],
-  boardEnds: [number, number],
-): Array<[number, number]> {
-  const [left, right] = boardEnds;
-  if (left < 0 || right < 0) return [[tile[0], tile[1]]];
-
-  const out: Array<[number, number]> = [];
-  if (tile[0] === left) out.push([tile[1], right]);
-  if (tile[1] === left) out.push([tile[0], right]);
-  if (tile[0] === right) out.push([left, tile[1]]);
-  if (tile[1] === right) out.push([left, tile[0]]);
-  return out;
-}
-
-function setupScore(remaining: [number, number][], ends: [number, number]): number {
-  let score = 0;
-  for (const tile of remaining) {
-    const matchesLeft = tile[0] === ends[0] || tile[1] === ends[0];
-    const matchesRight = tile[0] === ends[1] || tile[1] === ends[1];
-    if (matchesLeft || matchesRight) score += 1;
-    if (matchesLeft && matchesRight) score += 1;
-  }
-  return score;
-}
-
-function immediatePoints(ends: [number, number]): number {
-  const sum = ends[0] + ends[1];
-  return sum;
-}
-
-function valueForTile(
-  tile: [number, number],
-  boardEnds: [number, number],
-  handBefore: [number, number][],
-): { value: number; points: number } {
-  const possibilities = nextEndsForTile(tile, boardEnds);
-  if (possibilities.length === 0) {
-    return { value: Number.NEGATIVE_INFINITY, points: 0 };
-  }
-
-  const remaining = remainingHandAfterPlay(handBefore, tile);
-  let best = Number.NEGATIVE_INFINITY;
-  let bestPoints = 0;
-
-  for (const ends of possibilities) {
-    const points = immediatePoints(ends);
-    const future = setupScore(remaining, ends);
-    const value = points * 3 + future * 2;
-    if (value > best) {
-      best = value;
-      bestPoints = points;
-    }
-  }
-
-  return { value: best, points: bestPoints };
 }
 
 function classifyMove(
@@ -184,7 +111,7 @@ function classifyMove(
   let bestEval = valueForTile(fallbackBestTile, entry.boardEnds, entry.handBefore);
   for (const tile of validTiles.slice(1)) {
     const nextEval = valueForTile(tile, entry.boardEnds, entry.handBefore);
-    if (nextEval.value > bestEval.value) {
+    if (nextEval > bestEval) {
       bestEval = nextEval;
       fallbackBestTile = tile;
     }
@@ -193,9 +120,9 @@ function classifyMove(
   const playedEval = valueForTile(entry.tile, entry.boardEnds, entry.handBefore);
   const bestForAdvice = bestTile ?? fallbackBestTile;
   const bestPosition = bestMove?.position;
-  const diff = bestEval.value - playedEval.value;
+  const diff = bestEval - playedEval;
 
-  if (sameTileTuple(entry.tile, bestForAdvice) && Math.abs(diff) <= 0.3) {
+  if (sameTileTuple(entry.tile, bestForAdvice) && Math.abs(diff) <= 0.05) {
     return {
       score: 99,
       rating: 'Brilliant',
@@ -204,7 +131,7 @@ function classifyMove(
       explanation: `Brilliant. You matched the engine line with ${tileLabel(bestForAdvice)}.`,
     };
   }
-  if (sameTileTuple(entry.tile, bestForAdvice) || diff <= 1.25) {
+  if (sameTileTuple(entry.tile, bestForAdvice) || diff <= 0.25) {
     return {
       score: 91,
       rating: 'Great',
@@ -213,7 +140,7 @@ function classifyMove(
       explanation: `Great move. ${tileLabel(bestForAdvice)} was the cleanest engine continuation.`,
     };
   }
-  if (diff <= 3) {
+  if (diff <= 0.6) {
     return {
       score: 79,
       rating: 'Good',
@@ -222,7 +149,7 @@ function classifyMove(
       explanation: `Solid move. ${tileLabel(bestForAdvice)} was slightly stronger.`,
     };
   }
-  if (diff <= 6) {
+  if (diff <= 1.2) {
     return {
       score: 62,
       rating: 'Inaccuracy',
@@ -231,7 +158,7 @@ function classifyMove(
       explanation: `You played ${tileLabel(entry.tile)}, but ${tileLabel(bestForAdvice)} was more accurate here.`,
     };
   }
-  if (diff <= 10) {
+  if (diff <= 2.0) {
     return {
       score: 44,
       rating: 'Mistake',
