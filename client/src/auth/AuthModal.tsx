@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
+const AUTH_MODAL_SUBMIT_TIMEOUT_MS = 11000;
+
 interface AuthModalProps {
   open: boolean;
-  loading?: boolean;
   supabaseEnabled: boolean;
   supabaseConfigError: string | null;
   onClose: () => void;
@@ -12,7 +13,6 @@ interface AuthModalProps {
 
 export default function AuthModal({
   open,
-  loading,
   supabaseEnabled,
   supabaseConfigError,
   onClose,
@@ -25,11 +25,23 @@ export default function AuthModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    setError(null);
+  const resetFormState = () => {
     setSubmitting(false);
+    setError(null);
+  };
+
+  useEffect(() => {
+    resetFormState();
   }, [open, mode]);
+
+  useEffect(() => {
+    if (!open || !submitting) return;
+    const timeoutId = window.setTimeout(() => {
+      setSubmitting(false);
+      setError('Request timed out. Please try again.');
+    }, AUTH_MODAL_SUBMIT_TIMEOUT_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [open, submitting]);
 
   const canSubmit = useMemo(() => {
     if (!supabaseEnabled) return false;
@@ -38,6 +50,11 @@ export default function AuthModal({
   }, [supabaseEnabled, submitting, email, password]);
 
   if (!open) return null;
+
+  const handleClose = () => {
+    resetFormState();
+    onClose();
+  };
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -55,7 +72,7 @@ export default function AuthModal({
         return;
       }
 
-      onClose();
+      handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed.');
     } finally {
@@ -68,7 +85,7 @@ export default function AuthModal({
       role="dialog"
       aria-modal="true"
       aria-label="Sign in"
-      onClick={onClose}
+      onClick={handleClose}
       style={{
         position: 'fixed',
         inset: 0,
@@ -106,7 +123,7 @@ export default function AuthModal({
           }}
         >
           <h3 style={{ margin: 0 }}>{mode === 'signin' ? 'Sign in' : 'Create account'}</h3>
-          <button className="mode-inline-btn" onClick={onClose}>
+          <button className="mode-inline-btn" onClick={handleClose}>
             Close
           </button>
         </div>
@@ -128,7 +145,7 @@ export default function AuthModal({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            disabled={submitting || Boolean(loading)}
+            disabled={submitting}
             style={{
               borderRadius: '10px',
               border: '1px solid rgba(255,255,255,0.18)',
@@ -146,7 +163,7 @@ export default function AuthModal({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Minimum 6 characters"
-            disabled={submitting || Boolean(loading)}
+            disabled={submitting}
             style={{
               borderRadius: '10px',
               border: '1px solid rgba(255,255,255,0.18)',

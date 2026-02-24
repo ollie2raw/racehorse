@@ -1599,23 +1599,24 @@ export default function App() {
                 className="mode-inline-btn"
                 disabled={signingOut}
                 onClick={async () => {
+                  setSigningOut(true);
+                  // Reset UI immediately; complete remote sign-out in the background.
+                  setAppMode('home');
+                  setJoinedRoom(null);
+                  setState(null);
+                  setPlayers([]);
+                  setLegalMoves([]);
+                  setCanDraw(false);
+                  setSelectedTile(null);
+                  setHandReveal(null);
+                  setScoreTrackOpen(false);
+                  setError('');
+                  setActionError('');
                   try {
-                    setSigningOut(true);
-                    await signOut();
+                    void signOut().catch(() => {});
                   } catch {
-                    // no-op: always force local UI reset below
+                    // no-op
                   } finally {
-                    setAppMode('home');
-                    setJoinedRoom(null);
-                    setState(null);
-                    setPlayers([]);
-                    setLegalMoves([]);
-                    setCanDraw(false);
-                    setSelectedTile(null);
-                    setHandReveal(null);
-                    setScoreTrackOpen(false);
-                    setError('');
-                    setActionError('');
                     setSigningOut(false);
                   }
                 }}
@@ -1631,7 +1632,7 @@ export default function App() {
             <p className="lobby-kicker">Racehorse Dominoes</p>
             <h2>Choose Game Mode</h2>
             <p className="lobby-server mode-subtitle">
-              Pick online multiplayer or a local no-brainer practice run.
+              Choose how you want to play: live online matches, practice modes, or daily challenges.
             </p>
             <div className="mode-actions">
               <button
@@ -1639,7 +1640,7 @@ export default function App() {
                 onClick={() => setAppMode('multiplayer')}
               >
                 <span className="mode-option-title">Multiplayer Online</span>
-                <span className="mode-option-meta">Play live in private rooms</span>
+                <span className="mode-option-meta">Create a private room and play head-to-head in real time</span>
               </button>
             <button
               className="mode-option"
@@ -1649,7 +1650,7 @@ export default function App() {
               }}
             >
               <span className="mode-option-title">Tournament Mode</span>
-              <span className="mode-option-meta">Round robin (4+), first to 30</span>
+              <span className="mode-option-meta">Round robin (4+ players), first to 30 points</span>
             </button>
 
 
@@ -1658,7 +1659,7 @@ export default function App() {
                 onClick={() => setAppMode('noBrainer')}
               >
                 <span className="mode-option-title">Practice → No-Brainer Lab</span>
-                <span className="mode-option-meta">Offline puzzle mode, no server needed</span>
+                <span className="mode-option-meta">Practice one-turn clear runs with curated hands</span>
               </button>
               <button
                 className="mode-option mode-option-secondary"
@@ -1666,7 +1667,7 @@ export default function App() {
               >
                 <span className="mode-option-title">Practice → Play vs Bot</span>
                 <span className="mode-option-meta">
-                  Offline match vs a simple but strong bot (no server)
+                  Sharpen your game offline against a solid AI opponent
                 </span>
               </button>
               <button
@@ -1675,7 +1676,7 @@ export default function App() {
               >
                 <span className="mode-option-title">Daily Puzzle</span>
                 <span className="mode-option-meta">
-                  Curated puzzle from today’s board situation
+                  Solve today’s featured scenario and compare leaderboard results
                 </span>
               </button>
 
@@ -1684,7 +1685,7 @@ export default function App() {
                 onClick={() => setWeeklyStatsOpen(true)}
               >
                 <span className="mode-option-title">Weekly Stats</span>
-                <span className="mode-option-meta">Fun weekly awards and mini leaderboards</span>
+                <span className="mode-option-meta">See weekly highlights, awards, and leaderboard snapshots</span>
               </button>
               {isAdmin && (
                 <button
@@ -1708,7 +1709,6 @@ export default function App() {
         </div>
         <AuthModal
           open={authModalOpen}
-          loading={authLoading}
           supabaseEnabled={supabaseEnabled}
           supabaseConfigError={supabaseConfigError}
           onClose={() => setAuthModalOpen(false)}

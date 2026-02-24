@@ -135,25 +135,30 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
 
   return (
     <div className="app walnut-live practice-lab">
-      <section className="practice-toolbar">
-        <div className="practice-title-wrap">
-          <h2>No-Brainer Lab</h2>
-          <p>
-            Play all 7 tiles in one turn. Continue only after a double or scoring play. Final tile
-            must be non-double and non-scoring.
-          </p>
+      <section className="wl-top-rail practice-top-rail" data-ui="hud">
+        <div className="wl-player-pill is-active practice-mode-pill">
+          <div className="wl-pill-top">
+            <span className="wl-player-label">No-Brainer Lab</span>
+          </div>
+          <span className="wl-player-score" style={{ fontSize: '0.9rem' }}>
+            7-Tile Run
+          </span>
+        </div>
+        <div className="wl-center-status practice-center-status">
+          <span className="wl-turn-label your-turn">Clear all 7 tiles in one turn.</span>
+          <span className="wl-room-code">Continue after scoring plays or doubles, then finish clean.</span>
         </div>
         <div className="practice-controls">
-          <button className="btn text" onClick={startHand}>
+          <button className="mode-inline-btn" onClick={startHand}>
             New Hand
           </button>
-          <button className="btn text" onClick={onHint}>
+          <button className="mode-inline-btn" onClick={onHint}>
             Hint
           </button>
-          <button className="btn text" onClick={() => setShowSolution((prev) => !prev)}>
+          <button className="mode-inline-btn" onClick={() => setShowSolution((prev) => !prev)}>
             {showSolution ? 'Hide Solution' : 'Show Solution'}
           </button>
-          <button className="btn text" onClick={onBack}>
+          <button className="mode-inline-btn" onClick={onBack}>
             Back to Home
           </button>
         </div>
@@ -162,7 +167,7 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
       <section className="practice-status-row">
         <div className={`practice-status ${practiceState.status}`}>
           {practiceState.status === 'playing' && (practiceState.board?.mainLine.length ?? 0) === 0
-            ? 'Select a legal opening tile.'
+            ? 'Choose a legal opening tile.'
             : practiceState.message}
         </div>
         {hintText && <div className="practice-hint">{hintText}</div>}

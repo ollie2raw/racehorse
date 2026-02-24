@@ -14,7 +14,8 @@ interface AuthResult {
 
 const TEMP_USERNAME_PREFIX = 'user_';
 const USERNAME_REQUEST_TIMEOUT_MS = 10000;
-const SIGN_OUT_TIMEOUT_MS = 8000;
+const AUTH_REQUEST_TIMEOUT_MS = 10000;
+const SIGN_OUT_TIMEOUT_MS = 1200;
 
 export function isTemporaryUsername(username: string | null | undefined): boolean {
   if (!username) return true;
@@ -91,40 +92,48 @@ export function useAuth() {
   useEffect(() => {
     let active = true;
 
+    const syncSession = async (sessionUser: User | null) => {
+      if (!active) return;
+      setUser(sessionUser);
+      if (!sessionUser) {
+        setProfile(null);
+        return;
+      }
+      try {
+        await ensureProfile(sessionUser.id);
+        if (!active) return;
+        await refreshProfile(sessionUser.id);
+      } catch {
+        if (active) setProfile(null);
+      }
+    };
+
     const init = async () => {
       if (!supabase) {
         if (active) {
-          setLoading(false);
           setUser(null);
           setProfile(null);
+          setLoading(false);
         }
         return;
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!active) return;
-
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-
-      if (currentUser) {
-        try {
-          await ensureProfile(currentUser.id);
-          await refreshProfile(currentUser.id);
-        } catch {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        await syncSession(session?.user ?? null);
+      } catch {
+        if (active) {
+          setUser(null);
           setProfile(null);
         }
-      } else {
-        setProfile(null);
+      } finally {
+        if (active) setLoading(false);
       }
-
-      setLoading(false);
     };
 
-    init();
+    void init();
 
     if (!supabase)
       return () => {
@@ -135,35 +144,29 @@ export function useAuth() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!active) return;
-
-      const nextUser = session?.user ?? null;
-      setUser(nextUser);
-
-      if (nextUser) {
-        try {
-          await ensureProfile(nextUser.id);
-          await refreshProfile(nextUser.id);
-        } catch {
-          setProfile(null);
-        }
-      } else {
-        setProfile(null);
+      try {
+        await syncSession(session?.user ?? null);
+      } finally {
+        if (active) setLoading(false);
       }
-
-      setLoading(false);
     });
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && supabase) {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          const nextUser = session?.user ?? null;
-          setUser(nextUser);
-          if (nextUser) {
-            void refreshProfile(nextUser.id);
-          } else {
+        void supabase.auth
+          .getSession()
+          .then(({ data: { session } }) => {
+            const nextUser = session?.user ?? null;
+            setUser(nextUser);
+            if (nextUser) {
+              void refreshProfile(nextUser.id);
+            } else {
+              setProfile(null);
+            }
+          })
+          .catch(() => {
             setProfile(null);
-          }
-        });
+          });
       }
     };
 
@@ -179,20 +182,26 @@ export function useAuth() {
   const signUp = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
       if (!supabase) return { error: getSupabaseConfigError() };
+      try {
+        const { data, error } = await withTimeout(
+          supabase.auth.signUp({ email, password }),
+          AUTH_REQUEST_TIMEOUT_MS,
+        );
+        if (error) return { error: error.message };
 
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) return { error: error.message };
-
-      if (data.user) {
-        try {
-          await ensureProfile(data.user.id);
-          await refreshProfile(data.user.id);
-        } catch {
-          // Ignore profile bootstrap failures here; user can retry via username update.
+        if (data.user) {
+          try {
+            await ensureProfile(data.user.id);
+            await refreshProfile(data.user.id);
+          } catch {
+            // Ignore profile bootstrap failures here; user can retry via username update.
+          }
         }
-      }
 
-      return { error: null };
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : 'Unable to sign up.' };
+      }
     },
     [refreshProfile],
   );
@@ -200,20 +209,26 @@ export function useAuth() {
   const signIn = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
       if (!supabase) return { error: getSupabaseConfigError() };
+      try {
+        const { data, error } = await withTimeout(
+          supabase.auth.signInWithPassword({ email, password }),
+          AUTH_REQUEST_TIMEOUT_MS,
+        );
+        if (error) return { error: error.message };
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return { error: error.message };
-
-      if (data.user) {
-        try {
-          await ensureProfile(data.user.id);
-          await refreshProfile(data.user.id);
-        } catch {
-          // Keep auth session even if profile fetch fails.
+        if (data.user) {
+          try {
+            await ensureProfile(data.user.id);
+            await refreshProfile(data.user.id);
+          } catch {
+            // Keep auth session even if profile fetch fails.
+          }
         }
-      }
 
-      return { error: null };
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : 'Unable to sign in.' };
+      }
     },
     [refreshProfile],
   );
@@ -229,6 +244,10 @@ export function useAuth() {
 
     let errorMessage: string | null = null;
     let usedTimeoutFallback = false;
+
+    // Optimistically reset local auth UI immediately.
+    setProfile(null);
+    setUser(null);
 
     try {
       const signOutPromise = supabase.auth.signOut().then(({ error }) => ({
@@ -249,10 +268,7 @@ export function useAuth() {
 
         // IMPORTANT: do not await anything that can hang here. We want UI to recover.
         try {
-          await Promise.race([
-            supabase.auth.signOut({ scope: 'local' }),
-            new Promise((resolve) => setTimeout(resolve, 800)),
-          ]);
+          void supabase.auth.signOut({ scope: 'local' }).catch(() => {});
         } catch {
           // ignore
         } finally {
@@ -264,6 +280,7 @@ export function useAuth() {
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : 'Unable to sign out.';
     } finally {
+      clearLocalSupabaseAuthTokens();
       setProfile(null);
       setUser(null);
       if (isDev) {
