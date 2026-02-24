@@ -44,6 +44,15 @@ type RoomJoinConfig = { username?: string; userId?: string | null };
 type AckFn = (payload: any) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
+const RECONNECT_GRACE_MS = 90_000;
+type ReconnectSeat = {
+  oldSocketId: string;
+  username: string;
+  userId: string | null;
+  expiresAt: number;
+};
+const reconnectSeatsByCode = new Map<string, ReconnectSeat[]>();
+const socketsByUserId = new Map<string, Set<string>>();
 
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -62,6 +71,76 @@ function getRoomPlayersWithFallback(roomCode: string, socketIds: string[]): Room
   const next = socketIds.map((id) => byId.get(id) ?? { id, username: 'Guest', userId: null });
   roomPlayersByCode.set(roomCode, next);
   return next;
+}
+
+function pruneReconnectSeats(roomCode: string): ReconnectSeat[] {
+  const now = Date.now();
+  const seats = (reconnectSeatsByCode.get(roomCode) ?? []).filter((seat) => seat.expiresAt > now);
+  if (seats.length > 0) reconnectSeatsByCode.set(roomCode, seats);
+  else reconnectSeatsByCode.delete(roomCode);
+  return seats;
+}
+
+function reserveReconnectSeat(roomCode: string, seat: Omit<ReconnectSeat, 'expiresAt'>) {
+  const seats = pruneReconnectSeats(roomCode).filter((s) => s.oldSocketId !== seat.oldSocketId);
+  seats.push({ ...seat, expiresAt: Date.now() + RECONNECT_GRACE_MS });
+  reconnectSeatsByCode.set(roomCode, seats);
+}
+
+function identityMatchesReconnectSeat(
+  seat: ReconnectSeat,
+  identity: { username: string; userId: string | null },
+): boolean {
+  if (seat.userId && identity.userId) {
+    return seat.userId === identity.userId;
+  }
+  if (!seat.userId && !identity.userId) {
+    return seat.username === identity.username;
+  }
+  return false;
+}
+
+function migrateRoomSeat(roomCode: string, oldSocketId: string, newSocketId: string) {
+  const room = getRoom(roomCode);
+  const idx = room.players.indexOf(oldSocketId);
+  if (idx < 0) return;
+  room.players[idx] = newSocketId;
+
+  if (room.state) {
+    const nextPlayerIds = room.state.playerIds.map((pid) =>
+      pid === oldSocketId ? newSocketId : pid,
+    );
+    const nextPlayers: Record<string, any> = { ...room.state.players };
+    if (nextPlayers[oldSocketId]) {
+      nextPlayers[newSocketId] = nextPlayers[oldSocketId];
+      delete nextPlayers[oldSocketId];
+    }
+    room.state = {
+      ...room.state,
+      playerIds: nextPlayerIds,
+      players: nextPlayers,
+    } as any;
+    if (room.lastBroadcastScores[oldSocketId] !== undefined) {
+      room.lastBroadcastScores[newSocketId] = room.lastBroadcastScores[oldSocketId];
+      delete room.lastBroadcastScores[oldSocketId];
+    }
+  }
+
+  if (room.nextHandReady.has(oldSocketId)) {
+    room.nextHandReady.delete(oldSocketId);
+    room.nextHandReady.add(newSocketId);
+  }
+  if (room.rematchReady.has(oldSocketId)) {
+    room.rematchReady.delete(oldSocketId);
+    room.rematchReady.add(newSocketId);
+  }
+
+  const roster = roomPlayersByCode.get(roomCode) ?? [];
+  const rosterIdx = roster.findIndex((p) => p.id === oldSocketId);
+  if (rosterIdx >= 0) {
+    roster[rosterIdx] = { ...roster[rosterIdx], id: newSocketId };
+    roomPlayersByCode.set(roomCode, roster);
+  }
 }
 
 function emitRematchStatus(roomCode: string) {
@@ -265,6 +344,65 @@ function broadcastStateUpdate(roomCode: string) {
 
 io.on('connection', (socket: Socket) => {
 /* ROOM_REACTIONS_CHAT_EMOTE */
+  const removeSocketPresence = () => {
+    const userId = normalizeUserId(socket.data?.userId);
+    if (!userId) return;
+    const set = socketsByUserId.get(userId);
+    if (!set) return;
+    set.delete(socket.id);
+    if (set.size === 0) socketsByUserId.delete(userId);
+  };
+
+  socket.on(
+    'presence:identify',
+    (payload: { userId?: string | null; username?: string }, cb?: AckFn) => {
+    const userId = normalizeUserId(payload?.userId);
+    if (!userId) return cb?.({ ok: false });
+    console.log('[presence] identify received', userId);
+    removeSocketPresence();
+    socket.data.userId = userId;
+    socket.data.username = normalizeUsername(payload?.username ?? socket.data?.username);
+    const existing = socketsByUserId.get(userId) ?? new Set<string>();
+    existing.add(socket.id);
+    socketsByUserId.set(userId, existing);
+    cb?.({ ok: true });
+  });
+
+  socket.on('presence:online', (argUserIds: unknown, cb?: AckFn) => {
+    const userIds = Array.isArray(argUserIds)
+      ? argUserIds
+          .map((id) => normalizeUserId(id))
+          .filter((id): id is string => Boolean(id))
+      : [];
+    const onlineUserIds = userIds.filter((id) => (socketsByUserId.get(id)?.size ?? 0) > 0);
+    console.log(
+      '[presence] online check',
+      JSON.stringify({
+        requested: userIds.length,
+        online: onlineUserIds.length,
+        registeredUsers: socketsByUserId.size,
+      }),
+    );
+    cb?.({ ok: true, onlineUserIds });
+  });
+
+  socket.on(
+    'friend:invite',
+    (payload: { toUserId: string; fromUsername: string; roomCode: string; inviteUrl: string }) => {
+      const toUserId = normalizeUserId(payload?.toUserId);
+      if (!toUserId) return;
+      const targetSockets = socketsByUserId.get(toUserId);
+      if (!targetSockets) return;
+      for (const socketId of targetSockets) {
+        io.to(socketId).emit('friend:invited', {
+          fromUsername: normalizeUsername(payload?.fromUsername),
+          roomCode: String(payload?.roomCode ?? '').trim().toUpperCase(),
+          inviteUrl: String(payload?.inviteUrl ?? ''),
+        });
+      }
+    },
+  );
+
   const nowMs = () => Date.now();
   const clampString = (s: string, max: number) => {
     const t = (s ?? '').trim();
@@ -716,7 +854,29 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     console.log(`[room:join] socket=${socket.id}, code=${roomCode}`);
     try {
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
-      const room = joinRoom(roomCode, socket.id);
+      let room;
+      try {
+        room = joinRoom(roomCode, socket.id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'unknown error';
+        if (!message.toLowerCase().includes('room is full')) {
+          throw err;
+        }
+        const seats = pruneReconnectSeats(roomCode);
+        const match = seats.find((seat) =>
+          identityMatchesReconnectSeat(seat, {
+            username,
+            userId,
+          }),
+        );
+        if (!match) throw err;
+        migrateRoomSeat(roomCode, match.oldSocketId, socket.id);
+        reconnectSeatsByCode.set(
+          roomCode,
+          seats.filter((seat) => seat.oldSocketId !== match.oldSocketId),
+        );
+        room = getRoom(roomCode);
+      }
       socket.join(room.code);
       socket.data.roomId = room.code;
       socket.data.username = username;
@@ -881,6 +1041,22 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
   });
 
   socket.on('disconnect', () => {
+    removeSocketPresence();
+    const roomCode = (socket.data?.roomId as string | undefined) ?? undefined;
+    if (roomCode) {
+      try {
+        const room = getRoom(roomCode);
+        if (room.players.includes(socket.id)) {
+          reserveReconnectSeat(roomCode, {
+            oldSocketId: socket.id,
+            username: normalizeUsername(socket.data?.username),
+            userId: normalizeUserId(socket.data?.userId),
+          });
+        }
+      } catch {
+        // room no longer exists
+      }
+    }
     clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
     console.log('Client disconnected:', socket.id);
   });

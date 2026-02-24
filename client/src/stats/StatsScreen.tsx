@@ -11,11 +11,12 @@ interface StatsScreenProps {
 }
 
 const EMPTY_STATS: StatsSummary = {
-  gamesPlayed: 0,
+  onlineGamesPlayed: 0,
   wins: 0,
   losses: 0,
   botWins: 0,
   botLosses: 0,
+  longestWinStreak: 0,
 };
 
 export default function StatsScreen({ open, user, profile, onClose }: StatsScreenProps) {
@@ -72,7 +73,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           position: 'relative',
           zIndex: 1901,
           pointerEvents: 'auto',
-          width: 'min(520px, calc(100vw - 24px))',
+          width: 'min(760px, calc(100vw - 24px))',
           borderRadius: '16px',
           border: '1px solid rgba(236,252,245,0.2)',
           background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
@@ -80,7 +81,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           padding: '18px',
           color: 'rgba(235,245,242,0.96)',
           display: 'grid',
-          gap: '12px',
+          gap: '14px',
         }}
       >
         <div
@@ -97,7 +98,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           </button>
         </div>
 
-        <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
+        <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)', fontSize: '1.02rem' }}>
           {profile?.username ? `@${profile.username}` : 'Guest'}
         </p>
 
@@ -109,14 +110,15 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              gap: '10px',
-              minHeight: '180px',
+              gap: '12px',
+              minHeight: '220px',
             }}
           >
             {[
-              ['Games', stats.gamesPlayed],
+              ['Online Games', stats.onlineGamesPlayed],
               ['Wins', stats.wins],
               ['Losses', stats.losses],
+              ['Longest Win Streak', stats.longestWinStreak],
               ['Bot Wins', stats.botWins],
               ['Bot Losses', stats.botLosses],
             ].map(([label, value]) => (
@@ -126,15 +128,17 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
                   borderRadius: '10px',
                   border: '1px solid rgba(255,255,255,0.16)',
                   background: 'rgba(12,20,34,0.68)',
-                  padding: '10px',
+                  padding: '12px',
                   display: 'grid',
-                  gap: '4px',
+                  gap: '6px',
                 }}
               >
                 <span style={{ fontSize: '0.86rem', color: 'rgba(191,213,223,0.86)' }}>
                   {label}
                 </span>
-                <strong style={{ fontSize: '1.2rem' }}>{value}</strong>
+                <strong style={{ fontSize: '1.4rem', lineHeight: 1.05, letterSpacing: '0.01em' }}>
+                  {value}
+                </strong>
               </div>
             ))}
           </div>

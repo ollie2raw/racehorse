@@ -39,11 +39,52 @@ export async function recordMatchResult(
 }
 
 export interface StatsSummary {
-  gamesPlayed: number;
+  onlineGamesPlayed: number;
   wins: number;
   losses: number;
   botWins: number;
   botLosses: number;
+  longestWinStreak: number;
+}
+
+type MatchSummaryRow = {
+  winner_user_id: string | null;
+  loser_user_id: string | null;
+  mode: string | null;
+  created_at?: string | null;
+};
+
+function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummary {
+  const onlineRows = rows
+    .filter((row) => row.mode === 'online')
+    .sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
+
+  const wins = onlineRows.filter((row) => row.winner_user_id === userId).length;
+  const losses = onlineRows.filter((row) => row.loser_user_id === userId).length;
+
+  const botRows = rows.filter((row) => row.mode === 'bot');
+  const botWins = botRows.filter((row) => row.winner_user_id === userId).length;
+  const botLosses = botRows.filter((row) => row.loser_user_id === userId).length;
+
+  let longestWinStreak = 0;
+  let currentWinStreak = 0;
+  for (const match of onlineRows) {
+    if (match.winner_user_id === userId) {
+      currentWinStreak += 1;
+      if (currentWinStreak > longestWinStreak) longestWinStreak = currentWinStreak;
+    } else if (match.loser_user_id === userId) {
+      currentWinStreak = 0;
+    }
+  }
+
+  return {
+    onlineGamesPlayed: wins + losses,
+    wins,
+    losses,
+    botWins,
+    botLosses,
+    longestWinStreak,
+  };
 }
 
 export async function fetchUserStats(
@@ -51,13 +92,22 @@ export async function fetchUserStats(
 ): Promise<{ data: StatsSummary | null; error: string | null }> {
   if (!supabase) return { data: null, error: 'Supabase not configured.' };
 
-  const [winnerResp, loserResp] = await Promise.all([
-    supabase.from('matches').select('mode, metadata').eq('winner_user_id', user.id),
-    supabase.from('matches').select('mode, metadata').eq('loser_user_id', user.id),
-  ]);
+  const { data, error } = await fetchUserStatsByUserId(user.id);
+  return { data, error };
+}
 
-  if (winnerResp.error || loserResp.error) {
-    const message = winnerResp.error?.message ?? loserResp.error?.message ?? 'Stats unavailable.';
+export async function fetchUserStatsByUserId(
+  userId: string,
+): Promise<{ data: StatsSummary | null; error: string | null }> {
+  if (!supabase) return { data: null, error: 'Supabase not configured.' };
+
+  const historyResp = await supabase
+    .from('matches')
+    .select('winner_user_id, loser_user_id, mode, created_at')
+    .or(`winner_user_id.eq.${userId},loser_user_id.eq.${userId}`);
+
+  if (historyResp.error) {
+    const message = historyResp.error.message ?? 'Stats unavailable.';
     const normalized = message.toLowerCase();
     if (
       normalized.includes('relation') ||
@@ -69,22 +119,11 @@ export async function fetchUserStats(
     return { data: null, error: message };
   }
 
-  const wins = winnerResp.data?.length ?? 0;
-  const losses = loserResp.data?.length ?? 0;
-  const winners = winnerResp.data ?? [];
-  const losers = loserResp.data ?? [];
-
-  const botWins = winners.filter((row) => row.mode === 'bot').length;
-  const botLosses = losers.filter((row) => row.mode === 'bot').length;
+  const rows = (historyResp.data ?? []) as MatchSummaryRow[];
+  const summary = buildStatsSummary(userId, rows);
 
   return {
-    data: {
-      gamesPlayed: wins + losses,
-      wins,
-      losses,
-      botWins,
-      botLosses,
-    },
+    data: summary,
     error: null,
   };
 }

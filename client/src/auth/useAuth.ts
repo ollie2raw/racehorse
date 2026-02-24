@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { User } from '@supabase/supabase-js';
+import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
 
 export interface UserProfile {
@@ -18,6 +18,7 @@ const AUTH_REQUEST_TIMEOUT_MS = 15000;
 const SESSION_BOOTSTRAP_TIMEOUT_MS = 8000;
 const SIGN_OUT_TIMEOUT_MS = 1200;
 const AUTH_RETRY_DELAY_MS = 350;
+const PROFILE_REQUEST_TIMEOUT_MS = 5000;
 
 export function isTemporaryUsername(username: string | null | undefined): boolean {
   if (!username) return true;
@@ -27,11 +28,25 @@ export function isTemporaryUsername(username: string | null | undefined): boolea
 async function ensureProfile(userId: string): Promise<void> {
   if (!supabase) return;
   const tempUsername = `${TEMP_USERNAME_PREFIX}${userId.replace(/-/g, '').slice(0, 8)}`;
-  const { error } = await supabase
-    .from('profiles')
-    .upsert({ id: userId, username: tempUsername }, { onConflict: 'id', ignoreDuplicates: true });
-  if (error) {
-    throw error;
+  try {
+    const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+      setTimeout(() => resolve({ timedOut: true }), PROFILE_REQUEST_TIMEOUT_MS);
+    });
+    const upsertPromise = supabase
+      .from('profiles')
+      .upsert({ id: userId, username: tempUsername }, { onConflict: 'id', ignoreDuplicates: true })
+      .then(({ error }) => ({ timedOut: false as const, error }));
+
+    const result = await Promise.race([upsertPromise, timeoutPromise]);
+    if ('timedOut' in result && result.timedOut) {
+      console.warn('[auth] ensureProfile timed out; continuing without blocking auth');
+      return;
+    }
+    if (result.error) {
+      console.warn('[auth] ensureProfile failed; continuing without blocking auth', result.error);
+    }
+  } catch (err) {
+    console.warn('[auth] ensureProfile errored; continuing without blocking auth', err);
   }
 }
 
@@ -93,41 +108,82 @@ export function useAuth() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshProfile = useCallback(async (userId: string) => {
+  const fallbackProfile = useCallback((sessionUser: User): UserProfile => {
+    const derived = sessionUser.email?.split('@')[0]?.trim().toLowerCase();
+    return {
+      id: sessionUser.id,
+      username: derived || `${TEMP_USERNAME_PREFIX}${sessionUser.id.replace(/-/g, '').slice(0, 8)}`,
+    };
+  }, []);
+
+  const refreshProfile = useCallback(async (sessionUser: User) => {
     if (!supabase) {
-      setProfile(null);
+      setProfile(fallbackProfile(sessionUser));
       return;
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username, created_at')
-      .eq('id', userId)
-      .maybeSingle();
+    try {
+      const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+        setTimeout(() => resolve({ timedOut: true }), PROFILE_REQUEST_TIMEOUT_MS);
+      });
+      const queryPromise = supabase
+        .from('profiles')
+        .select('id, username, created_at')
+        .eq('id', sessionUser.id)
+        .maybeSingle()
+        .then(({ data, error }) => ({ timedOut: false as const, data, error }));
 
-    if (error) {
-      throw error;
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      if ('timedOut' in result && result.timedOut) {
+        console.warn('[auth] refreshProfile timed out; using fallback profile');
+        setProfile(fallbackProfile(sessionUser));
+        return;
+      }
+      if (result.error || !result.data) {
+        if (result.error) {
+          console.warn('[auth] refreshProfile failed; using fallback profile', result.error);
+        }
+        setProfile(fallbackProfile(sessionUser));
+        return;
+      }
+      setProfile(result.data as UserProfile);
+    } catch (err) {
+      console.warn('[auth] refreshProfile errored; using fallback profile', err);
+      setProfile(fallbackProfile(sessionUser));
     }
+  }, [fallbackProfile]);
 
-    setProfile(data as UserProfile | null);
-  }, []);
+  const hydrateProfile = useCallback(
+    async (sessionUser: User): Promise<void> => {
+      await ensureProfile(sessionUser.id);
+      await refreshProfile(sessionUser);
+    },
+    [refreshProfile],
+  );
 
   useEffect(() => {
     let active = true;
 
-    const syncSession = async (sessionUser: User | null) => {
+    const syncSession = async (
+      event: AuthChangeEvent | 'INITIAL_BOOTSTRAP',
+      sessionUser: User | null,
+    ) => {
       if (!active) return;
-      setUser(sessionUser);
-      if (!sessionUser) {
+      if (event === 'SIGNED_OUT' || !sessionUser) {
+        setUser(null);
         setProfile(null);
         return;
       }
-      try {
-        await ensureProfile(sessionUser.id);
-        if (!active) return;
-        await refreshProfile(sessionUser.id);
-      } catch {
-        if (active) setProfile(null);
+
+      setUser(sessionUser);
+      if (
+        event === 'SIGNED_IN' ||
+        event === 'INITIAL_SESSION' ||
+        event === 'TOKEN_REFRESHED' ||
+        event === 'USER_UPDATED' ||
+        event === 'INITIAL_BOOTSTRAP'
+      ) {
+        void hydrateProfile(sessionUser);
       }
     };
 
@@ -145,7 +201,7 @@ export function useAuth() {
         const {
           data: { session },
         } = await withTimeout(supabase.auth.getSession(), SESSION_BOOTSTRAP_TIMEOUT_MS);
-        await syncSession(session?.user ?? null);
+        await syncSession('INITIAL_BOOTSTRAP', session?.user ?? null);
       } catch {
         if (active) {
           setUser(null);
@@ -165,10 +221,10 @@ export function useAuth() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!active) return;
       try {
-        await syncSession(session?.user ?? null);
+        await syncSession(event, session?.user ?? null);
       } finally {
         if (active) setLoading(false);
       }
@@ -182,7 +238,7 @@ export function useAuth() {
             const nextUser = session?.user ?? null;
             setUser(nextUser);
             if (nextUser) {
-              void refreshProfile(nextUser.id);
+              void hydrateProfile(nextUser);
             } else {
               setProfile(null);
             }
@@ -200,7 +256,7 @@ export function useAuth() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       subscription.unsubscribe();
     };
-  }, [refreshProfile]);
+  }, [hydrateProfile]);
 
   const signUp = useCallback(
     async (email: string, password: string): Promise<AuthResult> => {
@@ -221,12 +277,7 @@ export function useAuth() {
         if (error) return { error: error.message };
 
         if (data.user) {
-          try {
-            await ensureProfile(data.user.id);
-            await refreshProfile(data.user.id);
-          } catch {
-            // Ignore profile bootstrap failures here; user can retry via username update.
-          }
+          void hydrateProfile(data.user);
         }
 
         return { error: null };
@@ -237,7 +288,7 @@ export function useAuth() {
               data: { session },
             } = await withTimeout(supabase.auth.getSession(), 3000);
             if (session?.user) {
-              await refreshProfile(session.user.id);
+              void hydrateProfile(session.user);
               return { error: null };
             }
           } catch {
@@ -247,7 +298,7 @@ export function useAuth() {
         return { error: err instanceof Error ? err.message : 'Unable to sign up.' };
       }
     },
-    [refreshProfile],
+    [hydrateProfile],
   );
 
   const signIn = useCallback(
@@ -269,12 +320,7 @@ export function useAuth() {
         if (error) return { error: error.message };
 
         if (data.user) {
-          try {
-            await ensureProfile(data.user.id);
-            await refreshProfile(data.user.id);
-          } catch {
-            // Keep auth session even if profile fetch fails.
-          }
+          void hydrateProfile(data.user);
         }
 
         return { error: null };
@@ -285,7 +331,7 @@ export function useAuth() {
               data: { session },
             } = await withTimeout(supabase.auth.getSession(), 3000);
             if (session?.user) {
-              await refreshProfile(session.user.id);
+              void hydrateProfile(session.user);
               return { error: null };
             }
           } catch {
@@ -295,7 +341,7 @@ export function useAuth() {
         return { error: err instanceof Error ? err.message : 'Unable to sign in.' };
       }
     },
-    [refreshProfile],
+    [hydrateProfile],
   );
 
   const signOut = useCallback(async (): Promise<AuthResult> => {

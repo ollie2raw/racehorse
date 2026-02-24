@@ -14,6 +14,7 @@ import AuthModal from './auth/AuthModal';
 import UsernameModal from './auth/UsernameModal';
 import { isTemporaryUsername, useAuth } from './auth/useAuth';
 import StatsScreen from './stats/StatsScreen';
+import FriendsScreen from './friends/FriendsScreen';
 import { recordMatchResult } from './stats/statsApi';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 
@@ -27,6 +28,10 @@ function tileEquals(a: Tile, b: Tile): boolean {
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
   return raw || 'Guest';
+}
+
+function normalizeRoomCode(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toUpperCase() : '';
 }
 
 function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
@@ -46,6 +51,8 @@ function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
     })
     .filter((p) => Boolean(p.id));
 }
+
+const LAST_ROOM_STORAGE_KEY = 'racehorse_last_room_code';
 
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
   return (
@@ -335,6 +342,10 @@ export default function App() {
   const trayCenterRef = useRef<HTMLDivElement>(null);
   const autoConnectAttemptedRef = useRef(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const connectRef = useRef<() => void>(() => {});
+  const pendingCreateOnConnectRef = useRef(false);
+  const pendingCreateResolversRef = useRef<Array<(code: string | null) => void>>([]);
   const [serverUrl] = useState(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001');
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -424,10 +435,18 @@ export default function App() {
     signOut,
     updateUsername,
   } = useAuth();
+  const authUserRef = useRef(authUser);
+  const authProfileRef = useRef(authProfile);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
   const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
+  const [friendInvite, setFriendInvite] = useState<{
+    fromUsername: string;
+    roomCode: string;
+    inviteUrl: string;
+  } | null>(null);
 
   const loadWeeklyAwards = useCallback(() => {
     if (!socket || !socket.connected) return;
@@ -439,6 +458,9 @@ export default function App() {
 
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const joinedRoomRef = useRef<string | null>(null);
+  const preventAutoRejoinRef = useRef(false);
+  const autoJoinAttemptedRef = useRef(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
@@ -494,6 +516,128 @@ export default function App() {
   }, [isMuted]);
 
   useEffect(() => {
+    authUserRef.current = authUser;
+  }, [authUser]);
+
+  useEffect(() => {
+    authProfileRef.current = authProfile;
+  }, [authProfile]);
+
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
+
+  useEffect(() => {
+    if (!socket || !authUser?.id) return;
+
+    const username = authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player';
+
+    const emitIdentify = () => {
+      console.log('[presence] emitting presence:identify', { userId: authUser.id, connected: socket.connected });
+      socket.emit('presence:identify', { userId: authUser.id, username }, () => {
+        console.log('[presence] identify ack received');
+      });
+    };
+
+    // Always register reconnect handler
+    socket.on('connect', emitIdentify);
+
+    // Also fire immediately if already connected
+    if (socket.connected) {
+      emitIdentify();
+    }
+
+    return () => {
+      socket.off('connect', emitIdentify);
+    };
+  }, [socket, authUser?.id, authProfile?.username, authUser?.email]);
+
+  useEffect(() => {
+    joinedRoomRef.current = joinedRoom;
+    if (typeof window === 'undefined') return;
+    if (joinedRoom) {
+      window.localStorage.setItem(LAST_ROOM_STORAGE_KEY, joinedRoom);
+    }
+  }, [joinedRoom]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const linkedRoom = normalizeRoomCode(params.get('room'));
+    if (!linkedRoom) return;
+    setRoomCode(linkedRoom);
+    setAppMode('multiplayer');
+  }, []);
+
+  const getInviteLink = useCallback((code: string) => {
+    if (typeof window === 'undefined') return '';
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', code);
+    return url.toString();
+  }, []);
+
+  const resolvePendingCreate = useCallback((code: string | null) => {
+    const pending = pendingCreateResolversRef.current.splice(0);
+    pending.forEach((resolve) => resolve(code));
+  }, []);
+
+  const emitCreateRoom = useCallback(
+    (targetSocket: Socket) => {
+      setError('');
+      setActionError('');
+      targetSocket.emit(
+        'room:create',
+        {
+          username: authProfile?.username ?? 'Guest',
+          userId: authUser?.id ?? null,
+        },
+        (resp: any) => {
+          if (!resp?.ok) {
+            setError(resp?.error ?? 'Unable to create room.');
+            resolvePendingCreate(null);
+            return;
+          }
+          setError('');
+          setActionError('');
+          setState(null);
+          setLegalMoves([]);
+          setCanDraw(false);
+          setSelectedTile(null);
+          setJoinedRoom(resp.roomCode);
+          setRoomCode(resp.roomCode);
+          setPlayers(normalizeRoomPlayers(resp.players));
+          autoJoinAttemptedRef.current = false;
+          preventAutoRejoinRef.current = false;
+          resolvePendingCreate(resp.roomCode);
+        },
+      );
+    },
+    [authProfile?.username, authUser?.id, resolvePendingCreate],
+  );
+
+  useEffect(() => {
+    if (!socket) return;
+    const onFriendInvited = (payload: {
+      fromUsername: string;
+      roomCode: string;
+      inviteUrl: string;
+    }) => {
+      console.log('[invite] received friend:invited', payload);
+      setFriendInvite(payload);
+    };
+    socket.on('friend:invited', onFriendInvited);
+    return () => {
+      socket.off('friend:invited', onFriendInvited);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!friendInvite) return;
+    const timer = setTimeout(() => setFriendInvite(null), 30000);
+    return () => clearTimeout(timer);
+  }, [friendInvite]);
+
+  useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
@@ -524,13 +668,53 @@ export default function App() {
     if (isConnecting || socket?.connected) return;
     setError('');
     setIsConnecting(true);
-    const s = io(serverUrl, { transports: ['websocket'] });
+    const s = io(serverUrl, {
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+    });
     s.onAny((event, ...args) => traceSocketEvent(String(event), args.length <= 1 ? args[0] : args));
 
     s.on('connect', () => {
       setIsConnected(true);
       setYou(s.id ?? '');
       setIsConnecting(false);
+      const userId = authUserRef.current?.id;
+      const username =
+        authProfileRef.current?.username ?? authUserRef.current?.email?.split('@')[0] ?? 'player';
+      if (userId) {
+        console.log('[presence] socket connect: emitting identify', userId);
+        s.emit('presence:identify', { userId, username });
+      }
+      if (pendingCreateOnConnectRef.current) {
+        pendingCreateOnConnectRef.current = false;
+        emitCreateRoom(s);
+        return;
+      }
+      if (preventAutoRejoinRef.current || autoJoinAttemptedRef.current) return;
+      const savedCode = normalizeRoomCode(
+        (typeof window !== 'undefined' && window.localStorage.getItem(LAST_ROOM_STORAGE_KEY)) || '',
+      );
+      if (!savedCode || joinedRoomRef.current) return;
+      autoJoinAttemptedRef.current = true;
+      s.emit(
+        'room:join',
+        savedCode,
+        {
+          username: authProfile?.username ?? 'Guest',
+          userId: authUser?.id ?? null,
+        },
+        (resp: any) => {
+          if (!resp?.ok) return;
+          setJoinedRoom(resp.roomCode);
+          setRoomCode(resp.roomCode);
+          setState(resp.state ?? null);
+          setPlayers(normalizeRoomPlayers(resp.players));
+          setSelectedTile(null);
+          setLegalMoves([]);
+          setCanDraw(false);
+          showToast('Rejoined room.', 1200);
+        },
+      );
     });
 
     s.on('disconnect', () => {
@@ -644,7 +828,58 @@ export default function App() {
     });
 
     setSocket(s);
-  }, [isConnecting, socket, serverUrl, showToast]);
+  }, [isConnecting, socket, serverUrl, showToast, authProfile?.username, authUser?.id, emitCreateRoom]);
+
+  const onCreatePrivateRoom = useCallback(() => {
+    setAppMode('multiplayer');
+    preventAutoRejoinRef.current = false;
+    autoJoinAttemptedRef.current = false;
+    const activeSocket = socketRef.current;
+    if (joinedRoomRef.current) {
+      resolvePendingCreate(joinedRoomRef.current);
+      return;
+    }
+    if (activeSocket?.connected) {
+      emitCreateRoom(activeSocket);
+      return;
+    }
+    pendingCreateOnConnectRef.current = true;
+    connectRef.current();
+  }, [emitCreateRoom, resolvePendingCreate]);
+
+  const copyInviteLink = useCallback(
+    async (): Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }> => {
+      let code = normalizeRoomCode(joinedRoomRef.current ?? roomCode);
+      if (!code) {
+        onCreatePrivateRoom();
+        const startedAt = Date.now();
+        while (!joinedRoomRef.current && Date.now() - startedAt < 3000) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        const createdCode = joinedRoomRef.current ?? null;
+        code = normalizeRoomCode(createdCode ?? roomCode);
+      }
+      if (!code) {
+        showToast('Could not prepare an invite link.');
+        return { ok: false, roomCode: null, inviteUrl: null };
+      }
+      const link = getInviteLink(code);
+      if (!link) return { ok: false, roomCode: null, inviteUrl: null };
+      try {
+        await navigator.clipboard.writeText(link);
+        showToast('Invite link copied.');
+        return { ok: true, roomCode: code, inviteUrl: link };
+      } catch {
+        showToast('Could not copy invite link.');
+        return { ok: false, roomCode: code, inviteUrl: link };
+      }
+    },
+    [roomCode, getInviteLink, showToast, onCreatePrivateRoom],
+  );
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     if (!weeklyStatsOpen) return;
@@ -688,7 +923,18 @@ export default function App() {
     connect();
   }, [appMode, socket, connect]);
 
+  useEffect(() => {
+    if (!authUser?.id) return;
+    if (!serverUrl || socket || isConnecting) return;
+    connect();
+  }, [authUser?.id, serverUrl, socket, isConnecting, connect]);
+
   const disconnect = useCallback(() => {
+    preventAutoRejoinRef.current = true;
+    autoJoinAttemptedRef.current = false;
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
+    }
     socket?.disconnect();
     setSocket(null);
     setJoinedRoom(null);
@@ -751,26 +997,8 @@ export default function App() {
     setError('');
     setActionError('');
     if (!socket) return setError('Not connected to server.');
-    socket.emit(
-      'room:create',
-      {
-        username: authProfile?.username ?? 'Guest',
-        userId: authUser?.id ?? null,
-      },
-      (resp: any) => {
-        if (!resp.ok) return setError(resp.error);
-        setError('');
-        setActionError('');
-        setState(null);
-        setLegalMoves([]);
-        setCanDraw(false);
-        setSelectedTile(null);
-        setJoinedRoom(resp.roomCode);
-        setRoomCode(resp.roomCode);
-        setPlayers(normalizeRoomPlayers(resp.players));
-      },
-    );
-  }, [socket, authProfile?.username, authUser?.id]);
+    emitCreateRoom(socket);
+  }, [socket, emitCreateRoom]);
 
   const joinRoom = useCallback(() => {
     setError('');
@@ -793,9 +1021,42 @@ export default function App() {
         setSelectedTile(null);
         setLegalMoves([]);
         setCanDraw(false);
+        autoJoinAttemptedRef.current = false;
+        preventAutoRejoinRef.current = false;
       },
     );
   }, [socket, roomCode, authProfile?.username, authUser?.id]);
+
+  useEffect(() => {
+    if (!socket || !socket.connected || joinedRoom || autoJoinAttemptedRef.current) return;
+    const linkedCode =
+      typeof window !== 'undefined'
+        ? normalizeRoomCode(new URLSearchParams(window.location.search).get('room'))
+        : '';
+    if (!linkedCode) return;
+    autoJoinAttemptedRef.current = true;
+    setRoomCode(linkedCode);
+    socket.emit(
+      'room:join',
+      linkedCode,
+      {
+        username: authProfile?.username ?? 'Guest',
+        userId: authUser?.id ?? null,
+      },
+      (resp: any) => {
+        if (!resp?.ok) {
+          setError(resp?.error ?? 'Unable to join room from invite link.');
+          return;
+        }
+        setJoinedRoom(resp.roomCode);
+        setState(resp.state ?? null);
+        setPlayers(normalizeRoomPlayers(resp.players));
+        setSelectedTile(null);
+        setLegalMoves([]);
+        setCanDraw(false);
+      },
+    );
+  }, [socket, joinedRoom, authProfile?.username, authUser?.id]);
 
   const startGame = useCallback(() => {
     setError('');
@@ -1568,6 +1829,45 @@ export default function App() {
 
 
 
+  const friendInvitePopup = friendInvite ? (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        zIndex: 2000,
+        background: 'linear-gradient(170deg, rgba(18,26,39,0.96), rgba(9,15,26,0.98))',
+        border: '1px solid rgba(236,252,245,0.2)',
+        borderRadius: 14,
+        padding: '16px 20px',
+        color: 'rgba(235,245,242,0.96)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        display: 'grid',
+        gap: 10,
+        minWidth: 280,
+      }}
+    >
+      <p style={{ margin: 0 }}>
+        ⚡ <strong>@{friendInvite.fromUsername}</strong> invited you to a game!
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          className="mode-inline-btn"
+          onClick={() => {
+            const nextUrl = friendInvite.inviteUrl;
+            setFriendInvite(null);
+            window.location.href = nextUrl;
+          }}
+        >
+          Join
+        </button>
+        <button className="mode-inline-btn" onClick={() => setFriendInvite(null)}>
+          Dismiss
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   if (appMode === 'home') {
     return (
       <div ref={appRootRef} className="app">
@@ -1594,6 +1894,9 @@ export default function App() {
               </button>
               <button className="mode-inline-btn" onClick={() => setStatsOpen(true)}>
                 Stats
+              </button>
+              <button className="mode-inline-btn" onClick={() => setFriendsOpen(true)}>
+                Friends
               </button>
               <button
                 className="mode-inline-btn"
@@ -1737,11 +2040,22 @@ export default function App() {
           profile={authProfile}
           onClose={() => setStatsOpen(false)}
         />
+        <FriendsScreen
+          open={friendsOpen}
+          user={authUser}
+          socket={socket}
+          joinedRoom={joinedRoom}
+          currentUsername={authProfile?.username ?? ''}
+          onCopyInviteLink={copyInviteLink}
+          onCreatePrivateRoom={onCreatePrivateRoom}
+          onClose={() => setFriendsOpen(false)}
+        />
               <WeeklyStatsScreen
           open={weeklyStatsOpen}
           onClose={() => setWeeklyStatsOpen(false)}
           awards={weeklyAwards}
         />
+        {friendInvitePopup}
 </div>
     );
   }
@@ -1750,6 +2064,7 @@ export default function App() {
     <div ref={appRootRef} className="app">
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
+      {friendInvitePopup}
 
       {/* Error Banner */}
       {error && (
@@ -1883,6 +2198,10 @@ export default function App() {
                 <span className="mode-option-meta">Begin the live multiplayer hand</span>
               </button>
             )}
+            <button className="mode-option mode-option-secondary" onClick={copyInviteLink}>
+              <span className="mode-option-title">Copy Invite Link</span>
+              <span className="mode-option-meta">Share one-tap room join with friends</span>
+            </button>
             <button className="mode-option mode-option-secondary" onClick={disconnect}>
               <span className="mode-option-title">Leave Room</span>
               <span className="mode-option-meta">Exit this room and return to setup</span>
