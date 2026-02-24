@@ -651,9 +651,7 @@ export default function App() {
           },
         );
         if (!resp?.ok) {
-          setError(resp?.error ?? 'Unable to create room.');
-          resolvePendingCreate(null);
-          return null;
+          throw new Error(resp?.error ?? 'Unable to create room.');
         }
         setError('');
         setActionError('');
@@ -667,16 +665,13 @@ export default function App() {
         autoJoinAttemptedRef.current = false;
         preventAutoRejoinRef.current = false;
         resolvePendingCreate(resp.roomCode);
-        return resp.roomCode as string;
+        return resp;
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Action failed';
-        setError(message);
-        showToast(message, 2000);
         resolvePendingCreate(null);
-        return null;
+        throw e;
       }
     },
-    [authProfile?.username, authUser?.id, resolvePendingCreate, showToast],
+    [authProfile?.username, authUser?.id, resolvePendingCreate],
   );
 
   useEffect(() => {
@@ -765,7 +760,11 @@ export default function App() {
       }
       if (pendingCreateOnConnectRef.current) {
         pendingCreateOnConnectRef.current = false;
-        emitCreateRoom(s);
+        void emitCreateRoom(s).catch((e) => {
+          const message = e instanceof Error ? e.message : 'Action failed';
+          setError(message);
+          showToast(message, 2000);
+        });
         return;
       }
       const reconnectCode = normalizeRoomCode(
@@ -976,7 +975,11 @@ export default function App() {
       return;
     }
     if (activeSocket?.connected) {
-      emitCreateRoom(activeSocket);
+      void emitCreateRoom(activeSocket).catch((e) => {
+        const message = e instanceof Error ? e.message : 'Action failed';
+        setError(message);
+        showToast(message, 2000);
+      });
       return;
     }
     pendingCreateOnConnectRef.current = true;
