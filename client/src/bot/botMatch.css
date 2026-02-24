@@ -67,16 +67,24 @@
 }
 
 .bot-match-screen .hand-container.is-scrollable {
-  scrollbar-width: thin;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 
 .bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar {
-  height: 6px;
+  display: none;
 }
 
 .bot-match-screen .hand-container.is-scrollable::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.22);
   border-radius: 999px;
+}
+
+.bot-match-screen .hand-container .domino-tile {
+  flex-shrink: 0;
 }
 
 .bot-difficulty {

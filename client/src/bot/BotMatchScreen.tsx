@@ -346,7 +346,7 @@ export default function BotMatchScreen({
   const handActive = !match.handOver && !match.gameOver;
   const botTurn = match.currentPlayer === 'bot' && handActive;
   const handTileSize = match.dealSize === 14 ? 84 : 92;
-  const handScrollable = match.dealSize === 14;
+  const handScrollable = match.dealSize === 14 || match.players.you.hand.length > 7;
   const turnLabel = match.handOver
     ? match.gameOver
       ? match.winnerId === 'you'
