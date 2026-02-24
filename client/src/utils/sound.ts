@@ -1,4 +1,4 @@
-import tileTapUrl from '../assets/sounds/tile-tap.wav';
+import tileTapUrl from '../assets/sounds/342200__christopherderp__videogame-menu-button-click.wav';
 
 /**
  * sound.ts — Racehorse Dominoes audio synthesis

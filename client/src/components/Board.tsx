@@ -406,6 +406,7 @@ interface BoardProps {
   selectedTile: Tile | null;
   onPositionClick: (position: PlacementPosition) => void;
   tileSize?: number;
+  showOpenEndGlow?: boolean;
 }
 
 export function Board({
@@ -414,6 +415,7 @@ export function Board({
   selectedTile,
   onPositionClick,
   tileSize = 72,
+  showOpenEndGlow = false,
 }: BoardProps) {
   const fitPaddingX = 110;
   const fitPaddingY = 90;
@@ -438,8 +440,27 @@ export function Board({
     return computeLayout(board, validPositions);
   }, [board, validPositions]);
 
+  const openEndPositions = useMemo(() => {
+    if (!board) return [] as PlacementPosition[];
+    const positions: PlacementPosition[] = ['left', 'right'];
+    for (const hub of board.hubDoubles ?? []) {
+      if (typeof hub.hubId !== 'number') continue;
+      const hubId = hub.hubId;
+      positions.push(`branch-${hubId}-0`, `branch-${hubId}-1`);
+    }
+    return positions;
+  }, [board]);
+
+  const glowLayout = useMemo(() => {
+    if (!showOpenEndGlow) return null;
+    return computeLayout(board, openEndPositions);
+  }, [showOpenEndGlow, board, openEndPositions]);
+
   // Convert layout units to pixels
   const unitToPixels = tileSize;
+  // Calculate board center offset
+  const centerX = (layout.minX + layout.maxX) / 2;
+  const centerY = (layout.minY + layout.maxY) / 2;
 
   // Auto-fit camera on layout change
   useEffect(() => {
@@ -520,10 +541,6 @@ export function Board({
 
     setCamera({ x: 0, y: 0, scale: fitScale });
   }, [layout, unitToPixels, fitPaddingX, fitPaddingY]);
-
-  // Calculate board center offset
-  const centerX = (layout.minX + layout.maxX) / 2;
-  const centerY = (layout.minY + layout.maxY) / 2;
 
   return (
     <div
@@ -606,6 +623,7 @@ export function Board({
               }}
               data-lane={zone.lane}
               data-dir={`${zone.dirX},${zone.dirY}`}
+              data-position={zone.position}
             >
               <span className="placement-arrow">{arrow}</span>
               {showTargetDebug && (
@@ -616,6 +634,31 @@ export function Board({
             </div>
           );
         })}
+
+        {showOpenEndGlow &&
+          selectedTile === null &&
+          glowLayout?.zones.map((zone) => {
+            const outwardPx = tileSize * 0.16;
+            const x = (zone.x - centerX) * unitToPixels + zone.dirX * outwardPx;
+            const y = (zone.y - centerY) * unitToPixels + zone.dirY * outwardPx;
+            const width = zone.width * unitToPixels;
+            const height = zone.height * unitToPixels;
+            return (
+              <div
+                key={`glow-${zone.key}`}
+                className="placement-zone open-end-glow"
+                style={{
+                  position: 'absolute',
+                  left: `calc(50% + ${x}px)`,
+                  top: `calc(50% + ${y}px)`,
+                  width,
+                  height,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              />
+            );
+          })}
+
       </div>
     </div>
   );

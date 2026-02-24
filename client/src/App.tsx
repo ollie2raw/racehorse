@@ -10,13 +10,20 @@ import BotMatchScreen from './bot/BotMatchScreen';
 import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
 import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
 import GameOverModal from './components/GameOverModal';
-import AnalyzerModal from './analyzer/AnalyzerModal';
+import GameReviewer from './analyzer/GameReviewer';
 import AuthModal from './auth/AuthModal';
 import UsernameModal from './auth/UsernameModal';
 import { isTemporaryUsername, useAuth } from './auth/useAuth';
 import StatsScreen from './stats/StatsScreen';
 import FriendsScreen from './friends/FriendsScreen';
-import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis, type MoveEntry } from './analyzer/moveAnalyzer';
+import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from './analyzer/moveAnalyzer';
+import {
+  type MoveEntry,
+  pickEngineBestMove,
+  snapshotBoardState,
+  cloneBoardState,
+  toTileTuple,
+} from './analyzer/moveLogger';
 import { recordMatchResult } from './stats/statsApi';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 
@@ -56,13 +63,20 @@ function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
 
 const LAST_ROOM_STORAGE_KEY = 'racehorse_last_room_code';
 
-function toTileTuple(tile: Tile): [number, number] {
-  return [tile.low, tile.high];
-}
-
 function getBoardEnds(board: GameState['board']): [number, number] {
   if (!board) return [-1, -1];
   return [board.leftEnd, board.rightEnd];
+}
+
+function getBoardTileCount(board: GameState['board']): number {
+  if (!board) return 0;
+  let count = board.mainLine.length;
+  for (const hub of board.hubDoubles) {
+    for (const arm of hub.branches) {
+      if (arm) count += arm.tiles.length;
+    }
+  }
+  return count;
 }
 
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
@@ -133,36 +147,36 @@ function HandView({
     return playableTiles.some((t) => tileEquals(t, tile));
   };
 
-  return (
-    <div
-      className={`hand-container ${compactStacked ? 'is-stacked' : ''}`}
-      style={{
-        display: 'flex',
-        flexWrap: compactStacked ? 'wrap' : 'nowrap',
-        justifyContent: 'center',
-        overflow: 'visible',
-        width: '100%',
-      }}
-    >
-      {hand.map((tile, idx) => {
-        const isSel = selectedTile && tileEquals(tile, selectedTile);
-        const canPlay = isMyTurn && canPlayTile(tile);
+  const renderTile = (tile: Tile, idx: number) => {
+    const isSel = selectedTile && tileEquals(tile, selectedTile);
+    const canPlay = isMyTurn && canPlayTile(tile);
+    return (
+      <DominoTile
+        key={`${idx}-${tile.low}-${tile.high}`}
+        tile={tile}
+        size={tileSize}
+        selected={isSel ?? false}
+        highlight={canPlay}
+        onClick={() => isMyTurn && onSelect(tile)}
+        disabled={!isMyTurn}
+        className={drawPulseIndex === idx ? 'new-draw' : ''}
+      />
+    );
+  };
 
-        return (
-          <DominoTile
-            key={`${idx}-${tile.low}-${tile.high}`}
-            tile={tile}
-            size={tileSize}
-            selected={isSel ?? false}
-            highlight={canPlay}
-            onClick={() => isMyTurn && onSelect(tile)}
-            disabled={!isMyTurn}
-            className={drawPulseIndex === idx ? 'new-draw' : ''}
-          />
-        );
-      })}
-    </div>
-  );
+  if (compactStacked) {
+    const splitAt = Math.ceil(hand.length / 2);
+    const firstRow = hand.slice(0, splitAt);
+    const secondRow = hand.slice(splitAt);
+    return (
+      <div className="hand-container is-stacked">
+        <div className="hand-row">{firstRow.map((tile, idx) => renderTile(tile, idx))}</div>
+        <div className="hand-row">{secondRow.map((tile, idx) => renderTile(tile, splitAt + idx))}</div>
+      </div>
+    );
+  }
+
+  return <div className="hand-container">{hand.map((tile, idx) => renderTile(tile, idx))}</div>;
 }
 
 // ─── Game Over Overlay ───────────────────────────────────────
@@ -239,7 +253,15 @@ function GameOverOverlay({
         <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', fontSize: '0.92rem' }}>{waitingText}</p>
       )}
       {extraActionLabel && onExtraAction && (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            width: '100%',
+            marginTop: 15,
+            gridColumn: '1 / -1',
+          }}
+        >
           <button className="mode-inline-btn" onClick={onExtraAction}>
             {extraActionLabel}
           </button>
@@ -489,6 +511,9 @@ export default function App() {
   const prevHudScoresRef = useRef<Record<string, number>>({});
   const prevMyHandLenRef = useRef(0);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
+  const [opponentDragging, setOpponentDragging] = useState(false);
+  const draggingStateRef = useRef(false);
+  const isMutedRef = useRef(isMuted);
   const matchRecordKeyRef = useRef('');
   const prevGameOverRef = useRef(false);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
@@ -526,6 +551,10 @@ export default function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('racehorse_muted', isMuted ? '1' : '0');
+  }, [isMuted]);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
   }, [isMuted]);
 
   useEffect(() => {
@@ -742,6 +771,8 @@ export default function App() {
       setActionError('');
       setRematchRequested(false);
       setRematchReadyIds([]);
+      setOpponentDragging(false);
+      draggingStateRef.current = false;
     });
 
     s.on('state:update', (update: StateUpdate) => {
@@ -750,6 +781,14 @@ export default function App() {
       setCanDraw(update.canDraw);
       setSelectedTile(null);
       setActionError('');
+      const nextBoardCount = getBoardTileCount(update.state.board);
+      if (prevBoardTileCountRef.current > 0 && nextBoardCount > prevBoardTileCountRef.current) {
+        playTileSound(
+          nextBoardCount - prevBoardTileCountRef.current > 1 ? 'slam' : 'standard',
+          isMutedRef.current,
+        );
+      }
+      prevBoardTileCountRef.current = nextBoardCount;
       if (!update.state.gameOver) {
         setRematchRequested(false);
         setRematchReadyIds([]);
@@ -834,6 +873,11 @@ export default function App() {
       setRematchRequested(false);
       setRematchReadyIds([]);
       showToast('Rematch started.', 1200);
+    });
+
+    s.on('player:dragging', (payload: { playerId?: string; dragging?: boolean }) => {
+      if (!payload?.playerId || payload.playerId === s.id) return;
+      setOpponentDragging(Boolean(payload.dragging));
     });
 
     s.on('connect_error', (e) => {
@@ -952,6 +996,8 @@ export default function App() {
     setHandReveal(null);
     setRematchRequested(false);
     setRematchReadyIds([]);
+    setOpponentDragging(false);
+    draggingStateRef.current = false;
     setPendingUiAction(null);
     handRevealShownRef.current = null;
     setAppMode('home');
@@ -973,6 +1019,8 @@ export default function App() {
     setHandReveal(null);
     setRematchRequested(false);
     setRematchReadyIds([]);
+    setOpponentDragging(false);
+    draggingStateRef.current = false;
     setAppMode('tournament');
   }, [disconnect, tournamentId, tournamentState?.status]);
 
@@ -1091,7 +1139,10 @@ export default function App() {
   }, [socket, joinedRoom, state?.gameOver, rematchRequested, showToast]);
 
   const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber'>) => {
-    const moveNumber = multiplayerMoveCounterRef.current++;
+    const moveNumber =
+      entry.player === 'you'
+        ? multiplayerMoveCounterRef.current++
+        : multiplayerMoveCounterRef.current;
     setMultiplayerMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
   }, []);
 
@@ -1102,10 +1153,22 @@ export default function App() {
     setAnalyzerOpen(true);
   }, [multiplayerMoveLog]);
 
+  const emitDraggingState = useCallback(
+    (dragging: boolean) => {
+      if (draggingStateRef.current === dragging) return;
+      draggingStateRef.current = dragging;
+      if (!socket || !joinedRoom || !state || state.gameOver || state.handOver) return;
+      if (!state.playerIds.includes(you)) return;
+      socket.emit('player:dragging', joinedRoom, { dragging });
+    },
+    [socket, joinedRoom, state, you],
+  );
+
   // Game actions
   const draw = useCallback(() => {
     setActionError('');
     if (!socket || !joinedRoom) return;
+    emitDraggingState(false);
     setPendingUiAction('draw');
     const boardEnds = getBoardEnds(state?.board ?? null);
     const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
@@ -1125,13 +1188,24 @@ export default function App() {
         handBefore,
         validMoves,
         pipDelta: 0,
+        boardState: snapshotBoardState(state?.board ?? null),
+        boardRenderState: cloneBoardState(state?.board ?? null),
+        handSnapshot: handBefore,
+        engineBestMove: pickEngineBestMove(
+          legalMoves
+            .filter((m) => m.type === 'play' && m.tile)
+            .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
+          boardEnds,
+          handBefore,
+        ),
       });
     });
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState]);
 
   const pass = useCallback(() => {
     setActionError('');
     if (!socket || !joinedRoom) return;
+    emitDraggingState(false);
     setPendingUiAction('pass');
     const boardEnds = getBoardEnds(state?.board ?? null);
     const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
@@ -1151,14 +1225,25 @@ export default function App() {
         handBefore,
         validMoves,
         pipDelta: 0,
+        boardState: snapshotBoardState(state?.board ?? null),
+        boardRenderState: cloneBoardState(state?.board ?? null),
+        handSnapshot: handBefore,
+        engineBestMove: pickEngineBestMove(
+          legalMoves
+            .filter((m) => m.type === 'play' && m.tile)
+            .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
+          boardEnds,
+          handBefore,
+        ),
       });
     });
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState]);
 
   const play = useCallback(
     (position: PlacementPosition) => {
       setActionError('');
       if (!socket || !joinedRoom || !selectedTile) return;
+      emitDraggingState(false);
       setPendingUiAction('play');
       const boardEnds = getBoardEnds(state?.board ?? null);
       const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
@@ -1189,12 +1274,22 @@ export default function App() {
             handBefore,
             validMoves,
             pipDelta: -(playedTile[0] + playedTile[1]),
+            boardState: snapshotBoardState(state?.board ?? null),
+            boardRenderState: cloneBoardState(state?.board ?? null),
+            handSnapshot: handBefore,
+            engineBestMove: pickEngineBestMove(
+              legalMoves
+                .filter((m) => m.type === 'play' && m.tile)
+                .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
+              boardEnds,
+              handBefore,
+            ),
           });
           setSelectedTile(null);
         },
       );
     },
-    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove],
+    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove, emitDraggingState],
   );
 
   // Derived state
@@ -1245,23 +1340,55 @@ export default function App() {
       })()
     : undefined;
 
+  const handleTileTap = useCallback(
+    (tile: Tile) => {
+      if (!isMyTurn || state?.handOver || state?.gameOver) return;
+      if (selectedTile && tileEquals(selectedTile, tile)) {
+        const tileMoves = legalMoves.filter(
+          (m) => m.type === 'play' && m.tile && tileEquals(m.tile as Tile, tile),
+        );
+        if (tileMoves.length === 1 && tileMoves[0].position) {
+          play(tileMoves[0].position as PlacementPosition);
+          return;
+        }
+      }
+      setSelectedTile(tile);
+      emitDraggingState(true);
+    },
+    [isMyTurn, state?.handOver, state?.gameOver, selectedTile, legalMoves, play, emitDraggingState],
+  );
+
+  useEffect(() => {
+    emitDraggingState(Boolean(selectedTile));
+  }, [selectedTile, emitDraggingState]);
+
   useEffect(() => {
     setRematchRequested(false);
     setRematchReadyIds([]);
     setMultiplayerMoveLog([]);
     multiplayerMoveCounterRef.current = 1;
     previousStateForAnalysisRef.current = null;
+    setOpponentDragging(false);
+    draggingStateRef.current = false;
   }, [joinedRoom]);
+
+  useEffect(() => {
+    if (!isMyTurn || state?.gameOver || state?.handOver) {
+      emitDraggingState(false);
+    }
+  }, [isMyTurn, state?.gameOver, state?.handOver, emitDraggingState]);
 
   useEffect(() => {
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, myHand.length);
       const MAX_TRAY_WIDTH = window.innerWidth - 32;
-      const BASE_TILE_WIDTH = 56;
-      const MIN_TILE_WIDTH = 32;
-      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / tileCount);
+      const BASE_TILE_WIDTH = 48;
+      const MIN_TILE_WIDTH = 40;
+      const forceTwoRows = tileCount > 12;
+      const visualColumns = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
+      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / visualColumns);
       const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
-      const useVertical = tileWidth <= MIN_TILE_WIDTH || tileCount > 14;
+      const useVertical = forceTwoRows;
       setHandTileSize(tileWidth);
       setHandCompactStacked(useVertical);
     };
@@ -1351,8 +1478,8 @@ export default function App() {
     const actorId = prev.playerIds[prev.currentPlayerIndex] ?? null;
     if (!actorId || actorId === you) return;
 
-    const prevBoardCount = prev.board?.mainLine.length ?? 0;
-    const nextBoardCount = state.board?.mainLine.length ?? 0;
+    const prevBoardCount = getBoardTileCount(prev.board);
+    const nextBoardCount = getBoardTileCount(state.board);
     let action: MoveEntry['action'] = 'pass';
     if (nextBoardCount > prevBoardCount) action = 'place';
     else if ((state.boneyard?.length ?? 0) < (prev.boneyard?.length ?? 0)) action = 'draw';
@@ -1364,6 +1491,10 @@ export default function App() {
       handBefore: [],
       validMoves: [],
       pipDelta: 0,
+      boardState: snapshotBoardState(prev.board),
+      boardRenderState: cloneBoardState(prev.board),
+      handSnapshot: (prev.players[you]?.hand ?? []).map(toTileTuple),
+      engineBestMove: null,
     });
   }, [state, you, appendMultiplayerMove]);
 
@@ -1377,7 +1508,7 @@ export default function App() {
     prevOppCountRef.current = opponentTileCount;
   }, [opponentTileCount]);
 
-  // Pulse score cards on scoring events and play a short hit cue.
+  // Pulse score cards on scoring events.
   useEffect(() => {
     if (!state) return;
 
@@ -1397,13 +1528,12 @@ export default function App() {
     prevHudScoresRef.current = nextScores;
     if (!changed) return;
 
-    playTileSound('slam', isMuted);
     setHudScorePulse(nextPulse);
     const timeout = setTimeout(() => setHudScorePulse({}), 260);
     return () => clearTimeout(timeout);
-  }, [state, isMuted]);
+  }, [state]);
 
-  // Add tactile audio feedback for turn switches and tile placements.
+  // Track turn changes for UI state sync.
   useEffect(() => {
     if (!inGame || !state) {
       prevBoardTileCountRef.current = 0;
@@ -1411,25 +1541,12 @@ export default function App() {
       return;
     }
 
-    const currentTileCount = state.board?.mainLine.length ?? 0;
-    if (prevBoardTileCountRef.current > 0 && currentTileCount > prevBoardTileCountRef.current) {
-      playTileSound(
-        currentTileCount - prevBoardTileCountRef.current > 1 ? 'slam' : 'standard',
-        isMuted,
-      );
-    }
+    const currentTileCount = getBoardTileCount(state.board);
     prevBoardTileCountRef.current = currentTileCount;
 
     const activePlayerId = state.playerIds[state.currentPlayerIndex] ?? null;
-    if (
-      prevTurnIdRef.current !== null &&
-      activePlayerId &&
-      prevTurnIdRef.current !== activePlayerId
-    ) {
-      playTileSound('deal', isMuted);
-    }
     prevTurnIdRef.current = activePlayerId;
-  }, [inGame, state, isMuted]);
+  }, [inGame, state]);
 
   useEffect(() => {
     const finalState = state;
@@ -2367,11 +2484,6 @@ export default function App() {
                       />
                     ))}
                   </div>
-                  <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
-                    <button className="mode-inline-btn" onClick={openMultiplayerAnalyzer}>
-                      Analyze Game
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -2440,6 +2552,7 @@ export default function App() {
                 selectedTile={selectedTile}
                 onPositionClick={play}
                 tileSize={72}
+                showOpenEndGlow={opponentDragging}
               />
             </div>
           </div>
@@ -2450,7 +2563,7 @@ export default function App() {
                 <HandView
                   hand={myHand}
                   selectedTile={selectedTile}
-                  onSelect={setSelectedTile}
+                  onSelect={handleTileTap}
                   isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
                   legalMoves={legalMoves}
                   tileSize={handTileSize}
@@ -2519,11 +2632,11 @@ export default function App() {
           </div>
         </div>
       )}
-      <AnalyzerModal
+      <GameReviewer
         open={analyzerOpen}
         onClose={() => setAnalyzerOpen(false)}
         analysis={currentAnalysis}
-        title="Analyze Game"
+        title="Game Review"
       />
     </div>
   );

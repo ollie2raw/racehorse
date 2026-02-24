@@ -166,8 +166,11 @@ export function computeGoOutBonusPoints(
   hand: readonly Tile[],
   config: Config = DEFAULT_CONFIG,
 ): number {
+  void config;
   const total = hand.reduce((sum, t) => sum + t.high + t.low, 0);
-  return Math.round(total / config.scoringMultiple) * config.scoringMultiple;
+  const awarded = Math.round(total / 5) * 5;
+  console.log(`[scoring] Hand Total: ${total}, Awarded: ${awarded}`);
+  return awarded;
 }
 
 // ─── Board Placement ─────────────────────────────────────────

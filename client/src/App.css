@@ -915,13 +915,13 @@ button:hover:not(:disabled) {
   position: absolute;
   /* Prevent tiles from causing layout jitter */
   will-change: transform;
-  animation: board-tile-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: board-tile-enter 50ms ease-out;
 }
 
 @keyframes board-tile-enter {
   from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.94);
+    opacity: 0.96;
+    transform: translate(-50%, -50%) scale(0.95);
   }
   to {
     opacity: 1;
@@ -935,18 +935,26 @@ button:hover:not(:disabled) {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 3px dashed rgba(255, 255, 255, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.4);
   border-radius: var(--radius-md);
-  background: rgba(52, 211, 153, 0.15);
+  background: rgba(255, 255, 255, 0.04);
   cursor: pointer;
   transition: all var(--transition-fast);
   touch-action: manipulation;
 }
 
 .placement-zone.active {
-  border-color: var(--tile-highlight);
-  background: rgba(52, 211, 153, 0.25);
+  border-color: #34d399;
+  background: rgba(52, 211, 153, 0.15);
   animation: zone-glow 1.5s ease-in-out infinite;
+}
+
+.placement-zone.open-end-glow {
+  border-color: rgba(112, 244, 198, 0.2);
+  background: rgba(70, 214, 171, 0.15);
+  pointer-events: none;
+  animation: none;
+  filter: blur(8px);
 }
 
 .placement-zone.debug {
@@ -957,10 +965,10 @@ button:hover:not(:disabled) {
 @keyframes zone-glow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.35);
   }
   50% {
-    box-shadow: 0 0 15px 5px rgba(52, 211, 153, 0.3);
+    box-shadow: 0 0 14px 4px rgba(52, 211, 153, 0.24);
   }
 }
 
@@ -1005,6 +1013,11 @@ button:hover:not(:disabled) {
 /* Board tiles should not hover-animate to avoid layout jitter */
 .domino-tile.board-tile {
   pointer-events: none;
+}
+
+.drag-ghost-tile {
+  opacity: 0.92;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.45));
 }
 
 .domino-body {
@@ -1220,7 +1233,7 @@ button:hover:not(:disabled) {
   flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
-  gap: var(--hand-gap, 10px);
+  gap: 8px;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -1236,7 +1249,8 @@ button:hover:not(:disabled) {
 }
 
 .hand-container .domino-tile {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  margin: 4px;
   animation: hand-tile-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -1270,13 +1284,22 @@ button:hover:not(:disabled) {
 }
 
 .hand-container.is-stacked {
-  flex-wrap: wrap;
-  white-space: normal;
-  row-gap: 8px;
-  column-gap: 8px;
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  gap: 8px;
   height: auto;
   min-height: 100px;
   align-content: center;
+  justify-items: center;
+  white-space: normal;
+}
+
+.hand-row {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
 }
 
 .icon-btn {
@@ -1617,7 +1640,7 @@ button:hover:not(:disabled) {
   }
 
   .hand-container {
-    gap: 6px;
+    gap: 8px;
   }
 
   .opponent-tile-card {

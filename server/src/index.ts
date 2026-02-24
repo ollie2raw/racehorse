@@ -1127,6 +1127,21 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     }
   });
 
+  socket.on('player:dragging', (code: unknown, payload?: { dragging?: boolean }) => {
+    const roomCode = String(code ?? '').trim().toUpperCase();
+    if (!roomCode) return;
+    try {
+      const room = getRoom(roomCode);
+      if (!room.players.includes(socket.id)) return;
+      socket.to(roomCode).emit('player:dragging', {
+        playerId: socket.id,
+        dragging: Boolean(payload?.dragging),
+      });
+    } catch {
+      // ignore invalid room
+    }
+  });
+
   socket.on('disconnect', () => {
     removeSocketPresence();
     const roomCode = (socket.data?.roomId as string | undefined) ?? undefined;

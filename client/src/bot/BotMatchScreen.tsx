@@ -7,8 +7,15 @@ import {
   type DailyPuzzleLeaderboardEntry,
 } from '../dailyPuzzle/api';
 import GameOverModal from '../components/GameOverModal';
-import AnalyzerModal from '../analyzer/AnalyzerModal';
-import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis, type MoveEntry } from '../analyzer/moveAnalyzer';
+import GameReviewer from '../analyzer/GameReviewer';
+import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from '../analyzer/moveAnalyzer';
+import {
+  type MoveEntry,
+  pickEngineBestMove,
+  snapshotBoardState,
+  cloneBoardState,
+  toTileTuple,
+} from '../analyzer/moveLogger';
 import {
   applyPlayMove,
   createBotMatch,
@@ -64,10 +71,6 @@ function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
-}
-
-function toTileTuple(tile: Tile): [number, number] {
-  return [tile.low, tile.high];
 }
 
 function sumTilePips(hand: Tile[]): number {
@@ -190,7 +193,8 @@ export default function BotMatchScreen({
   };
 
   const appendMove = (entry: Omit<MoveEntry, 'moveNumber'>) => {
-    const moveNumber = moveCounterRef.current++;
+    const moveNumber =
+      entry.player === 'you' ? moveCounterRef.current++ : moveCounterRef.current;
     setMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
   };
 
@@ -276,6 +280,17 @@ export default function BotMatchScreen({
     const beforePips = sumTilePips(match.players.you.hand);
     const result = applyPlayMove(match, 'you', move);
     const afterPips = sumTilePips(result.state.players.you.hand);
+    const mirroredChoice = chooseBotMove(
+      {
+        ...match,
+        players: {
+          you: match.players.bot,
+          bot: match.players.you,
+        },
+        currentPlayer: 'bot',
+      },
+      difficulty,
+    );
     setMovesUsed((prev) => prev + 1);
     setSelectedTile(null);
     appendMove({
@@ -286,6 +301,22 @@ export default function BotMatchScreen({
       handBefore,
       validMoves,
       pipDelta: beforePips - afterPips,
+      boardState: snapshotBoardState(match.board),
+      boardRenderState: cloneBoardState(match.board),
+      handSnapshot: handBefore,
+      engineBestMove: mirroredChoice?.move?.tile
+        ? {
+            tile: toTileTuple(mirroredChoice.move.tile as Tile),
+            position: mirroredChoice.move.position,
+            score: mirroredChoice.score,
+          }
+        : pickEngineBestMove(
+            userPlayMoves
+              .filter((m) => m.type === 'play' && m.tile)
+              .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
+            boardEnds,
+            handBefore,
+          ),
     });
     applyAndNotify(result);
   };
@@ -312,6 +343,10 @@ export default function BotMatchScreen({
             handBefore: [],
             validMoves: [],
             pipDelta: 0,
+            boardState: snapshotBoardState(match.board),
+            boardRenderState: cloneBoardState(match.board),
+            handSnapshot: match.players.you.hand.map(toTileTuple),
+            engineBestMove: null,
           });
         }
         if (drawPass.passed) {
@@ -322,6 +357,10 @@ export default function BotMatchScreen({
             handBefore: [],
             validMoves: [],
             pipDelta: 0,
+            boardState: snapshotBoardState(match.board),
+            boardRenderState: cloneBoardState(match.board),
+            handSnapshot: match.players.you.hand.map(toTileTuple),
+            engineBestMove: null,
           });
         }
         const afterDraw = asPlayMoves(getLegalMoves(working, 'bot'));
@@ -348,6 +387,10 @@ export default function BotMatchScreen({
             handBefore: [],
             validMoves: [],
             pipDelta: 0,
+            boardState: snapshotBoardState(match.board),
+            boardRenderState: cloneBoardState(match.board),
+            handSnapshot: match.players.you.hand.map(toTileTuple),
+            engineBestMove: null,
           });
         }
         applyAndNotify(result);
@@ -384,6 +427,16 @@ export default function BotMatchScreen({
         handBefore,
         validMoves: [],
         pipDelta: 0,
+        boardState: snapshotBoardState(match.board),
+        boardRenderState: cloneBoardState(match.board),
+        handSnapshot: handBefore,
+        engineBestMove: pickEngineBestMove(
+          userPlayMoves
+            .filter((m) => m.type === 'play' && m.tile)
+            .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
+          boardEnds,
+          handBefore,
+        ),
       });
     }
     if (result.passed) {
@@ -394,6 +447,16 @@ export default function BotMatchScreen({
         handBefore,
         validMoves: [],
         pipDelta: 0,
+        boardState: snapshotBoardState(match.board),
+        boardRenderState: cloneBoardState(match.board),
+        handSnapshot: handBefore,
+        engineBestMove: pickEngineBestMove(
+          userPlayMoves
+            .filter((m) => m.type === 'play' && m.tile)
+            .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
+          boardEnds,
+          handBefore,
+        ),
       });
     }
     applyAndNotify(result);
@@ -517,11 +580,6 @@ export default function BotMatchScreen({
                   />
                 ))}
               </div>
-              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
-                <button className="mode-inline-btn" onClick={openAnalyzer}>
-                  Analyze Game
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -552,7 +610,15 @@ export default function BotMatchScreen({
           onSecondary={onBack}
           onClose={onBack}
         >
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              width: '100%',
+              marginTop: 24,
+              gridColumn: '1 / -1',
+            }}
+          >
             <button className="mode-inline-btn" onClick={openAnalyzer}>
               Analyze Game
             </button>
@@ -790,11 +856,11 @@ export default function BotMatchScreen({
         </div>
       </div>
 
-      <AnalyzerModal
+      <GameReviewer
         open={analyzerOpen}
         onClose={() => setAnalyzerOpen(false)}
         analysis={currentAnalysis}
-        title="Analyze Game"
+        title="Game Review"
       />
 
       {showDebug && (

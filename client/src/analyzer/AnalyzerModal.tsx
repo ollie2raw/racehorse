@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { GameAnalysis } from './moveAnalyzer';
+import type { GameAnalysis, MoveRating } from './moveAnalyzer';
 
 interface AnalyzerModalProps {
   open: boolean;
@@ -8,9 +8,11 @@ interface AnalyzerModalProps {
   title?: string;
 }
 
-function colorForRating(rating: 'Optimal' | 'Good' | 'Mistake' | 'Blunder'): string {
-  if (rating === 'Optimal') return '#5be39b';
+function colorForRating(rating: MoveRating): string {
+  if (rating === 'Brilliant') return '#00ff88';
+  if (rating === 'Great') return '#67e8f9';
   if (rating === 'Good') return '#73b7ff';
+  if (rating === 'Inaccuracy') return '#ffcc00';
   if (rating === 'Mistake') return '#f0c46c';
   return '#ff7373';
 }
