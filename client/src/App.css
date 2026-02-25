@@ -68,12 +68,11 @@ body {
   min-height: 100dvh;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 #root {
-  height: auto;
+  height: 100%;
   min-height: 100dvh;
 }
 
@@ -981,6 +980,7 @@ button:hover:not(:disabled) {
   background: var(--bg-board-pattern);
   pointer-events: none;
   opacity: 0.22;
+  z-index: 0;
 }
 
 .board-area::after {
@@ -989,6 +989,7 @@ button:hover:not(:disabled) {
   inset: 0;
   pointer-events: none;
   background: radial-gradient(circle at center, rgba(0, 0, 0, 0) 56%, rgba(0, 0, 0, 0.2) 100%);
+  z-index: 0;
 }
 
 /* ─── Board Container ───────────────────────────────────────── */

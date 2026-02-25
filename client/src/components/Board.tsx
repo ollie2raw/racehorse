@@ -9,6 +9,8 @@ import type { Tile, BoardState, PlacementPosition, Move } from '../types';
 const TILE_UNIT = 1;
 const TILE_GAP = 0.15;
 const DOUBLE_CROSS_GAP = 0.2;
+const FIT_PADDING_X = 0;
+const FIT_PADDING_Y = 0;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -81,13 +83,38 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
       });
     }
 
+    if (zones.length > 0) {
+      // Fit strictly to the opening placement zone footprint with a small breathing margin.
+      let minX = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      for (const zone of zones) {
+        const halfW = zone.width / 2;
+        const halfH = zone.height / 2;
+        minX = Math.min(minX, zone.x - halfW);
+        maxX = Math.max(maxX, zone.x + halfW);
+        minY = Math.min(minY, zone.y - halfH);
+        maxY = Math.max(maxY, zone.y + halfH);
+      }
+      const margin = 0.5;
+      return {
+        tiles,
+        zones,
+        minX: minX - margin,
+        maxX: maxX + margin,
+        minY: minY - margin,
+        maxY: maxY + margin,
+      };
+    }
+
     return {
       tiles,
       zones,
-      minX: -2,
-      maxX: 2,
-      minY: -2,
-      maxY: 2,
+      minX: -1.5,
+      maxX: 1.5,
+      minY: -1,
+      maxY: 1,
     };
   }
 
@@ -417,9 +444,8 @@ export function Board({
   tileSize = 72,
   showOpenEndGlow = false,
 }: BoardProps) {
-  const fitPaddingX = 110;
-  const fitPaddingY = 90;
   const containerRef = useRef<HTMLDivElement>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
@@ -462,23 +488,73 @@ export function Board({
   const centerX = (layout.minX + layout.maxX) / 2;
   const centerY = (layout.minY + layout.maxY) / 2;
 
-  // Auto-fit camera on layout change
+  function fitCameraToContainer(width?: number, height?: number) {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const containerWidth = width ?? rect.width;
+    const containerHeight = height ?? rect.height;
+    if (containerWidth < 2 || containerHeight < 2) return;
+
+    const layoutWidth = (layout.maxX - layout.minX) * unitToPixels;
+    const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
+    if (layoutWidth <= 0 || layoutHeight <= 0) return;
+
+    // Calculate scale to fit
+    const scaleX = Math.max(240, containerWidth - FIT_PADDING_X) / layoutWidth;
+    const scaleY = Math.max(180, containerHeight - FIT_PADDING_Y) / layoutHeight;
+    const fitScale = Math.min(1.45, Math.max(0.42, Math.min(scaleX, scaleY)));
+
+    setCamera({ x: 0, y: 0, scale: fitScale });
+  }
+
+  // Single authoritative camera auto-fit: respond to layout and container size.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
+    const runFit = () => {
+      const rect = container.getBoundingClientRect();
+      setViewportSize((prev) =>
+        Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5
+          ? prev
+          : { width: rect.width, height: rect.height },
+      );
+      fitCameraToContainer(rect.width, rect.height);
+    };
+    runFit();
+    const raf1 = window.requestAnimationFrame(runFit);
+    const raf2 = window.requestAnimationFrame(() => window.requestAnimationFrame(runFit));
 
-    const layoutWidth = (layout.maxX - layout.minX) * unitToPixels;
-    const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        window.cancelAnimationFrame(raf1);
+        window.cancelAnimationFrame(raf2);
+      };
+    }
 
-    // Calculate scale to fit
-    const scaleX = Math.max(240, containerWidth - fitPaddingX) / layoutWidth;
-    const scaleY = Math.max(180, containerHeight - fitPaddingY) / layoutHeight;
-    const fitScale = Math.min(1.45, Math.max(0.42, Math.min(scaleX, scaleY)));
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const box = entry?.contentRect;
+      if (box) {
+        setViewportSize((prev) =>
+          Math.abs(prev.width - box.width) < 0.5 && Math.abs(prev.height - box.height) < 0.5
+            ? prev
+            : { width: box.width, height: box.height },
+        );
+        fitCameraToContainer(box.width, box.height);
+      } else {
+        runFit();
+      }
+    });
+    observer.observe(container);
 
-    setCamera({ x: 0, y: 0, scale: fitScale });
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+    };
   }, [layout, unitToPixels]);
 
   // Mouse wheel zoom
@@ -526,21 +602,8 @@ export function Board({
 
   // Double-click to reset
   const handleDoubleClick = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-
-    const layoutWidth = (layout.maxX - layout.minX) * unitToPixels;
-    const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
-
-    const scaleX = Math.max(240, containerWidth - fitPaddingX) / layoutWidth;
-    const scaleY = Math.max(180, containerHeight - fitPaddingY) / layoutHeight;
-    const fitScale = Math.min(1.45, Math.max(0.42, Math.min(scaleX, scaleY)));
-
-    setCamera({ x: 0, y: 0, scale: fitScale });
-  }, [layout, unitToPixels, fitPaddingX, fitPaddingY]);
+    fitCameraToContainer();
+  }, [layout, unitToPixels]);
 
   return (
     <div
@@ -557,6 +620,8 @@ export function Board({
       <div
         className="board-canvas"
         style={{
+          width: viewportSize.width > 0 ? `${viewportSize.width}px` : '100%',
+          height: viewportSize.height > 0 ? `${viewportSize.height}px` : '100%',
           transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
           transformOrigin: 'center center',
         }}
