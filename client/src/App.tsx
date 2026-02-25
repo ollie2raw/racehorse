@@ -481,6 +481,7 @@ export default function App() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [serverWaking, setServerWaking] = useState(false);
   const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
   const [friendInvite, setFriendInvite] = useState<{
@@ -554,6 +555,12 @@ export default function App() {
         clearTimeout(toastTimeoutRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hasSeen = window.localStorage.getItem('hasSeenWelcome');
+    if (!hasSeen) setWelcomeOpen(true);
   }, []);
 
   useEffect(() => {
@@ -1725,24 +1732,22 @@ export default function App() {
   useEffect(() => {
     if (!isMyTurn || state?.gameOver || state?.handOver) {
       emitDraggingState(false);
+      setSelectedTile(null);
     }
   }, [isMyTurn, state?.gameOver, state?.handOver, emitDraggingState]);
 
   useEffect(() => {
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, myHand.length);
-      const MAX_TRAY_WIDTH = window.innerWidth - 32;
-      const BASE_TILE_WIDTH = 44;
-      const MIN_TILE_WIDTH = 32;
-      const forceTwoRows = tileCount > 12;
-      const visualColumns = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
-      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / visualColumns);
-      const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
-      const useVertical = forceTwoRows;
-      const trayHeight = forceTwoRows ? 120 : 80;
+      const forceTwoRows = tileCount > 9;
+      let tileWidth = 72;
+      if (tileCount >= 8 && tileCount <= 10) tileWidth = 64;
+      else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
+      else if (tileCount >= 15) tileWidth = 48;
+      const trayHeight = forceTwoRows ? 138 : 120;
       document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
-      setHandCompactStacked(useVertical);
+      setHandCompactStacked(forceTwoRows);
     };
 
     updateHandTileSize();
@@ -2142,9 +2147,11 @@ export default function App() {
         className="screen lobby-screen mode-home-screen"
 >
         <div className="mode-home-glow" aria-hidden="true" />
+        <div style={{ overflowY: 'auto', height: '100%', width: '100%' }}>
         <div
           className="card lobby-card mode-card multiplayer-menu-card"
->
+          style={{ width: '100%' }}
+        >
           <p className="lobby-kicker">Racehorse Dominoes</p>
           <h2>{tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}</h2>
           <p className="lobby-server mode-subtitle">
@@ -2222,7 +2229,7 @@ export default function App() {
                 display: 'grid',
                 width: '100%',
                 minWidth: 0,
-                gridTemplateColumns: 'minmax(340px, 360px) minmax(0, 1fr)',
+                gridTemplateColumns: 'minmax(300px, 340px) minmax(0, 1fr)',
                 gap: 16,
                 alignItems: 'start',
               }}
@@ -2381,6 +2388,7 @@ export default function App() {
             </button>
           </div>
         </div>
+        </div>
       </div>
     );
   }
@@ -2439,6 +2447,115 @@ export default function App() {
       </div>
     </div>
   ) : null;
+
+  const dismissWelcome = () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('hasSeenWelcome', 'true');
+    }
+    setWelcomeOpen(false);
+  };
+
+  const welcomeModal =
+    appMode === 'home' && welcomeOpen ? (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Welcome to Racehorse Dominoes"
+        onClick={dismissWelcome}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1600,
+          background: 'rgba(6,10,18,0.62)',
+          backdropFilter: 'blur(8px)',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 12,
+        }}
+      >
+        <div
+          className="card"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: 'min(680px, calc(100vw - 24px))',
+            maxHeight: 'calc(100vh - 24px)',
+            overflowY: 'auto',
+            borderRadius: 16,
+            border: '1px solid rgba(236,252,245,0.2)',
+            background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
+            color: 'rgba(235,245,242,0.96)',
+            padding: 18,
+            textAlign: 'left',
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: '1.35rem' }}>Welcome to Racehorse Dominoes</h3>
+          <p style={{ margin: '8px 0 14px', color: 'rgba(223,236,244,0.86)' }}>
+            Pick a mode and jump in. Everything tracks automatically as you play.
+          </p>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 10,
+            }}
+          >
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">🎮 Multiplayer Online</span>
+              <span className="mode-option-meta">
+                Create a private room and play live 1v1 against friends with a room code
+              </span>
+            </div>
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">🏆 Tournament Mode</span>
+              <span className="mode-option-meta">
+                Create or join a round-robin lobby (4+ players), share the code, compete through a
+                full bracket first to 30 points
+              </span>
+            </div>
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">🤖 vs Bot</span>
+              <span className="mode-option-meta">
+                Practice offline against an AI opponent and track your daily score on the
+                leaderboard
+              </span>
+            </div>
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">🧠 No-Brainer Lab</span>
+              <span className="mode-option-meta">
+                Practice one-turn clear runs with curated hands. Can you clear all 7 tiles in one
+                shot?
+              </span>
+            </div>
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">🧩 Daily Puzzle</span>
+              <span className="mode-option-meta">
+                One puzzle per day, solve it and compete on the leaderboard
+              </span>
+            </div>
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">📊 Stats & Leaderboard</span>
+              <span className="mode-option-meta">
+                Every multiplayer game tracks your wins, point diff, and streaks. Compete for the
+                weekly leaderboard. Check your stats anytime from the top bar
+              </span>
+            </div>
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">👥 Friends</span>
+              <span className="mode-option-meta">
+                Add friends, see when they&apos;re active, and challenge them directly from the
+                Friends panel in the top bar
+              </span>
+            </div>
+          </div>
+          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="mode-inline-btn" onClick={dismissWelcome}>
+              Let&apos;s Play →
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
 
   if (appMode === 'home') {
     return (
@@ -2581,6 +2698,7 @@ export default function App() {
             )}
           </div>
         </div>
+        {welcomeModal}
         <AuthModal
           open={authModalOpen}
           supabaseEnabled={supabaseEnabled}
@@ -2938,11 +3056,11 @@ export default function App() {
               </div>
               <Board
                 board={state.board}
-                legalMoves={legalMoves}
-                selectedTile={selectedTile}
+                legalMoves={isMyTurn ? legalMoves : []}
+                selectedTile={isMyTurn ? selectedTile : null}
                 onPositionClick={play}
                 tileSize={72}
-                showOpenEndGlow={opponentDragging}
+                showOpenEndGlow={isMyTurn && opponentDragging}
               />
             </div>
           </div>

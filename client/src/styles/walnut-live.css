@@ -209,7 +209,7 @@ body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: linear-gradient(175deg, rgba(98, 72, 50, 0.92) 0%, rgba(48, 31, 22, 0.92) 100%);
+  background: transparent;
   padding: 0;
 }
 
@@ -245,7 +245,8 @@ body {
     0 -8px 20px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: visible;
-  height: var(--tray-height);
+  height: var(--tray-height, 120px);
+  min-height: 120px;
   padding: 0 10px;
   display: flex;
   align-items: center;
@@ -450,6 +451,21 @@ body {
   padding: 0 2px;
   transform: none;
   overflow: visible;
+}
+
+.wl-hand-area .hand-container.is-stacked {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.wl-hand-area .hand-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .wl-hand-area .hand-container.is-scrollable {
@@ -740,11 +756,15 @@ body {
 }
 
 .walnut-live.theme-brown .wl-stage-shell {
-  background: linear-gradient(175deg, rgba(126, 86, 58, 0.94) 0%, rgba(66, 41, 27, 0.94) 100%);
+  background: transparent;
   border-color: rgba(238, 205, 170, 0.28);
+  overflow: hidden;
+  border-radius: 0;
 }
 
 .walnut-live.theme-brown .wl-board-area {
+  border-radius: 20px !important;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 44%, rgba(224, 180, 129, 0.18), transparent 60%),
     linear-gradient(180deg, #7e4f2f 0%, #53321f 100%);

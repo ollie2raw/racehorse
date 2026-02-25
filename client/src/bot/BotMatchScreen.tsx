@@ -27,7 +27,7 @@ import {
   type BotDealSize,
   type BotMatchState,
 } from './botEngine';
-import { chooseBotMove, type BotChoice, type BotDifficulty } from './botHeuristics';
+import { chooseBotMove, type BotChoice } from './botHeuristics';
 import { getLocalDateKey } from '../dailyPuzzle/date';
 import './botMatch.css';
 
@@ -65,6 +65,21 @@ function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
           <path d="M15 20h5v-5" />
         </>
       )}
+    </svg>
+  );
+}
+
+function VolumeIcon({ isMuted }: { isMuted: boolean }) {
+  return (
+    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path className="icon-body" d="M3 10v4h4l5 4V6L7 10H3z" />
+      {!isMuted && (
+        <>
+          <path className="icon-wave" d="M16 8.5a5 5 0 010 7" />
+          <path className="icon-wave" d="M19 6a9 9 0 010 12" />
+        </>
+      )}
+      {isMuted && <path className="icon-slash" d="M5 5l14 14" />}
     </svg>
   );
 }
@@ -113,10 +128,13 @@ export default function BotMatchScreen({
   const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, 7));
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState('');
-  const [difficulty, setDifficulty] = useState<BotDifficulty>('standard');
   const [lastBotChoice, setLastBotChoice] = useState<BotChoice | null>(null);
   const [handReveal, setHandReveal] = useState<BotHandReveal | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('racehorse_muted') === '1';
+  });
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const [movesUsed, setMovesUsed] = useState(0);
   const [dailyLeaderboard, setDailyLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
@@ -159,6 +177,11 @@ export default function BotMatchScreen({
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('racehorse_ui_theme', uiTheme);
   }, [uiTheme]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('racehorse_muted', isMuted ? '1' : '0');
+  }, [isMuted]);
 
   useEffect(() => {
     return () => {
@@ -367,11 +390,11 @@ export default function BotMatchScreen({
         if (afterDraw.length === 0) {
           result = drawPass;
         } else {
-          chosen = chooseBotMove(working, difficulty);
+          chosen = chooseBotMove(working, 'hard');
           result = applyPlayMove(working, 'bot', chosen?.move ?? afterDraw[0]);
         }
       } else {
-        chosen = chooseBotMove(working, difficulty);
+        chosen = chooseBotMove(working, 'hard');
         result = applyPlayMove(working, 'bot', chosen?.move ?? botPlayable[0]);
       }
 
@@ -398,7 +421,7 @@ export default function BotMatchScreen({
     }, 760);
 
     return () => clearTimeout(timer);
-  }, [match, difficulty]);
+  }, [match]);
 
   useEffect(() => {
     if (!handReveal || match.gameOver) return;
@@ -514,14 +537,12 @@ export default function BotMatchScreen({
   useEffect(() => {
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, match.players.you.hand.length);
-      const MAX_TRAY_WIDTH = window.innerWidth - 32;
-      const BASE_TILE_WIDTH = 44;
-      const MIN_TILE_WIDTH = 32;
-      const forceTwoRows = tileCount > 10;
-      const visualColumns = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
-      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / visualColumns);
-      const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
-      const trayHeight = forceTwoRows ? 220 : 120;
+      const forceTwoRows = tileCount > 9;
+      let tileWidth = 72;
+      if (tileCount >= 8 && tileCount <= 10) tileWidth = 64;
+      else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
+      else if (tileCount >= 15) tileWidth = 48;
+      const trayHeight = forceTwoRows ? 138 : 120;
       document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
       setHandCompactStacked(forceTwoRows);
@@ -545,6 +566,23 @@ export default function BotMatchScreen({
       : 'Your move';
 
   const openEnds = getDisplayOpenEnds(match);
+  const applyDealSize = (nextDeal: BotDealSize) => {
+    if (nextDeal === dealSize) return;
+    setDealSize(nextDeal);
+    setSelectedTile(null);
+    setLastBotChoice(null);
+    setHandReveal(null);
+    setMovesUsed(0);
+    setDailyLeaderboard([]);
+    setDailyLeaderboardError(null);
+    setDailyLeaderboardLoading(false);
+    setMoveLog([]);
+    moveCounterRef.current = 1;
+    setCurrentAnalysis(null);
+    setAnalyzerOpen(false);
+    dailyResultSyncKeyRef.current = '';
+    setMatch(createBotMatch(60, nextDeal));
+  };
 
   return (
     <div
@@ -692,53 +730,27 @@ export default function BotMatchScreen({
 
         {/* Center zone: left-controls | status | right-controls */}
         <div className="bot-center-zone">
-          {/* Left controls: fullscreen + Bot difficulty + Deal */}
+          {/* Left controls: Tiles */}
           <div className="bot-controls-left">
-            <button
-              className="btn text icon-btn fullscreen-btn bot-chip-control"
-              onClick={toggleFullscreen}
-              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            >
-              <FullscreenIcon isFullscreen={isFullscreen} />
-            </button>
-            <label className="bot-difficulty bot-chip-control">
-              <span>Bot</span>
-              <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value as BotDifficulty)}
-              >
-                <option value="casual">Casual</option>
-                <option value="standard">Standard</option>
-                <option value="hard">Hard</option>
-              </select>
-            </label>
-            <label className="bot-difficulty bot-chip-control">
-              <span>Deal</span>
-              <select
-                value={dealSize}
-                onChange={(e) => {
-                  const nextDeal = Number(e.target.value) as BotDealSize;
-                  setDealSize(nextDeal);
-                  setSelectedTile(null);
-                  setLastBotChoice(null);
-                  setHandReveal(null);
-                  setMovesUsed(0);
-                  setDailyLeaderboard([]);
-                  setDailyLeaderboardError(null);
-                  setDailyLeaderboardLoading(false);
-                  setMoveLog([]);
-                  moveCounterRef.current = 1;
-                  setCurrentAnalysis(null);
-                  setAnalyzerOpen(false);
-                  dailyResultSyncKeyRef.current = '';
-                  setMatch(createBotMatch(60, nextDeal));
-                }}
-              >
-                <option value={7}>7 tiles + boneyard</option>
-                <option value={14}>14 tiles (no boneyard)</option>
-              </select>
-            </label>
+            <div className="bot-difficulty bot-chip-control bot-tiles-picker">
+              <span>Tiles</span>
+              <div className="bot-tiles-options" role="group" aria-label="Select tile count">
+                <button
+                  type="button"
+                  className={`bot-tiles-option ${dealSize === 7 ? 'is-active' : ''}`}
+                  onClick={() => applyDealSize(7)}
+                >
+                  7
+                </button>
+                <button
+                  type="button"
+                  className={`bot-tiles-option ${dealSize === 14 ? 'is-active' : ''}`}
+                  onClick={() => applyDealSize(14)}
+                >
+                  14
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Center status */}
@@ -752,25 +764,13 @@ export default function BotMatchScreen({
             </span>
           </div>
 
-          {/* Right controls: Color + New Match + Copy JSON + Home */}
+          {/* Right controls: Admin-only */}
           <div className="bot-controls-right">
-            <button
-              className="btn text compact bot-chip-control"
-              onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
-            >
-              Color
-            </button>
-            <button className="btn text compact bot-chip-control" onClick={startFreshMatch}>
-              New Match
-            </button>
             {showDevCapture && (
               <button className="btn text compact bot-chip-control" onClick={copyAsDailyPuzzleJson}>
                 Copy Puzzle JSON
               </button>
             )}
-            <button className="btn text leave-btn compact bot-chip-control" onClick={onBack}>
-              Home
-            </button>
           </div>
         </div>
 
@@ -790,6 +790,7 @@ export default function BotMatchScreen({
         <div className="board-area wl-board-area" data-ui="board">
           {!match.gameOver && (
             <div
+              className="boneyard-pill"
               style={{
                 position: 'absolute',
                 top: 10,
@@ -797,8 +798,10 @@ export default function BotMatchScreen({
                 zIndex: 8,
                 borderRadius: 999,
                 border: '1px solid rgba(236,252,245,0.24)',
-                background: 'rgba(10,16,28,0.78)',
-                color: 'rgba(232,245,240,0.95)',
+                background: 'rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(20px)',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                color: 'rgba(232,245,240,0.85)',
                 padding: '5px 10px',
                 fontSize: '0.78rem',
                 fontWeight: 600,
@@ -821,6 +824,104 @@ export default function BotMatchScreen({
             onPositionClick={onPositionClick}
             tileSize={72}
           />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 10,
+              right: 10,
+              zIndex: 20,
+              display: 'flex',
+              gap: 2,
+              alignItems: 'center',
+              background: 'rgba(255,255,255,0.06)',
+              borderRadius: 999,
+              padding: '4px 6px',
+              border: '1px solid rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+            }}
+          >
+            <button
+              className="btn text icon-btn fullscreen-btn"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              style={{
+                padding: '4px 6px',
+                color: 'rgba(200,220,215,0.7)',
+                background: 'none',
+                border: 'none',
+              }}
+            >
+              <FullscreenIcon isFullscreen={isFullscreen} />
+            </button>
+            <button
+              className="btn text icon-btn volume-btn"
+              onClick={() => setIsMuted((prev) => !prev)}
+              title={isMuted ? 'Unmute' : 'Mute'}
+              style={{
+                padding: '4px 6px',
+                color: 'rgba(200,220,215,0.7)',
+                background: 'none',
+                border: 'none',
+              }}
+            >
+              <VolumeIcon isMuted={isMuted} />
+            </button>
+            <button
+              onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
+              title="Toggle table color"
+              style={{
+                padding: '4px 6px',
+                color: 'rgba(200,220,215,0.55)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 2a10 10 0 0 1 0 20" />
+              </svg>
+            </button>
+            <button
+              onClick={onBack}
+              title="Leave game"
+              style={{
+                padding: '4px 6px',
+                color: 'rgba(200,220,215,0.55)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 

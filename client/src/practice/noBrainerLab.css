@@ -1,10 +1,9 @@
 .practice-lab {
   min-height: 100vh;
-  display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
-  gap: 8px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
   padding-bottom: 12px;
 }
 
@@ -35,6 +34,7 @@
   width: calc(100vw - 20px);
   margin: 0 auto;
   gap: 10px;
+  grid-template-columns: 220px 1fr auto;
 }
 
 .practice-mode-pill {
@@ -74,13 +74,13 @@
 }
 
 .practice-status-row {
-  width: calc(100vw - 20px);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 0 6px;
+  padding: 0 10px;
 }
 
 .practice-status {
@@ -113,16 +113,33 @@
 }
 
 .practice-stage-shell {
-  align-self: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  border-radius: 0;
 }
 
 .practice-board-area {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden;
   position: relative;
-  display: grid;
-  grid-template-rows: 1fr auto;
+  display: flex;
   align-items: center;
-  justify-items: center;
-  padding: 24px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 20px;
+  border: 1px solid rgba(231, 255, 244, 0.14);
+  background:
+    radial-gradient(circle at 50% 44%, rgba(186, 246, 223, 0.16), transparent 60%),
+    linear-gradient(180deg, #1d5a45 0%, #123a2d 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 26px 70px rgba(0, 0, 0, 0.48);
 }
 
 .practice-chain {
@@ -170,8 +187,15 @@
 }
 
 .practice-hand-area {
-  height: 118px !important;
-  padding: 8px 10px !important;
+  height: var(--tray-height, 120px) !important;
+  padding: 0 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  border-radius: 16px 16px 0 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: #0b1222 !important;
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
 }
 
 .practice-hand-row {
