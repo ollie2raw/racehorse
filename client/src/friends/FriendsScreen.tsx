@@ -254,9 +254,6 @@ export default function FriendsScreen({
                           </strong>
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', alignItems: 'center' }}>
-                          <button className="mode-inline-btn" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => setSelectedFriend(friend)}>
-                            📊 Stats
-                          </button>
                           <button
                             className="mode-inline-btn"
                             style={{
@@ -308,6 +305,9 @@ export default function FriendsScreen({
                             title={joinedRoom ? 'Copy invite link' : 'Create room and copy invite link'}
                           >
                             {copiedFriendId === friend.id ? 'Copied!' : '⚡ Invite'}
+                          </button>
+                          <button className="mode-inline-btn" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => setSelectedFriend(friend)}>
+                            📊 Stats
                           </button>
                           <button
                             className="mode-inline-btn"

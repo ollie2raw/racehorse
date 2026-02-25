@@ -99,9 +99,6 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
           {!loading && puzzle && (
             <>
               <div className="daily-puzzle-summary">
-                <p>
-                  <strong>{puzzle.title}</strong> · {puzzle.puzzle_date}
-                </p>
                 <p>Objective: {objectiveLabel(puzzle)}</p>
                 {puzzle.config.notes && <p>{puzzle.config.notes}</p>}
                 <p>
@@ -116,7 +113,7 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
                   className="mode-option mode-option-primary"
                   onClick={() => setPlaying(true)}
                 >
-                  <span className="mode-option-title">Start Puzzle</span>
+                  <span className="mode-option-title">Start Today&apos;s Puzzle</span>
                   <span className="mode-option-meta">Play now using today’s puzzle setup</span>
                 </button>
                 <button className="mode-option mode-option-secondary" onClick={onBack}>
@@ -130,7 +127,7 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
                   <p className="lobby-server">No solved submissions yet.</p>
                 ) : (
                   <div className="daily-leaderboard-list">
-                    {leaderboard.map((row, idx) => (
+                    {leaderboard.slice(0, 3).map((row, idx) => (
                       <div className="daily-leaderboard-row" key={`${row.userId}-${idx}`}>
                         <span className="daily-leaderboard-rank">#{idx + 1}</span>
                         <span className="daily-leaderboard-name">@{row.username}</span>

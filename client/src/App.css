@@ -249,6 +249,100 @@ body {
   margin: 0 0 24px;
 }
 
+.welcome-modal-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90vw;
+  max-width: 1100px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(236, 252, 245, 0.2);
+  background: linear-gradient(170deg, rgba(18, 26, 39, 0.92), rgba(9, 15, 26, 0.96));
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.42);
+  color: rgba(235, 245, 242, 0.96);
+  padding: 36px;
+}
+
+.welcome-modal-title {
+  font-size: 2rem;
+}
+
+.welcome-modal-subtitle {
+  font-size: 1rem;
+  margin-bottom: 12px;
+}
+
+.welcome-features-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.welcome-feature-card {
+  padding: 24px;
+  border-radius: 10px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.welcome-feature-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.welcome-feature-meta {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.welcome-feature-multiplayer {
+  border-top: 3px solid #38bdf8;
+}
+
+.welcome-feature-tournament {
+  border-top: 3px solid #f59e0b;
+}
+
+.welcome-feature-bot {
+  border-top: 3px solid #a78bfa;
+}
+
+.welcome-feature-lab {
+  border-top: 3px solid #f472b6;
+}
+
+.welcome-feature-daily {
+  border-top: 3px solid #22c55e;
+}
+
+.welcome-feature-stats {
+  border-top: 3px solid #fb923c;
+}
+
+.welcome-cta {
+  width: 100%;
+  background: #22c55e !important;
+  color: #fff !important;
+  border-color: #22c55e !important;
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  justify-content: center;
+}
+
 /* ─── Buttons ───────────────────────────────────────────────── */
 
 .btn {

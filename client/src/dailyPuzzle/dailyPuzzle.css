@@ -151,7 +151,7 @@
 }
 
 .daily-leaderboard-modal {
-  width: min(720px, calc(100vw - 24px));
+  width: min(700px, calc(100vw - 24px));
   max-height: min(82vh, 760px);
 }
 
@@ -528,4 +528,170 @@
 
 .daily-puzzle-entry-card .daily-leaderboard-stat {
   color: rgba(230, 241, 236, 0.9);
+}
+
+.daily-puzzle-entry-card {
+  max-width: 560px;
+  width: 90%;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 20px !important;
+  padding: 48px 40px !important;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.36);
+}
+
+.daily-puzzle-entry-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px 12px;
+}
+
+.daily-entry-glow {
+  pointer-events: none;
+}
+
+.daily-entry-emoji {
+  font-size: 3rem;
+  line-height: 1;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.daily-puzzle-entry-card .lobby-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  color: rgba(86, 225, 189, 0.92);
+  margin: 0 0 8px;
+}
+
+.daily-puzzle-entry-card h2 {
+  margin: 0;
+  font-size: 2.2rem;
+  font-weight: 800;
+}
+
+.daily-puzzle-entry-card .mode-subtitle {
+  margin-top: 12px;
+  font-size: 1rem;
+  line-height: 1.45;
+  color: rgba(226, 240, 248, 0.9);
+}
+
+.daily-puzzle-entry-card .mode-subtitle {
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.daily-entry-stats-row {
+  margin: 14px auto 6px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 12px;
+  color: rgba(219, 236, 245, 0.7);
+  font-size: 0.84rem;
+  align-items: center;
+}
+
+.daily-entry-stats-row span {
+  white-space: nowrap;
+}
+
+.daily-entry-stats-row span + span::before {
+  content: '•';
+  margin-right: 12px;
+  color: rgba(206, 225, 234, 0.5);
+}
+
+.daily-entry-actions {
+  width: 100%;
+  max-width: 380px;
+  margin: 12px 0 0;
+  gap: 12px;
+}
+
+.daily-start-hero {
+  width: 100%;
+  background: #22c55e !important;
+  border-color: rgba(183, 255, 215, 0.55) !important;
+  box-shadow:
+    0 12px 28px rgba(20, 115, 66, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  animation: daily-cta-pulse 2.6s ease-in-out infinite;
+}
+
+.daily-start-hero .mode-option-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.daily-leaderboard-cta {
+  width: 100%;
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+}
+
+.daily-back-link {
+  margin: 8px auto 0;
+  border: none;
+  background: transparent;
+  color: rgba(206, 221, 232, 0.62);
+  font-size: 0.84rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-decoration: none;
+  opacity: 0.5;
+}
+
+.daily-back-link:hover {
+  color: rgba(232, 245, 255, 0.86);
+  opacity: 0.9;
+}
+
+.daily-entry-actions .mode-option {
+  width: 100%;
+}
+
+.daily-entry-back-link {
+  margin: 4px auto 0;
+  font-size: 0.82rem;
+  opacity: 0.72;
+}
+
+.daily-you-pill {
+  color: rgba(140, 241, 196, 0.92);
+  font-weight: 700;
+}
+
+.daily-leaderboard-empty {
+  margin: 2px 0 0;
+  padding: 20px 10px;
+  text-align: center;
+  color: rgba(225, 238, 246, 0.9);
+  font-size: 1rem;
+}
+
+@keyframes daily-cta-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 12px 28px rgba(20, 115, 66, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  }
+  50% {
+    box-shadow:
+      0 16px 32px rgba(20, 115, 66, 0.34),
+      0 0 0 2px rgba(152, 253, 194, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
 }

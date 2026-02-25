@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from 'react';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import { traceSocketEvent } from "./debug/socketTrace";
 import { io, Socket } from 'socket.io-client';
@@ -2535,6 +2535,9 @@ export default function App() {
     }
     setWelcomeOpen(false);
   };
+  const welcomeFeatureCardStyle: CSSProperties = {
+    cursor: 'default',
+  };
 
   const welcomeModal =
     appMode === 'home' && welcomeOpen ? (
@@ -2555,82 +2558,60 @@ export default function App() {
         }}
       >
         <div
-          className="card"
+          className="card welcome-modal-card"
           onClick={(e) => e.stopPropagation()}
-          style={{
-            width: 'min(680px, calc(100vw - 24px))',
-            maxHeight: 'calc(100vh - 24px)',
-            overflowY: 'auto',
-            borderRadius: 16,
-            border: '1px solid rgba(236,252,245,0.2)',
-            background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
-            boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-            color: 'rgba(235,245,242,0.96)',
-            padding: 18,
-            textAlign: 'left',
-          }}
+          style={{ textAlign: 'left' }}
         >
-          <h3 style={{ margin: 0, fontSize: '1.35rem' }}>Welcome to Racehorse Dominoes</h3>
-          <p style={{ margin: '8px 0 14px', color: 'rgba(223,236,244,0.86)' }}>
+          <h3 className="welcome-modal-title" style={{ margin: 0, lineHeight: 1.2 }}>
+            🁣 Welcome to Racehorse Dominoes
+          </h3>
+          <p className="welcome-modal-subtitle" style={{ margin: '6px 0 10px', color: 'rgba(223,236,244,0.86)' }}>
             Pick a mode and jump in. Everything tracks automatically as you play.
           </p>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: 10,
-            }}
-          >
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">🎮 Multiplayer Online</span>
-              <span className="mode-option-meta">
+          <div className="welcome-features-grid">
+            <div className="mode-option welcome-feature-card welcome-feature-multiplayer" style={welcomeFeatureCardStyle}>
+              <span className="mode-option-title welcome-feature-title">🎮 Multiplayer Online</span>
+              <span className="mode-option-meta welcome-feature-meta">
                 Create a private room and play live 1v1 against friends with a room code
               </span>
             </div>
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">🏆 Tournament Mode</span>
-              <span className="mode-option-meta">
-                Create or join a round-robin lobby (4+ players), share the code, compete through a
-                full bracket first to 30 points
+            <div className="mode-option welcome-feature-card welcome-feature-tournament" style={welcomeFeatureCardStyle}>
+              <span className="mode-option-title welcome-feature-title">🏆 Tournament Mode</span>
+              <span className="mode-option-meta welcome-feature-meta">
+                Create or join a round-robin lobby (4+ players), share the code, compete through a full bracket playing shorter games to 30
               </span>
             </div>
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">🤖 vs Bot</span>
-              <span className="mode-option-meta">
-                Practice offline against an AI opponent and track your daily score on the
-                leaderboard
+            <div className="mode-option welcome-feature-card welcome-feature-bot" style={welcomeFeatureCardStyle}>
+              <span className="mode-option-title welcome-feature-title">🤖 vs Bot</span>
+              <span className="mode-option-meta welcome-feature-meta">
+                Practice against an AI bot with normal rules, or a special 14 tile deal
               </span>
             </div>
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">🧠 No-Brainer Lab</span>
-              <span className="mode-option-meta">
+            <div className="mode-option welcome-feature-card welcome-feature-lab" style={welcomeFeatureCardStyle}>
+              <span className="mode-option-title welcome-feature-title">🧠 No-Brainer Lab</span>
+              <span className="mode-option-meta welcome-feature-meta">
                 Practice one-turn clear runs with curated hands. Can you clear all 7 tiles in one
                 shot?
               </span>
             </div>
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">🧩 Daily Puzzle</span>
-              <span className="mode-option-meta">
+            <div className="mode-option welcome-feature-card welcome-feature-daily" style={welcomeFeatureCardStyle}>
+              <span className="mode-option-title welcome-feature-title">🧩 Daily Puzzle</span>
+              <span className="mode-option-meta welcome-feature-meta">
                 One puzzle per day, solve it and compete on the leaderboard
               </span>
             </div>
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">📊 Stats & Leaderboard</span>
-              <span className="mode-option-meta">
-                Every multiplayer game tracks your wins, point diff, and streaks. Compete for the
-                weekly leaderboard. Check your stats anytime from the top bar
-              </span>
-            </div>
-            <div className="mode-option" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">👥 Friends</span>
-              <span className="mode-option-meta">
-                Add friends, see when they&apos;re active, and challenge them directly from the
-                Friends panel in the top bar
+            <div className="mode-option welcome-feature-card welcome-feature-stats" style={welcomeFeatureCardStyle}>
+              <span className="mode-option-title welcome-feature-title">📊 Stats & Leaderboard</span>
+              <span className="mode-option-meta welcome-feature-meta">
+                Track wins, point diff, and streaks. Compete for the weekly leaderboard. View stats and challenge friends from the top bar
               </span>
             </div>
           </div>
-          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
-            <button className="mode-inline-btn" onClick={dismissWelcome}>
+          <div style={{ marginTop: 12, display: 'flex' }}>
+            <button
+              className="mode-inline-btn welcome-cta"
+              onClick={dismissWelcome}
+            >
               Let&apos;s Play →
             </button>
           </div>
@@ -3122,14 +3103,14 @@ export default function App() {
               )}
               <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', gap: 2, alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '4px 6px', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
                 <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
-                <button className="btn text icon-btn fullscreen-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
-                  <FullscreenIcon isFullscreen={isFullscreen} />
+                <button onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))} title="Toggle table color" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
                 </button>
                 <button className="btn text icon-btn volume-btn" onClick={() => setIsMuted((prev) => !prev)} title={isMuted ? 'Unmute' : 'Mute'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
                   <VolumeIcon isMuted={isMuted} />
                 </button>
-                <button onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))} title="Toggle table color" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+                <button className="btn text icon-btn fullscreen-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
+                  <FullscreenIcon isFullscreen={isFullscreen} />
                 </button>
                 <button onClick={disconnect} title="Leave game" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>

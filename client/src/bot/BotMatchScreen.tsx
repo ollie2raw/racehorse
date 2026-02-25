@@ -758,10 +758,6 @@ export default function BotMatchScreen({
             <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
               {turnLabel}
             </span>
-            <span className="wl-room-code">
-              Hand {match.handNumber} · Offline vs Bot · {match.dealSize}-tile
-              {match.dealSize === 14 ? ' (no boneyard)' : ''}
-            </span>
           </div>
 
           {/* Right controls: Admin-only */}
@@ -842,32 +838,6 @@ export default function BotMatchScreen({
             }}
           >
             <button
-              className="btn text icon-btn fullscreen-btn"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-              style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.7)',
-                background: 'none',
-                border: 'none',
-              }}
-            >
-              <FullscreenIcon isFullscreen={isFullscreen} />
-            </button>
-            <button
-              className="btn text icon-btn volume-btn"
-              onClick={() => setIsMuted((prev) => !prev)}
-              title={isMuted ? 'Unmute' : 'Mute'}
-              style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.7)',
-                background: 'none',
-                border: 'none',
-              }}
-            >
-              <VolumeIcon isMuted={isMuted} />
-            </button>
-            <button
               onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
               title="Toggle table color"
               style={{
@@ -893,6 +863,32 @@ export default function BotMatchScreen({
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 2a10 10 0 0 1 0 20" />
               </svg>
+            </button>
+            <button
+              className="btn text icon-btn volume-btn"
+              onClick={() => setIsMuted((prev) => !prev)}
+              title={isMuted ? 'Unmute' : 'Mute'}
+              style={{
+                padding: '4px 6px',
+                color: 'rgba(200,220,215,0.7)',
+                background: 'none',
+                border: 'none',
+              }}
+            >
+              <VolumeIcon isMuted={isMuted} />
+            </button>
+            <button
+              className="btn text icon-btn fullscreen-btn"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              style={{
+                padding: '4px 6px',
+                color: 'rgba(200,220,215,0.7)',
+                background: 'none',
+                border: 'none',
+              }}
+            >
+              <FullscreenIcon isFullscreen={isFullscreen} />
             </button>
             <button
               onClick={onBack}

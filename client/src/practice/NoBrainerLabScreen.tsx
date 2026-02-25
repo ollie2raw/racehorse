@@ -251,19 +251,6 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
               Home
             </button>
             <button
-              className="btn text icon-btn fullscreen-btn"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-              style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.7)',
-                background: 'none',
-                border: 'none',
-              }}
-            >
-              <FullscreenIcon isFullscreen={isFullscreen} />
-            </button>
-            <button
               onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
               title="Toggle table color"
               style={{
@@ -289,6 +276,19 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 2a10 10 0 0 1 0 20" />
               </svg>
+            </button>
+            <button
+              className="btn text icon-btn fullscreen-btn"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              style={{
+                padding: '4px 6px',
+                color: 'rgba(200,220,215,0.7)',
+                background: 'none',
+                border: 'none',
+              }}
+            >
+              <FullscreenIcon isFullscreen={isFullscreen} />
             </button>
           </div>
         </div>

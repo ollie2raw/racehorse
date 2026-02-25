@@ -188,7 +188,7 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
           <span className="wl-player-score">{movesUsed}</span>
         </div>
         <div className="wl-center-status">
-          <span className="wl-turn-label your-turn">{puzzle.title}</span>
+          
           <span className="wl-room-code">
             Attempt {attempts} · Best {bestMoves ?? '--'} · Max {maxMoves}
           </span>
