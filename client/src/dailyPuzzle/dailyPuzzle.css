@@ -29,10 +29,10 @@
 }
 
 .daily-puzzle-screen .daily-hud-pill .wl-player-score {
-  font-size: 0.92rem;
+  font-size: 2rem;
   line-height: 1.1;
   letter-spacing: 0.04em;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .daily-puzzle-screen .daily-top-rail > .daily-hud-pill:first-child {
@@ -58,6 +58,18 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.daily-puzzle-screen .daily-top-actions-pill {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+  padding: 8px 12px;
 }
 
 .daily-puzzle-screen .daily-chip-control {

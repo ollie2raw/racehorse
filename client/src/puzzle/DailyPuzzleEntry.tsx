@@ -35,6 +35,7 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [playHovered, setPlayHovered] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -82,6 +83,14 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
     );
   }
 
+  const formattedPuzzleDate = puzzle
+    ? new Date(`${puzzle.puzzle_date}T00:00:00`).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : '';
+
   return (
     <div className="app">
       <div className="screen lobby-screen mode-home-screen">
@@ -108,20 +117,50 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
                 </p>
               </div>
 
-              <div className="mode-actions">
+              <div style={{ textAlign: 'center' }}>
                 <button
-                  className="mode-option mode-option-primary"
                   onClick={() => setPlaying(true)}
+                  onMouseEnter={() => setPlayHovered(true)}
+                  onMouseLeave={() => setPlayHovered(false)}
+                  aria-label="Start Today's Puzzle"
+                  style={{
+                    width: 110,
+                    height: 110,
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle at 40% 35%, #2ecc71, #16a34a)',
+                    border: '1.5px solid rgba(134,239,172,0.4)',
+                    fontSize: '2.4rem',
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '40px auto 12px',
+                    boxShadow: playHovered
+                      ? '0 0 60px rgba(34,197,94,0.55), 0 0 120px rgba(34,197,94,0.25)'
+                      : '0 0 40px rgba(34,197,94,0.35), 0 0 80px rgba(34,197,94,0.15), inset 0 1px 0 rgba(255,255,255,0.2)',
+                    transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+                    transform: playHovered ? 'scale(1.05)' : 'scale(1)',
+                  }}
                 >
-                  <span className="mode-option-title">Start Today&apos;s Puzzle</span>
-                  <span className="mode-option-meta">Play now using today’s puzzle setup</span>
+                  ▶
                 </button>
-                <button className="mode-option mode-option-secondary" onClick={onBack}>
-                  <span className="mode-option-title">Back to Home</span>
-                </button>
+                <div
+                  style={{
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    color: 'rgba(255,255,255,0.9)',
+                    marginBottom: 8,
+                  }}
+                >
+                  Start Today&apos;s Puzzle
+                </div>
+                <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.58)' }}>
+                  {formattedPuzzleDate}
+                </div>
               </div>
 
-              <div className="daily-leaderboard-panel">
+              <div className="mode-option daily-leaderboard-panel" style={{ marginTop: 48, cursor: 'default' }}>
                 <h3>Today’s Leaderboard</h3>
                 {leaderboard.length === 0 ? (
                   <p className="lobby-server">No solved submissions yet.</p>
@@ -138,6 +177,21 @@ export default function DailyPuzzleEntry({ user, profile, onBack }: DailyPuzzleE
                   </div>
                 )}
               </div>
+
+              <button
+                onClick={onBack}
+                style={{
+                  display: 'block',
+                  margin: '20px auto 0',
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.35)',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Back to Home
+              </button>
             </>
           )}
         </div>

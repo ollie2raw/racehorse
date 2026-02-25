@@ -557,27 +557,17 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
         </div>
         <div className="daily-center-zone">
           <div className="wl-center-status">
-            <span className="wl-turn-label your-turn">
-              {isOneTurnHighScore ? 'Daily Puzzle' : puzzle.title}
-            </span>
-            <span className="wl-room-code">
-              {isOneTurnHighScore
-                ? `${puzzle.puzzleDate} · Deal ${puzzle.dealSize}`
-                : `${puzzle.puzzleDate} · Deal ${puzzle.dealSize} · Moves ${movesUsed}/${puzzle.maxMoves}`}
-            </span>
-          </div>
-          <div className="daily-controls-right">
-            <button className="btn text compact daily-chip-control" onClick={resetAttempt}>
-              Play Again
-            </button>
-            <button className="btn text compact daily-chip-control" onClick={onBack}>
-              Back to Home
-            </button>
+            <span className="wl-turn-label your-turn">DAILY PUZZLE</span>
+            <span className="wl-room-code">{formattedPuzzleDate}</span>
           </div>
         </div>
-        <div className="wl-player-pill is-you daily-hud-pill">
-          <span className="wl-player-label">Status</span>
-          <span className="wl-player-score">{status.replace('_', ' ')}</span>
+        <div className="daily-top-actions-pill">
+          <button className="btn text compact daily-chip-control" onClick={resetAttempt}>
+            Play Again
+          </button>
+          <button className="btn text compact daily-chip-control" onClick={onBack}>
+            Back to Home
+          </button>
         </div>
       </div>
 
