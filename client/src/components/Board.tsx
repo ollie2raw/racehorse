@@ -269,10 +269,12 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
   return {
     tiles,
     zones,
-    minX: minX - 1.0,
-    maxX: maxX + 1.0,
-    minY: minY - 1.0,
-    maxY: maxY + 1.0,
+    // Keep full placement-zone footprints visible near edges during camera auto-fit.
+    // Existing 1.0 breathing room + requested additional 1.5 => total 2.5 units.
+    minX: minX - 2.5,
+    maxX: maxX + 2.5,
+    minY: minY - 2.5,
+    maxY: maxY + 2.5,
   };
 }
 
@@ -450,8 +452,6 @@ export function Board({
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredZoom, setHoveredZoom] = useState<'in' | 'out' | null>(null);
   const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
-  const userHasZoomed = useRef(false);
-  const prevBoardWasNull = useRef(true);
   const showTargetDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
 
@@ -524,9 +524,7 @@ export function Board({
           ? prev
           : { width: rect.width, height: rect.height },
       );
-      if (!userHasZoomed.current) {
-        fitCameraToContainer(rect.width, rect.height);
-      }
+      fitCameraToContainer(rect.width, rect.height);
     };
     runFit();
     const raf1 = window.requestAnimationFrame(runFit);
@@ -548,9 +546,7 @@ export function Board({
             ? prev
             : { width: box.width, height: box.height },
         );
-        if (!userHasZoomed.current) {
-          fitCameraToContainer(box.width, box.height);
-        }
+        fitCameraToContainer(box.width, box.height);
       } else {
         runFit();
       }
@@ -563,14 +559,6 @@ export function Board({
       window.cancelAnimationFrame(raf2);
     };
   }, [layout, unitToPixels]);
-
-  useEffect(() => {
-    const hasBoard = Boolean(board);
-    if (hasBoard && prevBoardWasNull.current) {
-      userHasZoomed.current = false;
-    }
-    prevBoardWasNull.current = !hasBoard;
-  }, [board]);
 
   // Mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -586,7 +574,6 @@ export function Board({
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
-      userHasZoomed.current = true;
       setIsDragging(true);
       dragStart.current = {
         x: e.clientX,
@@ -618,9 +605,15 @@ export function Board({
 
   // Double-click to reset
   const handleDoubleClick = useCallback(() => {
-    userHasZoomed.current = false;
     fitCameraToContainer();
   }, [layout, unitToPixels]);
+
+  const applyZoomStep = useCallback((delta: number) => {
+    setCamera((cam) => ({
+      ...cam,
+      scale: Math.min(1.8, Math.max(0.3, cam.scale + delta)),
+    }));
+  }, []);
 
   return (
     <div
@@ -757,19 +750,26 @@ export function Board({
           backdropFilter: 'blur(20px)',
           boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
         }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
       >
         <button
           title="Zoom out"
           onMouseEnter={() => setHoveredZoom('out')}
           onMouseLeave={() => setHoveredZoom(null)}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
+          onMouseDown={(e) => {
+            e.preventDefault();
             e.stopPropagation();
-            userHasZoomed.current = true;
-            setCamera((cam) => ({
-              ...cam,
-              scale: Math.max(0.3, cam.scale - 0.15),
-            }));
+          }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            applyZoomStep(-0.15);
           }}
           style={{
             padding: '4px 8px',
@@ -798,14 +798,18 @@ export function Board({
           title="Zoom in"
           onMouseEnter={() => setHoveredZoom('in')}
           onMouseLeave={() => setHoveredZoom(null)}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
+          onMouseDown={(e) => {
+            e.preventDefault();
             e.stopPropagation();
-            userHasZoomed.current = true;
-            setCamera((cam) => ({
-              ...cam,
-              scale: Math.min(1.8, cam.scale + 0.15),
-            }));
+          }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            applyZoomStep(0.15);
           }}
           style={{
             padding: '4px 8px',

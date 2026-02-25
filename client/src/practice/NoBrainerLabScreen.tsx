@@ -64,8 +64,7 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('PRACTICE_DEBUG') === '1';
   const handTileCount = Math.max(1, practiceState?.remainingHand.length ?? 0);
-  const handTileSize =
-    handTileCount <= 8 ? 56 : handTileCount <= 10 ? 64 : handTileCount <= 14 ? 56 : 48;
+  const handTileSize = handTileCount >= 15 ? 48 : 56;
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -145,6 +144,15 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
     }
     setSelectedTile(hint.tile);
     setHintText(`Try ${tileLabel(hint.tile)} on ${hint.position}.`);
+  };
+
+  const retryHand = () => {
+    if (!record) return;
+    setPracticeState(createPracticeState(record.hand));
+    setSelectedTile(null);
+    setHintText('');
+    setShowSolution(false);
+    setError('');
   };
 
   if (!dataset && !error) {
@@ -238,6 +246,9 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
               boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
             }}
           >
+            <button className="btn text compact bot-chip-control" onClick={retryHand}>
+              Retry
+            </button>
             <button className="btn text compact bot-chip-control" onClick={startHand}>
               New Hand
             </button>
@@ -324,9 +335,15 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
       </div>
 
       {showSolution && (
-        <section className="practice-solution">
-          <h4>Solution sequence</h4>
-          <div className="practice-solution-tiles">
+        <section
+          className="practice-solution"
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+        >
+          <h4 style={{ textAlign: 'center', width: '100%' }}>Solution sequence</h4>
+          <div
+            className="practice-solution-tiles"
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
             {record.example.map((tile, idx) => (
               <DominoTile
                 key={`sol-${idx}-${tile.low}-${tile.high}`}
