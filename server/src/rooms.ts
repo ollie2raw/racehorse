@@ -179,8 +179,8 @@ export function act(code: string, socketId: string, action: ActionPayload): Room
       if (currentId !== socketId) {
         throw new Error("It's not your turn.");
       }
-      if (state.boneyard.length === 0) {
-        throw new Error('Boneyard is empty.');
+      if (state.boneyard.length <= state.config.deadTileCount) {
+        throw new Error('Boneyard locked');
       }
       throw new Error('You have a legal play — you may not draw.');
     }

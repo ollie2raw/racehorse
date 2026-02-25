@@ -19,8 +19,9 @@ interface FriendsScreenProps {
   joinedRoom: string | null;
   currentUsername: string;
   onClose: () => void;
+  showToast: (msg: string, duration?: number) => void;
   onCopyInviteLink: () => Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }>;
-  onCreatePrivateRoom?: () => void;
+  onCreatePrivateRoom?: () => Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }>;
 }
 
 const EMPTY_STATS: StatsSummary = {
@@ -42,6 +43,7 @@ export default function FriendsScreen({
   joinedRoom,
   currentUsername,
   onClose,
+  showToast,
   onCopyInviteLink,
   onCreatePrivateRoom,
 }: FriendsScreenProps) {
@@ -228,17 +230,35 @@ export default function FriendsScreen({
                         <button
                           className="mode-inline-btn"
                           onClick={async () => {
-                            if (!joinedRoom) onCreatePrivateRoom?.();
-                            const invite = await onCopyInviteLink();
-                            if (!invite.ok || !invite.roomCode || !invite.inviteUrl) return;
-                            if (socket?.connected) {
-                              socket.emit('friend:invite', {
-                                toUserId: friend.userId,
-                                fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
-                                roomCode: invite.roomCode,
-                                inviteUrl: invite.inviteUrl,
-                              });
+                            if (!socket?.connected) return;
+
+                            // Ensure room exists FIRST and wait for it
+                            let roomInfo;
+
+                            if (!joinedRoom) {
+                              const created = await onCreatePrivateRoom?.();
+                              if (!created?.ok || !created?.roomCode) {
+                                showToast('Unable to create room.', 2000);
+                                return;
+                              }
+                              roomInfo = created;
+                            } else {
+                              roomInfo = await onCopyInviteLink();
                             }
+
+                            if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) {
+                              showToast('Create a room first.', 2000);
+                              return;
+                            }
+
+                            socket.emit('friend:invite', {
+                              toUserId: friend.userId,
+                              fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
+                              roomCode: roomInfo.roomCode,
+                              inviteUrl: roomInfo.inviteUrl,
+                            });
+                            onClose();
+
                             setCopiedFriendId(friend.id);
                             setTimeout(() => {
                               setCopiedFriendId((prev) => (prev === friend.id ? null : prev));
@@ -374,28 +394,31 @@ export default function FriendsScreen({
             {statsLoading && <p style={{ margin: 0 }}>Loading stats...</p>}
             {statsError && <p className="auth-inline-error">{statsError}</p>}
             {!statsLoading && !statsError && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                 {[
-                  ['Online Games', friendStats.onlineGamesPlayed],
-                  ['Wins', friendStats.wins],
-                  ['Losses', friendStats.losses],
-                  ['Longest Win Streak', friendStats.longestWinStreak],
-                  ['Bot Wins', friendStats.botWins],
-                  ['Bot Losses', friendStats.botLosses],
-                ].map(([label, value]) => (
+                  { label: 'Win Rate', value: friendStats.onlineGamesPlayed > 0 ? `${Math.round((friendStats.wins / friendStats.onlineGamesPlayed) * 100)}%` : '0%', icon: '📊', tone: 'neutral' },
+                  { label: 'Wins', value: friendStats.wins, icon: '🏆', tone: 'teal' },
+                  { label: 'Losses', value: friendStats.losses, icon: '📉', tone: 'red' },
+                  { label: 'Best Streak', value: friendStats.longestWinStreak, icon: '⚡', tone: 'neutral' },
+                  { label: 'Online Games', value: friendStats.onlineGamesPlayed, icon: '🧩', tone: 'neutral' },
+                  { label: 'Bot Wins', value: friendStats.botWins, icon: '🤖', tone: 'neutral' },
+                  { label: 'Bot Losses', value: friendStats.botLosses, icon: '🛠️', tone: 'neutral' },
+                ].map((item) => (
                   <div
-                    key={String(label)}
+                    key={item.label}
                     style={{
                       borderRadius: 10,
                       border: '1px solid rgba(255,255,255,0.16)',
                       background: 'rgba(12,20,34,0.68)',
-                      padding: 10,
+                      padding: 12,
                       display: 'grid',
-                      gap: 4,
+                      gap: 6,
+                      alignContent: 'start',
+                      boxShadow: item.tone === 'teal' ? 'inset 0 0 0 1px rgba(52,211,153,0.2)' : item.tone === 'red' ? 'inset 0 0 0 1px rgba(248,113,113,0.2)' : 'none',
                     }}
                   >
-                    <span style={{ color: 'rgba(191,213,223,0.86)' }}>{label}</span>
-                    <strong style={{ fontSize: '1.22rem' }}>{value}</strong>
+                    <span style={{ fontSize: '0.9rem', color: 'rgba(191,213,223,0.86)' }}>{item.icon} {item.label}</span>
+                    <strong style={{ fontSize: '1.4rem', color: item.tone === 'teal' ? 'rgba(52,211,153,0.95)' : item.tone === 'red' ? 'rgba(248,113,113,0.95)' : 'rgba(235,245,242,0.96)' }}>{item.value}</strong>
                   </div>
                 ))}
               </div>

@@ -293,9 +293,9 @@ export function startNewHand(state: GameState): GameState {
     players[id] = { ...state.players[id], hand };
   }
 
-  // Remaining tiles: drawable boneyard is everything except the last deadTileCount
+  // Remaining tiles: include all physical tiles in boneyard; last deadTileCount are locked.
   const remaining = allTiles.slice(cursor);
-  const boneyard = remaining.slice(0, remaining.length - cfg.deadTileCount);
+  const boneyard = remaining;
   const deadTiles = remaining.slice(remaining.length - cfg.deadTileCount);
 
   // Starting player rotates by hand number (1-indexed → 0-indexed)
@@ -313,6 +313,10 @@ export function startNewHand(state: GameState): GameState {
     handOver: false,
     consecutivePasses: 0,
   };
+}
+
+function getDrawableBoneyardCount(state: GameState): number {
+  return Math.max(0, state.boneyard.length - state.config.deadTileCount);
 }
 
 export function getLegalMoves(state: GameState, playerId: string): Move[] {
@@ -373,7 +377,7 @@ export function getLegalMoves(state: GameState, playerId: string): Move[] {
   }
 
   // Pass is only legal when no play moves exist AND drawable boneyard is empty
-  if (moves.length === 0 && state.boneyard.length === 0) {
+  if (moves.length === 0 && getDrawableBoneyardCount(state) === 0) {
     moves.push({ type: 'pass' });
   }
 
@@ -393,7 +397,7 @@ export function canDraw(state: GameState, playerId: string): boolean {
   const currentId = state.playerIds[state.currentPlayerIndex];
   if (currentId !== playerId) return false;
 
-  if (state.boneyard.length === 0) return false;
+  if (getDrawableBoneyardCount(state) === 0) return false;
 
   const moves = getLegalMoves(state, playerId);
   const hasPlay = moves.some((m) => m.type === 'play');
@@ -417,7 +421,7 @@ export function drawUntilPlayableOrEmpty(
   let current = state;
   let drew = 0;
 
-  while (current.boneyard.length > 0) {
+  while (getDrawableBoneyardCount(current) > 0) {
     const [drawnTile, ...remainingBoneyard] = current.boneyard;
     const playerState = current.players[playerId];
     const newHand = [...playerState.hand, drawnTile];
@@ -453,7 +457,7 @@ export function applyMove(state: GameState, playerId: string, move: Move): GameS
 
   // ── Pass ──
   if (move.type === 'pass') {
-    if (state.boneyard.length > 0) {
+    if (getDrawableBoneyardCount(state) > 0) {
       throw new Error(
         'Cannot pass while there are drawable tiles in the boneyard. ' +
           'Call drawUntilPlayableOrEmpty() first.',
@@ -550,7 +554,7 @@ export function applyMove(state: GameState, playerId: string, move: Move): GameS
   // Check if player went out (hand is empty)
   if (newHand.length === 0) {
     // House rule: scoring or double last tile must draw 1 and continue (if boneyard has tiles).
-    if ((playedDouble || scored > 0) && newState.boneyard.length > 0) {
+    if ((playedDouble || scored > 0) && getDrawableBoneyardCount(newState) > 0) {
       const [drawnTile, ...remainingBoneyard] = newState.boneyard;
       return {
         ...newState,

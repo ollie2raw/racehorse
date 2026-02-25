@@ -25,6 +25,7 @@ import {
   deleteRoom,
   getRoomLegalMoves,
   getRoomCanDraw,
+  type Room,
 } from './rooms';
 
 const app = express();
@@ -478,6 +479,14 @@ io.on('connection', (socket: Socket) => {
   socket.on(
     'friend:invite',
     (payload: { toUserId: string; fromUsername: string; roomCode: string; inviteUrl: string }) => {
+      const roomCode = String(payload?.roomCode ?? '').trim().toUpperCase();
+      try {
+        getRoom(roomCode);
+      } catch {
+        console.log(`[friend:invite] ERROR room_not_found code=${roomCode} from=${socket.id}`);
+        socket.emit('friend:invite:error', { ok: false, error: 'room_not_found' });
+        return;
+      }
       const toUserId = normalizeUserId(payload?.toUserId);
       if (!toUserId) return;
       const targetSockets = socketsByUserId.get(toUserId);
@@ -485,7 +494,7 @@ io.on('connection', (socket: Socket) => {
       for (const socketId of targetSockets) {
         io.to(socketId).emit('friend:invited', {
           fromUsername: normalizeUsername(payload?.fromUsername),
-          roomCode: String(payload?.roomCode ?? '').trim().toUpperCase(),
+          roomCode,
           inviteUrl: String(payload?.inviteUrl ?? ''),
         });
       }
@@ -867,7 +876,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
 
-      let room;
+      let room: Room | null = null;
       try {
         room = getRoom(code);
       } catch {
@@ -918,7 +927,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
   });
 
-socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
+  socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     const cb = (
       typeof arg3 === 'function' ? arg3 : typeof arg2 === 'function' ? arg2 : undefined
     ) as AckFn | undefined;
@@ -946,42 +955,71 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     try {
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
-      let room;
-      try {
-        room = joinRoom(roomCode, socket.id);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'unknown error';
-        if (!message.toLowerCase().includes('room is full')) {
-          throw err;
+      let room: Room | null = null;
+      let roster: RoomPlayer[] = [];
+      let migratedByUserId = false;
+      const existingRoom = getRoom(roomCode);
+      roster = (
+        roomPlayersByCode.get(roomCode) ??
+        getRoomPlayersWithFallback(roomCode, existingRoom.players)
+      ).slice();
+      if (existingRoom && userId) {
+        const existingPlayer = roster.find((player) => player.userId === userId);
+        if (existingPlayer) {
+          migrateRoomSeat(roomCode, existingPlayer.id, socket.id);
+          roster = roster
+            .map((player) =>
+              player.id === existingPlayer.id ? { ...player, id: socket.id, username, userId } : player,
+            )
+            .filter((player) => player.id !== existingPlayer.id);
+          roomPlayersByCode.set(roomCode, roster);
+          socket.data.roomId = roomCode;
+          room = existingRoom;
+          migratedByUserId = true;
         }
-        const seats = pruneReconnectSeats(roomCode);
-        const match = seats.find((seat) =>
-          identityMatchesReconnectSeat(seat, {
-            username,
-            userId,
-          }),
-        );
-        if (!match) throw err;
-        migrateRoomSeat(roomCode, match.oldSocketId, socket.id);
-        reconnectSeatsByCode.set(
-          roomCode,
-          seats.filter((seat) => seat.oldSocketId !== match.oldSocketId),
-        );
-        room = getRoom(roomCode);
       }
+      if (!migratedByUserId) {
+        try {
+          room = joinRoom(roomCode, socket.id);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'unknown error';
+          if (!message.toLowerCase().includes('room is full')) {
+            throw err;
+          }
+          const seats = pruneReconnectSeats(roomCode);
+          const match = seats.find((seat) =>
+            identityMatchesReconnectSeat(seat, {
+              username,
+              userId,
+            }),
+          );
+          if (!match) throw err;
+          migrateRoomSeat(roomCode, match.oldSocketId, socket.id);
+          reconnectSeatsByCode.set(
+            roomCode,
+            seats.filter((seat) => seat.oldSocketId !== match.oldSocketId),
+          );
+          roster = roster
+            .map((player) =>
+              player.id === match.oldSocketId ? { ...player, id: socket.id, username, userId } : player,
+            )
+            .filter((player) => player.id !== match.oldSocketId);
+          room = getRoom(roomCode);
+        }
+      }
+      if (!room) throw new Error('Room not found.');
       socket.join(room.code);
       socket.data.roomId = room.code;
       socket.data.username = username;
       socket.data.userId = userId;
-      const roomPlayers = getRoomPlayersWithFallback(room.code, room.players);
-      const existingIdx = roomPlayers.findIndex((p) => p.id === socket.id);
+      const existingIdx = roster.findIndex((p) => p.id === socket.id);
       if (existingIdx >= 0) {
-        roomPlayers[existingIdx] = { id: socket.id, username, userId };
+        roster[existingIdx] = { id: socket.id, username, userId };
       } else {
-        roomPlayers.push({ id: socket.id, username, userId });
+        roster.push({ id: socket.id, username, userId });
       }
-      roomPlayersByCode.set(room.code, roomPlayers);
-      io.to(room.code).emit('room:update', { players: roomPlayers });
+      roomPlayersByCode.set(room.code, roster);
+      io.to(room.code).emit('room:update', { players: roster });
       console.log(`[room:join] joined room=${room.code}, players=${room.players.length}`);
       const stateWithCounts = room.state
         ? {
@@ -1008,7 +1046,7 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
         ok: true,
         roomCode: room.code,
         you: socket.id,
-        players: roomPlayers,
+        players: roster,
         state: stateWithCounts,
       });
     } catch (err: unknown) {
@@ -1018,10 +1056,52 @@ socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     }
   });
 
+  socket.on('room:leave', (roomCode: unknown) => {
+    const code = typeof roomCode === 'string' ? roomCode.trim().toUpperCase() : '';
+    if (!code) return;
+
+    // Leave the socket.io channel immediately
+    socket.leave(code);
+    socket.data.roomId = undefined;
+
+    // Remove from room players list
+    try {
+      const room = getRoom(code);
+      room.players = room.players.filter((pid) => pid !== socket.id);
+
+      // Remove from roomPlayersByCode metadata
+      const meta = roomPlayersByCode.get(code) ?? [];
+      roomPlayersByCode.set(code, meta.filter((p) => p.id !== socket.id));
+
+      // Clear any reconnect seat for this socket
+      const seats = reconnectSeatsByCode.get(code) ?? [];
+      reconnectSeatsByCode.set(code, seats.filter((s) => s.oldSocketId !== socket.id));
+
+      // Notify remaining players
+      const remainingMeta = roomPlayersByCode.get(code) ?? [];
+      io.to(code).emit('room:update', { players: remainingMeta });
+
+      // Evaluate cleanup
+      evaluateRoomLifecycle(code);
+    } catch {
+      // Room may already be gone — no-op
+    }
+  });
+
   socket.on('game:start', (code, cb) => {
     const roomCode = String(code).trim().toUpperCase();
     console.log(`[game:start] socket=${socket.id}, code=${roomCode}`);
     try {
+      const existingRoom = getRoom(roomCode);
+      const liveCount = io.sockets.adapter.rooms.get(roomCode)?.size ?? 0;
+      const rosterCount = (
+        roomPlayersByCode.get(roomCode) ??
+        getRoomPlayersWithFallback(roomCode, existingRoom.players)
+      ).length;
+      if (liveCount < 2 || rosterCount < 2) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'waiting_for_players' });
+        return;
+      }
       const room = startGame(roomCode);
       console.log(
         `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,

@@ -515,13 +515,16 @@ export default function BotMatchScreen({
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, match.players.you.hand.length);
       const MAX_TRAY_WIDTH = window.innerWidth - 32;
-      const BASE_TILE_WIDTH = 56;
-      const MIN_TILE_WIDTH = 32;
-      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / tileCount);
+      const BASE_TILE_WIDTH = 48;
+      const MIN_TILE_WIDTH = 40;
+      const forceTwoRows = tileCount > 10;
+      const visualColumns = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
+      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / visualColumns);
       const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
-      const useVertical = tileWidth <= MIN_TILE_WIDTH || tileCount > 14;
+      const trayHeight = forceTwoRows ? 220 : 120;
+      document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
-      setHandCompactStacked(useVertical);
+      setHandCompactStacked(forceTwoRows);
     };
 
     updateHandTileSize();
@@ -803,7 +806,12 @@ export default function BotMatchScreen({
                 pointerEvents: 'none',
               }}
             >
-              Boneyard: {match.boneyard.length > 0 ? `${match.boneyard.length} left` : 'Empty'}
+              Boneyard:{' '}
+              {match.boneyard.length <= 2
+                ? match.boneyard.length === 0
+                  ? 'Empty'
+                  : 'Locked'
+                : `${match.boneyard.length} left`}
             </div>
           )}
           <Board
@@ -820,26 +828,36 @@ export default function BotMatchScreen({
         <div className="tray-rail">
           <div className="tray-center">
             <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
-              {match.players.you.hand.map((tile, idx) => {
-                const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
-                const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
-                return (
-                  <DominoTile
-                    key={`bot-hand-${idx}-${tile.low}-${tile.high}`}
-                    tile={tile}
-                    size={handTileSize}
-                    rotation={handCompactStacked ? 90 : 0}
-                    selected={selected}
-                    highlight={playable}
-                    disabled={!handActive || botTurn}
-                    onClick={() => {
-                      if (!handActive || botTurn) return;
-                      if (!playable) return;
-                      setSelectedTile(tile);
-                    }}
-                  />
-                );
-              })}
+              {(handCompactStacked
+                ? [
+                    match.players.you.hand.slice(0, Math.ceil(match.players.you.hand.length / 2)),
+                    match.players.you.hand.slice(Math.ceil(match.players.you.hand.length / 2)),
+                  ]
+                : [match.players.you.hand]
+              ).map((row, rowIdx) => (
+                <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
+                  {row.map((tile, idx) => {
+                    const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
+                    const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
+                    return (
+                      <DominoTile
+                        key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
+                        tile={tile}
+                        size={handTileSize}
+                        rotation={0}
+                        selected={selected}
+                        highlight={playable}
+                        disabled={!handActive || botTurn}
+                        onClick={() => {
+                          if (!handActive || botTurn) return;
+                          if (!playable) return;
+                          setSelectedTile(tile);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         </div>

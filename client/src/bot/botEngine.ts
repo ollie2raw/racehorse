@@ -59,6 +59,8 @@ export interface BotMovePreview {
   openSum: number;
 }
 
+const BONEYARD_LOCKED_COUNT = 2;
+
 function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
@@ -119,8 +121,9 @@ function createDealtHand(
   const youHand = deck.slice(0, dealSize);
   const botHand = deck.slice(dealSize, dealSize * 2);
   const remaining = deck.slice(dealSize * 2);
-  const deadTiles = dealSize === 14 ? [] : remaining.slice(remaining.length - 2);
-  const boneyard = dealSize === 14 ? [] : remaining.slice(0, remaining.length - 2);
+  const deadTiles =
+    dealSize === 14 ? [] : remaining.slice(remaining.length - BONEYARD_LOCKED_COUNT);
+  const boneyard = dealSize === 14 ? [] : remaining;
   const currentPlayer: BotPlayerId = handNumber % 2 === 1 ? 'you' : 'bot';
 
   return {
@@ -582,7 +585,7 @@ function getPlayMoves(state: BotMatchState, player: BotPlayerId): Move[] {
 export function getLegalMoves(state: BotMatchState, player: BotPlayerId): Move[] {
   if (state.currentPlayer !== player || state.handOver || state.gameOver) return [];
   const playMoves = getPlayMoves(state, player);
-  if (playMoves.length === 0 && state.boneyard.length === 0) {
+  if (playMoves.length === 0 && state.boneyard.length <= BONEYARD_LOCKED_COUNT) {
     return [{ type: 'pass' }];
   }
   return playMoves;
@@ -673,7 +676,10 @@ export function applyPlayMove(
   };
 
   if (updatedHand.length === 0) {
-    if ((preview.isDouble || preview.immediateScore > 0) && nextState.boneyard.length > 0) {
+    if (
+      (preview.isDouble || preview.immediateScore > 0) &&
+      nextState.boneyard.length > BONEYARD_LOCKED_COUNT
+    ) {
       const [drawnTile, ...remainingBoneyard] = nextState.boneyard;
       nextState = {
         ...nextState,
@@ -728,7 +734,7 @@ export function drawOne(state: BotMatchState, player: BotPlayerId): BotActionRes
     state.currentPlayer !== player ||
     state.handOver ||
     state.gameOver ||
-    state.boneyard.length === 0
+    state.boneyard.length <= BONEYARD_LOCKED_COUNT
   ) {
     return { state };
   }
@@ -752,7 +758,7 @@ export function drawOne(state: BotMatchState, player: BotPlayerId): BotActionRes
 export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionResult {
   if (state.currentPlayer !== player || state.handOver || state.gameOver) return { state };
   if (getPlayMoves(state, player).length > 0) return { state };
-  if (state.boneyard.length > 0) return { state };
+  if (state.boneyard.length > BONEYARD_LOCKED_COUNT) return { state };
 
   const nextConsecutive = state.consecutivePasses + 1;
   const moved = {
@@ -761,7 +767,7 @@ export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionRe
     consecutivePasses: nextConsecutive,
   };
 
-  if (moved.boneyard.length === 0 && nextConsecutive >= 2) {
+  if (moved.boneyard.length <= BONEYARD_LOCKED_COUNT && nextConsecutive >= 2) {
     const youPips = sumPips(moved.players.you.hand);
     const botPips = sumPips(moved.players.bot.hand);
     const winner: BotPlayerId = youPips <= botPips ? 'you' : 'bot';
@@ -797,7 +803,7 @@ export function drawUntilPlayableOrEmpty(
 
   let current = state;
   let lastDrawn: Tile | null = null;
-  while (current.boneyard.length > 0) {
+  while (current.boneyard.length > BONEYARD_LOCKED_COUNT) {
     const [drawn, ...rest] = current.boneyard;
     lastDrawn = drawn;
     current = {

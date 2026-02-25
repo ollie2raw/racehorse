@@ -507,6 +507,9 @@ export default function App() {
   const autoJoinAttemptedRef = useRef(false);
   const joinInFlightRef = useRef(false);
   const createInFlightRef = useRef(false);
+  const inviteJoinInFlightRef = useRef(false);
+  const rejoinInFlightRef = useRef(false);
+  const intentionalDisconnectRef = useRef(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(70);
@@ -618,11 +621,12 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (inviteJoinInFlightRef.current) return;
     const params = new URLSearchParams(window.location.search);
     const linkedRoom = normalizeRoomCode(params.get('room'));
     if (!linkedRoom) return;
     setRoomCode(linkedRoom);
-    setAppMode('multiplayer');
+    setAppMode('home');
   }, []);
 
   const getInviteLink = useCallback((code: string) => {
@@ -684,11 +688,47 @@ export default function App() {
       console.log('[invite] received friend:invited', payload);
       setFriendInvite(payload);
     };
+    const onFriendInviteError = (payload: { ok?: boolean; error?: string }) => {
+      console.log('[invite] received friend:invite:error', payload);
+      showToast('Invite failed: room not found', 2000);
+    };
+    const onRoomUpdate = (payload: { players?: unknown }) => {
+      const nextPlayers = normalizeRoomPlayers(payload?.players);
+      if (import.meta.env.DEV) {
+        console.log('[room:update]', {
+          joinedRoom: joinedRoomRef.current,
+          players: nextPlayers.length,
+        });
+      }
+      // Keep players synced from server push; do not infer or set room code here.
+      setPlayers(nextPlayers);
+    };
+    const onStateUpdate = (payload: {
+      state?: GameState | null;
+      legalMoves?: Move[];
+      canDraw?: boolean;
+    }) => {
+      if (import.meta.env.DEV) {
+        console.log('[state:update]', {
+          joinedRoom: joinedRoomRef.current,
+          hasState: Boolean(payload?.state),
+        });
+      }
+      setState(payload?.state ?? null);
+      setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
+      setCanDraw(Boolean(payload?.canDraw));
+    };
     socket.on('friend:invited', onFriendInvited);
+    socket.on('friend:invite:error', onFriendInviteError);
+    socket.on('room:update', onRoomUpdate);
+    socket.on('state:update', onStateUpdate);
     return () => {
       socket.off('friend:invited', onFriendInvited);
+      socket.off('friend:invite:error', onFriendInviteError);
+      socket.off('room:update', onRoomUpdate);
+      socket.off('state:update', onStateUpdate);
     };
-  }, [socket]);
+  }, [socket, showToast]);
 
   useEffect(() => {
     if (!friendInvite) return;
@@ -725,13 +765,14 @@ export default function App() {
   // Connection
   const connect = useCallback(() => {
     if (isConnecting || socket?.connected) return;
+    intentionalDisconnectRef.current = false;
     setError('');
     setIsConnecting(true);
     const s = io(serverUrl, {
       transports: ['polling', 'websocket'],
       upgrade: true,
-      reconnection: true,
-      reconnectionAttempts: 10,
+      reconnection: false,
+      reconnectionAttempts: 0,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
       timeout: 20000,
@@ -742,11 +783,10 @@ export default function App() {
       s.on('connect', () => console.log('[socket] connect', s.id));
       s.on('disconnect', (r) => console.log('[socket] disconnect', r));
       s.on('connect_error', (e) => console.log('[socket] connect_error', e?.message));
-      s.io.on('reconnect_attempt', (n) => console.log('[socket] reconnect_attempt', n));
-      s.io.on('reconnect', (n) => console.log('[socket] reconnect', n));
     }
 
     s.on('connect', async () => {
+      if (intentionalDisconnectRef.current) return;
       setIsConnected(true);
       setYou(s.id ?? '');
       setIsConnecting(false);
@@ -755,8 +795,16 @@ export default function App() {
       const username =
         authProfileRef.current?.username ?? authUserRef.current?.email?.split('@')[0] ?? 'player';
       if (userId) {
-        console.log('[presence] socket connect: emitting identify', userId);
-        s.emit('presence:identify', { userId, username });
+        if (import.meta.env.DEV) {
+          console.log('[presence] socket connect: emitting identify', userId);
+        }
+        try {
+          await emitWithAck<any>(s, 'presence:identify', { userId, username });
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.log('[presence] identify failed', e instanceof Error ? e.message : e);
+          }
+        }
       }
       if (pendingCreateOnConnectRef.current) {
         pendingCreateOnConnectRef.current = false;
@@ -767,10 +815,51 @@ export default function App() {
         });
         return;
       }
+
+      if (!preventAutoRejoinRef.current) {
+        const code = normalizeRoomCode(joinedRoomRef.current ?? roomCode);
+        if (code && !rejoinInFlightRef.current) {
+          rejoinInFlightRef.current = true;
+          try {
+            const resp = await emitWithAck<any>(
+              s,
+              'room:join',
+              code,
+              {
+                username: authProfileRef.current?.username ?? 'Guest',
+                userId: authUserRef.current?.id ?? null,
+              },
+            );
+            if (resp?.ok) {
+              setJoinedRoom(resp.roomCode);
+              setRoomCode(resp.roomCode);
+              setPlayers(normalizeRoomPlayers(resp.players));
+              setState(resp.state ?? null);
+              setSelectedTile(null);
+              setLegalMoves([]);
+              setCanDraw(false);
+              reconnectShouldJoinRef.current = false;
+              reconnectRoomCodeRef.current = resp.roomCode;
+              return;
+            }
+            if (import.meta.env.DEV) {
+              console.log('[rejoin] room:join not ok', { code, resp });
+            }
+          } catch (e) {
+            if (import.meta.env.DEV) {
+              console.log('[rejoin] room:join failed', e instanceof Error ? e.message : e);
+            }
+          } finally {
+            rejoinInFlightRef.current = false;
+          }
+        }
+      }
+
+      if (inviteJoinInFlightRef.current) return;
       const reconnectCode = normalizeRoomCode(
         reconnectRoomCodeRef.current ?? joinedRoomRef.current ?? '',
       );
-      if (reconnectShouldJoinRef.current && reconnectCode) {
+      if (reconnectShouldJoinRef.current && reconnectCode && !preventAutoRejoinRef.current) {
         try {
           const resp = await emitWithAck<any>(
             s,
@@ -830,10 +919,15 @@ export default function App() {
       })();
     });
 
-    s.on('disconnect', () => {
+    s.on('disconnect', (_reason) => {
       const roomBeforeDisconnect = joinedRoomRef.current;
       const stateBeforeDisconnect = stateRef.current;
-      if (roomBeforeDisconnect && stateBeforeDisconnect && !stateBeforeDisconnect.gameOver) {
+      if (
+        roomBeforeDisconnect &&
+        stateBeforeDisconnect &&
+        !stateBeforeDisconnect.gameOver &&
+        !preventAutoRejoinRef.current
+      ) {
         reconnectRoomCodeRef.current = roomBeforeDisconnect;
         reconnectShouldJoinRef.current = true;
       }
@@ -965,38 +1059,71 @@ export default function App() {
     setSocket(s);
   }, [isConnecting, socket, serverUrl, showToast, authProfile?.username, authUser?.id, emitCreateRoom]);
 
-  const onCreatePrivateRoom = useCallback(() => {
-    setAppMode('multiplayer');
+  const onCreatePrivateRoom = useCallback(async (): Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }> => {
+    setAppMode('home');
     preventAutoRejoinRef.current = false;
     autoJoinAttemptedRef.current = false;
     const activeSocket = socketRef.current;
     if (joinedRoomRef.current) {
+      setAppMode('multiplayer');
+      setRoomCode(joinedRoomRef.current);
       resolvePendingCreate(joinedRoomRef.current);
-      return;
+      const code = normalizeRoomCode(joinedRoomRef.current);
+      return {
+        ok: Boolean(code),
+        roomCode: code || null,
+        inviteUrl: code ? getInviteLink(code) : null,
+      };
     }
     if (activeSocket?.connected) {
-      void emitCreateRoom(activeSocket).catch((e) => {
+      try {
+        const resp = await emitCreateRoom(activeSocket);
+        const code = normalizeRoomCode(resp?.roomCode);
+        if (code) {
+          setJoinedRoom(code);
+          setRoomCode(code);
+          setPlayers(normalizeRoomPlayers(resp.players ?? []));
+          setAppMode('multiplayer');
+        }
+        return {
+          ok: Boolean(code),
+          roomCode: code || null,
+          inviteUrl: code ? getInviteLink(code) : null,
+        };
+      } catch (e) {
         const message = e instanceof Error ? e.message : 'Action failed';
         setError(message);
         showToast(message, 2000);
-      });
-      return;
+        return { ok: false, roomCode: null, inviteUrl: null };
+      }
     }
     pendingCreateOnConnectRef.current = true;
     connectRef.current();
-  }, [emitCreateRoom, resolvePendingCreate]);
+    const roomCode = await new Promise<string | null>((resolve) => {
+      let done = false;
+      const timer = window.setTimeout(() => {
+        if (done) return;
+        done = true;
+        resolve(null);
+      }, 8000);
+      pendingCreateResolversRef.current.push((code) => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        resolve(code);
+      });
+    });
+    const code = normalizeRoomCode(roomCode);
+    if (!code) return { ok: false, roomCode: null, inviteUrl: null };
+    return { ok: true, roomCode: code, inviteUrl: getInviteLink(code) };
+  }, [emitCreateRoom, getInviteLink, resolvePendingCreate, showToast]);
 
   const copyInviteLink = useCallback(
     async (): Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }> => {
       let code = normalizeRoomCode(joinedRoomRef.current ?? roomCode);
       if (!code) {
-        onCreatePrivateRoom();
-        const startedAt = Date.now();
-        while (!joinedRoomRef.current && Date.now() - startedAt < 3000) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-        const createdCode = joinedRoomRef.current ?? null;
-        code = normalizeRoomCode(createdCode ?? roomCode);
+        const created = await onCreatePrivateRoom();
+        code = normalizeRoomCode(created.roomCode ?? roomCode);
       }
       if (!code) {
         showToast('Could not prepare an invite link.');
@@ -1021,6 +1148,22 @@ export default function App() {
   }, [connect]);
 
   useEffect(() => {
+    if (isConnected) return;
+    if (intentionalDisconnectRef.current) return;
+    if (!joinedRoomRef.current) return;
+    if (!stateRef.current || stateRef.current.gameOver) return;
+
+    // Only reconnect if we were mid-game and got accidentally dropped
+    const timer = setTimeout(() => {
+      if (!intentionalDisconnectRef.current && joinedRoomRef.current) {
+        connectRef.current?.();
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [isConnected]);
+
+  useEffect(() => {
     if (!weeklyStatsOpen) return;
 
     if (!socket || !socket.connected) {
@@ -1037,6 +1180,7 @@ export default function App() {
     if (appMode !== 'multiplayer' && appMode !== 'tournament') return;
     if (autoConnectAttemptedRef.current) return;
     if (!serverUrl) return;
+    if (intentionalDisconnectRef.current) return;
     autoConnectAttemptedRef.current = true;
     connect();
   }, [appMode, connect, serverUrl]);
@@ -1046,24 +1190,33 @@ export default function App() {
     // Ensure tournament mode has an active socket (create/join requires it)
     if (appMode !== 'tournament') return;
     if (socket) return;
+    if (intentionalDisconnectRef.current) return;
     connect();
   }, [appMode, socket, connect]);
 
   useEffect(() => {
     if (!authUser?.id) return;
     if (!serverUrl || socket || isConnecting) return;
+    if (intentionalDisconnectRef.current) return;
     connect();
   }, [authUser?.id, serverUrl, socket, isConnecting, connect]);
 
   const disconnect = useCallback(() => {
+    intentionalDisconnectRef.current = true;
     reconnectRoomCodeRef.current = null;
     reconnectShouldJoinRef.current = false;
     preventAutoRejoinRef.current = true;
     autoJoinAttemptedRef.current = false;
+    setAppMode('home');
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
     }
-    socket?.disconnect();
+    const s = socketRef.current;
+    if (s) {
+      s.removeAllListeners();
+      s.disconnect();
+      socketRef.current = null;
+    }
     setSocket(null);
     setJoinedRoom(null);
     setState(null);
@@ -1085,9 +1238,12 @@ export default function App() {
     handRevealShownRef.current = null;
     setAppMode('home');
     autoConnectAttemptedRef.current = false;
-  }, [socket]);
+  }, []);
 
   const handlePostGame = useCallback(() => {
+    reconnectShouldJoinRef.current = false;
+    reconnectRoomCodeRef.current = null;
+    preventAutoRejoinRef.current = true;
     // Tournament matches should return to tournament lobby, not disconnect to Home.
     const inTournament = Boolean(tournamentId) || tournamentState?.status === 'running';
     if (!inTournament) return disconnect();
@@ -1108,6 +1264,9 @@ export default function App() {
   }, [disconnect, tournamentId, tournamentState?.status]);
 
   const backToTournamentHub = useCallback(() => {
+    reconnectShouldJoinRef.current = false;
+    reconnectRoomCodeRef.current = null;
+    preventAutoRejoinRef.current = true;
     if (socket && joinedRoom) {
       socket.emit('room:leave', joinedRoom);
     }
@@ -1184,6 +1343,7 @@ export default function App() {
 
   useEffect(() => {
     if (!socket || !socket.connected || joinedRoom || autoJoinAttemptedRef.current) return;
+    if (inviteJoinInFlightRef.current) return;
     const linkedCode =
       typeof window !== 'undefined'
         ? normalizeRoomCode(new URLSearchParams(window.location.search).get('room'))
@@ -1217,6 +1377,73 @@ export default function App() {
       }
     })();
   }, [socket, joinedRoom, authProfile?.username, authUser?.id, showToast]);
+
+  const acceptFriendInvite = useCallback(async () => {
+    if (!socket || !friendInvite) return;
+    if (inviteJoinInFlightRef.current) return;
+    inviteJoinInFlightRef.current = true;
+
+    // If socket exists but isn't connected, wait for connection before joining
+    if (!socket.connected) {
+      try {
+        socket.connect();
+        await new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => reject(new Error('Connection timed out')), 15000);
+          socket.once('connect', () => {
+            window.clearTimeout(timeout);
+            resolve();
+          });
+          socket.once('connect_error', () => {
+            window.clearTimeout(timeout);
+            reject(new Error('Connection failed'));
+          });
+        });
+      } catch {
+        showToast('Could not connect to server. Try again.', 2000);
+        inviteJoinInFlightRef.current = false;
+        setPendingUiAction(null);
+        return;
+      }
+    }
+
+    preventAutoRejoinRef.current = true;
+    setPendingUiAction('join');
+    setError('');
+    setActionError('');
+
+    try {
+      const resp = await emitWithAck<any>(
+        socket,
+        'room:join',
+        normalizeRoomCode(friendInvite.roomCode),
+        {
+          username: authProfile?.username ?? 'Guest',
+          userId: authUser?.id ?? null,
+        },
+      );
+      if (!resp?.ok) {
+        throw new Error(resp?.error ?? 'Unable to join room from invite.');
+      }
+
+      setJoinedRoom(resp.roomCode);
+      setRoomCode(resp.roomCode);
+      setState(resp.state ?? null);
+      setPlayers(normalizeRoomPlayers(resp.players));
+      setSelectedTile(null);
+      setLegalMoves([]);
+      setCanDraw(false);
+      setAppMode('multiplayer');
+      setFriendsOpen(false);
+      autoJoinAttemptedRef.current = false;
+      setFriendInvite(null);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
+    } finally {
+      inviteJoinInFlightRef.current = false;
+      preventAutoRejoinRef.current = false;
+      setPendingUiAction((prev) => (prev === 'join' ? null : prev));
+    }
+  }, [socket, friendInvite, authProfile?.username, authUser?.id, showToast]);
 
   const startGame = useCallback(async () => {
     setError('');
@@ -1275,7 +1502,8 @@ export default function App() {
   // Game actions
   const draw = useCallback(async () => {
     setActionError('');
-    if (!socket || !joinedRoom) return;
+    const boneyardLockedNow = (state?.boneyard.length ?? 0) <= 2;
+    if (!socket || !joinedRoom || boneyardLockedNow) return;
     emitDraggingState(false);
     setPendingUiAction('draw');
     const boardEnds = getBoardEnds(state?.board ?? null);
@@ -1444,6 +1672,8 @@ export default function App() {
   const hudRightScorePulse = isSpectatingMatch && spectateRightPlayerId ? Boolean(hudScorePulse[spectateRightPlayerId]) : Boolean(hudScorePulse[you]);
   const canPass = legalMoves.some((m) => m.type === 'pass');
   const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
+  const boneyardCount = state?.boneyard.length ?? 0;
+  const isBoneyardLocked = boneyardCount <= 2;
   const canUseRematch = Boolean(
     state?.gameOver && joinedRoom && !isSpectatingMatch && !isTournamentMatch && state.playerIds.includes(you),
   );
@@ -1504,11 +1734,13 @@ export default function App() {
       const MAX_TRAY_WIDTH = window.innerWidth - 32;
       const BASE_TILE_WIDTH = 48;
       const MIN_TILE_WIDTH = 40;
-      const forceTwoRows = tileCount > 12;
+      const forceTwoRows = tileCount > 10;
       const visualColumns = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
       const fittedWidth = Math.floor(MAX_TRAY_WIDTH / visualColumns);
       const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
       const useVertical = forceTwoRows;
+      const trayHeight = forceTwoRows ? 220 : 120;
+      document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
       setHandCompactStacked(useVertical);
     };
@@ -2142,7 +2374,7 @@ export default function App() {
 <button
               className="mode-option mode-option-secondary"
               style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-              onClick={() => setAppMode('home')}
+              onClick={disconnect}
             >
               <span className="mode-option-title">Disconnect</span>
               <span className="mode-option-meta">Return to offline mode selector</span>
@@ -2180,13 +2412,27 @@ export default function App() {
         <button
           className="mode-inline-btn"
           onClick={() => {
-            const nextUrl = friendInvite.inviteUrl;
-            setFriendInvite(null);
-            window.location.href = nextUrl;
+            void acceptFriendInvite();
           }}
+          disabled={pendingUiAction === 'join'}
         >
-          Join
+          {pendingUiAction === 'join' ? 'Joining…' : 'Join'}
         </button>
+        {friendInvite.inviteUrl && (
+          <button
+            className="mode-inline-btn"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(friendInvite.inviteUrl);
+                showToast('Invite link copied.', 1200);
+              } catch {
+                showToast('Could not copy invite link.', 1200);
+              }
+            }}
+          >
+            Copy Link
+          </button>
+        )}
         <button className="mode-inline-btn" onClick={() => setFriendInvite(null)}>
           Dismiss
         </button>
@@ -2228,6 +2474,9 @@ export default function App() {
                 className="mode-inline-btn"
                 disabled={signingOut}
                 onClick={async () => {
+                  reconnectShouldJoinRef.current = false;
+                  reconnectRoomCodeRef.current = null;
+                  preventAutoRejoinRef.current = true;
                   setSigningOut(true);
                   // Reset UI immediately; complete remote sign-out in the background.
                   setAppMode('home');
@@ -2263,13 +2512,27 @@ export default function App() {
             <p className="lobby-server mode-subtitle">
               Choose how you want to play: live online matches, practice modes, or daily challenges.
             </p>
-            <div className="mode-actions">
+            <div className="mode-actions" style={{ maxWidth: '680px', width: '100%' }}>
               <button
                 className="mode-option mode-option-primary"
                 onClick={() => setAppMode('multiplayer')}
               >
                 <span className="mode-option-title">Multiplayer Online</span>
                 <span className="mode-option-meta">Create a private room and play head-to-head in real time</span>
+              </button>
+              <button
+                className="mode-option mode-option-secondary"
+                onClick={() => setAppMode('bot')}
+              >
+                <span className="mode-option-title">Practice → Play vs Bot</span>
+                <span className="mode-option-meta">Sharpen your game offline against an AI opponent</span>
+              </button>
+              <button
+                className="mode-option mode-option-secondary"
+                onClick={() => setAppMode('noBrainer')}
+              >
+                <span className="mode-option-title">Practice → No-Brainer Lab</span>
+                <span className="mode-option-meta">Practice one-turn clear runs with curated hands</span>
               </button>
             <button
               className="mode-option"
@@ -2281,24 +2544,6 @@ export default function App() {
               <span className="mode-option-title">Tournament Mode</span>
               <span className="mode-option-meta">Round robin (4+ players), first to 30 points</span>
             </button>
-
-
-              <button
-                className="mode-option mode-option-secondary"
-                onClick={() => setAppMode('noBrainer')}
-              >
-                <span className="mode-option-title">Practice → No-Brainer Lab</span>
-                <span className="mode-option-meta">Practice one-turn clear runs with curated hands</span>
-              </button>
-              <button
-                className="mode-option mode-option-secondary"
-                onClick={() => setAppMode('bot')}
-              >
-                <span className="mode-option-title">Practice → Play vs Bot</span>
-                <span className="mode-option-meta">
-                  Sharpen your game offline against an AI opponent
-                </span>
-              </button>
               <button
                 className="mode-option mode-option-secondary"
                 onClick={() => setAppMode('daily')}
@@ -2372,6 +2617,7 @@ export default function App() {
           socket={socket}
           joinedRoom={joinedRoom}
           currentUsername={authProfile?.username ?? ''}
+          showToast={showToast}
           onCopyInviteLink={copyInviteLink}
           onCreatePrivateRoom={onCreatePrivateRoom}
           onClose={() => setFriendsOpen(false)}
@@ -2652,6 +2898,7 @@ export default function App() {
             <div className="board-area wl-board-area" data-ui="board">
               {!state.gameOver && (
                 <div
+                  className={`boneyard-pill${isBoneyardLocked ? ' locked' : ''}`}
                   style={{
                     position: 'absolute',
                     top: 10,
@@ -2668,7 +2915,9 @@ export default function App() {
                     pointerEvents: 'none',
                   }}
                 >
-                  Boneyard: {state.boneyard.length > 0 ? `${state.boneyard.length} left` : 'Empty'}
+                  Boneyard:{' '}
+                  {boneyardCount > 0 ? `${boneyardCount} left` : 'Empty'}
+                  {isBoneyardLocked ? ' 🔒' : ''}
                 </div>
               )}
               <Board
@@ -2698,13 +2947,17 @@ export default function App() {
               </div>
 
               <div className="tray-right" data-ui="actions">
-                {isMyTurn && !state.handOver && !state.gameOver && hasPlayMoves && canDraw && (
+                {isMyTurn && !state.handOver && !state.gameOver && hasPlayMoves && (canDraw || isBoneyardLocked) && (
                   <button
                     className={`btn text optional-draw-btn compact ${pendingUiAction === 'draw' ? 'is-loading' : ''}`}
                     onClick={draw}
-                    disabled={pendingUiAction === 'draw'}
+                    disabled={pendingUiAction === 'draw' || isBoneyardLocked}
                   >
-                    {pendingUiAction === 'draw' ? 'Drawing…' : `Draw (${state.boneyard.length})`}
+                    {pendingUiAction === 'draw'
+                      ? 'Drawing…'
+                      : isBoneyardLocked
+                        ? `Draw Locked (${boneyardCount})`
+                        : `Draw (${boneyardCount})`}
                   </button>
                 )}
                 <div className="tray-controls">

@@ -1,3 +1,4 @@
+/* Never use global scale to "fix" layout; it breaks at 100% zoom and across browsers. */
 :root {
   --bg0: #060a10;
   --bg1: #0b1220;
@@ -110,5 +111,5 @@ body {
 [data-ui='actions'] button:active,
 [data-ui='actions'] .btn:active,
 [data-ui='actions'] a:active {
-  transform: translateY(0px) scale(0.99) !important;
+  transform: translateY(0px) !important;
 }

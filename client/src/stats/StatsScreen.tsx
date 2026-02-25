@@ -152,12 +152,12 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
             }}
           >
             {[
+              { label: 'Win Rate', value: `${stats.winRate}%`, icon: '📊', tone: 'neutral' },
               { label: 'Wins', value: stats.wins, icon: '🏆', tone: 'teal' },
               { label: 'Losses', value: stats.losses, icon: '📉', tone: 'red' },
-              { label: 'Current Streak', value: stats.currentWinStreak, icon: '🔥', tone: 'teal' },
-              { label: 'Best Streak', value: stats.longestWinStreak, icon: '⚡', tone: 'teal' },
+              { label: 'Current Streak', value: stats.currentWinStreak, icon: '🔥', tone: 'neutral' },
+              { label: 'Best Streak', value: stats.longestWinStreak, icon: '⚡', tone: 'neutral' },
               { label: 'This Week', value: stats.gamesThisWeek, icon: '🎮', tone: 'neutral' },
-              { label: 'Win Rate', value: `${stats.winRate}%`, icon: '📊', tone: 'neutral' },
               { label: 'Online Games', value: stats.onlineGamesPlayed, icon: '🧩', tone: 'neutral' },
               { label: 'Bot Wins', value: stats.botWins, icon: '🤖', tone: 'neutral' },
               { label: 'Bot Losses', value: stats.botLosses, icon: '🛠️', tone: 'neutral' },
@@ -198,26 +198,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
                 >
                   {item.value}
                 </strong>
-                {item.label === 'Win Rate' && (
-                  <div
-                    style={{
-                      marginTop: 4,
-                      height: 6,
-                      borderRadius: 999,
-                      background: 'rgba(236,248,245,0.18)',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${Math.max(0, Math.min(100, stats.winRate))}%`,
-                        height: '100%',
-                        background: '#34d399',
-                        transition: 'width 180ms ease',
-                      }}
-                    />
-                  </div>
-                )}
+
               </div>
             ))}
           </div>
