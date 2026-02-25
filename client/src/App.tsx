@@ -512,7 +512,7 @@ export default function App() {
   const intentionalDisconnectRef = useRef(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
-  const [handTileSize, setHandTileSize] = useState(70);
+  const [handTileSize, setHandTileSize] = useState(44);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
   const autoTurnActionKeyRef = useRef<string>('');
   const handRevealShownRef = useRef<number | null>(null);
@@ -1732,14 +1732,14 @@ export default function App() {
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, myHand.length);
       const MAX_TRAY_WIDTH = window.innerWidth - 32;
-      const BASE_TILE_WIDTH = 48;
-      const MIN_TILE_WIDTH = 40;
-      const forceTwoRows = tileCount > 10;
+      const BASE_TILE_WIDTH = 44;
+      const MIN_TILE_WIDTH = 32;
+      const forceTwoRows = tileCount > 12;
       const visualColumns = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
       const fittedWidth = Math.floor(MAX_TRAY_WIDTH / visualColumns);
       const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
       const useVertical = forceTwoRows;
-      const trayHeight = forceTwoRows ? 220 : 120;
+      const trayHeight = forceTwoRows ? 120 : 80;
       document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
       setHandCompactStacked(useVertical);
@@ -2881,7 +2881,6 @@ export default function App() {
                 {isMyTurn ? 'Your move' : 'Opponent thinking'}
               </span>
               <span className="wl-room-code">Room {joinedRoom}</span>
-              <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
             </div>
             <button
               type="button"
@@ -2920,6 +2919,21 @@ export default function App() {
                   {isBoneyardLocked ? ' 🔒' : ''}
                 </div>
               )}
+              <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', gap: 2, alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '4px 6px', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+                <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
+                <button className="btn text icon-btn fullscreen-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
+                  <FullscreenIcon isFullscreen={isFullscreen} />
+                </button>
+                <button className="btn text icon-btn volume-btn" onClick={() => setIsMuted((prev) => !prev)} title={isMuted ? 'Unmute' : 'Mute'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
+                  <VolumeIcon isMuted={isMuted} />
+                </button>
+                <button onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))} title="Toggle table color" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+                </button>
+                <button onClick={disconnect} title="Leave game" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                </button>
+              </div>
               <Board
                 board={state.board}
                 legalMoves={legalMoves}
@@ -2946,66 +2960,7 @@ export default function App() {
                 />
               </div>
 
-              <div className="tray-right" data-ui="actions">
-                {isMyTurn && !state.handOver && !state.gameOver && hasPlayMoves && (canDraw || isBoneyardLocked) && (
-                  <button
-                    className={`btn text optional-draw-btn compact ${pendingUiAction === 'draw' ? 'is-loading' : ''}`}
-                    onClick={draw}
-                    disabled={pendingUiAction === 'draw' || isBoneyardLocked}
-                  >
-                    {pendingUiAction === 'draw'
-                      ? 'Drawing…'
-                      : isBoneyardLocked
-                        ? `Draw Locked (${boneyardCount})`
-                        : `Draw (${boneyardCount})`}
-                  </button>
-                )}
-                <div className="tray-controls">
-                  <div className="tray-icon-row">
-                    <button
-                      className="btn text icon-btn fullscreen-btn"
-                      onClick={toggleFullscreen}
-                      aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                      title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                    >
-                      <FullscreenIcon isFullscreen={isFullscreen} />
-                    </button>
-                    <button
-                      className="btn text icon-btn volume-btn"
-                      onClick={() => setIsMuted((prev) => !prev)}
-                      aria-label={isMuted ? 'Unmute' : 'Mute'}
-                      title={isMuted ? 'Unmute' : 'Mute'}
-                    >
-                      <VolumeIcon isMuted={isMuted} />
-                    </button>
-                  </div>
-                  <button
-                    className="btn text compact"
-                    onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
-                    title={
-                      uiTheme === 'green'
-                        ? 'Switch to brown felt + colored pips'
-                        : 'Switch to green felt + black pips'
-                    }
-                  >
-                    Color
-                  </button>
-                  {isSpectatingMatch ? (
-                    <button
-                      className="btn text leave-btn compact"
-                      onClick={backToTournamentHub}
-                      title="Back to Hub"
-                      style={{ whiteSpace: 'nowrap' }}
-                    >
-                      Hub
-                    </button>
-                  ) : (
-                    <button className="btn text leave-btn compact" onClick={disconnect}>
-                      Leave
-                    </button>
-                  )}
-                </div>
-              </div>
+
             </div>
           </div>
         </div>

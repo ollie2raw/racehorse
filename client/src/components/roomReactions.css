@@ -1,29 +1,29 @@
 /* Reactions widget: anchored near left score HUD, portal-rendered so always clickable. */
 
 .rr-root {
-  position: fixed;
-  top: 28px;
-  right: 180px;
+  position: relative;
   z-index: 9999;
   pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
 }
 
 .rr-pill {
-  height: 34px;
-  min-width: 42px;
-  padding: 0 10px;
+  height: 28px;
+  min-width: 32px;
+  padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.32);
-  color: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
+  border: none;
+  background: transparent;
+  color: rgba(200, 220, 215, 0.7);
   cursor: pointer;
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
 }
 
 .rr-pop {
   position: absolute;
-  top: 42px;
+  bottom: 42px;
+  top: auto;
   right: 0;
   width: 280px;
   max-height: 280px;

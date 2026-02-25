@@ -72,13 +72,6 @@ export function RoomReactions({ feed, onSendChat, onSendEmote }: Props) {
 
       {open && (
         <div className="rr-pop" ref={popRef} role="dialog" aria-label="Room chat">
-          <div className="rr-head">
-            <div className="rr-title"></div>
-            <button type="button" className="rr-x" onClick={() => setOpen(false)} aria-label="Close">
-              ✕
-            </button>
-          </div>
-
           <div className="rr-feed">
             {last.length === 0 ? (
               <div className="rr-empty">No messages yet.</div>
@@ -135,5 +128,5 @@ export function RoomReactions({ feed, onSendChat, onSendEmote }: Props) {
     </div>
   );
 
-  return createPortal(ui, document.body);
+  return ui;
 }

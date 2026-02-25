@@ -57,7 +57,7 @@ body {
   grid-template-columns: 220px 1fr 220px;
   align-items: center;
   gap: 14px;
-  padding: 6px 2px 4px;
+  padding: 4px 2px 2px;
 }
 
 .wl-player-pill {
@@ -65,8 +65,8 @@ body {
   width: 220px;
   gap: 3px;
   border-radius: 18px;
-  min-height: 64px;
-  padding: 8px 14px 7px;
+  min-height: 48px;
+  padding: 5px 12px 5px;
   background: linear-gradient(145deg, rgba(235, 250, 243, 0.12), rgba(146, 173, 163, 0.12));
   border: 1px solid var(--wl-card-border);
   box-shadow:
@@ -128,7 +128,7 @@ body {
 }
 
 .wl-player-score {
-  font-size: clamp(24px, 4vw, 38px);
+  font-size: clamp(20px, 3vw, 30px);
   line-height: 0.95;
   font-weight: 800;
   color: rgba(245, 253, 250, 0.98);
@@ -245,8 +245,10 @@ body {
     0 -8px 20px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: visible;
-  height: 120px;
-  padding: 4px 10px;
+  height: var(--tray-height);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
 }
 
 .walnut-live .board-tile-wrapper {
@@ -299,10 +301,10 @@ body {
 
 .wl-hand-area .tray-controls {
   display: inline-flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 6px;
-  padding: 6px;
+  gap: 4px;
+  padding: 4px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: linear-gradient(180deg, rgba(15, 21, 34, 0.76), rgba(8, 12, 22, 0.9));
@@ -862,8 +864,10 @@ body {
     left: 7px !important;
     right: 7px !important;
     width: auto !important;
-    height: 96px;
-    padding: 4px 8px;
+    height: var(--tray-height);
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
   }
 
   .wl-hand-area .tray-rail {
