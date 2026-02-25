@@ -120,6 +120,7 @@ export default function FriendsScreen({
     if (!user) return 'Sign in to use Friends';
     return `Friends (${friends.length})`;
   }, [user, friends.length]);
+  const hasPendingRequests = incoming.length > 0 || outgoing.length > 0;
 
   if (!open) return null;
 
@@ -168,16 +169,25 @@ export default function FriendsScreen({
 
         {user && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 8 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                gap: 8,
+                alignItems: 'stretch',
+              }}
+            >
               <input
                 type="text"
                 placeholder="Add friend by username"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="mode-join-input"
+                style={{ height: 44, borderRadius: 12 }}
               />
               <button
                 className="mode-inline-btn"
+                style={{ height: 44, borderRadius: 12 }}
                 onClick={async () => {
                   const resp = await sendFriendRequest(user.id, query);
                   if (resp.error) {
@@ -197,12 +207,12 @@ export default function FriendsScreen({
             {loading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading friends...</p>}
 
             {!loading && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
+              <div style={{ display: 'grid', gap: 12 }}>
                 <div style={{ display: 'grid', gap: 8 }}>
                   <h4 style={{ margin: 0 }}>Friends</h4>
                   {friends.length === 0 && (
                     <p style={{ margin: 0, color: 'rgba(196,213,223,0.82)' }}>
-                      No friends yet. Send your first request.
+                      No friends yet. Add someone by username above.
                     </p>
                   )}
                   {friends.map((friend) => (
@@ -212,143 +222,175 @@ export default function FriendsScreen({
                         borderRadius: 10,
                         border: '1px solid rgba(255,255,255,0.14)',
                         background: 'rgba(12,20,34,0.66)',
-                        padding: '10px',
+                        padding: '9px 10px',
                         display: 'grid',
-                        gap: 8,
+                        gap: 6,
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                        <strong>@{friend.username}</strong>
-                        <span style={{ color: friend.online ? '#95f0ca' : 'rgba(196,213,223,0.75)' }}>
-                          {friend.online ? 'Online' : 'Offline'}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <button className="mode-inline-btn" onClick={() => setSelectedFriend(friend)}>
-                          View Stats
-                        </button>
-                        <button
-                          className="mode-inline-btn"
-                          onClick={async () => {
-                            if (!socket?.connected) return;
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 999,
+                              background: friend.online ? '#34d399' : 'rgba(148,163,184,0.6)',
+                              boxShadow: friend.online
+                                ? '0 0 10px rgba(52,211,153,0.85)'
+                                : '0 0 0 rgba(0,0,0,0)',
+                              flexShrink: 0,
+                            }}
+                          />
+                          <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            @{friend.username}
+                          </strong>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', alignItems: 'center' }}>
+                          <button className="mode-inline-btn" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => setSelectedFriend(friend)}>
+                            📊 Stats
+                          </button>
+                          <button
+                            className="mode-inline-btn"
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '0.75rem',
+                              background: friend.online
+                                ? 'linear-gradient(170deg, rgba(29,55,66,0.88) 0%, rgba(11,21,34,0.9) 100%)'
+                                : 'rgba(255,255,255,0.08)',
+                              borderColor: friend.online
+                                ? 'rgba(149, 240, 202, 0.45)'
+                                : 'rgba(255,255,255,0.16)',
+                              opacity: friend.online ? 1 : 0.72,
+                            }}
+                            onClick={async () => {
+                              if (!socket?.connected) return;
 
-                            // Ensure room exists FIRST and wait for it
-                            let roomInfo;
+                              // Ensure room exists FIRST and wait for it
+                              let roomInfo;
 
-                            if (!joinedRoom) {
-                              const created = await onCreatePrivateRoom?.();
-                              if (!created?.ok || !created?.roomCode) {
-                                showToast('Unable to create room.', 2000);
+                              if (!joinedRoom) {
+                                const created = await onCreatePrivateRoom?.();
+                                if (!created?.ok || !created?.roomCode) {
+                                  showToast('Unable to create room.', 2000);
+                                  return;
+                                }
+                                roomInfo = created;
+                              } else {
+                                roomInfo = await onCopyInviteLink();
+                              }
+
+                              if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) {
+                                showToast('Create a room first.', 2000);
                                 return;
                               }
-                              roomInfo = created;
-                            } else {
-                              roomInfo = await onCopyInviteLink();
-                            }
 
-                            if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) {
-                              showToast('Create a room first.', 2000);
-                              return;
-                            }
+                              socket.emit('friend:invite', {
+                                toUserId: friend.userId,
+                                fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
+                                roomCode: roomInfo.roomCode,
+                                inviteUrl: roomInfo.inviteUrl,
+                              });
+                              onClose();
 
-                            socket.emit('friend:invite', {
-                              toUserId: friend.userId,
-                              fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
-                              roomCode: roomInfo.roomCode,
-                              inviteUrl: roomInfo.inviteUrl,
-                            });
-                            onClose();
-
-                            setCopiedFriendId(friend.id);
-                            setTimeout(() => {
-                              setCopiedFriendId((prev) => (prev === friend.id ? null : prev));
-                            }, 2000);
-                          }}
-                          title={joinedRoom ? 'Copy invite link' : 'Create room and copy invite link'}
-                        >
-                          {copiedFriendId === friend.id ? 'Copied!' : 'Invite'}
-                        </button>
-                        <button
-                          className="mode-inline-btn"
-                          onClick={async () => {
-                            if (!user) return;
-                            const resp = await removeFriend(friend.id, user.id);
-                            if (resp.error) {
-                              setError(resp.error);
-                              return;
-                            }
-                            await loadFriends();
-                          }}
-                        >
-                          Remove
-                        </button>
+                              setCopiedFriendId(friend.id);
+                              setTimeout(() => {
+                                setCopiedFriendId((prev) => (prev === friend.id ? null : prev));
+                              }, 2000);
+                            }}
+                            title={joinedRoom ? 'Copy invite link' : 'Create room and copy invite link'}
+                          >
+                            {copiedFriendId === friend.id ? 'Copied!' : '⚡ Invite'}
+                          </button>
+                          <button
+                            className="mode-inline-btn"
+                            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                            onClick={async () => {
+                              if (!user) return;
+                              const resp = await removeFriend(friend.id, user.id);
+                              if (resp.error) {
+                                setError(resp.error);
+                                return;
+                              }
+                              await loadFriends();
+                            }}
+                          >
+                            🗑 Remove
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <h4 style={{ margin: 0 }}>Requests</h4>
-                  {incoming.length === 0 && outgoing.length === 0 && (
-                    <p style={{ margin: 0, color: 'rgba(196,213,223,0.82)' }}>No pending requests.</p>
-                  )}
-                  {incoming.map((req) => (
-                    <div
-                      key={req.id}
-                      style={{
-                        borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        background: 'rgba(12,20,34,0.66)',
-                        padding: 10,
-                        display: 'grid',
-                        gap: 8,
-                      }}
-                    >
-                      <span>@{req.username} sent you a request</span>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          className="mode-inline-btn"
-                          onClick={async () => {
-                            const resp = await acceptFriendRequest(req.id, user.id);
-                            if (resp.error) {
-                              setError(resp.error);
-                              return;
-                            }
-                            await loadFriends();
-                          }}
-                        >
-                          Accept
-                        </button>
-                        <button
-                          className="mode-inline-btn"
-                          onClick={async () => {
-                            const resp = await declineFriendRequest(req.id, user.id);
-                            if (resp.error) {
-                              setError(resp.error);
-                              return;
-                            }
-                            await loadFriends();
-                          }}
-                        >
-                          Decline
-                        </button>
+                {hasPendingRequests && (
+                  <div style={{ display: 'grid', gap: 8, borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: 12 }}>
+                    <h4 style={{ margin: 0 }}>Requests</h4>
+                    {incoming.map((req) => (
+                      <div
+                        key={req.id}
+                        style={{
+                          borderRadius: 10,
+                          border: '1px solid rgba(255,255,255,0.14)',
+                          background: 'rgba(12,20,34,0.66)',
+                          padding: 10,
+                          display: 'grid',
+                          gap: 8,
+                        }}
+                      >
+                        <span>@{req.username} sent you a request</span>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            className="mode-inline-btn"
+                            onClick={async () => {
+                              const resp = await acceptFriendRequest(req.id, user.id);
+                              if (resp.error) {
+                                setError(resp.error);
+                                return;
+                              }
+                              await loadFriends();
+                            }}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            className="mode-inline-btn"
+                            onClick={async () => {
+                              const resp = await declineFriendRequest(req.id, user.id);
+                              if (resp.error) {
+                                setError(resp.error);
+                                return;
+                              }
+                              await loadFriends();
+                            }}
+                          >
+                            Decline
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {outgoing.map((req) => (
-                    <div
-                      key={req.id}
-                      style={{
-                        borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        background: 'rgba(12,20,34,0.66)',
-                        padding: 10,
-                      }}
-                    >
-                      Pending: @{req.username}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                    {outgoing.map((req) => (
+                      <div
+                        key={req.id}
+                        style={{
+                          borderRadius: 10,
+                          border: '1px solid rgba(255,255,255,0.14)',
+                          background: 'rgba(12,20,34,0.66)',
+                          padding: 10,
+                        }}
+                      >
+                        Pending: @{req.username}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </>

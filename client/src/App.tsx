@@ -285,6 +285,42 @@ function WeeklyStatsScreen({
   onClose: () => void;
   awards: any | null;
 }) {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(now.getDate() + mondayOffset);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const rangeFmt = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const weekRange = `${rangeFmt.format(monday)} – ${rangeFmt.format(sunday)}`;
+
+  const items = Array.isArray(awards?.awards) ? awards.awards : [];
+  const hasRows = items.length > 0;
+  const iconFor = (key: string, title: string): string => {
+    const s = `${key} ${title}`.toLowerCase();
+    if (s.includes('most wins')) return '🥇';
+    if (s.includes('most games')) return '🎮';
+    if (s.includes('biggest win')) return '💥';
+    if (s.includes('closest win')) return '🎯';
+    if (s.includes('biggest comeback')) return '🔥';
+    if (s.includes('longest win streak')) return '⚡';
+    return '🥇';
+  };
+  const unitFor = (key: string, title: string): string => {
+    const s = `${key} ${title}`.toLowerCase();
+    if (s.includes('most wins')) return 'wins';
+    if (s.includes('most games')) return 'games';
+    if (s.includes('streak')) return 'wins';
+    if (s.includes('margin') || s.includes('closest') || s.includes('comeback')) return 'pts';
+    return '';
+  };
+
   return (
     <div
       role="dialog"
@@ -325,9 +361,12 @@ function WeeklyStatsScreen({
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <div style={{ display: 'grid', gap: 4 }}>
-            <h3 style={{ margin: 0 }}>Weekly Stats</h3>
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span aria-hidden="true">🏆</span>
+              <span>Weekly Leaderboard</span>
+            </h3>
             <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
-              Mon–Sun highlights (wins, streaks, blowouts)
+              Week of {weekRange}
             </p>
           </div>
           <button className="mode-inline-btn" onClick={onClose}>
@@ -335,14 +374,15 @@ function WeeklyStatsScreen({
           </button>
         </div>
 
-        {awards?.awards ? (
+        {hasRows ? (
           <div style={{ display: 'grid', gap: 10 }}>
-            {awards.awards.map((a: any) => (
+            {items.map((a: any) => (
               <div
                 key={a.key}
                 style={{
                   borderRadius: '10px',
                   border: '1px solid rgba(255,255,255,0.16)',
+                  borderLeft: '3px solid rgba(245, 158, 11, 0.6)',
                   background: 'rgba(12,20,34,0.68)',
                   padding: '12px',
                   display: 'flex',
@@ -351,15 +391,56 @@ function WeeklyStatsScreen({
                   gap: 12,
                 }}
               >
-                <span style={{ fontSize: '0.92rem', color: 'rgba(191,213,223,0.92)' }}>{a.title}</span>
-                <strong style={{ fontSize: '1.02rem', whiteSpace: 'nowrap' }}>
-                  {a.leader ? `${a.leader.username} (${a.leader.value})` : '—'}
-                </strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <span aria-hidden="true" style={{ fontSize: '1rem' }}>
+                    {iconFor(String(a.key ?? ''), String(a.title ?? ''))}
+                  </span>
+                  <span style={{ fontSize: '0.92rem', color: 'rgba(191,213,223,0.92)' }}>{a.title}</span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    minWidth: 0,
+                    justifyContent: 'flex-end',
+                  }}
+                >
+                  <strong
+                    style={{
+                      fontSize: '1.02rem',
+                      whiteSpace: 'nowrap',
+                      fontWeight: 700,
+                      color: 'rgba(245,252,248,0.96)',
+                    }}
+                  >
+                    {a.leader?.username ?? '—'}
+                  </strong>
+                  {a.leader ? (
+                    <span
+                      style={{
+                        whiteSpace: 'nowrap',
+                        borderRadius: 999,
+                        padding: '4px 8px',
+                        background: 'rgba(245, 158, 11, 0.16)',
+                        border: '1px solid rgba(245, 158, 11, 0.36)',
+                        color: 'rgba(255, 226, 172, 0.96)',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      {a.leader.value} {unitFor(String(a.key ?? ''), String(a.title ?? ''))}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
         ) : (
-          <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Tap Refresh to load this week’s highlights.</p>
+          <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
+            No games played this week yet. Be the first!
+          </p>
         )}
       </div>
     </div>
