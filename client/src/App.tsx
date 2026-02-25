@@ -1263,7 +1263,7 @@ export default function App() {
     setAppMode('tournament');
   }, [disconnect, tournamentId, tournamentState?.status]);
 
-  const backToTournamentHub = useCallback(() => {
+  const _backToTournamentHub = useCallback(() => {
     reconnectShouldJoinRef.current = false;
     reconnectRoomCodeRef.current = null;
     preventAutoRejoinRef.current = true;
