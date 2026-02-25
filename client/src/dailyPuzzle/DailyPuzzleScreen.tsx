@@ -562,10 +562,28 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
           </div>
         </div>
         <div className="daily-top-actions-pill">
-          <button className="btn text compact daily-chip-control" onClick={resetAttempt}>
+          <button
+            className="btn text compact daily-chip-control"
+            onClick={resetAttempt}
+            style={{
+              fontWeight: 700,
+              fontSize: '0.88rem',
+              color: 'rgba(236, 248, 242, 0.92)',
+              letterSpacing: '0.02em',
+            }}
+          >
             Play Again
           </button>
-          <button className="btn text compact daily-chip-control" onClick={onBack}>
+          <button
+            className="btn text compact daily-chip-control"
+            onClick={onBack}
+            style={{
+              fontWeight: 700,
+              fontSize: '0.88rem',
+              color: 'rgba(236, 248, 242, 0.92)',
+              letterSpacing: '0.02em',
+            }}
+          >
             Back to Home
           </button>
         </div>
@@ -573,27 +591,6 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
 
       <div className="wl-stage-shell">
         <div className="board-area wl-board-area" data-ui="board">
-          {status === 'IN_PROGRESS' && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 10,
-                right: 10,
-                zIndex: 8,
-                borderRadius: 999,
-                border: '1px solid rgba(236,252,245,0.24)',
-                background: 'rgba(10,16,28,0.78)',
-                color: 'rgba(232,245,240,0.95)',
-                padding: '5px 10px',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                letterSpacing: '0.02em',
-                pointerEvents: 'none',
-              }}
-            >
-              Boneyard: {runtimeState.boneyard.length > 0 ? `${runtimeState.boneyard.length} left` : 'Empty'}
-            </div>
-          )}
           <Board
             board={runtimeState.board}
             legalMoves={legalMoves}
