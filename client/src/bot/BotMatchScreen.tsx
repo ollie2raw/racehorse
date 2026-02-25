@@ -538,8 +538,9 @@ export default function BotMatchScreen({
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, match.players.you.hand.length);
       const forceTwoRows = tileCount > 9;
-      let tileWidth = 72;
-      if (tileCount >= 8 && tileCount <= 10) tileWidth = 64;
+      const maxSizeAtLowCounts = 56; // 14-tile reference size cap
+      let tileWidth = maxSizeAtLowCounts;
+      if (tileCount >= 9 && tileCount <= 10) tileWidth = 64;
       else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
       else if (tileCount >= 15) tileWidth = 48;
       const trayHeight = forceTwoRows ? 138 : 120;

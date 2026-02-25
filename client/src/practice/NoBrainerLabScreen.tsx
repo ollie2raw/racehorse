@@ -63,6 +63,9 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
 
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('PRACTICE_DEBUG') === '1';
+  const handTileCount = Math.max(1, practiceState?.remainingHand.length ?? 0);
+  const handTileSize =
+    handTileCount <= 8 ? 56 : handTileCount <= 10 ? 64 : handTileCount <= 14 ? 56 : 48;
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -302,7 +305,7 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
               <DominoTile
                 key={`hand-${idx}-${tile.low}-${tile.high}`}
                 tile={tile}
-                size={78}
+                size={handTileSize}
                 selected={selected}
                 highlight={false}
                 disabled={practiceState.status !== 'playing'}

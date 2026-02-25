@@ -9,8 +9,8 @@ import type { Tile, BoardState, PlacementPosition, Move } from '../types';
 const TILE_UNIT = 1;
 const TILE_GAP = 0.15;
 const DOUBLE_CROSS_GAP = 0.2;
-const FIT_PADDING_X = 0;
-const FIT_PADDING_Y = 0;
+const FIT_PADDING_X = 80;
+const FIT_PADDING_Y = 80;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -269,10 +269,10 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
   return {
     tiles,
     zones,
-    minX,
-    maxX,
-    minY,
-    maxY,
+    minX: minX - 1.0,
+    maxX: maxX + 1.0,
+    minY: minY - 1.0,
+    maxY: maxY + 1.0,
   };
 }
 
@@ -448,7 +448,10 @@ export function Board({
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
+  const [hoveredZoom, setHoveredZoom] = useState<'in' | 'out' | null>(null);
   const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
+  const userHasZoomed = useRef(false);
+  const prevBoardWasNull = useRef(true);
   const showTargetDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
 
@@ -521,7 +524,9 @@ export function Board({
           ? prev
           : { width: rect.width, height: rect.height },
       );
-      fitCameraToContainer(rect.width, rect.height);
+      if (!userHasZoomed.current) {
+        fitCameraToContainer(rect.width, rect.height);
+      }
     };
     runFit();
     const raf1 = window.requestAnimationFrame(runFit);
@@ -543,7 +548,9 @@ export function Board({
             ? prev
             : { width: box.width, height: box.height },
         );
-        fitCameraToContainer(box.width, box.height);
+        if (!userHasZoomed.current) {
+          fitCameraToContainer(box.width, box.height);
+        }
       } else {
         runFit();
       }
@@ -556,6 +563,14 @@ export function Board({
       window.cancelAnimationFrame(raf2);
     };
   }, [layout, unitToPixels]);
+
+  useEffect(() => {
+    const hasBoard = Boolean(board);
+    if (hasBoard && prevBoardWasNull.current) {
+      userHasZoomed.current = false;
+    }
+    prevBoardWasNull.current = !hasBoard;
+  }, [board]);
 
   // Mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -571,6 +586,7 @@ export function Board({
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
+      userHasZoomed.current = true;
       setIsDragging(true);
       dragStart.current = {
         x: e.clientX,
@@ -602,6 +618,7 @@ export function Board({
 
   // Double-click to reset
   const handleDoubleClick = useCallback(() => {
+    userHasZoomed.current = false;
     fitCameraToContainer();
   }, [layout, unitToPixels]);
 
@@ -724,6 +741,87 @@ export function Board({
             );
           })}
 
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 10,
+          left: 10,
+          zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+          background: 'rgba(255,255,255,0.06)',
+          borderRadius: 999,
+          padding: '4px 6px',
+          border: '1px solid rgba(236,252,245,0.24)',
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        }}
+      >
+        <button
+          title="Zoom out"
+          onMouseEnter={() => setHoveredZoom('out')}
+          onMouseLeave={() => setHoveredZoom(null)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            userHasZoomed.current = true;
+            setCamera((cam) => ({
+              ...cam,
+              scale: Math.max(0.3, cam.scale - 0.15),
+            }));
+          }}
+          style={{
+            padding: '4px 8px',
+            color: 'rgba(200,220,215,0.7)',
+            fontSize: '0.9rem',
+            lineHeight: 1,
+            background: hoveredZoom === 'out' ? 'rgba(255,255,255,0.08)' : 'none',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            borderRadius: 8,
+          }}
+        >
+          −
+        </button>
+        <div
+          style={{
+            width: 1,
+            height: 16,
+            margin: '0 4px',
+            background: 'rgba(236,252,245,0.24)',
+          }}
+        />
+        <button
+          title="Zoom in"
+          onMouseEnter={() => setHoveredZoom('in')}
+          onMouseLeave={() => setHoveredZoom(null)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            userHasZoomed.current = true;
+            setCamera((cam) => ({
+              ...cam,
+              scale: Math.min(1.8, cam.scale + 0.15),
+            }));
+          }}
+          style={{
+            padding: '4px 8px',
+            color: 'rgba(200,220,215,0.7)',
+            fontSize: '0.9rem',
+            lineHeight: 1,
+            background: hoveredZoom === 'in' ? 'rgba(255,255,255,0.08)' : 'none',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            borderRadius: 8,
+          }}
+        >
+          +
+        </button>
       </div>
     </div>
   );
