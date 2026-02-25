@@ -210,7 +210,7 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
       </section>
 
       <div className="wl-stage-shell practice-stage-shell">
-        <div className="wl-board-area practice-board-area">
+        <div className="board-area wl-board-area practice-board-area">
           <Board
             board={practiceState.board}
             legalMoves={practiceState.legalMoves}

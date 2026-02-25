@@ -964,8 +964,6 @@ button:hover:not(:disabled) {
 
 .board-area {
   flex: 0 0 auto;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
   width: 100vw;
   height: calc(100dvh - var(--tray-height));
   min-height: 0;
