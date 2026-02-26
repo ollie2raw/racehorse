@@ -3000,10 +3000,13 @@ export default function App() {
               <section className="mode-hub-primary mode-hub-section-multiplayer">
                 <p className="mode-section-label">Play Online</p>
                 <button
-                  className="mode-option mode-option-primary mode-option-hero mode-accent-multiplayer"
+                  className="mode-option mode-option-primary mode-option-hero mode-accent-multiplayer mode-card-play-online"
                   onClick={() => setAppMode('multiplayer')}
                 >
-                  <span className="mode-option-title">Multiplayer Online</span>
+                  <span className="mode-option-title">
+                    Multiplayer Online
+                    <span className="mode-live-badge">Live</span>
+                  </span>
                   <span className="mode-option-meta">Create a private room and play head-to-head in real time</span>
                 </button>
               </section>
@@ -3016,14 +3019,14 @@ export default function App() {
                   </div>
                   <div className="mode-hub-middle-cards">
                     <button
-                      className="mode-option mode-option-secondary mode-accent-bot"
+                      className="mode-option mode-option-secondary mode-accent-bot mode-card-bot"
                       onClick={() => setAppMode('botSetup')}
                     >
                       <span className="mode-option-title">Play vs Bot</span>
                       <span className="mode-option-meta">Sharpen your game offline against an AI opponent</span>
                     </button>
                     <button
-                      className="mode-option mode-accent-tournament"
+                      className="mode-option mode-accent-tournament mode-card-compete"
                       onClick={() => {
                         setError('');
                         setAppMode('tournament');
@@ -3033,14 +3036,14 @@ export default function App() {
                       <span className="mode-option-meta">Round robin (4+ players), first to 30 points</span>
                     </button>
                     <button
-                      className="mode-option mode-option-secondary mode-accent-bot"
+                      className="mode-option mode-option-secondary mode-accent-bot mode-card-practice"
                       onClick={() => setAppMode('noBrainer')}
                     >
                       <span className="mode-option-title">No-Brainer Lab</span>
                       <span className="mode-option-meta">Practice one-turn clear runs with curated hands</span>
                     </button>
                     <button
-                      className="mode-option mode-option-secondary mode-accent-daily mode-option-hero-outline"
+                      className="mode-option mode-option-secondary mode-option-primary mode-option-hero mode-accent-daily mode-option-hero-outline mode-card-daily"
                       onClick={() => setAppMode('daily')}
                     >
                       <span className="mode-option-title">Daily Puzzle</span>
@@ -3055,7 +3058,7 @@ export default function App() {
                   <p className="mode-section-label">Track</p>
                   <div className="mode-actions">
                     <button
-                      className="mode-option mode-option-secondary mode-accent-track"
+                      className="mode-option mode-option-secondary mode-accent-track mode-card-track"
                       onClick={() => setWeeklyStatsOpen(true)}
                     >
                       <span className="mode-option-title">Weekly Stats</span>
@@ -3063,7 +3066,7 @@ export default function App() {
                     </button>
                     {isAdmin && (
                       <button
-                        className="mode-option mode-option-secondary"
+                        className="mode-option mode-option-secondary mode-card-track"
                         onClick={() => setAppMode('dailyAdmin')}
                       >
                         <span className="mode-option-title">Admin: Daily Puzzles</span>

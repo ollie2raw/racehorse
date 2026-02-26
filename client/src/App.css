@@ -640,8 +640,8 @@ button:hover:not(:disabled) {
 /* ─── Home Mode Picker ─────────────────────────────────────── */
 
 .mode-home-screen {
-  --mode-accent: rgba(149, 240, 202, 0.58);
-  --mode-accent-soft: rgba(149, 240, 202, 0.18);
+  --mode-accent: rgba(56, 189, 248, 0.58);
+  --mode-accent-soft: rgba(56, 189, 248, 0.18);
   --mode-section-tone: rgba(215, 230, 240, 0.62);
   --mode-hover-border: rgba(255, 255, 255, 0.26);
   position: relative;
@@ -720,21 +720,21 @@ button:hover:not(:disabled) {
 }
 
 .mode-hub-section-multiplayer .mode-section-label {
-  color: rgba(183, 241, 214, 0.78);
+  color: #38bdf8;
 }
 
 .mode-hub-section-practice .mode-section-label,
 .mode-section-label-practice {
-  color: rgba(190, 223, 255, 0.78);
+  color: #818cf8;
 }
 
 .mode-hub-section-compete .mode-section-label,
 .mode-section-label-compete {
-  color: rgba(243, 213, 149, 0.78);
+  color: #f87171;
 }
 
 .mode-hub-section-track .mode-section-label {
-  color: rgba(201, 214, 255, 0.76);
+  color: #34d399;
 }
 
 .mode-section-label {
@@ -747,6 +747,14 @@ button:hover:not(:disabled) {
   text-transform: uppercase;
   transform: none;
   color: color-mix(in srgb, var(--mode-section-tone), white 10%);
+}
+
+.mode-section-label.mode-section-label-practice {
+  color: #818cf8;
+}
+
+.mode-section-label.mode-section-label-compete {
+  color: #f87171;
 }
 
 .mode-option-hero {
@@ -890,11 +898,33 @@ button:hover:not(:disabled) {
   box-shadow: var(--card-shadow-base);
 }
 
+.mode-home-screen .mode-option {
+  position: relative;
+  overflow: hidden;
+}
+
+.mode-home-screen .mode-option::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--menu-section-color, transparent) 0%, rgba(0, 0, 0, 0) 100%);
+  transition: opacity 180ms ease;
+}
+
 .mode-home-screen .mode-option:hover,
 .bot-setup-screen .mode-option:hover {
   border-color: color-mix(in srgb, var(--mode-hover-border), white 10%);
   box-shadow: var(--card-shadow-hover);
   filter: brightness(1.03);
+}
+
+.mode-home-screen .mode-option:hover::before {
+  opacity: 1;
 }
 
 .mode-option:focus-visible,
@@ -915,9 +945,73 @@ button:hover:not(:disabled) {
 
 .mode-home-screen .mode-option-title,
 .bot-setup-screen .mode-option-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 1.14rem;
   font-weight: 740;
   letter-spacing: 0.01em;
+}
+
+.mode-home-screen .mode-option-title::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: var(--menu-section-color, rgba(255, 255, 255, 0.65));
+}
+
+.mode-card-play-online {
+  --menu-section-color: #38bdf8;
+}
+
+.mode-card-practice {
+  --menu-section-color: #c084fc;
+}
+
+.mode-card-bot {
+  --menu-section-color: #818cf8;
+}
+
+.mode-card-compete {
+  --menu-section-color: #f87171;
+}
+
+.mode-card-daily {
+  --menu-section-color: #fbbf24;
+}
+
+.mode-option.mode-card-daily {
+  border-color: rgba(251, 191, 36, 0.3) !important;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.04) 0%, transparent 60%) !important;
+}
+
+.mode-home-screen .mode-option.mode-card-daily:hover {
+  border-color: rgba(251, 191, 36, 0.3) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 1px rgba(251, 191, 36, 0.1),
+    0 16px 30px rgba(20, 15, 10, 0.28);
+}
+
+.mode-card-track {
+  --menu-section-color: #34d399;
+}
+
+.mode-live-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.16);
+  color: #38bdf8;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  padding: 0.3em 0.55em;
 }
 
 .mode-home-screen .mode-option-meta,
@@ -989,33 +1083,86 @@ button:hover:not(:disabled) {
 }
 
 .mode-accent-multiplayer {
-  --mode-accent: rgba(149, 240, 202, 0.64);
-  --mode-section-tone: rgba(183, 241, 214, 0.78);
-  --mode-hover-border: rgba(163, 238, 210, 0.38);
+  --mode-accent: rgba(56, 189, 248, 0.64);
+  --mode-section-tone: rgba(169, 224, 248, 0.78);
+  --mode-hover-border: rgba(116, 205, 248, 0.38);
 }
 
 .mode-accent-bot {
-  --mode-accent: rgba(120, 186, 255, 0.64);
-  --mode-section-tone: rgba(190, 223, 255, 0.78);
-  --mode-hover-border: rgba(167, 208, 255, 0.36);
+  --mode-accent: rgba(129, 140, 248, 0.64);
+  --mode-section-tone: rgba(199, 204, 251, 0.78);
+  --mode-hover-border: rgba(169, 178, 249, 0.36);
 }
 
 .mode-accent-daily {
-  --mode-accent: rgba(216, 181, 111, 0.66);
-  --mode-section-tone: rgba(239, 217, 173, 0.78);
-  --mode-hover-border: rgba(230, 197, 137, 0.38);
+  --mode-accent: rgba(251, 191, 36, 0.66);
+  --mode-section-tone: rgba(252, 225, 145, 0.78);
+  --mode-hover-border: rgba(252, 210, 101, 0.38);
 }
 
 .mode-accent-tournament {
-  --mode-accent: rgba(255, 107, 107, 0.62);
-  --mode-section-tone: rgba(255, 190, 190, 0.78);
-  --mode-hover-border: rgba(255, 157, 157, 0.34);
+  --mode-accent: rgba(248, 113, 113, 0.62);
+  --mode-section-tone: rgba(251, 194, 194, 0.78);
+  --mode-hover-border: rgba(249, 160, 160, 0.34);
 }
 
 .mode-accent-track {
   --mode-accent: rgba(128, 160, 255, 0.62);
   --mode-section-tone: rgba(201, 214, 255, 0.76);
   --mode-hover-border: rgba(177, 196, 255, 0.35);
+}
+
+@keyframes modeFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mode-home-screen .layout-screen-title,
+.mode-home-screen .layout-screen-subtitle,
+.mode-home-screen .mode-hub-primary,
+.mode-home-screen .mode-hub-middle,
+.mode-home-screen .mode-hub-section-track {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: modeFadeUp 400ms ease forwards;
+}
+
+.mode-home-screen .layout-screen-title {
+  animation-delay: 0ms;
+}
+
+.mode-home-screen .layout-screen-subtitle {
+  animation-delay: 70ms;
+}
+
+.mode-home-screen .mode-hub-primary {
+  animation-delay: 140ms;
+}
+
+.mode-home-screen .mode-hub-middle {
+  animation-delay: 210ms;
+}
+
+.mode-home-screen .mode-hub-section-track {
+  animation-delay: 280ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-home-screen .layout-screen-title,
+  .mode-home-screen .layout-screen-subtitle,
+  .mode-home-screen .mode-hub-primary,
+  .mode-home-screen .mode-hub-middle,
+  .mode-home-screen .mode-hub-section-track {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
 }
 
 @media (min-width: 920px) {
