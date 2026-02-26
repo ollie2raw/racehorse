@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Board, DominoTile, ScoreTrackOverlay } from '../components';
+import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from '../components';
 import type { Move, Tile } from '../types';
 import {
   fetchDailyPuzzleLeaderboard,
@@ -35,11 +35,10 @@ import './botMatch.css';
 
 interface BotMatchScreenProps {
   onBack: () => void;
+  dealSize: BotDealSize;
   dailyPuzzleDate?: string | null;
   userId?: string | null;
   username?: string | null;
-  largeMode?: boolean;
-  onToggleLargeMode?: () => void;
 }
 
 interface BotHandReveal {
@@ -120,15 +119,13 @@ function toastFromResult(result: BotActionResult): string {
 
 export default function BotMatchScreen({
   onBack,
+  dealSize,
   dailyPuzzleDate = null,
   userId = null,
   username = null,
-  largeMode = false,
-  onToggleLargeMode,
 }: BotMatchScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [dealSize, setDealSize] = useState<BotDealSize>(7);
-  const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, 7));
+  const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, dealSize));
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState('');
   const [scoreToast, setScoreToast] = useState<{
@@ -634,24 +631,6 @@ export default function BotMatchScreen({
 
   const openEnds = getDisplayOpenEnds(match);
   const openEndsSum = match.board ? computeOpenEndsSum(match.board) : 0;
-  const applyDealSize = (nextDeal: BotDealSize) => {
-    if (nextDeal === dealSize) return;
-    setDealSize(nextDeal);
-    setSelectedTile(null);
-    setLastBotChoice(null);
-    setHandReveal(null);
-    setMovesUsed(0);
-    setDailyLeaderboard([]);
-    setDailyLeaderboardError(null);
-    setDailyLeaderboardLoading(false);
-    setMoveLog([]);
-    moveCounterRef.current = 1;
-    setCurrentAnalysis(null);
-    setAnalyzerOpen(false);
-    dailyResultSyncKeyRef.current = '';
-    setMatch(createBotMatch(60, nextDeal));
-  };
-
   return (
     <div
       ref={rootRef}
@@ -946,7 +925,7 @@ export default function BotMatchScreen({
         </GameOverModal>
       )}
 
-      <div className="wl-top-rail bot-top-rail" data-ui="hud">
+      <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
         <div className="bot-hud-left-cluster">
           <button
             type="button"
@@ -964,34 +943,27 @@ export default function BotMatchScreen({
             </div>
             <span className="wl-player-score">{match.players.bot.score}</span>
           </button>
-          <div className="wl-tiles-pill bot-difficulty bot-chip-control bot-tiles-picker">
-            <span className="bot-tiles-label">Tiles</span>
-            <div className="bot-tiles-options" role="group" aria-label="Select tile count">
-              <button
-                type="button"
-                className={`bot-tiles-option ${dealSize === 7 ? 'is-active' : ''}`}
-                onClick={() => applyDealSize(7)}
-              >
-                7
-              </button>
-              <button
-                type="button"
-                className={`bot-tiles-option ${dealSize === 14 ? 'is-active' : ''}`}
-                onClick={() => applyDealSize(14)}
-              >
-                14
-              </button>
-            </div>
-          </div>
         </div>
 
-        <div className="bot-hud-center-cluster wl-center-status">
+        <div
+          className="bot-hud-center-cluster wl-center-status"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
           <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
             {turnLabel}
           </span>
           <span
             className="open-ends-pill"
             style={{
+              position: 'absolute',
+              left: 'calc(100% + 8px)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -1011,7 +983,17 @@ export default function BotMatchScreen({
           </span>
         </div>
 
-        <div className="bot-hud-right-cluster">
+        <div
+          className="bot-hud-right-cluster"
+          style={{
+            gridColumn: 3,
+            justifySelf: 'end',
+            marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
           {showDevCapture && (
             <button
               className="btn text compact bot-chip-control bot-admin-chip"
@@ -1022,15 +1004,6 @@ export default function BotMatchScreen({
               <span className="bot-admin-chip-label">Copy Puzzle JSON</span>
             </button>
           )}
-          <button
-            onClick={() => onToggleLargeMode?.()}
-            title="Toggle Large Mode"
-            className={`large-mode-toggle-btn large-mode-toggle-btn--top ${largeMode ? 'is-active' : ''}`}
-            aria-label="Toggle large mode"
-            aria-pressed={largeMode}
-          >
-            <span aria-hidden="true">Aa</span>
-          </button>
           <button
             type="button"
             className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
@@ -1094,12 +1067,11 @@ export default function BotMatchScreen({
                 pointerEvents: 'none',
               }}
             >
-              Boneyard:{' '}
-              {match.boneyard.length <= 2
-                ? match.boneyard.length === 0
-                  ? 'Empty'
-                  : 'Locked'
-                : `${match.boneyard.length} left`}
+              <BoneyardStackIcon className="boneyard-icon" />
+              <span className="boneyard-count">{match.boneyard.length}</span>
+              {match.boneyard.length > 0 && match.boneyard.length <= 2 ? (
+                <span className="boneyard-meta">locked</span>
+              ) : null}
             </div>
           )}
           <Board

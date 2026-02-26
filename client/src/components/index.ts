@@ -4,3 +4,4 @@ export type { DominoTileProps } from './DominoTile';
 
 export { Board } from './Board';
 export { ScoreTrackOverlay } from './ScoreTrackOverlay';
+export { BoneyardStackIcon } from './BoneyardStackIcon';

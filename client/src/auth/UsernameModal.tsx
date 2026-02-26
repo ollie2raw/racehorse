@@ -88,7 +88,7 @@ export default function UsernameModal({
         >
           <h3 style={{ margin: 0 }}>Pick your username</h3>
           {onClose && (
-            <button className="mode-inline-btn" onClick={onClose} disabled={saving}>
+            <button type="button" className="mode-inline-btn" onClick={onClose} disabled={saving}>
               Not now
             </button>
           )}
@@ -119,6 +119,7 @@ export default function UsernameModal({
         {error && <p className="auth-inline-error">{error}</p>}
 
         <button
+          type="button"
           className="mode-option mode-option-primary auth-submit"
           onClick={submit}
           disabled={saving}

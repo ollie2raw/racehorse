@@ -4,10 +4,11 @@ import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './compon
 import { traceSocketEvent } from "./debug/socketTrace";
 import { io, Socket } from 'socket.io-client';
 import './App.css';
-import { Board, DominoTile, ScoreTrackOverlay } from './components';
+import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from './components';
 import { playTileSound } from './utils/sound';
 import NoBrainerLabScreen from './practice/NoBrainerLabScreen';
 import BotMatchScreen from './bot/BotMatchScreen';
+import BotSetupScreen from './bot/BotSetupScreen';
 import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
 import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
 import GameOverModal from './components/GameOverModal';
@@ -27,6 +28,7 @@ import {
 } from './analyzer/moveLogger';
 import { recordMatchResult } from './stats/statsApi';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
+import type { BotDealSize } from './bot/botEngine';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -350,6 +352,26 @@ function WeeklyStatsScreen({
     if (s.includes('margin') || s.includes('closest') || s.includes('comeback')) return 'pts';
     return '';
   };
+  const accentFor = (key: string, title: string): string => {
+    const s = `${key} ${title}`.toLowerCase();
+    if (s.includes('most wins')) return '#f5c76a';
+    if (s.includes('most games')) return '#4da3ff';
+    if (s.includes('biggest win')) return '#ff6b6b';
+    if (s.includes('closest win')) return '#3ddc97';
+    if (s.includes('biggest comeback')) return '#ff9f43';
+    if (s.includes('longest win streak') || s.includes('longest streak')) return '#6c8cff';
+    return '#f5c76a';
+  };
+  const accentClassFor = (key: string, title: string): string => {
+    const s = `${key} ${title}`.toLowerCase();
+    if (s.includes('most wins')) return 'most-wins';
+    if (s.includes('most games')) return 'most-games';
+    if (s.includes('biggest win')) return 'biggest-win';
+    if (s.includes('closest win')) return 'closest-win';
+    if (s.includes('biggest comeback')) return 'biggest-comeback';
+    if (s.includes('longest win streak') || s.includes('longest streak')) return 'longest-streak';
+    return 'most-wins';
+  };
 
   return (
     <div
@@ -409,10 +431,11 @@ function WeeklyStatsScreen({
             {items.map((a: any) => (
               <div
                 key={a.key}
+                className={`weekly-award-row ${accentClassFor(String(a.key ?? ''), String(a.title ?? ''))}`}
                 style={{
+                  ['--accent' as any]: accentFor(String(a.key ?? ''), String(a.title ?? '')),
                   borderRadius: '10px',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  borderLeft: '3px solid rgba(245, 158, 11, 0.6)',
+                  border: '1px solid color-mix(in srgb, var(--accent), transparent 75%)',
                   background: 'rgba(12,20,34,0.68)',
                   padding: '12px',
                   display: 'flex',
@@ -448,13 +471,12 @@ function WeeklyStatsScreen({
                   </strong>
                   {a.leader ? (
                     <span
+                      className="weekly-award-value-pill"
                       style={{
                         whiteSpace: 'nowrap',
                         borderRadius: 999,
                         padding: '4px 8px',
-                        background: 'rgba(245, 158, 11, 0.16)',
-                        border: '1px solid rgba(245, 158, 11, 0.36)',
-                        color: 'rgba(255, 226, 172, 0.96)',
+                        border: '1px solid color-mix(in srgb, var(--accent), transparent 70%)',
                         fontSize: '0.8rem',
                         fontWeight: 700,
                         letterSpacing: '0.01em',
@@ -495,7 +517,7 @@ export default function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [appMode, setAppMode] = useState<
-    'home' | 'multiplayer' | 'noBrainer' | 'bot' | 'daily' | 'dailyAdmin' | 'tournament'
+    'home' | 'multiplayer' | 'noBrainer' | 'botSetup' | 'bot' | 'daily' | 'dailyAdmin' | 'tournament'
   >('home');
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -506,19 +528,11 @@ export default function App() {
     const stored = window.localStorage.getItem('racehorse_ui_theme');
     return stored === 'brown' ? 'brown' : 'green';
   });
-  const [largeMode, setLargeMode] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem('racehorse-large-mode') === 'true';
+  const [botDealSize, setBotDealSize] = useState<BotDealSize>(() => {
+    if (typeof window === 'undefined') return 7;
+    const stored = window.localStorage.getItem('racehorse_bot_deal_size');
+    return stored === '14' ? 14 : 7;
   });
-  const toggleLargeMode = useCallback(() => {
-    setLargeMode((prev) => {
-      const next = !prev;
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('racehorse-large-mode', next ? 'true' : 'false');
-      }
-      return next;
-    });
-  }, []);
 
   const [roomCode, setRoomCode] = useState('');
   const [tournamentCode, setTournamentCode] = useState('');
@@ -674,8 +688,11 @@ export default function App() {
   const needsUsernameOnboarding = Boolean(
     authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
   );
-  const onboardingDismissed = Boolean(
-    typeof window !== 'undefined' && window.localStorage.getItem('username_onboarding_dismissed'),
+  const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(() =>
+    Boolean(
+      typeof window !== 'undefined' &&
+        window.localStorage.getItem('username_onboarding_dismissed'),
+    ),
   );
 
   const showToast = useCallback((msg: string, duration = 3000) => {
@@ -740,24 +757,14 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    window.localStorage.setItem('racehorse_bot_deal_size', String(botDealSize));
+  }, [botDealSize]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     window.localStorage.setItem('racehorse_muted', isMuted ? '1' : '0');
   }, [isMuted]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('racehorse-large-mode', largeMode ? 'true' : 'false');
-  }, [largeMode]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    setLargeMode(window.localStorage.getItem('racehorse-large-mode') === 'true');
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== 'racehorse-large-mode') return;
-      setLargeMode(event.newValue === 'true');
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -2338,15 +2345,26 @@ export default function App() {
   }, [state, joinedRoom, players, supabaseEnabled, authUser, you, multiplayerMoveLog]);
 
   // ─── Render ───────────────────────────────────────────────
-  const appRootClassName = `app${largeMode ? ' large-mode' : ''}`;
+  const appRootClassName = 'app large-mode';
 
   if (appMode === 'noBrainer') {
     return (
       <div className={appRootClassName}>
         <NoBrainerLabScreen
           onBack={() => setAppMode('home')}
-          largeMode={largeMode}
-          onToggleLargeMode={toggleLargeMode}
+        />
+      </div>
+    );
+  }
+
+  if (appMode === 'botSetup') {
+    return (
+      <div className={appRootClassName}>
+        <BotSetupScreen
+          dealSize={botDealSize}
+          onDealSizeChange={setBotDealSize}
+          onStart={() => setAppMode('bot')}
+          onBack={() => setAppMode('home')}
         />
       </div>
     );
@@ -2357,10 +2375,9 @@ export default function App() {
       <div className={appRootClassName}>
         <BotMatchScreen
           onBack={() => setAppMode('home')}
+          dealSize={botDealSize}
           userId={authUser?.id ?? null}
           username={authProfile?.username ?? null}
-          largeMode={largeMode}
-          onToggleLargeMode={toggleLargeMode}
         />
       </div>
     );
@@ -2373,8 +2390,6 @@ export default function App() {
           user={authUser}
           profile={authProfile}
           onBack={() => setAppMode('home')}
-          largeMode={largeMode}
-          onToggleLargeMode={toggleLargeMode}
         />
       </div>
     );
@@ -2927,6 +2942,14 @@ export default function App() {
             gap: 8,
           }}
         >
+          <button
+            className="mode-inline-btn home-help-btn"
+            onClick={() => setWelcomeOpen(true)}
+            aria-label="Open help and how to play"
+            title="How to play"
+          >
+            ?
+          </button>
           {!authUser && (
             <button className="mode-inline-btn" onClick={() => setAuthModalOpen(true)}>
               Sign in
@@ -2995,7 +3018,7 @@ export default function App() {
               </button>
               <button
                 className="mode-option mode-option-secondary"
-                onClick={() => setAppMode('bot')}
+                onClick={() => setAppMode('botSetup')}
               >
                 <span className="mode-option-title">Practice → Play vs Bot</span>
                 <span className="mode-option-meta">Sharpen your game offline against an AI opponent</span>
@@ -3070,12 +3093,14 @@ export default function App() {
             const result = await updateUsername(username);
             if (!result.error) {
               window.localStorage.removeItem('username_onboarding_dismissed');
+              setOnboardingDismissed(false);
               setUsernameModalOpen(false);
             }
             return result;
           }}
           onClose={() => {
             window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
+            setOnboardingDismissed(true);
             setUsernameModalOpen(false);
           }}
         />
@@ -3499,7 +3524,7 @@ export default function App() {
               className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
-              style={{ width: largeMode ? 154 : 142, minWidth: 'unset' }}
+              style={{ width: 154, minWidth: 'unset' }}
             >
               <div className="wl-pill-top">
                 <span className="wl-player-label">{opponentName}</span>
@@ -3558,15 +3583,6 @@ export default function App() {
                 gap: 8,
               }}
             >
-              <button
-                onClick={toggleLargeMode}
-                title="Toggle Large Mode"
-                className={`large-mode-toggle-btn large-mode-toggle-btn--top ${largeMode ? 'is-active' : ''}`}
-                aria-label="Toggle large mode"
-                aria-pressed={largeMode}
-              >
-                <span aria-hidden="true">Aa</span>
-              </button>
               <button
                 type="button"
                 className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? 'is-active' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
@@ -3632,9 +3648,11 @@ export default function App() {
                     pointerEvents: 'none',
                   }}
                 >
-                  Boneyard:{' '}
-                  {boneyardCount > 0 ? `${boneyardCount} left` : 'Empty'}
-                  {isBoneyardLocked ? ' 🔒' : ''}
+                  <BoneyardStackIcon className="boneyard-icon" />
+                  <span className="boneyard-count">{boneyardCount}</span>
+                  {isBoneyardLocked && boneyardCount > 0 ? (
+                    <span className="boneyard-meta">locked</span>
+                  ) : null}
                 </div>
               )}
               <div className="wl-controls-tray" style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', gap: 2, alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '4px 6px', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>

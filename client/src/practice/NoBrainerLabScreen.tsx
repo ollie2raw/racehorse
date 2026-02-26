@@ -16,8 +16,6 @@ import './noBrainerLab.css';
 
 interface NoBrainerLabScreenProps {
   onBack: () => void;
-  largeMode?: boolean;
-  onToggleLargeMode?: () => void;
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
@@ -52,8 +50,6 @@ function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
 
 export default function NoBrainerLabScreen({
   onBack,
-  largeMode = false,
-  onToggleLargeMode,
 }: NoBrainerLabScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [dataset, setDataset] = useState<NoBrainerHandRecord[] | null>(null);
@@ -194,46 +190,19 @@ export default function NoBrainerLabScreen({
 
   return (
     <div ref={rootRef} className={`app walnut-live practice-lab theme-${uiTheme}`}>
-      <section
-        className="wl-top-rail practice-top-rail"
-        data-ui="hud"
-        style={{ position: 'relative', minHeight: 72, display: 'flex', alignItems: 'center' }}
-      >
-        <div
-          className="wl-player-pill is-active practice-mode-pill"
-          style={{
-            position: 'absolute',
-            left: 12,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            opacity: 0.9,
-            scale: '0.98',
-          }}
-        >
-          <div className="wl-pill-top">
-            <span className="wl-player-label" style={{ fontSize: '0.7rem' }}>
-              No-Brainer Lab
-            </span>
+      <section className="wl-top-rail practice-top-rail" data-ui="hud">
+        <div className="practice-mode-pill">
+          <span className="practice-mode-accent" aria-hidden="true" />
+          <div className="practice-mode-copy">
+            
+            <span className="practice-mode-eyebrow">NO BRAINER</span>
+            <span className="practice-mode-title">7‑TILE RUN</span>
           </div>
-          <span className="wl-player-score" style={{ fontSize: '0.88rem' }}>
-            7-Tile Run
-          </span>
         </div>
-        <div
-          className="wl-center-status practice-center-status"
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: '50%',
-            transform: 'translateX(-50%) translateY(-50%)',
-            display: 'grid',
-            justifyItems: 'center',
-            textAlign: 'center',
-            width: 'min(92vw, 640px)',
-          }}
-        >
-          <span className="wl-turn-label your-turn">Clear all 7 tiles in one turn.</span>
+        <div className="wl-center-status practice-center-status">
+          <span className="wl-turn-label your-turn">Clear all 7 tiles in one turn</span>
         </div>
+        <div className="practice-top-spacer" aria-hidden="true" />
       </section>
 
       <div className="wl-stage-shell practice-stage-shell">
@@ -263,15 +232,6 @@ export default function NoBrainerLabScreen({
               boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
             }}
           >
-            <button
-              onClick={() => onToggleLargeMode?.()}
-              title={largeMode ? 'Disable large mode' : 'Enable large mode'}
-              className={`large-mode-toggle-btn ${largeMode ? 'is-active' : ''}`}
-              aria-label="Toggle large mode"
-              aria-pressed={largeMode}
-            >
-              👓 <span>{largeMode ? 'Large On' : 'Large'}</span>
-            </button>
             <button className="btn text compact bot-chip-control" onClick={retryHand}>
               Retry
             </button>
@@ -293,29 +253,9 @@ export default function NoBrainerLabScreen({
             <button
               onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
               title="Toggle table color"
-              style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.55)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-              }}
+              className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 2a10 10 0 0 1 0 20" />
-              </svg>
+              <span className="table-theme-dot" aria-hidden="true" />
             </button>
             <button
               className="btn text icon-btn fullscreen-btn"

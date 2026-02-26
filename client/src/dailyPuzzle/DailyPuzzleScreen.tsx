@@ -21,8 +21,6 @@ interface DailyPuzzleScreenProps {
   user: User | null;
   profile: UserProfile | null;
   onBack: () => void;
-  largeMode?: boolean;
-  onToggleLargeMode?: () => void;
 }
 
 type PlayStatus = 'IN_PROGRESS' | 'SOLVED' | 'FAILED';
@@ -159,8 +157,6 @@ export default function DailyPuzzleScreen({
   user,
   profile,
   onBack,
-  largeMode = false,
-  onToggleLargeMode,
 }: DailyPuzzleScreenProps) {
   const localDateKey = useMemo(() => getLocalDateKey(), []);
   const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
@@ -728,16 +724,6 @@ export default function DailyPuzzleScreen({
           </div>
         </div>
         <div className="daily-top-actions-pill">
-          <button
-            className={`large-mode-toggle-btn ${largeMode ? 'is-active' : ''}`}
-            onClick={() => onToggleLargeMode?.()}
-            title={largeMode ? 'Disable large mode' : 'Enable large mode'}
-            aria-label="Toggle large mode"
-            aria-pressed={largeMode}
-            style={{ marginRight: 2 }}
-          >
-            👓 <span>{largeMode ? 'Large On' : 'Large'}</span>
-          </button>
           <button
             className="btn text compact daily-chip-control"
             onClick={resetAttempt}
