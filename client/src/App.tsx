@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import { traceSocketEvent } from "./debug/socketTrace";
@@ -628,6 +628,7 @@ export default function App() {
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [serverWaking, setServerWaking] = useState(false);
   const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
+  const [playersOnlineCount, setPlayersOnlineCount] = useState<number | null>(null);
   const [friendInvite, setFriendInvite] = useState<{
     fromUsername: string;
     roomCode: string;
@@ -1456,6 +1457,50 @@ export default function App() {
     loadWeeklyAwards();
   }, [weeklyStatsOpen, socket, connect, loadWeeklyAwards]);
 
+  useEffect(() => {
+    if (appMode !== 'home') return;
+    if (!socket || !socket.connected) {
+      setPlayersOnlineCount(null);
+      return;
+    }
+
+    let active = true;
+    const refreshPresence = () => {
+      socket.emit('presence:online', [], (resp: any) => {
+        if (!active || !resp?.ok) return;
+        if (Number.isFinite(resp.onlineCount)) {
+          setPlayersOnlineCount(Number(resp.onlineCount));
+          return;
+        }
+        if (Array.isArray(resp.onlineUserIds)) {
+          setPlayersOnlineCount(resp.onlineUserIds.length);
+          return;
+        }
+        setPlayersOnlineCount(null);
+      });
+    };
+
+    refreshPresence();
+    const interval = window.setInterval(refreshPresence, 30000);
+    const onConnect = () => refreshPresence();
+    socket.on('connect', onConnect);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      socket.off('connect', onConnect);
+    };
+  }, [appMode, socket]);
+
+  useEffect(() => {
+    if (appMode !== 'home') return;
+    if (!socket || !socket.connected) return;
+
+    loadWeeklyAwards();
+    const interval = window.setInterval(loadWeeklyAwards, 60000);
+    return () => window.clearInterval(interval);
+  }, [appMode, socket, loadWeeklyAwards]);
+
 
   useEffect(() => {
     if (appMode !== 'multiplayer' && appMode !== 'tournament') return;
@@ -1951,6 +1996,18 @@ export default function App() {
     : authUser?.email
       ? `@${authUser.email.split('@')[0]}`
       : '@player';
+  const weeklyAwardRows = Array.isArray(weeklyAwards?.awards) ? weeklyAwards.awards : [];
+  const weeklyLeaderHandle = useMemo(() => {
+    const mostWins = weeklyAwardRows.find((entry: any) =>
+      `${entry?.key ?? ''} ${entry?.title ?? ''}`.toLowerCase().includes('most wins'),
+    );
+    const fallback = weeklyAwardRows.find((entry: any) => Boolean(entry?.leader?.username));
+    const username = mostWins?.leader?.username ?? fallback?.leader?.username ?? null;
+    return username ? `@${username}` : null;
+  }, [weeklyAwardRows]);
+  const weeklyRank: number | null = null;
+  const hasSocialProofData =
+    playersOnlineCount !== null && weeklyLeaderHandle !== null && weeklyRank !== null;
   const inGame = Boolean(isConnected && joinedRoom && state);
   const isSpectatingMatch = Boolean(tournamentId && joinedRoom && state && !state.playerIds.includes(you));
   const isTournamentMatch = Boolean(tournamentId || tournamentState?.status === 'running');
@@ -2833,10 +2890,6 @@ export default function App() {
     }
     setWelcomeOpen(false);
   };
-  const welcomeFeatureCardStyle: CSSProperties = {
-    cursor: 'default',
-  };
-
   const welcomeModal =
     appMode === 'home' && welcomeOpen ? (
       <div
@@ -2848,8 +2901,8 @@ export default function App() {
           position: 'fixed',
           inset: 0,
           zIndex: 1600,
-          background: 'rgba(6,10,18,0.62)',
-          backdropFilter: 'blur(8px)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(4px)',
           display: 'grid',
           placeItems: 'center',
           padding: 12,
@@ -2861,48 +2914,53 @@ export default function App() {
           style={{ textAlign: 'left' }}
         >
           <h3 className="welcome-modal-title" style={{ margin: 0, lineHeight: 1.2 }}>
-            🁣 Welcome to Racehorse Dominoes
+            How to Play
           </h3>
-          <p className="welcome-modal-subtitle" style={{ margin: '6px 0 10px', color: 'rgba(223,236,244,0.86)' }}>
-            Pick a mode and jump in. Everything tracks automatically as you play.
+          <p className="welcome-modal-subtitle">
+            Quick guide to each game mode.
           </p>
-          <div className="welcome-features-grid">
-            <div className="mode-option welcome-feature-card welcome-feature-multiplayer" style={welcomeFeatureCardStyle}>
-              <span className="mode-option-title welcome-feature-title">🎮 Multiplayer Online</span>
-              <span className="mode-option-meta welcome-feature-meta">
-                Create a private room and play live 1v1 against friends with a room code
-              </span>
+          <div className="welcome-mode-list">
+            <div className="welcome-mode-row">
+              <div className="welcome-mode-name">
+                <span className="welcome-mode-dot" style={{ background: '#38bdf8' }} aria-hidden="true" />
+                Multiplayer Online
+              </div>
+              <div className="welcome-mode-desc">Play live 1v1 against a friend with a room code</div>
             </div>
-            <div className="mode-option welcome-feature-card welcome-feature-tournament" style={welcomeFeatureCardStyle}>
-              <span className="mode-option-title welcome-feature-title">🏆 Tournament Mode</span>
-              <span className="mode-option-meta welcome-feature-meta">
-                Create or join a round-robin lobby (4+ players), share the code, compete through a full bracket playing shorter games to 30
-              </span>
+            <div className="welcome-mode-row">
+              <div className="welcome-mode-name">
+                <span className="welcome-mode-dot" style={{ background: '#e05c6a' }} aria-hidden="true" />
+                Tournament Mode
+              </div>
+              <div className="welcome-mode-desc">Round robin bracket, 4+ players, first to 30 points</div>
             </div>
-            <div className="mode-option welcome-feature-card welcome-feature-bot" style={welcomeFeatureCardStyle}>
-              <span className="mode-option-title welcome-feature-title">🤖 vs Bot</span>
-              <span className="mode-option-meta welcome-feature-meta">
-                Practice against an AI bot with normal rules, or a special 14 tile deal
-              </span>
+            <div className="welcome-mode-row">
+              <div className="welcome-mode-name">
+                <span className="welcome-mode-dot" style={{ background: '#f0c040' }} aria-hidden="true" />
+                Daily Puzzle
+              </div>
+              <div className="welcome-mode-desc">One puzzle per day, compete on the leaderboard</div>
             </div>
-            <div className="mode-option welcome-feature-card welcome-feature-lab" style={welcomeFeatureCardStyle}>
-              <span className="mode-option-title welcome-feature-title">🧠 No-Brainer Lab</span>
-              <span className="mode-option-meta welcome-feature-meta">
-                Practice one-turn clear runs with curated hands. Can you clear all 7 tiles in one
-                shot?
-              </span>
+            <div className="welcome-mode-row">
+              <div className="welcome-mode-name">
+                <span className="welcome-mode-dot" style={{ background: '#60a5fa' }} aria-hidden="true" />
+                vs Bot
+              </div>
+              <div className="welcome-mode-desc">Practice against an AI opponent</div>
             </div>
-            <div className="mode-option welcome-feature-card welcome-feature-daily" style={welcomeFeatureCardStyle}>
-              <span className="mode-option-title welcome-feature-title">🧩 Daily Puzzle</span>
-              <span className="mode-option-meta welcome-feature-meta">
-                One puzzle per day, solve it and compete on the leaderboard
-              </span>
+            <div className="welcome-mode-row">
+              <div className="welcome-mode-name">
+                <span className="welcome-mode-dot" style={{ background: '#a78bfa' }} aria-hidden="true" />
+                No-Brainer Lab
+              </div>
+              <div className="welcome-mode-desc">Practice clearing all 7 tiles in one turn</div>
             </div>
-            <div className="mode-option welcome-feature-card welcome-feature-stats" style={welcomeFeatureCardStyle}>
-              <span className="mode-option-title welcome-feature-title">📊 Stats & Leaderboard</span>
-              <span className="mode-option-meta welcome-feature-meta">
-                Track wins, point diff, and streaks. Compete for the weekly leaderboard. View stats and challenge friends from the top bar
-              </span>
+            <div className="welcome-mode-row">
+              <div className="welcome-mode-name">
+                <span className="welcome-mode-dot" style={{ background: '#34d399' }} aria-hidden="true" />
+                Stats &amp; Leaderboard
+              </div>
+              <div className="welcome-mode-desc">Track your wins, streaks, and weekly rank</div>
             </div>
           </div>
           <div style={{ marginTop: 12, display: 'flex' }}>
@@ -2910,7 +2968,7 @@ export default function App() {
               className="mode-inline-btn welcome-cta"
               onClick={dismissWelcome}
             >
-              Let&apos;s Play →
+              Got it
             </button>
           </div>
         </div>
@@ -2921,6 +2979,7 @@ export default function App() {
     return (
       <div ref={appRootRef} className={appRootClassName}>
         <div
+          className="home-top-actions"
           style={{
             position: 'absolute',
             top: 14,
@@ -2931,32 +2990,25 @@ export default function App() {
             gap: 8,
           }}
         >
-          <button
-            className="mode-inline-btn home-help-btn"
-            onClick={() => setWelcomeOpen(true)}
-            aria-label="Open help and how to play"
-            title="How to play"
-          >
-            ?
-          </button>
           {!authUser && (
-            <button className="mode-inline-btn" onClick={() => setAuthModalOpen(true)}>
+            <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setAuthModalOpen(true)}>
               Sign in
             </button>
           )}
           {authUser && (
             <>
-              <button className="mode-inline-btn" onClick={() => setUsernameModalOpen(true)}>
+              <button className="mode-inline-btn home-top-btn home-top-btn-user" onClick={() => setUsernameModalOpen(true)}>
+                <span className="home-top-online-dot" aria-hidden="true" />
                 {myHandle}
               </button>
-              <button className="mode-inline-btn" onClick={() => setStatsOpen(true)}>
+              <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setStatsOpen(true)}>
                 Stats
               </button>
-              <button className="mode-inline-btn" onClick={() => setFriendsOpen(true)}>
+              <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setFriendsOpen(true)}>
                 Friends
               </button>
               <button
-                className="mode-inline-btn"
+                className="mode-inline-btn home-top-btn home-top-btn-signout"
                 disabled={signingOut}
                 onClick={async () => {
                   reconnectShouldJoinRef.current = false;
@@ -2991,12 +3043,53 @@ export default function App() {
         </div>
         <LayoutScreen
           className="screen lobby-screen mode-home-screen mode-accent-multiplayer"
-          badge="Racehorse Dominoes"
-          title="Choose Game Mode"
+          badge={
+            <span className="mode-home-badge-lockup">
+              <BoneyardStackIcon className="mode-home-badge-icon" />
+              <span className="mode-home-badge-wordmark">Racehorse Dominoes</span>
+            </span>
+          }
+          title={
+            <span className="mode-title-with-help">
+              <span>Choose Game Mode</span>
+              <button
+                className="mode-inline-btn mode-title-help-btn"
+                onClick={() => setWelcomeOpen(true)}
+                aria-label="Open help and how to play"
+                title="How to play"
+              >
+                ?
+              </button>
+            </span>
+          }
           subtitle="Choose how you want to play: live online matches, practice modes, or daily challenges."
           contentClassName="screen-shell"
         >
             <div className="mode-hub" style={{ width: '100%' }}>
+              {
+                // TODO: unhide when presence/stats data is wired up.
+                hasSocialProofData && (
+                  <p className="mode-social-proof" aria-live="polite">
+                    <span>
+                      🟢 {playersOnlineCount === null ? '-- players online' : `${playersOnlineCount} players online`}
+                    </span>
+                    <span className="mode-social-proof-sep" aria-hidden="true">•</span>
+                    <span>
+                      {
+                        // TODO: wire weekly rank to a dedicated stats rank endpoint when available.
+                        `🏆 You're rank #${weeklyRank} this week`
+                      }
+                    </span>
+                    <span className="mode-social-proof-sep" aria-hidden="true">•</span>
+                    <span>
+                      {
+                        // TODO: wire weekly leader to a dedicated leaderboard endpoint if weekly awards are unavailable.
+                        weeklyLeaderHandle ? `👑 This week's leader: ${weeklyLeaderHandle}` : '👑 Weekly leader: --'
+                      }
+                    </span>
+                  </p>
+                )
+              }
               <section className="mode-hub-primary mode-hub-section-multiplayer">
                 <p className="mode-section-label">Play Online</p>
                 <button
@@ -3046,7 +3139,10 @@ export default function App() {
                       className="mode-option mode-option-secondary mode-option-primary mode-option-hero mode-accent-daily mode-option-hero-outline mode-card-daily"
                       onClick={() => setAppMode('daily')}
                     >
-                      <span className="mode-option-title">Daily Puzzle</span>
+                      <span className="mode-option-title">
+                        <span className="mode-daily-crown" aria-hidden="true">👑</span>
+                        Daily Puzzle
+                      </span>
                       <span className="mode-option-meta">
                         Solve today’s featured scenario and compare leaderboard results
                       </span>
