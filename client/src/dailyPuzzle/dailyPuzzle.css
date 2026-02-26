@@ -625,9 +625,19 @@
 
 .daily-entry-actions {
   width: 100%;
-  max-width: 380px;
-  margin: 12px 0 0;
-  gap: 12px;
+  max-width: 680px;
+  margin: 0;
+  gap: 10px;
+}
+
+.daily-entry-panel {
+  width: min(680px, 100%);
+  margin-top: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(176deg, rgba(11, 18, 32, 0.68), rgba(8, 14, 26, 0.78));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .daily-start-hero {
@@ -672,6 +682,18 @@
 
 .daily-entry-actions .mode-option {
   width: 100%;
+}
+
+.daily-entry-panel .mode-option-primary {
+  border-color: rgba(149, 240, 202, 0.56);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 24px rgba(7, 24, 22, 0.3);
+}
+
+.daily-entry-panel .mode-option:not(.mode-option-primary) {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(10, 16, 28, 0.42);
 }
 
 .daily-entry-back-link {

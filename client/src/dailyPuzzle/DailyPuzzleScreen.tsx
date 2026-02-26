@@ -15,6 +15,7 @@ import {
 } from './api';
 import { computeBestPossiblePuzzleScore, createPuzzleMatchState, validatePuzzle } from './validator';
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
+import LayoutScreen from '../ui/LayoutScreen';
 import './dailyPuzzle.css';
 
 interface DailyPuzzleScreenProps {
@@ -499,72 +500,69 @@ export default function DailyPuzzleScreen({
 
   if (loading) {
     return (
-      <div className="app">
-        <div className="screen lobby-screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card">
-            <h2>Daily Puzzle</h2>
-            <p>Loading today's curated puzzle...</p>
-          </div>
-        </div>
-      </div>
+      <LayoutScreen
+        className="screen lobby-screen mode-home-screen"
+        badge="Daily Puzzle"
+        title="Today's Challenge"
+        subtitle="Loading today's curated puzzle..."
+        contentClassName="screen-shell"
+      />
     );
   }
 
   if (loadError) {
     return (
-      <div className="app">
-        <div className="screen lobby-screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card">
-            <h2>Daily Puzzle</h2>
-            <p className="auth-inline-error">{loadError}</p>
-            <p className="lobby-server">Local date key: {localDateKey}</p>
-            <p className="lobby-server">Timezone: {timezone}</p>
-            <button className="mode-inline-btn" onClick={onBack}>
-              Back to Home
-            </button>
-          </div>
-        </div>
-      </div>
+      <LayoutScreen
+        className="screen lobby-screen mode-home-screen"
+        badge="Daily Puzzle"
+        title="Today's Challenge"
+        subtitle="Unable to load today's puzzle."
+        contentClassName="screen-shell"
+      >
+        <p className="auth-inline-error">{loadError}</p>
+        <p className="lobby-server">Local date key: {localDateKey}</p>
+        <p className="lobby-server">Timezone: {timezone}</p>
+        <button className="mode-inline-btn" onClick={onBack}>
+          Back to Home
+        </button>
+      </LayoutScreen>
     );
   }
 
   if (matchError) {
     return (
-      <div className="app">
-        <div className="screen lobby-screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card">
-            <h2>Daily Puzzle</h2>
-            <p className="auth-inline-error">{matchError}</p>
-            <p className="lobby-server">Local date key: {localDateKey}</p>
-            <p className="lobby-server">Timezone: {timezone}</p>
-            <button className="mode-inline-btn" onClick={onBack}>
-              Back to Home
-            </button>
-          </div>
-        </div>
-      </div>
+      <LayoutScreen
+        className="screen lobby-screen mode-home-screen"
+        badge="Daily Puzzle"
+        title="Today's Challenge"
+        subtitle="Puzzle configuration issue."
+        contentClassName="screen-shell"
+      >
+        <p className="auth-inline-error">{matchError}</p>
+        <p className="lobby-server">Local date key: {localDateKey}</p>
+        <p className="lobby-server">Timezone: {timezone}</p>
+        <button className="mode-inline-btn" onClick={onBack}>
+          Back to Home
+        </button>
+      </LayoutScreen>
     );
   }
 
   if (!puzzle || !runtimeState) {
     return (
-      <div className="app">
-        <div className="screen lobby-screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card">
-            <h2>Daily Puzzle</h2>
-            <p>Today's puzzle is not posted yet.</p>
-            <p className="lobby-server">Local date key: {localDateKey}</p>
-            <p className="lobby-server">Timezone: {timezone}</p>
-            <button className="mode-inline-btn" onClick={onBack}>
-              Back to Home
-            </button>
-          </div>
-        </div>
-      </div>
+      <LayoutScreen
+        className="screen lobby-screen mode-home-screen"
+        badge="Daily Puzzle"
+        title="Today's Challenge"
+        subtitle="Today's puzzle is not posted yet."
+        contentClassName="screen-shell"
+      >
+        <p className="lobby-server">Local date key: {localDateKey}</p>
+        <p className="lobby-server">Timezone: {timezone}</p>
+        <button className="mode-inline-btn" onClick={onBack}>
+          Back to Home
+        </button>
+      </LayoutScreen>
     );
   }
 
@@ -610,15 +608,14 @@ export default function DailyPuzzleScreen({
 
   if (showLobby) {
     return (
-      <div className="app">
-        <div className="screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card">
-            <p className="lobby-kicker">DAILY PUZZLE</p>
-            <h2>Today&apos;s Challenge</h2>
-            <p className="mode-subtitle" style={{ margin: '4px 0 0' }}>
-              Score the most points you can in one turn.
-            </p>
+      <>
+        <LayoutScreen
+          className="screen mode-home-screen mode-subpage-screen mode-accent-daily daily-entry-screen"
+          badge="Daily Puzzle"
+          title="Today&apos;s Challenge"
+          subtitle="Score the most points you can in one turn."
+          contentClassName="screen-shell"
+        >
             <p className="lobby-server mode-subtitle" style={{ marginTop: 10 }}>
               {formattedPuzzleDate}
             </p>
@@ -641,30 +638,31 @@ export default function DailyPuzzleScreen({
             >
               🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
             </div>
-            <div className="mode-actions daily-entry-actions">
-              <button
-                className="mode-option mode-option-primary"
-                onClick={() => {
-                  startTimeRef.current = Date.now();
-                  setDailyLeaderboardOpen(false);
-                  setShowLobby(false);
-                }}
-              >
-                <span className="mode-option-title">▶ Start Today&apos;s Puzzle</span>
-              </button>
-              <button
-                className="mode-option"
-                onClick={() => setDailyLeaderboardOpen(true)}
-              >
-                <span className="mode-option-title">🏆 Leaderboard</span>
-                <span className="mode-option-meta">See today&apos;s top scores</span>
-              </button>
-              <button className="mode-option" onClick={onBack}>
-                <span className="mode-option-title">← Back to Home</span>
-              </button>
+            <div className="daily-entry-panel">
+              <div className="mode-actions daily-entry-actions">
+                <button
+                  className="mode-option mode-option-primary mode-accent-daily"
+                  onClick={() => {
+                    startTimeRef.current = Date.now();
+                    setDailyLeaderboardOpen(false);
+                    setShowLobby(false);
+                  }}
+                >
+                  <span className="mode-option-title">▶ Start Today&apos;s Puzzle</span>
+                </button>
+                <button
+                  className="mode-option"
+                  onClick={() => setDailyLeaderboardOpen(true)}
+                >
+                  <span className="mode-option-title">🏆 Leaderboard</span>
+                  <span className="mode-option-meta">See today&apos;s top scores</span>
+                </button>
+                <button className="mode-option" onClick={onBack}>
+                  <span className="mode-option-title">← Back to Home</span>
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
+        </LayoutScreen>
         {dailyLeaderboardOpen && (
           <div
             className="daily-puzzle-overlay"
@@ -706,7 +704,7 @@ export default function DailyPuzzleScreen({
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   }
 

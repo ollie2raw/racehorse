@@ -18,6 +18,7 @@ import UsernameModal from './auth/UsernameModal';
 import { isTemporaryUsername, useAuth } from './auth/useAuth';
 import StatsScreen from './stats/StatsScreen';
 import FriendsScreen from './friends/FriendsScreen';
+import LayoutScreen from './ui/LayoutScreen';
 import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from './analyzer/moveAnalyzer';
 import {
   type MoveEntry,
@@ -2399,16 +2400,17 @@ export default function App() {
     if (!isAdmin) {
       return (
         <div className={appRootClassName}>
-          <div className="screen lobby-screen mode-home-screen">
-            <div className="mode-home-glow" aria-hidden="true" />
-            <div className="card lobby-card mode-card">
-              <h2>Admin: Daily Puzzles</h2>
-              <p>You are not authorized to access the puzzle editor.</p>
-              <button className="mode-inline-btn" onClick={() => setAppMode('home')}>
-                Back to Home
-              </button>
-            </div>
-          </div>
+          <LayoutScreen
+            className="screen lobby-screen mode-home-screen mode-subpage-screen"
+            badge="Racehorse Dominoes"
+            title="Admin: Daily Puzzles"
+            subtitle="You are not authorized to access the puzzle editor."
+            contentClassName="screen-shell"
+          >
+            <button className="mode-inline-btn" onClick={() => setAppMode('home')}>
+              Back to Home
+            </button>
+          </LayoutScreen>
         </div>
       );
     }
@@ -2533,87 +2535,80 @@ export default function App() {
     };
 
     return (
-      <div
-        className="screen lobby-screen mode-home-screen"
->
-        <div className="mode-home-glow" aria-hidden="true" />
-        <div style={{ overflowY: 'auto', height: '100%', width: '100%' }}>
-        <div
-          className="card lobby-card mode-card multiplayer-menu-card"
-          style={{ width: '100%' }}
-        >
-          <p className="lobby-kicker">Racehorse Dominoes</p>
-          <h2>{tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}</h2>
-          <p className="lobby-server mode-subtitle">
-            {tournamentId
-              ? 'Finish your match, then wait here for the next round. Watch live games and track the standings.'
-              : 'Create a new lobby or enter a code to join your friends instantly.'}
-          </p>
+      <LayoutScreen
+        className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-tournament"
+        badge="Racehorse Dominoes"
+        title={tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}
+        subtitle={
+          tournamentId
+            ? 'Finish your match, then wait here for the next round. Watch live games and track the standings.'
+            : 'Create a new lobby or enter a code to join your friends instantly.'
+        }
+        contentClassName="multiplayer-menu-card screen-shell"
+      >
+        {error && (
+          <div className="error-banner">
+            {error}
+            <button onClick={() => setError('')}>×</button>
+          </div>
+        )}
 
-          {error && (
-            <div className="error-banner">
-              {error}
-              <button onClick={() => setError('')}>×</button>
-            </div>
-          )}
-
-          <div className="mode-actions" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
-            {/* TOURNAMENT_TWO_COL_LAYOUT */}
-            <div style={{ display: 'flex', width: '100%', minWidth: 0, gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div style={{ width: '100%', minWidth: 0, display: 'grid', gap: 14 }}>
-            {showLobbySetup && (
-              <>
-                <button className="mode-option mode-option-primary" onClick={createLobby}>
-                  <span className="mode-option-title">Create Lobby</span>
-                  <span className="mode-option-meta">Start a tournament lobby and share the code</span>
-                </button>
-                <div className="mode-option" style={{ cursor: 'default' }}>
-                  <span className="mode-option-title">Join Lobby</span>
-                  <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
-                  <div className="mode-join-row" style={{ marginTop: 10 }}>
-                    <input
-                      className="mode-join-input"
-                      type="text"
-                      placeholder="Lobby Code"
-                      value={tournamentCode}
-                      onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
-                      maxLength={6}
-                    />
-                    <button className="mode-inline-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
-                      Join Lobby
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-            {!!tournamentCode && (
+        <div className="mode-actions" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
+          {showLobbySetup && (
+            <>
+              <button className="mode-option mode-option-primary" onClick={createLobby}>
+                <span className="mode-option-title">Create Lobby</span>
+                <span className="mode-option-meta">Start a tournament lobby and share the code</span>
+              </button>
               <div className="mode-option" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Lobby Code</span>
-                <span className="mode-option-meta">Share this code to invite players</span>
-                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ fontSize: 22, letterSpacing: 1, opacity: 0.95 }}>{tournamentCode}</div>
-                  <button
-                    className="btn text compact"
-                    onClick={() => navigator.clipboard?.writeText(String(tournamentCode))}
-                    title="Copy lobby code"
-                  >
-                    Copy
+                <span className="mode-option-title">Join Lobby</span>
+                <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
+                <div className="mode-join-row" style={{ marginTop: 10 }}>
+                  <input
+                    className="mode-join-input"
+                    type="text"
+                    placeholder="Lobby Code"
+                    value={tournamentCode}
+                    onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
+                    maxLength={6}
+                  />
+                  <button className="mode-inline-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
+                    Join Lobby
                   </button>
                 </div>
               </div>
-            )}
-            {isHost && tournamentState?.status !== 'running' && (
-              <button className="mode-option mode-option-primary" onClick={start} disabled={players.length < 4}>
-                <span className="mode-option-title">Start Tournament</span>
-                <span className="mode-option-meta">
-                  {players.length < 4 ? 'Need 4+ players to start' : 'Generate schedule and begin first match'}
-                </span>
-              </button>
-            )}
+            </>
+          )}
 
+          {!!tournamentCode && (
+            <div className="mode-option" style={{ cursor: 'default' }}>
+              <span className="mode-option-title">Lobby Code</span>
+              <span className="mode-option-meta">Share this code to invite players</span>
+              <div
+                style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+              >
+                <div style={{ fontSize: 22, letterSpacing: 1, opacity: 0.95 }}>{tournamentCode}</div>
+                <button
+                  className="btn text compact"
+                  onClick={() => navigator.clipboard?.writeText(String(tournamentCode))}
+                  title="Copy lobby code"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
 
-            {/* Tournament Hub (waiting room) */}
-                        {/* TOURNAMENT_TWO_COL_LAYOUT (grid) */}
+          {isHost && tournamentState?.status !== 'running' && (
+            <button className="mode-option mode-option-primary" onClick={start} disabled={players.length < 4}>
+              <span className="mode-option-title">Start Tournament</span>
+              <span className="mode-option-meta">
+                {players.length < 4 ? 'Need 4+ players to start' : 'Generate schedule and begin first match'}
+              </span>
+            </button>
+          )}
+
+          {tournamentId && (
             <div
               style={{
                 display: 'grid',
@@ -2625,161 +2620,155 @@ export default function App() {
               }}
             >
               <div style={{ display: 'grid', minWidth: 0, gap: 14 }}>
-{tournamentId && (
-              <div className="mode-option" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Status</span>
-                <span className="mode-option-meta">
-                  {yourStatus}
-                  {totalMatches ? ` • ${doneCount}/${totalMatches} complete` : ''}
-                </span>
+                <div className="mode-option" style={{ cursor: 'default' }}>
+                  <span className="mode-option-title">Status</span>
+                  <span className="mode-option-meta">
+                    {yourStatus}
+                    {totalMatches ? ` • ${doneCount}/${totalMatches} complete` : ''}
+                  </span>
 
-                <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span style={{ opacity: 0.9 }}>Now Playing</span>
-                    <span style={{ opacity: 0.9 }}>
-                      {activeMatch ? `${nameFor(activeMatch.a)} vs ${nameFor(activeMatch.b)}` : 'Waiting…'}
-                    </span>
-                  </div>
-
-                  {!!nextForYou && (
+                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <span style={{ opacity: 0.9 }}>Up Next</span>
+                      <span style={{ opacity: 0.9 }}>Now Playing</span>
                       <span style={{ opacity: 0.9 }}>
-                        {nextForYou.a === mySocketId ? nameFor(nextForYou.b) : nameFor(nextForYou.a)}
+                        {activeMatch ? `${nameFor(activeMatch.a)} vs ${nameFor(activeMatch.b)}` : 'Waiting…'}
                       </span>
                     </div>
-                  )}
-                </div>
 
-                {tournamentState?.status === 'running' && activeRoom && !youArePlaying && (
-                  <button
-                    className="btn text compact"
-                    style={{ marginTop: 12 }}
-                    onClick={spectate}
-                    disabled={!activeRoom}
-                    title="Watch the current match"
-                  >
-                    Watch match
-                  </button>
-                )}
-              </div>
-            )}
-
-            
-              </div>
-              <div style={{ width: '100%', minWidth: 0, display: 'grid', gap: 14 }}>
-{tournamentId && matches.length > 0 && (
-              <div className="mode-option" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Bracket</span>
-                <span className="mode-option-meta">Round robin schedule</span>
-
-                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                  {matches.map((m: any, i: number) => {
-                    const isActive = Boolean(activeMatch && m.id === activeMatch.id);
-                    const involvesYou = Boolean(mySocketId && (m.a === mySocketId || m.b === mySocketId));
-                    const rowOpacity = m.status === 'done' ? 0.7 : 0.92;
-
-                    const left = nameFor(m.a);
-                    const right = nameFor(m.b);
-
-                    const label =
-                      m.status === 'done' ? 'Done' : m.status === 'active' ? 'Playing' : 'Queued';
-
-                    const winnerName =
-                      m.status === 'done' && m.winner ? nameFor(m.winner) : null;
-
-                    return (
-                      <div
-                        key={m.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: 12,
-                          padding: '8px 10px',
-                          borderRadius: 12,
-                          opacity: rowOpacity,
-                          outline: isActive ? '2px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.06)',
-                          background: involvesYou ? 'rgba(255,255,255,0.04)' : 'transparent',
-                        }}
-                      >
-                        <div style={{ display: 'grid', gap: 2 }}>
-                          <div style={{ opacity: 0.95 }}>
-                            {left} <span style={{ opacity: 0.65 }}>vs</span> {right}
-                          </div>
-                          {winnerName && (
-                            <div style={{ opacity: 0.75, fontSize: 12 }}>
-                              Winner: {winnerName}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                          <span style={{ opacity: 0.7, fontSize: 12 }}>#{i + 1}</span>
-                          <span style={{ opacity: 0.85 }}>{label}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-{tournamentId && Array.isArray(standings) && standings.length > 0 && (
-              <div className="mode-option" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Standings</span>
-                <span className="mode-option-meta">Wins • point diff</span>
-
-                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                  {standings.map((st: any, idx: number) => {
-                    const diff = (st.pointsFor ?? 0) - (st.pointsAgainst ?? 0);
-                    const me = Boolean(mySocketId && st.socketId === mySocketId);
-
-                    return (
-                      <div
-                        key={st.socketId}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: 12,
-                          padding: '8px 10px',
-                          borderRadius: 12,
-                          outline: '1px solid rgba(255,255,255,0.06)',
-                          background: me ? 'rgba(255,255,255,0.05)' : 'transparent',
-                        }}
-                      >
-                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                          <span style={{ opacity: 0.65, width: 18, textAlign: 'right' }}>{idx + 1}</span>
-                          <span style={{ opacity: 0.95 }}>{st.username ?? 'Player'}</span>
-                        </div>
+                    {!!nextForYou && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                        <span style={{ opacity: 0.9 }}>Up Next</span>
                         <span style={{ opacity: 0.9 }}>
-                          {st.wins ?? 0}-{st.losses ?? 0} ({diff >= 0 ? '+' : ''}{diff})
+                          {nextForYou.a === mySocketId ? nameFor(nextForYou.b) : nameFor(nextForYou.a)}
                         </span>
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
+
+                  {tournamentState?.status === 'running' && activeRoom && !youArePlaying && (
+                    <button
+                      className="btn text compact"
+                      style={{ marginTop: 12 }}
+                      onClick={spectate}
+                      disabled={!activeRoom}
+                      title="Watch the current match"
+                    >
+                      Watch match
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
 
-            
+              <div style={{ width: '100%', minWidth: 0, display: 'grid', gap: 14 }}>
+                {matches.length > 0 && (
+                  <div className="mode-option" style={{ cursor: 'default' }}>
+                    <span className="mode-option-title">Bracket</span>
+                    <span className="mode-option-meta">Round robin schedule</span>
 
+                    <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                      {matches.map((m: any, i: number) => {
+                        const isActive = Boolean(activeMatch && m.id === activeMatch.id);
+                        const involvesYou = Boolean(mySocketId && (m.a === mySocketId || m.b === mySocketId));
+                        const rowOpacity = m.status === 'done' ? 0.7 : 0.92;
+
+                        const left = nameFor(m.a);
+                        const right = nameFor(m.b);
+
+                        const label =
+                          m.status === 'done' ? 'Done' : m.status === 'active' ? 'Playing' : 'Queued';
+
+                        const winnerName = m.status === 'done' && m.winner ? nameFor(m.winner) : null;
+
+                        return (
+                          <div
+                            key={m.id}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: 12,
+                              padding: '8px 10px',
+                              borderRadius: 12,
+                              opacity: rowOpacity,
+                              outline: isActive
+                                ? '2px solid rgba(255,255,255,0.18)'
+                                : '1px solid rgba(255,255,255,0.06)',
+                              background: involvesYou ? 'rgba(255,255,255,0.04)' : 'transparent',
+                            }}
+                          >
+                            <div style={{ display: 'grid', gap: 2 }}>
+                              <div style={{ opacity: 0.95 }}>
+                                {left} <span style={{ opacity: 0.65 }}>vs</span> {right}
+                              </div>
+                              {winnerName && (
+                                <div style={{ opacity: 0.75, fontSize: 12 }}>
+                                  Winner: {winnerName}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                              <span style={{ opacity: 0.7, fontSize: 12 }}>#{i + 1}</span>
+                              <span style={{ opacity: 0.85 }}>{label}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {Array.isArray(standings) && standings.length > 0 && (
+                  <div className="mode-option" style={{ cursor: 'default' }}>
+                    <span className="mode-option-title">Standings</span>
+                    <span className="mode-option-meta">Wins • point diff</span>
+
+                    <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                      {standings.map((st: any, idx: number) => {
+                        const diff = (st.pointsFor ?? 0) - (st.pointsAgainst ?? 0);
+                        const me = Boolean(mySocketId && st.socketId === mySocketId);
+
+                        return (
+                          <div
+                            key={st.socketId}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: 12,
+                              padding: '8px 10px',
+                              borderRadius: 12,
+                              outline: '1px solid rgba(255,255,255,0.06)',
+                              background: me ? 'rgba(255,255,255,0.05)' : 'transparent',
+                            }}
+                          >
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                              <span style={{ opacity: 0.65, width: 18, textAlign: 'right' }}>{idx + 1}</span>
+                              <span style={{ opacity: 0.95 }}>{st.username ?? 'Player'}</span>
+                            </div>
+                            <span style={{ opacity: 0.9 }}>
+                              {st.wins ?? 0}-{st.losses ?? 0} ({diff >= 0 ? '+' : ''}
+                              {diff})
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-              </div>
-            </div>
+          )}
 
-<button
-              className="mode-option mode-option-secondary"
-              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-              onClick={() => disconnect('user disconnect')}
-            >
-              <span className="mode-option-title">Disconnect</span>
-              <span className="mode-option-meta">Return to offline mode selector</span>
-            </button>
-          </div>
+          <button
+            className="mode-option mode-option-secondary"
+            style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
+            onClick={() => disconnect('user disconnect')}
+          >
+            <span className="mode-option-title">Disconnect</span>
+            <span className="mode-option-meta">Return to offline mode selector</span>
+          </button>
         </div>
-        </div>
-      </div>
+      </LayoutScreen>
     );
   }
 
@@ -3000,74 +2989,92 @@ export default function App() {
             </>
           )}
         </div>
-        <div className="screen lobby-screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card">
-            <p className="lobby-kicker">Racehorse Dominoes</p>
-            <h2>Choose Game Mode</h2>
-            <p className="lobby-server mode-subtitle">
-              Choose how you want to play: live online matches, practice modes, or daily challenges.
-            </p>
-            <div className="mode-actions" style={{ maxWidth: '680px', width: '100%' }}>
-              <button
-                className="mode-option mode-option-primary"
-                onClick={() => setAppMode('multiplayer')}
-              >
-                <span className="mode-option-title">Multiplayer Online</span>
-                <span className="mode-option-meta">Create a private room and play head-to-head in real time</span>
-              </button>
-              <button
-                className="mode-option mode-option-secondary"
-                onClick={() => setAppMode('botSetup')}
-              >
-                <span className="mode-option-title">Practice → Play vs Bot</span>
-                <span className="mode-option-meta">Sharpen your game offline against an AI opponent</span>
-              </button>
-              <button
-                className="mode-option mode-option-secondary"
-                onClick={() => setAppMode('noBrainer')}
-              >
-                <span className="mode-option-title">Practice → No-Brainer Lab</span>
-                <span className="mode-option-meta">Practice one-turn clear runs with curated hands</span>
-              </button>
-            <button
-              className="mode-option"
-              onClick={() => {
-                setError('');
-                setAppMode('tournament');
-              }}
-            >
-              <span className="mode-option-title">Tournament Mode</span>
-              <span className="mode-option-meta">Round robin (4+ players), first to 30 points</span>
-            </button>
-              <button
-                className="mode-option mode-option-secondary"
-                onClick={() => setAppMode('daily')}
-              >
-                <span className="mode-option-title">Daily Puzzle</span>
-                <span className="mode-option-meta">
-                  Solve today’s featured scenario and compare leaderboard results
-                </span>
-              </button>
-
-              <button
-                className="mode-option mode-option-secondary"
-                onClick={() => setWeeklyStatsOpen(true)}
-              >
-                <span className="mode-option-title">Weekly Stats</span>
-                <span className="mode-option-meta">See weekly highlights, awards, and leaderboard snapshots</span>
-              </button>
-              {isAdmin && (
+        <LayoutScreen
+          className="screen lobby-screen mode-home-screen mode-accent-multiplayer"
+          badge="Racehorse Dominoes"
+          title="Choose Game Mode"
+          subtitle="Choose how you want to play: live online matches, practice modes, or daily challenges."
+          contentClassName="screen-shell"
+        >
+            <div className="mode-hub" style={{ width: '100%' }}>
+              <section className="mode-hub-primary mode-hub-section-multiplayer">
+                <p className="mode-section-label">Play Online</p>
                 <button
-                  className="mode-option mode-option-secondary"
-                  onClick={() => setAppMode('dailyAdmin')}
+                  className="mode-option mode-option-primary mode-option-hero mode-accent-multiplayer"
+                  onClick={() => setAppMode('multiplayer')}
                 >
-                  <span className="mode-option-title">Admin: Daily Puzzles</span>
-                  <span className="mode-option-meta">
-                    Create or edit curated daily puzzle entries
-                  </span>
+                  <span className="mode-option-title">Multiplayer Online</span>
+                  <span className="mode-option-meta">Create a private room and play head-to-head in real time</span>
                 </button>
-              )}
+              </section>
+
+              <div className="mode-hub-grid">
+                <section className="mode-hub-middle" aria-label="Practice and compete modes">
+                  <div className="mode-hub-middle-labels">
+                    <p className="mode-section-label mode-section-label-practice">Practice</p>
+                    <p className="mode-section-label mode-section-label-compete">Compete</p>
+                  </div>
+                  <div className="mode-hub-middle-cards">
+                    <button
+                      className="mode-option mode-option-secondary mode-accent-bot"
+                      onClick={() => setAppMode('botSetup')}
+                    >
+                      <span className="mode-option-title">Play vs Bot</span>
+                      <span className="mode-option-meta">Sharpen your game offline against an AI opponent</span>
+                    </button>
+                    <button
+                      className="mode-option mode-accent-tournament"
+                      onClick={() => {
+                        setError('');
+                        setAppMode('tournament');
+                      }}
+                    >
+                      <span className="mode-option-title">Tournament Mode</span>
+                      <span className="mode-option-meta">Round robin (4+ players), first to 30 points</span>
+                    </button>
+                    <button
+                      className="mode-option mode-option-secondary mode-accent-bot"
+                      onClick={() => setAppMode('noBrainer')}
+                    >
+                      <span className="mode-option-title">No-Brainer Lab</span>
+                      <span className="mode-option-meta">Practice one-turn clear runs with curated hands</span>
+                    </button>
+                    <button
+                      className="mode-option mode-option-secondary mode-accent-daily mode-option-hero-outline"
+                      onClick={() => setAppMode('daily')}
+                    >
+                      <span className="mode-option-title">Daily Puzzle</span>
+                      <span className="mode-option-meta">
+                        Solve today’s featured scenario and compare leaderboard results
+                      </span>
+                    </button>
+                  </div>
+                </section>
+
+                <section className="mode-hub-section mode-hub-section-track">
+                  <p className="mode-section-label">Track</p>
+                  <div className="mode-actions">
+                    <button
+                      className="mode-option mode-option-secondary mode-accent-track"
+                      onClick={() => setWeeklyStatsOpen(true)}
+                    >
+                      <span className="mode-option-title">Weekly Stats</span>
+                      <span className="mode-option-meta">See weekly highlights, awards, and leaderboard snapshots</span>
+                    </button>
+                    {isAdmin && (
+                      <button
+                        className="mode-option mode-option-secondary"
+                        onClick={() => setAppMode('dailyAdmin')}
+                      >
+                        <span className="mode-option-title">Admin: Daily Puzzles</span>
+                        <span className="mode-option-meta">
+                          Create or edit curated daily puzzle entries
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </section>
+              </div>
             </div>
 
             {!supabaseEnabled && (
@@ -3075,8 +3082,7 @@ export default function App() {
                 {supabaseConfigError ?? 'Supabase not configured.'}
               </p>
             )}
-          </div>
-        </div>
+        </LayoutScreen>
         {welcomeModal}
         <AuthModal
           open={authModalOpen}
@@ -3155,18 +3161,17 @@ export default function App() {
 
       {/* Disconnected Lobby Screen */}
       {!isConnected && !isRecoveringConnection && (
-        <div className="screen lobby-screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card multiplayer-menu-card">
-            <p className="lobby-kicker">Racehorse Dominoes</p>
-            <h2>Multiplayer Online</h2>
-            <p className="lobby-server mode-subtitle">
-              Connect to create a room or join a friend using a room code.
-            </p>
+        <LayoutScreen
+          className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer"
+          badge="Racehorse Dominoes"
+          title="Multiplayer Online"
+          subtitle="Connect to create a room or join a friend using a room code."
+          contentClassName="multiplayer-menu-card screen-shell"
+        >
             <p className="lobby-server mode-server-line">Server: {serverUrl}</p>
-            <div className="mode-actions">
+            <div className="mode-actions mode-entry-panel">
               <button
-                className="mode-option mode-option-primary"
+                className="mode-option mode-option-primary mode-accent-multiplayer"
                 onClick={connect}
                 disabled={isConnecting}
               >
@@ -3199,23 +3204,21 @@ export default function App() {
                 </p>
               )}
             </div>
-          </div>
-        </div>
+        </LayoutScreen>
       )}
 
       {/* Lobby Screen */}
       {isConnected && !joinedRoom && (
-        <div className="screen lobby-screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card multiplayer-menu-card">
-            <p className="lobby-kicker">Racehorse Dominoes</p>
-            <h2>Join or Create a Room</h2>
-            <p className="lobby-server mode-subtitle">
-              Create a new room or enter a code to join your friend instantly.
-            </p>
-            <div className="mode-actions">
+        <LayoutScreen
+          className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer"
+          badge="Racehorse Dominoes"
+          title="Join or Create a Room"
+          subtitle="Create a new room or enter a code to join your friend instantly."
+          contentClassName="multiplayer-menu-card screen-shell"
+        >
+            <div className="mode-actions mode-entry-panel">
               <button
-                className={`mode-option mode-option-primary ${pendingUiAction === 'create' ? 'is-loading' : ''}`}
+                className={`mode-option mode-option-primary mode-accent-multiplayer ${pendingUiAction === 'create' ? 'is-loading' : ''}`}
                 onClick={createRoom}
                 disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
               >
@@ -3245,20 +3248,19 @@ export default function App() {
                 <span className="mode-option-meta">Return to offline mode selector</span>
               </button>
             </div>
-          </div>
-        </div>
+        </LayoutScreen>
       )}
 
       {/* Room Screen (waiting for game) */}
       {isConnected && joinedRoom && !state && (
-        <div className="screen room-screen mode-home-screen">
-          <div className="mode-home-glow" aria-hidden="true" />
-          <div className="card lobby-card mode-card multiplayer-menu-card">
-            <p className="lobby-kicker">Racehorse Dominoes</p>
-            <h2>Room: {joinedRoom}</h2>
-            <p className="lobby-server mode-subtitle">
-              Waiting for all players to join before starting the hand.
-            </p>
+        <LayoutScreen
+          className="screen room-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer"
+          badge="Racehorse Dominoes"
+          title={`Room: ${joinedRoom}`}
+          subtitle="Waiting for all players to join before starting the hand."
+          contentClassName="multiplayer-menu-card screen-shell"
+        >
+            <div className="mode-entry-panel room-entry-panel">
             <div className="players-list mode-room-list">
               <h3>Players ({players.length}/2)</h3>
               {players.map((p) => (
@@ -3279,7 +3281,7 @@ export default function App() {
             </div>
             {players.length === 2 && (
               <button
-                className={`mode-option mode-option-primary ${pendingUiAction === 'start' ? 'is-loading' : ''}`}
+                className={`mode-option mode-option-primary mode-accent-multiplayer ${pendingUiAction === 'start' ? 'is-loading' : ''}`}
                 onClick={startGame}
                 disabled={pendingUiAction === 'start'}
               >
@@ -3295,8 +3297,8 @@ export default function App() {
               <span className="mode-option-title">Leave Room</span>
               <span className="mode-option-meta">Exit this room and return to setup</span>
             </button>
-          </div>
-        </div>
+            </div>
+        </LayoutScreen>
       )}
 
       {/* Game Screen */}
