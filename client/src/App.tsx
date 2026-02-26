@@ -970,6 +970,11 @@ export default function App() {
     intentionalDisconnectRef.current = false;
     setError('');
     setIsConnecting(true);
+    // Ensure we never keep a stale disconnected socket instance around.
+    if (socket && !socket.connected) {
+      socket.removeAllListeners();
+      socket.disconnect();
+    }
     const s = io(serverUrl, {
       transports: ['polling', 'websocket'],
       upgrade: true,
@@ -1127,27 +1132,20 @@ export default function App() {
     s.on('disconnect', (_reason) => {
       const roomBeforeDisconnect = joinedRoomRef.current;
       const stateBeforeDisconnect = stateRef.current;
-      const playerIds = stateBeforeDisconnect?.playerIds ?? [];
-      const bothPlayersHaveTiles =
-        Boolean(stateBeforeDisconnect) &&
-        playerIds.length >= 2 &&
-        playerIds.every((pid) => (stateBeforeDisconnect?.players?.[pid]?.hand?.length ?? 0) > 0);
-      const isGameActive =
-        Boolean(stateBeforeDisconnect) &&
-        !stateBeforeDisconnect?.gameOver &&
-        !stateBeforeDisconnect?.handOver &&
-        bothPlayersHaveTiles;
+      const isRecoverableSession =
+        !stateBeforeDisconnect ||
+        (!stateBeforeDisconnect.gameOver && !stateBeforeDisconnect.handOver);
       const shouldAttemptReconnect =
         Boolean(roomBeforeDisconnect) &&
-        isGameActive &&
+        isRecoverableSession &&
         !preventAutoRejoinRef.current &&
         !intentionalDisconnectRef.current;
 
       if (
         roomBeforeDisconnect &&
-        stateBeforeDisconnect &&
-        !stateBeforeDisconnect.gameOver &&
-        !preventAutoRejoinRef.current
+        isRecoverableSession &&
+        !preventAutoRejoinRef.current &&
+        !intentionalDisconnectRef.current
       ) {
         reconnectRoomCodeRef.current = roomBeforeDisconnect;
         reconnectShouldJoinRef.current = true;
@@ -1167,7 +1165,7 @@ export default function App() {
         reconnectAttemptCountRef.current = nextAttempt;
         console.warn('[socket] disconnected mid-game, reconnect scheduled', {
           attempt: nextAttempt,
-          maxAttempts: 3,
+          maxAttempts: 8,
           reason: _reason,
           roomCode: roomBeforeDisconnect,
         });
@@ -1304,11 +1302,11 @@ export default function App() {
       if (shouldRetryReconnect) {
         const nextAttempt = reconnectAttemptCountRef.current + 1;
         reconnectAttemptCountRef.current = nextAttempt;
-        if (nextAttempt <= 3) {
+        if (nextAttempt <= 8) {
           setIsRecoveringConnection(true);
           console.warn('[socket] reconnect attempt failed, retrying', {
             attempt: nextAttempt,
-            maxAttempts: 3,
+            maxAttempts: 8,
             roomCode: reconnectRoomCodeRef.current,
           });
           clearReconnectAttemptTimer();
@@ -1433,9 +1431,9 @@ export default function App() {
     if (isConnected) return;
     if (intentionalDisconnectRef.current) return;
     if (!joinedRoomRef.current) return;
-    if (!stateRef.current || stateRef.current.gameOver) return;
+    if (stateRef.current?.gameOver) return;
 
-    // Only reconnect if we were mid-game and got accidentally dropped
+    // Reconnect if we were in any active room and got accidentally dropped.
     const timer = setTimeout(() => {
       if (!intentionalDisconnectRef.current && joinedRoomRef.current) {
         connectRef.current?.();
