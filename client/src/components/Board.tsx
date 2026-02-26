@@ -736,6 +736,7 @@ export function Board({
 
       </div>
       <div
+        className="board-zoom-tray"
         style={{
           position: 'absolute',
           bottom: 10,
@@ -755,6 +756,7 @@ export function Board({
         onDoubleClick={(e) => e.stopPropagation()}
       >
         <button
+          className="board-zoom-btn"
           title="Zoom out"
           onMouseEnter={() => setHoveredZoom('out')}
           onMouseLeave={() => setHoveredZoom(null)}
@@ -787,6 +789,7 @@ export function Board({
           −
         </button>
         <div
+          className="board-zoom-divider"
           style={{
             width: 1,
             height: 16,
@@ -795,6 +798,7 @@ export function Board({
           }}
         />
         <button
+          className="board-zoom-btn"
           title="Zoom in"
           onMouseEnter={() => setHoveredZoom('in')}
           onMouseLeave={() => setHoveredZoom(null)}

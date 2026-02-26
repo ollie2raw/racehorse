@@ -19,6 +19,7 @@ import {
 } from '../analyzer/moveLogger';
 import {
   applyPlayMove,
+  computeOpenEndsSum,
   createBotMatch,
   drawUntilPlayableOrEmpty,
   getDisplayOpenEnds,
@@ -37,6 +38,8 @@ interface BotMatchScreenProps {
   dailyPuzzleDate?: string | null;
   userId?: string | null;
   username?: string | null;
+  largeMode?: boolean;
+  onToggleLargeMode?: () => void;
 }
 
 interface BotHandReveal {
@@ -120,6 +123,8 @@ export default function BotMatchScreen({
   dailyPuzzleDate = null,
   userId = null,
   username = null,
+  largeMode = false,
+  onToggleLargeMode,
 }: BotMatchScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [dealSize, setDealSize] = useState<BotDealSize>(7);
@@ -628,6 +633,7 @@ export default function BotMatchScreen({
       : 'Your move';
 
   const openEnds = getDisplayOpenEnds(match);
+  const openEndsSum = match.board ? computeOpenEndsSum(match.board) : 0;
   const applyDealSize = (nextDeal: BotDealSize) => {
     if (nextDeal === dealSize) return;
     setDealSize(nextDeal);
@@ -947,10 +953,11 @@ export default function BotMatchScreen({
           className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
           onClick={() => setScoreTrackOpen(true)}
           aria-label="Open score track"
+          style={{ width: 130, minWidth: 'unset' }}
         >
           <div className="wl-pill-top">
             <span className="wl-player-label">Bot</span>
-            <span className="wl-tiles-chip">
+            <span className={`wl-tiles-chip ${botTurn ? 'is-pulsing' : ''}`}>
               <span className="wl-tiles-count">{match.players.bot.hand.length}</span>
               <span className="wl-tiles-text">tiles</span>
             </span>
@@ -959,10 +966,9 @@ export default function BotMatchScreen({
         </button>
 
         {/* Center zone: left-controls | status | right-controls */}
-        <div className="bot-center-zone">
-          {/* Left controls: Tiles */}
+        <div className="bot-center-zone" style={{ position: 'relative' }}>
           <div className="bot-controls-left">
-            <div className="bot-difficulty bot-chip-control bot-tiles-picker">
+            <div className="wl-tiles-pill bot-difficulty bot-chip-control bot-tiles-picker">
               <span>Tiles</span>
               <div className="bot-tiles-options" role="group" aria-label="Select tile count">
                 <button
@@ -984,9 +990,41 @@ export default function BotMatchScreen({
           </div>
 
           {/* Center status */}
-          <div className="wl-center-status">
+          <div
+            className="wl-center-status"
+            style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
               {turnLabel}
+            </span>
+            <span
+              className="open-ends-pill"
+              style={{
+                position: 'absolute',
+                left: 'calc(100% + 8px)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                lineHeight: 1.05,
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 999,
+                padding: '4px 12px',
+                fontSize: '0.78rem',
+                color: 'rgba(232,245,240,0.8)',
+                fontWeight: 600,
+              }}
+            >
+              <span>{openEndsSum}</span>
+              <span style={{ fontSize: '0.66rem', opacity: 0.9 }}>open</span>
             </span>
           </div>
 
@@ -1000,16 +1038,31 @@ export default function BotMatchScreen({
           </div>
         </div>
 
-        {/* Right: You score pill */}
-        <button
-          type="button"
-          className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
-          onClick={() => setScoreTrackOpen(true)}
-          aria-label="Open score track"
+        {/* Right: Large toggle + You score pill */}
+        <div
+          className="bot-hud-right-cluster"
+          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
         >
-          <span className="wl-player-label">You</span>
-          <span className="wl-player-score">{match.players.you.score}</span>
-        </button>
+          <button
+            onClick={() => onToggleLargeMode?.()}
+            title="Toggle Large Mode"
+            className={`large-mode-toggle-btn large-mode-toggle-btn--top ${largeMode ? 'is-active' : ''}`}
+            aria-label="Toggle large mode"
+            aria-pressed={largeMode}
+          >
+            <span aria-hidden="true">Aa</span>
+          </button>
+          <button
+            type="button"
+            className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
+            onClick={() => setScoreTrackOpen(true)}
+            aria-label="Open score track"
+            style={{ width: 130, minWidth: 'unset' }}
+          >
+            <span className="wl-player-label">You</span>
+            <span className="wl-player-score">{match.players.you.score}</span>
+          </button>
+        </div>
       </div>
 
       <div className="wl-stage-shell">
@@ -1078,6 +1131,7 @@ export default function BotMatchScreen({
             tileSize={72}
           />
           <div
+            className="wl-controls-tray"
             style={{
               position: 'absolute',
               bottom: 10,
@@ -1097,29 +1151,9 @@ export default function BotMatchScreen({
             <button
               onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
               title="Toggle table color"
-              style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.55)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-              }}
+              className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 2a10 10 0 0 1 0 20" />
-              </svg>
+              <span className="table-theme-dot" aria-hidden="true" />
             </button>
             <button
               className="btn text icon-btn volume-btn"

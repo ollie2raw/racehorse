@@ -21,6 +21,8 @@ interface DailyPuzzleScreenProps {
   user: User | null;
   profile: UserProfile | null;
   onBack: () => void;
+  largeMode?: boolean;
+  onToggleLargeMode?: () => void;
 }
 
 type PlayStatus = 'IN_PROGRESS' | 'SOLVED' | 'FAILED';
@@ -153,7 +155,13 @@ function formatPuzzleDateLabel(dateText: string): string {
   });
 }
 
-export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzleScreenProps) {
+export default function DailyPuzzleScreen({
+  user,
+  profile,
+  onBack,
+  largeMode = false,
+  onToggleLargeMode,
+}: DailyPuzzleScreenProps) {
   const localDateKey = useMemo(() => getLocalDateKey(), []);
   const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const [puzzle, setPuzzle] = useState<CuratedDailyPuzzle | null>(null);
@@ -282,14 +290,17 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     if (!runtimeState) return;
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, runtimeState.players.you.hand.length);
-      const MAX_TRAY_WIDTH = window.innerWidth - 32;
-      const BASE_TILE_WIDTH = 56;
-      const MIN_TILE_WIDTH = 32;
-      const fittedWidth = Math.floor(MAX_TRAY_WIDTH / tileCount);
-      const tileWidth = Math.max(MIN_TILE_WIDTH, Math.min(BASE_TILE_WIDTH, fittedWidth));
-      const useVertical = tileWidth <= MIN_TILE_WIDTH || tileCount > 14;
+      const forceTwoRows = tileCount > 9;
+      const maxTileSize = 56; // 14-tile reference size cap
+      let tileWidth = maxTileSize;
+      if (tileCount >= 9 && tileCount <= 10) tileWidth = 64;
+      else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
+      else if (tileCount >= 15) tileWidth = 48;
+      tileWidth = Math.min(tileWidth, maxTileSize);
+      const trayHeight = forceTwoRows ? 138 : 120;
+      document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
-      setHandCompactStacked(useVertical);
+      setHandCompactStacked(forceTwoRows);
     };
 
     updateHandTileSize();
@@ -609,7 +620,10 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
           <div className="card lobby-card mode-card">
             <p className="lobby-kicker">DAILY PUZZLE</p>
             <h2>Today&apos;s Challenge</h2>
-            <p className="lobby-server mode-subtitle">
+            <p className="mode-subtitle" style={{ margin: '4px 0 0' }}>
+              Score the most points you can in one turn.
+            </p>
+            <p className="lobby-server mode-subtitle" style={{ marginTop: 10 }}>
               {formattedPuzzleDate}
             </p>
             <div
@@ -715,6 +729,16 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
         </div>
         <div className="daily-top-actions-pill">
           <button
+            className={`large-mode-toggle-btn ${largeMode ? 'is-active' : ''}`}
+            onClick={() => onToggleLargeMode?.()}
+            title={largeMode ? 'Disable large mode' : 'Enable large mode'}
+            aria-label="Toggle large mode"
+            aria-pressed={largeMode}
+            style={{ marginRight: 2 }}
+          >
+            👓 <span>{largeMode ? 'Large On' : 'Large'}</span>
+          </button>
+          <button
             className="btn text compact daily-chip-control"
             onClick={resetAttempt}
             style={{
@@ -770,28 +794,43 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
         <div className="tray-rail">
           <div className="tray-center">
             <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
-              {runtimeState.players.you.hand.map((tile, idx) => {
-                const playable = legalMoves.some(
-                  (candidate) => candidate.tile && tileEquals(candidate.tile, tile),
-                );
-                const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
+              {(handCompactStacked
+                ? [
+                    runtimeState.players.you.hand.slice(
+                      0,
+                      Math.ceil(runtimeState.players.you.hand.length / 2),
+                    ),
+                    runtimeState.players.you.hand.slice(
+                      Math.ceil(runtimeState.players.you.hand.length / 2),
+                    ),
+                  ]
+                : [runtimeState.players.you.hand]
+              ).map((row, rowIdx) => (
+                <div key={`daily-hand-row-${rowIdx}`} className="hand-row">
+                  {row.map((tile, idx) => {
+                    const playable = legalMoves.some(
+                      (candidate) => candidate.tile && tileEquals(candidate.tile, tile),
+                    );
+                    const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
 
-                return (
-                  <DominoTile
-                    key={`daily-curated-${idx}-${tile.low}-${tile.high}`}
-                    tile={tile}
-                    size={handTileSize}
-                    rotation={handCompactStacked ? 90 : 0}
-                    selected={isSelected}
-                    highlight={playable && status === 'IN_PROGRESS'}
-                    disabled={status !== 'IN_PROGRESS' || !playable}
-                    onClick={() => {
-                      if (status !== 'IN_PROGRESS' || !playable) return;
-                      setSelectedTile(tile);
-                    }}
-                  />
-                );
-              })}
+                    return (
+                      <DominoTile
+                        key={`daily-curated-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
+                        tile={tile}
+                        size={handTileSize}
+                        rotation={0}
+                        selected={isSelected}
+                        highlight={playable && status === 'IN_PROGRESS'}
+                        disabled={status !== 'IN_PROGRESS' || !playable}
+                        onClick={() => {
+                          if (status !== 'IN_PROGRESS' || !playable) return;
+                          setSelectedTile(tile);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
 

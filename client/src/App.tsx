@@ -105,6 +105,25 @@ function getBoardTileCount(board: GameState['board']): number {
   return count;
 }
 
+function getOpenEndsSum(board: GameState['board']): number {
+  if (!board || board.mainLine.length === 0) return 0;
+  if (board.mainLine.length === 1) {
+    const tile = board.mainLine[0]?.tile;
+    return tile ? tile.low + tile.high : 0;
+  }
+
+  let sum = 0;
+  sum += board.leftEndIsDouble ? board.leftEnd * 2 : board.leftEnd;
+  sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
+  for (const hub of board.hubDoubles) {
+    for (const branch of hub.branches) {
+      if (!branch) continue;
+      sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
+    }
+  }
+  return sum;
+}
+
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
   return (
     <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -487,6 +506,19 @@ export default function App() {
     const stored = window.localStorage.getItem('racehorse_ui_theme');
     return stored === 'brown' ? 'brown' : 'green';
   });
+  const [largeMode, setLargeMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('racehorse-large-mode') === 'true';
+  });
+  const toggleLargeMode = useCallback(() => {
+    setLargeMode((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('racehorse-large-mode', next ? 'true' : 'false');
+      }
+      return next;
+    });
+  }, []);
 
   const [roomCode, setRoomCode] = useState('');
   const [tournamentCode, setTournamentCode] = useState('');
@@ -608,6 +640,9 @@ export default function App() {
   const inviteJoinInFlightRef = useRef(false);
   const rejoinInFlightRef = useRef(false);
   const intentionalDisconnectRef = useRef(false);
+  const reconnectAttemptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptCountRef = useRef(0);
+  const [isRecoveringConnection, setIsRecoveringConnection] = useState(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(44);
@@ -660,7 +695,15 @@ export default function App() {
       if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
       if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
       if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
+      if (reconnectAttemptTimerRef.current) clearTimeout(reconnectAttemptTimerRef.current);
     };
+  }, []);
+
+  const clearReconnectAttemptTimer = useCallback(() => {
+    if (reconnectAttemptTimerRef.current) {
+      clearTimeout(reconnectAttemptTimerRef.current);
+      reconnectAttemptTimerRef.current = null;
+    }
   }, []);
 
   const showScoreLikeToast = useCallback((message: string, tone: 'you' | 'opp') => {
@@ -699,6 +742,22 @@ export default function App() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('racehorse_muted', isMuted ? '1' : '0');
   }, [isMuted]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('racehorse-large-mode', largeMode ? 'true' : 'false');
+  }, [largeMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setLargeMode(window.localStorage.getItem('racehorse-large-mode') === 'true');
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== 'racehorse-large-mode') return;
+      setLargeMode(event.newValue === 'true');
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -921,6 +980,9 @@ export default function App() {
 
     s.on('connect', async () => {
       if (intentionalDisconnectRef.current) return;
+      clearReconnectAttemptTimer();
+      reconnectAttemptCountRef.current = 0;
+      setIsRecoveringConnection(false);
       setIsConnected(true);
       setYou(s.id ?? '');
       setIsConnecting(false);
@@ -1056,6 +1118,22 @@ export default function App() {
     s.on('disconnect', (_reason) => {
       const roomBeforeDisconnect = joinedRoomRef.current;
       const stateBeforeDisconnect = stateRef.current;
+      const playerIds = stateBeforeDisconnect?.playerIds ?? [];
+      const bothPlayersHaveTiles =
+        Boolean(stateBeforeDisconnect) &&
+        playerIds.length >= 2 &&
+        playerIds.every((pid) => (stateBeforeDisconnect?.players?.[pid]?.hand?.length ?? 0) > 0);
+      const isGameActive =
+        Boolean(stateBeforeDisconnect) &&
+        !stateBeforeDisconnect?.gameOver &&
+        !stateBeforeDisconnect?.handOver &&
+        bothPlayersHaveTiles;
+      const shouldAttemptReconnect =
+        Boolean(roomBeforeDisconnect) &&
+        isGameActive &&
+        !preventAutoRejoinRef.current &&
+        !intentionalDisconnectRef.current;
+
       if (
         roomBeforeDisconnect &&
         stateBeforeDisconnect &&
@@ -1067,16 +1145,35 @@ export default function App() {
       }
       setIsConnected(false);
       setIsConnecting(false);
-      setJoinedRoom(null);
-      setState(null);
-      setLegalMoves([]);
-      setCanDraw(false);
       setError('');
       setActionError('');
       setRematchRequested(false);
       setRematchReadyIds([]);
       setOpponentDragging(false);
       draggingStateRef.current = false;
+
+      if (shouldAttemptReconnect) {
+        setIsRecoveringConnection(true);
+        const nextAttempt = reconnectAttemptCountRef.current + 1;
+        reconnectAttemptCountRef.current = nextAttempt;
+        console.warn('[socket] disconnected mid-game, reconnect scheduled', {
+          attempt: nextAttempt,
+          maxAttempts: 3,
+          reason: _reason,
+          roomCode: roomBeforeDisconnect,
+        });
+        clearReconnectAttemptTimer();
+        reconnectAttemptTimerRef.current = setTimeout(() => {
+          connectRef.current?.();
+        }, 2000);
+        return;
+      }
+
+      setIsRecoveringConnection(false);
+      setJoinedRoom(null);
+      setState(null);
+      setLegalMoves([]);
+      setCanDraw(false);
     });
 
     s.on('state:update', (update: StateUpdate) => {
@@ -1191,12 +1288,49 @@ export default function App() {
 
     s.on('connect_error', () => {
       setIsConnecting(false);
+      const shouldRetryReconnect =
+        reconnectShouldJoinRef.current &&
+        !intentionalDisconnectRef.current &&
+        !preventAutoRejoinRef.current;
+      if (shouldRetryReconnect) {
+        const nextAttempt = reconnectAttemptCountRef.current + 1;
+        reconnectAttemptCountRef.current = nextAttempt;
+        if (nextAttempt <= 3) {
+          setIsRecoveringConnection(true);
+          console.warn('[socket] reconnect attempt failed, retrying', {
+            attempt: nextAttempt,
+            maxAttempts: 3,
+            roomCode: reconnectRoomCodeRef.current,
+          });
+          clearReconnectAttemptTimer();
+          reconnectAttemptTimerRef.current = setTimeout(() => {
+            connectRef.current?.();
+          }, 2000);
+          return;
+        }
+        console.warn('[nav] redirect home after reconnect failure', {
+          attempts: nextAttempt - 1,
+          roomCode: reconnectRoomCodeRef.current,
+        });
+        setIsRecoveringConnection(false);
+        disconnect('reconnect failed');
+        return;
+      }
       setServerWaking(true);
       setError('');
     });
 
     setSocket(s);
-  }, [isConnecting, socket, serverUrl, showToast, authProfile?.username, authUser?.id, emitCreateRoom]);
+  }, [
+    isConnecting,
+    socket,
+    serverUrl,
+    showToast,
+    authProfile?.username,
+    authUser?.id,
+    emitCreateRoom,
+    clearReconnectAttemptTimer,
+  ]);
 
   const onCreatePrivateRoom = useCallback(async (): Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }> => {
     setAppMode('home');
@@ -1340,10 +1474,20 @@ export default function App() {
     connect();
   }, [authUser?.id, serverUrl, socket, isConnecting, connect]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback((reason: string = 'user requested') => {
+    console.warn('[nav] redirect home', {
+      reason,
+      appMode,
+      joinedRoom: joinedRoomRef.current,
+      gameOver: stateRef.current?.gameOver ?? null,
+      handOver: stateRef.current?.handOver ?? null,
+    });
     intentionalDisconnectRef.current = true;
     reconnectRoomCodeRef.current = null;
     reconnectShouldJoinRef.current = false;
+    clearReconnectAttemptTimer();
+    reconnectAttemptCountRef.current = 0;
+    setIsRecoveringConnection(false);
     preventAutoRejoinRef.current = true;
     autoJoinAttemptedRef.current = false;
     setAppMode('home');
@@ -1377,7 +1521,7 @@ export default function App() {
     handRevealShownRef.current = null;
     setAppMode('home');
     autoConnectAttemptedRef.current = false;
-  }, []);
+  }, [appMode, clearReconnectAttemptTimer]);
 
   const handlePostGame = useCallback(() => {
     reconnectShouldJoinRef.current = false;
@@ -1385,7 +1529,7 @@ export default function App() {
     preventAutoRejoinRef.current = true;
     // Tournament matches should return to tournament lobby, not disconnect to Home.
     const inTournament = Boolean(tournamentId) || tournamentState?.status === 'running';
-    if (!inTournament) return disconnect();
+    if (!inTournament) return disconnect('post-game to home');
 
     setJoinedRoom(null);
     setRoomCode('');
@@ -1793,7 +1937,7 @@ export default function App() {
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
   const opponent = players.find((pl) => pl.id !== you) ?? null;
   const opponentName = opponent?.username ? `@${opponent.username}` : 'Rival';
-  const myName = authProfile?.username ? `You · @${authProfile.username}` : 'You';
+  const myName = authProfile?.username ? `@${authProfile.username}` : 'you';
   const myHandle = authProfile?.username
     ? `@${authProfile.username}`
     : authUser?.email
@@ -1814,6 +1958,7 @@ export default function App() {
   const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
   const boneyardCount = state?.boneyard.length ?? 0;
   const isBoneyardLocked = boneyardCount <= 2;
+  const openEndsSum = getOpenEndsSum(state?.board ?? null);
   const canUseRematch = Boolean(
     state?.gameOver && joinedRoom && !isSpectatingMatch && !isTournamentMatch && state.playerIds.includes(you),
   );
@@ -1834,18 +1979,14 @@ export default function App() {
     (tile: Tile) => {
       if (!isMyTurn || state?.handOver || state?.gameOver) return;
       if (selectedTile && tileEquals(selectedTile, tile)) {
-        const tileMoves = legalMoves.filter(
-          (m) => m.type === 'play' && m.tile && tileEquals(m.tile as Tile, tile),
-        );
-        if (tileMoves.length === 1 && tileMoves[0].position) {
-          play(tileMoves[0].position as PlacementPosition);
-          return;
-        }
+        setSelectedTile(null);
+        emitDraggingState(false);
+        return;
       }
       setSelectedTile(tile);
       emitDraggingState(true);
     },
-    [isMyTurn, state?.handOver, state?.gameOver, selectedTile, legalMoves, play, emitDraggingState],
+    [isMyTurn, state?.handOver, state?.gameOver, selectedTile, emitDraggingState],
   );
 
   useEffect(() => {
@@ -2152,6 +2293,11 @@ export default function App() {
 
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
+    const matchAnalysis = analyzeMoveLog(multiplayerMoveLog);
+    const avgMoveQuality =
+      matchAnalysis.analyzedMoves.length > 0 && matchAnalysis.accuracy > 0
+        ? matchAnalysis.accuracy
+        : undefined;
 
     if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
       // eslint-disable-next-line no-console
@@ -2171,12 +2317,13 @@ export default function App() {
       mode: 'online',
       opponentType: 'online',
       winnerUserId,
-      loserUserId,
-      winnerScore,
-      loserScore,
-      moveCount: null,
-      roomCode: joinedRoom,
-      metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
+        loserUserId,
+        winnerScore,
+        loserScore,
+        avgMoveQuality,
+        moveCount: null,
+        roomCode: joinedRoom,
+        metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
     }).then(({ error }) => {
       if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
         // eslint-disable-next-line no-console
@@ -2188,21 +2335,32 @@ export default function App() {
         console.error('[Stats] recordMatchResult failed:', error);
       }
     });
-  }, [state, joinedRoom, players, supabaseEnabled, authUser, you]);
+  }, [state, joinedRoom, players, supabaseEnabled, authUser, you, multiplayerMoveLog]);
 
   // ─── Render ───────────────────────────────────────────────
+  const appRootClassName = `app${largeMode ? ' large-mode' : ''}`;
 
   if (appMode === 'noBrainer') {
-    return <NoBrainerLabScreen onBack={() => setAppMode('home')} />;
+    return (
+      <div className={appRootClassName}>
+        <NoBrainerLabScreen
+          onBack={() => setAppMode('home')}
+          largeMode={largeMode}
+          onToggleLargeMode={toggleLargeMode}
+        />
+      </div>
+    );
   }
 
   if (appMode === 'bot') {
     return (
-      <div className="app">
+      <div className={appRootClassName}>
         <BotMatchScreen
           onBack={() => setAppMode('home')}
           userId={authUser?.id ?? null}
           username={authProfile?.username ?? null}
+          largeMode={largeMode}
+          onToggleLargeMode={toggleLargeMode}
         />
       </div>
     );
@@ -2210,14 +2368,22 @@ export default function App() {
 
   if (appMode === 'daily') {
     return (
-      <DailyPuzzleScreen user={authUser} profile={authProfile} onBack={() => setAppMode('home')} />
+      <div className={appRootClassName}>
+        <DailyPuzzleScreen
+          user={authUser}
+          profile={authProfile}
+          onBack={() => setAppMode('home')}
+          largeMode={largeMode}
+          onToggleLargeMode={toggleLargeMode}
+        />
+      </div>
     );
   }
 
   if (appMode === 'dailyAdmin') {
     if (!isAdmin) {
       return (
-        <div className="app">
+        <div className={appRootClassName}>
           <div className="screen lobby-screen mode-home-screen">
             <div className="mode-home-glow" aria-hidden="true" />
             <div className="card lobby-card mode-card">
@@ -2231,7 +2397,11 @@ export default function App() {
         </div>
       );
     }
-    return <DailyPuzzleAdminScreen onBack={() => setAppMode('home')} />;
+    return (
+      <div className={appRootClassName}>
+        <DailyPuzzleAdminScreen onBack={() => setAppMode('home')} />
+      </div>
+    );
   }
   if (appMode === 'tournament') {
     const players = tournamentState?.players ?? [];
@@ -2586,7 +2756,7 @@ export default function App() {
 <button
               className="mode-option mode-option-secondary"
               style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-              onClick={disconnect}
+              onClick={() => disconnect('user disconnect')}
             >
               <span className="mode-option-title">Disconnect</span>
               <span className="mode-option-meta">Return to offline mode selector</span>
@@ -2745,7 +2915,7 @@ export default function App() {
 
   if (appMode === 'home') {
     return (
-      <div ref={appRootRef} className="app">
+      <div ref={appRootRef} className={appRootClassName}>
         <div
           style={{
             position: 'absolute',
@@ -2937,7 +3107,7 @@ export default function App() {
   }
 
   return (
-    <div ref={appRootRef} className="app">
+    <div ref={appRootRef} className={appRootClassName}>
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
       {friendInvitePopup}
@@ -2959,7 +3129,7 @@ export default function App() {
       )}
 
       {/* Disconnected Lobby Screen */}
-      {!isConnected && (
+      {!isConnected && !isRecoveringConnection && (
         <div className="screen lobby-screen mode-home-screen">
           <div className="mode-home-glow" aria-hidden="true" />
           <div className="card lobby-card mode-card multiplayer-menu-card">
@@ -3045,7 +3215,7 @@ export default function App() {
                   {pendingUiAction === 'join' ? 'Joining…' : 'Join Room'}
                 </button>
               </div>
-              <button className="mode-option mode-option-secondary" onClick={disconnect}>
+              <button className="mode-option mode-option-secondary" onClick={() => disconnect('user disconnect')}>
                 <span className="mode-option-title">Disconnect</span>
                 <span className="mode-option-meta">Return to offline mode selector</span>
               </button>
@@ -3096,7 +3266,7 @@ export default function App() {
               <span className="mode-option-title">Copy Invite Link</span>
               <span className="mode-option-meta">Share one-tap room join with friends</span>
             </button>
-            <button className="mode-option mode-option-secondary" onClick={disconnect}>
+            <button className="mode-option mode-option-secondary" onClick={() => disconnect('user leave room')}>
               <span className="mode-option-title">Leave Room</span>
               <span className="mode-option-meta">Exit this room and return to setup</span>
             </button>
@@ -3105,8 +3275,28 @@ export default function App() {
       )}
 
       {/* Game Screen */}
-      {isConnected && joinedRoom && state && (
+      {(isConnected || isRecoveringConnection) && joinedRoom && state && (
         <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
+          {isRecoveringConnection && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 12,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 1200,
+                padding: '8px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(236,252,245,0.24)',
+                background: 'rgba(15,25,20,0.82)',
+                color: 'rgba(232,245,240,0.95)',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+              }}
+            >
+              Reconnecting…
+            </div>
+          )}
           <ScoreTrackOverlay
             open={scoreTrackOpen}
             onClose={() => setScoreTrackOpen(false)}
@@ -3303,12 +3493,13 @@ export default function App() {
             </div>
           )}
 
-          <div className="wl-top-rail" data-ui="hud">
+          <div className="wl-top-rail" data-ui="hud" style={{ position: 'relative' }}>
             <button
               type="button"
               className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
+              style={{ width: largeMode ? 154 : 142, minWidth: 'unset' }}
             >
               <div className="wl-pill-top">
                 <span className="wl-player-label">{opponentName}</span>
@@ -3319,21 +3510,74 @@ export default function App() {
               </div>
               <span className="wl-player-score">{opponentScore}</span>
             </button>
-            <div className="wl-center-status">
+            <div
+              className="wl-center-status"
+              style={{
+                position: 'absolute',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
                 {isMyTurn ? 'Your move' : 'Opponent thinking'}
               </span>
-              <span className="wl-room-code">Room {joinedRoom}</span>
+              <span
+                className="open-ends-pill"
+                style={{
+                  position: 'absolute',
+                  left: 'calc(100% + 8px)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 1.05,
+                  background: 'rgba(255,255,255,0.07)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 999,
+                  padding: '4px 12px',
+                  fontSize: '0.78rem',
+                  color: 'rgba(232,245,240,0.8)',
+                  fontWeight: 600,
+                }}
+              >
+                <span>{openEndsSum}</span>
+                <span style={{ fontSize: '0.66rem', opacity: 0.9 }}>open</span>
+              </span>
             </div>
-            <button
-              type="button"
-              className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? 'is-active' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
-              onClick={() => setScoreTrackOpen(true)}
-              aria-label="Open score track"
+            <div
+              className="hud-right-cluster"
+              style={{
+                gridColumn: 3,
+                justifySelf: 'end',
+                marginLeft: 'auto',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
             >
-              <span className="wl-player-label">{hudRightLabel}</span>
-              <span className="wl-player-score">{hudRightScore}</span>
-            </button>
+              <button
+                onClick={toggleLargeMode}
+                title="Toggle Large Mode"
+                className={`large-mode-toggle-btn large-mode-toggle-btn--top ${largeMode ? 'is-active' : ''}`}
+                aria-label="Toggle large mode"
+                aria-pressed={largeMode}
+              >
+                <span aria-hidden="true">Aa</span>
+              </button>
+              <button
+                type="button"
+                className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? 'is-active' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
+                onClick={() => setScoreTrackOpen(true)}
+                aria-label="Open score track"
+                style={{ width: 130, minWidth: 'unset' }}
+              >
+                <span className="wl-player-label">{hudRightLabel}</span>
+                <span className="wl-player-score">{hudRightScore}</span>
+              </button>
+            </div>
           </div>
 
           <div className="wl-stage-shell">
@@ -3393,10 +3637,14 @@ export default function App() {
                   {isBoneyardLocked ? ' 🔒' : ''}
                 </div>
               )}
-              <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', gap: 2, alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '4px 6px', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+              <div className="wl-controls-tray" style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', gap: 2, alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '4px 6px', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
                 <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
-                <button onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))} title="Toggle table color" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+                <button
+                  onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
+                  title="Toggle table color"
+                  className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
+                >
+                  <span className="table-theme-dot" aria-hidden="true" />
                 </button>
                 <button className="btn text icon-btn volume-btn" onClick={() => setIsMuted((prev) => !prev)} title={isMuted ? 'Unmute' : 'Mute'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
                   <VolumeIcon isMuted={isMuted} />
@@ -3404,7 +3652,7 @@ export default function App() {
                 <button className="btn text icon-btn fullscreen-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
                   <FullscreenIcon isFullscreen={isFullscreen} />
                 </button>
-                <button onClick={disconnect} title="Leave game" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <button onClick={() => disconnect('user leave game')} title="Leave game" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                 </button>
               </div>

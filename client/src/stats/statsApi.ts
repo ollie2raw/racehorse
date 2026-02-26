@@ -11,6 +11,7 @@ export interface RecordMatchInput {
   winnerScore: number | null;
   loserScore: number | null;
   moveCount: number | null;
+  avgMoveQuality?: number | null;
   roomCode?: string | null;
   metadata?: Record<string, unknown>;
 }
@@ -20,7 +21,7 @@ export async function recordMatchResult(
 ): Promise<{ error: string | null }> {
   if (!supabase) return { error: null };
 
-  const payload = {
+  const basePayload: Record<string, unknown> = {
     mode: input.mode,
     room_code: input.roomCode ?? null,
     winner_user_id: input.winnerUserId,
@@ -33,8 +34,28 @@ export async function recordMatchResult(
       ...(input.metadata ?? {}),
     },
   };
+  const includeMoveQuality =
+    typeof input.avgMoveQuality === 'number' &&
+    Number.isFinite(input.avgMoveQuality) &&
+    input.avgMoveQuality > 0;
+  const payload: Record<string, unknown> = includeMoveQuality
+    ? { ...basePayload, avg_move_quality: input.avgMoveQuality }
+    : basePayload;
 
-  const { error } = await supabase.from('matches').insert(payload);
+  let { error } = await supabase.from('matches').insert(payload);
+
+  // Backward-compatible retry for deployments where avg_move_quality column is not added yet.
+  if (
+    error &&
+    includeMoveQuality &&
+    (error.message.toLowerCase().includes('avg_move_quality') ||
+      error.message.toLowerCase().includes('column') ||
+      String((error as { code?: string }).code ?? '') === '42703')
+  ) {
+    const retry = await supabase.from('matches').insert(basePayload);
+    error = retry.error;
+  }
+
   return { error: error?.message ?? null };
 }
 
@@ -42,6 +63,7 @@ export interface StatsSummary {
   onlineGamesPlayed: number;
   wins: number;
   losses: number;
+  avgMoveQuality: number | null;
   longestWinStreak: number;
   winRate: number;
   currentWinStreak: number;
@@ -52,6 +74,7 @@ type MatchSummaryRow = {
   winner_user_id: string | null;
   loser_user_id: string | null;
   mode: string | null;
+  avg_move_quality?: number | null;
   created_at?: string | null;
 };
 
@@ -87,6 +110,13 @@ function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummar
   const onlineGamesPlayed = wins + losses;
   const winRate =
     onlineGamesPlayed > 0 ? Math.round((wins / onlineGamesPlayed) * 1000) / 10 : 0;
+  const qualitySamples = onlineRows
+    .map((row) => row.avg_move_quality)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const avgMoveQuality =
+    qualitySamples.length > 0
+      ? Math.round((qualitySamples.reduce((sum, value) => sum + value, 0) / qualitySamples.length) * 10) / 10
+      : null;
   const nowMs = Date.now();
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   const gamesThisWeek = onlineRows.filter((row) => {
@@ -98,6 +128,7 @@ function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummar
     onlineGamesPlayed,
     wins,
     losses,
+    avgMoveQuality,
     longestWinStreak,
     winRate,
     currentWinStreak,
@@ -119,10 +150,23 @@ export async function fetchUserStatsByUserId(
 ): Promise<{ data: StatsSummary | null; error: string | null }> {
   if (!supabase) return { data: null, error: 'Supabase not configured.' };
 
-  const historyResp = await supabase
+  let historyResp: { data: unknown[] | null; error: { message?: string; code?: string } | null } = await supabase
     .from('matches')
-    .select('winner_user_id, loser_user_id, mode, created_at')
+    .select('winner_user_id, loser_user_id, mode, avg_move_quality, created_at')
     .or(`winner_user_id.eq.${userId},loser_user_id.eq.${userId}`);
+
+  // Backward-compatible retry for deployments where avg_move_quality column is not added yet.
+  if (
+    historyResp.error &&
+    (((historyResp.error.message ?? '').toLowerCase().includes('avg_move_quality') ||
+      (historyResp.error.message ?? '').toLowerCase().includes('column')) ||
+      String((historyResp.error as { code?: string }).code ?? '') === '42703')
+  ) {
+    historyResp = await supabase
+      .from('matches')
+      .select('winner_user_id, loser_user_id, mode, created_at')
+      .or(`winner_user_id.eq.${userId},loser_user_id.eq.${userId}`);
+  }
 
   if (historyResp.error) {
     const message = historyResp.error.message ?? 'Stats unavailable.';

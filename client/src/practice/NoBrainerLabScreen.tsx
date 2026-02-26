@@ -16,6 +16,8 @@ import './noBrainerLab.css';
 
 interface NoBrainerLabScreenProps {
   onBack: () => void;
+  largeMode?: boolean;
+  onToggleLargeMode?: () => void;
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
@@ -48,7 +50,11 @@ function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
   );
 }
 
-export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) {
+export default function NoBrainerLabScreen({
+  onBack,
+  largeMode = false,
+  onToggleLargeMode,
+}: NoBrainerLabScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [dataset, setDataset] = useState<NoBrainerHandRecord[] | null>(null);
   const [record, setRecord] = useState<NoBrainerHandRecord | null>(null);
@@ -240,6 +246,7 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
             tileSize={72}
           />
           <div
+            className="wl-controls-tray"
             style={{
               position: 'absolute',
               bottom: 10,
@@ -256,6 +263,15 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
               boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
             }}
           >
+            <button
+              onClick={() => onToggleLargeMode?.()}
+              title={largeMode ? 'Disable large mode' : 'Enable large mode'}
+              className={`large-mode-toggle-btn ${largeMode ? 'is-active' : ''}`}
+              aria-label="Toggle large mode"
+              aria-pressed={largeMode}
+            >
+              👓 <span>{largeMode ? 'Large On' : 'Large'}</span>
+            </button>
             <button className="btn text compact bot-chip-control" onClick={retryHand}>
               Retry
             </button>

@@ -1766,3 +1766,232 @@ button:hover:not(:disabled) {
     transition: none !important;
   }
 }
+
+/* Accessibility Large Mode: boost readability of HUD/controls only (not board geometry) */
+.large-mode .wl-top-rail {
+  min-height: 82px !important;
+}
+
+.large-mode .wl-player-pill {
+  min-height: 60px !important;
+  padding: 10px 18px !important;
+  border-width: 1.5px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 18px rgba(0, 0, 0, 0.35) !important;
+}
+
+.large-mode .wl-player-label {
+  font-size: 0.95rem !important;
+  letter-spacing: 0.1em !important;
+  color: rgba(238, 247, 243, 0.95) !important;
+}
+
+.large-mode .wl-player-score {
+  font-size: 3.25rem !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 0 10px rgba(160, 238, 211, 0.18) !important;
+}
+
+.large-mode .wl-tiles-chip {
+  min-height: 28px !important;
+  padding: 5px 12px !important;
+  border-width: 1.8px !important;
+  font-size: 0.84rem !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(245, 252, 248, 0.96) !important;
+}
+
+.large-mode .wl-tiles-count {
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+}
+
+.large-mode .wl-tiles-text {
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+}
+
+.large-mode .wl-turn-label {
+  font-size: 1.24rem !important;
+  padding: 10px 22px !important;
+  letter-spacing: 0.08em !important;
+  border-width: 1.5px !important;
+}
+
+.large-mode .open-ends-pill {
+  min-width: 72px !important;
+  padding: 8px 16px !important;
+  border-width: 1.8px !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(244, 252, 248, 0.98) !important;
+}
+
+.large-mode .open-ends-pill > span:first-child {
+  font-size: 1.48rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+}
+
+.large-mode .open-ends-pill > span:last-child {
+  font-size: 0.86rem !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  opacity: 0.92 !important;
+}
+
+.large-mode .boneyard-pill,
+.large-mode [data-ui="boneyard"] {
+  font-size: 1.26rem !important;
+  font-weight: 800 !important;
+  padding: 10px 18px !important;
+  border-width: 1.8px !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: rgba(248, 253, 250, 0.98) !important;
+  letter-spacing: 0.02em !important;
+}
+
+.large-mode .wl-controls-tray {
+  gap: 10px !important;
+  padding: 8px 12px !important;
+  border-width: 1.5px !important;
+}
+
+.large-mode .wl-controls-tray button {
+  min-height: 36px !important;
+  font-size: 1.03rem !important;
+}
+
+.large-mode .bot-chip-control,
+.large-mode .daily-chip-control,
+.large-mode .mode-inline-btn {
+  font-size: 1.05rem !important;
+  padding: 12px 18px !important;
+  font-weight: 700 !important;
+}
+
+.large-mode .practice-mode-pill {
+  padding: 10px 16px !important;
+}
+
+.large-mode .daily-hud-pill {
+  padding: 10px 16px !important;
+}
+
+.large-mode .daily-top-actions-pill {
+  gap: 8px !important;
+}
+
+.large-mode-toggle-btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 9px 12px;
+  color: rgba(233, 247, 241, 0.95);
+  background: rgba(12, 22, 34, 0.78);
+  border: 1px solid rgba(236, 252, 245, 0.28);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.large-mode-toggle-btn.is-active {
+  color: rgba(225, 255, 241, 0.98);
+  background: rgba(46, 204, 142, 0.2);
+  border-color: rgba(46, 204, 142, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(46, 204, 142, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.26);
+}
+
+.large-mode-toggle-btn--top {
+  width: 44px;
+  padding: 0;
+  align-self: center;
+}
+
+.large-mode-toggle-btn:focus-visible {
+  outline: 2px solid rgba(149, 240, 202, 0.95);
+  outline-offset: 2px;
+}
+
+.large-mode .large-mode-toggle-btn {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.large-mode .board-zoom-tray {
+  padding: 6px 9px !important;
+  border-width: 1.4px !important;
+}
+
+.large-mode .board-zoom-btn {
+  padding: 6px 12px !important;
+  font-size: 1.12rem !important;
+  min-width: 34px;
+  min-height: 30px;
+}
+
+.large-mode .board-zoom-divider {
+  height: 20px !important;
+  margin: 0 6px !important;
+}
+
+.table-theme-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 160ms ease, filter 160ms ease;
+}
+
+.table-theme-toggle:hover {
+  transform: scale(1.08);
+  filter: brightness(1.08);
+}
+
+.table-theme-toggle:focus-visible {
+  outline: 2px solid rgba(149, 240, 202, 0.9);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.table-theme-toggle.is-green .table-theme-dot {
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.1),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+    0 0 10px rgba(125, 241, 197, 0.35);
+}
+
+.table-theme-toggle.is-brown .table-theme-dot {
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.1),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+    0 0 10px rgba(216, 181, 111, 0.32);
+}
+
+.table-theme-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7e573d 0%, #7e573d 49%, #2f6f59 51%, #2f6f59 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.08),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.32);
+}

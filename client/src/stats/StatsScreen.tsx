@@ -14,6 +14,7 @@ const EMPTY_STATS: StatsSummary = {
   onlineGamesPlayed: 0,
   wins: 0,
   losses: 0,
+  avgMoveQuality: null,
   longestWinStreak: 0,
   winRate: 0,
   currentWinStreak: 0,
@@ -153,6 +154,25 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
               { label: 'Win Rate', value: `${stats.winRate}%`, icon: '📊', tone: 'neutral' },
               { label: 'Wins', value: stats.wins, icon: '🏆', tone: 'teal' },
               { label: 'Losses', value: stats.losses, icon: '📉', tone: 'red' },
+              {
+                label: 'Avg Move Quality',
+                value: stats.avgMoveQuality == null ? '—' : `${Math.round(stats.avgMoveQuality)}%`,
+                subtitle:
+                  stats.avgMoveQuality == null
+                    ? 'Not enough data'
+                    : stats.avgMoveQuality >= 85
+                      ? 'Excellent'
+                      : stats.avgMoveQuality >= 70
+                        ? 'Good'
+                        : 'Developing',
+                icon: '🎯',
+                tone:
+                  stats.avgMoveQuality == null
+                    ? 'neutral'
+                    : stats.avgMoveQuality >= 85
+                      ? 'teal'
+                      : 'neutral',
+              },
               { label: 'Current Streak', value: stats.currentWinStreak, icon: '🔥', tone: 'neutral' },
               { label: 'Best Streak', value: stats.longestWinStreak, icon: '⚡', tone: 'neutral' },
               { label: 'This Week', value: stats.gamesThisWeek, icon: '🎮', tone: 'neutral' },
@@ -194,7 +214,22 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
                 >
                   {item.value}
                 </strong>
-
+                {'subtitle' in item && item.subtitle && (
+                  <span
+                    style={{
+                      fontSize: '0.78rem',
+                      color:
+                        item.subtitle === 'Excellent'
+                          ? '#5eead4'
+                          : item.subtitle === 'Good'
+                            ? 'rgba(236,248,245,0.9)'
+                            : 'rgba(191,213,223,0.8)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {item.subtitle}
+                  </span>
+                )}
               </div>
             ))}
           </div>

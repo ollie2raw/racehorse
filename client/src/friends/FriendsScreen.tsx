@@ -28,6 +28,7 @@ const EMPTY_STATS: StatsSummary = {
   onlineGamesPlayed: 0,
   wins: 0,
   losses: 0,
+  avgMoveQuality: null,
   longestWinStreak: 0,
   winRate: 0,
   currentWinStreak: 0,
