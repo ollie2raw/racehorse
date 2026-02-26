@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import confetti from 'canvas-confetti';
 import { Board, DominoTile, ScoreTrackOverlay } from '../components';
 import type { Move, Tile } from '../types';
 import {
@@ -44,6 +45,7 @@ interface BotHandReveal {
   pointsAwarded: number;
   loserPips: number;
   calcText: string;
+  yourRemainingTiles: Tile[];
   botRemainingTiles: Tile[];
 }
 
@@ -105,14 +107,10 @@ function asPlayMoves(moves: Move[]): Move[] {
 }
 
 function toastFromResult(result: BotActionResult): string {
-  if (result.scored) {
-    return `${result.scored.player === 'you' ? 'You' : 'Bot'} scored +${result.scored.points}`;
-  }
   if (result.handEnded) {
     const winner = result.handEnded.winner === 'you' ? 'You' : 'Bot';
     return `${winner} won hand (${result.handEnded.reason}) +${result.handEnded.pointsAwarded}`;
   }
-  if (result.drew) return `${result.drew.player === 'you' ? 'You' : 'Bot'} drew`;
   if (result.passed) return `${result.passed.player === 'you' ? 'You' : 'Bot'} passed`;
   return '';
 }
@@ -128,6 +126,11 @@ export default function BotMatchScreen({
   const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, 7));
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState('');
+  const [scoreToast, setScoreToast] = useState<{
+    message: string;
+    tone: 'you' | 'bot';
+    visible: boolean;
+  } | null>(null);
   const [lastBotChoice, setLastBotChoice] = useState<BotChoice | null>(null);
   const [handReveal, setHandReveal] = useState<BotHandReveal | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -148,6 +151,9 @@ export default function BotMatchScreen({
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
   const dailyResultSyncKeyRef = useRef('');
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gameWinConfettiKeyRef = useRef('');
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
@@ -186,6 +192,8 @@ export default function BotMatchScreen({
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
+      if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
     };
   }, []);
 
@@ -213,6 +221,24 @@ export default function BotMatchScreen({
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(msg);
     toastTimerRef.current = setTimeout(() => setToast(''), ms);
+  };
+
+  const showBoardToast = (message: string, tone: 'you' | 'bot') => {
+    if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
+    if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
+    setScoreToast({
+      message,
+      tone,
+      visible: true,
+    });
+    scoreToastHideTimerRef.current = setTimeout(() => {
+      setScoreToast((prev) => (prev ? { ...prev, visible: false } : prev));
+    }, 1700);
+    scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), 2000);
+  };
+
+  const showScoreToast = (player: 'you' | 'bot', points: number) => {
+    showBoardToast(`${player === 'you' ? 'You' : 'Bot'} scored +${points}`, player);
   };
 
   const appendMove = (entry: Omit<MoveEntry, 'moveNumber'>) => {
@@ -266,8 +292,22 @@ export default function BotMatchScreen({
     setCurrentAnalysis(null);
     setAnalyzerOpen(false);
     dailyResultSyncKeyRef.current = '';
+    gameWinConfettiKeyRef.current = '';
     setMatch(createBotMatch(60, dealSize));
   };
+
+  useEffect(() => {
+    if (!match.gameOver || match.winnerId !== 'you') return;
+    const key = `${match.handNumber}:${match.players.you.score}:${match.players.bot.score}`;
+    if (gameWinConfettiKeyRef.current === key) return;
+    gameWinConfettiKeyRef.current = key;
+    confetti({
+      particleCount: 150,
+      spread: 80,
+      origin: { y: 0.55 },
+      colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff'],
+    });
+  }, [match.gameOver, match.winnerId, match.handNumber, match.players.you.score, match.players.bot.score]);
 
   const userLegalMoves = useMemo(() => {
     return match.currentPlayer === 'you' ? getLegalMoves(match, 'you') : [];
@@ -283,8 +323,15 @@ export default function BotMatchScreen({
         pointsAwarded: result.handEnded.pointsAwarded,
         loserPips: result.handEnded.loserPips,
         calcText: result.handEnded.calcText,
+        yourRemainingTiles: result.state.players.you.hand,
         botRemainingTiles: result.state.players.bot.hand,
       });
+    }
+    if (result.scored) {
+      showScoreToast(result.scored.player, result.scored.points);
+    }
+    if (result.drew && result.drew.player === 'you') {
+      showBoardToast('You drew a tile', 'bot');
     }
     const msg = toastFromResult(result);
     if (msg) pushToast(msg);
@@ -423,14 +470,18 @@ export default function BotMatchScreen({
     return () => clearTimeout(timer);
   }, [match]);
 
+  const advanceHand = () => {
+    setSelectedTile(null);
+    setLastBotChoice(null);
+    setHandReveal(null);
+    setMatch((prev) => (prev.handOver && !prev.gameOver ? startNextBotHand(prev) : prev));
+  };
+
   useEffect(() => {
     if (!handReveal || match.gameOver) return;
     const timer = setTimeout(() => {
-      setSelectedTile(null);
-      setLastBotChoice(null);
-      setHandReveal(null);
-      setMatch((prev) => (prev.handOver && !prev.gameOver ? startNextBotHand(prev) : prev));
-    }, 4200);
+      advanceHand();
+    }, 5000);
     return () => clearTimeout(timer);
   }, [handReveal, match.gameOver]);
 
@@ -602,28 +653,167 @@ export default function BotMatchScreen({
       />
       {toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
-        <div className="hand-reveal-overlay">
-          <div className="hand-reveal-backdrop" />
-          <div className="hand-reveal-modal">
-            <div className="hand-reveal-card">
-              <h3>Hand Over</h3>
-              <p className="reveal-points">
-                {handReveal.winner === 'you' ? 'You' : 'Bot'} +{handReveal.pointsAwarded}
-                {' · '}
-                {handReveal.reason} ({handReveal.calcText})
-              </p>
-              <p className="reveal-label">Bot remaining tiles</p>
-              <div className="reveal-tiles">
-                {handReveal.botRemainingTiles.map((tile, idx) => (
-                  <DominoTile
-                    key={`bot-reveal-${idx}-${tile.low}-${tile.high}`}
-                    tile={tile}
-                    size={34}
-                    className="hand-over-tile"
-                  />
-                ))}
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1500,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'rgba(6, 10, 18, 0.62)',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            style={{
+              background: 'rgba(10,18,15,0.95)',
+              border: '1px solid rgba(236,252,245,0.14)',
+              borderRadius: 20,
+              padding: 32,
+              width: 480,
+              maxWidth: '90vw',
+              boxShadow: '0 26px 70px rgba(0,0,0,0.48)',
+              color: 'rgba(232,245,240,0.95)',
+              display: 'grid',
+              gap: 18,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, marginBottom: 6 }}>
+              Hand Over
+            </h3>
+            <p
+              style={{
+                margin: 0,
+                fontSize: '1rem',
+                color: 'rgba(232,245,240,0.55)',
+                marginBottom: 20,
+              }}
+            >
+              {handReveal.winner === 'you' ? 'You' : 'Bot'} +{handReveal.pointsAwarded} ·{' '}
+              {handReveal.reason} ({handReveal.calcText})
+            </p>
+
+            {handReveal.reason === 'blocked' ? (
+              <div style={{ display: 'grid', gap: 16 }}>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div
+                    style={{
+                      fontSize: '0.8rem',
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'rgba(200,220,215,0.7)',
+                      fontWeight: 700,
+                      textAlign: 'center',
+                    }}
+                  >
+                    Your Remaining Tiles
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                    {handReveal.yourRemainingTiles.map((tile, idx) => (
+                      <DominoTile
+                        key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
+                        tile={tile}
+                        size={52}
+                        className="hand-over-tile"
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div
+                    style={{
+                      fontSize: '0.8rem',
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'rgba(200,220,215,0.7)',
+                      fontWeight: 700,
+                      textAlign: 'center',
+                    }}
+                  >
+                    Bot Remaining Tiles
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                    {handReveal.botRemainingTiles.map((tile, idx) => (
+                      <DominoTile
+                        key={`bot-reveal-${idx}-${tile.low}-${tile.high}`}
+                        tile={tile}
+                        size={52}
+                        className="hand-over-tile"
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : handReveal.winner === 'you' ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div
+                  style={{
+                    color: 'rgba(151, 241, 205, 0.98)',
+                    fontWeight: 700,
+                    fontSize: '1rem',
+                    textAlign: 'center',
+                  }}
+                >
+                  🎉 You cleared your hand
+                </div>
+                <div
+                  style={{
+                    color: 'rgba(232,245,240,0.8)',
+                    fontSize: '0.9rem',
+                    textAlign: 'center',
+                  }}
+                >
+                  Bot had {handReveal.botRemainingTiles.length} tile
+                  {handReveal.botRemainingTiles.length === 1 ? '' : 's'} remaining:
+                </div>
+                {handReveal.botRemainingTiles.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                    {handReveal.botRemainingTiles.map((tile, idx) => (
+                      <DominoTile
+                        key={`bot-reveal-${idx}-${tile.low}-${tile.high}`}
+                        tile={tile}
+                        size={52}
+                        className="hand-over-tile"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div
+                  style={{
+                    color: 'rgba(232,245,240,0.85)',
+                    fontWeight: 600,
+                    fontSize: '1rem',
+                    textAlign: 'center',
+                  }}
+                >
+                  Bot cleared their hand
+                </div>
+                <div
+                  style={{
+                    color: 'rgba(232,245,240,0.8)',
+                    fontSize: '0.9rem',
+                    textAlign: 'center',
+                  }}
+                >
+                  Your remaining tiles:
+                </div>
+                {handReveal.yourRemainingTiles.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                    {handReveal.yourRemainingTiles.map((tile, idx) => (
+                      <DominoTile
+                        key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
+                        tile={tile}
+                        size={52}
+                        className="hand-over-tile"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -786,6 +976,33 @@ export default function BotMatchScreen({
 
       <div className="wl-stage-shell">
         <div className="board-area wl-board-area" data-ui="board">
+          {scoreToast && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 12,
+                left: '50%',
+                transform: scoreToast.visible ? 'translate(-50%, 0px)' : 'translate(-50%, -10px)',
+                opacity: scoreToast.visible ? 1 : 0,
+                transition: 'opacity 220ms ease, transform 220ms ease',
+                zIndex: 14,
+                background: 'rgba(15, 25, 20, 0.85)',
+                backdropFilter: 'blur(16px)',
+                border: '1px solid rgba(236,252,245,0.18)',
+                borderRadius: 999,
+                padding: '8px 20px',
+                color:
+                  scoreToast.tone === 'you'
+                    ? 'rgba(151, 241, 205, 0.98)'
+                    : 'rgba(232,245,240,0.95)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                pointerEvents: 'none',
+              }}
+            >
+              {scoreToast.message}
+            </div>
+          )}
           {!match.gameOver && (
             <div
               className="boneyard-pill"

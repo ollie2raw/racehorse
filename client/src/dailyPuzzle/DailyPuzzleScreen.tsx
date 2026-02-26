@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import { Board, DominoTile } from '../components';
@@ -9,9 +10,10 @@ import {
   getDailyPuzzleForDate,
   getLocalDateKey,
   type DailyPuzzleLeaderboardEntry,
+  upsertDailyPuzzleCompletion,
   upsertDailyPuzzleBestScore,
 } from './api';
-import { createPuzzleMatchState, validatePuzzle } from './validator';
+import { computeBestPossiblePuzzleScore, createPuzzleMatchState, validatePuzzle } from './validator';
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
 import './dailyPuzzle.css';
 
@@ -27,6 +29,11 @@ interface DailyProgress {
   attempts: number;
   bestMoves: number | null;
   lastResult: PlayStatus | null;
+}
+
+interface DailyPuzzleStreak {
+  lastCompletedDate: string | null;
+  currentStreak: number;
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
@@ -60,6 +67,74 @@ function writeProgress(dateSeed: string, progress: DailyProgress): void {
   window.localStorage.setItem(progressKey(dateSeed), JSON.stringify(progress));
 }
 
+function streakKey(): string {
+  return 'dailyPuzzle:streak';
+}
+
+function readStreak(): DailyPuzzleStreak {
+  if (typeof window === 'undefined') {
+    return { lastCompletedDate: null, currentStreak: 0 };
+  }
+  try {
+    const raw = window.localStorage.getItem(streakKey());
+    if (!raw) return { lastCompletedDate: null, currentStreak: 0 };
+    const parsed = JSON.parse(raw) as DailyPuzzleStreak;
+    return {
+      lastCompletedDate:
+        typeof parsed.lastCompletedDate === 'string' ? parsed.lastCompletedDate : null,
+      currentStreak: Number.isFinite(parsed.currentStreak) ? Math.max(0, parsed.currentStreak) : 0,
+    };
+  } catch {
+    return { lastCompletedDate: null, currentStreak: 0 };
+  }
+}
+
+function writeStreak(streak: DailyPuzzleStreak): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(streakKey(), JSON.stringify(streak));
+}
+
+function parseLocalDateKeyToDate(dateKey: string): Date | null {
+  const match = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const parsed = new Date(y, m - 1, d);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function diffLocalCalendarDays(prev: string, next: string): number | null {
+  const prevDate = parseLocalDateKeyToDate(prev);
+  const nextDate = parseLocalDateKeyToDate(next);
+  if (!prevDate || !nextDate) return null;
+  const ms = nextDate.getTime() - prevDate.getTime();
+  return Math.round(ms / 86400000);
+}
+
+function recordSolvedStreak(dateKey: string): number {
+  const streak = readStreak();
+  if (streak.lastCompletedDate === dateKey) {
+    const sameDay = Math.max(1, streak.currentStreak || 1);
+    writeStreak({ lastCompletedDate: dateKey, currentStreak: sameDay });
+    return sameDay;
+  }
+
+  const dayDiff = streak.lastCompletedDate ? diffLocalCalendarDays(streak.lastCompletedDate, dateKey) : null;
+  const nextStreak = dayDiff === 1 ? Math.max(1, streak.currentStreak + 1) : 1;
+  writeStreak({ lastCompletedDate: dateKey, currentStreak: nextStreak });
+  return nextStreak;
+}
+
+function getDisplayStreak(todayDateKey: string): number {
+  const streak = readStreak();
+  if (!streak.lastCompletedDate || streak.currentStreak <= 0) return 1;
+  const dayDiff = diffLocalCalendarDays(streak.lastCompletedDate, todayDateKey);
+  if (dayDiff === null) return Math.max(1, streak.currentStreak);
+  if (dayDiff <= 1) return Math.max(1, streak.currentStreak);
+  return 1;
+}
 
 function getDisplayName(username: string | null | undefined): string {
   const value = (username ?? '').trim();
@@ -100,8 +175,10 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [handTileSize, setHandTileSize] = useState(56);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
+  const [streakDays, setStreakDays] = useState(1);
   const startTimeRef = useRef<number>(0);
   const submittedRef = useRef(false);
+  const solvedConfettiFiredRef = useRef(false);
 
   const refreshLeaderboard = useCallback(async (puzzleDate: string) => {
     setLeaderboardLoading(true);
@@ -127,6 +204,10 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     }
   }, [puzzle]);
   const [runtimeState, setRuntimeState] = useState(match);
+  const bestPossibleScore = useMemo(() => {
+    if (!puzzle) return 0;
+    return computeBestPossiblePuzzleScore(puzzle);
+  }, [puzzle]);
 
   useEffect(() => {
     setRuntimeState(match);
@@ -175,6 +256,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
         if (active) {
           void refreshLeaderboard(today.puzzleDate);
         }
+        setStreakDays(getDisplayStreak(today.puzzleDate));
       } catch (err) {
         if (!active) return;
         // eslint-disable-next-line no-console
@@ -226,6 +308,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     setFinalScore(null);
     runningScoreRef.current = 0;
     submittedRef.current = false;
+    solvedConfettiFiredRef.current = false;
     startTimeRef.current = Date.now();
     setStatusMessage(
       puzzle.puzzleType === 'one_turn_high_score'
@@ -246,8 +329,12 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
   ) => {
     if (!puzzle) return;
     const progress = readProgress(puzzle.puzzleDate);
+    let resolvedStreak = streakDays;
 
     if (nextStatus === 'SOLVED' && solvedMoves !== null) {
+      const nextStreak = recordSolvedStreak(puzzle.puzzleDate);
+      setStreakDays(nextStreak);
+      resolvedStreak = nextStreak;
       const nextBest =
         progress.bestMoves === null ? solvedMoves : Math.min(progress.bestMoves, solvedMoves);
       writeProgress(puzzle.puzzleDate, {
@@ -263,14 +350,35 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     if (user && !submittedRef.current) {
       submittedRef.current = true;
       const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000));
-      void upsertDailyPuzzleBestScore({
+      const bestScorePromise = upsertDailyPuzzleBestScore({
         puzzleDate: puzzle.puzzleDate,
         userId: user.id,
         username: profile?.username ?? user.email?.split('@')[0] ?? 'Player',
         score: finalScoreValue,
         movesUsed: solvedMoves ?? movesUsed,
         seconds: elapsedSeconds,
-      }).finally(() => {
+      }).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[DailyPuzzle] best score upsert failed', err);
+      });
+
+      const completionPromise =
+        nextStatus === 'SOLVED'
+          ? upsertDailyPuzzleCompletion({
+              puzzleDate: puzzle.puzzleDate,
+              userId: user.id,
+              username: profile?.username ?? user.email?.split('@')[0] ?? 'Player',
+              score: finalScoreValue,
+              bestPossibleScore,
+              perfect: finalScoreValue >= bestPossibleScore,
+              currentStreak: resolvedStreak,
+            }).catch((err) => {
+              // eslint-disable-next-line no-console
+              console.warn('[DailyPuzzle] completion upsert failed', err);
+            })
+          : Promise.resolve();
+
+      void Promise.allSettled([bestScorePromise, completionPromise]).finally(() => {
         void refreshLeaderboard(puzzle.puzzleDate);
       });
     } else {
@@ -367,6 +475,21 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
     finalizeResult('FAILED', null, 0);
   }, [puzzle, status, legalMoves.length]);
 
+  useEffect(() => {
+    if (status !== 'SOLVED') {
+      solvedConfettiFiredRef.current = false;
+      return;
+    }
+    if (solvedConfettiFiredRef.current) return;
+    solvedConfettiFiredRef.current = true;
+    confetti({
+      particleCount: 150,
+      spread: 80,
+      origin: { y: 0.55 },
+      colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff'],
+    });
+  }, [status]);
+
   if (loading) {
     return (
       <div className="app">
@@ -441,6 +564,16 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
   const solvableWarning = Boolean(validation && !validation.solvable);
   const isOneTurnHighScore = puzzle.puzzleType === 'one_turn_high_score';
   const formattedPuzzleDate = formatPuzzleDateLabel(puzzle.puzzleDate);
+  const completedScore = isOneTurnHighScore
+    ? (finalScore ?? runtimeState.players.you.score)
+    : runtimeState.players.you.score;
+  const completionRatio = bestPossibleScore > 0 ? completedScore / bestPossibleScore : 1;
+  const completionMessage =
+    completedScore >= bestPossibleScore
+      ? { text: '🏆 Perfect!', color: '#d8b56f' }
+      : completionRatio >= 0.8
+        ? { text: '⭐ Great solve!', color: 'rgba(125, 241, 197, 0.95)' }
+        : { text: 'Keep practicing!', color: 'rgba(232,245,240,0.85)' };
   const modalLeaderboard = leaderboard.slice(0, 20);
   const currentUserId = user?.id ?? null;
   const renderLeaderboardRows = (rows: DailyPuzzleLeaderboardEntry[]) => (
@@ -479,6 +612,25 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
             <p className="lobby-server mode-subtitle">
               {formattedPuzzleDate}
             </p>
+            <div
+              style={{
+                width: 'fit-content',
+                margin: '8px 0 16px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(236,252,245,0.24)',
+                backdropFilter: 'blur(20px)',
+                borderRadius: 999,
+                padding: '5px 14px',
+                color: 'rgba(232,245,240,0.85)',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+              }}
+            >
+              🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
+            </div>
             <div className="mode-actions daily-entry-actions">
               <button
                 className="mode-option mode-option-primary"
@@ -652,7 +804,7 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
             {isOneTurnHighScore ? (
               <>
                 <h3>Final score: {finalScore ?? 0}</h3>
-                <p>High Score — One turn · Deal {puzzle.dealSize}</p>
+                <p>High Score — One turn</p>
               </>
             ) : (
               <>
@@ -667,6 +819,28 @@ export default function DailyPuzzleScreen({ user, profile, onBack }: DailyPuzzle
                 </p>
               </>
             )}
+            {status === 'SOLVED' && <p>Streak: {streakDays} days 🔥</p>}
+            <div
+              style={{
+                borderRadius: 14,
+                border: '1px solid rgba(236,252,245,0.16)',
+                background: 'rgba(15, 25, 20, 0.72)',
+                backdropFilter: 'blur(16px)',
+                padding: '12px 14px',
+                display: 'grid',
+                gap: 6,
+              }}
+            >
+              <p style={{ margin: 0, color: 'rgba(232,245,240,0.95)', fontWeight: 700 }}>
+                Your score: {completedScore} pts
+              </p>
+              <p style={{ margin: 0, color: 'rgba(232,245,240,0.86)' }}>
+                Best possible: {bestPossibleScore} pts
+              </p>
+              <p style={{ margin: 0, color: completionMessage.color, fontWeight: 700 }}>
+                {completionMessage.text}
+              </p>
+            </div>
             {!user && <p className="lobby-server">Sign in to submit to leaderboard.</p>}
             <div className="daily-leaderboard-panel daily-leaderboard-panel-modal">
               <h3>Today&apos;s Top Scores</h3>

@@ -298,6 +298,16 @@ export interface UpsertDailyPuzzleBestScoreInput {
   seconds?: number;
 }
 
+export interface UpsertDailyPuzzleCompletionInput {
+  puzzleDate: string;
+  userId: string;
+  username: string;
+  score: number;
+  bestPossibleScore: number;
+  perfect: boolean;
+  currentStreak: number;
+}
+
 export interface DailyPuzzleLeaderboardEntry {
   userId: string;
   username: string;
@@ -442,6 +452,35 @@ export async function fetchDailyPuzzleLeaderboard(
       updatedAt: row.updated_at as string,
     };
   });
+}
+
+export async function upsertDailyPuzzleCompletion(
+  input: UpsertDailyPuzzleCompletionInput,
+): Promise<void> {
+  if (!supabase) return;
+
+  const canonicalDate = normalizeDateInputToLocalKey(input.puzzleDate);
+  const { error } = await withTimeout(
+    Promise.resolve(
+      supabase.from('daily_puzzle_completions').upsert(
+        {
+          puzzle_date: canonicalDate,
+          user_id: input.userId,
+          username: input.username,
+          score: input.score,
+          best_possible_score: input.bestPossibleScore,
+          perfect: input.perfect,
+          current_streak: input.currentStreak,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'puzzle_date,user_id' },
+      ),
+    ),
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export { getLocalDateKey, normalizeDateInputToLocalKey };

@@ -317,12 +317,17 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     <div className="app">
       <div className="screen lobby-screen mode-home-screen">
         <div className="mode-home-glow" aria-hidden="true" />
-        <div className="card lobby-card mode-card daily-admin-card">
+        <div
+          className="card lobby-card mode-card daily-admin-card"
+          style={{ padding: '14px 16px', display: 'grid', gap: 8 }}
+        >
           <p className="lobby-kicker">Racehorse Dominoes</p>
           <h2>Admin: Daily Puzzles</h2>
-          <p className="lobby-server">Admin email: {adminEmail || '(VITE_ADMIN_EMAIL not set)'}</p>
+          <p className="lobby-server" style={{ margin: 0 }}>
+            Admin email: {adminEmail || '(VITE_ADMIN_EMAIL not set)'}
+          </p>
 
-          <div className="daily-admin-grid">
+          <div className="daily-admin-grid" style={{ marginTop: 6, gap: 8 }}>
             <label>
               Date
               <input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} />
@@ -373,7 +378,8 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
           <label className="daily-admin-textarea">
             Paste Captured Puzzle JSON
             <textarea
-              rows={5}
+              rows={3}
+              style={{ height: 72, minHeight: 72 }}
               value={pasteJson}
               onChange={(e) => setPasteJson(e.target.value)}
               placeholder='Paste output from "Copy Puzzle JSON" button here...'
@@ -385,12 +391,22 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
 
           <label className="daily-admin-textarea">
             starting_board JSON
-            <textarea rows={10} value={boardJson} onChange={(e) => setBoardJson(e.target.value)} />
+            <textarea
+              rows={3}
+              style={{ height: 80, minHeight: 80 }}
+              value={boardJson}
+              onChange={(e) => setBoardJson(e.target.value)}
+            />
           </label>
 
           <label className="daily-admin-textarea">
             starting_hand JSON
-            <textarea rows={6} value={handJson} onChange={(e) => setHandJson(e.target.value)} />
+            <textarea
+              rows={3}
+              style={{ height: 80, minHeight: 80 }}
+              value={handJson}
+              onChange={(e) => setHandJson(e.target.value)}
+            />
           </label>
 
           {validation && (

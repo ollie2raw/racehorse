@@ -9,8 +9,6 @@ import type { Tile, BoardState, PlacementPosition, Move } from '../types';
 const TILE_UNIT = 1;
 const TILE_GAP = 0.15;
 const DOUBLE_CROSS_GAP = 0.2;
-const FIT_PADDING_X = 80;
-const FIT_PADDING_Y = 80;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -505,8 +503,10 @@ export function Board({
     if (layoutWidth <= 0 || layoutHeight <= 0) return;
 
     // Calculate scale to fit
-    const scaleX = Math.max(240, containerWidth - FIT_PADDING_X) / layoutWidth;
-    const scaleY = Math.max(180, containerHeight - FIT_PADDING_Y) / layoutHeight;
+    const layoutSpanUnits = Math.max(layout.maxX - layout.minX, layout.maxY - layout.minY);
+    const targetFill = layoutSpanUnits >= 10 ? 0.93 : 0.9;
+    const scaleX = (containerWidth * targetFill) / layoutWidth;
+    const scaleY = (containerHeight * targetFill) / layoutHeight;
     const fitScale = Math.min(1.45, Math.max(0.42, Math.min(scaleX, scaleY)));
 
     setCamera({ x: 0, y: 0, scale: fitScale });
@@ -769,7 +769,7 @@ export function Board({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            applyZoomStep(-0.15);
+            applyZoomStep(-0.12);
           }}
           style={{
             padding: '4px 8px',
@@ -809,7 +809,7 @@ export function Board({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            applyZoomStep(0.15);
+            applyZoomStep(0.12);
           }}
           style={{
             padding: '4px 8px',

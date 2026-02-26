@@ -147,3 +147,67 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
     reason,
   };
 }
+
+function boardKey(state: BotMatchState): string {
+  if (!state.board) return 'empty';
+  const mainLine = state.board.mainLine
+    .map((p) => `${p.tile.low}-${p.tile.high}-${p.orientation}`)
+    .join('|');
+  const hubs = state.board.hubDoubles
+    .map((hub, idx) => {
+      const hubId = hub.hubId ?? idx;
+      const branches = hub.branches
+        .map((branch, branchIdx) => {
+          if (!branch) return `b${branchIdx}:none`;
+          const tiles = branch.tiles
+            .map((t) => `${t.tile.low}-${t.tile.high}-${t.orientation}`)
+            .join(',');
+          return `b${branchIdx}:${branch.openEnd}:${branch.openEndIsDouble ? 1 : 0}:${tiles}`;
+        })
+        .join(';');
+      return `${hubId}:${hub.hubValue}:${hub.isCrossed ? 1 : 0}:${branches}`;
+    })
+    .join('||');
+  return `${mainLine}::${hubs}`;
+}
+
+function stateKey(state: BotMatchState): string {
+  const handKey = [...state.players.you.hand]
+    .map((t) => `${t.low}-${t.high}`)
+    .sort()
+    .join(',');
+  return `${state.currentPlayer}::${state.players.you.score}::${handKey}::${boardKey(state)}`;
+}
+
+export function computeBestPossiblePuzzleScore(puzzle: CuratedDailyPuzzle): number {
+  const initial = createPuzzleMatchState(puzzle);
+  const memo = new Map<string, number>();
+
+  const dfs = (state: BotMatchState): number => {
+    const key = stateKey(state);
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+
+    let best = state.players.you.score;
+    if (state.currentPlayer !== 'you') {
+      memo.set(key, best);
+      return best;
+    }
+
+    const legalMoves = getLegalMoves(state, 'you').filter((move) => move.type === 'play');
+    if (legalMoves.length === 0) {
+      memo.set(key, best);
+      return best;
+    }
+
+    for (const move of legalMoves) {
+      const nextState = applyPlayMove(state, 'you', move).state;
+      best = Math.max(best, dfs(nextState));
+    }
+
+    memo.set(key, best);
+    return best;
+  };
+
+  return dfs(initial);
+}

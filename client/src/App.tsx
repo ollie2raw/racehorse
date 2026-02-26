@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from 'react';
+import confetti from 'canvas-confetti';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import { traceSocketEvent } from "./debug/socketTrace";
 import { io, Socket } from 'socket.io-client';
@@ -214,13 +215,12 @@ interface GameOverOverlayProps {
 interface HandEndedPayload {
   handNumber: number;
   opponentRemainingTiles: Tile[];
+  yourRemainingTiles: Tile[];
   pointsAwarded: {
     you: number;
     opponent: number;
   };
 }
-
-const HAND_OVER_REVEAL_MS = 5000;
 
 function GameOverOverlay({
   state,
@@ -533,6 +533,11 @@ export default function App() {
   const [error, setError] = useState<string>('');
   const [actionError, setActionError] = useState<string>('');
   const [toast, setToast] = useState<string>('');
+  const [scoreToast, setScoreToast] = useState<{
+    message: string;
+    tone: 'you' | 'opp';
+    visible: boolean;
+  } | null>(null);
   const [handReveal, setHandReveal] = useState<HandEndedPayload | null>(null);
   const [rematchRequested, setRematchRequested] = useState(false);
   const [rematchReadyIds, setRematchReadyIds] = useState<string[]>([]);
@@ -611,6 +616,8 @@ export default function App() {
   const isMutedRef = useRef(isMuted);
   const matchRecordKeyRef = useRef('');
   const prevGameOverRef = useRef(false);
+  const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const isAdmin = Boolean(
     authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
@@ -635,8 +642,31 @@ export default function App() {
       if (toastTimeoutRef.current) {
         clearTimeout(toastTimeoutRef.current);
       }
+      if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
+      if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
     };
   }, []);
+
+  const showScoreLikeToast = useCallback((message: string, tone: 'you' | 'opp') => {
+    if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
+    if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
+    setScoreToast({
+      message,
+      tone,
+      visible: true,
+    });
+    scoreToastHideTimerRef.current = setTimeout(() => {
+      setScoreToast((prev) => (prev ? { ...prev, visible: false } : prev));
+    }, 1700);
+    scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), 2000);
+  }, []);
+
+  const showScoreToast = useCallback(
+    (player: 'you' | 'opp', points: number, label?: string) => {
+      showScoreLikeToast(`${label ?? (player === 'you' ? 'You' : 'Opponent')} scored +${points}`, player);
+    },
+    [showScoreLikeToast],
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1115,7 +1145,12 @@ export default function App() {
     });
 
     s.on('hand:ended', (payload: HandEndedPayload) => {
-      setHandReveal(payload);
+      const currentState = stateRef.current;
+      const myRemaining = currentState?.players[s.id ?? '']?.hand ?? [];
+      setHandReveal({
+        ...payload,
+        yourRemainingTiles: payload.yourRemainingTiles ?? myRemaining,
+      });
       handRevealShownRef.current = payload.handNumber;
     });
 
@@ -1623,12 +1658,13 @@ export default function App() {
           handBefore,
         ),
       });
+      showScoreLikeToast('You drew a tile', 'opp');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
     }
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, showScoreLikeToast]);
 
   const pass = useCallback(async () => {
     setActionError('');
@@ -1862,6 +1898,7 @@ export default function App() {
     const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
     setHandReveal({
       handNumber: state.handNumber,
+      yourRemainingTiles: state.players[you]?.hand ?? [],
       opponentRemainingTiles: opponentIdFromState
         ? (state.players[opponentIdFromState]?.hand ?? [])
         : [],
@@ -1870,20 +1907,12 @@ export default function App() {
     handRevealShownRef.current = state.handNumber;
   }, [inGame, state, you]);
 
-  useEffect(() => {
-    if (!handReveal || !socket || !joinedRoom) return;
-    if (state?.gameOver) {
-      setHandReveal(null);
-      return;
-    }
-
-    const timer = setTimeout(() => {
+  const continueAfterHandReveal = useCallback(() => {
+    if (socket && joinedRoom) {
       socket.emit('hand:ready', joinedRoom, () => {});
-      setHandReveal(null);
-    }, HAND_OVER_REVEAL_MS);
-
-    return () => clearTimeout(timer);
-  }, [handReveal, socket, joinedRoom, state?.gameOver]);
+    }
+    setHandReveal(null);
+  }, [socket, joinedRoom]);
 
   useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
@@ -1958,10 +1987,21 @@ export default function App() {
 
     for (const pid of state.playerIds) {
       const score = state.players[pid]?.score ?? 0;
+      const prevScore = prevHudScoresRef.current[pid];
       nextScores[pid] = score;
-      if (prevHudScoresRef.current[pid] !== undefined && prevHudScoresRef.current[pid] !== score) {
+      if (prevScore !== undefined && prevScore !== score) {
         nextPulse[pid] = true;
         changed = true;
+        const delta = score - prevScore;
+        if (delta > 0 && !state.handOver && !state.gameOver) {
+          if (pid === you) {
+            showScoreToast('you', delta, 'You');
+          } else {
+            const playerName =
+              players.find((p) => p.id === pid)?.username?.trim() || opponentName || 'Opponent';
+            showScoreToast('opp', delta, playerName);
+          }
+        }
       }
     }
 
@@ -1971,7 +2011,7 @@ export default function App() {
     setHudScorePulse(nextPulse);
     const timeout = setTimeout(() => setHudScorePulse({}), 260);
     return () => clearTimeout(timeout);
-  }, [state]);
+  }, [state, you, players, opponentName, showScoreToast]);
 
   // Track turn changes for UI state sync.
   useEffect(() => {
@@ -2003,6 +2043,14 @@ export default function App() {
 
     const winnerSocketId = finalState?.winnerId ?? null;
     if (!winnerSocketId) return;
+    if (winnerSocketId === you) {
+      confetti({
+        particleCount: 150,
+        spread: 80,
+        origin: { y: 0.55 },
+        colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff'],
+      });
+    }
     const loserSocketId = finalState.playerIds.find((pid) => pid !== winnerSocketId) ?? null;
     if (!loserSocketId) return;
 
@@ -3010,33 +3058,139 @@ export default function App() {
             />
           )}
           {handReveal && !state.gameOver && (
-            <div className="hand-reveal-overlay">
-              <div className="hand-reveal-backdrop" />
-              <div className="hand-reveal-modal">
-                <div className="hand-reveal-card">
-                  <h3>Hand Over</h3>
-                  <p className="reveal-points">
-                    You:{' '}
-                    {handReveal.pointsAwarded.you >= 0
-                      ? `+${handReveal.pointsAwarded.you}`
-                      : handReveal.pointsAwarded.you}
-                    {' · '}
-                    Opponent:{' '}
-                    {handReveal.pointsAwarded.opponent >= 0
-                      ? `+${handReveal.pointsAwarded.opponent}`
-                      : handReveal.pointsAwarded.opponent}
-                  </p>
-                  <p className="reveal-label">Opponent remaining tiles</p>
-                  <div className="reveal-tiles">
-                    {handReveal.opponentRemainingTiles.map((tile, idx) => (
-                      <DominoTile
-                        key={`reveal-${idx}-${tile.low}-${tile.high}`}
-                        tile={tile}
-                        size={34}
-                        className="hand-over-tile"
-                      />
-                    ))}
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 1500,
+                display: 'grid',
+                placeItems: 'center',
+                background: 'rgba(6, 10, 18, 0.62)',
+                backdropFilter: 'blur(4px)',
+              }}
+            >
+              <div
+                style={{
+                  background: 'rgba(10,18,15,0.95)',
+                  border: '1px solid rgba(236,252,245,0.14)',
+                  borderRadius: 20,
+                  padding: 32,
+                  minWidth: 420,
+                  boxShadow: '0 26px 70px rgba(0,0,0,0.48)',
+                  color: 'rgba(232,245,240,0.95)',
+                  display: 'grid',
+                  gap: 18,
+                }}
+              >
+                <h3 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>Hand Over</h3>
+                <p style={{ margin: 0, fontSize: '1rem', color: 'rgba(223,236,244,0.92)' }}>
+                  You{' '}
+                  {handReveal.pointsAwarded.you >= 0
+                    ? `+${handReveal.pointsAwarded.you}`
+                    : handReveal.pointsAwarded.you}
+                  {' · '}
+                  {opponentName}{' '}
+                  {handReveal.pointsAwarded.opponent >= 0
+                    ? `+${handReveal.pointsAwarded.opponent}`
+                    : handReveal.pointsAwarded.opponent}
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <div
+                      style={{
+                        fontSize: '0.78rem',
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        color: 'rgba(200,220,215,0.7)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Your Tiles
+                    </div>
+                    {handReveal.yourRemainingTiles.length === 0 ? (
+                      <div
+                        style={{
+                          minHeight: 68,
+                          borderRadius: 12,
+                          border: '1px dashed rgba(236,252,245,0.24)',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: 'rgba(200,220,215,0.66)',
+                          fontSize: '0.9rem',
+                        }}
+                      >
+                        None remaining
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {handReveal.yourRemainingTiles.map((tile, idx) => (
+                          <DominoTile
+                            key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
+                            tile={tile}
+                            size={48}
+                            className="hand-over-tile"
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <div
+                      style={{
+                        fontSize: '0.78rem',
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        color: 'rgba(200,220,215,0.7)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {`${opponentName} Tiles`}
+                    </div>
+                    {handReveal.opponentRemainingTiles.length === 0 ? (
+                      <div
+                        style={{
+                          minHeight: 68,
+                          borderRadius: 12,
+                          border: '1px dashed rgba(236,252,245,0.24)',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: 'rgba(200,220,215,0.66)',
+                          fontSize: '0.9rem',
+                        }}
+                      >
+                        None remaining
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {handReveal.opponentRemainingTiles.map((tile, idx) => (
+                          <DominoTile
+                            key={`reveal-${idx}-${tile.low}-${tile.high}`}
+                            tile={tile}
+                            size={48}
+                            className="hand-over-tile"
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+                  <button
+                    className="btn"
+                    onClick={continueAfterHandReveal}
+                    style={{
+                      borderRadius: 999,
+                      padding: '10px 24px',
+                      border: 'none',
+                      background: 'linear-gradient(180deg, #74f6ca 0%, #3ec49e 100%)',
+                      color: '#052018',
+                      fontWeight: 700,
+                      fontSize: '0.95rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Continue
+                  </button>
                 </div>
               </div>
             </div>
@@ -3077,6 +3231,35 @@ export default function App() {
 
           <div className="wl-stage-shell">
             <div className="board-area wl-board-area" data-ui="board">
+              {scoreToast && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    left: '50%',
+                    transform: scoreToast.visible
+                      ? 'translate(-50%, 0px)'
+                      : 'translate(-50%, -10px)',
+                    opacity: scoreToast.visible ? 1 : 0,
+                    transition: 'opacity 220ms ease, transform 220ms ease',
+                    zIndex: 14,
+                    background: 'rgba(15, 25, 20, 0.85)',
+                    backdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(236,252,245,0.18)',
+                    borderRadius: 999,
+                    padding: '8px 20px',
+                    color:
+                      scoreToast.tone === 'you'
+                        ? 'rgba(151, 241, 205, 0.98)'
+                        : 'rgba(232,245,240,0.95)',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {scoreToast.message}
+                </div>
+              )}
               {!state.gameOver && (
                 <div
                   className={`boneyard-pill${isBoneyardLocked ? ' locked' : ''}`}
