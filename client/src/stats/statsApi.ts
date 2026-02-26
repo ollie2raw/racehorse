@@ -42,8 +42,6 @@ export interface StatsSummary {
   onlineGamesPlayed: number;
   wins: number;
   losses: number;
-  botWins: number;
-  botLosses: number;
   longestWinStreak: number;
   winRate: number;
   currentWinStreak: number;
@@ -64,10 +62,6 @@ function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummar
 
   const wins = onlineRows.filter((row) => row.winner_user_id === userId).length;
   const losses = onlineRows.filter((row) => row.loser_user_id === userId).length;
-
-  const botRows = rows.filter((row) => row.mode === 'bot');
-  const botWins = botRows.filter((row) => row.winner_user_id === userId).length;
-  const botLosses = botRows.filter((row) => row.loser_user_id === userId).length;
 
   let longestWinStreak = 0;
   let streakTracker = 0;
@@ -104,8 +98,6 @@ function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummar
     onlineGamesPlayed,
     wins,
     losses,
-    botWins,
-    botLosses,
     longestWinStreak,
     winRate,
     currentWinStreak,

@@ -28,8 +28,6 @@ const EMPTY_STATS: StatsSummary = {
   onlineGamesPlayed: 0,
   wins: 0,
   losses: 0,
-  botWins: 0,
-  botLosses: 0,
   longestWinStreak: 0,
   winRate: 0,
   currentWinStreak: 0,
@@ -443,8 +441,6 @@ export default function FriendsScreen({
                   { label: 'Losses', value: friendStats.losses, icon: '📉', tone: 'red' },
                   { label: 'Best Streak', value: friendStats.longestWinStreak, icon: '⚡', tone: 'neutral' },
                   { label: 'Online Games', value: friendStats.onlineGamesPlayed, icon: '🧩', tone: 'neutral' },
-                  { label: 'Bot Wins', value: friendStats.botWins, icon: '🤖', tone: 'neutral' },
-                  { label: 'Bot Losses', value: friendStats.botLosses, icon: '🛠️', tone: 'neutral' },
                 ].map((item) => (
                   <div
                     key={item.label}

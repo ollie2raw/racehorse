@@ -14,8 +14,6 @@ const EMPTY_STATS: StatsSummary = {
   onlineGamesPlayed: 0,
   wins: 0,
   losses: 0,
-  botWins: 0,
-  botLosses: 0,
   longestWinStreak: 0,
   winRate: 0,
   currentWinStreak: 0,
@@ -159,8 +157,6 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
               { label: 'Best Streak', value: stats.longestWinStreak, icon: '⚡', tone: 'neutral' },
               { label: 'This Week', value: stats.gamesThisWeek, icon: '🎮', tone: 'neutral' },
               { label: 'Online Games', value: stats.onlineGamesPlayed, icon: '🧩', tone: 'neutral' },
-              { label: 'Bot Wins', value: stats.botWins, icon: '🤖', tone: 'neutral' },
-              { label: 'Bot Losses', value: stats.botLosses, icon: '🛠️', tone: 'neutral' },
             ].map((item) => (
               <div
                 key={item.label}
