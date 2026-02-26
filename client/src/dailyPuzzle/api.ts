@@ -182,32 +182,49 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs = 10000): Promise<T
   });
 }
 
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof Error && /timed out/i.test(err.message);
+}
+
 export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuzzle | null> {
   if (!supabase) return null;
+  const sb = supabase;
 
   const seed = getLocalDateKey(date);
-  const t0 = performance.now();
-  const { data, error } = await withTimeout(
-    (async () =>
-      await supabase
+  const query = () =>
+    Promise.resolve(
+      sb
         .from('daily_puzzles')
         .select(
           'id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at',
         )
         .eq('puzzle_date', seed)
-        .maybeSingle())(),
-    8000,
-  );
-  const ms = Math.round(performance.now() - t0);
-  // eslint-disable-next-line no-console
-  console.log('[DailyPuzzle] select finished', { ms, seed, error, hasData: Boolean(data) });
+        .maybeSingle(),
+    );
 
-  if (error) {
-    throw new Error(error.message);
+  const run = async (timeoutMs: number) => {
+    const t0 = performance.now();
+    const { data, error } = (await withTimeout(query(), timeoutMs)) as {
+      data: CuratedDailyPuzzleRow | null;
+      error: { message: string } | null;
+    };
+    const ms = Math.round(performance.now() - t0);
+    // eslint-disable-next-line no-console
+    console.log('[DailyPuzzle] select finished', { ms, seed, timeoutMs, error, hasData: Boolean(data) });
+    if (error) throw new Error(error.message);
+    return data;
+  };
+
+  try {
+    const data = await run(8000);
+    if (!data) return null;
+    return coercePuzzleRow(data as CuratedDailyPuzzleRow);
+  } catch (err) {
+    if (!isTimeoutError(err)) throw err;
+    const data = await run(12000);
+    if (!data) return null;
+    return coercePuzzleRow(data as CuratedDailyPuzzleRow);
   }
-
-  if (!data) return null;
-  return coercePuzzleRow(data as CuratedDailyPuzzleRow);
 }
 
 export async function getDailyPuzzleByDateSeed(

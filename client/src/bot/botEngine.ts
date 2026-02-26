@@ -542,7 +542,7 @@ function winnerFromScores(scores: Record<BotPlayerId, number>, target: number): 
 
 function computeHandPenalty(hand: Tile[]): number {
   const total = sumPips(hand);
-  return Math.ceil(total / 5) * 5;
+  return Math.round(total / 5);
 }
 
 function computeGoOutBonusPoints(hand: Tile[]): number {
@@ -783,7 +783,7 @@ export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionRe
         reason: 'blocked',
         pointsAwarded,
         loserPips,
-        calcText: `ceil(${loserPips}/5)*5 = ${pointsAwarded}`,
+        calcText: `round(${loserPips}/5) = ${pointsAwarded}`,
       },
     };
   }

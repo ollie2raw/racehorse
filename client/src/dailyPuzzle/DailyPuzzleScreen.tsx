@@ -37,6 +37,10 @@ interface DailyPuzzleStreak {
   currentStreak: number;
 }
 
+function puzzleCacheKey(dateSeed: string): string {
+  return `dailyPuzzle:cached:${dateSeed}`;
+}
+
 function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
@@ -66,6 +70,35 @@ function readProgress(dateSeed: string): DailyProgress {
 function writeProgress(dateSeed: string, progress: DailyProgress): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(progressKey(dateSeed), JSON.stringify(progress));
+}
+
+function readCachedPuzzle(dateSeed: string): CuratedDailyPuzzle | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(puzzleCacheKey(dateSeed));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CuratedDailyPuzzle;
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      typeof parsed.puzzleDate !== 'string' ||
+      !Array.isArray(parsed.startingHand)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedPuzzle(puzzle: CuratedDailyPuzzle): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(puzzleCacheKey(puzzle.puzzleDate), JSON.stringify(puzzle));
+  } catch {
+    // no-op
+  }
 }
 
 function streakKey(): string {
@@ -181,6 +214,7 @@ export default function DailyPuzzleScreen({
   const [handTileSize, setHandTileSize] = useState(56);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
   const [streakDays, setStreakDays] = useState(1);
+  const [bestPossibleScore, setBestPossibleScore] = useState(0);
   const startTimeRef = useRef<number>(0);
   const submittedRef = useRef(false);
   const solvedConfettiFiredRef = useRef(false);
@@ -209,10 +243,6 @@ export default function DailyPuzzleScreen({
     }
   }, [puzzle]);
   const [runtimeState, setRuntimeState] = useState(match);
-  const bestPossibleScore = useMemo(() => {
-    if (!puzzle) return 0;
-    return computeBestPossiblePuzzleScore(puzzle);
-  }, [puzzle]);
 
   useEffect(() => {
     setRuntimeState(match);
@@ -225,6 +255,33 @@ export default function DailyPuzzleScreen({
       setLoading(true);
       setLoadError(null);
       setShowLobby(true);
+      const cached = readCachedPuzzle(localDateKey);
+      let hasCachedFallback = false;
+      if (cached) {
+        hasCachedFallback = true;
+        setPuzzle(cached);
+        setValidation(null);
+        setBestPossibleScore(0);
+        setStatus('IN_PROGRESS');
+        setSelectedTile(null);
+        setMovesUsed(0);
+        setLastMovePoints(0);
+        setFinalScore(null);
+        runningScoreRef.current = 0;
+        setStatusMessage(
+          cached.puzzleType === 'one_turn_high_score'
+            ? 'Running score: 0 — keep playing'
+            : `Score Attack — Reach ${cached.targetScore} in ${cached.maxMoves} moves.`,
+        );
+        const cachedProgress = readProgress(cached.puzzleDate);
+        setAttempts(cachedProgress.attempts);
+        setBestMoves(cachedProgress.bestMoves);
+        setStreakDays(getDisplayStreak(cached.puzzleDate));
+        setLoading(false);
+        if (active) {
+          void refreshLeaderboard(cached.puzzleDate);
+        }
+      }
       try {
         // eslint-disable-next-line no-console
         console.log('[DailyPuzzle] loading', { localDateKey, timezone });
@@ -237,9 +294,11 @@ export default function DailyPuzzleScreen({
           return;
         }
 
-        const check = today.puzzleType === 'reach_target' ? validatePuzzle(today) : null;
+        const check = null;
         setPuzzle(today);
+        writeCachedPuzzle(today);
         setValidation(check);
+        setBestPossibleScore(0);
         setStatus('IN_PROGRESS');
         setSelectedTile(null);
         setMovesUsed(0);
@@ -266,7 +325,9 @@ export default function DailyPuzzleScreen({
         if (!active) return;
         // eslint-disable-next-line no-console
         console.error('[DailyPuzzle] load error', { localDateKey, timezone, err });
-        setLoadError(err instanceof Error ? err.message : 'Failed to load daily puzzle.');
+        if (!hasCachedFallback) {
+          setLoadError(err instanceof Error ? err.message : 'Failed to load daily puzzle.');
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -277,6 +338,43 @@ export default function DailyPuzzleScreen({
       active = false;
     };
   }, [localDateKey, timezone, refreshLeaderboard]);
+
+  useEffect(() => {
+    if (!puzzle) return;
+    let cancelled = false;
+
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      if (puzzle.puzzleType === 'reach_target') {
+        try {
+          const check = validatePuzzle(puzzle);
+          if (!cancelled) setValidation(check);
+        } catch (err) {
+          if (!cancelled) {
+            setValidation({
+              solvable: false,
+              bestScore: 0,
+              hasScoringMove: false,
+              exploredStates: 0,
+              reason: err instanceof Error ? err.message : 'Validation failed.',
+            });
+          }
+        }
+      }
+
+      try {
+        const computed = computeBestPossiblePuzzleScore(puzzle);
+        if (!cancelled) setBestPossibleScore(computed);
+      } catch {
+        if (!cancelled) setBestPossibleScore(0);
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [puzzle]);
 
   const legalMoves = useMemo(() => {
     if (!runtimeState || status !== 'IN_PROGRESS') return [] as Move[];
@@ -370,6 +468,9 @@ export default function DailyPuzzleScreen({
         console.warn('[DailyPuzzle] best score upsert failed', err);
       });
 
+      const resolvedBestPossibleScore =
+        bestPossibleScore > 0 ? bestPossibleScore : computeBestPossiblePuzzleScore(puzzle);
+
       const completionPromise =
         nextStatus === 'SOLVED'
           ? upsertDailyPuzzleCompletion({
@@ -377,8 +478,8 @@ export default function DailyPuzzleScreen({
               userId: user.id,
               username: profile?.username ?? user.email?.split('@')[0] ?? 'Player',
               score: finalScoreValue,
-              bestPossibleScore,
-              perfect: finalScoreValue >= bestPossibleScore,
+              bestPossibleScore: resolvedBestPossibleScore,
+              perfect: finalScoreValue >= resolvedBestPossibleScore,
               currentStreak: resolvedStreak,
             }).catch((err) => {
               // eslint-disable-next-line no-console
