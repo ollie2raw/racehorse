@@ -947,102 +947,81 @@ export default function BotMatchScreen({
       )}
 
       <div className="wl-top-rail bot-top-rail" data-ui="hud">
-        {/* Left: Bot score pill */}
-        <button
-          type="button"
-          className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
-          onClick={() => setScoreTrackOpen(true)}
-          aria-label="Open score track"
-          style={{ width: 130, minWidth: 'unset' }}
-        >
-          <div className="wl-pill-top">
-            <span className="wl-player-label">Bot</span>
-            <span className={`wl-tiles-chip ${botTurn ? 'is-pulsing' : ''}`}>
-              <span className="wl-tiles-count">{match.players.bot.hand.length}</span>
-              <span className="wl-tiles-text">tiles</span>
-            </span>
-          </div>
-          <span className="wl-player-score">{match.players.bot.score}</span>
-        </button>
-
-        {/* Center zone: left-controls | status | right-controls */}
-        <div className="bot-center-zone" style={{ position: 'relative' }}>
-          <div className="bot-controls-left">
-            <div className="wl-tiles-pill bot-difficulty bot-chip-control bot-tiles-picker">
-              <span>Tiles</span>
-              <div className="bot-tiles-options" role="group" aria-label="Select tile count">
-                <button
-                  type="button"
-                  className={`bot-tiles-option ${dealSize === 7 ? 'is-active' : ''}`}
-                  onClick={() => applyDealSize(7)}
-                >
-                  7
-                </button>
-                <button
-                  type="button"
-                  className={`bot-tiles-option ${dealSize === 14 ? 'is-active' : ''}`}
-                  onClick={() => applyDealSize(14)}
-                >
-                  14
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Center status */}
-          <div
-            className="wl-center-status"
-            style={{
-              position: 'absolute',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+        <div className="bot-hud-left-cluster">
+          <button
+            type="button"
+            className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
+            onClick={() => setScoreTrackOpen(true)}
+            aria-label="Open score track"
+            style={{ width: 142, minWidth: 'unset' }}
           >
-            <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
-              {turnLabel}
-            </span>
-            <span
-              className="open-ends-pill"
-              style={{
-                position: 'absolute',
-                left: 'calc(100% + 8px)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                lineHeight: 1.05,
-                background: 'rgba(255,255,255,0.07)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 999,
-                padding: '4px 12px',
-                fontSize: '0.78rem',
-                color: 'rgba(232,245,240,0.8)',
-                fontWeight: 600,
-              }}
-            >
-              <span>{openEndsSum}</span>
-              <span style={{ fontSize: '0.66rem', opacity: 0.9 }}>open</span>
-            </span>
-          </div>
-
-          {/* Right controls: Admin-only */}
-          <div className="bot-controls-right">
-            {showDevCapture && (
-              <button className="btn text compact bot-chip-control" onClick={copyAsDailyPuzzleJson}>
-                Copy Puzzle JSON
+            <div className="wl-pill-top">
+              <span className="wl-player-label">Bot</span>
+              <span className={`wl-tiles-chip ${botTurn ? 'is-pulsing' : ''}`}>
+                <span className="wl-tiles-count">{match.players.bot.hand.length}</span>
+                <span className="wl-tiles-text">tiles</span>
+              </span>
+            </div>
+            <span className="wl-player-score">{match.players.bot.score}</span>
+          </button>
+          <div className="wl-tiles-pill bot-difficulty bot-chip-control bot-tiles-picker">
+            <span className="bot-tiles-label">Tiles</span>
+            <div className="bot-tiles-options" role="group" aria-label="Select tile count">
+              <button
+                type="button"
+                className={`bot-tiles-option ${dealSize === 7 ? 'is-active' : ''}`}
+                onClick={() => applyDealSize(7)}
+              >
+                7
               </button>
-            )}
+              <button
+                type="button"
+                className={`bot-tiles-option ${dealSize === 14 ? 'is-active' : ''}`}
+                onClick={() => applyDealSize(14)}
+              >
+                14
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Right: Large toggle + You score pill */}
-        <div
-          className="bot-hud-right-cluster"
-          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-        >
+        <div className="bot-hud-center-cluster wl-center-status">
+          <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
+            {turnLabel}
+          </span>
+          <span
+            className="open-ends-pill"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1.05,
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 999,
+              padding: '4px 12px',
+              fontSize: '0.78rem',
+              color: 'rgba(232,245,240,0.8)',
+              fontWeight: 600,
+            }}
+          >
+            <span>{openEndsSum}</span>
+            <span style={{ fontSize: '0.66rem', opacity: 0.9 }}>open</span>
+          </span>
+        </div>
+
+        <div className="bot-hud-right-cluster">
+          {showDevCapture && (
+            <button
+              className="btn text compact bot-chip-control bot-admin-chip"
+              onClick={copyAsDailyPuzzleJson}
+              title="Copy Puzzle JSON"
+            >
+              <span aria-hidden="true">📋</span>
+              <span className="bot-admin-chip-label">Copy Puzzle JSON</span>
+            </button>
+          )}
           <button
             onClick={() => onToggleLargeMode?.()}
             title="Toggle Large Mode"
