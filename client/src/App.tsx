@@ -52,6 +52,14 @@ function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
 
+function tileListEquals(a: Tile[], b: Tile[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (!tileEquals(a[i], b[i])) return false;
+  }
+  return true;
+}
+
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
   return raw || 'Guest';
@@ -220,6 +228,9 @@ interface HandEndedPayload {
     you: number;
     opponent: number;
   };
+  whoWentOut?: string | null;
+  winnerId?: string | null;
+  handWinnerId?: string | null;
 }
 
 function GameOverOverlay({
@@ -613,6 +624,9 @@ export default function App() {
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
   const [opponentDragging, setOpponentDragging] = useState(false);
   const draggingStateRef = useRef(false);
+  const handRevealAutoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handRevealAutoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [handRevealAutoProgress, setHandRevealAutoProgress] = useState(1);
   const isMutedRef = useRef(isMuted);
   const matchRecordKeyRef = useRef('');
   const prevGameOverRef = useRef(false);
@@ -644,6 +658,8 @@ export default function App() {
       }
       if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
       if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
+      if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
+      if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
     };
   }, []);
 
@@ -1907,12 +1923,70 @@ export default function App() {
     handRevealShownRef.current = state.handNumber;
   }, [inGame, state, you]);
 
+  useEffect(() => {
+    if (!handReveal || !state || state.gameOver || !state.handOver) return;
+    const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
+    const nextYourRemaining = state.players[you]?.hand ?? [];
+    const nextOpponentRemaining = opponentIdFromState
+      ? (state.players[opponentIdFromState]?.hand ?? [])
+      : [];
+    if (
+      tileListEquals(handReveal.yourRemainingTiles, nextYourRemaining) &&
+      tileListEquals(handReveal.opponentRemainingTiles, nextOpponentRemaining)
+    ) {
+      return;
+    }
+    setHandReveal((prev) =>
+      prev
+        ? {
+            ...prev,
+            yourRemainingTiles: nextYourRemaining,
+            opponentRemainingTiles: nextOpponentRemaining,
+          }
+        : prev,
+    );
+  }, [handReveal, state, you]);
+
+  useEffect(() => {
+    if (!handReveal) return;
+    console.log('handReveal:', handReveal);
+  }, [handReveal]);
+
   const continueAfterHandReveal = useCallback(() => {
     if (socket && joinedRoom) {
       socket.emit('hand:ready', joinedRoom, () => {});
     }
     setHandReveal(null);
   }, [socket, joinedRoom]);
+
+  useEffect(() => {
+    if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
+    if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
+
+    if (!handReveal || state?.gameOver) {
+      setHandRevealAutoProgress(1);
+      return;
+    }
+
+    const durationMs = 4000;
+    const start = Date.now();
+    setHandRevealAutoProgress(1);
+
+    handRevealAutoIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const nextProgress = Math.max(0, 1 - elapsed / durationMs);
+      setHandRevealAutoProgress(nextProgress);
+    }, 50);
+
+    handRevealAutoTimeoutRef.current = setTimeout(() => {
+      continueAfterHandReveal();
+    }, durationMs);
+
+    return () => {
+      if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
+      if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
+    };
+  }, [handReveal, state?.gameOver, continueAfterHandReveal]);
 
   useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
@@ -3080,117 +3154,150 @@ export default function App() {
                   color: 'rgba(232,245,240,0.95)',
                   display: 'grid',
                   gap: 18,
+                  opacity: 0.92 + handRevealAutoProgress * 0.08,
                 }}
               >
+                {(() => {
+                  const youPoints = handReveal.pointsAwarded.you;
+                  const oppPoints = handReveal.pointsAwarded.opponent;
+                  const youWonHand = youPoints > oppPoints;
+                  const oppWonHand = oppPoints > youPoints;
+                  const winnerText = youWonHand
+                    ? `🎉 You won this hand  +${youPoints} pts`
+                    : oppWonHand
+                      ? `${opponentName} won this hand  +${oppPoints} pts`
+                      : 'Hand ended  +0 pts';
+                  const winnerColor = youWonHand
+                    ? 'rgba(125, 241, 197, 0.95)'
+                    : 'rgba(223,236,244,0.86)';
+                  return (
+                    <>
                 <h3 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>Hand Over</h3>
-                <p style={{ margin: 0, fontSize: '1rem', color: 'rgba(223,236,244,0.92)' }}>
-                  You{' '}
-                  {handReveal.pointsAwarded.you >= 0
-                    ? `+${handReveal.pointsAwarded.you}`
-                    : handReveal.pointsAwarded.you}
-                  {' · '}
-                  {opponentName}{' '}
-                  {handReveal.pointsAwarded.opponent >= 0
-                    ? `+${handReveal.pointsAwarded.opponent}`
-                    : handReveal.pointsAwarded.opponent}
+                <p style={{ margin: 0, fontSize: '1rem', color: winnerColor }}>
+                  {winnerText}
                 </p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <div
-                      style={{
-                        fontSize: '0.78rem',
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        color: 'rgba(200,220,215,0.7)',
-                        fontWeight: 700,
-                      }}
-                    >
-                      Your Tiles
+                    </>
+                  );
+                })()}
+                {(() => {
+                  const yourCount = handReveal.yourRemainingTiles.length;
+                  const oppCount = handReveal.opponentRemainingTiles.length;
+                  const whoWentOutRaw =
+                    handReveal.whoWentOut ?? handReveal.winnerId ?? handReveal.handWinnerId ?? null;
+                  const youWentOut =
+                    whoWentOutRaw === 'you' || whoWentOutRaw === you || (whoWentOutRaw == null && yourCount === 0);
+                  const oppWentOut =
+                    whoWentOutRaw === 'opponent' ||
+                    (Boolean(opponentId) && whoWentOutRaw === opponentId) ||
+                    (whoWentOutRaw == null && oppCount === 0);
+                  const blocked = yourCount > 0 && oppCount > 0;
+
+                  const sectionLabelStyle = {
+                    fontSize: '0.86rem',
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase' as const,
+                    color: 'rgba(200,220,215,0.78)',
+                    fontWeight: 700,
+                    textAlign: 'center' as const,
+                  };
+
+                  const tileRowStyle = {
+                    display: 'flex',
+                    flexWrap: 'wrap' as const,
+                    gap: 8,
+                    justifyContent: 'center' as const,
+                  };
+
+                  if (youWentOut && !blocked) {
+                    return (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        <div style={sectionLabelStyle}>
+                          {opponentName} had {oppCount} tile{oppCount === 1 ? '' : 's'} remaining:
+                        </div>
+                        <div style={tileRowStyle}>
+                          {handReveal.opponentRemainingTiles.map((tile, idx) => (
+                            <DominoTile
+                              key={`reveal-${idx}-${tile.low}-${tile.high}`}
+                              tile={tile}
+                              size={48}
+                              className="hand-over-tile"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (oppWentOut && !blocked) {
+                    return (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        <div style={sectionLabelStyle}>Your remaining tiles:</div>
+                        <div style={tileRowStyle}>
+                          {handReveal.yourRemainingTiles.map((tile, idx) => (
+                            <DominoTile
+                              key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
+                              tile={tile}
+                              size={48}
+                              className="hand-over-tile"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{ display: 'grid', gap: 16 }}>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <div style={sectionLabelStyle}>Your remaining tiles</div>
+                        <div style={tileRowStyle}>
+                          {handReveal.yourRemainingTiles.map((tile, idx) => (
+                            <DominoTile
+                              key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
+                              tile={tile}
+                              size={48}
+                              className="hand-over-tile"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <div style={sectionLabelStyle}>{opponentName} remaining tiles</div>
+                        <div style={tileRowStyle}>
+                          {handReveal.opponentRemainingTiles.map((tile, idx) => (
+                            <DominoTile
+                              key={`reveal-${idx}-${tile.low}-${tile.high}`}
+                              tile={tile}
+                              size={48}
+                              className="hand-over-tile"
+                            />
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    {handReveal.yourRemainingTiles.length === 0 ? (
-                      <div
-                        style={{
-                          minHeight: 68,
-                          borderRadius: 12,
-                          border: '1px dashed rgba(236,252,245,0.24)',
-                          display: 'grid',
-                          placeItems: 'center',
-                          color: 'rgba(200,220,215,0.66)',
-                          fontSize: '0.9rem',
-                        }}
-                      >
-                        None remaining
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {handReveal.yourRemainingTiles.map((tile, idx) => (
-                          <DominoTile
-                            key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
-                            tile={tile}
-                            size={48}
-                            className="hand-over-tile"
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <div
-                      style={{
-                        fontSize: '0.78rem',
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        color: 'rgba(200,220,215,0.7)',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {`${opponentName} Tiles`}
-                    </div>
-                    {handReveal.opponentRemainingTiles.length === 0 ? (
-                      <div
-                        style={{
-                          minHeight: 68,
-                          borderRadius: 12,
-                          border: '1px dashed rgba(236,252,245,0.24)',
-                          display: 'grid',
-                          placeItems: 'center',
-                          color: 'rgba(200,220,215,0.66)',
-                          fontSize: '0.9rem',
-                        }}
-                      >
-                        None remaining
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {handReveal.opponentRemainingTiles.map((tile, idx) => (
-                          <DominoTile
-                            key={`reveal-${idx}-${tile.low}-${tile.high}`}
-                            tile={tile}
-                            size={48}
-                            className="hand-over-tile"
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
-                  <button
-                    className="btn"
-                    onClick={continueAfterHandReveal}
+                  );
+                })()}
+                <div style={{ display: 'grid', gap: 6, marginTop: 2 }}>
+                  <div
                     style={{
+                      height: 4,
                       borderRadius: 999,
-                      padding: '10px 24px',
-                      border: 'none',
-                      background: 'linear-gradient(180deg, #74f6ca 0%, #3ec49e 100%)',
-                      color: '#052018',
-                      fontWeight: 700,
-                      fontSize: '0.95rem',
-                      cursor: 'pointer',
+                      background: 'rgba(236,252,245,0.12)',
+                      overflow: 'hidden',
                     }}
                   >
-                    Continue
-                  </button>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.max(0, Math.min(1, handRevealAutoProgress)) * 100}%`,
+                        background: 'linear-gradient(90deg, rgba(125,241,197,0.9), rgba(125,241,197,0.45))',
+                        transition: 'width 50ms linear',
+                      }}
+                    />
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(200,220,215,0.66)' }}>
+                    Next hand in {Math.max(0, Math.ceil(handRevealAutoProgress * 4))}s
+                  </p>
                 </div>
               </div>
             </div>

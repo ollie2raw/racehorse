@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Board, DominoTile, ScoreTrackOverlay } from '../components';
 import type { Move, Tile } from '../types';
@@ -133,6 +133,7 @@ export default function BotMatchScreen({
   } | null>(null);
   const [lastBotChoice, setLastBotChoice] = useState<BotChoice | null>(null);
   const [handReveal, setHandReveal] = useState<BotHandReveal | null>(null);
+  const [handRevealProgress, setHandRevealProgress] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -470,20 +471,28 @@ export default function BotMatchScreen({
     return () => clearTimeout(timer);
   }, [match]);
 
-  const advanceHand = () => {
+  const advanceHand = useCallback(() => {
     setSelectedTile(null);
     setLastBotChoice(null);
     setHandReveal(null);
     setMatch((prev) => (prev.handOver && !prev.gameOver ? startNextBotHand(prev) : prev));
-  };
+  }, []);
 
   useEffect(() => {
-    if (!handReveal || match.gameOver) return;
+    if (!handReveal || match.gameOver) {
+      setHandRevealProgress(1);
+      return;
+    }
+    setHandRevealProgress(1);
+    const rafId = requestAnimationFrame(() => setHandRevealProgress(0));
     const timer = setTimeout(() => {
       advanceHand();
     }, 5000);
-    return () => clearTimeout(timer);
-  }, [handReveal, match.gameOver]);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timer);
+    };
+  }, [handReveal, match.gameOver, advanceHand]);
 
   useEffect(() => {
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
@@ -676,6 +685,8 @@ export default function BotMatchScreen({
               color: 'rgba(232,245,240,0.95)',
               display: 'grid',
               gap: 18,
+              position: 'relative',
+              overflow: 'hidden',
             }}
           >
             <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, marginBottom: 6 }}>
@@ -685,12 +696,15 @@ export default function BotMatchScreen({
               style={{
                 margin: 0,
                 fontSize: '1rem',
-                color: 'rgba(232,245,240,0.55)',
+                color:
+                  handReveal.winner === 'you' ? '#2ecc8e' : 'rgba(232,245,240,0.6)',
                 marginBottom: 20,
+                fontWeight: 600,
               }}
             >
-              {handReveal.winner === 'you' ? 'You' : 'Bot'} +{handReveal.pointsAwarded} ·{' '}
-              {handReveal.reason} ({handReveal.calcText})
+              {handReveal.winner === 'you'
+                ? `🎉 You won this hand  +${handReveal.pointsAwarded} pts`
+                : `Bot won this hand  +${handReveal.pointsAwarded} pts`}
             </p>
 
             {handReveal.reason === 'blocked' ? (
@@ -698,11 +712,11 @@ export default function BotMatchScreen({
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div
                     style={{
-                      fontSize: '0.8rem',
+                      fontSize: '0.95rem',
                       letterSpacing: '0.08em',
                       textTransform: 'uppercase',
-                      color: 'rgba(200,220,215,0.7)',
-                      fontWeight: 700,
+                      color: 'rgba(232,245,240,0.9)',
+                      fontWeight: 600,
                       textAlign: 'center',
                     }}
                   >
@@ -722,11 +736,11 @@ export default function BotMatchScreen({
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div
                     style={{
-                      fontSize: '0.8rem',
+                      fontSize: '0.95rem',
                       letterSpacing: '0.08em',
                       textTransform: 'uppercase',
-                      color: 'rgba(200,220,215,0.7)',
-                      fontWeight: 700,
+                      color: 'rgba(232,245,240,0.9)',
+                      fontWeight: 600,
                       textAlign: 'center',
                     }}
                   >
@@ -758,8 +772,9 @@ export default function BotMatchScreen({
                 </div>
                 <div
                   style={{
-                    color: 'rgba(232,245,240,0.8)',
-                    fontSize: '0.9rem',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: 'rgba(232,245,240,0.9)',
                     textAlign: 'center',
                   }}
                 >
@@ -783,9 +798,9 @@ export default function BotMatchScreen({
               <div style={{ display: 'grid', gap: 10 }}>
                 <div
                   style={{
-                    color: 'rgba(232,245,240,0.85)',
+                    color: 'rgba(232,245,240,0.9)',
                     fontWeight: 600,
-                    fontSize: '1rem',
+                    fontSize: '0.95rem',
                     textAlign: 'center',
                   }}
                 >
@@ -793,8 +808,9 @@ export default function BotMatchScreen({
                 </div>
                 <div
                   style={{
-                    color: 'rgba(232,245,240,0.8)',
-                    fontSize: '0.9rem',
+                    color: 'rgba(232,245,240,0.9)',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
                     textAlign: 'center',
                   }}
                 >
@@ -814,6 +830,28 @@ export default function BotMatchScreen({
                 )}
               </div>
             )}
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 3,
+                background: 'rgba(46,204,142,0.25)',
+                borderRadius: '0 0 20px 20px',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%`,
+                  background: '#2ecc8e',
+                  borderRadius: '0 0 20px 20px',
+                  transition: 'width 5000ms linear',
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
