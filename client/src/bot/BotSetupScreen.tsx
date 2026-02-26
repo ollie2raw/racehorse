@@ -46,7 +46,7 @@ export default function BotSetupScreen({
             <span className="mode-option-title">Start</span>
             <span className="mode-option-meta">Begin a {dealSize}-tile match vs bot</span>
           </button>
-          <button className="mode-option mode-option-secondary" onClick={onBack}>
+          <button className="mode-option mode-option-secondary bot-setup-back" onClick={onBack}>
             <span className="mode-option-title">Back to Home</span>
             <span className="mode-option-meta">Return to game mode menu</span>
           </button>

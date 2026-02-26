@@ -616,32 +616,16 @@ export default function DailyPuzzleScreen({
           subtitle="Score the most points you can in one turn."
           contentClassName="screen-shell"
         >
-            <p className="lobby-server mode-subtitle" style={{ marginTop: 10 }}>
-              {formattedPuzzleDate}
-            </p>
-            <div
-              style={{
-                width: 'fit-content',
-                margin: '8px 0 16px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(236,252,245,0.24)',
-                backdropFilter: 'blur(20px)',
-                borderRadius: 999,
-                padding: '5px 14px',
-                color: 'rgba(232,245,240,0.85)',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-              }}
-            >
-              🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
+            <div className="daily-entry-meta-row">
+              <p className="lobby-server mode-subtitle daily-entry-date">{formattedPuzzleDate}</p>
+              <div className="daily-entry-streak-badge">
+                🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
+              </div>
             </div>
             <div className="daily-entry-panel">
               <div className="mode-actions daily-entry-actions">
                 <button
-                  className="mode-option mode-option-primary mode-accent-daily"
+                  className="mode-option mode-option-primary mode-accent-daily daily-start-hero"
                   onClick={() => {
                     startTimeRef.current = Date.now();
                     setDailyLeaderboardOpen(false);
@@ -651,13 +635,13 @@ export default function DailyPuzzleScreen({
                   <span className="mode-option-title">▶ Start Today&apos;s Puzzle</span>
                 </button>
                 <button
-                  className="mode-option"
+                  className="mode-option mode-option-secondary daily-leaderboard-cta"
                   onClick={() => setDailyLeaderboardOpen(true)}
                 >
                   <span className="mode-option-title">🏆 Leaderboard</span>
                   <span className="mode-option-meta">See today&apos;s top scores</span>
                 </button>
-                <button className="mode-option" onClick={onBack}>
+                <button className="mode-option mode-option-secondary daily-entry-back-link" onClick={onBack}>
                   <span className="mode-option-title">← Back to Home</span>
                 </button>
               </div>

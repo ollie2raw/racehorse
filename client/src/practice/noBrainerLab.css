@@ -103,6 +103,7 @@
 
 .practice-center-status {
   min-width: 0;
+  grid-column: 2;
   justify-self: center;
   display: grid;
   justify-items: center;
@@ -111,6 +112,7 @@
 }
 
 .practice-top-spacer {
+  grid-column: 3;
   justify-self: end;
   width: 100%;
   min-width: 0;

@@ -191,14 +191,6 @@ export default function NoBrainerLabScreen({
   return (
     <div ref={rootRef} className={`app walnut-live practice-lab theme-${uiTheme}`}>
       <section className="wl-top-rail practice-top-rail" data-ui="hud">
-        <div className="practice-mode-pill">
-          <span className="practice-mode-accent" aria-hidden="true" />
-          <div className="practice-mode-copy">
-            
-            <span className="practice-mode-eyebrow">NO BRAINER</span>
-            <span className="practice-mode-title">7‑TILE RUN</span>
-          </div>
-        </div>
         <div className="wl-center-status practice-center-status">
           <span className="wl-turn-label your-turn">Clear all 7 tiles in one turn</span>
         </div>

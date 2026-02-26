@@ -1501,12 +1501,18 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [appMode, socket, loadWeeklyAwards]);
 
+  useEffect(() => {
+    if (appMode !== 'botSetup') return;
+    setBotDealSize(7);
+  }, [appMode]);
+
 
   useEffect(() => {
     if (appMode !== 'multiplayer' && appMode !== 'tournament') return;
     if (autoConnectAttemptedRef.current) return;
     if (!serverUrl) return;
-    if (intentionalDisconnectRef.current) return;
+    // Entering an online mode is explicit intent to reconnect.
+    intentionalDisconnectRef.current = false;
     autoConnectAttemptedRef.current = true;
     connect();
   }, [appMode, connect, serverUrl]);
@@ -1516,7 +1522,7 @@ export default function App() {
     // Ensure tournament mode has an active socket (create/join requires it)
     if (appMode !== 'tournament') return;
     if (socket) return;
-    if (intentionalDisconnectRef.current) return;
+    intentionalDisconnectRef.current = false;
     connect();
   }, [appMode, socket, connect]);
 
@@ -2502,6 +2508,7 @@ export default function App() {
 
     const doneCount = matches.filter((m: any) => m.status === 'done').length;
     const totalMatches = matches.length;
+    const hasHubRightColumn = matches.length > 0 || standings.length > 0;
 
     const youArePlaying = Boolean(
       activeMatch && mySocketId && (activeMatch.a === mySocketId || activeMatch.b === mySocketId),
@@ -2530,7 +2537,10 @@ export default function App() {
     const showLobbySetup = !tournamentId || tournamentState?.status === 'lobby';
 
     const createLobby = () => {
-      if (!socket) return setError('Not connected.');
+      if (!socket?.connected) {
+        connect();
+        return setError('Connecting to server…');
+      }
       socket.emit(
         'tournament:create',
         { username: authProfile?.username ?? 'Guest', userId: authUser?.id ?? null },
@@ -2544,7 +2554,10 @@ export default function App() {
     };
 
     const joinLobby = () => {
-      if (!socket) return setError('Not connected.');
+      if (!socket?.connected) {
+        connect();
+        return setError('Connecting to server…');
+      }
       const code = tournamentCode.trim().toUpperCase();
       if (!code) return setError('Enter a lobby code.');
       socket.emit(
@@ -2563,7 +2576,10 @@ export default function App() {
     };
 
     const start = () => {
-      if (!socket) return setError('Not connected.');
+      if (!socket?.connected) {
+        connect();
+        return setError('Connecting to server…');
+      }
       socket.emit('tournament:start', (resp: any) => {
         if (!resp?.ok) return setError(resp?.error === 'need_4' ? 'Need 4+ players.' : 'Start failed.');
         setError('');
@@ -2571,7 +2587,10 @@ export default function App() {
     };
 
     const spectate = () => {
-      if (!socket) return setError('Not connected.');
+      if (!socket?.connected) {
+        connect();
+        return setError('Connecting to server…');
+      }
       if (!activeRoom) return setError('No active match yet.');
       const code = String(activeRoom).trim().toUpperCase();
       socket.emit(
@@ -2593,8 +2612,8 @@ export default function App() {
 
     return (
       <LayoutScreen
-        className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-tournament"
-        badge="Racehorse Dominoes"
+        className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-tournament tournament-screen"
+        badge="Compete"
         title={tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}
         subtitle={
           tournamentId
@@ -2610,26 +2629,26 @@ export default function App() {
           </div>
         )}
 
-        <div className="mode-actions" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
+        <div className="mode-actions tournament-mode-actions" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
           {showLobbySetup && (
             <>
-              <button className="mode-option mode-option-primary" onClick={createLobby}>
+              <button className="mode-option mode-option-primary tournament-create-hero" onClick={createLobby}>
                 <span className="mode-option-title">Create Lobby</span>
                 <span className="mode-option-meta">Start a tournament lobby and share the code</span>
               </button>
-              <div className="mode-option" style={{ cursor: 'default' }}>
+              <div className="mode-option tournament-join-card" style={{ cursor: 'default' }}>
                 <span className="mode-option-title">Join Lobby</span>
                 <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
                 <div className="mode-join-row" style={{ marginTop: 10 }}>
                   <input
-                    className="mode-join-input"
+                    className="mode-join-input tournament-join-input"
                     type="text"
                     placeholder="Lobby Code"
                     value={tournamentCode}
                     onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
                     maxLength={6}
                   />
-                  <button className="mode-inline-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
+                  <button className="mode-inline-btn tournament-join-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
                     Join Lobby
                   </button>
                 </div>
@@ -2638,7 +2657,7 @@ export default function App() {
           )}
 
           {!!tournamentCode && (
-            <div className="mode-option" style={{ cursor: 'default' }}>
+            <div className="mode-option tournament-code-card" style={{ cursor: 'default' }}>
               <span className="mode-option-title">Lobby Code</span>
               <span className="mode-option-meta">Share this code to invite players</span>
               <div
@@ -2657,7 +2676,7 @@ export default function App() {
           )}
 
           {isHost && tournamentState?.status !== 'running' && (
-            <button className="mode-option mode-option-primary" onClick={start} disabled={players.length < 4}>
+            <button className="mode-option mode-option-primary tournament-start-hero" onClick={start} disabled={players.length < 4}>
               <span className="mode-option-title">Start Tournament</span>
               <span className="mode-option-meta">
                 {players.length < 4 ? 'Need 4+ players to start' : 'Generate schedule and begin first match'}
@@ -2667,16 +2686,16 @@ export default function App() {
 
           {tournamentId && (
             <div
+              className={`tournament-hub-grid ${hasHubRightColumn ? 'has-side-panels' : 'single-column'}`}
               style={{
                 display: 'grid',
                 width: '100%',
                 minWidth: 0,
-                gridTemplateColumns: 'minmax(300px, 340px) minmax(0, 1fr)',
                 gap: 16,
                 alignItems: 'start',
               }}
             >
-              <div style={{ display: 'grid', minWidth: 0, gap: 14 }}>
+              <div className="tournament-hub-left" style={{ display: 'grid', minWidth: 0, gap: 14 }}>
                 <div className="mode-option" style={{ cursor: 'default' }}>
                   <span className="mode-option-title">Status</span>
                   <span className="mode-option-meta">
@@ -2716,7 +2735,8 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ width: '100%', minWidth: 0, display: 'grid', gap: 14 }}>
+              {hasHubRightColumn && (
+              <div className="tournament-hub-right" style={{ width: '100%', minWidth: 0, display: 'grid', gap: 14 }}>
                 {matches.length > 0 && (
                   <div className="mode-option" style={{ cursor: 'default' }}>
                     <span className="mode-option-title">Bracket</span>
@@ -2813,11 +2833,12 @@ export default function App() {
                   </div>
                 )}
               </div>
+              )}
             </div>
           )}
 
           <button
-            className="mode-option mode-option-secondary"
+            className="mode-option mode-option-secondary tournament-disconnect-muted"
             style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
             onClick={() => disconnect('user disconnect')}
           >
@@ -3261,16 +3282,16 @@ export default function App() {
       {/* Disconnected Lobby Screen */}
       {!isConnected && !isRecoveringConnection && (
         <LayoutScreen
-          className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer"
-          badge="Racehorse Dominoes"
+          className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-disconnected"
+          badge="Play Online"
           title="Multiplayer Online"
           subtitle="Connect to create a room or join a friend using a room code."
           contentClassName="multiplayer-menu-card screen-shell"
         >
-            <p className="lobby-server mode-server-line">Server: {serverUrl}</p>
+            <p className="lobby-server mode-server-line multiplayer-server-line">Server: {serverUrl}</p>
             <div className="mode-actions mode-entry-panel">
               <button
-                className="mode-option mode-option-primary mode-accent-multiplayer"
+                className="mode-option mode-option-primary mode-accent-multiplayer multiplayer-connect-hero"
                 onClick={connect}
                 disabled={isConnecting}
               >
@@ -3279,7 +3300,7 @@ export default function App() {
                 </span>
                 <span className="mode-option-meta">Enable room creation and room joins</span>
               </button>
-              <button className="mode-option mode-option-secondary" onClick={createRoom} disabled>
+              <button className="mode-option mode-option-secondary multiplayer-create-muted" onClick={createRoom} disabled>
                 <span className="mode-option-title">Create New Room</span>
                 <span className="mode-option-meta">Connect first to start hosting</span>
               </button>
@@ -3293,7 +3314,7 @@ export default function App() {
                   maxLength={6}
                   disabled
                 />
-                <button className="mode-inline-btn" onClick={joinRoom} disabled>
+                <button className="mode-inline-btn multiplayer-join-btn" onClick={joinRoom} disabled>
                   Join Room
                 </button>
               </div>
@@ -3309,15 +3330,15 @@ export default function App() {
       {/* Lobby Screen */}
       {isConnected && !joinedRoom && (
         <LayoutScreen
-          className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer"
-          badge="Racehorse Dominoes"
+          className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-lobby"
+          badge="Play Online"
           title="Join or Create a Room"
           subtitle="Create a new room or enter a code to join your friend instantly."
           contentClassName="multiplayer-menu-card screen-shell"
         >
             <div className="mode-actions mode-entry-panel">
               <button
-                className={`mode-option mode-option-primary mode-accent-multiplayer ${pendingUiAction === 'create' ? 'is-loading' : ''}`}
+                className={`mode-option mode-option-primary mode-accent-multiplayer multiplayer-create-hero ${pendingUiAction === 'create' ? 'is-loading' : ''}`}
                 onClick={createRoom}
                 disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
               >
@@ -3335,14 +3356,14 @@ export default function App() {
                   disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
                 />
                 <button
-                  className={`mode-inline-btn ${pendingUiAction === 'join' ? 'is-loading' : ''}`}
+                  className={`mode-inline-btn multiplayer-join-btn ${pendingUiAction === 'join' ? 'is-loading' : ''}`}
                   onClick={joinRoom}
                   disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
                 >
                   {pendingUiAction === 'join' ? 'Joining…' : 'Join Room'}
                 </button>
               </div>
-              <button className="mode-option mode-option-secondary" onClick={() => disconnect('user disconnect')}>
+              <button className="mode-option mode-option-secondary multiplayer-disconnect-muted" onClick={() => disconnect('user disconnect')}>
                 <span className="mode-option-title">Disconnect</span>
                 <span className="mode-option-meta">Return to offline mode selector</span>
               </button>
@@ -3353,15 +3374,15 @@ export default function App() {
       {/* Room Screen (waiting for game) */}
       {isConnected && joinedRoom && !state && (
         <LayoutScreen
-          className="screen room-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer"
-          badge="Racehorse Dominoes"
-          title={`Room: ${joinedRoom}`}
+          className="screen room-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-room"
+          badge="Play Online"
+          title={<span>Room: <span className="multiplayer-room-code">{joinedRoom}</span></span>}
           subtitle="Waiting for all players to join before starting the hand."
           contentClassName="multiplayer-menu-card screen-shell"
         >
             <div className="mode-entry-panel room-entry-panel">
-            <div className="players-list mode-room-list">
-              <h3>Players ({players.length}/2)</h3>
+            <div className="players-list mode-room-list multiplayer-players-panel">
+              <h3 className="multiplayer-players-label">Players ({players.length}/2)</h3>
               {players.map((p) => (
                 <div
                   key={p.id}
@@ -3373,10 +3394,10 @@ export default function App() {
                     </span>
                     {p.id === you && <span className="mode-room-item-sub">@{p.username}</span>}
                   </div>
-                  {p.id === you && <span className="badge">Host</span>}
+                  {p.id === you && <span className="badge multiplayer-host-badge">Host</span>}
                 </div>
               ))}
-              {players.length < 2 && <div className="waiting">Waiting for another player...</div>}
+              {players.length < 2 && <div className="waiting multiplayer-waiting-live">Waiting for another player...</div>}
             </div>
             {players.length === 2 && (
               <button
@@ -3388,11 +3409,11 @@ export default function App() {
                 <span className="mode-option-meta">Begin the live multiplayer hand</span>
               </button>
             )}
-            <button className="mode-option mode-option-secondary" onClick={copyInviteLink}>
+            <button className="mode-option mode-option-secondary multiplayer-copy-cta" onClick={copyInviteLink}>
               <span className="mode-option-title">Copy Invite Link</span>
               <span className="mode-option-meta">Share one-tap room join with friends</span>
             </button>
-            <button className="mode-option mode-option-secondary" onClick={() => disconnect('user leave room')}>
+            <button className="mode-option mode-option-secondary multiplayer-leave-muted" onClick={() => disconnect('user leave room')}>
               <span className="mode-option-title">Leave Room</span>
               <span className="mode-option-meta">Exit this room and return to setup</span>
             </button>

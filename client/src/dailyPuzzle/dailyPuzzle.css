@@ -632,7 +632,7 @@
 
 .daily-entry-panel {
   width: min(680px, 100%);
-  margin-top: 6px;
+  margin-top: 0;
   padding: 14px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -640,44 +640,45 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+.daily-entry-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 24px;
+}
+
+.daily-entry-date {
+  margin: 0;
+}
+
+.daily-entry-streak-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-size: 12px;
+  background: rgba(240, 192, 64, 0.12);
+  border: 1px solid rgba(240, 192, 64, 0.25);
+  color: #f0c040;
+}
+
 .daily-start-hero {
   width: 100%;
-  background: #22c55e !important;
-  border-color: rgba(183, 255, 215, 0.55) !important;
-  box-shadow:
-    0 12px 28px rgba(20, 115, 66, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  animation: daily-cta-pulse 2.6s ease-in-out infinite;
+  padding: 24px 22px !important;
+  border-color: rgba(240, 192, 64, 0.5) !important;
+  background: rgba(240, 192, 64, 0.1) !important;
 }
 
 .daily-start-hero .mode-option-title {
-  font-size: 1.1rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: #fff;
+  font-size: 16px !important;
+  font-weight: 700 !important;
 }
 
 .daily-leaderboard-cta {
   width: 100%;
-  padding-top: 14px !important;
-  padding-bottom: 14px !important;
-}
-
-.daily-back-link {
-  margin: 8px auto 0;
-  border: none;
-  background: transparent;
-  color: rgba(206, 221, 232, 0.62);
-  font-size: 0.84rem;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  text-decoration: none;
-  opacity: 0.5;
-}
-
-.daily-back-link:hover {
-  color: rgba(232, 245, 255, 0.86);
-  opacity: 0.9;
+  border-color: rgba(240, 192, 64, 0.2) !important;
+  background: rgba(240, 192, 64, 0.04) !important;
+  opacity: 1 !important;
 }
 
 .daily-entry-actions .mode-option {
@@ -685,10 +686,7 @@
 }
 
 .daily-entry-panel .mode-option-primary {
-  border-color: rgba(149, 240, 202, 0.56);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 10px 24px rgba(7, 24, 22, 0.3);
+  box-shadow: 0 0 20px rgba(129, 140, 248, 0.08);
 }
 
 .daily-entry-panel .mode-option:not(.mode-option-primary) {
@@ -697,9 +695,17 @@
 }
 
 .daily-entry-back-link {
-  margin: 4px auto 0;
-  font-size: 0.82rem;
-  opacity: 0.72;
+  opacity: 0.4 !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  background: transparent !important;
+}
+
+.daily-entry-back-link .mode-option-title::before {
+  display: none;
+}
+
+.daily-entry-back-link:hover {
+  opacity: 0.7 !important;
 }
 
 .daily-you-pill {
@@ -713,19 +719,4 @@
   text-align: center;
   color: rgba(225, 238, 246, 0.9);
   font-size: 1rem;
-}
-
-@keyframes daily-cta-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 12px 28px rgba(20, 115, 66, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  }
-  50% {
-    box-shadow:
-      0 16px 32px rgba(20, 115, 66, 0.34),
-      0 0 0 2px rgba(152, 253, 194, 0.24),
-      inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  }
 }
