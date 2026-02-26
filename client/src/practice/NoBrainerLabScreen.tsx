@@ -54,7 +54,6 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
   const [record, setRecord] = useState<NoBrainerHandRecord | null>(null);
   const [practiceState, setPracticeState] = useState<NoBrainerPracticeState | null>(null);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
-  const [hintText, setHintText] = useState<string>('');
   const [showSolution, setShowSolution] = useState(false);
   const [error, setError] = useState<string>('');
   const [reloadTick, setReloadTick] = useState(0);
@@ -116,7 +115,6 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
     setRecord(nextRecord);
     setPracticeState(createPracticeState(nextRecord.hand));
     setSelectedTile(null);
-    setHintText('');
     setShowSolution(false);
     setError('');
   }, [dataset]);
@@ -132,25 +130,19 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
     const next = playPracticeMove(practiceState, selectedTile, position);
     setPracticeState(next);
     setSelectedTile(null);
-    setHintText('');
   };
 
   const onHint = () => {
     if (!practiceState || !record) return;
     const hint = hintForState(practiceState, record.example);
-    if (!hint) {
-      setHintText('No hint available from solution sequence right now.');
-      return;
-    }
+    if (!hint) return;
     setSelectedTile(hint.tile);
-    setHintText(`Try ${tileLabel(hint.tile)} on ${hint.position}.`);
   };
 
   const retryHand = () => {
     if (!record) return;
     setPracticeState(createPracticeState(record.hand));
     setSelectedTile(null);
-    setHintText('');
     setShowSolution(false);
     setError('');
   };
@@ -196,28 +188,46 @@ export default function NoBrainerLabScreen({ onBack }: NoBrainerLabScreenProps) 
 
   return (
     <div ref={rootRef} className={`app walnut-live practice-lab theme-${uiTheme}`}>
-      <section className="wl-top-rail practice-top-rail" data-ui="hud">
-        <div className="wl-player-pill is-active practice-mode-pill">
+      <section
+        className="wl-top-rail practice-top-rail"
+        data-ui="hud"
+        style={{ position: 'relative', minHeight: 72, display: 'flex', alignItems: 'center' }}
+      >
+        <div
+          className="wl-player-pill is-active practice-mode-pill"
+          style={{
+            position: 'absolute',
+            left: 12,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            opacity: 0.9,
+            scale: '0.98',
+          }}
+        >
           <div className="wl-pill-top">
-            <span className="wl-player-label">No-Brainer Lab</span>
+            <span className="wl-player-label" style={{ fontSize: '0.7rem' }}>
+              No-Brainer Lab
+            </span>
           </div>
-          <span className="wl-player-score" style={{ fontSize: '0.9rem' }}>
+          <span className="wl-player-score" style={{ fontSize: '0.88rem' }}>
             7-Tile Run
           </span>
         </div>
-        <div className="wl-center-status practice-center-status">
+        <div
+          className="wl-center-status practice-center-status"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translateX(-50%) translateY(-50%)',
+            display: 'grid',
+            justifyItems: 'center',
+            textAlign: 'center',
+            width: 'min(92vw, 640px)',
+          }}
+        >
           <span className="wl-turn-label your-turn">Clear all 7 tiles in one turn.</span>
-          <span className="wl-room-code">Continue after scoring plays or doubles, then finish clean.</span>
         </div>
-      </section>
-
-      <section className="practice-status-row" style={{ marginTop: 0 }}>
-        <div className={`practice-status ${practiceState.status}`}>
-          {practiceState.status === 'playing' && (practiceState.board?.mainLine.length ?? 0) === 0
-            ? 'Choose a legal opening tile.'
-            : practiceState.message}
-        </div>
-        {hintText && <div className="practice-hint">{hintText}</div>}
       </section>
 
       <div className="wl-stage-shell practice-stage-shell">
