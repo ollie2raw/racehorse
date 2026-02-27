@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from '../components';
+import TileRack from '../components/TileRack';
 import type { Move, Tile } from '../types';
 import {
   fetchDailyPuzzleLeaderboard,
@@ -1146,23 +1147,25 @@ export default function BotMatchScreen({
 
       <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
         <div className="bot-hud-left-cluster">
-          <button
-            type="button"
-            className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
-            ref={opponentPillRef}
-            onClick={() => setScoreTrackOpen(true)}
-            aria-label="Open score track"
-            style={{ width: 142, minWidth: 'unset' }}
-          >
-            <div className="wl-pill-top">
-              <span className="wl-player-label">Fritz</span>
-              <span className={`wl-tiles-chip ${botTurn ? 'is-pulsing' : ''}`}>
-                <span className="wl-tiles-count">{match.players.bot.hand.length}</span>
-                <span className="wl-tiles-text">tiles</span>
-              </span>
-            </div>
-            <span className="wl-player-score">{match.players.bot.score}</span>
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
+              ref={opponentPillRef}
+              onClick={() => setScoreTrackOpen(true)}
+              aria-label="Open score track"
+              style={{ width: 110, minWidth: 'unset' }}
+            >
+              <div className="wl-pill-top">
+                <span className="wl-player-label">Fritz</span>
+              </div>
+              <span className="wl-player-score">{match.players.bot.score}</span>
+            </button>
+            <TileRack
+              count={match.players.bot.hand.length}
+              isActive={botTurn}
+            />
+          </div>
         </div>
 
         <div

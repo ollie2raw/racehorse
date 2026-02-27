@@ -5,6 +5,7 @@ import { traceSocketEvent } from "./debug/socketTrace";
 import { io, Socket } from 'socket.io-client';
 import './App.css';
 import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from './components';
+import TileRack from './components/TileRack';
 import {
   playBlockedSound,
   playDrawSound,
@@ -3823,23 +3824,25 @@ export default function App() {
           )}
 
           <div className="wl-top-rail" data-ui="hud" style={{ position: 'relative' }}>
-            <button
-              type="button"
-              ref={opponentPillRef}
-              className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
-              onClick={() => setScoreTrackOpen(true)}
-              aria-label="Open score track"
-              style={{ width: 154, minWidth: 'unset' }}
-            >
-              <div className="wl-pill-top">
-                <span className="wl-player-label">{opponentName}</span>
-                <span className={`wl-tiles-chip ${oppTilePulse ? 'is-pulsing' : ''}`}>
-                  <span className="wl-tiles-count">{opponentTileCount}</span>
-                  <span className="wl-tiles-text">tiles</span>
-                </span>
-              </div>
-              <span className="wl-player-score">{opponentScore}</span>
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                ref={opponentPillRef}
+                className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
+                onClick={() => setScoreTrackOpen(true)}
+                aria-label="Open score track"
+                style={{ width: 154, minWidth: 'unset' }}
+              >
+                <div className="wl-pill-top">
+                  <span className="wl-player-label">{opponentName}</span>
+                </div>
+                <span className="wl-player-score">{opponentScore}</span>
+              </button>
+              <TileRack
+                count={opponentTileCount}
+                isActive={!isMyTurn}
+              />
+            </div>
             <div
               className="wl-center-status"
               style={{
