@@ -155,6 +155,28 @@ function buildThwack(
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
+const soundQueue: Array<() => void> = [];
+let soundQueueRunning = false;
+
+export function queueSound(fn: () => void, delayMs = 0): void {
+  soundQueue.push(() => {
+    setTimeout(() => {
+      fn();
+      soundQueueRunning = false;
+      if (soundQueue.length > 0) {
+        soundQueueRunning = true;
+        const next = soundQueue.shift()!;
+        next();
+      }
+    }, delayMs);
+  });
+  if (!soundQueueRunning) {
+    soundQueueRunning = true;
+    const next = soundQueue.shift()!;
+    next();
+  }
+}
+
 export type TileSoundType = 'standard' | 'slam' | 'deal';
 
 /**
@@ -208,37 +230,54 @@ export function playTileSound(type: TileSoundType, isMuted: boolean): void {
 
   switch (type) {
     case 'standard': {
-      // Domino click + short body thud.
-      const stdDecay1 = 0.056 + (Math.random() * 0.014 - 0.007);
+      // Sharp wooden clack — bright attack + resonant body
+
+      // Layer 1: sharp high click on impact
       buildThwack(
         ac,
         now,
-        /* bodyFreq */ 760,
+        /* bodyFreq */ 1100,
         /* oscType */ 'triangle',
-        /* pitchDrop */ 0.58,
-        /* peakGain */ 0.24,
-        /* decayTime */ stdDecay1,
-        /* lpFreq */ 780,
-        /* lpQ */ 0.9,
-        /* noiseGain */ 0.2,
-        /* noiseDur */ 0.015,
+        /* pitchDrop */ 0.45,
+        /* peakGain */ 0.32,
+        /* decayTime */ 0.038,
+        /* lpFreq */ 2200,
+        /* lpQ */ 1.4,
+        /* noiseGain */ 0.38,
+        /* noiseDur */ 0.014,
         /* startDelay */ 0,
       );
-      // Low body resonance.
-      const stdDecay2 = 0.102 + (Math.random() * 0.016 - 0.008);
+
+      // Layer 2: woody mid-body resonance
       buildThwack(
         ac,
         now,
-        /* bodyFreq */ 158,
+        /* bodyFreq */ 420,
+        /* oscType */ 'triangle',
+        /* pitchDrop */ 0.52,
+        /* peakGain */ 0.26,
+        /* decayTime */ 0.085,
+        /* lpFreq */ 1100,
+        /* lpQ */ 1.2,
+        /* noiseGain */ 0.14,
+        /* noiseDur */ 0.018,
+        /* startDelay */ 0.004,
+      );
+
+      // Layer 3: short low thud for weight
+      buildThwack(
+        ac,
+        now,
+        /* bodyFreq */ 95,
         /* oscType */ 'sine',
-        /* pitchDrop */ 0.72,
+        /* pitchDrop */ 0.58,
         /* peakGain */ 0.18,
-        /* decayTime */ stdDecay2,
-        /* lpFreq */ 520,
-        /* lpQ */ 1.1,
+        /* decayTime */ 0.065,
+        /* lpFreq */ 280,
+        /* lpQ */ 0.9,
         /* noiseGain */ 0,
         /* noiseDur */ 0,
-        /* startDelay */ 0.003,
+        /* startDelay */ 0.006,
       );
       break;
     }
@@ -297,5 +336,186 @@ export function playTileSound(type: TileSoundType, isMuted: boolean): void {
       );
       break;
     }
+  }
+}
+
+export function playScoreSound(points: number, isMuted: boolean): void {
+  if (isMuted) return;
+  let ac: AudioContext;
+  try {
+    ac = getCtx();
+  } catch {
+    return;
+  }
+
+  const pingCount = points >= 15 ? 3 : points >= 10 ? 2 : 1;
+
+  // Arcade chime notes — ascending major chord
+  const notes = [523, 659, 784]; // C5, E5, G5
+
+  for (let i = 0; i < pingCount; i++) {
+    const t = ac.currentTime + i * 0.12;
+    const freq = notes[i];
+
+    // Clean sine oscillator
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+
+    // Second oscillator one octave up at low volume for shimmer
+    const osc2 = ac.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(freq * 2, t);
+
+    // ADSR envelope
+    const env = ac.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.28, t + 0.01); // fast attack
+    env.gain.linearRampToValueAtTime(0.22, t + 0.04); // slight decay
+    env.gain.linearRampToValueAtTime(0.18, t + 0.12); // sustain
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.35); // release
+
+    // Shimmer gain much quieter
+    const env2 = ac.createGain();
+    env2.gain.setValueAtTime(0, t);
+    env2.gain.linearRampToValueAtTime(0.06, t + 0.01);
+    env2.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+    osc.connect(env);
+    osc2.connect(env2);
+    env.connect(ac.destination);
+    env2.connect(ac.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.4);
+    osc2.start(t);
+    osc2.stop(t + 0.25);
+  }
+}
+
+export function playDrawSound(isMuted: boolean): void {
+  if (isMuted) return;
+
+  let ac: AudioContext;
+  try {
+    ac = getCtx();
+  } catch {
+    return;
+  }
+  const now = ac.currentTime;
+
+  buildThwack(ac, now, 280, 'triangle', 0.62, 0.12, 0.07, 420, 0.8, 0.28, 0.035, 0);
+}
+
+export function playHandWinSound(isMuted: boolean): void {
+  if (isMuted) return;
+
+  let ac: AudioContext;
+  try {
+    ac = getCtx();
+  } catch {
+    return;
+  }
+  const now = ac.currentTime;
+
+  buildThwack(ac, now, 440, 'sine', 0.98, 0.2, 0.18, 2000, 1.0, 0, 0, 0);
+  buildThwack(ac, now, 660, 'sine', 0.98, 0.18, 0.22, 2000, 1.0, 0, 0, 0.14);
+}
+
+export function playHandLoseSound(isMuted: boolean): void {
+  if (isMuted) return;
+
+  let ac: AudioContext;
+  try {
+    ac = getCtx();
+  } catch {
+    return;
+  }
+  const now = ac.currentTime;
+
+  buildThwack(ac, now, 440, 'sine', 0.98, 0.16, 0.18, 1800, 1.0, 0, 0, 0);
+  buildThwack(ac, now, 294, 'sine', 0.96, 0.14, 0.22, 1800, 1.0, 0, 0, 0.14);
+}
+
+export function playMatchWinSound(isMuted: boolean): void {
+  if (isMuted) return;
+
+  let ac: AudioContext;
+  try {
+    ac = getCtx();
+  } catch {
+    return;
+  }
+  const now = ac.currentTime;
+
+  buildThwack(ac, now, 392, 'sine', 0.99, 0.22, 0.28, 2400, 1.3, 0, 0, 0);
+  buildThwack(ac, now, 523, 'sine', 0.99, 0.2, 0.28, 2400, 1.3, 0, 0, 0.16);
+  buildThwack(ac, now, 659, 'sine', 0.99, 0.24, 0.38, 2400, 1.3, 0, 0, 0.32);
+}
+
+export function playMatchLoseSound(isMuted: boolean): void {
+  if (isMuted) return;
+
+  let ac: AudioContext;
+  try {
+    ac = getCtx();
+  } catch {
+    return;
+  }
+  const now = ac.currentTime;
+
+  buildThwack(ac, now, 494, 'sine', 0.97, 0.16, 0.28, 1600, 1.0, 0, 0, 0);
+  buildThwack(ac, now, 370, 'sine', 0.97, 0.14, 0.28, 1600, 1.0, 0, 0, 0.18);
+  buildThwack(ac, now, 294, 'sine', 0.95, 0.12, 0.36, 1600, 1.0, 0, 0, 0.38);
+}
+
+export function playBlockedSound(isMuted: boolean): void {
+  if (isMuted) return;
+
+  let ac: AudioContext;
+  try {
+    ac = getCtx();
+  } catch {
+    return;
+  }
+  const now = ac.currentTime;
+
+  buildThwack(ac, now, 320, 'triangle', 0.88, 0.15, 0.35, 900, 1.4, 0.06, 0.02, 0);
+  buildThwack(ac, now, 339, 'triangle', 0.88, 0.13, 0.35, 900, 1.4, 0, 0, 0);
+}
+
+export function playYourTurnSound(isMuted: boolean): void {
+  if (isMuted) return;
+
+  let ac: AudioContext;
+  try {
+    ac = getCtx();
+  } catch {
+    return;
+  }
+  const t = ac.currentTime;
+
+  // Soft two-note chime — gentle notification feel
+  const notes = [330, 440]; // E4 then A4 — simple pleasant interval
+
+  for (let i = 0; i < notes.length; i++) {
+    const t0 = t + i * 0.1;
+    const freq = notes[i];
+
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+
+    const env = ac.createGain();
+    env.gain.setValueAtTime(0, t0);
+    env.gain.linearRampToValueAtTime(0.15, t0 + 0.012); // soft attack
+    env.gain.linearRampToValueAtTime(0.1, t0 + 0.06); // slight decay
+    env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28); // gentle fade
+
+    osc.connect(env);
+    env.connect(ac.destination);
+
+    osc.start(t0);
+    osc.stop(t0 + 0.32);
   }
 }

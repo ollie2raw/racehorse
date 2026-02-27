@@ -152,6 +152,61 @@ export default function AnalyzerModal({
                       <div>Board Ends: {move.boardEnds[0]} · {move.boardEnds[1]}</div>
                       <div>Played: {tileText(move.playedTile)}</div>
                       <div>Best: {tileText(move.bestTile)}</div>
+                      {move.bestBreakdown && (
+                        <>
+                          <div
+                            style={{
+                              fontSize: '0.78rem',
+                              color: 'rgba(180,200,220,0.6)',
+                              marginBottom: 4,
+                              letterSpacing: '0.04em',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            Fritz&apos;s evaluation of best move:
+                          </div>
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(2, 1fr)',
+                              gap: '4px 16px',
+                              padding: '6px 8px',
+                              background: 'rgba(255,255,255,0.04)',
+                              borderRadius: 6,
+                              fontSize: '0.82rem',
+                              color: 'rgba(200,220,235,0.75)',
+                            }}
+                          >
+                            <span>
+                              🎯 Scored:{' '}
+                              {move.bestBreakdown.immediate > 0
+                                ? `${move.bestBreakdown.immediate} pt${
+                                    move.bestBreakdown.immediate !== 1 ? 's' : ''
+                                  }`
+                                : 'No points'}
+                            </span>
+                            <span>🤚 Tiles kept playable: {move.bestBreakdown.mobility}</span>
+                            <span>
+                              🛡 Board control:{' '}
+                              {move.bestBreakdown.denial > -10
+                                ? 'Strong'
+                                : move.bestBreakdown.denial > -20
+                                  ? 'Moderate'
+                                  : 'Weak'}
+                            </span>
+                            <span>⚖️ Pips shed: {move.bestBreakdown.unload}</span>
+                            <span>
+                              ⚠️ Reply risk:{' '}
+                              {move.bestBreakdown.replyRisk < 3
+                                ? 'Low'
+                                : move.bestBreakdown.replyRisk < 7
+                                  ? 'Medium'
+                                  : 'High'}
+                            </span>
+                            {move.bestBreakdown.doubleBias > 0 && <span>🎲 Double play</span>}
+                          </div>
+                        </>
+                      )}
                       <div>Hand: {move.handBefore.length ? move.handBefore.map(tileText).join('  ') : '—'}</div>
                       <div>Valid: {move.validMoves.length ? move.validMoves.map(tileText).join('  ') : '—'}</div>
                       <div>Score: {move.score}/100</div>

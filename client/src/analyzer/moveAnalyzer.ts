@@ -1,5 +1,8 @@
-import type { MoveEntry, TileTuple } from './moveLogger';
+import type { EngineBestMove, MoveEntry, TileTuple } from './moveLogger';
 import { sameTileTuple, valueForTile } from './moveLogger';
+import { chooseBotMove } from '../bot/botHeuristics';
+import { createBotMatch, previewPlayMove } from '../bot/botEngine';
+import type { BotMatchState } from '../bot/botEngine';
 
 export type MoveRating = 'Brilliant' | 'Great' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder';
 
@@ -19,6 +22,7 @@ export type AnalyzedMove = {
   boardRenderState: MoveEntry['boardRenderState'];
   handSnapshot: MoveEntry['handSnapshot'];
   engineBestMove: MoveEntry['engineBestMove'];
+  bestBreakdown?: EngineBestMove['breakdown'];
 };
 
 export type GameAnalysis = {
@@ -60,6 +64,103 @@ function uniqueTiles(tiles: TileTuple[]): TileTuple[] {
   return out;
 }
 
+function buildExplanation(
+  playedTile: TileTuple | undefined,
+  bestTile: TileTuple | undefined,
+  rating: MoveRating,
+  playedBreakdown: EngineBestMove['breakdown'] | null,
+  bestBreakdown: { immediate: number; mobility: number; denial: number; unload: number } | null,
+): string {
+  if (rating === 'Brilliant') {
+    const pts = bestBreakdown?.immediate ?? 0;
+    const mob = bestBreakdown?.mobility ?? 0;
+    const parts: string[] = [];
+    if (pts > 0) parts.push(`scores ${pts} point${pts !== 1 ? 's' : ''}`);
+    if (mob >= 3) parts.push(`keeps ${mob} tiles playable`);
+    const detail = parts.length > 0 ? ` — ${parts.join(', ')}` : '';
+    return `Brilliant. You found the Fritz line${detail}.`;
+  }
+  if (!playedTile || !bestTile) return 'No alternatives available to compare.';
+  const played = tileLabel(playedTile);
+  const best = tileLabel(bestTile);
+  const reasons: string[] = [];
+  if (bestBreakdown) {
+    if (bestBreakdown.immediate > (playedBreakdown?.immediate ?? 0)) {
+      const diff = bestBreakdown.immediate - (playedBreakdown?.immediate ?? 0);
+      reasons.push(`scores ${diff} more point${diff !== 1 ? 's' : ''}`);
+    }
+    if (bestBreakdown.mobility > (playedBreakdown?.mobility ?? 0) + 1) {
+      reasons.push(`leaves more tiles playable`);
+    }
+    if (bestBreakdown.denial < (playedBreakdown?.denial ?? 0) - 2) {
+      reasons.push(`better board denial`);
+    }
+    if (bestBreakdown.unload > (playedBreakdown?.unload ?? 0)) {
+      reasons.push(`unloads higher pip liability`);
+    }
+  }
+  const reasonText = reasons.length > 0 ? ` — ${reasons.join(', ')}` : '';
+  if (rating === 'Great') return `Great move. Fritz also liked ${best}${reasonText}.`;
+  if (rating === 'Good') return `Good move. ${best} was slightly stronger${reasonText}.`;
+  if (rating === 'Inaccuracy')
+    return `Inaccuracy. You played ${played}, but ${best} was more accurate${reasonText}.`;
+  if (rating === 'Mistake')
+    return `Mistake. You played ${played}, but ${best} would have been significantly better${reasonText}.`;
+  return `Blunder. You played ${played}, but ${best} was a major upgrade${reasonText}.`;
+}
+
+function computePlayedBreakdown(
+  entry: MoveEntry,
+): EngineBestMove['breakdown'] | null {
+  if (!entry.tile || !entry.boardRenderState) return null;
+  try {
+    const template = createBotMatch(60, 7);
+    const hand = entry.handBefore.map((t) => ({ low: t[0], high: t[1] }));
+    const evalState: BotMatchState = {
+      ...template,
+      board: entry.boardRenderState as unknown as typeof template.board,
+      currentPlayer: 'you',
+      handOpen: true,
+      handOver: false,
+      gameOver: false,
+      winningScore: 60,
+      consecutivePasses: 0,
+      boneyard: new Array(14).fill({ low: 0, high: 0 }),
+      players: {
+        you: { ...template.players.you, hand, score: 0 },
+        bot: { ...template.players.bot, hand: [], score: 0 },
+      },
+    };
+    const move = {
+      type: 'play' as const,
+      tile: { low: entry.tile[0], high: entry.tile[1] },
+      position: entry.boardRenderState.mainLine.length === 0
+        ? ('left' as const)
+        : ('right' as const),
+    };
+    const preview = previewPlayMove(evalState, 'you', move);
+    if (!preview) return null;
+    const immediate = preview.immediateScore;
+    const mobility = preview.nextHand.filter((t) =>
+      preview.openEnds.some((e) => e === t.low || e === t.high),
+    ).length;
+    const unload = entry.tile[0] + entry.tile[1];
+    const denial = preview.openEnds.reduce((sum, end) => {
+      return sum - (end >= 0 && end <= 6 ? 7 : 0);
+    }, 0);
+    return {
+      immediate,
+      doubleBias: entry.tile[0] === entry.tile[1] ? 1 : 0,
+      mobility,
+      denial,
+      unload,
+      replyRisk: 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function classifyMove(
   entry: MoveEntry,
 ): {
@@ -72,15 +173,16 @@ function classifyMove(
   const validTiles = uniqueTiles(entry.validMoves);
   const bestMove = entry.engineBestMove;
   const bestTile = bestMove?.tile;
+  const bestBreakdown = entry.engineBestMove?.breakdown ?? null;
+  const playedBreakdown = computePlayedBreakdown(entry);
 
-  if ((entry.action === 'draw' || entry.action === 'pass') && validTiles.length > 0) {
-    const bestText = bestTile ? ` ${tileLabel(bestTile)} was playable.` : '';
+  if (entry.action === 'pass' && validTiles.length > 0) {
     return {
       score: 12,
       rating: 'Blunder',
       bestTile,
       bestPosition: bestMove?.position,
-      explanation: `You could have played a tile instead of drawing/passing.${bestText}`,
+      explanation: buildExplanation(entry.tile, bestTile, 'Blunder', playedBreakdown, bestBreakdown),
     };
   }
 
@@ -89,13 +191,13 @@ function classifyMove(
       return {
         score: 84,
         rating: 'Good',
-        explanation: 'No legal play was available on this turn.',
+        explanation: buildExplanation(entry.tile, bestTile, 'Good', playedBreakdown, bestBreakdown),
       };
     }
     return {
       score: 46,
       rating: 'Inaccuracy',
-      explanation: 'A playable option existed but was not used.',
+      explanation: buildExplanation(entry.tile, bestTile, 'Inaccuracy', playedBreakdown, bestBreakdown),
     };
   }
 
@@ -103,7 +205,7 @@ function classifyMove(
     return {
       score: 72,
       rating: 'Good',
-      explanation: 'Move quality could not be compared against alternatives.',
+      explanation: buildExplanation(entry.tile, bestTile, 'Good', playedBreakdown, bestBreakdown),
     };
   }
 
@@ -122,57 +224,57 @@ function classifyMove(
   const bestPosition = bestMove?.position;
   const diff = bestEval - playedEval;
 
-  if (sameTileTuple(entry.tile, bestForAdvice) && Math.abs(diff) <= 0.05) {
+  if (bestTile && sameTileTuple(entry.tile, bestTile)) {
     return {
       score: 99,
       rating: 'Brilliant',
-      bestTile: bestForAdvice,
+      bestTile,
       bestPosition,
-      explanation: `Brilliant. You matched the engine line with ${tileLabel(bestForAdvice)}.`,
+      explanation: buildExplanation(entry.tile, bestTile, 'Brilliant', playedBreakdown, bestBreakdown),
     };
   }
-  if (sameTileTuple(entry.tile, bestForAdvice) || diff <= 0.25) {
+  if (diff <= 1.5) {
     return {
-      score: 91,
+      score: 88,
       rating: 'Great',
       bestTile: bestForAdvice,
       bestPosition,
-      explanation: `Great move. ${tileLabel(bestForAdvice)} was the cleanest engine continuation.`,
+      explanation: buildExplanation(entry.tile, bestForAdvice, 'Great', playedBreakdown, bestBreakdown),
     };
   }
-  if (diff <= 0.6) {
+  if (diff <= 3.0) {
     return {
-      score: 79,
+      score: 74,
       rating: 'Good',
       bestTile: bestForAdvice,
       bestPosition,
-      explanation: `Solid move. ${tileLabel(bestForAdvice)} was slightly stronger.`,
+      explanation: buildExplanation(entry.tile, bestForAdvice, 'Good', playedBreakdown, bestBreakdown),
     };
   }
-  if (diff <= 1.2) {
+  if (diff <= 5.0) {
     return {
-      score: 62,
+      score: 58,
       rating: 'Inaccuracy',
       bestTile: bestForAdvice,
       bestPosition,
-      explanation: `You played ${tileLabel(entry.tile)}, but ${tileLabel(bestForAdvice)} was more accurate here.`,
+      explanation: buildExplanation(entry.tile, bestForAdvice, 'Inaccuracy', playedBreakdown, bestBreakdown),
     };
   }
-  if (diff <= 2.0) {
+  if (diff <= 8.0) {
     return {
-      score: 44,
+      score: 38,
       rating: 'Mistake',
       bestTile: bestForAdvice,
       bestPosition,
-      explanation: `You played ${tileLabel(entry.tile)}, but ${tileLabel(bestForAdvice)} would have scored better and improved control.`,
+      explanation: buildExplanation(entry.tile, bestForAdvice, 'Mistake', playedBreakdown, bestBreakdown),
     };
   }
   return {
-    score: 19,
+    score: 18,
     rating: 'Blunder',
     bestTile: bestForAdvice,
     bestPosition,
-    explanation: `You played ${tileLabel(entry.tile)}, but ${tileLabel(bestForAdvice)} was a major upgrade for score and board denial.`,
+    explanation: buildExplanation(entry.tile, bestForAdvice, 'Blunder', playedBreakdown, bestBreakdown),
   };
 }
 
@@ -184,9 +286,54 @@ function gradeFromAccuracy(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
   return 'D';
 }
 
-export function analyzeMoveLog(entries: MoveEntry[]): GameAnalysis {
+export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
+  return entries.map((entry) => {
+    // Only evaluate your moves, only placements draws and passes
+    if (entry.player !== 'you') return entry;
+    // Already has a real Fritz evaluation from bot mode — skip
+    if (entry.engineBestMove !== null) return entry;
+    // Need a board to evaluate against
+    if (!entry.boardRenderState) return entry;
+
+    try {
+      const template = createBotMatch(60, 7);
+      const hand = entry.handBefore.map((t) => ({ low: t[0], high: t[1] }));
+      const evalState: BotMatchState = {
+        ...template,
+        board: entry.boardRenderState as unknown as typeof template.board,
+        currentPlayer: 'you',
+        handOpen: true,
+        handOver: false,
+        gameOver: false,
+        winningScore: 60,
+        consecutivePasses: 0,
+        boneyard: new Array(14).fill({ low: 0, high: 0 }),
+        players: {
+          you: { ...template.players.you, hand, score: 0 },
+          bot: { ...template.players.bot, hand: [], score: 0 },
+        },
+      };
+      const choice = chooseBotMove(evalState, 'hard');
+      if (!choice || !choice.move.tile) return entry;
+      return {
+        ...entry,
+        engineBestMove: {
+          tile: [choice.move.tile.low, choice.move.tile.high] as [number, number],
+          position: choice.move.position,
+          score: choice.score,
+          breakdown: choice.breakdown,
+        },
+      };
+    } catch {
+      return entry;
+    }
+  });
+}
+
+export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): GameAnalysis {
+  const processedEntries = enrichWithFritz ? enrichMovesWithFritz(entries) : entries;
   const verdictByMoveNumber = new Map<number, ReturnType<typeof classifyMove>>();
-  const myMoves = entries.filter((entry) => entry.player === 'you');
+  const myMoves = processedEntries.filter((entry) => entry.player === 'you');
   const analyzedMoves: AnalyzedMove[] = myMoves.map((entry) => {
     const verdict = classifyMove(entry);
     verdictByMoveNumber.set(entry.moveNumber, verdict);
@@ -206,15 +353,18 @@ export function analyzeMoveLog(entries: MoveEntry[]): GameAnalysis {
       boardRenderState: entry.boardRenderState,
       handSnapshot: entry.handSnapshot,
       engineBestMove: entry.engineBestMove,
+      bestBreakdown: entry.engineBestMove?.breakdown,
     };
   });
 
-  const timeline = entries.map((entry, moveIndex) => {
+  const timeline = processedEntries.map((entry, moveIndex) => {
     if (entry.player === 'you') {
       const verdict = verdictByMoveNumber.get(entry.moveNumber) ?? classifyMove(entry);
       return { moveIndex, moveNumber: entry.moveNumber, player: entry.player, score: verdict.score };
     }
-    const opponentScore = 50;
+    const opponentScore = entry.engineBestMove
+      ? Math.min(99, Math.round(entry.engineBestMove.score * 2))
+      : 50;
     return { moveIndex, moveNumber: entry.moveNumber, player: entry.player, score: opponentScore };
   });
 

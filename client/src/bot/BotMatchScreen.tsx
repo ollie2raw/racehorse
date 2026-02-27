@@ -11,8 +11,8 @@ import GameOverModal from '../components/GameOverModal';
 import GameReviewer from '../analyzer/GameReviewer';
 import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from '../analyzer/moveAnalyzer';
 import {
+  type EngineBestMove,
   type MoveEntry,
-  pickEngineBestMove,
   snapshotBoardState,
   cloneBoardState,
   toTileTuple,
@@ -33,6 +33,18 @@ import {
 } from './botEngine';
 import { chooseBotMove, type BotChoice } from './botHeuristics';
 import { getLocalDateKey } from '../dailyPuzzle/date';
+import {
+  playBlockedSound,
+  playDrawSound,
+  playHandLoseSound,
+  playHandWinSound,
+  playMatchLoseSound,
+  playMatchWinSound,
+  playScoreSound,
+  playTileSound,
+  playYourTurnSound,
+  queueSound,
+} from '../utils/sound';
 import './botMatch.css';
 
 interface BotMatchScreenProps {
@@ -170,6 +182,9 @@ export default function BotMatchScreen({
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
+  const gameOverSoundKeyRef = useRef('');
+  const matchRef = useRef(match);
+  const prevTurnRef = useRef<BotPlayerId>(match.currentPlayer);
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
@@ -204,6 +219,19 @@ export default function BotMatchScreen({
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('racehorse_muted', isMuted ? '1' : '0');
   }, [isMuted]);
+
+  useEffect(() => {
+    matchRef.current = match;
+  }, [match]);
+
+  useEffect(() => {
+    const prev = prevTurnRef.current;
+    const next = match.currentPlayer;
+    if (prev === 'bot' && next === 'you' && !match.handOver && !match.gameOver) {
+      queueSound(() => playYourTurnSound(isMuted), 400);
+    }
+    prevTurnRef.current = next;
+  }, [match.currentPlayer, match.handOver, match.gameOver, isMuted]);
 
   useEffect(() => {
     return () => {
@@ -288,6 +316,27 @@ export default function BotMatchScreen({
     setMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
   };
 
+  const getFritzBestMove = useCallback((state: BotMatchState): EngineBestMove | null => {
+    const choice = chooseBotMove(state, 'hard');
+    if (!choice || !choice.move.tile) return null;
+    return {
+      tile: toTileTuple(choice.move.tile as Tile),
+      position: choice.move.position,
+      score: choice.score,
+      breakdown: choice.breakdown,
+    };
+  }, []);
+
+  const toEngineBestFromChoice = useCallback((choice: BotChoice | null): EngineBestMove | null => {
+    if (!choice || !choice.move.tile) return null;
+    return {
+      tile: toTileTuple(choice.move.tile as Tile),
+      position: choice.move.position,
+      score: choice.score,
+      breakdown: choice.breakdown,
+    };
+  }, []);
+
   const openAnalyzer = () => {
     const analysis = analyzeMoveLog(moveLog);
     setCurrentAnalysis(analysis);
@@ -350,6 +399,21 @@ export default function BotMatchScreen({
     });
   }, [match.gameOver, match.winnerId, match.handNumber, match.players.you.score, match.players.bot.score]);
 
+  useEffect(() => {
+    if (!match.gameOver || !match.winnerId) {
+      gameOverSoundKeyRef.current = '';
+      return;
+    }
+    const key = `${match.handNumber}:${match.winnerId}:${match.players.you.score}:${match.players.bot.score}`;
+    if (gameOverSoundKeyRef.current === key) return;
+    gameOverSoundKeyRef.current = key;
+    if (match.winnerId === 'you') {
+      queueSound(() => playMatchWinSound(isMuted), 320);
+    } else {
+      queueSound(() => playMatchLoseSound(isMuted), 320);
+    }
+  }, [match.gameOver, match.winnerId, match.handNumber, match.players.you.score, match.players.bot.score, isMuted]);
+
   const userLegalMoves = useMemo(() => {
     return match.currentPlayer === 'you' ? getLegalMoves(match, 'you') : [];
   }, [match]);
@@ -367,9 +431,21 @@ export default function BotMatchScreen({
         yourRemainingTiles: result.state.players.you.hand,
         botRemainingTiles: result.state.players.bot.hand,
       });
+      if (result.handEnded.reason === 'blocked') {
+        queueSound(() => playBlockedSound(isMuted), 0);
+      }
+      if (!result.state.gameOver) {
+        if (result.handEnded.winner === 'you') {
+          queueSound(() => playHandWinSound(isMuted), 320);
+        } else {
+          queueSound(() => playHandLoseSound(isMuted), 320);
+        }
+      }
     }
     if (result.scored) {
-      showScoreToast(result.scored.player, result.scored.points);
+      const points = result.scored.points;
+      showScoreToast(result.scored.player, points);
+      queueSound(() => playScoreSound(points, isMuted), 80);
     }
     if (result.drew && result.drew.player === 'you') {
       showBoardToast('You drew a tile', 'bot');
@@ -422,6 +498,7 @@ export default function BotMatchScreen({
         drewAny = true;
         current = step.state;
         setMatch(current);
+        queueSound(() => playDrawSound(isMuted), 0);
         triggerDrawStepAnimation(player, current);
         await new Promise<void>((resolve) => setTimeout(resolve, DRAW_STEP_MS));
       }
@@ -439,7 +516,7 @@ export default function BotMatchScreen({
         drew: drewAny ? { player, tile: current.players[player].hand[current.players[player].hand.length - 1] } : undefined,
       };
     },
-    [triggerDrawStepAnimation],
+    [triggerDrawStepAnimation, isMuted],
   );
 
   const onPositionClick = (position: any) => {
@@ -455,17 +532,6 @@ export default function BotMatchScreen({
     const beforePips = sumTilePips(match.players.you.hand);
     const result = applyPlayMove(match, 'you', move);
     const afterPips = sumTilePips(result.state.players.you.hand);
-    const mirroredChoice = chooseBotMove(
-      {
-        ...match,
-        players: {
-          you: match.players.bot,
-          bot: match.players.you,
-        },
-        currentPlayer: 'bot',
-      },
-      'hard',
-    );
     setMovesUsed((prev) => prev + 1);
     setSelectedTile(null);
     appendMove({
@@ -479,19 +545,7 @@ export default function BotMatchScreen({
       boardState: snapshotBoardState(match.board),
       boardRenderState: cloneBoardState(match.board),
       handSnapshot: handBefore,
-      engineBestMove: mirroredChoice?.move?.tile
-        ? {
-            tile: toTileTuple(mirroredChoice.move.tile as Tile),
-            position: mirroredChoice.move.position,
-            score: mirroredChoice.score,
-          }
-        : pickEngineBestMove(
-            userPlayMoves
-              .filter((m) => m.type === 'play' && m.tile)
-              .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-            boardEnds,
-            handBefore,
-          ),
+      engineBestMove: getFritzBestMove(match),
     });
     applyAndNotify(result);
   };
@@ -499,6 +553,7 @@ export default function BotMatchScreen({
   useEffect(() => {
     if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
     let cancelled = false;
+    let actionResolved = false;
 
     const timer = setTimeout(() => {
       void (async () => {
@@ -527,7 +582,7 @@ export default function BotMatchScreen({
                 boardState: snapshotBoardState(match.board),
                 boardRenderState: cloneBoardState(match.board),
                 handSnapshot: match.players.you.hand.map(toTileTuple),
-                engineBestMove: null,
+                engineBestMove: toEngineBestFromChoice(chosen),
               });
             }
             if (drawPass.passed) {
@@ -541,7 +596,7 @@ export default function BotMatchScreen({
                 boardState: snapshotBoardState(match.board),
                 boardRenderState: cloneBoardState(match.board),
                 handSnapshot: match.players.you.hand.map(toTileTuple),
-                engineBestMove: null,
+                engineBestMove: toEngineBestFromChoice(chosen),
               });
             }
             const afterDraw = asPlayMoves(getLegalMoves(working, 'bot'));
@@ -549,6 +604,7 @@ export default function BotMatchScreen({
               result = drawPass;
             } else {
               chosen = chooseBotMove(working, 'hard');
+              queueSound(() => playTileSound('deal', isMuted), 0);
               result = applyPlayMove(working, 'bot', chosen?.move ?? afterDraw[0]);
             }
           } finally {
@@ -556,12 +612,14 @@ export default function BotMatchScreen({
           }
         } else {
           chosen = chooseBotMove(working, 'hard');
+          queueSound(() => playTileSound('deal', isMuted), 0);
           result = applyPlayMove(working, 'bot', chosen?.move ?? botPlayable[0]);
         }
 
-        if (cancelled) return;
+        if (cancelled || actionResolved) return;
         if (chosen) setLastBotChoice(chosen);
         if (result) {
+          actionResolved = true;
           setSelectedTile(null);
           if (chosen?.move?.tile) {
             appendMove({
@@ -575,7 +633,7 @@ export default function BotMatchScreen({
               boardState: snapshotBoardState(match.board),
               boardRenderState: cloneBoardState(match.board),
               handSnapshot: match.players.you.hand.map(toTileTuple),
-              engineBestMove: null,
+              engineBestMove: toEngineBestFromChoice(chosen),
             });
           }
           applyAndNotify(result);
@@ -583,11 +641,56 @@ export default function BotMatchScreen({
       })();
     }, 760);
 
+    const maxThinkingTimer = setTimeout(() => {
+      if (cancelled || actionResolved) return;
+      const live = matchRef.current;
+      if (!live || live.currentPlayer !== 'bot' || live.handOver || live.gameOver) return;
+      const fallbackPlay = asPlayMoves(getLegalMoves(live, 'bot'))[0];
+      if (!fallbackPlay) return;
+      cancelled = true;
+      actionResolved = true;
+      const beforeEndsRaw = getDisplayOpenEnds(live);
+      const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
+      const forcedResult = applyPlayMove(live, 'bot', fallbackPlay);
+      if (fallbackPlay.tile) {
+        appendMove({
+          player: 'opponent',
+          action: 'place',
+          tile: toTileTuple(fallbackPlay.tile),
+          boardEnds,
+          handBefore: [],
+          validMoves: [],
+          pipDelta: 0,
+          boardState: snapshotBoardState(live.board),
+          boardRenderState: cloneBoardState(live.board),
+          handSnapshot: live.players.you.hand.map(toTileTuple),
+          engineBestMove: fallbackPlay.tile
+            ? {
+                tile: toTileTuple(fallbackPlay.tile),
+                position: fallbackPlay.position,
+                score: 0,
+              }
+            : null,
+        });
+      }
+      setLastBotChoice(null);
+      setSelectedTile(null);
+      applyAndNotify(forcedResult);
+    }, 3000);
+
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      clearTimeout(maxThinkingTimer);
     };
-  }, [match, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth]);
+  }, [
+    match,
+    appendMove,
+    runDrawSequenceLocal,
+    setDrawSequenceActiveBoth,
+    isMuted,
+    toEngineBestFromChoice,
+  ]);
 
   const advanceHand = useCallback(() => {
     setSelectedTile(null);
@@ -636,13 +739,7 @@ export default function BotMatchScreen({
             boardState: snapshotBoardState(match.board),
             boardRenderState: cloneBoardState(match.board),
             handSnapshot: handBefore,
-            engineBestMove: pickEngineBestMove(
-              userPlayMoves
-                .filter((m) => m.type === 'play' && m.tile)
-                .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-              boardEnds,
-              handBefore,
-            ),
+            engineBestMove: getFritzBestMove(match),
           });
         }
         if (result.passed) {
@@ -656,13 +753,7 @@ export default function BotMatchScreen({
             boardState: snapshotBoardState(match.board),
             boardRenderState: cloneBoardState(match.board),
             handSnapshot: handBefore,
-            engineBestMove: pickEngineBestMove(
-              userPlayMoves
-                .filter((m) => m.type === 'play' && m.tile)
-                .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-              boardEnds,
-              handBefore,
-            ),
+            engineBestMove: getFritzBestMove(match),
           });
         }
         applyAndNotify(result);
@@ -673,7 +764,7 @@ export default function BotMatchScreen({
     return () => {
       cancelled = true;
     };
-  }, [match, userPlayMoves.length, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, userPlayMoves]);
+  }, [match, userPlayMoves.length, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, isMuted, getFritzBestMove]);
 
   useEffect(() => {
     if (!isDailyPuzzleRun || !dailyPuzzleDate || !match.gameOver) return;

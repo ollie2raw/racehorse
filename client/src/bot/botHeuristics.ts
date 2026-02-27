@@ -237,6 +237,8 @@ export function chooseBotMove(
     };
   }
 
+  const unseenTiles = inferUnseenTiles(state);
+
   const scored = candidates.map((move) => {
     const preview = previewPlayMove(state, 'bot', move)!;
     const immediate = preview.immediateScore;
@@ -277,7 +279,6 @@ export function chooseBotMove(
 
       // Penalize stranding tiles that match none of the current open ends.
       const openEndSet = new Set(preview.openEnds);
-      const unseenTiles = inferUnseenTiles(state);
       // High count means opponent likely has matches, so opening that end is riskier.
       const endDangerScore = preview.openEnds.reduce((sum, end) => {
         const matches = unseenTiles.filter((t) => t.low === end || t.high === end).length;

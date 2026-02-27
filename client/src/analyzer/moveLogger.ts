@@ -6,6 +6,14 @@ export type EngineBestMove = {
   tile: TileTuple;
   position?: PlacementPosition;
   score: number;
+  breakdown?: {
+    immediate: number;
+    doubleBias: number;
+    mobility: number;
+    denial: number;
+    unload: number;
+    replyRisk: number;
+  };
 };
 
 export type BoardSnapshotEntry = {

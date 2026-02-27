@@ -5,7 +5,16 @@ import { traceSocketEvent } from "./debug/socketTrace";
 import { io, Socket } from 'socket.io-client';
 import './App.css';
 import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from './components';
-import { playTileSound } from './utils/sound';
+import {
+  playBlockedSound,
+  playDrawSound,
+  playHandLoseSound,
+  playHandWinSound,
+  playMatchLoseSound,
+  playMatchWinSound,
+  playScoreSound,
+  playTileSound,
+} from './utils/sound';
 import NoBrainerLabScreen from './practice/NoBrainerLabScreen';
 import BotMatchScreen from './bot/BotMatchScreen';
 import BotSetupScreen from './bot/BotSetupScreen';
@@ -999,6 +1008,7 @@ export default function App() {
       drawerHandCount: number;
     }) => {
       if (!payload) return;
+      playDrawSound(isMutedRef.current);
       setDrawSequenceActiveBoth(true);
       if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
       drawSequenceTimeoutRef.current = setTimeout(() => {
@@ -1388,9 +1398,33 @@ export default function App() {
     s.on('hand:ended', (payload: HandEndedPayload) => {
       const currentState = stateRef.current;
       const myRemaining = currentState?.players[s.id ?? '']?.hand ?? [];
+      const yourRemainingTiles = payload.yourRemainingTiles ?? myRemaining;
+      const opponentRemainingTiles = payload.opponentRemainingTiles ?? [];
+      const blocked = yourRemainingTiles.length > 0 && opponentRemainingTiles.length > 0;
+      if (blocked) {
+        playBlockedSound(isMutedRef.current);
+      }
+      const stateNow = stateRef.current;
+      const target = stateNow?.config?.winningScore ?? 60;
+      const myId = s.id ?? '';
+      const oppId = stateNow?.playerIds.find((pid) => pid !== myId) ?? null;
+      const myAward = payload.pointsAwarded?.you ?? 0;
+      const oppAward = payload.pointsAwarded?.opponent ?? 0;
+      const myPostScore = (stateNow?.players?.[myId]?.score ?? 0) + myAward;
+      const oppPostScore = oppId ? (stateNow?.players?.[oppId]?.score ?? 0) + oppAward : oppAward;
+      const matchWillBeOver = myPostScore >= target || oppPostScore >= target;
+      if (!matchWillBeOver) {
+        const handWinnerId = payload.handWinnerId ?? payload.winnerId ?? null;
+        const iWonHand = Boolean(handWinnerId && handWinnerId === myId);
+        if (iWonHand) {
+          playHandWinSound(isMutedRef.current);
+        } else {
+          playHandLoseSound(isMutedRef.current);
+        }
+      }
       setHandReveal({
         ...payload,
-        yourRemainingTiles: payload.yourRemainingTiles ?? myRemaining,
+        yourRemainingTiles,
       });
       handRevealShownRef.current = payload.handNumber;
     });
@@ -1943,7 +1977,7 @@ export default function App() {
   }, []);
 
   const openMultiplayerAnalyzer = useCallback(() => {
-    const analysis = analyzeMoveLog(multiplayerMoveLog);
+    const analysis = analyzeMoveLog(multiplayerMoveLog, true);
     setCurrentAnalysis(analysis);
     saveGameAnalysis('multiplayer', analysis);
     setAnalyzerOpen(true);
@@ -2401,6 +2435,7 @@ export default function App() {
         changed = true;
         const delta = score - prevScore;
         if (delta > 0 && !state.handOver && !state.gameOver) {
+          playScoreSound(delta, isMutedRef.current);
           if (pid === you) {
             showScoreToast('you', delta, 'You');
           } else {
@@ -2450,6 +2485,11 @@ export default function App() {
 
     const winnerSocketId = finalState?.winnerId ?? null;
     if (!winnerSocketId) return;
+    if (winnerSocketId === you) {
+      playMatchWinSound(isMutedRef.current);
+    } else {
+      playMatchLoseSound(isMutedRef.current);
+    }
     if (winnerSocketId === you) {
       const canvas = confettiCanvasRef.current;
       if (canvas) {
@@ -2514,7 +2554,7 @@ export default function App() {
 
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
-    const matchAnalysis = analyzeMoveLog(multiplayerMoveLog);
+    const matchAnalysis = analyzeMoveLog(multiplayerMoveLog, true);
     const avgMoveQuality =
       matchAnalysis.analyzedMoves.length > 0 && matchAnalysis.accuracy > 0
         ? matchAnalysis.accuracy
