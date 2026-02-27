@@ -386,8 +386,10 @@ export default function DailyPuzzleScreen({
   useEffect(() => {
     if (!puzzle) return;
     let cancelled = false;
+    let idleId: number | null = null;
+    let timeoutId: ReturnType<typeof window.setTimeout> | null = null;
 
-    const timer = window.setTimeout(() => {
+    const runHeavyComputations = () => {
       if (cancelled) return;
       if (puzzle.puzzleType === 'reach_target') {
         try {
@@ -412,11 +414,29 @@ export default function DailyPuzzleScreen({
       } catch {
         if (!cancelled) setBestPossibleScore(0);
       }
-    }, 0);
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+      idleId = window.requestIdleCallback(
+        () => {
+          runHeavyComputations();
+        },
+        { timeout: 1000 },
+      );
+    } else {
+      timeoutId = window.setTimeout(() => {
+        runHeavyComputations();
+      }, 50);
+    }
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (idleId !== null && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [puzzle]);
 
