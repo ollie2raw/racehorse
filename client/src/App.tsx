@@ -677,6 +677,8 @@ export default function App() {
   const [drawStepMyHand, setDrawStepMyHand] = useState<Tile[] | null>(null);
   const [drawStepOpponentHandCount, setDrawStepOpponentHandCount] = useState<number | null>(null);
   const [drawSequenceActive, setDrawSequenceActive] = useState(false);
+  const drawSequenceActiveRef = useRef(false);
+  const drawSequenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [flyingTiles, setFlyingTiles] = useState<
     { x: number; y: number; toX: number; toY: number; id: number }[]
   >([]);
@@ -684,6 +686,7 @@ export default function App() {
   const boneyardRef = useRef<HTMLDivElement>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
+  const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
   const [opponentDragging, setOpponentDragging] = useState(false);
   const draggingStateRef = useRef(false);
   const handRevealAutoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -717,6 +720,11 @@ export default function App() {
     toastTimeoutRef.current = setTimeout(() => setToast(''), duration);
   }, []);
 
+  const setDrawSequenceActiveBoth = useCallback((val: boolean) => {
+    drawSequenceActiveRef.current = val;
+    setDrawSequenceActive(val);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) {
@@ -727,6 +735,7 @@ export default function App() {
       if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
       if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
       if (reconnectAttemptTimerRef.current) clearTimeout(reconnectAttemptTimerRef.current);
+      if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
     };
   }, []);
 
@@ -747,15 +756,18 @@ export default function App() {
     });
     scoreToastHideTimerRef.current = setTimeout(() => {
       setScoreToast((prev) => (prev ? { ...prev, visible: false } : prev));
-    }, 1700);
-    scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), 2000);
+    }, 2800);
+    scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), 3200);
   }, []);
 
   const showScoreToast = useCallback(
     (player: 'you' | 'opp', points: number, label?: string) => {
-      showScoreLikeToast(`${label ?? (player === 'you' ? 'You' : 'Opponent')} scored +${points}`, player);
+      const currentScore = player === 'you'
+        ? (stateRef.current?.players[you]?.score ?? 0)
+        : (stateRef.current?.players[stateRef.current?.playerIds.find(p => p !== you) ?? '']?.score ?? 0);
+      showScoreLikeToast(`${label ?? (player === 'you' ? 'You' : 'Opponent')} scored +${points} · ${currentScore} pts`, player);
     },
-    [showScoreLikeToast],
+    [showScoreLikeToast, you],
   );
 
   useEffect(() => {
@@ -806,11 +818,15 @@ export default function App() {
 
   useEffect(() => {
     if (state) return;
-    setDrawSequenceActive(false);
+    if (drawSequenceTimeoutRef.current) {
+      clearTimeout(drawSequenceTimeoutRef.current);
+      drawSequenceTimeoutRef.current = null;
+    }
+    setDrawSequenceActiveBoth(false);
     setDrawStepMyHand(null);
     setDrawStepOpponentHandCount(null);
     setBoneyardDisplayCount(null);
-  }, [state]);
+  }, [state, setDrawSequenceActiveBoth]);
 
   useEffect(() => {
     if (!socket || !authUser?.id) return;
@@ -943,11 +959,13 @@ export default function App() {
       setState(payload?.state ?? null);
       setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       setCanDraw(Boolean(payload?.canDraw));
-      setDrawSequenceActive(false);
-      setDrawStepMyHand(null);
-      setDrawStepOpponentHandCount(null);
+      if (!drawSequenceActiveRef.current) {
+        setDrawSequenceActiveBoth(false);
+        setDrawStepMyHand(null);
+        setDrawStepOpponentHandCount(null);
+        setFlyingTiles([]);
+      }
       setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
-      setFlyingTiles([]);
     };
     const onDrawStep = (payload: {
       playerId: string;
@@ -956,7 +974,11 @@ export default function App() {
       drawerHandCount: number;
     }) => {
       if (!payload) return;
-      setDrawSequenceActive(true);
+      setDrawSequenceActiveBoth(true);
+      if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
+      drawSequenceTimeoutRef.current = setTimeout(() => {
+        setDrawSequenceActiveBoth(false);
+      }, 2000);
       setBoneyardDisplayCount(payload.boneyardCount);
       if (boneyardRef.current) {
         const from = boneyardRef.current.getBoundingClientRect();
@@ -1004,7 +1026,7 @@ export default function App() {
       socket.off('state:update', onStateUpdate);
       socket.off('game:draw_step', onDrawStep);
     };
-  }, [socket, showToast]);
+  }, [socket, showToast, setDrawSequenceActiveBoth]);
 
   useEffect(() => {
     if (!friendInvite) return;
@@ -1949,7 +1971,6 @@ export default function App() {
           handBefore,
         ),
       });
-      showScoreLikeToast('You drew a tile', 'opp');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
@@ -2405,12 +2426,63 @@ export default function App() {
     const winnerSocketId = finalState?.winnerId ?? null;
     if (!winnerSocketId) return;
     if (winnerSocketId === you) {
-      confetti({
-        particleCount: 150,
-        spread: 80,
-        origin: { y: 0.55 },
-        colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff'],
-      });
+      const canvas = confettiCanvasRef.current;
+      if (canvas) {
+        const myConfetti = confetti.create(canvas, { resize: true, useWorker: true });
+        const colors = ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#fbbf24'];
+
+        myConfetti({
+          particleCount: 120,
+          spread: 100,
+          origin: { x: 0.5, y: 0.4 },
+          colors,
+          scalar: 1.3,
+        });
+        setTimeout(
+          () =>
+            myConfetti({
+              particleCount: 80,
+              spread: 120,
+              origin: { x: 0.2, y: 0.5 },
+              colors,
+              scalar: 1.1,
+            }),
+          200,
+        );
+        setTimeout(
+          () =>
+            myConfetti({
+              particleCount: 80,
+              spread: 120,
+              origin: { x: 0.8, y: 0.5 },
+              colors,
+              scalar: 1.1,
+            }),
+          400,
+        );
+        setTimeout(
+          () =>
+            myConfetti({
+              particleCount: 60,
+              angle: 60,
+              spread: 80,
+              origin: { x: 0, y: 0.6 },
+              colors,
+            }),
+          600,
+        );
+        setTimeout(
+          () =>
+            myConfetti({
+              particleCount: 60,
+              angle: 120,
+              spread: 80,
+              origin: { x: 1, y: 0.6 },
+              colors,
+            }),
+          600,
+        );
+      }
     }
     const loserSocketId = finalState.playerIds.find((pid) => pid !== winnerSocketId) ?? null;
     if (!loserSocketId) return;
@@ -2687,7 +2759,7 @@ export default function App() {
 
     return (
       <LayoutScreen
-        className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-tournament tournament-screen"
+        className={`screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-tournament tournament-screen ${tournamentState?.status === 'running' ? 'tournament-screen-running' : ''}`}
         badge="Compete"
         title={tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}
         subtitle={
@@ -2697,6 +2769,12 @@ export default function App() {
         }
         contentClassName="multiplayer-menu-card screen-shell"
       >
+        <div className="tournament-top-right">
+          <button className="mode-option tournament-card tournament-disconnect-muted tournament-disconnect-corner" onClick={() => disconnect('user disconnect')}>
+            <span className="mode-option-title">Disconnect</span>
+          </button>
+        </div>
+
         {error && (
           <div className="error-banner">
             {error}
@@ -2704,17 +2782,17 @@ export default function App() {
           </div>
         )}
 
-        <div className="mode-actions tournament-mode-actions" style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
-          {showLobbySetup && (
-            <>
-              <button className="mode-option mode-option-primary tournament-create-hero" onClick={createLobby}>
+        <div className="mode-actions tournament-mode-actions">
+          {!tournamentId && (
+            <div className="tournament-grid tournament-grid-entry">
+              <button className="mode-option tournament-card tournament-card-create is-selected" onClick={createLobby}>
                 <span className="mode-option-title">Create Lobby</span>
                 <span className="mode-option-meta">Start a tournament lobby and share the code</span>
               </button>
-              <div className="mode-option tournament-join-card" style={{ cursor: 'default' }}>
+              <div className="mode-option tournament-card tournament-card-join">
                 <span className="mode-option-title">Join Lobby</span>
                 <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
-                <div className="mode-join-row" style={{ marginTop: 10 }}>
+                <div className="mode-join-row tournament-join-row">
                   <input
                     className="mode-join-input tournament-join-input"
                     type="text"
@@ -2728,198 +2806,172 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            </>
+            </div>
           )}
 
-          {!!tournamentCode && (
-            <div className="mode-option tournament-code-card" style={{ cursor: 'default' }}>
-              <span className="mode-option-title">Lobby Code</span>
-              <span className="mode-option-meta">Share this code to invite players</span>
-              <div
-                style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
-              >
-                <div style={{ fontSize: 22, letterSpacing: 1, opacity: 0.95 }}>{tournamentCode}</div>
-                <button
-                  className="btn text compact"
-                  onClick={() => navigator.clipboard?.writeText(String(tournamentCode))}
-                  title="Copy lobby code"
-                >
-                  Copy
+          {tournamentId && tournamentState?.status !== 'running' && (
+            <div className="tournament-grid tournament-grid-waiting">
+              <button className="mode-option tournament-card tournament-card-create is-selected" onClick={createLobby}>
+                <span className="mode-option-title">Create Lobby</span>
+                <span className="mode-option-meta">Start a tournament lobby and share the code</span>
+              </button>
+              <div className="mode-option tournament-card tournament-card-join">
+                <span className="mode-option-title">Join Lobby</span>
+                <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
+                <div className="mode-join-row tournament-join-row">
+                  <input
+                    className="mode-join-input tournament-join-input"
+                    type="text"
+                    placeholder="Lobby Code"
+                    value={tournamentCode}
+                    onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
+                    maxLength={6}
+                  />
+                  <button className="mode-inline-btn tournament-join-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
+                    Join Lobby
+                  </button>
+                </div>
+              </div>
+
+              <div className="mode-option tournament-card tournament-card-code">
+                <span className="mode-option-title">Lobby Code</span>
+                <span className="mode-option-meta">Share this code to invite players</span>
+                <div className="tournament-code-row">
+                  <div className="tournament-code-value">{tournamentCode || '------'}</div>
+                  <button
+                    className="btn text compact tournament-copy-btn"
+                    onClick={() => tournamentCode && navigator.clipboard?.writeText(String(tournamentCode))}
+                    title="Copy lobby code"
+                    disabled={!tournamentCode}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              {isHost && (
+                <button className="mode-option tournament-card tournament-card-start is-selected" onClick={start} disabled={players.length < 4}>
+                  <span className="mode-option-title">Start Tournament</span>
+                  <span className="mode-option-meta">
+                    {players.length < 4 ? 'Need 4+ players to start' : 'Generate schedule and begin first match'}
+                  </span>
                 </button>
+              )}
+
+              <div className="mode-option tournament-card tournament-card-status tournament-card-status-full">
+                <span className="mode-option-title">Status</span>
+                <span className="mode-option-meta">
+                  {yourStatus}
+                  {totalMatches ? ` • ${doneCount}/${totalMatches} complete` : ''}
+                </span>
+                <div className="tournament-status-row">
+                  <span className="tournament-status-key">Now Playing</span>
+                  <span className="tournament-status-value">
+                    {activeMatch ? `${nameFor(activeMatch.a)} vs ${nameFor(activeMatch.b)}` : 'Waiting…'}
+                  </span>
+                </div>
               </div>
             </div>
           )}
 
-          {isHost && tournamentState?.status !== 'running' && (
-            <button className="mode-option mode-option-primary tournament-start-hero" onClick={start} disabled={players.length < 4}>
-              <span className="mode-option-title">Start Tournament</span>
-              <span className="mode-option-meta">
-                {players.length < 4 ? 'Need 4+ players to start' : 'Generate schedule and begin first match'}
-              </span>
-            </button>
-          )}
-
-          {tournamentId && (
-            <div
-              className={`tournament-hub-grid ${hasHubRightColumn ? 'has-side-panels' : 'single-column'}`}
-              style={{
-                display: 'grid',
-                width: '100%',
-                minWidth: 0,
-                gap: 16,
-                alignItems: 'start',
-              }}
-            >
-              <div className="tournament-hub-left" style={{ display: 'grid', minWidth: 0, gap: 14 }}>
-                <div className="mode-option" style={{ cursor: 'default' }}>
-                  <span className="mode-option-title">Status</span>
-                  <span className="mode-option-meta">
-                    {yourStatus}
-                    {totalMatches ? ` • ${doneCount}/${totalMatches} complete` : ''}
-                  </span>
-
-                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <span style={{ opacity: 0.9 }}>Now Playing</span>
-                      <span style={{ opacity: 0.9 }}>
-                        {activeMatch ? `${nameFor(activeMatch.a)} vs ${nameFor(activeMatch.b)}` : 'Waiting…'}
-                      </span>
-                    </div>
-
-                    {!!nextForYou && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                        <span style={{ opacity: 0.9 }}>Up Next</span>
-                        <span style={{ opacity: 0.9 }}>
-                          {nextForYou.a === mySocketId ? nameFor(nextForYou.b) : nameFor(nextForYou.a)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {tournamentState?.status === 'running' && activeRoom && !youArePlaying && (
+          {tournamentId && tournamentState?.status === 'running' && (
+            <div className="tournament-grid tournament-grid-running">
+              <div className="tournament-running-top">
+                <div className="mode-option tournament-card tournament-card-code">
+                  <span className="mode-option-title">Lobby Code</span>
+                  <span className="mode-option-meta">Share this code to invite players</span>
+                  <div className="tournament-code-row">
+                    <div className="tournament-code-value">{tournamentCode || '------'}</div>
                     <button
-                      className="btn text compact"
-                      style={{ marginTop: 12 }}
-                      onClick={spectate}
-                      disabled={!activeRoom}
-                      title="Watch the current match"
+                      className="btn text compact tournament-copy-btn"
+                      onClick={() => tournamentCode && navigator.clipboard?.writeText(String(tournamentCode))}
+                      title="Copy lobby code"
+                      disabled={!tournamentCode}
                     >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mode-option tournament-card tournament-card-status">
+                  <span className="mode-option-title">Status</span>
+                  <span className="mode-option-meta">{doneCount} / {totalMatches || 0} complete</span>
+                  <div className="tournament-progress">
+                    <div
+                      className="tournament-progress-fill"
+                      style={{ width: `${totalMatches ? Math.round((doneCount / totalMatches) * 100) : 0}%` }}
+                    />
+                  </div>
+                  <div className="tournament-status-row">
+                    <span className="tournament-status-key">Now Playing</span>
+                    <span className="tournament-status-value">
+                      {activeMatch ? `${nameFor(activeMatch.a)} vs ${nameFor(activeMatch.b)}` : 'Waiting…'}
+                    </span>
+                  </div>
+                  <div className="tournament-status-row">
+                    <span className="tournament-status-key">Up Next</span>
+                    <span className="tournament-status-value">
+                      {nextForYou ? (nextForYou.a === mySocketId ? nameFor(nextForYou.b) : nameFor(nextForYou.a)) : 'Waiting…'}
+                    </span>
+                  </div>
+                  {activeRoom && !youArePlaying && (
+                    <button className="tournament-status-link" onClick={spectate} disabled={!activeRoom}>
                       Watch match
                     </button>
                   )}
                 </div>
               </div>
 
-              {hasHubRightColumn && (
-              <div className="tournament-hub-right" style={{ width: '100%', minWidth: 0, display: 'grid', gap: 14 }}>
-                {matches.length > 0 && (
-                  <div className="mode-option" style={{ cursor: 'default' }}>
-                    <span className="mode-option-title">Bracket</span>
-                    <span className="mode-option-meta">Round robin schedule</span>
-
-                    <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                      {matches.map((m: any, i: number) => {
-                        const isActive = Boolean(activeMatch && m.id === activeMatch.id);
-                        const involvesYou = Boolean(mySocketId && (m.a === mySocketId || m.b === mySocketId));
-                        const rowOpacity = m.status === 'done' ? 0.7 : 0.92;
-
-                        const left = nameFor(m.a);
-                        const right = nameFor(m.b);
-
-                        const label =
-                          m.status === 'done' ? 'Done' : m.status === 'active' ? 'Playing' : 'Queued';
-
-                        const winnerName = m.status === 'done' && m.winner ? nameFor(m.winner) : null;
-
-                        return (
-                          <div
-                            key={m.id}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              gap: 12,
-                              padding: '8px 10px',
-                              borderRadius: 12,
-                              opacity: rowOpacity,
-                              outline: isActive
-                                ? '2px solid rgba(255,255,255,0.18)'
-                                : '1px solid rgba(255,255,255,0.06)',
-                              background: involvesYou ? 'rgba(255,255,255,0.04)' : 'transparent',
-                            }}
-                          >
-                            <div style={{ display: 'grid', gap: 2 }}>
-                              <div style={{ opacity: 0.95 }}>
-                                {left} <span style={{ opacity: 0.65 }}>vs</span> {right}
-                              </div>
-                              {winnerName && (
-                                <div style={{ opacity: 0.75, fontSize: 12 }}>
-                                  Winner: {winnerName}
-                                </div>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                              <span style={{ opacity: 0.7, fontSize: 12 }}>#{i + 1}</span>
-                              <span style={{ opacity: 0.85 }}>{label}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+              <div className="tournament-running-bottom">
+                <div className="mode-option tournament-card tournament-card-bracket">
+                  <span className="mode-option-title">Bracket</span>
+                  <span className="mode-option-meta">Round robin schedule</span>
+                  <div className="tournament-inner-list">
+                    {matches.map((m: any, i: number) => {
+                      const isActive = Boolean(activeMatch && m.id === activeMatch.id);
+                      const label = m.status === 'active' ? 'Playing' : m.status === 'done' ? 'Done' : 'Queued';
+                      return (
+                        <div key={m.id} className={`tournament-inner-row tournament-bracket-row ${isActive ? 'is-active' : ''}`}>
+                          <span className="tournament-row-index">Match {i + 1}</span>
+                          <span className="tournament-row-players">
+                            {nameFor(m.a)} vs {nameFor(m.b)}
+                          </span>
+                          <span className={`tournament-row-status tournament-row-status-badge ${m.status === 'active' ? 'is-playing' : ''}`}>
+                            {label}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
 
-                {Array.isArray(standings) && standings.length > 0 && (
-                  <div className="mode-option" style={{ cursor: 'default' }}>
-                    <span className="mode-option-title">Standings</span>
-                    <span className="mode-option-meta">Wins • point diff</span>
-
-                    <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                      {standings.map((st: any, idx: number) => {
-                        const diff = (st.pointsFor ?? 0) - (st.pointsAgainst ?? 0);
-                        const me = Boolean(mySocketId && st.socketId === mySocketId);
-
-                        return (
-                          <div
-                            key={st.socketId}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              gap: 12,
-                              padding: '8px 10px',
-                              borderRadius: 12,
-                              outline: '1px solid rgba(255,255,255,0.06)',
-                              background: me ? 'rgba(255,255,255,0.05)' : 'transparent',
-                            }}
-                          >
-                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                              <span style={{ opacity: 0.65, width: 18, textAlign: 'right' }}>{idx + 1}</span>
-                              <span style={{ opacity: 0.95 }}>{st.username ?? 'Player'}</span>
-                            </div>
-                            <span style={{ opacity: 0.9 }}>
-                              {st.wins ?? 0}-{st.losses ?? 0} ({diff >= 0 ? '+' : ''}
-                              {diff})
-                            </span>
+                <div className="mode-option tournament-card tournament-card-standings">
+                  <span className="mode-option-title">Standings</span>
+                  <span className="mode-option-meta">Wins · point diff</span>
+                  <div className="tournament-inner-list">
+                    {standings.map((st: any, idx: number) => {
+                      const diff = (st.pointsFor ?? 0) - (st.pointsAgainst ?? 0);
+                      const me = Boolean(mySocketId && st.socketId === mySocketId);
+                      return (
+                        <div key={st.socketId} className={`tournament-inner-row tournament-standings-row ${me ? 'is-you' : ''}`}>
+                          <div className="tournament-row-main">
+                            <span className="tournament-row-rank">{idx + 1}</span>
+                            <span className="tournament-row-name">{st.username ?? 'Player'}</span>
+                            {me && <span className="tournament-you-badge">You</span>}
                           </div>
-                        );
-                      })}
-                    </div>
+                          <span className="tournament-row-score">
+                            {st.wins ?? 0}W · {diff >= 0 ? '+' : ''}
+                            {diff}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
               </div>
-              )}
             </div>
           )}
 
-          <button
-            className="mode-option mode-option-secondary tournament-disconnect-muted"
-            style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
-            onClick={() => disconnect('user disconnect')}
-          >
-            <span className="mode-option-title">Disconnect</span>
-            <span className="mode-option-meta">Return to offline mode selector</span>
-          </button>
         </div>
       </LayoutScreen>
     );
@@ -3528,6 +3580,18 @@ export default function App() {
               { label: myName, score: myScore, tone: 'you' },
             ]}
           />
+          <canvas
+            ref={confettiCanvasRef}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              zIndex: 2100,
+              display: state.gameOver ? 'block' : 'none',
+            }}
+          />
           {/* Game Over Overlay */}
           {state.gameOver && (
             <GameOverOverlay
@@ -3800,26 +3864,34 @@ export default function App() {
                 <div
                   style={{
                     position: 'absolute',
-                    top: 12,
+                    top: 16,
                     left: '50%',
                     transform: scoreToast.visible
-                      ? 'translate(-50%, 0px)'
-                      : 'translate(-50%, -10px)',
+                      ? 'translate(-50%, 0px) scale(1)'
+                      : 'translate(-50%, -14px) scale(0.95)',
                     opacity: scoreToast.visible ? 1 : 0,
-                    transition: 'opacity 220ms ease, transform 220ms ease',
+                    transition: 'opacity 250ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)',
                     zIndex: 14,
-                    background: 'rgba(15, 25, 20, 0.85)',
-                    backdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(236,252,245,0.18)',
+                    background: scoreToast.tone === 'you'
+                      ? 'rgba(10, 40, 25, 0.92)'
+                      : 'rgba(40, 15, 15, 0.92)',
+                    backdropFilter: 'blur(20px)',
+                    border: scoreToast.tone === 'you'
+                      ? '1.5px solid rgba(100, 220, 160, 0.45)'
+                      : '1.5px solid rgba(220, 100, 100, 0.35)',
                     borderRadius: 999,
-                    padding: '8px 20px',
+                    padding: '12px 28px',
                     color:
                       scoreToast.tone === 'you'
                         ? 'rgba(151, 241, 205, 0.98)'
-                        : 'rgba(232,245,240,0.95)',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
+                        : 'rgba(255, 180, 180, 0.95)',
+                    fontSize: '1.05rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.01em',
                     pointerEvents: 'none',
+                    boxShadow: scoreToast.tone === 'you'
+                      ? '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(100,220,160,0.1)'
+                      : '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(220,100,100,0.1)',
                   }}
                 >
                   {scoreToast.message}

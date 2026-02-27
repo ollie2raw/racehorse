@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import confetti from 'canvas-confetti';
 import { Board, DominoTile } from '../components';
 import type { PlacementPosition, Tile } from '../types';
 import {
@@ -57,10 +58,14 @@ export default function NoBrainerLabScreen({
   const [practiceState, setPracticeState] = useState<NoBrainerPracticeState | null>(null);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [showSolution, setShowSolution] = useState(false);
+  const [usedHint, setUsedHint] = useState(false);
+  const [usedShowSolution, setUsedShowSolution] = useState(false);
   const [error, setError] = useState<string>('');
   const [reloadTick, setReloadTick] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [uiTheme, setUiTheme] = useState<'green' | 'brown'>('green');
+  const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
+  const confettiFiredRef = useRef(false);
 
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('PRACTICE_DEBUG') === '1';
@@ -118,6 +123,9 @@ export default function NoBrainerLabScreen({
     setPracticeState(createPracticeState(nextRecord.hand));
     setSelectedTile(null);
     setShowSolution(false);
+    setUsedHint(false);
+    setUsedShowSolution(false);
+    confettiFiredRef.current = false;
     setError('');
   }, [dataset]);
 
@@ -138,6 +146,7 @@ export default function NoBrainerLabScreen({
     if (!practiceState || !record) return;
     const hint = hintForState(practiceState, record.example);
     if (!hint) return;
+    setUsedHint(true);
     setSelectedTile(hint.tile);
   };
 
@@ -146,8 +155,54 @@ export default function NoBrainerLabScreen({
     setPracticeState(createPracticeState(record.hand));
     setSelectedTile(null);
     setShowSolution(false);
+    setUsedHint(false);
+    setUsedShowSolution(false);
+    confettiFiredRef.current = false;
     setError('');
   };
+
+  useEffect(() => {
+    if (!practiceState) return;
+    if (practiceState.status !== 'won') {
+      confettiFiredRef.current = false;
+      return;
+    }
+    if (usedHint || usedShowSolution) return;
+    if (confettiFiredRef.current) return;
+    const canvas = confettiCanvasRef.current;
+    if (!canvas) return;
+    confettiFiredRef.current = true;
+    const myConfetti = confetti.create(canvas, { resize: true, useWorker: true });
+    myConfetti({
+      particleCount: 120,
+      spread: 100,
+      origin: { x: 0.5, y: 0.4 },
+      colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#fbbf24'],
+      scalar: 1.2,
+    });
+    setTimeout(
+      () =>
+        myConfetti({
+          particleCount: 80,
+          spread: 120,
+          origin: { x: 0.2, y: 0.5 },
+          colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#fbbf24'],
+          scalar: 1.05,
+        }),
+      200,
+    );
+    setTimeout(
+      () =>
+        myConfetti({
+          particleCount: 80,
+          spread: 120,
+          origin: { x: 0.8, y: 0.5 },
+          colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#fbbf24'],
+          scalar: 1.05,
+        }),
+      400,
+    );
+  }, [practiceState, usedHint, usedShowSolution]);
 
   if (!dataset && !error) {
     return (
@@ -190,6 +245,18 @@ export default function NoBrainerLabScreen({
 
   return (
     <div ref={rootRef} className={`app walnut-live practice-lab theme-${uiTheme}`}>
+      <canvas
+        ref={confettiCanvasRef}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 2100,
+          display: practiceState.status === 'won' ? 'block' : 'none',
+        }}
+      />
       <section className="wl-top-rail practice-top-rail" data-ui="hud">
         <div className="wl-center-status practice-center-status">
           <span className="wl-turn-label your-turn">Clear all 7 tiles in one turn</span>
@@ -235,7 +302,13 @@ export default function NoBrainerLabScreen({
             </button>
             <button
               className="btn text compact bot-chip-control"
-              onClick={() => setShowSolution((prev) => !prev)}
+              onClick={() =>
+                setShowSolution((prev) => {
+                  const next = !prev;
+                  if (next) setUsedShowSolution(true);
+                  return next;
+                })
+              }
             >
               {showSolution ? 'Hide Solution' : 'Show Solution'}
             </button>

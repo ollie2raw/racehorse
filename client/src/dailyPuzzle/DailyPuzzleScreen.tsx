@@ -266,6 +266,7 @@ export default function DailyPuzzleScreen({
   const startTimeRef = useRef<number>(0);
   const submittedRef = useRef(false);
   const solvedConfettiFiredRef = useRef(false);
+  const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
   const loadIdRef = useRef(0);
   const loadInFlightKeyRef = useRef<string | null>(null);
   const currentPuzzleDateRef = useRef<string | null>(null);
@@ -833,14 +834,24 @@ export default function DailyPuzzleScreen({
       return;
     }
     if (solvedConfettiFiredRef.current) return;
+    const completedScore =
+      puzzle?.puzzleType === 'one_turn_high_score'
+        ? (finalScore ?? runtimeState?.players.you.score ?? 0)
+        : (runtimeState?.players.you.score ?? 0);
+    const completionRatio =
+      bestPossibleScore > 0 ? completedScore / bestPossibleScore : 0;
+    if (completionRatio < 0.8) return;
     solvedConfettiFiredRef.current = true;
-    confetti({
+    const canvas = confettiCanvasRef.current;
+    if (!canvas) return;
+    const myConfetti = confetti.create(canvas, { resize: true, useWorker: true });
+    myConfetti({
       particleCount: 150,
       spread: 80,
       origin: { y: 0.55 },
       colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff'],
     });
-  }, [status]);
+  }, [status, puzzle?.puzzleType, finalScore, runtimeState, bestPossibleScore]);
 
   if (loading) {
     return (
@@ -1031,6 +1042,18 @@ export default function DailyPuzzleScreen({
 
   return (
     <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
+      <canvas
+        ref={confettiCanvasRef}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 2100,
+          display: status === 'SOLVED' ? 'block' : 'none',
+        }}
+      />
       <div className="wl-top-rail daily-top-rail" data-ui="hud">
         <div className="wl-player-pill is-active daily-hud-pill">
           <span className="wl-player-label">Daily Puzzle</span>
