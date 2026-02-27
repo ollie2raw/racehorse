@@ -770,6 +770,31 @@ export default function App() {
     [showScoreLikeToast, you],
   );
 
+  const renderScoreToastMessage = useCallback((message: string) => {
+    const pointsMatch = message.match(/\+\d+/);
+    if (!pointsMatch || typeof pointsMatch.index !== 'number') return message;
+    const start = pointsMatch.index;
+    const end = start + pointsMatch[0].length;
+    return (
+      <>
+        {message.slice(0, start)}
+        <span
+          style={{
+            fontSize: '1.48rem',
+            fontWeight: 800,
+            lineHeight: 1,
+            letterSpacing: '0.01em',
+            display: 'inline-block',
+            margin: '0 2px',
+          }}
+        >
+          {pointsMatch[0]}
+        </span>
+        {message.slice(end)}
+      </>
+    );
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const hasSeen = window.localStorage.getItem('hasSeenWelcome');
@@ -3850,29 +3875,29 @@ export default function App() {
                     opacity: scoreToast.visible ? 1 : 0,
                     transition: 'opacity 250ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)',
                     zIndex: 14,
-                    background: scoreToast.tone === 'you'
-                      ? 'rgba(10, 40, 25, 0.92)'
-                      : 'rgba(40, 15, 15, 0.92)',
+                    background: 'rgba(255,255,255,0.06)',
                     backdropFilter: 'blur(20px)',
-                    border: scoreToast.tone === 'you'
-                      ? '1.5px solid rgba(100, 220, 160, 0.45)'
-                      : '1.5px solid rgba(220, 100, 100, 0.35)',
+                    border: '1px solid rgba(255,255,255,0.12)',
                     borderRadius: 999,
-                    padding: '12px 28px',
+                    padding: '10px 22px',
                     color:
                       scoreToast.tone === 'you'
                         ? 'rgba(151, 241, 205, 0.98)'
                         : 'rgba(255, 180, 180, 0.95)',
-                    fontSize: '1.05rem',
+                    fontSize: '1.24rem',
                     fontWeight: 700,
-                    letterSpacing: '0.01em',
+                    letterSpacing: '0.04em',
                     pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                    lineHeight: 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
                     boxShadow: scoreToast.tone === 'you'
-                      ? '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(100,220,160,0.1)'
-                      : '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(220,100,100,0.1)',
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(100,220,160,0.1)'
+                      : 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(220,100,100,0.1)',
                   }}
                 >
-                  {scoreToast.message}
+                  {renderScoreToastMessage(scoreToast.message)}
                 </div>
               )}
               {!state.gameOver && (

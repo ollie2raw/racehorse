@@ -21,13 +21,15 @@ import {
   applyPlayMove,
   computeOpenEndsSum,
   createBotMatch,
-  drawUntilPlayableOrEmpty,
+  drawOne,
   getDisplayOpenEnds,
   getLegalMoves,
+  passTurn,
   startNextBotHand,
   type BotActionResult,
   type BotDealSize,
   type BotMatchState,
+  type BotPlayerId,
 } from './botEngine';
 import { chooseBotMove, type BotChoice } from './botHeuristics';
 import { getLocalDateKey } from '../dailyPuzzle/date';
@@ -124,7 +126,11 @@ export default function BotMatchScreen({
   userId = null,
   username = null,
 }: BotMatchScreenProps) {
+  const DRAW_STEP_MS = 700;
   const rootRef = useRef<HTMLDivElement>(null);
+  const handAreaRef = useRef<HTMLDivElement>(null);
+  const boneyardRef = useRef<HTMLDivElement>(null);
+  const opponentPillRef = useRef<HTMLButtonElement>(null);
   const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, dealSize));
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState('');
@@ -149,6 +155,13 @@ export default function BotMatchScreen({
   const [moveLog, setMoveLog] = useState<MoveEntry[]>([]);
   const [handTileSize, setHandTileSize] = useState(56);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
+  const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
+  const [drawSequenceActive, setDrawSequenceActive] = useState(false);
+  const drawSequenceActiveRef = useRef(false);
+  const [flyingTiles, setFlyingTiles] = useState<
+    { x: number; y: number; toX: number; toY: number; id: number }[]
+  >([]);
+  const flyingTileIdRef = useRef(0);
   const moveCounterRef = useRef(1);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
@@ -243,6 +256,31 @@ export default function BotMatchScreen({
   const showScoreToast = (player: 'you' | 'bot', points: number) => {
     showBoardToast(`${player === 'you' ? 'You' : 'Bot'} scored +${points}`, player);
   };
+
+  const renderScoreToastMessage = useCallback((message: string) => {
+    const pointsMatch = message.match(/\+\d+/);
+    if (!pointsMatch || typeof pointsMatch.index !== 'number') return message;
+    const start = pointsMatch.index;
+    const end = start + pointsMatch[0].length;
+    return (
+      <>
+        {message.slice(0, start)}
+        <span
+          style={{
+            fontSize: '1.48rem',
+            fontWeight: 800,
+            lineHeight: 1,
+            letterSpacing: '0.01em',
+            display: 'inline-block',
+            margin: '0 2px',
+          }}
+        >
+          {pointsMatch[0]}
+        </span>
+        {message.slice(end)}
+      </>
+    );
+  }, []);
 
   const appendMove = (entry: Omit<MoveEntry, 'moveNumber'>) => {
     const moveNumber =
@@ -340,6 +378,70 @@ export default function BotMatchScreen({
     if (msg) pushToast(msg);
   };
 
+  const setDrawSequenceActiveBoth = useCallback((val: boolean) => {
+    drawSequenceActiveRef.current = val;
+    setDrawSequenceActive(val);
+  }, []);
+
+  const triggerDrawStepAnimation = useCallback((drawer: BotPlayerId, nextState: BotMatchState) => {
+    if (drawer === 'you') {
+      const pulseIndex = nextState.players.you.hand.length - 1;
+      if (pulseIndex >= 0) {
+        setDrawPulseIndex(pulseIndex);
+        setTimeout(() => setDrawPulseIndex((prev) => (prev === pulseIndex ? null : prev)), 420);
+      }
+    }
+
+    if (!boneyardRef.current) return;
+    const from = boneyardRef.current.getBoundingClientRect();
+    const targetEl = drawer === 'you' ? handAreaRef.current : opponentPillRef.current;
+    if (!targetEl) return;
+    const to = targetEl.getBoundingClientRect();
+    const id = ++flyingTileIdRef.current;
+    setFlyingTiles((prev) => [
+      ...prev,
+      {
+        x: from.left + from.width / 2,
+        y: from.top + from.height / 2,
+        toX: to.left + to.width / 2,
+        toY: to.top + to.height / 2,
+        id,
+      },
+    ]);
+    setTimeout(() => setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id)), 1800);
+  }, []);
+
+  const runDrawSequenceLocal = useCallback(
+    async (initialState: BotMatchState, player: BotPlayerId): Promise<BotActionResult> => {
+      let current = initialState;
+      let drewAny = false;
+
+      while (asPlayMoves(getLegalMoves(current, player)).length === 0) {
+        const step = drawOne(current, player);
+        if (!step.drew) break;
+        drewAny = true;
+        current = step.state;
+        setMatch(current);
+        triggerDrawStepAnimation(player, current);
+        await new Promise<void>((resolve) => setTimeout(resolve, DRAW_STEP_MS));
+      }
+
+      if (asPlayMoves(getLegalMoves(current, player)).length === 0) {
+        const passResult = passTurn(current, player);
+        return {
+          ...passResult,
+          drew: drewAny ? { player, tile: current.players[player].hand[current.players[player].hand.length - 1] } : undefined,
+        };
+      }
+
+      return {
+        state: current,
+        drew: drewAny ? { player, tile: current.players[player].hand[current.players[player].hand.length - 1] } : undefined,
+      };
+    },
+    [triggerDrawStepAnimation],
+  );
+
   const onPositionClick = (position: any) => {
     if (match.currentPlayer !== 'you' || !selectedTile || match.handOver || match.gameOver) return;
     const move = findMoveForSelection(userPlayMoves, selectedTile, position);
@@ -395,83 +497,97 @@ export default function BotMatchScreen({
   };
 
   useEffect(() => {
-    if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver) return;
+    if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
+    let cancelled = false;
 
     const timer = setTimeout(() => {
-      let working = match;
-      let result: BotActionResult | null = null;
-      let chosen: BotChoice | null = null;
-      const beforeEndsRaw = getDisplayOpenEnds(match);
-      const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
+      void (async () => {
+        let working = match;
+        let result: BotActionResult | null = null;
+        let chosen: BotChoice | null = null;
+        const beforeEndsRaw = getDisplayOpenEnds(match);
+        const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
 
-      const botPlayable = asPlayMoves(getLegalMoves(working, 'bot'));
-      if (botPlayable.length === 0) {
-        const drawPass = drawUntilPlayableOrEmpty(working, 'bot');
-        working = drawPass.state;
-        if (drawPass.drew) {
-          appendMove({
-            player: 'opponent',
-            action: 'draw',
-            boardEnds,
-            handBefore: [],
-            validMoves: [],
-            pipDelta: 0,
-            boardState: snapshotBoardState(match.board),
-            boardRenderState: cloneBoardState(match.board),
-            handSnapshot: match.players.you.hand.map(toTileTuple),
-            engineBestMove: null,
-          });
-        }
-        if (drawPass.passed) {
-          appendMove({
-            player: 'opponent',
-            action: 'pass',
-            boardEnds,
-            handBefore: [],
-            validMoves: [],
-            pipDelta: 0,
-            boardState: snapshotBoardState(match.board),
-            boardRenderState: cloneBoardState(match.board),
-            handSnapshot: match.players.you.hand.map(toTileTuple),
-            engineBestMove: null,
-          });
-        }
-        const afterDraw = asPlayMoves(getLegalMoves(working, 'bot'));
-        if (afterDraw.length === 0) {
-          result = drawPass;
+        const botPlayable = asPlayMoves(getLegalMoves(working, 'bot'));
+        if (botPlayable.length === 0) {
+          setDrawSequenceActiveBoth(true);
+          try {
+            const drawPass = await runDrawSequenceLocal(working, 'bot');
+            if (cancelled) return;
+            working = drawPass.state;
+
+            if (drawPass.drew) {
+              appendMove({
+                player: 'opponent',
+                action: 'draw',
+                boardEnds,
+                handBefore: [],
+                validMoves: [],
+                pipDelta: 0,
+                boardState: snapshotBoardState(match.board),
+                boardRenderState: cloneBoardState(match.board),
+                handSnapshot: match.players.you.hand.map(toTileTuple),
+                engineBestMove: null,
+              });
+            }
+            if (drawPass.passed) {
+              appendMove({
+                player: 'opponent',
+                action: 'pass',
+                boardEnds,
+                handBefore: [],
+                validMoves: [],
+                pipDelta: 0,
+                boardState: snapshotBoardState(match.board),
+                boardRenderState: cloneBoardState(match.board),
+                handSnapshot: match.players.you.hand.map(toTileTuple),
+                engineBestMove: null,
+              });
+            }
+            const afterDraw = asPlayMoves(getLegalMoves(working, 'bot'));
+            if (afterDraw.length === 0) {
+              result = drawPass;
+            } else {
+              chosen = chooseBotMove(working, 'hard');
+              result = applyPlayMove(working, 'bot', chosen?.move ?? afterDraw[0]);
+            }
+          } finally {
+            setDrawSequenceActiveBoth(false);
+          }
         } else {
           chosen = chooseBotMove(working, 'hard');
-          result = applyPlayMove(working, 'bot', chosen?.move ?? afterDraw[0]);
+          result = applyPlayMove(working, 'bot', chosen?.move ?? botPlayable[0]);
         }
-      } else {
-        chosen = chooseBotMove(working, 'hard');
-        result = applyPlayMove(working, 'bot', chosen?.move ?? botPlayable[0]);
-      }
 
-      if (chosen) setLastBotChoice(chosen);
-      if (result) {
-        setSelectedTile(null);
-        if (chosen?.move?.tile) {
-          appendMove({
-            player: 'opponent',
-            action: 'place',
-            tile: toTileTuple(chosen.move.tile),
-            boardEnds,
-            handBefore: [],
-            validMoves: [],
-            pipDelta: 0,
-            boardState: snapshotBoardState(match.board),
-            boardRenderState: cloneBoardState(match.board),
-            handSnapshot: match.players.you.hand.map(toTileTuple),
-            engineBestMove: null,
-          });
+        if (cancelled) return;
+        if (chosen) setLastBotChoice(chosen);
+        if (result) {
+          setSelectedTile(null);
+          if (chosen?.move?.tile) {
+            appendMove({
+              player: 'opponent',
+              action: 'place',
+              tile: toTileTuple(chosen.move.tile),
+              boardEnds,
+              handBefore: [],
+              validMoves: [],
+              pipDelta: 0,
+              boardState: snapshotBoardState(match.board),
+              boardRenderState: cloneBoardState(match.board),
+              handSnapshot: match.players.you.hand.map(toTileTuple),
+              engineBestMove: null,
+            });
+          }
+          applyAndNotify(result);
         }
-        applyAndNotify(result);
-      }
+      })();
     }, 760);
 
-    return () => clearTimeout(timer);
-  }, [match]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [match, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth]);
 
   const advanceHand = useCallback(() => {
     setSelectedTile(null);
@@ -497,55 +613,67 @@ export default function BotMatchScreen({
   }, [handReveal, match.gameOver, advanceHand]);
 
   useEffect(() => {
-    if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+    if (match.currentPlayer !== 'you' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
     if (userPlayMoves.length > 0) return;
+    let cancelled = false;
     const beforeEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
     const handBefore = match.players.you.hand.map(toTileTuple);
-    const result = drawUntilPlayableOrEmpty(match, 'you');
-    setSelectedTile(null);
-    if (result.drew) {
-      appendMove({
-        player: 'you',
-        action: 'draw',
-        boardEnds,
-        handBefore,
-        validMoves: [],
-        pipDelta: 0,
-        boardState: snapshotBoardState(match.board),
-        boardRenderState: cloneBoardState(match.board),
-        handSnapshot: handBefore,
-        engineBestMove: pickEngineBestMove(
-          userPlayMoves
-            .filter((m) => m.type === 'play' && m.tile)
-            .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-          boardEnds,
-          handBefore,
-        ),
-      });
-    }
-    if (result.passed) {
-      appendMove({
-        player: 'you',
-        action: 'pass',
-        boardEnds,
-        handBefore,
-        validMoves: [],
-        pipDelta: 0,
-        boardState: snapshotBoardState(match.board),
-        boardRenderState: cloneBoardState(match.board),
-        handSnapshot: handBefore,
-        engineBestMove: pickEngineBestMove(
-          userPlayMoves
-            .filter((m) => m.type === 'play' && m.tile)
-            .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-          boardEnds,
-          handBefore,
-        ),
-      });
-    }
-    applyAndNotify(result);
-  }, [match, userPlayMoves.length]);
+    void (async () => {
+      setDrawSequenceActiveBoth(true);
+      try {
+        const result = await runDrawSequenceLocal(match, 'you');
+        if (cancelled) return;
+        setSelectedTile(null);
+        if (result.drew) {
+          appendMove({
+            player: 'you',
+            action: 'draw',
+            boardEnds,
+            handBefore,
+            validMoves: [],
+            pipDelta: 0,
+            boardState: snapshotBoardState(match.board),
+            boardRenderState: cloneBoardState(match.board),
+            handSnapshot: handBefore,
+            engineBestMove: pickEngineBestMove(
+              userPlayMoves
+                .filter((m) => m.type === 'play' && m.tile)
+                .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
+              boardEnds,
+              handBefore,
+            ),
+          });
+        }
+        if (result.passed) {
+          appendMove({
+            player: 'you',
+            action: 'pass',
+            boardEnds,
+            handBefore,
+            validMoves: [],
+            pipDelta: 0,
+            boardState: snapshotBoardState(match.board),
+            boardRenderState: cloneBoardState(match.board),
+            handSnapshot: handBefore,
+            engineBestMove: pickEngineBestMove(
+              userPlayMoves
+                .filter((m) => m.type === 'play' && m.tile)
+                .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
+              boardEnds,
+              handBefore,
+            ),
+          });
+        }
+        applyAndNotify(result);
+      } finally {
+        setDrawSequenceActiveBoth(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [match, userPlayMoves.length, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, userPlayMoves]);
 
   useEffect(() => {
     if (!isDailyPuzzleRun || !dailyPuzzleDate || !match.gameOver) return;
@@ -930,6 +1058,7 @@ export default function BotMatchScreen({
           <button
             type="button"
             className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
+            ref={opponentPillRef}
             onClick={() => setScoreTrackOpen(true)}
             aria-label="Open score track"
             style={{ width: 142, minWidth: 'unset' }}
@@ -1023,31 +1152,39 @@ export default function BotMatchScreen({
             <div
               style={{
                 position: 'absolute',
-                top: 12,
+                top: 16,
                 left: '50%',
-                transform: scoreToast.visible ? 'translate(-50%, 0px)' : 'translate(-50%, -10px)',
+                transform: scoreToast.visible ? 'translate(-50%, 0px)' : 'translate(-50%, -14px)',
                 opacity: scoreToast.visible ? 1 : 0,
-                transition: 'opacity 220ms ease, transform 220ms ease',
+                transition: 'opacity 250ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)',
                 zIndex: 14,
-                background: 'rgba(15, 25, 20, 0.85)',
-                backdropFilter: 'blur(16px)',
-                border: '1px solid rgba(236,252,245,0.18)',
+                background: 'rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255,255,255,0.12)',
                 borderRadius: 999,
-                padding: '8px 20px',
-                color:
-                  scoreToast.tone === 'you'
-                    ? 'rgba(151, 241, 205, 0.98)'
-                    : 'rgba(232,245,240,0.95)',
-                fontSize: '0.85rem',
-                fontWeight: 600,
+                padding: '10px 22px',
+                color: scoreToast.tone === 'you'
+                  ? 'rgba(151, 241, 205, 0.98)'
+                  : 'rgba(255, 180, 180, 0.95)',
+                fontSize: '1.24rem',
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+                lineHeight: 1,
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
                 pointerEvents: 'none',
+                boxShadow: scoreToast.tone === 'you'
+                  ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(100,220,160,0.1)'
+                  : 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(220,100,100,0.1)',
               }}
             >
-              {scoreToast.message}
+              {renderScoreToastMessage(scoreToast.message)}
             </div>
           )}
           {!match.gameOver && (
             <div
+              ref={boneyardRef}
               className="boneyard-pill"
               style={{
                 position: 'absolute',
@@ -1165,7 +1302,7 @@ export default function BotMatchScreen({
 
       <div className="hand-area wl-hand-area" data-ui="tray">
         <div className="tray-rail">
-          <div className="tray-center">
+          <div className="tray-center" ref={handAreaRef}>
             <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
               {(handCompactStacked
                 ? [
@@ -1178,15 +1315,17 @@ export default function BotMatchScreen({
                   {row.map((tile, idx) => {
                     const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
                     const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
+                    const absoluteIdx = match.players.you.hand.findIndex((handTile) => tileEquals(handTile, tile));
                     return (
                       <DominoTile
                         key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
                         tile={tile}
                         size={handTileSize}
                         rotation={0}
+                        className={drawPulseIndex === absoluteIdx ? 'new-draw' : ''}
                         selected={selected}
                         highlight={playable}
-                        disabled={!handActive || botTurn}
+                        disabled={!handActive || botTurn || drawSequenceActive}
                         onClick={() => {
                           if (!handActive || botTurn) return;
                           if (!playable) return;
@@ -1201,6 +1340,19 @@ export default function BotMatchScreen({
           </div>
         </div>
       </div>
+
+      {flyingTiles.map((ft) => (
+        <div
+          key={ft.id}
+          className="flying-tile-overlay"
+          style={{
+            '--fly-from-x': `${ft.x}px`,
+            '--fly-from-y': `${ft.y}px`,
+            '--fly-to-x': `${ft.toX}px`,
+            '--fly-to-y': `${ft.toY}px`,
+          } as React.CSSProperties}
+        />
+      ))}
 
       <GameReviewer
         open={analyzerOpen}
