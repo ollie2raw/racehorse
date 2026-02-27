@@ -1,8 +1,9 @@
-import { GameState, Config, PlacementPosition, Move } from './game/types';
+import { GameState, Config, PlacementPosition, Move, Tile } from './game/types';
+import type { Server } from 'socket.io';
 import {
   createInitialState,
   startNewHand,
-  drawUntilPlayableOrEmpty,
+  drawOne,
   applyMove,
   getLegalMoves,
   getOpenEnds,
@@ -23,6 +24,14 @@ export type Room = {
 };
 
 const rooms = new Map<RoomCode, Room>();
+const drawSequencesByRoom = new Map<RoomCode, Promise<void>>();
+const DRAW_STEP_MS = 1400;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function withDrawSequenceFlag(state: GameState, active: boolean): GameState {
+  return { ...state, __drawSequenceActive: active };
+}
 
 function makeCode(len = 5): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -76,7 +85,88 @@ export function deleteRoom(code: string): boolean {
   return rooms.delete(code);
 }
 
-export function startGame(code: string): Room {
+export async function runDrawSequence(
+  roomId: string,
+  playerId: string,
+  io: Server,
+  getState: () => GameState,
+  setState: (s: GameState) => void,
+  preDrawnTiles: Tile[] = [],
+): Promise<void> {
+  const existing = drawSequencesByRoom.get(roomId);
+  if (existing) {
+    await existing;
+    return;
+  }
+
+  const sequence = (async () => {
+    let current = getState();
+    if (current.__drawSequenceActive) return;
+
+    const initialPlayable = getLegalMoves(current, playerId).some((move) => move.type === 'play');
+    if (initialPlayable) return;
+
+    setState(withDrawSequenceFlag(current, true));
+    current = getState();
+
+    try {
+      if (preDrawnTiles.length > 0) {
+        for (const tile of preDrawnTiles) {
+          io.to(playerId).emit('game:draw_step', {
+            playerId,
+            tile,
+            boneyardCount: current.boneyard.length,
+            drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+          });
+          io.to(roomId).except(playerId).emit('game:draw_step', {
+            playerId,
+            tile: null,
+            boneyardCount: current.boneyard.length,
+            drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+          });
+        }
+      }
+
+      while (true) {
+        const drawableCount = Math.max(0, current.boneyard.length - current.config.deadTileCount);
+        if (drawableCount === 0) break;
+
+        const { state: next, drew } = drawOne(current, playerId);
+        current = next;
+        setState(withDrawSequenceFlag(current, true));
+        current = getState();
+
+        io.to(playerId).emit('game:draw_step', {
+          playerId,
+          tile: drew,
+          boneyardCount: current.boneyard.length,
+          drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+        });
+        io.to(roomId).except(playerId).emit('game:draw_step', {
+          playerId,
+          tile: null,
+          boneyardCount: current.boneyard.length,
+          drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+        });
+
+        const playable = getLegalMoves(current, playerId).filter((move) => move.type === 'play');
+        if (playable.length > 0) break;
+        await sleep(DRAW_STEP_MS);
+      }
+    } finally {
+      setState(withDrawSequenceFlag(current, false));
+    }
+  })();
+
+  drawSequencesByRoom.set(roomId, sequence);
+  try {
+    await sequence;
+  } finally {
+    drawSequencesByRoom.delete(roomId);
+  }
+}
+
+export async function startGame(code: string, io: Server): Promise<Room> {
   const room = getRoom(code);
 
   if (room.players.length !== 2) {
@@ -93,12 +183,17 @@ export function startGame(code: string): Room {
   // Create fresh game state (either first start or restart after stale state)
   const state0 = createInitialState(room.players, room.config);
   const state1 = startNewHand(state0);
-
-  // Auto-draw for starting player until they can open
-  const currentPlayerId = state1.playerIds[state1.currentPlayerIndex];
-  const { state: state2 } = drawUntilPlayableOrEmpty(state1, currentPlayerId);
-
-  room.state = state2;
+  room.state = withDrawSequenceFlag(state1, false);
+  const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
+  await runDrawSequence(
+    room.code,
+    currentPlayerId,
+    io,
+    () => room.state as GameState,
+    (next) => {
+      room.state = next;
+    },
+  );
   room.nextHandReady.clear();
   room.rematchReady.clear();
   room.lastHandEndedNotifiedHand = null;
@@ -108,7 +203,7 @@ export function startGame(code: string): Room {
   return room;
 }
 
-export function nextHand(code: string): Room {
+export async function nextHand(code: string, io: Server): Promise<Room> {
   const room = getRoom(code);
   if (!room.state) throw new Error('Game not started.');
 
@@ -122,12 +217,17 @@ export function nextHand(code: string): Room {
 
   // Start new hand
   const state1 = startNewHand(room.state);
-
-  // Auto-draw for starting player until they can open
-  const currentPlayerId = state1.playerIds[state1.currentPlayerIndex];
-  const { state: state2 } = drawUntilPlayableOrEmpty(state1, currentPlayerId);
-
-  room.state = state2;
+  room.state = withDrawSequenceFlag(state1, false);
+  const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
+  await runDrawSequence(
+    room.code,
+    currentPlayerId,
+    io,
+    () => room.state as GameState,
+    (next) => {
+      room.state = next;
+    },
+  );
   room.nextHandReady.clear();
   room.lastHandEndedNotifiedHand = null;
   room.lastBroadcastScores = Object.fromEntries(
@@ -136,7 +236,11 @@ export function nextHand(code: string): Room {
   return room;
 }
 
-export function readyForNextHand(code: string, socketId: string): { started: boolean; room: Room } {
+export async function readyForNextHand(
+  code: string,
+  socketId: string,
+  io: Server,
+): Promise<{ started: boolean; room: Room }> {
   const room = getRoom(code);
   if (!room.state) throw new Error('Game not started.');
   if (room.state.gameOver) return { started: false, room };
@@ -146,7 +250,7 @@ export function readyForNextHand(code: string, socketId: string): { started: boo
   room.nextHandReady.add(socketId);
   if (room.nextHandReady.size >= room.players.length) {
     room.nextHandReady.clear();
-    const startedRoom = nextHand(code);
+    const startedRoom = await nextHand(code, io);
     return { started: true, room: startedRoom };
   }
 
@@ -162,7 +266,13 @@ export interface ActionPayload {
   };
 }
 
-export function act(code: string, socketId: string, action: ActionPayload): Room {
+export async function act(
+  code: string,
+  socketId: string,
+  action: ActionPayload,
+  io: Server,
+  onStateReady: (roomCode: string) => void,
+): Promise<Room> {
   const room = getRoom(code);
   if (!room.state) throw new Error('Game not started.');
 
@@ -174,6 +284,9 @@ export function act(code: string, socketId: string, action: ActionPayload): Room
   // DRAW
   // ─────────────────────────────
   if (type === 'DRAW') {
+    if (state.__drawSequenceActive) {
+      return room;
+    }
     if (!canDraw(state, socketId)) {
       const currentId = state.playerIds[state.currentPlayerIndex];
       if (currentId !== socketId) {
@@ -185,8 +298,17 @@ export function act(code: string, socketId: string, action: ActionPayload): Room
       throw new Error('You have a legal play — you may not draw.');
     }
 
-    const res = drawUntilPlayableOrEmpty(state, socketId);
-    room.state = res.state;
+    room.state = withDrawSequenceFlag(state, false);
+    onStateReady(room.code);
+    await runDrawSequence(
+      room.code,
+      socketId,
+      io,
+      () => room.state as GameState,
+      (next) => {
+        room.state = next;
+      },
+    );
     return room;
   }
 
@@ -205,7 +327,21 @@ export function act(code: string, socketId: string, action: ActionPayload): Room
       position,
     };
 
-    room.state = applyMove(state, socketId, move);
+    const { state: stateAfterMove, forcedDraw } = applyMove(state, socketId, move);
+    room.state = stateAfterMove;
+    if (forcedDraw) {
+      onStateReady(room.code);
+      await runDrawSequence(
+        room.code,
+        socketId,
+        io,
+        () => room.state as GameState,
+        (next) => {
+          room.state = next;
+        },
+        [forcedDraw],
+      );
+    }
     return room;
   }
 
@@ -213,7 +349,7 @@ export function act(code: string, socketId: string, action: ActionPayload): Room
   // PASS
   // ─────────────────────────────
   if (type === 'PASS') {
-    room.state = applyMove(state, socketId, { type: 'pass' });
+    room.state = applyMove(state, socketId, { type: 'pass' }).state;
     return room;
   }
 
@@ -235,6 +371,7 @@ export function getRoomLegalMoves(code: string, playerId: string) {
 export function getRoomCanDraw(code: string, playerId: string): boolean {
   const room = getRoom(code);
   if (!room.state) return false;
+  if (room.state.__drawSequenceActive) return false;
   return canDraw(room.state, playerId);
 }
 

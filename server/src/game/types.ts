@@ -152,6 +152,7 @@ export interface GameState {
   readonly gameOver: boolean;
   readonly winnerId: string | null;
   readonly consecutivePasses: number;
+  readonly __drawSequenceActive?: boolean;
 }
 
 // ─── Position Utilities ──────────────────────────────────────

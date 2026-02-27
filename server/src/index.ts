@@ -356,9 +356,11 @@ function broadcastStateUpdate(roomCode: string) {
         }),
       );
 
+      const { __drawSequenceActive, ...stateForClient } = room.state as any;
+      void __drawSequenceActive;
       socket.emit('state:update', {
         state: {
-          ...room.state,
+          ...stateForClient,
           players: maskedPlayers,
           handCounts,
         },
@@ -403,8 +405,10 @@ function broadcastStateUpdate(roomCode: string) {
   // TOURNAMENT_SPECTATE_BROADCAST
   // Spectator-safe broadcast to anyone in the Socket.IO room (hands hidden)
   if (room.state) {
+    const { __drawSequenceActive, ...stateForSpectatorsBase } = room.state as any;
+    void __drawSequenceActive;
     const stateForSpectators = {
-      ...room.state,
+      ...stateForSpectatorsBase,
       players: Object.fromEntries(
         room.state.playerIds.map((pid) => {
           const ps = room.state!.players[pid];
@@ -678,10 +682,14 @@ io.on('connection', (socket: Socket) => {
     });
 
     // Start match now
-    startGame(room.code);
-    broadcastStateUpdate(room.code);
-
-    emitTournament(t);
+    void startGame(room.code, io)
+      .then(() => {
+        broadcastStateUpdate(room.code);
+        emitTournament(t);
+      })
+      .catch((err) => {
+        console.warn('[tournament] failed to start match room', err);
+      });
   };
 
   const maybeFinalizeTournamentMatch = (room: any) => {
@@ -1088,7 +1096,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
   });
 
-  socket.on('game:start', (code, cb) => {
+  socket.on('game:start', async (code, cb) => {
     const roomCode = String(code).trim().toUpperCase();
     console.log(`[game:start] socket=${socket.id}, code=${roomCode}`);
     try {
@@ -1102,7 +1110,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
         if (typeof cb === 'function') cb({ ok: false, error: 'waiting_for_players' });
         return;
       }
-      const room = startGame(roomCode);
+      const room = await startGame(roomCode, io);
       console.log(
         `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,
       );
@@ -1115,7 +1123,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
   });
 
-  socket.on('game:action', (code, action, cb) => {
+  socket.on('game:action', async (code, action, cb) => {
     const roomCode = String(code).trim().toUpperCase();
     console.log(`[game:action] socket=${socket.id}, code=${roomCode}, action=${action?.type}`);
     try {
@@ -1124,7 +1132,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
         if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.' });
         return;
       }
-      const room = act(roomCode, socket.id, action);
+      const room = await act(roomCode, socket.id, action, io, (code) => broadcastStateUpdate(code));
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
       if (typeof cb === 'function') cb({ ok: true });
@@ -1135,11 +1143,11 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
   });
 
-  socket.on('hand:next', (code, cb) => {
+  socket.on('hand:next', async (code, cb) => {
     const roomCode = String(code).trim().toUpperCase();
     console.log(`[hand:next] socket=${socket.id}, code=${roomCode}`);
     try {
-      const room = nextHand(roomCode);
+      const room = await nextHand(roomCode, io);
       console.log(`[hand:next] new hand started, handNumber=${room.state?.handNumber}`);
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
@@ -1151,10 +1159,10 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
   });
 
-  socket.on('hand:ready', (code, cb) => {
+  socket.on('hand:ready', async (code, cb) => {
     const roomCode = String(code).trim().toUpperCase();
     try {
-      const result = readyForNextHand(roomCode, socket.id);
+      const result = await readyForNextHand(roomCode, socket.id, io);
       if (result.started) {
         broadcastStateUpdate(result.room.code);
         maybeFinalizeTournamentMatch(result.room);
@@ -1166,7 +1174,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
   });
 
-  socket.on('game:rematch', (code: unknown, cb?: AckFn) => {
+  socket.on('game:rematch', async (code: unknown, cb?: AckFn) => {
     const roomCode = String(code ?? '').trim().toUpperCase();
     try {
       const room = getRoom(roomCode);
@@ -1202,7 +1210,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
         maxLeadA: 0,
         maxLeadB: 0,
       };
-      startGame(room.code);
+      await startGame(room.code, io);
       broadcastStateUpdate(room.code);
       io.to(room.code).emit('game:rematch:started', { roomCode: room.code });
       emitRematchStatus(room.code);

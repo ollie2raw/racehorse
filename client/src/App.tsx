@@ -673,12 +673,24 @@ export default function App() {
   const prevHudScoresRef = useRef<Record<string, number>>({});
   const prevMyHandLenRef = useRef(0);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
+  const [boneyardDisplayCount, setBoneyardDisplayCount] = useState<number | null>(null);
+  const [drawStepMyHand, setDrawStepMyHand] = useState<Tile[] | null>(null);
+  const [drawStepOpponentHandCount, setDrawStepOpponentHandCount] = useState<number | null>(null);
+  const [drawSequenceActive, setDrawSequenceActive] = useState(false);
+  const [flyingTiles, setFlyingTiles] = useState<
+    { x: number; y: number; toX: number; toY: number; id: number }[]
+  >([]);
+  const flyingTileIdRef = useRef(0);
+  const boneyardRef = useRef<HTMLDivElement>(null);
+  const handAreaRef = useRef<HTMLDivElement>(null);
+  const opponentPillRef = useRef<HTMLButtonElement>(null);
   const [opponentDragging, setOpponentDragging] = useState(false);
   const draggingStateRef = useRef(false);
   const handRevealAutoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealAutoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [handRevealAutoProgress, setHandRevealAutoProgress] = useState(1);
   const isMutedRef = useRef(isMuted);
+  const youRef = useRef(you);
   const matchRecordKeyRef = useRef('');
   const prevGameOverRef = useRef(false);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -781,11 +793,23 @@ export default function App() {
   }, [authProfile]);
 
   useEffect(() => {
+    youRef.current = you;
+  }, [you]);
+
+  useEffect(() => {
     socketRef.current = socket;
   }, [socket]);
 
   useEffect(() => {
     stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    if (state) return;
+    setDrawSequenceActive(false);
+    setDrawStepMyHand(null);
+    setDrawStepOpponentHandCount(null);
+    setBoneyardDisplayCount(null);
   }, [state]);
 
   useEffect(() => {
@@ -919,16 +943,66 @@ export default function App() {
       setState(payload?.state ?? null);
       setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       setCanDraw(Boolean(payload?.canDraw));
+      setDrawSequenceActive(false);
+      setDrawStepMyHand(null);
+      setDrawStepOpponentHandCount(null);
+      setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
+      setFlyingTiles([]);
+    };
+    const onDrawStep = (payload: {
+      playerId: string;
+      tile: Tile | null;
+      boneyardCount: number;
+      drawerHandCount: number;
+    }) => {
+      if (!payload) return;
+      setDrawSequenceActive(true);
+      setBoneyardDisplayCount(payload.boneyardCount);
+      if (boneyardRef.current) {
+        const from = boneyardRef.current.getBoundingClientRect();
+        const isMe = payload.playerId === youRef.current;
+        const targetEl = isMe ? handAreaRef.current : opponentPillRef.current;
+        if (targetEl) {
+          const to = targetEl.getBoundingClientRect();
+          const id = ++flyingTileIdRef.current;
+          setFlyingTiles((prev) => [
+            ...prev,
+            {
+              x: from.left + from.width / 2,
+              y: from.top + from.height / 2,
+              toX: to.left + to.width / 2,
+              toY: to.top + to.height / 2,
+              id,
+            },
+          ]);
+          setTimeout(() => setFlyingTiles((prev) => prev.filter((t) => t.id !== id)), 1800);
+        }
+      }
+      const isMe = payload.playerId === youRef.current;
+      if (isMe && payload.tile) {
+        const drawnTile = payload.tile;
+        setDrawStepMyHand((prev) => {
+          const base = prev ?? (stateRef.current?.players?.[youRef.current]?.hand ?? []);
+          const next = [...base, drawnTile];
+          setDrawPulseIndex(next.length - 1);
+          setTimeout(() => setDrawPulseIndex(null), 400);
+          return next;
+        });
+      } else if (!isMe) {
+        setDrawStepOpponentHandCount(payload.drawerHandCount);
+      }
     };
     socket.on('friend:invited', onFriendInvited);
     socket.on('friend:invite:error', onFriendInviteError);
     socket.on('room:update', onRoomUpdate);
     socket.on('state:update', onStateUpdate);
+    socket.on('game:draw_step', onDrawStep);
     return () => {
       socket.off('friend:invited', onFriendInvited);
       socket.off('friend:invite:error', onFriendInviteError);
       socket.off('room:update', onRoomUpdate);
       socket.off('state:update', onStateUpdate);
+      socket.off('game:draw_step', onDrawStep);
     };
   }, [socket, showToast]);
 
@@ -1843,7 +1917,7 @@ export default function App() {
   const draw = useCallback(async () => {
     setActionError('');
     const boneyardLockedNow = (state?.boneyard.length ?? 0) <= 2;
-    if (!socket || !joinedRoom || boneyardLockedNow) return;
+    if (!socket || !joinedRoom || boneyardLockedNow || drawSequenceActive) return;
     emitDraggingState(false);
     setPendingUiAction('draw');
     const boardEnds = getBoardEnds(state?.board ?? null);
@@ -1881,11 +1955,11 @@ export default function App() {
     } finally {
       setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
     }
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, showScoreLikeToast]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, showScoreLikeToast, drawSequenceActive]);
 
   const pass = useCallback(async () => {
     setActionError('');
-    if (!socket || !joinedRoom) return;
+    if (!socket || !joinedRoom || drawSequenceActive) return;
     emitDraggingState(false);
     setPendingUiAction('pass');
     const boardEnds = getBoardEnds(state?.board ?? null);
@@ -1922,7 +1996,7 @@ export default function App() {
     } finally {
       setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
     }
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, drawSequenceActive]);
 
   const play = useCallback(
     async (position: PlacementPosition) => {
@@ -1984,12 +2058,14 @@ export default function App() {
   // Derived state
   const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
   const isMyTurn = currentTurnId === you;
-  const myHand = state?.players[you]?.hand ?? [];
+  const authoritativeMyHand = state?.players[you]?.hand ?? [];
+  const myHand = drawStepMyHand ?? authoritativeMyHand;
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
-  const opponentTileCount =
+  const authoritativeOpponentTileCount =
     state && opponentId
       ? (state.handCounts?.[opponentId] ?? state.players[opponentId]?.hand?.length ?? 0)
       : 0;
+  const opponentTileCount = drawStepOpponentHandCount ?? authoritativeOpponentTileCount;
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
   const opponent = players.find((pl) => pl.id !== you) ?? null;
@@ -2023,9 +2099,10 @@ export default function App() {
   const hudRightScore =
     isSpectatingMatch && spectateRightPlayerId ? (state?.players[spectateRightPlayerId]?.score ?? 0) : myScore;
   const hudRightScorePulse = isSpectatingMatch && spectateRightPlayerId ? Boolean(hudScorePulse[spectateRightPlayerId]) : Boolean(hudScorePulse[you]);
-  const canPass = legalMoves.some((m) => m.type === 'pass');
+  const canDrawNow = canDraw && !drawSequenceActive;
+  const canPass = legalMoves.some((m) => m.type === 'pass') && !drawSequenceActive;
   const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
-  const boneyardCount = state?.boneyard.length ?? 0;
+  const boneyardCount = boneyardDisplayCount ?? state?.boneyard.length ?? 0;
   const isBoneyardLocked = boneyardCount <= 2;
   const openEndsSum = getOpenEndsSum(state?.board ?? null);
   const canUseRematch = Boolean(
@@ -2200,15 +2277,15 @@ export default function App() {
 
   useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-    if (!handActive || !isMyTurn || hasPlayMoves) {
+    if (!handActive || !isMyTurn || hasPlayMoves || drawSequenceActive) {
       autoTurnActionKeyRef.current = '';
       return;
     }
 
-    const autoAction: 'draw' | 'pass' | null = canDraw ? 'draw' : canPass ? 'pass' : null;
+    const autoAction: 'draw' | 'pass' | null = canDrawNow ? 'draw' : canPass ? 'pass' : null;
     if (!autoAction) return;
 
-    const turnKey = `${state?.handNumber ?? 0}:${state?.currentPlayerIndex ?? -1}:${myHand.length}:${state?.boneyard.length ?? 0}:${autoAction}`;
+    const turnKey = `${state?.handNumber ?? 0}:${state?.currentPlayerIndex ?? -1}:${myHand.length}:${boneyardCount}:${autoAction}`;
     if (autoTurnActionKeyRef.current === turnKey) return;
 
     autoTurnActionKeyRef.current = turnKey;
@@ -2217,7 +2294,7 @@ export default function App() {
     } else {
       pass();
     }
-  }, [state, isMyTurn, hasPlayMoves, canDraw, canPass, myHand.length, draw, pass]);
+  }, [state, isMyTurn, hasPlayMoves, canDrawNow, canPass, myHand.length, boneyardCount, draw, pass, drawSequenceActive]);
 
   useEffect(() => {
     if (!state) {
@@ -3641,6 +3718,7 @@ export default function App() {
           <div className="wl-top-rail" data-ui="hud" style={{ position: 'relative' }}>
             <button
               type="button"
+              ref={opponentPillRef}
               className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
@@ -3749,6 +3827,7 @@ export default function App() {
               )}
               {!state.gameOver && (
                 <div
+                  ref={boneyardRef}
                   className={`boneyard-pill${isBoneyardLocked ? ' locked' : ''}`}
                   style={{
                     position: 'absolute',
@@ -3802,10 +3881,24 @@ export default function App() {
                 tileSize={72}
                 showOpenEndGlow={isMyTurn && opponentDragging}
               />
+              {flyingTiles.map((ft) => (
+                <div
+                  key={ft.id}
+                  className="flying-tile-overlay"
+                  style={
+                    {
+                      '--fly-from-x': `${ft.x}px`,
+                      '--fly-from-y': `${ft.y}px`,
+                      '--fly-to-x': `${ft.toX}px`,
+                      '--fly-to-y': `${ft.toY}px`,
+                    } as React.CSSProperties
+                  }
+                />
+              ))}
             </div>
           </div>
 
-          <div className="hand-area wl-hand-area" data-ui="tray">
+          <div ref={handAreaRef} className="hand-area wl-hand-area" data-ui="tray">
             <div className="tray-rail">
               <div className="tray-center" ref={trayCenterRef}>
                 <HandView

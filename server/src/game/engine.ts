@@ -444,7 +444,38 @@ export function drawUntilPlayableOrEmpty(
   return { state: current, drew };
 }
 
-export function applyMove(state: GameState, playerId: string, move: Move): GameState {
+export function drawOne(
+  state: GameState,
+  playerId: string,
+): { state: GameState; drew: Tile | null } {
+  const drawableCount = Math.max(0, state.boneyard.length - state.config.deadTileCount);
+  if (drawableCount === 0) return { state, drew: null };
+
+  const [drawnTile, ...remainingBoneyard] = state.boneyard;
+  const playerState = state.players[playerId];
+  const newHand = [...(playerState?.hand ?? []), drawnTile];
+
+  return {
+    state: {
+      ...state,
+      boneyard: remainingBoneyard,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...playerState,
+          hand: newHand,
+        },
+      },
+    },
+    drew: drawnTile,
+  };
+}
+
+export function applyMove(
+  state: GameState,
+  playerId: string,
+  move: Move,
+): { state: GameState; forcedDraw: Tile | null } {
   assertCurrentPlayer(state, playerId);
 
   if (state.handOver) {
@@ -473,16 +504,22 @@ export function applyMove(state: GameState, playerId: string, move: Move): GameS
 
     // If all players have passed consecutively, the hand is blocked
     if (newConsecutivePasses >= state.playerIds.length) {
-      return resolveBlockedHand({
-        ...state,
-        consecutivePasses: newConsecutivePasses,
-      });
+      return {
+        state: resolveBlockedHand({
+          ...state,
+          consecutivePasses: newConsecutivePasses,
+        }),
+        forcedDraw: null,
+      };
     }
 
     return {
-      ...state,
-      currentPlayerIndex: nextIndex,
-      consecutivePasses: newConsecutivePasses,
+      state: {
+        ...state,
+        currentPlayerIndex: nextIndex,
+        consecutivePasses: newConsecutivePasses,
+      },
+      forcedDraw: null,
     };
   }
 
@@ -557,28 +594,31 @@ export function applyMove(state: GameState, playerId: string, move: Move): GameS
     if ((playedDouble || scored > 0) && getDrawableBoneyardCount(newState) > 0) {
       const [drawnTile, ...remainingBoneyard] = newState.boneyard;
       return {
-        ...newState,
-        players: {
-          ...newState.players,
-          [playerId]: {
-            ...newState.players[playerId],
-            hand: [drawnTile],
+        state: {
+          ...newState,
+          players: {
+            ...newState.players,
+            [playerId]: {
+              ...newState.players[playerId],
+              hand: [drawnTile],
+            },
           },
+          boneyard: remainingBoneyard,
         },
-        boneyard: remainingBoneyard,
+        forcedDraw: drawnTile,
       };
     }
-    return resolveGoOut(newState, playerId);
+    return { state: resolveGoOut(newState, playerId), forcedDraw: null };
   }
 
   // Extra turn: doubles or scoring plays grant another turn (can chain)
   if (playedDouble || scored > 0) {
-    return newState;
+    return { state: newState, forcedDraw: null };
   }
 
   // Normal: advance to next player
   const nextIndex = (state.currentPlayerIndex + 1) % state.playerIds.length;
-  return { ...newState, currentPlayerIndex: nextIndex };
+  return { state: { ...newState, currentPlayerIndex: nextIndex }, forcedDraw: null };
 }
 
 // ─── Exports for scoring module ────────────────────────────

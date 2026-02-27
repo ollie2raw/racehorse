@@ -105,7 +105,7 @@ export function isNoBrainerHand(
     for (const move of legal) {
       let next;
       try {
-        next = applyMove(state, YOU_ID, move);
+        next = applyMove(state, YOU_ID, move).state;
       } catch {
         continue;
       }
