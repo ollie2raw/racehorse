@@ -1,5 +1,5 @@
 import type { EngineBestMove, MoveEntry, TileTuple } from './moveLogger';
-import { sameTileTuple, valueForTile } from './moveLogger';
+import { sameTileTuple } from './moveLogger';
 import { chooseBotMove } from '../bot/botHeuristics';
 import { createBotMatch, previewPlayMove } from '../bot/botEngine';
 import type { BotMatchState } from '../bot/botEngine';
@@ -209,22 +209,20 @@ function classifyMove(
     };
   }
 
-  let fallbackBestTile = validTiles[0];
-  let bestEval = valueForTile(fallbackBestTile, entry.boardEnds, entry.handBefore);
-  for (const tile of validTiles.slice(1)) {
-    const nextEval = valueForTile(tile, entry.boardEnds, entry.handBefore);
-    if (nextEval > bestEval) {
-      bestEval = nextEval;
-      fallbackBestTile = tile;
-    }
+  // If no Fritz evaluation available, rate as Good with no comparison
+  if (!bestTile || !entry.engineBestMove) {
+    return {
+      score: 72,
+      rating: 'Good',
+      explanation: 'No engine evaluation available for this move.',
+    };
   }
 
-  const playedEval = valueForTile(entry.tile, entry.boardEnds, entry.handBefore);
-  const bestForAdvice = bestTile ?? fallbackBestTile;
+  const bestForAdvice = bestTile;
   const bestPosition = bestMove?.position;
-  const diff = bestEval - playedEval;
 
-  if (bestTile && sameTileTuple(entry.tile, bestTile)) {
+  // Brilliant: played exactly Fritz's top choice
+  if (sameTileTuple(entry.tile, bestTile)) {
     return {
       score: 99,
       rating: 'Brilliant',
@@ -233,6 +231,17 @@ function classifyMove(
       explanation: buildExplanation(entry.tile, bestTile, 'Brilliant', playedBreakdown, bestBreakdown),
     };
   }
+
+  // Use Fritz score difference to rate the move
+  // Fritz score for best move vs played move
+  const bestScore = entry.engineBestMove.score;
+  const playedScore = playedBreakdown
+    ? playedBreakdown.immediate * 60 +
+      playedBreakdown.mobility * 8 +
+      playedBreakdown.unload * 1.2
+    : 0;
+  const diff = bestScore - playedScore;
+
   if (diff <= 1.5) {
     return {
       score: 88,
@@ -301,7 +310,7 @@ export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
       const evalState: BotMatchState = {
         ...template,
         board: entry.boardRenderState as unknown as typeof template.board,
-        currentPlayer: 'you',
+        currentPlayer: 'bot',
         handOpen: true,
         handOver: false,
         gameOver: false,
@@ -309,8 +318,8 @@ export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
         consecutivePasses: 0,
         boneyard: new Array(14).fill({ low: 0, high: 0 }),
         players: {
-          you: { ...template.players.you, hand, score: 0 },
-          bot: { ...template.players.bot, hand: [], score: 0 },
+          you: { ...template.players.you, hand: [], score: 0 },
+          bot: { ...template.players.bot, hand, score: 0 },
         },
       };
       const choice = chooseBotMove(evalState, 'hard');

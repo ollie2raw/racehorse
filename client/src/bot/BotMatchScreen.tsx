@@ -318,7 +318,20 @@ export default function BotMatchScreen({
   };
 
   const getFritzBestMove = useCallback((state: BotMatchState): EngineBestMove | null => {
-    const choice = chooseBotMove(state, 'hard');
+    // chooseBotMove always evaluates for 'bot' player.
+    // When it's your turn, mirror the state so your hand
+    // is in the bot slot for evaluation.
+    const evalState: BotMatchState = state.currentPlayer === 'you'
+      ? {
+          ...state,
+          currentPlayer: 'bot',
+          players: {
+            you: state.players.bot,
+            bot: state.players.you,
+          },
+        }
+      : state;
+    const choice = chooseBotMove(evalState, 'hard');
     if (!choice || !choice.move.tile) return null;
     return {
       tile: toTileTuple(choice.move.tile as Tile),
@@ -339,7 +352,7 @@ export default function BotMatchScreen({
   }, []);
 
   const openAnalyzer = () => {
-    const analysis = analyzeMoveLog(moveLog);
+    const analysis = analyzeMoveLog(moveLog, true);
     setCurrentAnalysis(analysis);
     saveGameAnalysis('bot', analysis);
     setAnalyzerOpen(true);

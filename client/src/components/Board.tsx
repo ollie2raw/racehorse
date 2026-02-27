@@ -517,7 +517,7 @@ export function Board({
     const targetFill = layoutSpanUnits >= 10 ? 0.93 : 0.9;
     const scaleX = (containerWidth * targetFill) / layoutWidth;
     const scaleY = (containerHeight * targetFill) / layoutHeight;
-    const fitScale = Math.min(1.45, Math.max(0.42, Math.min(scaleX, scaleY)));
+    const fitScale = Math.min(1.45, Math.max(0.22, Math.min(scaleX, scaleY)));
 
     setCamera({ x: 0, y: 0, scale: fitScale });
   }
@@ -570,7 +570,7 @@ export function Board({
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setCamera((cam) => ({
       ...cam,
-      scale: Math.min(1.8, Math.max(0.5, cam.scale * delta)),
+      scale: Math.min(1.8, Math.max(0.22, cam.scale * delta)),
     }));
   }, []);
 
@@ -615,7 +615,7 @@ export function Board({
   const applyZoomStep = useCallback((delta: number) => {
     setCamera((cam) => ({
       ...cam,
-      scale: Math.min(1.8, Math.max(0.3, cam.scale + delta)),
+      scale: Math.min(1.8, Math.max(0.22, cam.scale + delta)),
     }));
   }, []);
 
