@@ -950,7 +950,7 @@ export default function DailyPuzzleScreen({
           className="screen mode-home-screen mode-subpage-screen mode-accent-daily daily-entry-screen"
           badge="Daily Puzzle"
           title={stableDailyTitle}
-          subtitle="Score the most points you can in one turn."
+          subtitle="Score as many points as you can in one turn."
           contentClassName="screen-shell"
         >
             <div className="daily-entry-meta-row">

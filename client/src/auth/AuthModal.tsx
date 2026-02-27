@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import './authModal.css';
 
 const AUTH_MODAL_SUBMIT_TIMEOUT_MS = 16000;
 
@@ -20,6 +21,7 @@ export default function AuthModal({
   onSignUp,
 }: AuthModalProps) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -46,8 +48,9 @@ export default function AuthModal({
   const canSubmit = useMemo(() => {
     if (!supabaseEnabled) return false;
     if (submitting) return false;
+    if (mode === 'signup' && username.trim().length === 0) return false;
     return email.trim().length > 0 && password.length >= 6;
-  }, [supabaseEnabled, submitting, email, password]);
+  }, [supabaseEnabled, submitting, mode, username, email, password]);
 
   if (!open) return null;
 
@@ -81,117 +84,91 @@ export default function AuthModal({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Sign in"
-      onClick={handleClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1900,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'rgba(6, 10, 18, 0.62)',
-        backdropFilter: 'blur(4px)',
-        pointerEvents: 'auto',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          position: 'relative',
-          zIndex: 1901,
-          pointerEvents: 'auto',
-          width: 'min(520px, calc(100vw - 24px))',
-          borderRadius: '16px',
-          border: '1px solid rgba(236,252,245,0.2)',
-          background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '18px',
-          color: 'rgba(235,245,242,0.96)',
-          display: 'grid',
-          gap: '12px',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-          }}
-        >
-          <h3 style={{ margin: 0 }}>{mode === 'signin' ? 'Sign in' : 'Create account'}</h3>
-          <button className="mode-inline-btn" onClick={handleClose}>
-            Close
+    <div role="dialog" aria-modal="true" aria-label="Sign in" onClick={handleClose} className="auth-modal-overlay">
+      <div onClick={(e) => e.stopPropagation()} className="auth-modal-card">
+        <div className="auth-modal-head">
+          <p className="auth-modal-label">Account</p>
+          <button className="auth-modal-close" onClick={handleClose} aria-label="Close authentication modal">
+            ×
           </button>
         </div>
 
-        <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
-          {mode === 'signin'
-            ? 'Sign in to track profile and stats.'
-            : 'Create an account to save your progress.'}
-        </p>
+        <h3 className="auth-modal-title">{mode === 'signin' ? 'Sign in' : 'Create account'}</h3>
+        <p className="auth-modal-subtitle">Track your profile, stats, and leaderboard position.</p>
 
         {!supabaseEnabled && (
           <p className="auth-inline-error">{supabaseConfigError ?? 'Supabase not configured.'}</p>
         )}
 
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span style={{ fontSize: '0.9rem', color: 'rgba(223,236,244,0.9)' }}>Email</span>
+        <div className="auth-modal-fields">
+          {mode === 'signup' && (
+            <label className="auth-modal-field">
+              <span className="auth-modal-field-label">Username</span>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="your_username"
+                autoComplete="username"
+                className="auth-modal-input"
+              />
+            </label>
+          )}
+
+          <label className="auth-modal-field">
+            <span className="auth-modal-field-label">Email</span>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             autoComplete="email"
-            style={{
-              borderRadius: '10px',
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(11,18,30,0.7)',
-              color: 'rgba(238,248,243,0.96)',
-              padding: '10px',
-            }}
+            className="auth-modal-input"
           />
-        </label>
+          </label>
 
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span style={{ fontSize: '0.9rem', color: 'rgba(223,236,244,0.9)' }}>Password</span>
+          <label className="auth-modal-field">
+            <span className="auth-modal-field-label">Password</span>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Minimum 6 characters"
             autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            style={{
-              borderRadius: '10px',
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(11,18,30,0.7)',
-              color: 'rgba(238,248,243,0.96)',
-              padding: '10px',
-            }}
+            className="auth-modal-input"
           />
-        </label>
+          </label>
+          {mode === 'signin' && (
+            <button
+              type="button"
+              className="auth-modal-forgot"
+              onClick={() => setError('Password reset is coming soon.')}
+            >
+              Forgot password?
+            </button>
+          )}
+        </div>
 
         {error && <p className="auth-inline-error">{error}</p>}
 
         <button
-          className="mode-option mode-option-primary"
+          className="auth-modal-submit"
           onClick={submit}
           disabled={!canSubmit}
-          style={{ cursor: canSubmit ? 'pointer' : 'not-allowed' }}
         >
-          <span className="mode-option-title">
-            {submitting ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
-          </span>
+          {submitting ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
         </button>
 
-        <button
-          className="mode-inline-btn"
-          onClick={() => setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))}
-        >
-          {mode === 'signin' ? 'Need an account? Create one' : 'Already have an account? Sign in'}
+        <button type="button" className="auth-modal-toggle" onClick={() => setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))}>
+          {mode === 'signin' ? (
+            <>
+              Need an account? <span>Create one</span>
+            </>
+          ) : (
+            <>
+              Already have an account? <span>Sign in</span>
+            </>
+          )}
         </button>
       </div>
     </div>

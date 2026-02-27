@@ -340,3 +340,40 @@
   display: grid;
   gap: 4px;
 }
+
+@media (max-width: 768px) {
+  .practice-top-rail {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .practice-board-area,
+  .practice-board-wrap,
+  .practice-board-canvas {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .practice-hand-area,
+  .practice-hand-row,
+  .practice-controls {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .practice-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .practice-controls .mode-inline-btn,
+  .practice-open-end,
+  .practice-solution button {
+    min-height: 44px;
+    font-size: 13px;
+  }
+}

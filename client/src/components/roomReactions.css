@@ -144,3 +144,30 @@
 .rr-send:hover {
   background: rgba(255, 255, 255, 0.14);
 }
+
+@media (max-width: 768px) {
+  .room-reactions,
+  .rr-list,
+  .rr-emotes,
+  .rr-form {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .rr-line,
+  .rr-text,
+  .rr-name,
+  .rr-empty,
+  .rr-input,
+  .rr-send,
+  .rr-emo {
+    font-size: 13px;
+  }
+
+  .rr-send,
+  .rr-emo {
+    min-height: 44px;
+  }
+}

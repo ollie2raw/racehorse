@@ -445,6 +445,7 @@ export function Board({
   showOpenEndGlow = false,
 }: BoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const fitRetryRafRef = useRef<number | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
@@ -496,7 +497,16 @@ export function Board({
     const rect = container.getBoundingClientRect();
     const containerWidth = width ?? rect.width;
     const containerHeight = height ?? rect.height;
-    if (containerWidth < 2 || containerHeight < 2) return;
+    if (containerWidth < 2 || containerHeight < 2) {
+      // Mobile can report 0x0 before layout settles; retry next frame.
+      if (typeof window !== 'undefined' && fitRetryRafRef.current === null) {
+        fitRetryRafRef.current = window.requestAnimationFrame(() => {
+          fitRetryRafRef.current = null;
+          fitCameraToContainer();
+        });
+      }
+      return;
+    }
 
     const layoutWidth = (layout.maxX - layout.minX) * unitToPixels;
     const layoutHeight = (layout.maxY - layout.minY) * unitToPixels;
@@ -537,19 +547,9 @@ export function Board({
       };
     }
 
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      const box = entry?.contentRect;
-      if (box) {
-        setViewportSize((prev) =>
-          Math.abs(prev.width - box.width) < 0.5 && Math.abs(prev.height - box.height) < 0.5
-            ? prev
-            : { width: box.width, height: box.height },
-        );
-        fitCameraToContainer(box.width, box.height);
-      } else {
-        runFit();
-      }
+    const observer = new ResizeObserver(() => {
+      runFit();
+      fitCameraToContainer();
     });
     observer.observe(container);
 
@@ -557,6 +557,10 @@ export function Board({
       observer.disconnect();
       window.cancelAnimationFrame(raf1);
       window.cancelAnimationFrame(raf2);
+      if (fitRetryRafRef.current !== null) {
+        window.cancelAnimationFrame(fitRetryRafRef.current);
+        fitRetryRafRef.current = null;
+      }
     };
   }, [layout, unitToPixels]);
 
@@ -615,6 +619,8 @@ export function Board({
     }));
   }, []);
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
   return (
     <div
       ref={containerRef}
@@ -630,8 +636,8 @@ export function Board({
       <div
         className="board-canvas"
         style={{
-          width: viewportSize.width > 0 ? `${viewportSize.width}px` : '100%',
-          height: viewportSize.height > 0 ? `${viewportSize.height}px` : '100%',
+          width: isMobile ? '100%' : viewportSize.width > 0 ? `${viewportSize.width}px` : '100%',
+          height: isMobile ? '100%' : viewportSize.height > 0 ? `${viewportSize.height}px` : '100%',
           transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})`,
           transformOrigin: 'center center',
         }}

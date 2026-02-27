@@ -284,3 +284,75 @@
   justify-content: center;
   gap: 10px;
 }
+
+.bot-match-screen .flying-tile-overlay {
+  background: linear-gradient(145deg, #efe9dd 0%, #d9cbb3 48%, #c4ad86 100%);
+  border: 4px solid #6f5a3f;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.7),
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    inset 0 2px 0 rgba(255, 255, 255, 0.35);
+}
+
+.bot-match-screen .flying-tile-overlay::before,
+.bot-match-screen .flying-tile-overlay::after {
+  content: none;
+}
+
+@media (max-width: 768px) {
+  .bot-match-screen .bot-top-rail,
+  .bot-match-screen .bot-hud-center-cluster,
+  .bot-match-screen .bot-hud-left-cluster,
+  .bot-match-screen .bot-hud-right-cluster {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .bot-match-screen .bot-top-rail {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 0 6px;
+  }
+
+  .bot-match-screen .wl-board-area,
+  .bot-match-screen .board-container,
+  .bot-match-screen .board-canvas {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .bot-match-screen .wl-controls-tray button,
+  .bot-match-screen .bot-tray-controls button,
+  .bot-match-screen .mode-inline-btn {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  .bot-match-screen .bot-victory-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .bot-match-screen .bot-victory-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .bot-match-screen .wl-stage-shell,
+  .bot-match-screen .wl-board-area,
+  .bot-match-screen .board-canvas,
+  .bot-match-screen .board-container,
+  .bot-match-screen .wl-stage,
+  .bot-match-screen .game-board {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    overflow: hidden !important;
+    transform-origin: top left;
+  }
+}

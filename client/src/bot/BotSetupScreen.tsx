@@ -19,7 +19,7 @@ export default function BotSetupScreen({
     <LayoutScreen
       className="bot-setup-screen mode-home-screen mode-subpage-screen mode-accent-bot"
       badge="Practice"
-      title="Play vs Bot"
+      title="Play vs Fritz"
       subtitle="Choose deal size before the match starts."
       contentClassName="screen-shell bot-setup-content"
     >

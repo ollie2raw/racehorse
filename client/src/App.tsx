@@ -3083,7 +3083,7 @@ export default function App() {
                 <span className="welcome-mode-dot" style={{ background: '#e05c6a' }} aria-hidden="true" />
                 Tournament Mode
               </div>
-              <div className="welcome-mode-desc">Round robin bracket, 4+ players, first to 30 points</div>
+              <div className="welcome-mode-desc">Round robin (4+ players), matches to 30, play everyone once</div>
             </div>
             <div className="welcome-mode-row">
               <div className="welcome-mode-name">
@@ -3102,7 +3102,7 @@ export default function App() {
             <div className="welcome-mode-row">
               <div className="welcome-mode-name">
                 <span className="welcome-mode-dot" style={{ background: '#a78bfa' }} aria-hidden="true" />
-                No-Brainer Lab
+                No Brainer Lab
               </div>
               <div className="welcome-mode-desc">Practice clearing all 7 tiles in one turn</div>
             </div>
@@ -3251,7 +3251,7 @@ export default function App() {
                     Multiplayer Online
                     <span className="mode-live-badge">Live</span>
                   </span>
-                  <span className="mode-option-meta">Create a private room and play head-to-head in real time</span>
+                  <span className="mode-option-meta">Create a private room and play head to head in real time</span>
                 </button>
               </section>
 
@@ -3266,8 +3266,8 @@ export default function App() {
                       className="mode-option mode-option-secondary mode-accent-bot mode-card-bot"
                       onClick={() => setAppMode('botSetup')}
                     >
-                      <span className="mode-option-title">Play vs Bot</span>
-                      <span className="mode-option-meta">Sharpen your game offline against an AI opponent</span>
+                      <span className="mode-option-title">Play vs Fritz</span>
+                      <span className="mode-option-meta">Test yourself against the toughest opponent in the room</span>
                     </button>
                     <button
                       className="mode-option mode-accent-tournament mode-card-compete"
@@ -3277,14 +3277,14 @@ export default function App() {
                       }}
                     >
                       <span className="mode-option-title">Tournament Mode</span>
-                      <span className="mode-option-meta">Round robin (4+ players), first to 30 points</span>
+                      <span className="mode-option-meta">Round robin (4+ players), matches to 30, play everyone once</span>
                     </button>
                     <button
                       className="mode-option mode-option-secondary mode-accent-bot mode-card-practice"
                       onClick={() => setAppMode('noBrainer')}
                     >
-                      <span className="mode-option-title">No-Brainer Lab</span>
-                      <span className="mode-option-meta">Practice one-turn clear runs with curated hands</span>
+                      <span className="mode-option-title">No Brainer Lab</span>
+                      <span className="mode-option-meta">Practice one turn clear runs with curated hands</span>
                     </button>
                     <button
                       className="mode-option mode-option-secondary mode-option-primary mode-option-hero mode-accent-daily mode-option-hero-outline mode-card-daily"

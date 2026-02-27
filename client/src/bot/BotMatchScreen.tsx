@@ -112,10 +112,10 @@ function asPlayMoves(moves: Move[]): Move[] {
 
 function toastFromResult(result: BotActionResult): string {
   if (result.handEnded) {
-    const winner = result.handEnded.winner === 'you' ? 'You' : 'Bot';
+    const winner = result.handEnded.winner === 'you' ? 'You' : 'Fritz';
     return `${winner} won hand (${result.handEnded.reason}) +${result.handEnded.pointsAwarded}`;
   }
-  if (result.passed) return `${result.passed.player === 'you' ? 'You' : 'Bot'} passed`;
+  if (result.passed) return `${result.passed.player === 'you' ? 'You' : 'Fritz'} passed`;
   return '';
 }
 
@@ -254,7 +254,7 @@ export default function BotMatchScreen({
   };
 
   const showScoreToast = (player: 'you' | 'bot', points: number) => {
-    showBoardToast(`${player === 'you' ? 'You' : 'Bot'} scored +${points}`, player);
+    showBoardToast(`${player === 'you' ? 'You' : 'Fritz'} scored +${points}`, player);
   };
 
   const renderScoreToastMessage = useCallback((message: string) => {
@@ -751,10 +751,10 @@ export default function BotMatchScreen({
     ? match.gameOver
       ? match.winnerId === 'you'
         ? 'You win the match'
-        : 'Bot wins the match'
+        : 'Fritz wins the match'
       : 'Hand complete'
     : botTurn
-      ? 'Bot thinking'
+      ? 'Fritz thinking'
       : 'Your move';
 
   const openEnds = getDisplayOpenEnds(match);
@@ -769,7 +769,7 @@ export default function BotMatchScreen({
         onClose={() => setScoreTrackOpen(false)}
         target={60}
         players={[
-          { label: 'Bot', score: match.players.bot.score, tone: 'opp' },
+          { label: 'Fritz', score: match.players.bot.score, tone: 'opp' },
           { label: 'You', score: match.players.you.score, tone: 'you' },
         ]}
       />
@@ -817,7 +817,7 @@ export default function BotMatchScreen({
             >
               {handReveal.winner === 'you'
                 ? `🎉 You won this hand  +${handReveal.pointsAwarded} pts`
-                : `Bot won this hand  +${handReveal.pointsAwarded} pts`}
+                : `Fritz won this hand  +${handReveal.pointsAwarded} pts`}
             </p>
 
             {handReveal.reason === 'blocked' ? (
@@ -857,7 +857,7 @@ export default function BotMatchScreen({
                       textAlign: 'center',
                     }}
                   >
-                    Bot Remaining Tiles
+                    Fritz Remaining Tiles
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
                     {handReveal.botRemainingTiles.map((tile, idx) => (
@@ -891,7 +891,7 @@ export default function BotMatchScreen({
                     textAlign: 'center',
                   }}
                 >
-                  Bot had {handReveal.botRemainingTiles.length} tile
+                  Fritz had {handReveal.botRemainingTiles.length} tile
                   {handReveal.botRemainingTiles.length === 1 ? '' : 's'} remaining:
                 </div>
                 {handReveal.botRemainingTiles.length > 0 && (
@@ -917,7 +917,7 @@ export default function BotMatchScreen({
                     textAlign: 'center',
                   }}
                 >
-                  Bot cleared their hand
+                  Fritz cleared their hand
                 </div>
                 <div
                   style={{
@@ -971,8 +971,8 @@ export default function BotMatchScreen({
       {match.gameOver && (
         <GameOverModal
           open
-          ariaLabel="Bot match over"
-          title={match.winnerId === 'you' ? 'Champion!' : 'Bot Wins'}
+          ariaLabel="Fritz match over"
+          title={match.winnerId === 'you' ? 'Champion!' : 'Fritz Wins'}
           subtitle={`Final hand ${match.handNumber} · ${match.dealSize}-tile mode`}
           scores={[
             {
@@ -982,7 +982,7 @@ export default function BotMatchScreen({
               showCrown: match.winnerId === 'you',
             },
             {
-              label: 'Bot',
+              label: 'Fritz',
               value: match.players.bot.score,
               winner: match.winnerId === 'bot',
               showCrown: match.winnerId === 'bot',
@@ -1064,7 +1064,7 @@ export default function BotMatchScreen({
             style={{ width: 142, minWidth: 'unset' }}
           >
             <div className="wl-pill-top">
-              <span className="wl-player-label">Bot</span>
+              <span className="wl-player-label">Fritz</span>
               <span className={`wl-tiles-chip ${botTurn ? 'is-pulsing' : ''}`}>
                 <span className="wl-tiles-count">{match.players.bot.hand.length}</span>
                 <span className="wl-tiles-text">tiles</span>
@@ -1364,7 +1364,7 @@ export default function BotMatchScreen({
       {showDebug && (
         <aside className="bot-debug-panel">
           <div>
-            <strong>Bot hand:</strong>{' '}
+            <strong>Fritz hand:</strong>{' '}
             {match.players.bot.hand.map((t) => `[${t.low}|${t.high}]`).join(' ')}
           </div>
           <div>

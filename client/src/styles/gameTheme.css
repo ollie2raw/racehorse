@@ -401,3 +401,63 @@ body {
     transition: none !important;
   }
 }
+
+@media (max-width: 768px) {
+  .wl-stage-shell,
+  .game-layout,
+  .bot-match-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .wl-board-area,
+  .board-area,
+  .board-container,
+  .board-wrap,
+  .wl-stage,
+  .game-board {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 55vw;
+    min-height: 280px;
+    max-height: 420px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .wl-stage-shell,
+  .wl-board-area,
+  .board-canvas,
+  .board-container,
+  .wl-stage,
+  .game-board {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    overflow: hidden !important;
+    transform-origin: top left;
+  }
+
+  .board-canvas {
+    width: 100% !important;
+    height: auto !important;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform-origin: center center;
+  }
+
+  .wl-hand-area,
+  .hand-area,
+  .hand-tray,
+  .bot-hand {
+    flex-shrink: 0;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+}

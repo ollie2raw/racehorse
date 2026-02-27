@@ -803,3 +803,64 @@
   color: rgba(225, 238, 246, 0.9);
   font-size: 1rem;
 }
+
+@media (max-width: 768px) {
+  .daily-top-rail,
+  .daily-puzzle-entry-card,
+  .daily-puzzle-game-layout,
+  .daily-admin-grid,
+  .daily-admin-builder {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .daily-board-wrap,
+  .daily-board-container,
+  .daily-board-canvas,
+  .daily-admin-builder-board {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .daily-admin-starting-hand {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .daily-entry-actions .mode-option,
+  .daily-leaderboard-cta,
+  .daily-start-hero,
+  .daily-entry-back-link,
+  .daily-top-actions button,
+  .daily-leaderboard-modal button {
+    min-height: 44px;
+    font-size: 13px;
+    width: 100%;
+  }
+
+  .daily-leaderboard-head,
+  .daily-leaderboard-row {
+    grid-template-columns: 52px minmax(0, 1fr) 64px 64px !important;
+    gap: 8px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 768px) {
+  .daily-puzzle-screen .wl-stage-shell,
+  .daily-puzzle-screen .wl-board-area,
+  .daily-puzzle-screen .board-canvas,
+  .daily-puzzle-screen .board-container,
+  .daily-puzzle-screen .wl-stage,
+  .daily-puzzle-screen .game-board {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    overflow: hidden !important;
+    transform-origin: top left;
+  }
+}
