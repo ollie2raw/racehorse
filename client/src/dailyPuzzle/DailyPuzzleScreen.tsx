@@ -218,16 +218,41 @@ export default function DailyPuzzleScreen({
   const startTimeRef = useRef<number>(0);
   const submittedRef = useRef(false);
   const solvedConfettiFiredRef = useRef(false);
+  const loadIdRef = useRef(0);
+  const loadInFlightKeyRef = useRef<string | null>(null);
+  const leaderboardLoadIdRef = useRef(0);
+  const leaderboardInFlightDateRef = useRef<string | null>(null);
+  const handleBackHome = useCallback(() => {
+    setDailyLeaderboardOpen(false);
+    setShowLobby(true);
+    onBack();
+  }, [onBack]);
 
   const refreshLeaderboard = useCallback(async (puzzleDate: string) => {
+    if (leaderboardInFlightDateRef.current === puzzleDate) {
+      if (import.meta.env.DEV) {
+        console.debug('[DailyPuzzle] skip duplicate leaderboard fetch', { puzzleDate });
+      }
+      return;
+    }
+
+    const requestId = ++leaderboardLoadIdRef.current;
+    leaderboardInFlightDateRef.current = puzzleDate;
     setLeaderboardLoading(true);
     try {
       const rows = await fetchDailyPuzzleLeaderboard(puzzleDate, 20);
+      if (requestId !== leaderboardLoadIdRef.current) return;
       setLeaderboard(rows);
     } catch {
+      if (requestId !== leaderboardLoadIdRef.current) return;
       setLeaderboard([]);
     } finally {
-      setLeaderboardLoading(false);
+      if (requestId === leaderboardLoadIdRef.current) {
+        setLeaderboardLoading(false);
+      }
+      if (leaderboardInFlightDateRef.current === puzzleDate) {
+        leaderboardInFlightDateRef.current = null;
+      }
     }
   }, []);
 
@@ -249,15 +274,28 @@ export default function DailyPuzzleScreen({
   }, [match]);
 
   useEffect(() => {
-    let active = true;
+    const loadKey = localDateKey;
+    if (loadInFlightKeyRef.current === loadKey) {
+      if (import.meta.env.DEV) {
+        console.debug('[DailyPuzzle] skip duplicate load', { loadKey });
+      }
+      return;
+    }
+    loadInFlightKeyRef.current = loadKey;
+    const loadId = ++loadIdRef.current;
+    let cancelled = false;
 
     const load = async () => {
+      if (import.meta.env.DEV) {
+        console.debug('[DailyPuzzle] load start', { loadId, loadKey, timezone });
+      }
       setLoading(true);
       setLoadError(null);
       setShowLobby(true);
       const cached = readCachedPuzzle(localDateKey);
       let hasCachedFallback = false;
       if (cached) {
+        if (cancelled || loadId !== loadIdRef.current) return;
         hasCachedFallback = true;
         setPuzzle(cached);
         setValidation(null);
@@ -277,20 +315,15 @@ export default function DailyPuzzleScreen({
         setAttempts(cachedProgress.attempts);
         setBestMoves(cachedProgress.bestMoves);
         setStreakDays(getDisplayStreak(cached.puzzleDate));
-        setLoading(false);
-        if (active) {
-          void refreshLeaderboard(cached.puzzleDate);
-        }
+        setLoading(false); // cached fast path keeps UI interactive immediately
+        void refreshLeaderboard(cached.puzzleDate);
       }
       try {
-        // eslint-disable-next-line no-console
-        console.log('[DailyPuzzle] loading', { localDateKey, timezone });
         const today = await getDailyPuzzleForDate(new Date());
-        if (!active) return;
+        if (cancelled || loadId !== loadIdRef.current) return;
         if (!today) {
           setPuzzle(null);
           setValidation(null);
-          setLoading(false);
           return;
         }
 
@@ -317,25 +350,36 @@ export default function DailyPuzzleScreen({
         setAttempts(nextAttempts);
         setBestMoves(progress.bestMoves);
 
-        if (active) {
-          void refreshLeaderboard(today.puzzleDate);
-        }
+        void refreshLeaderboard(today.puzzleDate);
         setStreakDays(getDisplayStreak(today.puzzleDate));
       } catch (err) {
-        if (!active) return;
-        // eslint-disable-next-line no-console
-        console.error('[DailyPuzzle] load error', { localDateKey, timezone, err });
+        if (cancelled || loadId !== loadIdRef.current) return;
+        if (import.meta.env.DEV) {
+          console.debug('[DailyPuzzle] load error', { loadId, loadKey, err });
+        }
         if (!hasCachedFallback) {
           setLoadError(err instanceof Error ? err.message : 'Failed to load daily puzzle.');
         }
       } finally {
-        if (active) setLoading(false);
+        // Always clear loading for the active request so overlay/click lock cannot stick.
+        if (!cancelled && loadId === loadIdRef.current) {
+          setLoading(false);
+          if (import.meta.env.DEV) {
+            console.debug('[DailyPuzzle] load end', { loadId, loadKey });
+          }
+        }
+        if (loadInFlightKeyRef.current === loadKey) {
+          loadInFlightKeyRef.current = null;
+        }
       }
     };
 
     void load();
     return () => {
-      active = false;
+      cancelled = true;
+      if (loadInFlightKeyRef.current === loadKey) {
+        loadInFlightKeyRef.current = null;
+      }
     };
   }, [localDateKey, timezone, refreshLeaderboard]);
 
@@ -623,7 +667,7 @@ export default function DailyPuzzleScreen({
         <p className="auth-inline-error">{loadError}</p>
         <p className="lobby-server">Local date key: {localDateKey}</p>
         <p className="lobby-server">Timezone: {timezone}</p>
-        <button className="mode-inline-btn" onClick={onBack}>
+        <button type="button" className="mode-inline-btn" onClick={handleBackHome}>
           Back to Home
         </button>
       </LayoutScreen>
@@ -642,7 +686,7 @@ export default function DailyPuzzleScreen({
         <p className="auth-inline-error">{matchError}</p>
         <p className="lobby-server">Local date key: {localDateKey}</p>
         <p className="lobby-server">Timezone: {timezone}</p>
-        <button className="mode-inline-btn" onClick={onBack}>
+        <button type="button" className="mode-inline-btn" onClick={handleBackHome}>
           Back to Home
         </button>
       </LayoutScreen>
@@ -660,7 +704,7 @@ export default function DailyPuzzleScreen({
       >
         <p className="lobby-server">Local date key: {localDateKey}</p>
         <p className="lobby-server">Timezone: {timezone}</p>
-        <button className="mode-inline-btn" onClick={onBack}>
+        <button type="button" className="mode-inline-btn" onClick={handleBackHome}>
           Back to Home
         </button>
       </LayoutScreen>

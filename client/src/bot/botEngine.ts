@@ -503,6 +503,24 @@ function getMatchableOpenEnds(
   });
 }
 
+export function getPlacementTargetsForTile(
+  board: BoardState | null,
+  tile: Tile,
+): PlacementPosition[] {
+  if (!board) return ['left'];
+  return getMatchableOpenEnds(board)
+    .filter((end) => tileMatchesEnd(tile, end.matchValue))
+    .map((end) => end.position);
+}
+
+export function placeTileOnBoard(
+  board: BoardState | null,
+  tile: Tile,
+  position: PlacementPosition,
+): BoardState {
+  return simulatePlacement(board, tile, position);
+}
+
 export function computeOpenEndsSum(board: BoardState): number {
   if (board.mainLine.length === 1) {
     const t = board.mainLine[0].tile;

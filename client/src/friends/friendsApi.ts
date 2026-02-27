@@ -25,7 +25,9 @@ function normalizeDbError(message: string): string {
   if (
     normalized.includes('relation') ||
     normalized.includes('does not exist') ||
-    normalized.includes('42p01')
+    normalized.includes('42p01') ||
+    normalized.includes('schema cache') ||
+    normalized.includes('public.friends')
   ) {
     return 'Friends are unavailable until the friends table is created.';
   }

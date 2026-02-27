@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { BoardState, PlacedTile, Tile, TileOrientation } from '../types';
+import type { Move, PlacementPosition } from '../types';
+import { Board, DominoTile } from '../components';
+import { getPlacementTargetsForTile, placeTileOnBoard } from '../bot/botEngine';
 import {
   getDailyPuzzleByDateSeed,
   getLocalDateKey,
@@ -12,6 +15,20 @@ import './dailyPuzzle.css';
 
 interface DailyPuzzleAdminScreenProps {
   onBack: () => void;
+}
+
+function tileKey(tile: Tile): string {
+  return `${tile.low}-${tile.high}`;
+}
+
+function generateDoubleSixSet(): Tile[] {
+  const tiles: Tile[] = [];
+  for (let high = 0; high <= 6; high += 1) {
+    for (let low = 0; low <= high; low += 1) {
+      tiles.push({ low, high });
+    }
+  }
+  return tiles;
 }
 
 export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScreenProps) {
@@ -30,6 +47,10 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
   const [error, setError] = useState<string | null>(null);
   const [validation, setValidation] = useState<PuzzleValidationResult | null>(null);
   const [pasteJson, setPasteJson] = useState('');
+  const [builderMode, setBuilderMode] = useState(true);
+  const [builderBoard, setBuilderBoard] = useState<BoardState | null>(null);
+  const [builderHand, setBuilderHand] = useState<Tile[]>([]);
+  const [selectedBuilderTile, setSelectedBuilderTile] = useState<Tile | null>(null);
 
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
 
@@ -133,7 +154,7 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     });
   };
 
-  const parseDraft = (): { board: BoardState; hand: Tile[] } => {
+  const parseDraft = (requireMainLine = true): { board: BoardState | null; hand: Tile[] } => {
     let parsedBoard: unknown;
     let parsedHand: unknown;
     try {
@@ -167,10 +188,13 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
       normalizePlacement(entry, `starting_board.mainLine[${idx}]`),
     );
 
-    if (mainLine.length === 0) {
+    if (mainLine.length === 0 && requireMainLine) {
       throw new Error(
         'mainLine must be placements with { tile:{low,high}, orientation } (bare tiles are accepted and will be wrapped).',
       );
+    }
+    if (mainLine.length === 0) {
+      return { board: null, hand };
     }
 
     const leftEnd = Number.isFinite(boardRec.leftEnd)
@@ -254,6 +278,8 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
       setDealSize(existing.dealSize ?? 7);
       setBoardJson(JSON.stringify(existing.startingBoard, null, 2));
       setHandJson(JSON.stringify(existing.startingHand, null, 2));
+      setBuilderBoard(existing.startingBoard);
+      setBuilderHand(existing.startingHand);
       runValidation(existing);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load puzzle.');
@@ -268,7 +294,10 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     try {
       const canonicalDate = normalizeDateInputToLocalKey(dateValue);
       setDateValue(canonicalDate);
-      const parsed = parseDraft();
+      const parsed = parseDraft(true);
+      if (!parsed.board) {
+        throw new Error('starting_board cannot be empty. Place at least one tile.');
+      }
       const draftPuzzle: CuratedDailyPuzzle = {
         id: 'draft',
         puzzleDate: canonicalDate,
@@ -313,6 +342,94 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     }
   };
 
+  const syncBuilderFromJson = () => {
+    setError(null);
+    setMessage(null);
+    try {
+      const parsed = parseDraft(false);
+      setBuilderBoard(parsed.board);
+      setBuilderHand(parsed.hand);
+      setSelectedBuilderTile(null);
+      setMessage('Visual builder loaded from JSON.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to parse JSON.');
+    }
+  };
+
+  const syncJsonFromBuilder = () => {
+    setError(null);
+    setMessage(null);
+    const fallbackBoard = {
+      mainLine: [],
+      leftEnd: 0,
+      rightEnd: 0,
+      leftEndIsDouble: false,
+      rightEndIsDouble: false,
+      hubDoubles: [],
+    };
+    setBoardJson(JSON.stringify(builderBoard ?? fallbackBoard, null, 2));
+    setHandJson(JSON.stringify(builderHand, null, 2));
+    setMessage('JSON updated from visual builder.');
+  };
+
+  const copyPuzzleJsonFromBuilder = async () => {
+    const payload = {
+      puzzle_date: normalizeDateInputToLocalKey(dateValue),
+      title,
+      puzzle_type: puzzleType,
+      max_moves: maxMoves,
+      target_score: targetScore,
+      deal_size: dealSize,
+      starting_board:
+        builderBoard ?? {
+          mainLine: [],
+          leftEnd: 0,
+          rightEnd: 0,
+          leftEndIsDouble: false,
+          rightEndIsDouble: false,
+          hubDoubles: [],
+        },
+      starting_hand: builderHand,
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setMessage('Puzzle JSON copied.');
+      setError(null);
+    } catch {
+      setError('Unable to copy to clipboard.');
+    }
+  };
+
+  const builderPalette = useMemo(() => generateDoubleSixSet(), []);
+  const builderPlacementTargets = useMemo(
+    () =>
+      selectedBuilderTile
+        ? getPlacementTargetsForTile(builderBoard, selectedBuilderTile)
+        : ([] as PlacementPosition[]),
+    [builderBoard, selectedBuilderTile],
+  );
+  const builderLegalMoves = useMemo(
+    () =>
+      selectedBuilderTile
+        ? builderPlacementTargets.map(
+            (position) =>
+              ({
+                type: 'play',
+                tile: selectedBuilderTile,
+                position,
+              }) as Move,
+          )
+        : ([] as Move[]),
+    [selectedBuilderTile, builderPlacementTargets],
+  );
+
+  const onBuilderPositionClick = (position: PlacementPosition) => {
+    if (!selectedBuilderTile) return;
+    if (!builderPlacementTargets.includes(position)) return;
+    setBuilderBoard((prev) => placeTileOnBoard(prev, selectedBuilderTile, position));
+    setSelectedBuilderTile(null);
+  };
+
   return (
     <div className="app">
       <div className="screen lobby-screen mode-home-screen">
@@ -327,109 +444,227 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
             Admin email: {adminEmail || '(VITE_ADMIN_EMAIL not set)'}
           </p>
 
-          <div className="daily-admin-grid" style={{ marginTop: 6, gap: 8 }}>
-            <label>
-              Date
-              <input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} />
-            </label>
-            <label>
-              Title
-              <input value={title} onChange={(e) => setTitle(e.target.value)} />
-            </label>
-            <label>
-              Max Moves
-              <input
-                type="number"
-                min={1}
-                value={maxMoves}
-                onChange={(e) => setMaxMoves(Number(e.target.value))}
-              />
-            </label>
-            <label>
-              Target Score
-              <input
-                type="number"
-                min={1}
-                value={targetScore}
-                onChange={(e) => setTargetScore(Number(e.target.value))}
-              />
-            </label>
-            <label>
-              Puzzle Type
-              <select
-                value={puzzleType}
-                onChange={(e) => setPuzzleType(e.target.value as DailyPuzzleType)}
-              >
-                <option value="one_turn_high_score">High Score (1 move)</option>
-                <option value="reach_target">Reach Target (legacy)</option>
-              </select>
-            </label>
-            <label>
-              Deal Size
-              <input
-                type="number"
-                min={1}
-                value={dealSize}
-                onChange={(e) => setDealSize(Number(e.target.value))}
-              />
-            </label>
-          </div>
+          <div className="daily-admin-layout">
+            <div className="daily-admin-col daily-admin-col-left">
+              <div className="daily-admin-grid" style={{ marginTop: 6, gap: 8 }}>
+                <label>
+                  Date
+                  <input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} />
+                </label>
+                <label>
+                  Title
+                  <input value={title} onChange={(e) => setTitle(e.target.value)} />
+                </label>
+                <label>
+                  Max Moves
+                  <input
+                    type="number"
+                    min={1}
+                    value={maxMoves}
+                    onChange={(e) => setMaxMoves(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Target Score
+                  <input
+                    type="number"
+                    min={1}
+                    value={targetScore}
+                    onChange={(e) => setTargetScore(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  Puzzle Type
+                  <select
+                    value={puzzleType}
+                    onChange={(e) => setPuzzleType(e.target.value as DailyPuzzleType)}
+                  >
+                    <option value="one_turn_high_score">High Score (1 move)</option>
+                    <option value="reach_target">Reach Target (legacy)</option>
+                  </select>
+                </label>
+                <label>
+                  Deal Size
+                  <input
+                    type="number"
+                    min={1}
+                    value={dealSize}
+                    onChange={(e) => setDealSize(Number(e.target.value))}
+                  />
+                </label>
+              </div>
 
-          <label className="daily-admin-textarea">
-            Paste Captured Puzzle JSON
-            <textarea
-              rows={3}
-              style={{ height: 72, minHeight: 72 }}
-              value={pasteJson}
-              onChange={(e) => setPasteJson(e.target.value)}
-              placeholder='Paste output from "Copy Puzzle JSON" button here...'
-            />
-          </label>
-          <button className="mode-inline-btn" onClick={handlePasteCaptured}>
-            Load from Capture
-          </button>
+              <label className="daily-admin-textarea">
+                Paste Captured Puzzle JSON
+                <textarea
+                  rows={3}
+                  style={{ height: 72, minHeight: 72 }}
+                  value={pasteJson}
+                  onChange={(e) => setPasteJson(e.target.value)}
+                  placeholder='Paste output from "Copy Puzzle JSON" button here...'
+                />
+              </label>
+              <button className="mode-inline-btn" onClick={handlePasteCaptured}>
+                Load from Capture
+              </button>
 
-          <label className="daily-admin-textarea">
-            starting_board JSON
-            <textarea
-              rows={3}
-              style={{ height: 80, minHeight: 80 }}
-              value={boardJson}
-              onChange={(e) => setBoardJson(e.target.value)}
-            />
-          </label>
+              {validation && (
+                <div className={`daily-admin-validation ${validation.solvable ? 'ok' : 'bad'}`}>
+                  solvable={String(validation.solvable)} · bestScore={validation.bestScore} ·
+                  hasScoringMove={String(validation.hasScoringMove)} · explored=
+                  {validation.exploredStates}
+                </div>
+              )}
 
-          <label className="daily-admin-textarea">
-            starting_hand JSON
-            <textarea
-              rows={3}
-              style={{ height: 80, minHeight: 80 }}
-              value={handJson}
-              onChange={(e) => setHandJson(e.target.value)}
-            />
-          </label>
+              {error && <p className="auth-inline-error">{error}</p>}
+              {message && !error && <p className="lobby-server">{message}</p>}
 
-          {validation && (
-            <div className={`daily-admin-validation ${validation.solvable ? 'ok' : 'bad'}`}>
-              solvable={String(validation.solvable)} · bestScore={validation.bestScore} ·
-              hasScoringMove={String(validation.hasScoringMove)} · explored=
-              {validation.exploredStates}
+              <div className="daily-admin-actions">
+                <button className="mode-inline-btn" onClick={handleLoad}>
+                  Load Date
+                </button>
+                <button className="mode-inline-btn" onClick={handleSave} disabled={!canSave || saving}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                <button className="mode-inline-btn" onClick={onBack}>
+                  Back to Home
+                </button>
+              </div>
             </div>
-          )}
 
-          {error && <p className="auth-inline-error">{error}</p>}
-          {message && !error && <p className="lobby-server">{message}</p>}
+            <div className="daily-admin-col daily-admin-col-right">
+              <div className="daily-admin-actions" style={{ marginTop: 4 }}>
+                <button className="mode-inline-btn" onClick={() => setBuilderMode((prev) => !prev)}>
+                  {builderMode ? 'Hide Visual Builder' : 'Show Visual Builder'}
+                </button>
+                <button className="mode-inline-btn" onClick={syncBuilderFromJson}>
+                  JSON → Builder
+                </button>
+                <button className="mode-inline-btn" onClick={syncJsonFromBuilder}>
+                  Builder → JSON
+                </button>
+                <button className="mode-inline-btn" onClick={copyPuzzleJsonFromBuilder}>
+                  Copy Puzzle JSON
+                </button>
+              </div>
 
-          <div className="daily-admin-actions">
-            <button className="mode-inline-btn" onClick={handleLoad}>
-              Load Date
-            </button>
-            <button className="mode-inline-btn" onClick={handleSave} disabled={!canSave || saving}>
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-            <button className="mode-inline-btn" onClick={onBack}>
-              Back to Home
-            </button>
+              {builderMode && (
+                <div className="daily-admin-builder">
+                  <div className="daily-admin-builder-board">
+                    <Board
+                      board={builderBoard}
+                      legalMoves={builderLegalMoves}
+                      selectedTile={selectedBuilderTile}
+                      onPositionClick={onBuilderPositionClick}
+                      tileSize={54}
+                    />
+                  </div>
+                  <div className="daily-admin-builder-controls">
+                    <p className="lobby-server" style={{ margin: 0 }}>
+                      1) Select tile from palette 2) click highlighted board zone 3) add starting hand.
+                    </p>
+                    <div className="daily-admin-builder-actions">
+                      <button
+                        className="mode-inline-btn"
+                        onClick={() => {
+                          setBuilderBoard(null);
+                          setSelectedBuilderTile(null);
+                        }}
+                      >
+                        Clear Board
+                      </button>
+                      <button
+                        className="mode-inline-btn"
+                        onClick={() => {
+                          setBuilderHand([]);
+                        }}
+                      >
+                        Clear Hand
+                      </button>
+                    </div>
+                    <div className="daily-admin-tile-palette">
+                      {builderPalette.map((tile) => {
+                        const isSelected =
+                          selectedBuilderTile &&
+                          selectedBuilderTile.low === tile.low &&
+                          selectedBuilderTile.high === tile.high;
+                        return (
+                          <button
+                            key={`palette-${tileKey(tile)}`}
+                            type="button"
+                            className={`daily-admin-tile-btn ${isSelected ? 'is-selected' : ''}`}
+                            onClick={() => setSelectedBuilderTile(tile)}
+                            title={`Select [${tile.low}|${tile.high}] for placement`}
+                          >
+                            <DominoTile tile={tile} size={34} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="daily-admin-builder-actions">
+                      <button
+                        className="mode-inline-btn"
+                        onClick={() => {
+                          if (!selectedBuilderTile) return;
+                          setBuilderHand((prev) => [...prev, selectedBuilderTile]);
+                        }}
+                        disabled={!selectedBuilderTile}
+                      >
+                        Add Selected Tile to Hand
+                      </button>
+                      <button
+                        className="mode-inline-btn"
+                        onClick={() => {
+                          setBuilderHand((prev) => prev.slice(0, -1));
+                        }}
+                        disabled={builderHand.length === 0}
+                      >
+                        Remove Last Hand Tile
+                      </button>
+                    </div>
+                    <div className="daily-admin-starting-hand">
+                      {builderHand.length === 0 ? (
+                        <span className="lobby-server">Starting hand is empty.</span>
+                      ) : (
+                        builderHand.map((tile, idx) => (
+                          <button
+                            key={`hand-${idx}-${tileKey(tile)}`}
+                            type="button"
+                            className="daily-admin-tile-btn"
+                            onClick={() =>
+                              setBuilderHand((prev) => prev.filter((_, handIdx) => handIdx !== idx))
+                            }
+                            title="Click tile to remove from hand"
+                          >
+                            <DominoTile tile={tile} size={34} />
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <label className="daily-admin-textarea">
+                starting_board JSON
+                <textarea
+                  rows={3}
+                  style={{ height: 100, minHeight: 100 }}
+                  value={boardJson}
+                  onChange={(e) => setBoardJson(e.target.value)}
+                />
+              </label>
+
+              <label className="daily-admin-textarea">
+                starting_hand JSON
+                <textarea
+                  rows={3}
+                  style={{ height: 100, minHeight: 100 }}
+                  value={handJson}
+                  onChange={(e) => setHandJson(e.target.value)}
+                />
+              </label>
+            </div>
           </div>
         </div>
       </div>
