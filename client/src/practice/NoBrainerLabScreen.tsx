@@ -174,34 +174,11 @@ export default function NoBrainerLabScreen({
     confettiFiredRef.current = true;
     const myConfetti = confetti.create(canvas, { resize: true, useWorker: true });
     myConfetti({
-      particleCount: 120,
-      spread: 100,
-      origin: { x: 0.5, y: 0.4 },
-      colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#fbbf24'],
-      scalar: 1.2,
+      particleCount: 150,
+      spread: 80,
+      origin: { y: 0.55 },
+      colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff'],
     });
-    setTimeout(
-      () =>
-        myConfetti({
-          particleCount: 80,
-          spread: 120,
-          origin: { x: 0.2, y: 0.5 },
-          colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#fbbf24'],
-          scalar: 1.05,
-        }),
-      200,
-    );
-    setTimeout(
-      () =>
-        myConfetti({
-          particleCount: 80,
-          spread: 120,
-          origin: { x: 0.8, y: 0.5 },
-          colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#fbbf24'],
-          scalar: 1.05,
-        }),
-      400,
-    );
   }, [practiceState, usedHint, usedShowSolution]);
 
   if (!dataset && !error) {

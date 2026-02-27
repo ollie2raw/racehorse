@@ -2460,28 +2460,6 @@ export default function App() {
             }),
           400,
         );
-        setTimeout(
-          () =>
-            myConfetti({
-              particleCount: 60,
-              angle: 60,
-              spread: 80,
-              origin: { x: 0, y: 0.6 },
-              colors,
-            }),
-          600,
-        );
-        setTimeout(
-          () =>
-            myConfetti({
-              particleCount: 60,
-              angle: 120,
-              spread: 80,
-              origin: { x: 1, y: 0.6 },
-              colors,
-            }),
-          600,
-        );
       }
     }
     const loserSocketId = finalState.playerIds.find((pid) => pid !== winnerSocketId) ?? null;
