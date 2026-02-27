@@ -70,6 +70,20 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
     }
   }
 
+  // One-turn high-score puzzles do not have a target/max-moves requirement.
+  // They are valid as long as there is at least one legal opening play.
+  if (puzzle.puzzleType === 'one_turn_high_score') {
+    const solvable = firstMoves.length > 0;
+    const bestScore = computeBestPossiblePuzzleScore(puzzle);
+    return {
+      solvable,
+      bestScore,
+      hasScoringMove,
+      exploredStates: firstMoves.length,
+      reason: solvable ? 'OK' : 'No legal opening moves.',
+    };
+  }
+
   const keyOf = (state: BotMatchState, movesUsed: number): string => {
     const handKey = [...state.players.you.hand]
       .map((t) => `${t.low}-${t.high}`)

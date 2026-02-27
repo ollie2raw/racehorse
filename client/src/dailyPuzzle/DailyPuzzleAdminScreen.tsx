@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { BoardState, PlacedTile, Tile, TileOrientation } from '../types';
 import type { Move, PlacementPosition } from '../types';
 import { Board, DominoTile } from '../components';
@@ -34,10 +34,10 @@ function generateDoubleSixSet(): Tile[] {
 export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScreenProps) {
   const [dateValue, setDateValue] = useState(getLocalDateKey());
   const [title, setTitle] = useState('Daily Puzzle');
-  const [maxMoves, setMaxMoves] = useState(4);
-  const [targetScore, setTargetScore] = useState(3);
-  const [puzzleType, setPuzzleType] = useState<DailyPuzzleType>('one_turn_high_score');
-  const [dealSize, setDealSize] = useState(7);
+  const maxMoves = 1;
+  const targetScore = 999;
+  const puzzleType: DailyPuzzleType = 'one_turn_high_score';
+  const dealSize = 7;
   const [boardJson, setBoardJson] = useState<string>(
     '{\n  "mainLine": [],\n  "leftEnd": 0,\n  "rightEnd": 0,\n  "leftEndIsDouble": false,\n  "rightEndIsDouble": false,\n  "hubDoubles": []\n}',
   );
@@ -51,18 +51,26 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
   const [builderBoard, setBuilderBoard] = useState<BoardState | null>(null);
   const [builderHand, setBuilderHand] = useState<Tile[]>([]);
   const [selectedBuilderTile, setSelectedBuilderTile] = useState<Tile | null>(null);
+  const [tileMode, setTileMode] = useState<'board' | 'hand'>('board');
+
+  useEffect(() => {
+    const fallbackBoard = {
+      mainLine: [],
+      leftEnd: 0,
+      rightEnd: 0,
+      leftEndIsDouble: false,
+      rightEndIsDouble: false,
+      hubDoubles: [],
+    };
+    setBoardJson(JSON.stringify(builderBoard ?? fallbackBoard, null, 2));
+    setHandJson(JSON.stringify(builderHand, null, 2));
+  }, [builderBoard, builderHand]);
 
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
 
   const canSave = useMemo(
-    () =>
-      dateValue.trim().length === 10 &&
-      Number.isFinite(maxMoves) &&
-      Number.isFinite(targetScore) &&
-      Number.isFinite(dealSize) &&
-      dealSize > 0 &&
-      (puzzleType === 'one_turn_high_score' || puzzleType === 'reach_target'),
-    [dateValue, maxMoves, targetScore, dealSize, puzzleType],
+    () => dateValue.trim().length === 10,
+    [dateValue],
   );
 
   const normalizeTile = (value: unknown, fieldName: string): Tile => {
@@ -244,10 +252,6 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
       const raw = JSON.parse(pasteJson);
       if (raw.puzzle_date) setDateValue(raw.puzzle_date);
       if (raw.title) setTitle(raw.title);
-      if (raw.puzzle_type) setPuzzleType(raw.puzzle_type as DailyPuzzleType);
-      if (Number.isFinite(raw.max_moves)) setMaxMoves(raw.max_moves);
-      if (Number.isFinite(raw.target_score)) setTargetScore(raw.target_score);
-      if (Number.isFinite(raw.deal_size)) setDealSize(raw.deal_size);
       if (raw.starting_board) setBoardJson(JSON.stringify(raw.starting_board, null, 2));
       if (raw.starting_hand) setHandJson(JSON.stringify(raw.starting_hand, null, 2));
       setMessage('Captured JSON loaded. Review and Save.');
@@ -272,10 +276,6 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
       }
 
       setTitle(existing.title);
-      setMaxMoves(existing.maxMoves);
-      setTargetScore(existing.targetScore);
-      setPuzzleType(existing.puzzleType ?? 'one_turn_high_score');
-      setDealSize(existing.dealSize ?? 7);
       setBoardJson(JSON.stringify(existing.startingBoard, null, 2));
       setHandJson(JSON.stringify(existing.startingHand, null, 2));
       setBuilderBoard(existing.startingBoard);
@@ -436,234 +436,269 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
         <div className="mode-home-glow" aria-hidden="true" />
         <div
           className="card lobby-card mode-card daily-admin-card"
-          style={{ padding: '14px 16px', display: 'grid', gap: 8 }}
+          style={{ padding: '12px 14px', display: 'grid', gap: 10 }}
         >
-          <p className="lobby-kicker">Racehorse Dominoes</p>
-          <h2>Admin: Daily Puzzles</h2>
-          <p className="lobby-server" style={{ margin: 0 }}>
-            Admin email: {adminEmail || '(VITE_ADMIN_EMAIL not set)'}
-          </p>
-
-          <div className="daily-admin-layout">
-            <div className="daily-admin-col daily-admin-col-left">
-              <div className="daily-admin-grid" style={{ marginTop: 6, gap: 8 }}>
-                <label>
-                  Date
-                  <input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} />
-                </label>
-                <label>
-                  Title
-                  <input value={title} onChange={(e) => setTitle(e.target.value)} />
-                </label>
-                <label>
-                  Max Moves
-                  <input
-                    type="number"
-                    min={1}
-                    value={maxMoves}
-                    onChange={(e) => setMaxMoves(Number(e.target.value))}
-                  />
-                </label>
-                <label>
-                  Target Score
-                  <input
-                    type="number"
-                    min={1}
-                    value={targetScore}
-                    onChange={(e) => setTargetScore(Number(e.target.value))}
-                  />
-                </label>
-                <label>
-                  Puzzle Type
-                  <select
-                    value={puzzleType}
-                    onChange={(e) => setPuzzleType(e.target.value as DailyPuzzleType)}
-                  >
-                    <option value="one_turn_high_score">High Score (1 move)</option>
-                    <option value="reach_target">Reach Target (legacy)</option>
-                  </select>
-                </label>
-                <label>
-                  Deal Size
-                  <input
-                    type="number"
-                    min={1}
-                    value={dealSize}
-                    onChange={(e) => setDealSize(Number(e.target.value))}
-                  />
-                </label>
-              </div>
-
-              <label className="daily-admin-textarea">
-                Paste Captured Puzzle JSON
-                <textarea
-                  rows={3}
-                  style={{ height: 72, minHeight: 72 }}
-                  value={pasteJson}
-                  onChange={(e) => setPasteJson(e.target.value)}
-                  placeholder='Paste output from "Copy Puzzle JSON" button here...'
-                />
-              </label>
-              <button className="mode-inline-btn" onClick={handlePasteCaptured}>
-                Load from Capture
-              </button>
-
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <p className="lobby-kicker" style={{ margin: 0 }}>Racehorse Dominoes</p>
+              <h2 style={{ margin: 0 }}>Puzzle Editor</h2>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {validation && (
-                <div className={`daily-admin-validation ${validation.solvable ? 'ok' : 'bad'}`}>
-                  solvable={String(validation.solvable)} · bestScore={validation.bestScore} ·
-                  hasScoringMove={String(validation.hasScoringMove)} · explored=
-                  {validation.exploredStates}
+                <div className={`daily-admin-validation ${validation.solvable ? 'ok' : 'bad'}`}
+                  style={{ margin: 0, padding: '4px 10px', fontSize: '0.82rem' }}>
+                  {validation.solvable
+                    ? `✓ Valid · best score ${validation.bestScore}`
+                    : `✗ Invalid · ${validation.reason}`}
                 </div>
               )}
+              <button className="mode-inline-btn" onClick={onBack}>← Back</button>
+            </div>
+          </div>
 
-              {error && <p className="auth-inline-error">{error}</p>}
-              {message && !error && <p className="lobby-server">{message}</p>}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '200px minmax(0,1fr)',
+            gap: 8,
+            padding: '10px 12px',
+            background: 'rgba(255,255,255,0.04)',
+            borderRadius: 10,
+            border: '1px solid rgba(255,255,255,0.1)',
+          }}>
+            <label style={{ display: 'grid', gap: 3, fontSize: '0.78rem', color: 'rgba(200,220,230,0.7)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Date
+              <input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)}
+                style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(11,18,30,0.7)', color: 'rgba(238,248,243,0.96)', padding: '6px 8px', fontSize: '0.88rem' }} />
+            </label>
+            <label style={{ display: 'grid', gap: 3, fontSize: '0.78rem', color: 'rgba(200,220,230,0.7)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Title
+              <input value={title} onChange={(e) => setTitle(e.target.value)}
+                style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(11,18,30,0.7)', color: 'rgba(238,248,243,0.96)', padding: '6px 8px', fontSize: '0.88rem' }} />
+            </label>
+          </div>
 
-              <div className="daily-admin-actions">
-                <button className="mode-inline-btn" onClick={handleLoad}>
-                  Load Date
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 10, alignItems: 'start' }}>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div style={{
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 12,
+                background: 'rgba(5,10,18,0.7)',
+                minHeight: 480,
+                height: 'calc(100vh - 300px)',
+                overflow: 'hidden',
+              }}>
+                <Board
+                  board={builderBoard}
+                  legalMoves={builderLegalMoves}
+                  selectedTile={selectedBuilderTile}
+                  onPositionClick={onBuilderPositionClick}
+                  tileSize={54}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="mode-inline-btn" onClick={handlePasteCaptured} style={{ flex: 1 }}>
+                  Load from Capture
                 </button>
-                <button className="mode-inline-btn" onClick={handleSave} disabled={!canSave || saving}>
-                  {saving ? 'Saving...' : 'Save'}
+                <button className="mode-inline-btn" onClick={copyPuzzleJsonFromBuilder} style={{ flex: 1 }}>
+                  Copy JSON
                 </button>
-                <button className="mode-inline-btn" onClick={onBack}>
-                  Back to Home
+                <button
+                  className="mode-inline-btn"
+                  onClick={handleSave}
+                  disabled={!canSave || saving}
+                  style={{
+                    flex: 1,
+                    background: canSave && !saving ? 'rgba(52,211,153,0.18)' : undefined,
+                    borderColor: canSave && !saving ? 'rgba(52,211,153,0.45)' : undefined,
+                    color: canSave && !saving ? 'rgba(100,240,180,0.95)' : undefined,
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Save Puzzle'}
                 </button>
               </div>
             </div>
 
-            <div className="daily-admin-col daily-admin-col-right">
-              <div className="daily-admin-actions" style={{ marginTop: 4 }}>
-                <button className="mode-inline-btn" onClick={() => setBuilderMode((prev) => !prev)}>
-                  {builderMode ? 'Hide Visual Builder' : 'Show Visual Builder'}
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                borderRadius: 10,
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.14)',
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setTileMode('board')}
+                  style={{
+                    padding: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: tileMode === 'board'
+                      ? 'rgba(56,189,248,0.2)'
+                      : 'rgba(255,255,255,0.04)',
+                    color: tileMode === 'board'
+                      ? 'rgba(125,220,255,0.95)'
+                      : 'rgba(200,220,230,0.6)',
+                    borderRight: '1px solid rgba(255,255,255,0.1)',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Place on Board
                 </button>
-                <button className="mode-inline-btn" onClick={syncBuilderFromJson}>
-                  JSON → Builder
-                </button>
-                <button className="mode-inline-btn" onClick={syncJsonFromBuilder}>
-                  Builder → JSON
-                </button>
-                <button className="mode-inline-btn" onClick={copyPuzzleJsonFromBuilder}>
-                  Copy Puzzle JSON
+                <button
+                  type="button"
+                  onClick={() => setTileMode('hand')}
+                  style={{
+                    padding: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: tileMode === 'hand'
+                      ? 'rgba(52,211,153,0.2)'
+                      : 'rgba(255,255,255,0.04)',
+                    color: tileMode === 'hand'
+                      ? 'rgba(100,240,180,0.95)'
+                      : 'rgba(200,220,230,0.6)',
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Add to Hand
                 </button>
               </div>
 
-              {builderMode && (
-                <div className="daily-admin-builder">
-                  <div className="daily-admin-builder-board">
-                    <Board
-                      board={builderBoard}
-                      legalMoves={builderLegalMoves}
-                      selectedTile={selectedBuilderTile}
-                      onPositionClick={onBuilderPositionClick}
-                      tileSize={54}
-                    />
-                  </div>
-                  <div className="daily-admin-builder-controls">
-                    <p className="lobby-server" style={{ margin: 0 }}>
-                      1) Select tile from palette 2) click highlighted board zone 3) add starting hand.
-                    </p>
-                    <div className="daily-admin-builder-actions">
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: '0.72rem', color: 'rgba(180,200,215,0.6)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  {tileMode === 'board' ? 'Select tile -> click board zone' : 'Click tile to add to hand'}
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 6 }}>
+                  {builderPalette.map((tile) => {
+                    const isSelected =
+                      selectedBuilderTile &&
+                      selectedBuilderTile.low === tile.low &&
+                      selectedBuilderTile.high === tile.high;
+                    return (
                       <button
-                        className="mode-inline-btn"
+                        key={`palette-${tileKey(tile)}`}
+                        type="button"
+                        className={`daily-admin-tile-btn ${isSelected ? 'is-selected' : ''}`}
                         onClick={() => {
-                          setBuilderBoard(null);
-                          setSelectedBuilderTile(null);
+                          if (tileMode === 'hand') {
+                            setBuilderHand((prev) => [...prev, tile]);
+                          } else {
+                            setSelectedBuilderTile((prev) =>
+                              prev?.low === tile.low && prev?.high === tile.high ? null : tile
+                            );
+                          }
                         }}
+                        title={tileMode === 'hand' ? `Add [${tile.low}|${tile.high}] to hand` : `Place [${tile.low}|${tile.high}] on board`}
+                        style={{ width: '100%', minWidth: 0, padding: 2 }}
                       >
-                        Clear Board
+                        <DominoTile tile={tile} size={24} />
                       </button>
-                      <button
-                        className="mode-inline-btn"
-                        onClick={() => {
-                          setBuilderHand([]);
-                        }}
-                      >
-                        Clear Hand
-                      </button>
-                    </div>
-                    <div className="daily-admin-tile-palette">
-                      {builderPalette.map((tile) => {
-                        const isSelected =
-                          selectedBuilderTile &&
-                          selectedBuilderTile.low === tile.low &&
-                          selectedBuilderTile.high === tile.high;
-                        return (
-                          <button
-                            key={`palette-${tileKey(tile)}`}
-                            type="button"
-                            className={`daily-admin-tile-btn ${isSelected ? 'is-selected' : ''}`}
-                            onClick={() => setSelectedBuilderTile(tile)}
-                            title={`Select [${tile.low}|${tile.high}] for placement`}
-                          >
-                            <DominoTile tile={tile} size={34} />
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="daily-admin-builder-actions">
-                      <button
-                        className="mode-inline-btn"
-                        onClick={() => {
-                          if (!selectedBuilderTile) return;
-                          setBuilderHand((prev) => [...prev, selectedBuilderTile]);
-                        }}
-                        disabled={!selectedBuilderTile}
-                      >
-                        Add Selected Tile to Hand
-                      </button>
-                      <button
-                        className="mode-inline-btn"
-                        onClick={() => {
-                          setBuilderHand((prev) => prev.slice(0, -1));
-                        }}
-                        disabled={builderHand.length === 0}
-                      >
-                        Remove Last Hand Tile
-                      </button>
-                    </div>
-                    <div className="daily-admin-starting-hand">
-                      {builderHand.length === 0 ? (
-                        <span className="lobby-server">Starting hand is empty.</span>
-                      ) : (
-                        builderHand.map((tile, idx) => (
-                          <button
-                            key={`hand-${idx}-${tileKey(tile)}`}
-                            type="button"
-                            className="daily-admin-tile-btn"
-                            onClick={() =>
-                              setBuilderHand((prev) => prev.filter((_, handIdx) => handIdx !== idx))
-                            }
-                            title="Click tile to remove from hand"
-                          >
-                            <DominoTile tile={tile} size={34} />
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
 
-              <label className="daily-admin-textarea">
-                starting_board JSON
-                <textarea
-                  rows={3}
-                  style={{ height: 100, minHeight: 100 }}
-                  value={boardJson}
-                  onChange={(e) => setBoardJson(e.target.value)}
-                />
-              </label>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <p style={{ margin: 0, fontSize: '0.72rem', color: 'rgba(180,200,215,0.6)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    Starting Hand ({builderHand.length})
+                  </p>
+                  {builderHand.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setBuilderHand([])}
+                      style={{ fontSize: '0.7rem', color: 'rgba(255,120,120,0.7)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 6, minHeight: 44 }}>
+                  {builderHand.length === 0 ? (
+                    <span style={{ gridColumn: '1/-1', color: 'rgba(180,200,215,0.4)', fontSize: '0.8rem', padding: '8px 0' }}>
+                      Empty - add tiles above
+                    </span>
+                  ) : (
+                    builderHand.map((tile, idx) => (
+                      <button
+                        key={`hand-${idx}-${tileKey(tile)}`}
+                        type="button"
+                        className="daily-admin-tile-btn"
+                        onClick={() => setBuilderHand((prev) => prev.filter((_, i) => i !== idx))}
+                        title="Click to remove from hand"
+                        style={{ position: 'relative', width: '100%', minWidth: 0, padding: 2 }}
+                      >
+                        <DominoTile tile={tile} size={24} />
+                        <span style={{
+                          position: 'absolute',
+                          top: 2,
+                          right: 2,
+                          width: 12,
+                          height: 12,
+                          borderRadius: '50%',
+                          background: 'rgba(255,80,80,0.7)',
+                          fontSize: '0.55rem',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: 'white',
+                          lineHeight: 1,
+                        }}>x</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
 
-              <label className="daily-admin-textarea">
-                starting_hand JSON
+              <button
+                className="mode-inline-btn"
+                onClick={() => { setBuilderBoard(null); setSelectedBuilderTile(null); }}
+                style={{ fontSize: '0.78rem' }}
+              >
+                Clear Board
+              </button>
+
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10, display: 'grid', gap: 6 }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', color: 'rgba(180,200,215,0.5)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Load existing</p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input type="text" placeholder="paste date..." value={dateValue} onChange={(e) => setDateValue(e.target.value)}
+                    style={{ flex: 1, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(11,18,30,0.7)', color: 'rgba(238,248,243,0.96)', padding: '6px 8px', fontSize: '0.84rem' }} />
+                  <button className="mode-inline-btn" onClick={handleLoad} style={{ whiteSpace: 'nowrap' }}>Load</button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gap: 6 }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', color: 'rgba(180,200,215,0.5)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Paste Captured JSON
+                </p>
                 <textarea
-                  rows={3}
-                  style={{ height: 100, minHeight: 100 }}
-                  value={handJson}
-                  onChange={(e) => setHandJson(e.target.value)}
+                  rows={4}
+                  value={pasteJson}
+                  onChange={(e) => setPasteJson(e.target.value)}
+                  placeholder='Paste output from "Copy Puzzle JSON" here...'
+                  style={{
+                    borderRadius: 8,
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(11,18,30,0.7)',
+                    color: 'rgba(238,248,243,0.96)',
+                    padding: '8px 10px',
+                    fontSize: '0.8rem',
+                    minHeight: 84,
+                    resize: 'vertical',
+                  }}
                 />
-              </label>
+              </div>
+
+              <div style={{ display: 'grid', gap: 6 }}>
+                {error && <p style={{ margin: 0, color: 'rgba(255,160,160,0.9)', fontSize: '0.84rem' }}>{error}</p>}
+                {message && !error && <p style={{ margin: 0, color: 'rgba(160,240,200,0.9)', fontSize: '0.84rem' }}>{message}</p>}
+              </div>
             </div>
           </div>
         </div>
