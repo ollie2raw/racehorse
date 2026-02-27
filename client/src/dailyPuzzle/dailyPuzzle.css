@@ -768,6 +768,15 @@
   background: rgba(10, 16, 28, 0.42);
 }
 
+/* Keep the Daily entry heading stable even while deferred puzzle computations run. */
+.mode-home-screen.mode-subpage-screen.daily-entry-screen .layout-screen-title {
+  opacity: 1 !important;
+  filter: none !important;
+  color: rgba(243, 250, 247, 0.97) !important;
+  animation: none !important;
+  transition: none !important;
+}
+
 .daily-entry-back-link {
   opacity: 0.4 !important;
   border-color: rgba(255, 255, 255, 0.06) !important;
