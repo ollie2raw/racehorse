@@ -580,6 +580,7 @@ export default function BotMatchScreen({
     const result = applyPlayMove(match, 'you', move);
     const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
+    applyAndNotify(result);
     setSelectedTile(null);
     appendMove({
       player: 'you',
@@ -595,7 +596,6 @@ export default function BotMatchScreen({
       handSnapshot: handBefore,
       engineBestMove: getFritzBestMove(match),
     });
-    applyAndNotify(result);
   };
 
   useEffect(() => {

@@ -74,30 +74,23 @@ export default function FriendsScreen({
   }, [loadFriends]);
 
   useEffect(() => {
-    if (!open || !socket || !socket.connected || friends.length === 0) return;
+    if (!open || !socket || friends.length === 0) return;
+    const friendUserIds = friends.map((f) => f.userId);
     const checkPresence = () => {
-      console.log(
-        '[presence] checking online for',
-        friends.map((f) => f.userId),
-      );
-      socket.emit(
-        'presence:online',
-        friends.map((f) => f.userId),
-        (resp: { ok?: boolean; onlineUserIds?: string[] }) => {
-          console.log('[presence] presence:online response', resp);
-          if (!resp?.ok) return;
-          const set = new Set(resp.onlineUserIds ?? []);
-          setFriends((prev) => prev.map((f) => ({ ...f, online: set.has(f.userId) })));
-        },
-      );
+      if (!socket.connected) return;
+      socket.emit('presence:online', friendUserIds, (resp: { ok?: boolean; onlineUserIds?: string[] }) => {
+        if (!resp?.ok) return;
+        const set = new Set(resp.onlineUserIds ?? []);
+        setFriends((prev) => prev.map((f) => ({ ...f, online: set.has(f.userId) })));
+      });
     };
 
     checkPresence();
-    const timer = setTimeout(checkPresence, 1500);
     const interval = setInterval(checkPresence, 30000);
+    socket.on('connect', checkPresence);
     return () => {
-      clearTimeout(timer);
       clearInterval(interval);
+      socket.off('connect', checkPresence);
     };
   }, [open, socket, friends.length]);
 

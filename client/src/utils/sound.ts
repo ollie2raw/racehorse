@@ -27,12 +27,15 @@ import tileTapUrl from '../assets/sounds/freesound_community-thwump-85836.mp3';
 let ctx: AudioContext | null = null;
 let tileTapAudio: HTMLAudioElement | null = null;
 
-function getCtx(): AudioContext {
+function getCtx(): AudioContext | null {
   if (!ctx) {
     ctx = new AudioContext();
   }
   if (ctx.state === 'suspended') {
-    ctx.resume();
+    void ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended') {
+      return null;
+    }
   }
   return ctx;
 }
@@ -157,8 +160,14 @@ function buildThwack(
 
 const soundQueue: Array<() => void> = [];
 let soundQueueRunning = false;
+const MAX_SOUND_QUEUE_DEPTH = 3;
 
 export function queueSound(fn: () => void, delayMs = 0): void {
+  // Drop oldest entry if the queue is backing up while playback is paused.
+  while (soundQueue.length >= MAX_SOUND_QUEUE_DEPTH) {
+    soundQueue.shift();
+  }
+
   soundQueue.push(() => {
     setTimeout(() => {
       fn();
@@ -221,7 +230,9 @@ export function playTileSound(type: TileSoundType, isMuted: boolean): void {
 
   let ac: AudioContext;
   try {
-    ac = getCtx();
+    const activeCtx = getCtx();
+    if (!activeCtx) return;
+    ac = activeCtx;
   } catch {
     return; // No audio device — fail silently
   }
@@ -343,7 +354,9 @@ export function playScoreSound(points: number, isMuted: boolean): void {
   if (isMuted) return;
   let ac: AudioContext;
   try {
-    ac = getCtx();
+    const activeCtx = getCtx();
+    if (!activeCtx) return;
+    ac = activeCtx;
   } catch {
     return;
   }
@@ -398,7 +411,9 @@ export function playDrawSound(isMuted: boolean): void {
 
   let ac: AudioContext;
   try {
-    ac = getCtx();
+    const activeCtx = getCtx();
+    if (!activeCtx) return;
+    ac = activeCtx;
   } catch {
     return;
   }
@@ -412,7 +427,9 @@ export function playHandWinSound(isMuted: boolean): void {
 
   let ac: AudioContext;
   try {
-    ac = getCtx();
+    const activeCtx = getCtx();
+    if (!activeCtx) return;
+    ac = activeCtx;
   } catch {
     return;
   }
@@ -427,7 +444,9 @@ export function playHandLoseSound(isMuted: boolean): void {
 
   let ac: AudioContext;
   try {
-    ac = getCtx();
+    const activeCtx = getCtx();
+    if (!activeCtx) return;
+    ac = activeCtx;
   } catch {
     return;
   }
@@ -442,7 +461,9 @@ export function playMatchWinSound(isMuted: boolean): void {
 
   let ac: AudioContext;
   try {
-    ac = getCtx();
+    const activeCtx = getCtx();
+    if (!activeCtx) return;
+    ac = activeCtx;
   } catch {
     return;
   }
@@ -458,7 +479,9 @@ export function playMatchLoseSound(isMuted: boolean): void {
 
   let ac: AudioContext;
   try {
-    ac = getCtx();
+    const activeCtx = getCtx();
+    if (!activeCtx) return;
+    ac = activeCtx;
   } catch {
     return;
   }
@@ -474,7 +497,9 @@ export function playBlockedSound(isMuted: boolean): void {
 
   let ac: AudioContext;
   try {
-    ac = getCtx();
+    const activeCtx = getCtx();
+    if (!activeCtx) return;
+    ac = activeCtx;
   } catch {
     return;
   }
@@ -487,35 +512,36 @@ export function playBlockedSound(isMuted: boolean): void {
 export function playYourTurnSound(isMuted: boolean): void {
   if (isMuted) return;
 
-  let ac: AudioContext;
   try {
-    ac = getCtx();
+    const ac = getCtx();
+    if (!ac) return;
+
+    const t = ac.currentTime;
+
+    // Soft two-note chime — gentle notification feel
+    const notes = [330, 440]; // E4 then A4 — simple pleasant interval
+
+    for (let i = 0; i < notes.length; i++) {
+      const t0 = t + i * 0.1;
+      const freq = notes[i];
+
+      const osc = ac.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+
+      const env = ac.createGain();
+      env.gain.setValueAtTime(0, t0);
+      env.gain.linearRampToValueAtTime(0.15, t0 + 0.012); // soft attack
+      env.gain.linearRampToValueAtTime(0.1, t0 + 0.06); // slight decay
+      env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28); // gentle fade
+
+      osc.connect(env);
+      env.connect(ac.destination);
+
+      osc.start(t0);
+      osc.stop(t0 + 0.32);
+    }
   } catch {
     return;
-  }
-  const t = ac.currentTime;
-
-  // Soft two-note chime — gentle notification feel
-  const notes = [330, 440]; // E4 then A4 — simple pleasant interval
-
-  for (let i = 0; i < notes.length; i++) {
-    const t0 = t + i * 0.1;
-    const freq = notes[i];
-
-    const osc = ac.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, t0);
-
-    const env = ac.createGain();
-    env.gain.setValueAtTime(0, t0);
-    env.gain.linearRampToValueAtTime(0.15, t0 + 0.012); // soft attack
-    env.gain.linearRampToValueAtTime(0.1, t0 + 0.06); // slight decay
-    env.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28); // gentle fade
-
-    osc.connect(env);
-    env.connect(ac.destination);
-
-    osc.start(t0);
-    osc.stop(t0 + 0.32);
   }
 }

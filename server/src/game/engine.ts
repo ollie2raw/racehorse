@@ -167,28 +167,33 @@ function resolveBlockedHand(state: GameState): GameState {
 
   // 'lowestPips': player with fewest pips wins
   let lowestPips = Infinity;
-  let handWinnerId = state.playerIds[0];
+  let handWinnerId: string | null = null;
 
   for (const id of state.playerIds) {
     const pips = state.players[id].hand.reduce((sum, t) => sum + t.high + t.low, 0);
     if (pips < lowestPips) {
       lowestPips = pips;
       handWinnerId = id;
+    } else if (pips === lowestPips) {
+      // Tie means the blocked hand ends without a winner.
+      handWinnerId = null;
     }
   }
 
   const bonus =
-    cfg.endHandBonus === 'sumOpponentPenalties'
+    handWinnerId !== null && cfg.endHandBonus === 'sumOpponentPenalties'
       ? state.playerIds
           .filter((id) => id !== handWinnerId)
           .reduce((sum, id) => sum + computeHandPenalty(state.players[id].hand, cfg), 0)
       : 0;
 
   const updatedPlayers = { ...state.players };
-  updatedPlayers[handWinnerId] = {
-    ...updatedPlayers[handWinnerId],
-    score: updatedPlayers[handWinnerId].score + bonus,
-  };
+  if (handWinnerId !== null) {
+    updatedPlayers[handWinnerId] = {
+      ...updatedPlayers[handWinnerId],
+      score: updatedPlayers[handWinnerId].score + bonus,
+    };
+  }
 
   const newState = {
     ...state,

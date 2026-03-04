@@ -160,13 +160,22 @@ function identityMatchesReconnectSeat(
   seat: ReconnectSeat,
   identity: { username: string; userId: string | null },
 ): boolean {
+  // Prefer userId match — strongest signal
   if (seat.userId && identity.userId) {
     return seat.userId === identity.userId;
   }
-  if (!seat.userId && !identity.userId) {
-    return seat.username === identity.username;
+  // If one has userId and the other doesn't, no match
+  if (seat.userId || identity.userId) {
+    return false;
   }
-  return false;
+  // Both are guests — username match is acceptable only
+  // if the username is not a generic default
+  const genericNames = new Set(['guest', 'player', '']);
+  const normalized = identity.username.toLowerCase().trim();
+  if (genericNames.has(normalized)) {
+    return false; // Too ambiguous to trust username alone
+  }
+  return seat.username === identity.username;
 }
 
 function migrateRoomSeat(roomCode: string, oldSocketId: string, newSocketId: string) {
@@ -315,6 +324,14 @@ function broadcastStateUpdate(roomCode: string) {
   const sockets = io.sockets.adapter.rooms.get(roomCode);
   if (!sockets) return;
 
+  // Update hand-ended tracker before the loop so double
+  // broadcasts in the same tick don't send hand:ended twice.
+  if (room.state.handOver && !room.state.gameOver) {
+    room.lastHandEndedNotifiedHand = room.state.handNumber;
+  } else if (!room.state.handOver) {
+    room.lastHandEndedNotifiedHand = null;
+  }
+
   const currentScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
@@ -326,17 +343,6 @@ function broadcastStateUpdate(roomCode: string) {
       const isPlayer = room.state.playerIds.includes(socketId);
       const legalMoves = isPlayer ? getRoomLegalMoves(roomCode, socketId) : [];
       const canDraw = isPlayer ? getRoomCanDraw(roomCode, socketId) : false;
-
-      // DEBUG: Log legal moves info
-      const branchMoves = legalMoves.filter(
-        (m: any) => m.type === 'play' && m.position?.startsWith('branch-'),
-      );
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(
-          `[DEBUG broadcastStateUpdate] socket=${socketId}, legalMoves=${legalMoves.length}, branchMoves=${branchMoves.length}`,
-          branchMoves.length > 0 ? branchMoves.map((m: any) => m.position) : '',
-        );
-      }
 
       const handCounts = Object.fromEntries(
         room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
@@ -395,11 +401,6 @@ function broadcastStateUpdate(roomCode: string) {
     }
   }
 
-  if (room.state.handOver && !room.state.gameOver) {
-    room.lastHandEndedNotifiedHand = room.state.handNumber;
-  } else if (!room.state.handOver) {
-    room.lastHandEndedNotifiedHand = null;
-  }
   room.lastBroadcastScores = currentScores;
 
   // TOURNAMENT_SPECTATE_BROADCAST
@@ -1050,13 +1051,26 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
             ),
           }
         : null;
+      const rejoinLegalMoves = room.state ? getRoomLegalMoves(room.code, socket.id) : [];
+      const rejoinCanDraw = room.state ? getRoomCanDraw(room.code, socket.id) : false;
       cb?.({
         ok: true,
         roomCode: room.code,
         you: socket.id,
         players: roster,
         state: stateWithCounts,
+        legalMoves: rejoinLegalMoves,
+        canDraw: rejoinCanDraw,
       });
+      // Broadcast updated state so the rejoined socket
+      // receives legal moves immediately as a fallback.
+      if (room.state) {
+        try {
+          broadcastStateUpdate(room.code);
+        } catch {
+          // non-fatal
+        }
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[room:join] ERROR: ${message}`);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import { fetchUserStats, type StatsSummary } from './statsApi';
@@ -25,28 +25,40 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
   const [stats, setStats] = useState<StatsSummary>(EMPTY_STATS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
-  useEffect(() => {
-    if (!open || !user) return;
+  const loadStats = useCallback(() => {
+    if (!user) return;
 
-    let active = true;
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
 
-    fetchUserStats(user).then((result) => {
-      if (!active) return;
-      setLoading(false);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      setStats(result.data ?? EMPTY_STATS);
-    });
+    void fetchUserStats(user)
+      .then((result) => {
+        if (requestId !== requestIdRef.current) return;
+        setLoading(false);
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        setStats(result.data ?? EMPTY_STATS);
+      })
+      .catch(() => {
+        if (requestId !== requestIdRef.current) return;
+        setLoading(false);
+        setError('Unable to load stats. Please try again.');
+      });
+  }, [user]);
+
+  useEffect(() => {
+    if (!open || !user) return;
+    loadStats();
 
     return () => {
-      active = false;
+      requestIdRef.current += 1;
     };
-  }, [open, user]);
+  }, [loadStats, open, user]);
 
   return (
     <div
@@ -139,7 +151,16 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
         </div>
 
         {loading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading stats...</p>}
-        {error && <p className="auth-inline-error">{error}</p>}
+        {error && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <p className="auth-inline-error" style={{ margin: 0 }}>
+              {error}
+            </p>
+            <button className="mode-inline-btn" onClick={() => void loadStats()}>
+              Retry
+            </button>
+          </div>
+        )}
 
         {!loading && !error && (
           <div

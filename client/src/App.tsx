@@ -623,10 +623,12 @@ export default function App() {
     user: authUser,
     profile: authProfile,
     loading: authLoading,
+    justVerified,
     supabaseEnabled,
     supabaseConfigError,
     signIn,
     signUp,
+    resetPassword,
     signOut,
     updateUsername,
   } = useAuth();
@@ -716,12 +718,15 @@ export default function App() {
   const needsUsernameOnboarding = Boolean(
     authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
   );
-  const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(() =>
-    Boolean(
-      typeof window !== 'undefined' &&
-        window.localStorage.getItem('username_onboarding_dismissed'),
-    ),
-  );
+  const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const raw = window.localStorage.getItem('username_onboarding_dismissed');
+    if (!raw) return false;
+    // Only snooze for 24 hours - after that the prompt returns
+    const dismissedAt = parseInt(raw, 10);
+    const SNOOZE_MS = 24 * 60 * 60 * 1000;
+    return Date.now() - dismissedAt < SNOOZE_MS;
+  });
 
   const showToast = useCallback((msg: string, duration = 3000) => {
     if (toastTimeoutRef.current) {
@@ -839,6 +844,12 @@ export default function App() {
   useEffect(() => {
     authProfileRef.current = authProfile;
   }, [authProfile]);
+
+  useEffect(() => {
+    if (justVerified) {
+      showToast('✓ Email verified! Welcome to Racehorse Dominoes.', 5000);
+    }
+  }, [justVerified, showToast]);
 
   useEffect(() => {
     youRef.current = you;
@@ -995,7 +1006,16 @@ export default function App() {
       setState(payload?.state ?? null);
       setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       setCanDraw(Boolean(payload?.canDraw));
-      if (!drawSequenceActiveRef.current) {
+      // If server confirms draw sequence is done, unlock immediately
+      if ((payload?.state as any)?.__drawSequenceActive === false) {
+        if (drawSequenceTimeoutRef.current) {
+          clearTimeout(drawSequenceTimeoutRef.current);
+          drawSequenceTimeoutRef.current = null;
+        }
+        setDrawSequenceActiveBoth(false);
+        setDrawStepMyHand(null);
+        setDrawStepOpponentHandCount(null);
+      } else if (!drawSequenceActiveRef.current) {
         setDrawSequenceActiveBoth(false);
         setDrawStepMyHand(null);
         setDrawStepOpponentHandCount(null);
@@ -1015,7 +1035,7 @@ export default function App() {
       if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
       drawSequenceTimeoutRef.current = setTimeout(() => {
         setDrawSequenceActiveBoth(false);
-      }, 2000);
+      }, 5000);
       setBoneyardDisplayCount(payload.boneyardCount);
       if (boneyardRef.current) {
         const from = boneyardRef.current.getBoundingClientRect();
@@ -1177,10 +1197,10 @@ export default function App() {
               setJoinedRoom(resp.roomCode);
               setRoomCode(resp.roomCode);
               setPlayers(normalizeRoomPlayers(resp.players));
-              setState(resp.state ?? null);
+              if (resp.state) setState(resp.state);
               setSelectedTile(null);
-              setLegalMoves([]);
-              setCanDraw(false);
+              if (Array.isArray(resp.legalMoves)) setLegalMoves(resp.legalMoves);
+              if (typeof resp.canDraw === 'boolean') setCanDraw(resp.canDraw);
               reconnectShouldJoinRef.current = false;
               reconnectRoomCodeRef.current = resp.roomCode;
               return;
@@ -1213,14 +1233,19 @@ export default function App() {
               userId: authUserRef.current?.id ?? null,
             },
           );
-          if (!resp?.ok) return;
+          if (!resp?.ok) {
+            if (typeof window !== 'undefined') {
+              window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
+            }
+            return;
+          }
           setJoinedRoom(resp.roomCode);
           setRoomCode(resp.roomCode);
-          setState(resp.state ?? null);
+          if (resp.state) setState(resp.state);
           setPlayers(normalizeRoomPlayers(resp.players));
           setSelectedTile(null);
-          setLegalMoves([]);
-          setCanDraw(false);
+          if (Array.isArray(resp.legalMoves)) setLegalMoves(resp.legalMoves);
+          if (typeof resp.canDraw === 'boolean') setCanDraw(resp.canDraw);
           setAppMode('multiplayer');
           reconnectShouldJoinRef.current = false;
           reconnectRoomCodeRef.current = resp.roomCode;
@@ -1314,32 +1339,9 @@ export default function App() {
       setState(null);
       setLegalMoves([]);
       setCanDraw(false);
-    });
-
-    s.on('state:update', (update: StateUpdate) => {
-      setState(update.state);
-      setLegalMoves(update.legalMoves);
-      setCanDraw(update.canDraw);
-      setSelectedTile(null);
-      setActionError('');
-      const nextBoardCount = getBoardTileCount(update.state.board);
-      if (prevBoardTileCountRef.current > 0 && nextBoardCount > prevBoardTileCountRef.current) {
-        playTileSound(
-          nextBoardCount - prevBoardTileCountRef.current > 1 ? 'slam' : 'standard',
-          isMutedRef.current,
-        );
-      }
-      prevBoardTileCountRef.current = nextBoardCount;
-      if (!update.state.gameOver) {
-        setRematchRequested(false);
-        setRematchReadyIds([]);
-      }
-      if (update.state.handOver && !update.state.gameOver) {
-        showToast('Hand over', 1200);
-      }
-      if (update.state.gameOver) {
-        showToast(update.state.winnerId === s.id ? 'You win!' : 'Game over!');
-      }
+      setTournamentId(null);
+      setTournamentState(null);
+      setTournamentActiveRoom(null);
     });
 
     s.on('room:update', (data: { players: RoomPlayer[] }) => {
@@ -1718,6 +1720,9 @@ export default function App() {
     }
     setSocket(null);
     setJoinedRoom(null);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
+    }
     setState(null);
     setLegalMoves([]);
     setCanDraw(false);
@@ -2558,17 +2563,18 @@ export default function App() {
     let winnerUserId = bySocketId.get(winnerSocketId) ?? null;
     let loserUserId = bySocketId.get(loserSocketId) ?? null;
 
-    if (winnerUserId !== authUser.id && loserUserId !== authUser.id) {
-      if (winnerSocketId === you) {
-        winnerUserId = authUser.id;
-      } else if (loserSocketId === you) {
-        loserUserId = authUser.id;
-      } else if (!winnerUserId) {
-        winnerUserId = authUser.id;
-      } else {
-        loserUserId = authUser.id;
-      }
+    // Always ensure the authenticated user's ID is set
+    // correctly - never leave both sides unidentified.
+    if (winnerSocketId === you) {
+      winnerUserId = authUser.id;
+    } else if (loserSocketId === you) {
+      loserUserId = authUser.id;
     }
+
+    // If we still can't place the current user as a
+    // participant, skip recording - better no record
+    // than a corrupted one.
+    if (winnerUserId !== authUser.id && loserUserId !== authUser.id) return;
 
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
@@ -3399,6 +3405,7 @@ export default function App() {
           onClose={() => setAuthModalOpen(false)}
           onSignIn={signIn}
           onSignUp={signUp}
+          onResetPassword={resetPassword}
         />
         <UsernameModal
           open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}

@@ -9,7 +9,8 @@ interface AuthModalProps {
   supabaseConfigError: string | null;
   onClose: () => void;
   onSignIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  onSignUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  onSignUp: (email: string, password: string, username?: string) => Promise<{ error: string | null }>;
+  onResetPassword: (email: string) => Promise<{ error: string | null }>;
 }
 
 export default function AuthModal({
@@ -19,6 +20,7 @@ export default function AuthModal({
   onClose,
   onSignIn,
   onSignUp,
+  onResetPassword,
 }: AuthModalProps) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [username, setUsername] = useState('');
@@ -26,10 +28,12 @@ export default function AuthModal({
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
 
   const resetFormState = () => {
     setSubmitting(false);
     setError(null);
+    setResetSent(false);
   };
 
   useEffect(() => {
@@ -68,7 +72,7 @@ export default function AuthModal({
       const result =
         mode === 'signin'
           ? await onSignIn(email.trim(), password)
-          : await onSignUp(email.trim(), password);
+          : await onSignUp(email.trim(), password, username.trim() || undefined);
 
       if (result.error) {
         setError(result.error);
@@ -142,9 +146,25 @@ export default function AuthModal({
             <button
               type="button"
               className="auth-modal-forgot"
-              onClick={() => setError('Password reset is coming soon.')}
+              disabled={submitting || resetSent}
+              onClick={async () => {
+                if (!email.trim()) {
+                  setError('Enter your email above first.');
+                  return;
+                }
+                setSubmitting(true);
+                setError(null);
+                const result = await onResetPassword(email.trim());
+                setSubmitting(false);
+                if (result.error) {
+                  setError(result.error);
+                } else {
+                  setResetSent(true);
+                  setError(null);
+                }
+              }}
             >
-              Forgot password?
+              {resetSent ? '✓ Reset email sent' : 'Forgot password?'}
             </button>
           )}
         </div>

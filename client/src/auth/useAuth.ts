@@ -107,6 +107,7 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [justVerified, setJustVerified] = useState(false);
 
   const fallbackProfile = useCallback((sessionUser: User): UserProfile => {
     const derived = sessionUser.email?.split('@')[0]?.trim().toLowerCase();
@@ -176,6 +177,17 @@ export function useAuth() {
       }
 
       setUser(sessionUser);
+      if (event === 'SIGNED_IN' && sessionUser.email_confirmed_at) {
+        // Detect email verification redirect: SIGNED_IN fires when
+        // the user clicks the confirmation link and lands back in the app.
+        // We distinguish this from a normal sign-in by checking that
+        // there was no prior user in state (user was null before).
+        setJustVerified((prev) => {
+          if (prev) return prev;
+          return true;
+        });
+        setTimeout(() => setJustVerified(false), 8000);
+      }
       if (
         event === 'SIGNED_IN' ||
         event === 'INITIAL_SESSION' ||
@@ -259,7 +271,7 @@ export function useAuth() {
   }, [hydrateProfile]);
 
   const signUp = useCallback(
-    async (email: string, password: string): Promise<AuthResult> => {
+    async (email: string, password: string, username?: string): Promise<AuthResult> => {
       if (!supabase) return { error: getSupabaseConfigError() };
       const client = supabase;
       const runSignUp = async () =>
@@ -277,6 +289,18 @@ export function useAuth() {
         if (error) return { error: error.message };
 
         if (data.user) {
+          if (username) {
+            const normalized = username.trim().toLowerCase();
+            if (normalized.length >= 3 && /^[a-z0-9_]+$/.test(normalized)) {
+              try {
+                await supabase
+                  .from('profiles')
+                  .upsert({ id: data.user.id, username: normalized }, { onConflict: 'id' });
+              } catch {
+                // ignore profile write failures during sign up
+              }
+            }
+          }
           void hydrateProfile(data.user);
         }
 
@@ -450,15 +474,33 @@ export function useAuth() {
     [user],
   );
 
+  const resetPassword = useCallback(async (email: string): Promise<AuthResult> => {
+    if (!supabase) return { error: getSupabaseConfigError() };
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}`,
+        }),
+        AUTH_REQUEST_TIMEOUT_MS,
+      );
+      if (error) return { error: error.message };
+      return { error: null };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Unable to send reset email.' };
+    }
+  }, []);
+
   return {
     user,
     profile,
     loading,
+    justVerified,
     supabaseEnabled: isSupabaseConfigured,
     supabaseConfigError: getSupabaseConfigError(),
     signUp,
     signIn,
     signOut,
     updateUsername,
+    resetPassword,
   };
 }

@@ -211,7 +211,7 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
       y: mainY,
       rotation,
       flipped,
-      key: `main-${pt.tile.high}-${pt.tile.low}`,
+      key: `main-${i}-${pt.tile.high}-${pt.tile.low}`,
     });
 
     // Layout branches from this hub
@@ -337,7 +337,7 @@ function layoutBranches(
           y: centerY,
           rotation,
           flipped,
-          key: `branch-${hubId}-${armIdx}-${i}`,
+          key: `branch-${hubId}-${armIdx}-${i}-${branch.tiles[i].tile.high}-${branch.tiles[i].tile.low}`,
         });
 
         if (double) {
