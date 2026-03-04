@@ -119,6 +119,47 @@ function getBoardTileCount(board: GameState['board']): number {
   return count;
 }
 
+function getBoardTiles(board: GameState['board']): Tile[] {
+  if (!board) return [];
+  const tiles: Tile[] = [];
+  for (const placed of board.mainLine) {
+    tiles.push(placed.tile);
+  }
+  for (const hub of board.hubDoubles) {
+    for (const branch of hub.branches) {
+      if (!branch) continue;
+      for (const placed of branch.tiles) {
+        tiles.push(placed.tile);
+      }
+    }
+  }
+  return tiles;
+}
+
+function tileKey(tile: Tile): string {
+  const low = Math.min(tile.low, tile.high);
+  const high = Math.max(tile.low, tile.high);
+  return `${low}-${high}`;
+}
+
+function findPlacedTile(
+  previousBoard: GameState['board'],
+  nextBoard: GameState['board'],
+): Tile | null {
+  const prevCounts = new Map<string, number>();
+  for (const tile of getBoardTiles(previousBoard)) {
+    const key = tileKey(tile);
+    prevCounts.set(key, (prevCounts.get(key) ?? 0) + 1);
+  }
+  for (const tile of getBoardTiles(nextBoard)) {
+    const key = tileKey(tile);
+    const prevCount = prevCounts.get(key) ?? 0;
+    if (prevCount <= 0) return tile;
+    prevCounts.set(key, prevCount - 1);
+  }
+  return null;
+}
+
 function getOpenEndsSum(board: GameState['board']): number {
   if (!board || board.mainLine.length === 0) return 0;
   if (board.mainLine.length === 1) {
@@ -611,6 +652,7 @@ export default function App() {
   const [rematchRequested, setRematchRequested] = useState(false);
   const [rematchReadyIds, setRematchReadyIds] = useState<string[]>([]);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [multiplayerMoveLog, setMultiplayerMoveLog] = useState<MoveEntry[]>([]);
   const multiplayerMoveCounterRef = useRef(1);
   const previousStateForAnalysisRef = useRef<GameState | null>(null);
@@ -674,6 +716,7 @@ export default function App() {
   const [isRecoveringConnection, setIsRecoveringConnection] = useState(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(44);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
   const autoTurnActionKeyRef = useRef<string>('');
@@ -711,6 +754,7 @@ export default function App() {
   const prevGameOverRef = useRef(false);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const isAdmin = Boolean(
     authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
@@ -741,6 +785,19 @@ export default function App() {
     setDrawSequenceActive(val);
   }, []);
 
+  const flashLastPlayed = useCallback((tile: Tile | null) => {
+    if (lastPlayedTileTimerRef.current) {
+      clearTimeout(lastPlayedTileTimerRef.current);
+    }
+    setLastPlayedTile(tile);
+    if (tile) {
+      lastPlayedTileTimerRef.current = setTimeout(() => {
+        setLastPlayedTile(null);
+        lastPlayedTileTimerRef.current = null;
+      }, 2400);
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) {
@@ -752,6 +809,7 @@ export default function App() {
       if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
       if (reconnectAttemptTimerRef.current) clearTimeout(reconnectAttemptTimerRef.current);
       if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
+      if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
     };
   }, []);
 
@@ -2093,6 +2151,13 @@ export default function App() {
     async (position: PlacementPosition) => {
       setActionError('');
       if (!socket || !joinedRoom || !selectedTile) return;
+      const selectedMove = legalMoves.find(
+        (m) =>
+          m.type === 'play' &&
+          m.tile &&
+          m.position === position &&
+          tileEquals(m.tile, selectedTile),
+      );
       emitDraggingState(false);
       setPendingUiAction('play');
       const boardEnds = getBoardEnds(state?.board ?? null);
@@ -2117,6 +2182,7 @@ export default function App() {
           setSelectedTile(null);
           return;
         }
+        flashLastPlayed(selectedMove?.tile ?? selectedTile);
         appendMultiplayerMove({
           player: 'you',
           action: 'place',
@@ -2151,7 +2217,7 @@ export default function App() {
         setPendingUiAction((prev) => (prev === 'play' ? null : prev));
       }
     },
-    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast],
+    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, flashLastPlayed],
   );
 
   // Derived state
@@ -2415,6 +2481,9 @@ export default function App() {
     let action: MoveEntry['action'] = 'pass';
     if (nextBoardCount > prevBoardCount) action = 'place';
     else if ((state.boneyard?.length ?? 0) < (prev.boneyard?.length ?? 0)) action = 'draw';
+    if (action === 'place') {
+      flashLastPlayed(findPlacedTile(prev.board, state.board));
+    }
 
     appendMultiplayerMove({
       player: 'opponent',
@@ -2429,7 +2498,7 @@ export default function App() {
       handSnapshot: (prev.players[you]?.hand ?? []).map(toTileTuple),
       engineBestMove: null,
     });
-  }, [state, you, appendMultiplayerMove]);
+  }, [state, you, appendMultiplayerMove, flashLastPlayed]);
 
   // Pulse the opp-tile card whenever the count changes
   useEffect(() => {
@@ -4011,14 +4080,15 @@ export default function App() {
                 <button className="btn text icon-btn fullscreen-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
                   <FullscreenIcon isFullscreen={isFullscreen} />
                 </button>
-                <button onClick={() => disconnect('user leave game')} title="Leave game" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <button onClick={() => setShowLeaveConfirm(true)} title="Leave game" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg>
                 </button>
               </div>
               <Board
                 board={state.board}
                 legalMoves={isMyTurn ? legalMoves : []}
                 selectedTile={isMyTurn ? selectedTile : null}
+                lastPlayedTile={lastPlayedTile}
                 onPositionClick={play}
                 tileSize={72}
                 showOpenEndGlow={isMyTurn && opponentDragging}
@@ -4066,6 +4136,106 @@ export default function App() {
         analysis={currentAnalysis}
         title="Game Review"
       />
+      {showLeaveConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Leave game confirmation"
+          onClick={() => setShowLeaveConfirm(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1900,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'rgba(5, 8, 14, 0.62)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            padding: 12,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '480px',
+              borderRadius: 20,
+              border: '1px solid rgba(255,255,255,0.10)',
+              background: 'rgb(18, 22, 32)',
+              boxShadow: '0 32px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+              padding: '48px 44px',
+              color: 'rgba(235, 245, 242, 0.96)',
+            }}
+          >
+            <h2
+              style={{
+                margin: '0 0 20px',
+                fontSize: '2rem',
+                fontWeight: 700,
+                color: 'white',
+              }}
+            >
+              Leave game?
+            </h2>
+            <p
+              style={{
+                margin: '0 0 36px',
+                color: 'rgba(200,220,215,0.65)',
+                fontSize: '0.95rem',
+                lineHeight: 1.45,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span aria-hidden="true">⚠️</span>
+              <span>Your progress in this hand will be lost.</span>
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                gap: 10,
+                width: '100%',
+              }}
+            >
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                style={{
+                  flex: 1,
+                  background: 'rgba(45,160,120,0.85)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 14,
+                  padding: '16px 0',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLeaveConfirm(false);
+                  disconnect('user leave game');
+                }}
+                style={{
+                  flex: 1,
+                  background: 'rgba(180,40,40,0.25)',
+                  border: '1px solid rgba(220,80,80,0.5)',
+                  color: 'rgba(240,140,140,0.9)',
+                  borderRadius: 14,
+                  padding: '16px 0',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

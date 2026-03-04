@@ -246,6 +246,7 @@ export default function DailyPuzzleScreen({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [status, setStatus] = useState<PlayStatus>('IN_PROGRESS');
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [movesUsed, setMovesUsed] = useState(0);
   const [_lastMovePoints, setLastMovePoints] = useState(0);
   const [finalScore, setFinalScore] = useState<number | null>(null);
@@ -277,6 +278,24 @@ export default function DailyPuzzleScreen({
   const validatorWorkerRef = useRef<Worker | null>(null);
   const validatorRequestIdRef = useRef(0);
   const validatorPendingRef = useRef<Map<number, PendingWorkerJob<unknown>>>(new Map());
+  const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashLastPlayed = useCallback((tile: Tile | null) => {
+    if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
+    setLastPlayedTile(tile);
+    if (tile) {
+      lastPlayedTileTimerRef.current = setTimeout(() => {
+        setLastPlayedTile(null);
+        lastPlayedTileTimerRef.current = null;
+      }, 2400);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
+    };
+  }, []);
   const handleBackHome = useCallback(() => {
     setDailyLeaderboardOpen(false);
     setShowLobby(true);
@@ -761,6 +780,7 @@ export default function DailyPuzzleScreen({
     setSelectedTile(null);
     setMovesUsed(nextMoves);
     setLastMovePoints(pointsAwarded);
+    flashLastPlayed(move.tile ?? null);
 
     const afterEnds = getDisplayOpenEnds(nextState);
     // eslint-disable-next-line no-console
@@ -1099,6 +1119,7 @@ export default function DailyPuzzleScreen({
             board={runtimeState.board}
             legalMoves={legalMoves}
             selectedTile={selectedTile}
+            lastPlayedTile={lastPlayedTile}
             onPositionClick={onPositionClick}
             tileSize={72}
           />

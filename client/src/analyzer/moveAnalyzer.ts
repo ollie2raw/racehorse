@@ -1,7 +1,7 @@
 import type { EngineBestMove, MoveEntry, TileTuple } from './moveLogger';
 import { sameTileTuple } from './moveLogger';
 import { chooseBotMove } from '../bot/botHeuristics';
-import { createBotMatch, previewPlayMove } from '../bot/botEngine';
+import { createBotMatch, previewPlayMove, getLegalMoves } from '../bot/botEngine';
 import type { BotMatchState } from '../bot/botEngine';
 
 export type MoveRating = 'Brilliant' | 'Great' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder';
@@ -64,15 +64,118 @@ function uniqueTiles(tiles: TileTuple[]): TileTuple[] {
   return out;
 }
 
+// ─── Build a consistent BotMatchState for engine evaluation ───────────────────
+//
+// IMPORTANT: All engine scores (bestScore, playedScore) must use the SAME
+// evaluation function — chooseBotMove's internal scoring via previewPlayMove.
+// We never mix moveLogger's simple heuristic scores with the bot engine scores.
+
+function buildEvalState(
+  entry: MoveEntry,
+  perspective: 'bot' | 'you',
+): BotMatchState | null {
+  if (!entry.boardRenderState) return null;
+  try {
+    const template = createBotMatch(60, 7);
+    const hand = entry.handBefore.map((t) => ({ low: t[0], high: t[1] }));
+    return {
+      ...template,
+      board: entry.boardRenderState as unknown as typeof template.board,
+      currentPlayer: perspective,
+      handOpen: entry.boardRenderState.mainLine.length > 0 || true,
+      handOver: false,
+      gameOver: false,
+      winningScore: 60,
+      consecutivePasses: 0,
+      // Use a realistic boneyard size so bot doesn't think the game is over
+      boneyard: new Array(14).fill({ low: 0, high: 0 }),
+      players: {
+        you: {
+          ...template.players.you,
+          hand: perspective === 'you' ? [] : hand,
+          score: 0,
+        },
+        bot: {
+          ...template.players.bot,
+          hand: perspective === 'bot' ? hand : [],
+          score: 0,
+        },
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compute the engine score for a specific tile+position using the SAME
+ * previewPlayMove path the bot uses internally.
+ *
+ * Returns null if the move is illegal or can't be previewed.
+ */
+function engineScoreForMove(
+  evalState: BotMatchState,
+  tile: TileTuple,
+  position: string | undefined,
+  perspective: 'bot' | 'you',
+): { score: number; breakdown: EngineBestMove['breakdown'] } | null {
+  // Find the matching legal move to get the correct position
+  const legalMoves = getLegalMoves(evalState, perspective);
+  const tileObj = { low: tile[0], high: tile[1] };
+
+  // Try to find exact position match first, then fall back to any legal position for this tile
+  const matchingMoves = legalMoves.filter(
+    (m) => m.type === 'play' && m.tile &&
+      m.tile.low === tileObj.low && m.tile.high === tileObj.high,
+  );
+
+  if (matchingMoves.length === 0) return null;
+
+  // Prefer the position we recorded; otherwise take the highest-scoring legal placement
+  const targetMove = position
+    ? matchingMoves.find((m) => m.type === 'play' && m.position === position) ?? matchingMoves[0]
+    : matchingMoves[0];
+
+  const preview = previewPlayMove(evalState, perspective, targetMove);
+  if (!preview) return null;
+
+  const immediate = preview.immediateScore;
+  const isDouble = tile[0] === tile[1];
+  const mobility = preview.nextHand.filter((t) =>
+    preview.openEnds.some((e) => e === t.low || e === t.high),
+  ).length;
+  const unload = tile[0] + tile[1];
+  const denial = -preview.openEnds.reduce((sum, end) => {
+    return sum + (end >= 0 && end <= 6 ? 7 : 0);
+  }, 0);
+
+  // Use the same scoring formula as chooseBotMove standard mode for comparability
+  const score = immediate * 100 + unload * 0.8 + mobility * 8 + denial * 0.3 + (isDouble ? 2 : 0);
+
+  return {
+    score,
+    breakdown: {
+      immediate,
+      doubleBias: isDouble ? 1 : 0,
+      mobility,
+      denial,
+      unload,
+      replyRisk: 0,
+    },
+  };
+}
+
 function buildExplanation(
   playedTile: TileTuple | undefined,
   bestTile: TileTuple | undefined,
   rating: MoveRating,
   playedBreakdown: EngineBestMove['breakdown'] | null,
-  bestBreakdown: { immediate: number; mobility: number; denial: number; unload: number; replyRisk: number } | null,
+  bestBreakdown: EngineBestMove['breakdown'] | null,
+  context?: string,
 ): string {
   const played = playedTile ? tileLabel(playedTile) : null;
   const best = bestTile ? tileLabel(bestTile) : null;
+  const suffix = context ? ` ${context}` : '';
 
   if (rating === 'Brilliant') {
     const parts: string[] = [];
@@ -82,10 +185,10 @@ function buildExplanation(
       parts.push(`keeps ${bestBreakdown.mobility} tiles in play`);
     if (bestBreakdown?.replyRisk !== undefined && bestBreakdown.replyRisk < 3)
       parts.push('low reply risk');
-    return `Brilliant — you matched Fritz's top choice${parts.length ? ` (${parts.join(', ')})` : ''}.`;
+    return `Brilliant — you matched the engine's top choice${parts.length ? ` (${parts.join(', ')})` : ''}.${suffix}`;
   }
 
-  if (!played || !best) return 'No alternatives available to compare.';
+  if (!played || !best) return `No alternatives available to compare.${suffix}`;
 
   const reasons: string[] = [];
   const scoreDiff = (bestBreakdown?.immediate ?? 0) - (playedBreakdown?.immediate ?? 0);
@@ -94,12 +197,13 @@ function buildExplanation(
   const riskDiff = (playedBreakdown?.replyRisk ?? 0) - (bestBreakdown?.replyRisk ?? 0);
   const denialDiff = (bestBreakdown?.denial ?? 0) - (playedBreakdown?.denial ?? 0);
 
+  // Only report immediate score diff if it's a real scoring difference (actual game points)
   if (scoreDiff > 0)
     reasons.push(`${best} scores ${scoreDiff} more pt${scoreDiff !== 1 ? 's' : ''}`);
   if (mobilityDiff >= 2)
     reasons.push(`keeps ${mobilityDiff} more tile${mobilityDiff !== 1 ? 's' : ''} playable`);
   if (unloadDiff >= 3)
-    reasons.push(`sheds ${unloadDiff} more pips of dead weight`);
+    reasons.push(`sheds ${unloadDiff} more pips`);
   if (riskDiff >= 3)
     reasons.push('reduces opponent scoring chance');
   if (denialDiff > 5)
@@ -107,7 +211,7 @@ function buildExplanation(
 
   const warnings: string[] = [];
   if ((playedBreakdown?.replyRisk ?? 0) >= 7)
-    warnings.push('your move left the board open for opponent to score');
+    warnings.push('left board open for opponent to score');
   if ((playedBreakdown?.mobility ?? 0) <= 1 && (playedBreakdown?.unload ?? 0) <= 3)
     warnings.push('low pip value and strands tiles in hand');
 
@@ -115,82 +219,27 @@ function buildExplanation(
   const warningText = warnings.length > 0 ? `. Also: ${warnings.join(', ')}` : '';
 
   if (rating === 'Great')
-    return `Great. ${best} was Fritz's top choice${reasonText}, but ${played} was close${warningText}.`;
+    return `Great. ${best} was the engine's top choice${reasonText}, but ${played} was close${warningText}.${suffix}`;
   if (rating === 'Good')
-    return `Good. ${best} was stronger${reasonText}${warningText}.`;
+    return `Good. ${best} was stronger${reasonText}${warningText}.${suffix}`;
   if (rating === 'Inaccuracy')
-    return `Inaccuracy. You played ${played}, but ${best} was noticeably better${reasonText}${warningText}.`;
+    return `Inaccuracy. You played ${played}, but ${best} was noticeably better${reasonText}${warningText}.${suffix}`;
   if (rating === 'Mistake')
-    return `Mistake. ${best} was a significant upgrade over ${played}${reasonText}${warningText}.`;
-  return `Blunder. ${best} was far stronger than ${played}${reasonText}${warningText}.`;
+    return `Mistake. ${best} was a significant upgrade over ${played}${reasonText}${warningText}.${suffix}`;
+  return `Blunder. ${best} was far stronger than ${played}${reasonText}${warningText}.${suffix}`;
 }
 
-function computePlayedBreakdown(
-  entry: MoveEntry,
-): EngineBestMove['breakdown'] | null {
-  if (!entry.tile || !entry.boardRenderState) return null;
-  try {
-    const template = createBotMatch(60, 7);
-    const hand = entry.handBefore.map((t) => ({ low: t[0], high: t[1] }));
-    const evalState: BotMatchState = {
-      ...template,
-      board: entry.boardRenderState as unknown as typeof template.board,
-      currentPlayer: 'you',
-      handOpen: true,
-      handOver: false,
-      gameOver: false,
-      winningScore: 60,
-      consecutivePasses: 0,
-      boneyard: new Array(14).fill({ low: 0, high: 0 }),
-      players: {
-        you: { ...template.players.you, hand, score: 0 },
-        bot: { ...template.players.bot, hand: [], score: 0 },
-      },
-    };
-    const move = {
-      type: 'play' as const,
-      tile: { low: entry.tile[0], high: entry.tile[1] },
-      position: entry.boardRenderState.mainLine.length === 0
-        ? ('left' as const)
-        : ('right' as const),
-    };
-    const preview = previewPlayMove(evalState, 'you', move);
-    if (!preview) return null;
-    const immediate = preview.immediateScore;
-    const mobility = preview.nextHand.filter((t) =>
-      preview.openEnds.some((e) => e === t.low || e === t.high),
-    ).length;
-    const unload = entry.tile[0] + entry.tile[1];
-    const denial = preview.openEnds.reduce((sum, end) => {
-      return sum - (end >= 0 && end <= 6 ? 7 : 0);
-    }, 0);
-    return {
-      immediate,
-      doubleBias: entry.tile[0] === entry.tile[1] ? 1 : 0,
-      mobility,
-      denial,
-      unload,
-      replyRisk: 0,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function classifyMove(
-  entry: MoveEntry,
-): {
+function classifyMove(entry: MoveEntry): {
   score: number;
   rating: MoveRating;
-  bestTile?: [number, number];
+  bestTile?: TileTuple;
   bestPosition?: string;
   explanation: string;
+  playedBreakdown: EngineBestMove['breakdown'] | null;
 } {
   const validTiles = uniqueTiles(entry.validMoves);
   const bestMove = entry.engineBestMove;
   const bestTile = bestMove?.tile;
-  const bestBreakdown = entry.engineBestMove?.breakdown ?? null;
-  const playedBreakdown = computePlayedBreakdown(entry);
 
   if (entry.action === 'pass' && validTiles.length > 0) {
     return {
@@ -198,114 +247,140 @@ function classifyMove(
       rating: 'Blunder',
       bestTile,
       bestPosition: bestMove?.position,
-      explanation: buildExplanation(entry.tile, bestTile, 'Blunder', playedBreakdown, bestBreakdown),
+      explanation: buildExplanation(entry.tile, bestTile, 'Blunder', null, bestMove?.breakdown ?? null),
+      playedBreakdown: null,
     };
   }
 
   if (entry.action !== 'place' || !entry.tile) {
     if (validTiles.length === 0) {
-      return {
-        score: 84,
-        rating: 'Good',
-        explanation: buildExplanation(entry.tile, bestTile, 'Good', playedBreakdown, bestBreakdown),
-      };
+      return { score: 84, rating: 'Good', explanation: 'No legal plays — forced draw or pass.', playedBreakdown: null };
     }
-    return {
-      score: 46,
-      rating: 'Inaccuracy',
-      explanation: buildExplanation(entry.tile, bestTile, 'Inaccuracy', playedBreakdown, bestBreakdown),
-    };
+    return { score: 46, rating: 'Inaccuracy', explanation: 'Non-play action when plays were available.', playedBreakdown: null };
   }
 
   if (validTiles.length === 0) {
-    return {
-      score: 72,
-      rating: 'Good',
-      explanation: buildExplanation(entry.tile, bestTile, 'Good', playedBreakdown, bestBreakdown),
-    };
+    return { score: 72, rating: 'Good', explanation: 'Only one legal move available.', playedBreakdown: null };
   }
 
-  // If no Fritz evaluation available, rate as Good with no comparison
   if (!bestTile || !entry.engineBestMove) {
-    return {
-      score: 72,
-      rating: 'Good',
-      explanation: 'No engine evaluation available for this move.',
-    };
+    return { score: 72, rating: 'Good', explanation: 'No engine evaluation available for this move.', playedBreakdown: null };
   }
 
-  const bestForAdvice = bestTile;
-  const bestPosition = bestMove?.position;
+  // ── Score both moves on the SAME scale using the engine ──────────────────────
+  const evalState = buildEvalState(entry, 'bot');
 
-  // Brilliant: played exactly Fritz's top choice
-  if (sameTileTuple(entry.tile, bestTile)) {
+  let bestScore = entry.engineBestMove.score;
+  let bestBreakdown: EngineBestMove['breakdown'] | null = entry.engineBestMove.breakdown ?? null;
+  let playedScore: number | null = null;
+  let playedBreakdown: EngineBestMove['breakdown'] | null = null;
+
+  if (evalState) {
+    // Re-score the best move through the engine to get a consistent scale
+    const bestEval = engineScoreForMove(evalState, bestTile, bestMove?.position, 'bot');
+    if (bestEval) {
+      bestScore = bestEval.score;
+      bestBreakdown = bestEval.breakdown;
+    }
+
+    // Score the played move through the same engine
+    const playedEval = engineScoreForMove(evalState, entry.tile, entry.boardState?.find(
+      (s) => s.tile[0] === entry.tile![0] && s.tile[1] === entry.tile![1]
+    )?.position, 'bot');
+    if (playedEval) {
+      playedScore = playedEval.score;
+      playedBreakdown = playedEval.breakdown;
+    }
+  }
+
+  // Fallback: if we couldn't score the played move, use best score as baseline
+  if (playedScore === null) {
+    playedScore = bestScore * 0.7; // conservative assumption
+  }
+
+  // ── Check if played tile is a double (turn continues) ────────────────────────
+  // A double that continues the turn should not be penalised for the immediate
+  // move alone — we look at whether it was part of a deliberate chain.
+  const playedIsDouble = entry.tile[0] === entry.tile[1];
+  const bestIsDouble = bestTile[0] === bestTile[1];
+
+  // If player played a double and best move was not a double, the double grants
+  // an extra turn — add a turn-continuation bonus to played score.
+  // We approximate this as worth ~0.5 extra mobility points on the same scale.
+  let adjustedPlayedScore = playedScore;
+  if (playedIsDouble && !bestIsDouble) {
+    adjustedPlayedScore += 40; // ~0.5 mobility units on our 100-pt scale
+  }
+  // Conversely if best move is a double and played isn't, best gets the bonus
+  let adjustedBestScore = bestScore;
+  if (bestIsDouble && !playedIsDouble) {
+    adjustedBestScore += 40;
+  }
+
+  const diff = adjustedBestScore - adjustedPlayedScore;
+
+  // Normalize against best score magnitude so thresholds are scale-independent
+  const magnitude = Math.max(Math.abs(adjustedBestScore), 20);
+  const normalizedDiff = diff / magnitude;
+
+  if (normalizedDiff <= 0.0) {
+    // Played move was equal or better than engine's choice
     return {
       score: 99,
       rating: 'Brilliant',
       bestTile,
-      bestPosition,
+      bestPosition: bestMove?.position,
       explanation: buildExplanation(entry.tile, bestTile, 'Brilliant', playedBreakdown, bestBreakdown),
+      playedBreakdown,
     };
   }
-
-  // Use Fritz score difference to rate the move
-  // Fritz score for best move vs played move
-  const bestScore = entry.engineBestMove.score;
-  const playedScore = playedBreakdown
-    ? playedBreakdown.immediate * 60 +
-      playedBreakdown.mobility * 8 +
-      playedBreakdown.unload * 1.2
-    : 0;
-  const diff = bestScore - playedScore;
-
-  // Normalize diff as a percentage of bestScore so thresholds
-  // are scale-independent regardless of board complexity.
-  // A move within 8% of Fritz's best = Great
-  // 8-18% = Good, 18-32% = Inaccuracy, 32-50% = Mistake, 50%+ = Blunder
-  const normalizedDiff = bestScore > 0 ? diff / bestScore : diff / 10;
-
   if (normalizedDiff <= 0.08) {
     return {
       score: 88,
       rating: 'Great',
-      bestTile: bestForAdvice,
-      bestPosition,
-      explanation: buildExplanation(entry.tile, bestForAdvice, 'Great', playedBreakdown, bestBreakdown),
+      bestTile,
+      bestPosition: bestMove?.position,
+      explanation: buildExplanation(entry.tile, bestTile, 'Great', playedBreakdown, bestBreakdown),
+      playedBreakdown,
     };
   }
-  if (normalizedDiff <= 0.18) {
+  if (normalizedDiff <= 0.20) {
     return {
       score: 74,
       rating: 'Good',
-      bestTile: bestForAdvice,
-      bestPosition,
-      explanation: buildExplanation(entry.tile, bestForAdvice, 'Good', playedBreakdown, bestBreakdown),
+      bestTile,
+      bestPosition: bestMove?.position,
+      explanation: buildExplanation(entry.tile, bestTile, 'Good', playedBreakdown, bestBreakdown),
+      playedBreakdown,
     };
   }
-  if (normalizedDiff <= 0.32) {
+  if (normalizedDiff <= 0.36) {
     return {
       score: 58,
       rating: 'Inaccuracy',
-      bestTile: bestForAdvice,
-      bestPosition,
-      explanation: buildExplanation(entry.tile, bestForAdvice, 'Inaccuracy', playedBreakdown, bestBreakdown),
+      bestTile,
+      bestPosition: bestMove?.position,
+      explanation: buildExplanation(entry.tile, bestTile, 'Inaccuracy', playedBreakdown, bestBreakdown),
+      playedBreakdown,
     };
   }
-  if (normalizedDiff <= 0.50) {
+  if (normalizedDiff <= 0.55) {
     return {
       score: 38,
       rating: 'Mistake',
-      bestTile: bestForAdvice,
-      bestPosition,
-      explanation: buildExplanation(entry.tile, bestForAdvice, 'Mistake', playedBreakdown, bestBreakdown),
+      bestTile,
+      bestPosition: bestMove?.position,
+      explanation: buildExplanation(entry.tile, bestTile, 'Mistake', playedBreakdown, bestBreakdown),
+      playedBreakdown,
     };
   }
   return {
     score: 18,
     rating: 'Blunder',
-    bestTile: bestForAdvice,
-    bestPosition,
-    explanation: buildExplanation(entry.tile, bestForAdvice, 'Blunder', playedBreakdown, bestBreakdown),
+    bestTile,
+    bestPosition: bestMove?.position,
+    explanation: buildExplanation(entry.tile, bestTile, 'Blunder', playedBreakdown, bestBreakdown),
+    playedBreakdown,
   };
 }
 
@@ -319,37 +394,20 @@ function gradeFromAccuracy(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
 
 export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
   return entries.map((entry) => {
-    // Only evaluate your moves, only placements draws and passes
     if (entry.player !== 'you') return entry;
-    // Already has a real Fritz evaluation from bot mode — skip
     if (entry.engineBestMove !== null) return entry;
-    // Need a board to evaluate against
     if (!entry.boardRenderState) return entry;
 
     try {
-      const template = createBotMatch(60, 7);
-      const hand = entry.handBefore.map((t) => ({ low: t[0], high: t[1] }));
-      const evalState: BotMatchState = {
-        ...template,
-        board: entry.boardRenderState as unknown as typeof template.board,
-        currentPlayer: 'bot',
-        handOpen: true,
-        handOver: false,
-        gameOver: false,
-        winningScore: 60,
-        consecutivePasses: 0,
-        boneyard: new Array(14).fill({ low: 0, high: 0 }),
-        players: {
-          you: { ...template.players.you, hand: [], score: 0 },
-          bot: { ...template.players.bot, hand, score: 0 },
-        },
-      };
+      const evalState = buildEvalState(entry, 'bot');
+      if (!evalState) return entry;
+
       const choice = chooseBotMove(evalState, 'hard');
       if (!choice || !choice.move.tile) return entry;
       return {
         ...entry,
         engineBestMove: {
-          tile: [choice.move.tile.low, choice.move.tile.high] as [number, number],
+          tile: [choice.move.tile.low, choice.move.tile.high] as TileTuple,
           position: choice.move.position,
           score: choice.score,
           breakdown: choice.breakdown,
@@ -365,6 +423,7 @@ function sequenceAdjustRatings(
   analyzedMoves: AnalyzedMove[],
   allEntries: MoveEntry[],
 ): AnalyzedMove[] {
+  // Build actual game points scored per move number (real points, not engine scores)
   const pointsByMove = new Map<number, number>();
   for (const entry of allEntries) {
     if (entry.player === 'you') {
@@ -377,21 +436,22 @@ function sequenceAdjustRatings(
   return analyzedMoves.map((move, idx) => {
     if (move.rating === 'Brilliant') return move;
 
+    // Actual points scored over next 3 moves (real game points, not engine scale)
     const windowPts =
       (pointsByMove.get(moveNumbers[idx]) ?? 0) +
       (pointsByMove.get(moveNumbers[idx + 1]) ?? 0) +
       (pointsByMove.get(moveNumbers[idx + 2]) ?? 0);
 
-    const fritzImmediate = move.engineBestMove?.breakdown?.immediate ?? 0;
-    const playedImmediate =
-      move.score >= 88 ? fritzImmediate : (move.bestBreakdown?.immediate ?? 0);
+    // Engine's best immediate in REAL game points (from breakdown.immediate)
+    const fritzImmediateRealPts = move.engineBestMove?.breakdown?.immediate ?? 0;
 
+    // ── Soften: bad rating but sequence scored well ───────────────────────────
+    // E.g. played a double to chain into scoring moves
     if (
       (move.rating === 'Blunder' || move.rating === 'Mistake') &&
-      windowPts >= fritzImmediate + 2
+      windowPts >= Math.max(fritzImmediateRealPts, 1)
     ) {
-      const softenedRating: MoveRating =
-        move.rating === 'Blunder' ? 'Inaccuracy' : 'Good';
+      const softenedRating: MoveRating = move.rating === 'Blunder' ? 'Inaccuracy' : 'Good';
       const softenedScore = move.rating === 'Blunder' ? 62 : 76;
       return {
         ...move,
@@ -403,14 +463,14 @@ function sequenceAdjustRatings(
       };
     }
 
+    // ── Harden: good rating but sequence scored 0 when engine expected points ─
     if (
       (move.rating === 'Good' || move.rating === 'Great') &&
       windowPts === 0 &&
-      fritzImmediate >= 5 &&
+      fritzImmediateRealPts >= 1 &&
       idx < analyzedMoves.length - 2
     ) {
-      const hardenedRating: MoveRating =
-        move.rating === 'Great' ? 'Good' : 'Inaccuracy';
+      const hardenedRating: MoveRating = move.rating === 'Great' ? 'Good' : 'Inaccuracy';
       const hardenedScore = move.rating === 'Great' ? 74 : 58;
       return {
         ...move,
@@ -422,9 +482,10 @@ function sequenceAdjustRatings(
       };
     }
 
+    // ── Soften inaccuracy: next move scored at least as much as engine expected ─
     if (
       move.rating === 'Inaccuracy' &&
-      (pointsByMove.get(moveNumbers[idx + 1]) ?? 0) >= fritzImmediate
+      (pointsByMove.get(moveNumbers[idx + 1]) ?? 0) >= fritzImmediateRealPts
     ) {
       return {
         ...move,
@@ -444,6 +505,7 @@ export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): G
   const processedEntries = enrichWithFritz ? enrichMovesWithFritz(entries) : entries;
   const verdictByMoveNumber = new Map<number, ReturnType<typeof classifyMove>>();
   const myMoves = processedEntries.filter((entry) => entry.player === 'you');
+
   const rawAnalyzedMoves: AnalyzedMove[] = myMoves.map((entry) => {
     const verdict = classifyMove(entry);
     verdictByMoveNumber.set(entry.moveNumber, verdict);
@@ -466,6 +528,7 @@ export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): G
       bestBreakdown: entry.engineBestMove?.breakdown,
     };
   });
+
   const analyzedMoves = sequenceAdjustRatings(rawAnalyzedMoves, processedEntries);
 
   const timeline = processedEntries.map((entry, moveIndex) => {

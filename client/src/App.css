@@ -2652,11 +2652,20 @@ button:hover:not(:disabled) {
   transform: translateY(-2px);
 }
 
-.domino-tile.highlight .domino-body {
-  border-color: var(--tile-highlight);
+.board-canvas .domino-tile.highlight .domino-body {
   box-shadow:
-    0 0 0 4px var(--tile-highlight),
-    var(--tile-shadow);
+    0 0 0 3px rgba(255, 220, 80, 0.9),
+    0 0 18px 6px rgba(255, 200, 40, 0.5);
+  animation: last-played-pulse 2.4s ease-out forwards;
+  border-radius: 6px;
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes last-played-pulse {
+  0%   { box-shadow: 0 0 0 3px rgba(255,220,80,0.95), 0 0 22px 8px rgba(255,200,40,0.6); }
+  50%  { box-shadow: 0 0 0 3px rgba(255,220,80,0.7),  0 0 14px 4px rgba(255,200,40,0.35); }
+  100% { box-shadow: 0 0 0 2px rgba(255,220,80,0.3),  0 0 6px  2px rgba(255,200,40,0.1); }
 }
 
 .domino-tile.disabled:not(.board-tile) {
@@ -3343,7 +3352,9 @@ button:hover:not(:disabled) {
   letter-spacing: 0.02em !important;
 }
 
-.boneyard-pill {
+.boneyard-pill,
+.board-zoom-tray,
+.wl-controls-tray {
   display: inline-flex;
   align-items: center;
   gap: 7px;

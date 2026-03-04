@@ -57,6 +57,7 @@ export default function NoBrainerLabScreen({
   const [record, setRecord] = useState<NoBrainerHandRecord | null>(null);
   const [practiceState, setPracticeState] = useState<NoBrainerPracticeState | null>(null);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [showSolution, setShowSolution] = useState(false);
   const [usedHint, setUsedHint] = useState(false);
   const [usedShowSolution, setUsedShowSolution] = useState(false);
@@ -66,6 +67,18 @@ export default function NoBrainerLabScreen({
   const [uiTheme, setUiTheme] = useState<'green' | 'brown'>('green');
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
   const confettiFiredRef = useRef(false);
+  const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function flashLastPlayed(tile: Tile | null) {
+    if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
+    setLastPlayedTile(tile);
+    if (tile) {
+      lastPlayedTileTimerRef.current = setTimeout(() => {
+        setLastPlayedTile(null);
+        lastPlayedTileTimerRef.current = null;
+      }, 2400);
+    }
+  }
 
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('PRACTICE_DEBUG') === '1';
@@ -77,6 +90,12 @@ export default function NoBrainerLabScreen({
     document.addEventListener('fullscreenchange', onChange);
     onChange();
     return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -137,9 +156,18 @@ export default function NoBrainerLabScreen({
 
   const onPositionClick = (position: PlacementPosition) => {
     if (!practiceState || !selectedTile || practiceState.status !== 'playing') return;
+    const move = practiceState.legalMoves.find(
+      (candidate) =>
+        candidate.type === 'play' &&
+        candidate.tile &&
+        candidate.position === position &&
+        tileEquals(candidate.tile, selectedTile),
+    );
+    if (!move?.tile) return;
     const next = playPracticeMove(practiceState, selectedTile, position);
     setPracticeState(next);
     setSelectedTile(null);
+    flashLastPlayed(move.tile);
   };
 
   const onHint = () => {
@@ -247,6 +275,7 @@ export default function NoBrainerLabScreen({
             board={practiceState.board}
             legalMoves={practiceState.legalMoves}
             selectedTile={selectedTile}
+            lastPlayedTile={lastPlayedTile}
             onPositionClick={onPositionClick}
             tileSize={72}
           />

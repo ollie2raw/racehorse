@@ -112,6 +112,7 @@ export default function DailyPuzzlePlay({
 }: DailyPuzzlePlayProps) {
   const [match, setMatch] = useState<BotMatchState>(() => initialPuzzleState(puzzle));
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [status, setStatus] = useState<PuzzleStatus>('playing');
   const [message, setMessage] = useState<string>(objectiveText(puzzle));
   const [moves, setMoves] = useState(0);
@@ -120,6 +121,18 @@ export default function DailyPuzzlePlay({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const startedAtRef = useRef<number>(Date.now());
   const submittedRef = useRef(false);
+  const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function flashLastPlayed(tile: Tile | null) {
+    if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
+    setLastPlayedTile(tile);
+    if (tile) {
+      lastPlayedTileTimerRef.current = setTimeout(() => {
+        setLastPlayedTile(null);
+        lastPlayedTileTimerRef.current = null;
+      }, 2400);
+    }
+  }
 
   const legalMoves = useMemo(
     () => getLegalMoves(match, 'you').filter((m) => m.type === 'play'),
@@ -141,6 +154,12 @@ export default function DailyPuzzlePlay({
     }, 120);
     return () => clearInterval(timer);
   }, [status]);
+
+  useEffect(() => {
+    return () => {
+      if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
+    };
+  }, []);
 
   const submitResult = async (solved: boolean, finalMoves: number, finalMs: number) => {
     if (!user || submittedRef.current) return;
@@ -208,6 +227,7 @@ export default function DailyPuzzlePlay({
     setMoves(nextMoves);
     setMatch(result.state);
     setSelectedTile(null);
+    flashLastPlayed(move.tile ?? null);
 
     const finished = await finalizeIfNeeded(result.state, nextMoves);
     if (!finished) {
@@ -261,6 +281,7 @@ export default function DailyPuzzlePlay({
             board={match.board}
             legalMoves={legalMoves}
             selectedTile={selectedTile}
+            lastPlayedTile={lastPlayedTile}
             onPositionClick={(position) => {
               void onPositionClick(position);
             }}

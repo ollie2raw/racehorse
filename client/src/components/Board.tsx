@@ -50,7 +50,10 @@ function isDouble(tile: Tile): boolean {
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
-  return a.high === b.high && a.low === b.low;
+  return (
+    (a.high === b.high && a.low === b.low) ||
+    (a.high === b.low && a.low === b.high)
+  );
 }
 
 interface HubLookup {
@@ -431,6 +434,7 @@ interface BoardProps {
   board: BoardState | null;
   legalMoves: Move[];
   selectedTile: Tile | null;
+  lastPlayedTile?: Tile | null;
   onPositionClick: (position: PlacementPosition) => void;
   tileSize?: number;
   showOpenEndGlow?: boolean;
@@ -440,6 +444,7 @@ export function Board({
   board,
   legalMoves,
   selectedTile,
+  lastPlayedTile = null,
   onPositionClick,
   tileSize = 72,
   showOpenEndGlow = false,
@@ -664,6 +669,7 @@ export function Board({
                 size={tileSize}
                 rotation={lt.rotation}
                 flipped={lt.flipped}
+                highlight={lastPlayedTile != null && tileEquals(lt.tile, lastPlayedTile)}
                 disabled
                 className={`board-tile ${tileIsDouble ? 'hub-double' : ''}`}
               />

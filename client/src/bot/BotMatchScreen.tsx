@@ -147,6 +147,7 @@ export default function BotMatchScreen({
   const opponentPillRef = useRef<HTMLButtonElement>(null);
   const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, dealSize));
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState('');
   const [scoreToast, setScoreToast] = useState<{
     message: string;
@@ -162,6 +163,7 @@ export default function BotMatchScreen({
     return window.localStorage.getItem('racehorse_muted') === '1';
   });
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [movesUsed, setMovesUsed] = useState(0);
   const [dailyLeaderboard, setDailyLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
@@ -184,6 +186,7 @@ export default function BotMatchScreen({
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
   const gameOverSoundKeyRef = useRef('');
   const matchRef = useRef(match);
@@ -242,6 +245,7 @@ export default function BotMatchScreen({
       if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
       if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
       if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+      if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
     };
   }, []);
 
@@ -288,6 +292,17 @@ export default function BotMatchScreen({
   const showScoreToast = (player: 'you' | 'bot', points: number) => {
     showBoardToast(`${player === 'you' ? 'You' : 'Fritz'} scored +${points}`, player);
   };
+
+  function flashLastPlayed(tile: Tile | null) {
+    if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
+    setLastPlayedTile(tile);
+    if (tile) {
+      lastPlayedTileTimerRef.current = setTimeout(() => {
+        setLastPlayedTile(null);
+        lastPlayedTileTimerRef.current = null;
+      }, 2400);
+    }
+  }
 
   const renderScoreToastMessage = useCallback((message: string) => {
     const pointsMatch = message.match(/\+\d+/);
@@ -391,6 +406,7 @@ export default function BotMatchScreen({
 
   const startFreshMatch = () => {
     setSelectedTile(null);
+    flashLastPlayed(null);
     setLastBotChoice(null);
     setHandReveal(null);
     setMovesUsed(0);
@@ -462,6 +478,7 @@ export default function BotMatchScreen({
       };
     });
     if (result.handEnded) {
+      flashLastPlayed(null);
       const handEndedData = result.handEnded;
       const yourRemainingTiles = result.state.players.you.hand;
       const botRemainingTiles = result.state.players.bot.hand;
@@ -581,6 +598,7 @@ export default function BotMatchScreen({
     const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
     applyAndNotify(result);
+    flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
     appendMove({
       player: 'you',
@@ -602,6 +620,7 @@ export default function BotMatchScreen({
     if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
     let cancelled = false;
     let actionResolved = false;
+    let playedTileForHighlight: Tile | null = null;
 
     const timer = setTimeout(() => {
       void (async () => {
@@ -654,6 +673,7 @@ export default function BotMatchScreen({
               result = drawPass;
             } else {
               chosen = chooseBotMove(working, 'hard');
+              playedTileForHighlight = chosen?.move?.tile ?? afterDraw[0]?.tile ?? null;
               queueSound(() => playTileSound('deal', isMuted), 0);
               result = applyPlayMove(working, 'bot', chosen?.move ?? afterDraw[0]);
             }
@@ -662,6 +682,7 @@ export default function BotMatchScreen({
           }
         } else {
           chosen = chooseBotMove(working, 'hard');
+          playedTileForHighlight = chosen?.move?.tile ?? botPlayable[0]?.tile ?? null;
           queueSound(() => playTileSound('deal', isMuted), 0);
           result = applyPlayMove(working, 'bot', chosen?.move ?? botPlayable[0]);
         }
@@ -688,6 +709,7 @@ export default function BotMatchScreen({
             });
           }
           applyAndNotify(result);
+          flashLastPlayed(playedTileForHighlight);
         }
       })();
     }, 760);
@@ -728,6 +750,7 @@ export default function BotMatchScreen({
       setLastBotChoice(null);
       setSelectedTile(null);
       applyAndNotify(forcedResult);
+      flashLastPlayed(fallbackPlay.tile ?? null);
     }, 3000);
 
     return () => {
@@ -746,6 +769,7 @@ export default function BotMatchScreen({
 
   const advanceHand = useCallback(() => {
     setSelectedTile(null);
+    flashLastPlayed(null);
     setLastBotChoice(null);
     setHandReveal(null);
     setMatch((prev) =>
@@ -1371,6 +1395,7 @@ export default function BotMatchScreen({
             board={match.board}
             legalMoves={userPlayMoves}
             selectedTile={selectedTile}
+            lastPlayedTile={lastPlayedTile}
             onPositionClick={onPositionClick}
             tileSize={72}
           />
@@ -1426,7 +1451,7 @@ export default function BotMatchScreen({
               <FullscreenIcon isFullscreen={isFullscreen} />
             </button>
             <button
-              onClick={onBack}
+              onClick={() => setShowLeaveConfirm(true)}
               title="Leave game"
               style={{
                 padding: '4px 6px',
@@ -1439,17 +1464,17 @@ export default function BotMatchScreen({
               }}
             >
               <svg
-                width="14"
-                height="14"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.5"
+                strokeWidth="2.2"
                 strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
+                <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
+                <polyline points="9 21 9 12 15 12 15 21" />
               </svg>
             </button>
           </div>
@@ -1536,6 +1561,104 @@ export default function BotMatchScreen({
             </div>
           )}
         </aside>
+      )}
+
+      {showLeaveConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Leave game confirmation"
+          onClick={() => setShowLeaveConfirm(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1900,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'rgba(5, 8, 14, 0.62)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            padding: 12,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '480px',
+              borderRadius: 20,
+              border: '1px solid rgba(255,255,255,0.10)',
+              background: 'rgb(18, 22, 32)',
+              boxShadow: '0 32px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+              padding: '48px 44px',
+              color: 'rgba(235, 245, 242, 0.96)',
+            }}
+          >
+            <h2
+              style={{
+                margin: '0 0 20px',
+                fontSize: '2rem',
+                fontWeight: 700,
+                color: 'white',
+              }}
+            >
+              Leave game?
+            </h2>
+            <p
+              style={{
+                margin: '0 0 36px',
+                color: 'rgba(200,220,215,0.65)',
+                fontSize: '0.95rem',
+                lineHeight: 1.45,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span aria-hidden="true">⚠️</span>
+              <span>Your progress in this hand will be lost.</span>
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                gap: 10,
+                width: '100%',
+              }}
+            >
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                style={{
+                  flex: 1,
+                  background: 'rgba(45,160,120,0.85)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 14,
+                  padding: '16px 0',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onBack}
+                style={{
+                  flex: 1,
+                  background: 'rgba(180,40,40,0.25)',
+                  border: '1px solid rgba(220,80,80,0.5)',
+                  color: 'rgba(240,140,140,0.9)',
+                  borderRadius: 14,
+                  padding: '16px 0',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
