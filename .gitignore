@@ -12,3 +12,4 @@
 *.zip
 .vercel
 .env*.local
+server/.env
