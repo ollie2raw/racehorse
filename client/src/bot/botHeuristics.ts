@@ -86,34 +86,29 @@ function inferUnseenTiles(state: BotMatchState): { low: number; high: number }[]
   }
 
   const known = [...botHand, ...boardTiles];
-  return allTiles.filter((t) => !known.some((k) => k.low === t.low && k.high === t.high));
+  const unseenTiles = allTiles.filter(
+    (t) => !known.some((k) => k.low === t.low && k.high === t.high),
+  );
+  const knownMissing = new Set(state.opponentKnownMissing ?? []);
+  if (knownMissing.size === 0) {
+    return unseenTiles;
+  }
+  const filtered = unseenTiles.filter((t) => !knownMissing.has(t.low) && !knownMissing.has(t.high));
+  return filtered.length > 0 ? filtered : unseenTiles;
 }
 
-function stateAfterBotMove(state: BotMatchState, preview: BotMovePreview): BotMatchState {
-  return {
-    ...state,
-    board: preview.nextBoard,
-    currentPlayer: 'you',
-    players: {
-      ...state.players,
-      bot: { ...state.players.bot, hand: preview.nextHand },
-    },
-  };
-}
+function inferOpponentMissingPips(state: BotMatchState): number[] {
+  const missing: number[] = [];
+  const passedEnds = state.opponentPassedOnEnds ?? [];
 
-function estimateBestReply(_state: BotMatchState, afterMove: BotMatchState): number {
-  // Simulate the best score the opponent (you) could get on the very next turn.
-  const replyCandidates = getLegalMoves(afterMove, 'you').filter((m) => m.type === 'play');
-  if (replyCandidates.length === 0) return 0;
-  let best = 0;
-  for (const reply of replyCandidates) {
-    const rp = previewPlayMove(afterMove, 'you', reply);
-    if (rp) {
-      const effectiveScore = rp.turnContinues ? rp.immediateScore * 1.5 : rp.immediateScore;
-      if (effectiveScore > best) best = effectiveScore;
+  // If opponent passed/drew when an end was open, they likely don't have tiles matching that end
+  for (const end of passedEnds) {
+    const count = passedEnds.filter((e) => e === end).length;
+    if (count >= 2 && !missing.includes(end)) {
+      missing.push(end);
     }
   }
-  return best;
+  return missing;
 }
 
 function minimaxEndgame(
@@ -189,6 +184,138 @@ function minimaxEndgame(
   }
 }
 
+function threePlyScore(
+  state: BotMatchState,
+  botMove: Move,
+  unseenTiles: { low: number; high: number }[],
+): number {
+  const preview1 = previewPlayMove(state, 'bot', botMove);
+  if (!preview1) return 0;
+
+  const afterBot: BotMatchState = {
+    ...state,
+    board: preview1.nextBoard,
+    currentPlayer: 'you',
+    players: {
+      ...state.players,
+      bot: { ...state.players.bot, hand: preview1.nextHand },
+    },
+  };
+
+  const oppMoves = getLegalMoves(afterBot, 'you').filter((m) => m.type === 'play');
+  if (oppMoves.length === 0) return preview1.immediateScore * 10;
+
+  const likelyTiles = new Set(unseenTiles.map((tile) => `${tile.low}-${tile.high}`));
+  const knownMissing = new Set(state.opponentKnownMissing ?? []);
+  const weightedOppMoves = oppMoves.map((m) => {
+    const tile = m.tile!;
+    const tileKey = `${tile.low}-${tile.high}`;
+    const unlikely =
+      knownMissing.has(tile.low) || knownMissing.has(tile.high) || !likelyTiles.has(tileKey);
+    return { move: m, weight: unlikely ? 0.2 : 1.0 };
+  });
+  const totalWeight = weightedOppMoves.reduce((s, w) => s + w.weight, 0);
+
+  let worstNetScore = Infinity;
+
+  for (const { move: oppMove, weight } of weightedOppMoves) {
+    if (weight < 0.01) continue;
+    const preview2 = previewPlayMove(afterBot, 'you', oppMove);
+    if (!preview2) continue;
+
+    const afterOpp: BotMatchState = {
+      ...afterBot,
+      board: preview2.nextBoard,
+      currentPlayer: 'bot',
+      players: {
+        ...afterBot.players,
+        you: { ...afterBot.players.you, hand: preview2.nextHand },
+      },
+    };
+
+    const botReplies = getLegalMoves(afterOpp, 'bot').filter((m) => m.type === 'play');
+    let bestReply3Score = 0;
+    for (const reply of botReplies) {
+      const preview3 = previewPlayMove(afterOpp, 'bot', reply);
+      if (!preview3) continue;
+      const s = preview3.immediateScore * 10 + preview3.nextHand.length * -2;
+      if (s > bestReply3Score) bestReply3Score = s;
+    }
+
+    const netScore =
+      (preview1.immediateScore * 10 - preview2.immediateScore * 8 + bestReply3Score) *
+      (weight / totalWeight);
+
+    if (netScore < worstNetScore) worstNetScore = netScore;
+  }
+
+  return worstNetScore === Infinity ? preview1.immediateScore * 10 : worstNetScore;
+}
+
+function evaluateBlockedGameOutcome(
+  state: BotMatchState,
+  afterPreview: BotMovePreview,
+): number {
+  const botPipsAfter = afterPreview.nextHand.reduce((s, t) => s + t.low + t.high, 0);
+  const youPipsEstimate = state.players.you.hand.reduce((s, t) => s + t.low + t.high, 0);
+
+  if (state.boneyard.length <= 3) {
+    if (botPipsAfter < youPipsEstimate) {
+      return (youPipsEstimate - botPipsAfter) * 4;
+    }
+    return (youPipsEstimate - botPipsAfter) * 3;
+  }
+  return 0;
+}
+
+function scorePipArithmetic(
+  openEnds: number[],
+  openSum: number,
+  nextHand: { low: number; high: number }[],
+): number {
+  let bonus = 0;
+
+  for (const tile of nextHand) {
+    for (const end of openEnds) {
+      if (tile.low === end || tile.high === end) {
+        const pip = tile.low === end ? tile.high : tile.low;
+        const futureSum = openSum - end + pip;
+        if (futureSum > 0 && futureSum % 5 === 0) {
+          bonus += 8;
+        }
+        if (futureSum > 0 && futureSum % 10 === 0) {
+          bonus += 4;
+        }
+      }
+    }
+  }
+  return Math.min(bonus, 32);
+}
+
+function doubleTimingPenalty(
+  tile: { low: number; high: number },
+  openEnds: number[],
+  boneyard: { low: number; high: number }[],
+  hand: { low: number; high: number }[],
+): number {
+  if (tile.low !== tile.high) return 0;
+  const pip = tile.high;
+
+  const handMatches = hand.filter((t) => t.low === pip || t.high === pip).length;
+  const boneyardMatches = boneyard.filter((t) => t.low === pip || t.high === pip).length;
+
+  const endAlreadyOpen = openEnds.includes(pip);
+  if (endAlreadyOpen && boneyardMatches <= 2) {
+    return 18;
+  }
+
+  if (handMatches >= 2 && boneyard.length > 6) {
+    return 10;
+  }
+
+  return 0;
+}
+
 export function chooseBotMove(
   state: BotMatchState,
   difficulty: BotDifficulty = 'standard',
@@ -200,7 +327,7 @@ export function chooseBotMove(
   const botHandSize = state.players.bot.hand.length;
   const youHandSize = state.players.you.hand.length;
 
-  if (difficulty === 'hard' && botHandSize <= 4 && youHandSize <= 4) {
+  if (difficulty === 'hard' && botHandSize <= 7 && youHandSize <= 7) {
     // Use exact minimax instead of heuristics.
     let bestMove = candidates[0];
     let bestVal = -Infinity;
@@ -217,7 +344,7 @@ export function chooseBotMove(
           bot: { ...state.players.bot, hand: preview.nextHand },
         },
       };
-      const val = preview.immediateScore * 10 + minimaxEndgame(next, 6, false, -Infinity, Infinity);
+      const val = preview.immediateScore * 10 + minimaxEndgame(next, 8, false, -Infinity, Infinity);
       if (val > bestVal) {
         bestVal = val;
         bestMove = move;
@@ -237,7 +364,15 @@ export function chooseBotMove(
     };
   }
 
-  const unseenTiles = inferUnseenTiles(state);
+  const inferredMissing = inferOpponentMissingPips(state);
+  const inferredState: BotMatchState =
+    inferredMissing.length === 0
+      ? state
+      : {
+          ...state,
+          opponentKnownMissing: [...new Set([...(state.opponentKnownMissing ?? []), ...inferredMissing])],
+        };
+  const unseenTiles = inferUnseenTiles(inferredState);
 
   const scored = candidates.map((move) => {
     const preview = previewPlayMove(state, 'bot', move)!;
@@ -267,19 +402,25 @@ export function chooseBotMove(
       const youScore = state.players.you.score;
       const winTarget = state.winningScore;
 
-      // Always choose an immediate game-winning move.
       if (botScore + immediate >= winTarget) return { ...base, score: 10000 };
 
-      // Two-ply: simulate opponent's best immediate scoring reply.
-      const afterState = stateAfterBotMove(state, preview);
-      const bestReply = estimateBestReply(state, afterState);
+      const scoreDiff = botScore - youScore;
+      const aggressionMult = scoreDiff >= 15 ? 1.15 : scoreDiff <= -15 ? 0.88 : 1.0;
 
-      // Hand mobility matters more in a thin boneyard.
-      const boneyardFactor = state.boneyard.length <= 7 ? 1.6 : 1.0;
+      const oppWinProximity = youScore / winTarget;
+      const defenseUrgency = oppWinProximity >= 0.8 ? 1.8 : oppWinProximity >= 0.6 ? 1.3 : 1.0;
 
-      // Penalize stranding tiles that match none of the current open ends.
+      const stateWithInference: BotMatchState = {
+        ...state,
+        opponentKnownMissing: [...new Set([...(state.opponentKnownMissing ?? []), ...inferredMissing])],
+      };
+
+      const plyScore = threePlyScore(stateWithInference, move, unseenTiles);
+      const blockBonus = evaluateBlockedGameOutcome(state, preview);
+
+      const boneyardFactor =
+        state.boneyard.length <= 4 ? 2.0 : state.boneyard.length <= 10 ? 1.4 : 1.0;
       const openEndSet = new Set(preview.openEnds);
-      // High count means opponent likely has matches, so opening that end is riskier.
       const endDangerScore = preview.openEnds.reduce((sum, end) => {
         const matches = unseenTiles.filter((t) => t.low === end || t.high === end).length;
         return sum + matches;
@@ -292,24 +433,36 @@ export function chooseBotMove(
       ).length;
       const doubleDangerPenalty = preview.isDouble && youScore >= winTarget - 20 ? 30 : 0;
 
-      // Defensive urgency increases when the opponent is one scoring play from winning.
-      const defenseBonus = youScore >= winTarget - 10 ? denial * 0.6 : denial * 0.35;
+      const pipSetupBonus = scorePipArithmetic(
+        preview.openEnds,
+        preview.openSum,
+        preview.nextHand,
+      );
 
-      // Endgame hand reduction pressure.
+      const doubleTimingPen = doubleTimingPenalty(
+        move.tile!,
+        preview.openEnds,
+        state.boneyard,
+        preview.nextHand,
+      );
+      const defenseBonus = youScore >= winTarget - 10 ? denial * 0.6 : denial * 0.35;
       const handSize = preview.nextHand.length;
-      const endgameBonus = handSize <= 1 ? 200 : handSize <= 3 ? 40 : 0;
+      const endgameBonus = handSize === 0 ? 500 : handSize === 1 ? 220 : handSize <= 3 ? 55 : 0;
 
       score =
-        immediate * 60 +
-        -bestReply * 55 +
-        unload * 1.2 +
-        mobility * 8 * boneyardFactor +
-        playableTiles * 5 +
-        defenseBonus +
-        -deadTiles * 6 +
-        -endDangerScore * 2 +
+        plyScore * 1.8 * aggressionMult +
+        immediate * 45 +
+        unload * 3.5 +
+        mobility * 10 * boneyardFactor +
+        playableTiles * 3 +
+        defenseBonus * defenseUrgency +
+        -deadTiles * 9 +
+        -endDangerScore * 3.5 +
         -doubleDangerPenalty +
-        endgameBonus;
+        -doubleTimingPen +
+        pipSetupBonus +
+        endgameBonus +
+        blockBonus;
     } else if (difficulty !== 'casual') {
       score += mobility * 8 + denial * 0.35;
       score += doubleBias * 2;

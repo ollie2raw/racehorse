@@ -33,6 +33,10 @@ export interface BotMatchState {
   lastHandWinner: BotPlayerId | null;
   lastHandReason: BotHandEndReason | null;
   dealSize: BotDealSize;
+  // Opponent hand inference
+  opponentPassedOnEnds?: number[];
+  opponentDrawCount?: number;
+  opponentKnownMissing?: number[];
 }
 
 export interface BotActionResult {
@@ -145,6 +149,9 @@ function createDealtHand(
     lastHandWinner: null,
     lastHandReason: null,
     dealSize,
+    opponentPassedOnEnds: [],
+    opponentDrawCount: 0,
+    opponentKnownMissing: [],
   };
 }
 
@@ -487,7 +494,7 @@ function getOpenEnds(
   return ends;
 }
 
-function getMatchableOpenEnds(
+export function getMatchableOpenEnds(
   board: BoardState | null,
 ): Array<{ position: PlacementPosition; matchValue: number }> {
   const raw = getOpenEnds(board);

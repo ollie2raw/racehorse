@@ -1423,11 +1423,13 @@ export default function App() {
           playHandLoseSound(isMutedRef.current);
         }
       }
-      setHandReveal({
-        ...payload,
-        yourRemainingTiles,
-      });
       handRevealShownRef.current = payload.handNumber;
+      window.setTimeout(() => {
+        setHandReveal({
+          ...payload,
+          yourRemainingTiles,
+        });
+      }, 1400);
     });
 
     s.on('game:rematch:status', (payload: any) => {
@@ -2280,15 +2282,18 @@ export default function App() {
     if (!inGame || !state || state.gameOver || !state.handOver) return;
     if (handRevealShownRef.current === state.handNumber) return;
     const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
-    setHandReveal({
-      handNumber: state.handNumber,
-      yourRemainingTiles: state.players[you]?.hand ?? [],
-      opponentRemainingTiles: opponentIdFromState
-        ? (state.players[opponentIdFromState]?.hand ?? [])
-        : [],
-      pointsAwarded: { you: 0, opponent: 0 },
-    });
     handRevealShownRef.current = state.handNumber;
+    const tid = window.setTimeout(() => {
+      setHandReveal({
+        handNumber: state.handNumber,
+        yourRemainingTiles: state.players[you]?.hand ?? [],
+        opponentRemainingTiles: opponentIdFromState
+          ? (state.players[opponentIdFromState]?.hand ?? [])
+          : [],
+        pointsAwarded: { you: 0, opponent: 0 },
+      });
+    }, 1400);
+    return () => window.clearTimeout(tid);
   }, [inGame, state, you]);
 
   useEffect(() => {

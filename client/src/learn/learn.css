@@ -1,0 +1,222 @@
+.learn-home-screen .layout-screen-header,
+.learn-home-screen .layout-screen-content {
+  text-align: left;
+  align-items: flex-start;
+}
+
+.learn-home-screen {
+  min-height: unset;
+  display: block;
+  padding: 0;
+}
+
+.learn-home-screen .layout-screen-badge {
+  color: rgba(252, 205, 95, 0.82);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.learn-home-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: none;
+  padding: 40px 64px;
+  box-sizing: border-box;
+}
+
+.learn-home-header {
+  padding: 0 0 24px 0;
+  box-sizing: border-box;
+}
+
+.learn-home-top {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: -6px;
+  margin-bottom: 4px;
+}
+
+.learn-home-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 760px;
+  padding: 0;
+  margin-top: 32px;
+  box-sizing: border-box;
+}
+
+.learn-home-screen * {
+  text-align: left;
+}
+
+.learn-level-card {
+  display: grid;
+  gap: 8px;
+  position: relative;
+  width: 100%;
+  padding: 20px 24px;
+  box-sizing: border-box;
+}
+
+.learn-level-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.9), rgba(251, 191, 36, 0));
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.learn-level-card.is-locked {
+  opacity: 0.72;
+}
+
+.learn-level-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.learn-level-state {
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.learn-level-state.unlocked {
+  color: rgba(252, 225, 145, 0.92);
+}
+
+.learn-level-state.locked {
+  color: rgba(181, 193, 207, 0.6);
+}
+
+.learn-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.learn-lessons-list {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.learn-lessons-item {
+  margin: 0;
+  padding: 0;
+}
+
+.learn-lessons-link {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(206, 222, 236, 0.78);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.84rem;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.learn-lessons-link:hover {
+  border-color: rgba(252, 210, 101, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.learn-lessons-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.learn-lessons-title {
+  color: rgba(223, 236, 244, 0.88);
+}
+
+.learn-lesson-complete {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(246, 214, 142, 0.9);
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.08);
+  border-radius: 999px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.learn-lessons-duration {
+  color: rgba(181, 198, 215, 0.7);
+  white-space: nowrap;
+}
+
+.learn-progress-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.learn-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.85), rgba(252, 225, 145, 0.9));
+}
+
+.learn-progress-text {
+  font-size: 0.78rem;
+  color: rgba(199, 215, 230, 0.78);
+  min-width: 32px;
+  text-align: right;
+}
+
+.learn-level-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.learn-level-actions .mode-inline-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.learn-resume-btn {
+  border-color: rgba(251, 191, 36, 0.28);
+  color: rgba(249, 224, 163, 0.92);
+}
+
+@media (max-width: 768px) {
+  .learn-home-header {
+    padding: 0 0 16px 0;
+  }
+
+  .learn-home-wrap {
+    max-width: none;
+    padding: 24px 16px;
+  }
+
+  .learn-home-levels {
+    margin-top: 20px;
+  }
+}

@@ -23,6 +23,7 @@ import {
   computeOpenEndsSum,
   createBotMatch,
   drawOne,
+  getMatchableOpenEnds,
   getDisplayOpenEnds,
   getLegalMoves,
   passTurn,
@@ -182,6 +183,7 @@ export default function BotMatchScreen({
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handRevealTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
   const gameOverSoundKeyRef = useRef('');
   const matchRef = useRef(match);
@@ -239,6 +241,7 @@ export default function BotMatchScreen({
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
       if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
+      if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
     };
   }, []);
 
@@ -325,6 +328,9 @@ export default function BotMatchScreen({
       ? {
           ...state,
           currentPlayer: 'bot',
+          opponentPassedOnEnds: [],
+          opponentDrawCount: 0,
+          opponentKnownMissing: [],
           players: {
             you: state.players.bot,
             bot: state.players.you,
@@ -434,17 +440,44 @@ export default function BotMatchScreen({
   const userPlayMoves = useMemo(() => asPlayMoves(userLegalMoves), [userLegalMoves]);
 
   const applyAndNotify = (result: BotActionResult) => {
-    setMatch(result.state);
+    setMatch((prev) => {
+      const trackedDraw = result.drew?.player === 'you' ? 1 : 0;
+      const trackedPass = result.passed?.player === 'you' ? 1 : 0;
+      if (trackedDraw === 0 && trackedPass === 0) {
+        return result.state;
+      }
+
+      const openEnds = result.state.board
+        ? getMatchableOpenEnds(result.state.board).map((end) => end.matchValue)
+        : [];
+
+      return {
+        ...result.state,
+        opponentPassedOnEnds: [
+          ...(prev.opponentPassedOnEnds ?? []),
+          ...Array.from({ length: trackedDraw + trackedPass }, () => openEnds).flat(),
+        ],
+        opponentDrawCount: (prev.opponentDrawCount ?? 0) + trackedDraw,
+        opponentKnownMissing: prev.opponentKnownMissing ?? result.state.opponentKnownMissing ?? [],
+      };
+    });
     if (result.handEnded) {
-      setHandReveal({
-        winner: result.handEnded.winner,
-        reason: result.handEnded.reason,
-        pointsAwarded: result.handEnded.pointsAwarded,
-        loserPips: result.handEnded.loserPips,
-        calcText: result.handEnded.calcText,
-        yourRemainingTiles: result.state.players.you.hand,
-        botRemainingTiles: result.state.players.bot.hand,
-      });
+      const handEndedData = result.handEnded;
+      const yourRemainingTiles = result.state.players.you.hand;
+      const botRemainingTiles = result.state.players.bot.hand;
+      if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+      handRevealTimerRef.current = window.setTimeout(() => {
+        setHandReveal({
+          winner: handEndedData.winner,
+          reason: handEndedData.reason,
+          pointsAwarded: handEndedData.pointsAwarded,
+          loserPips: handEndedData.loserPips,
+          calcText: handEndedData.calcText,
+          yourRemainingTiles,
+          botRemainingTiles,
+        });
+        handRevealTimerRef.current = null;
+      }, 1400);
       if (result.handEnded.reason === 'blocked') {
         queueSound(() => playBlockedSound(isMuted), 0);
       }
@@ -710,7 +743,16 @@ export default function BotMatchScreen({
     setSelectedTile(null);
     setLastBotChoice(null);
     setHandReveal(null);
-    setMatch((prev) => (prev.handOver && !prev.gameOver ? startNextBotHand(prev) : prev));
+    setMatch((prev) =>
+      prev.handOver && !prev.gameOver
+        ? {
+            ...startNextBotHand(prev),
+            opponentPassedOnEnds: [],
+            opponentDrawCount: 0,
+            opponentKnownMissing: [],
+          }
+        : prev,
+    );
   }, []);
 
   useEffect(() => {

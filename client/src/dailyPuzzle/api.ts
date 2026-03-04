@@ -67,7 +67,7 @@ function isBoardState(value: unknown): value is BoardState {
   );
 }
 
-function normalizeBoardState(raw: unknown): BoardState | null {
+export function normalizeBoardState(raw: unknown): BoardState | null {
   if (!raw || typeof raw !== 'object') return null;
   const board = raw as Record<string, unknown>;
 
