@@ -1,5 +1,36 @@
-import type { Move } from '../types';
-import type { BotMatchState, BotMovePreview } from './botEngine';
+/**
+ * botHeuristics.ts — Racehorse Domino AI (Hard Bot) v3
+ *
+ * Racehorse rules:
+ *  - All Fives scoring: open-end sum divisible by 5 → sum/5 points
+ *  - Playing a DOUBLE continues your turn
+ *  - Playing a SCORING move continues your turn
+ *  - Turn ends only on a non-scoring, non-double play
+ *  - Turn must continue but no legal play → auto-draw until playable
+ *  - Boneyard locks at 2 tiles (max 26 tiles seen per hand)
+ *  - Doubles create branch arms (up to 4 open ends once both sides filled)
+ *  - Hand ends: domino or blocked → winner scores round(loser_pips / 5)
+ *  - Match: first to 60 points
+ *
+ * v3 upgrades over v2:
+ *  1. CHAIN TREE SEARCH    — full branching tree over turn sequences instead
+ *                            of greedy single-path simulation. Finds sequences
+ *                            like "take 0 now, set up +3 two moves later" that
+ *                            greedy misses entirely.
+ *  2. MONTE CARLO SAMPLING — sample 8 plausible opponent hands from the
+ *                            weighted pool, evaluate each, average the results.
+ *                            Blocking/denial decisions are now based on what
+ *                            the opponent can actually do, not just probability
+ *                            weights on individual tiles.
+ *  3. DRAW ANTICIPATION    — when a chain continuation would require drawing
+ *                            (no legal play but turn continues), estimate the
+ *                            boneyard draw cost and factor it into the move
+ *                            score. Avoids committing to chains that force
+ *                            expensive draws into bad tiles.
+ */
+
+import type { Move, Tile } from '../types';
+import type { BotMatchState } from './botEngine';
 import { getLegalMoves, previewPlayMove } from './botEngine';
 
 export type BotDifficulty = 'casual' | 'standard' | 'hard';
@@ -17,144 +48,444 @@ export interface BotChoice {
   };
 }
 
-function pipExposureLikelihood(openEnds: number[]): number {
-  const counts = new Array<number>(7).fill(0);
-  for (const pip of openEnds) {
-    if (pip >= 0 && pip <= 6) counts[pip] += 1;
-  }
-  // In double-six, each pip appears in 7 tiles. Lower is better for denial.
-  return counts.reduce((sum, count) => sum + count * 7, 0);
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const MC_SAMPLES = 8;          // Monte Carlo opponent hand samples
+const CHAIN_TREE_DEPTH = 5;    // Max moves to explore in chain tree
+const CHAIN_TREE_WIDTH = 3;    // Top N continuations to branch at each step
+const WIN_TARGET = 60;
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function tileKey(t: { low: number; high: number }): string {
+  return `${t.low}|${t.high}`;
 }
 
-function estimateMobility(remaining: { low: number; high: number }[], openEnds: number[]): number {
-  let mobility = 0;
-  for (const tile of remaining) {
-    if (openEnds.some((p) => p === tile.low || p === tile.high)) {
-      mobility += 1;
-    }
-  }
-  return mobility;
+function pipSum(hand: Tile[]): number {
+  return hand.reduce((s, t) => s + t.low + t.high, 0);
 }
 
-function estimateReplyRisk(openEnds: number[], openSum: number): number {
-  // Rough one-ply risk proxy: number of ways opponent can likely score next.
-  // Uses non-double replacement approximation.
-  let risk = 0;
-  for (const end of openEnds) {
-    for (let nextPip = 0; nextPip <= 6; nextPip++) {
-      const candidate = openSum - end + nextPip;
-      if (candidate !== 0 && candidate % 5 === 0) {
-        risk += 1;
-      }
-    }
-  }
-  return risk;
+function isDoubleTile(t: Tile): boolean {
+  return t.low === t.high;
 }
 
-function tiebreak(move: Move): string {
-  const tile = move.tile!;
-  const total = tile.low + tile.high;
-  const pos = move.position ?? '';
-  return `${99 - total}-${99 - tile.high}-${99 - tile.low}-${pos}`;
+function racehorsePoints(sum: number): number {
+  return sum > 0 && sum % 5 === 0 ? sum / 5 : 0;
 }
 
-function inferUnseenTiles(state: BotMatchState): { low: number; high: number }[] {
-  // All 28 tiles in a double-six set
-  const allTiles: { low: number; high: number }[] = [];
-  for (let i = 0; i <= 6; i++) {
-    for (let j = i; j <= 6; j++) {
-      allTiles.push({ low: i, high: j });
-    }
-  }
+function cloneState(
+  state: BotMatchState,
+  overrides: Partial<BotMatchState>,
+): BotMatchState {
+  return { ...state, ...overrides };
+}
 
-  // Remove bot's own hand
-  const botHand = state.players.bot.hand;
+// ─── Tile pool & inference ────────────────────────────────────────────────────
 
-  // Remove tiles visible on the board (mainLine + hub branches)
-  const boardTiles: { low: number; high: number }[] = [];
+function buildUnseenPool(state: BotMatchState): Tile[] {
+  const known = new Set<string>();
+  for (const t of state.players.bot.hand) known.add(tileKey(t));
   if (state.board) {
-    for (const entry of state.board.mainLine) {
-      boardTiles.push(entry.tile);
-    }
+    for (const pt of state.board.mainLine) known.add(tileKey(pt.tile));
     for (const hub of state.board.hubDoubles ?? []) {
       for (const branch of hub.branches ?? []) {
-        for (const entry of branch.tiles ?? []) {
-          boardTiles.push(entry.tile);
-        }
+        for (const pt of branch.tiles ?? []) known.add(tileKey(pt.tile));
       }
     }
   }
-
-  const known = [...botHand, ...boardTiles];
-  const unseenTiles = allTiles.filter(
-    (t) => !known.some((k) => k.low === t.low && k.high === t.high),
-  );
-  const knownMissing = new Set(state.opponentKnownMissing ?? []);
-  if (knownMissing.size === 0) {
-    return unseenTiles;
-  }
-  const filtered = unseenTiles.filter((t) => !knownMissing.has(t.low) && !knownMissing.has(t.high));
-  return filtered.length > 0 ? filtered : unseenTiles;
-}
-
-function inferOpponentMissingPips(state: BotMatchState): number[] {
-  const missing: number[] = [];
-  const passedEnds = state.opponentPassedOnEnds ?? [];
-
-  // If opponent passed/drew when an end was open, they likely don't have tiles matching that end
-  for (const end of passedEnds) {
-    const count = passedEnds.filter((e) => e === end).length;
-    if (count >= 2 && !missing.includes(end)) {
-      missing.push(end);
+  const pool: Tile[] = [];
+  for (let i = 0; i <= 6; i++) {
+    for (let j = i; j <= 6; j++) {
+      const t = { low: i, high: j };
+      if (!known.has(tileKey(t))) pool.push(t);
     }
   }
+  return pool;
+}
+
+/** Single pass = confirmed missing pip (2-player game — this is exact). */
+function inferMissingPips(state: BotMatchState): Set<number> {
+  const missing = new Set<number>(state.opponentKnownMissing ?? []);
+  for (const end of state.opponentPassedOnEnds ?? []) missing.add(end);
   return missing;
 }
 
-function minimaxEndgame(
+function opponentHoldWeights(pool: Tile[], missingPips: Set<number>): Map<string, number> {
+  const weights = new Map<string, number>();
+  for (const t of pool) {
+    const w = missingPips.has(t.low) || missingPips.has(t.high) ? 0.05 : 1.0;
+    weights.set(tileKey(t), w);
+  }
+  return weights;
+}
+
+// ─── Monte Carlo: sample plausible opponent hands ─────────────────────────────
+
+/**
+ * Sample `n` plausible opponent hands from the unseen pool.
+ * Uses weighted sampling without replacement — tiles the opponent is known
+ * to be missing get very low weight (0.05) so they almost never appear.
+ *
+ * Returns an array of sampled hands (each is an array of Tiles).
+ */
+function sampleOpponentHands(
+  pool: Tile[],
+  weights: Map<string, number>,
+  handSize: number,
+  n: number,
+): Tile[][] {
+  const hands: Tile[][] = [];
+
+  for (let s = 0; s < n; s++) {
+    // Weighted shuffle: Fisher-Yates with weighted selection
+    const available = [...pool];
+    const w = available.map((t) => weights.get(tileKey(t)) ?? 1.0);
+    const hand: Tile[] = [];
+
+    for (let i = 0; i < Math.min(handSize, available.length); i++) {
+      const totalW = w.reduce((sum, wi, idx) => (available[idx] ? sum + wi : sum), 0);
+      if (totalW <= 0) break;
+
+      let rand = Math.random() * totalW;
+      let chosen = -1;
+      for (let j = 0; j < available.length; j++) {
+        if (!available[j]) continue;
+        rand -= w[j];
+        if (rand <= 0) {
+          chosen = j;
+          break;
+        }
+      }
+      if (chosen === -1) {
+        // Fallback: pick first available
+        chosen = available.findIndex((t) => t != null);
+      }
+      if (chosen === -1) break;
+
+      hand.push(available[chosen]);
+      // Mark as taken
+      (available as (Tile | null)[])[chosen] = null;
+      w[chosen] = 0;
+    }
+
+    hands.push(hand);
+  }
+
+  return hands;
+}
+
+// ─── Threat & opportunity ─────────────────────────────────────────────────────
+
+function opponentThreat(
+  openEnds: number[],
+  openSum: number,
+  holdWeights: Map<string, number>,
+): number {
+  let threat = 0;
+  const checked = new Set<string>();
+  for (const end of openEnds) {
+    for (let pip = 0; pip <= 6; pip++) {
+      const newSum = openSum - end + pip;
+      if (newSum <= 0 || newSum % 5 !== 0) continue;
+      const lo = Math.min(end, pip);
+      const hi = Math.max(end, pip);
+      const key = `${lo}|${hi}`;
+      const dk = `${key}-${newSum}`;
+      if (checked.has(dk)) continue;
+      checked.add(dk);
+      const w = holdWeights.get(key) ?? 0;
+      if (w > 0) threat += racehorsePoints(newSum) * w;
+    }
+  }
+  return threat;
+}
+
+/**
+ * Exact opponent threat given a known sampled hand.
+ * Used in Monte Carlo evaluation.
+ */
+function exactOpponentThreat(
+  openEnds: number[],
+  openSum: number,
+  opponentHand: Tile[],
+): number {
+  let threat = 0;
+  const checked = new Set<string>();
+  for (const t of opponentHand) {
+    for (const end of openEnds) {
+      if (t.low !== end && t.high !== end) continue;
+      const connectingPip = t.low === end ? t.high : t.low;
+      const newSum = openSum - end + connectingPip;
+      if (newSum <= 0 || newSum % 5 !== 0) continue;
+      const dk = `${tileKey(t)}-${end}-${newSum}`;
+      if (checked.has(dk)) continue;
+      checked.add(dk);
+      threat += racehorsePoints(newSum);
+    }
+  }
+  return threat;
+}
+
+function selfOpportunity(openEnds: number[], openSum: number, hand: Tile[]): number {
+  let opp = 0;
+  for (const t of hand) {
+    for (const end of openEnds) {
+      if (t.low !== end && t.high !== end) continue;
+      const pip = t.low === end ? t.high : t.low;
+      const newSum = openSum - end + pip;
+      if (newSum > 0 && newSum % 5 === 0) opp += racehorsePoints(newSum);
+    }
+  }
+  return opp;
+}
+
+function handMobility(hand: Tile[], openEnds: number[]): number {
+  const endSet = new Set(openEnds);
+  return hand.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
+}
+
+// ─── Draw anticipation ────────────────────────────────────────────────────────
+
+/**
+ * Estimate the cost of being forced to draw during a chain continuation.
+ *
+ * When a move is a double or scores (turn continues) but we have no legal
+ * play afterward, we must draw. This function estimates:
+ *  - How likely are we to need to draw? (check if hand has no legal plays)
+ *  - How many draws might we need? (how sparse is the pip in the boneyard)
+ *  - What's the expected pip cost of drawing bad tiles?
+ *
+ * Returns a penalty value (positive = bad for bot).
+ */
+function estimateDrawCost(
+  nextHand: Tile[],
+  openEnds: number[],
+  boneyard: Tile[],
+): number {
+  const endSet = new Set(openEnds);
+  const playableAfter = nextHand.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
+
+  // If we have playable tiles, no draw risk
+  if (playableAfter > 0) return 0;
+
+  // We'd need to draw. How many draws until we find a playable tile?
+  const boneyardAvailable = Math.max(0, boneyard.length - 2); // locked at 2
+  if (boneyardAvailable === 0) return 15; // completely stuck = high penalty
+
+  // Count playable tiles in the boneyard
+  const playableInBoneyard = boneyard
+    .slice(0, boneyardAvailable)
+    .filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
+
+  if (playableInBoneyard === 0) return 20; // no help in boneyard
+
+  // Expected draws = boneyardAvailable / playableInBoneyard (geometric)
+  const expectedDraws = boneyardAvailable / playableInBoneyard;
+
+  // Average pip value of a boneyard tile (we're drawing unknown tiles)
+  const avgPip = boneyard.length > 0
+    ? boneyard.reduce((s, t) => s + t.low + t.high, 0) / boneyard.length
+    : 6;
+
+  // Cost: expected draws × average pip burden per draw
+  // (drawing is bad because it adds pips to our hand)
+  return Math.min(expectedDraws * avgPip * 0.4, 25);
+}
+
+// ─── Chain tree search ────────────────────────────────────────────────────────
+
+interface ChainNode {
+  totalPoints: number;
+  chainLength: number;
+  finalHand: Tile[];
+  finalOpenEnds: number[];
+  finalOpenSum: number;
+  finalBoard: BotMatchState['board'];
+  drawCostAccum: number;
+}
+
+/**
+ * Full chain tree search — explores branching turn sequences up to `maxDepth`
+ * moves deep, keeping the top `width` continuations at each step.
+ *
+ * This replaces the greedy single-path simulation. It finds sequences like:
+ *   "play 0|5 for 1pt → then double-0 continues → then 0|3 for 2pts"
+ * even when the greedy approach would have taken a different 0|5 play instead.
+ *
+ * Returns the best ChainNode found (highest totalPoints, tiebreak by setup).
+ */
+function searchChainTree(
+  state: BotMatchState,
+  firstMove: Move,
+  maxDepth: number = CHAIN_TREE_DEPTH,
+  width: number = CHAIN_TREE_WIDTH,
+): ChainNode | null {
+  const firstPreview = previewPlayMove(state, 'bot', firstMove);
+  if (!firstPreview) return null;
+
+  const drawCost = estimateDrawCost(
+    firstPreview.nextHand,
+    firstPreview.openEnds,
+    state.boneyard,
+  );
+
+  const root: ChainNode = {
+    totalPoints: firstPreview.immediateScore,
+    chainLength: 1,
+    finalHand: firstPreview.nextHand,
+    finalOpenEnds: firstPreview.openEnds,
+    finalOpenSum: firstPreview.openSum,
+    finalBoard: firstPreview.nextBoard,
+    drawCostAccum: drawCost,
+  };
+
+  if (!firstPreview.turnContinues) return root;
+
+  // BFS/beam: expand nodes level by level, keep top `width` at each level
+  let frontier: ChainNode[] = [root];
+  let bestLeaf: ChainNode = root;
+
+  for (let depth = 0; depth < maxDepth - 1; depth++) {
+    const nextFrontier: ChainNode[] = [];
+
+    for (const node of frontier) {
+      const tempState = cloneState(state, {
+        board: node.finalBoard,
+        players: {
+          ...state.players,
+          bot: { ...state.players.bot, hand: node.finalHand },
+        },
+        currentPlayer: 'bot',
+      });
+
+      const continuations = getLegalMoves(tempState, 'bot').filter((m) => m.type === 'play');
+      if (continuations.length === 0) {
+        // Turn ends here (no legal plays left in chain)
+        if (node.totalPoints > bestLeaf.totalPoints) bestLeaf = node;
+        continue;
+      }
+
+      // Score each continuation to select top `width`
+      const scored = continuations
+        .map((m) => {
+          const p = previewPlayMove(tempState, 'bot', m);
+          if (!p) return null;
+          const val =
+            p.immediateScore * 100 +
+            selfOpportunity(p.openEnds, p.openSum, p.nextHand) * 10 +
+            (m.tile ? m.tile.low + m.tile.high : 0) * 0.3;
+          return { m, p, val };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b!.val - a!.val)
+        .slice(0, width) as Array<{ m: Move; p: NonNullable<ReturnType<typeof previewPlayMove>>; val: number }>;
+
+      for (const { m, p } of scored) {
+        const dc = estimateDrawCost(p.nextHand, p.openEnds, state.boneyard);
+        const child: ChainNode = {
+          totalPoints: node.totalPoints + p.immediateScore,
+          chainLength: node.chainLength + 1,
+          finalHand: p.nextHand,
+          finalOpenEnds: p.openEnds,
+          finalOpenSum: p.openSum,
+          finalBoard: p.nextBoard,
+          drawCostAccum: node.drawCostAccum + dc,
+        };
+
+        if (p.turnContinues) {
+          nextFrontier.push(child);
+        } else {
+          // Chain ends here
+          if (child.totalPoints > bestLeaf.totalPoints) bestLeaf = child;
+        }
+      }
+    }
+
+    if (nextFrontier.length === 0) break;
+
+    // Keep the most promising frontier nodes (by points scored so far)
+    nextFrontier.sort((a, b) => b.totalPoints - a.totalPoints);
+    frontier = nextFrontier.slice(0, width * 2);
+
+    // Track best leaf seen so far
+    for (const node of frontier) {
+      if (node.totalPoints > bestLeaf.totalPoints) bestLeaf = node;
+    }
+  }
+
+  // Also check all remaining frontier nodes as potential leaves
+  for (const node of frontier) {
+    if (node.totalPoints > bestLeaf.totalPoints) bestLeaf = node;
+  }
+
+  return bestLeaf;
+}
+
+// ─── Branch discipline ────────────────────────────────────────────────────────
+
+function branchPenalty(
+  move: Move,
+  state: BotMatchState,
+  holdWeights: Map<string, number>,
+): number {
+  if (!move.tile || !isDoubleTile(move.tile)) return 0;
+  const pip = move.tile.low;
+
+  const ourFollowups = state.players.bot.hand.filter(
+    (t) => (t.low === pip || t.high === pip) && !(t.low === pip && t.high === pip),
+  ).length;
+
+  const oppFollowupWeight = Array.from(holdWeights.entries())
+    .filter(([k]) => {
+      const parts = k.split('|');
+      const lo = parseInt(parts[0], 10);
+      const hi = parseInt(parts[1], 10);
+      return (lo === pip || hi === pip) && !(lo === pip && hi === pip);
+    })
+    .reduce((sum, [, w]) => sum + w, 0);
+
+  if (ourFollowups === 0 && oppFollowupWeight > 1.5) return 40 + oppFollowupWeight * 8;
+  if (oppFollowupWeight > ourFollowups * 2) return 15 + (oppFollowupWeight - ourFollowups) * 5;
+  return 0;
+}
+
+// ─── Endgame minimax ──────────────────────────────────────────────────────────
+
+function minimax(
   state: BotMatchState,
   depth: number,
   isBot: boolean,
   alpha: number,
   beta: number,
+  pointsAccum: number,
 ): number {
   if (state.handOver || state.gameOver || depth === 0) {
-    const botPips = state.players.bot.hand.reduce((s, t) => s + t.low + t.high, 0);
-    const youPips = state.players.you.hand.reduce((s, t) => s + t.low + t.high, 0);
-    return youPips - botPips; // positive = good for bot
+    const botPips = pipSum(state.players.bot.hand);
+    const youPips = pipSum(state.players.you.hand);
+    return pointsAccum * 100 + (youPips - botPips);
   }
 
   const player = isBot ? 'bot' : 'you';
   const moves = getLegalMoves(state, player).filter((m) => m.type === 'play');
+  if (moves.length === 0) return minimax(state, depth - 1, !isBot, alpha, beta, pointsAccum);
 
-  if (moves.length === 0) {
-    if (state.boneyard.length > 2) {
-      const next: BotMatchState = {
-        ...state,
-        currentPlayer: isBot ? 'bot' : 'you',
-        boneyard: state.boneyard.slice(1),
-      };
-      return minimaxEndgame(next, depth - 1, isBot, alpha, beta);
-    }
-    return 0;
-  }
+  const orderedMoves = [...moves].sort((a, b) => {
+    const pa = previewPlayMove(state, player, a);
+    const pb = previewPlayMove(state, player, b);
+    return (pb?.immediateScore ?? 0) - (pa?.immediateScore ?? 0);
+  });
 
   if (isBot) {
     let best = -Infinity;
-    for (const move of moves) {
-      const preview = previewPlayMove(state, 'bot', move);
-      if (!preview) continue;
-      const continuesTurn = preview.turnContinues;
-      const next: BotMatchState = {
-        ...state,
-        board: preview.nextBoard,
-        currentPlayer: continuesTurn ? 'bot' : 'you',
-        players: {
-          ...state.players,
-          bot: { ...state.players.bot, hand: preview.nextHand },
-        },
-      };
-      const val = minimaxEndgame(next, depth - 1, continuesTurn ? true : false, alpha, beta);
+    for (const move of orderedMoves) {
+      const p = previewPlayMove(state, 'bot', move);
+      if (!p) continue;
+      const next = cloneState(state, {
+        board: p.nextBoard,
+        currentPlayer: p.turnContinues ? 'bot' : 'you',
+        players: { ...state.players, bot: { ...state.players.bot, hand: p.nextHand } },
+      });
+      const val = minimax(next, depth - 1, p.turnContinues ? true : false, alpha, beta, pointsAccum + p.immediateScore);
       best = Math.max(best, val);
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
@@ -162,20 +493,15 @@ function minimaxEndgame(
     return best;
   } else {
     let best = Infinity;
-    for (const move of moves) {
-      const preview = previewPlayMove(state, 'you', move);
-      if (!preview) continue;
-      const continuesTurn = preview.turnContinues;
-      const next: BotMatchState = {
-        ...state,
-        board: preview.nextBoard,
-        currentPlayer: continuesTurn ? 'you' : 'bot',
-        players: {
-          ...state.players,
-          you: { ...state.players.you, hand: preview.nextHand },
-        },
-      };
-      const val = minimaxEndgame(next, depth - 1, continuesTurn ? false : true, alpha, beta);
+    for (const move of orderedMoves) {
+      const p = previewPlayMove(state, 'you', move);
+      if (!p) continue;
+      const next = cloneState(state, {
+        board: p.nextBoard,
+        currentPlayer: p.turnContinues ? 'you' : 'bot',
+        players: { ...state.players, you: { ...state.players.you, hand: p.nextHand } },
+      });
+      const val = minimax(next, depth - 1, p.turnContinues ? false : true, alpha, beta, pointsAccum - p.immediateScore);
       best = Math.min(best, val);
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
@@ -184,306 +510,240 @@ function minimaxEndgame(
   }
 }
 
-function threePlyScore(
+// ─── Monte Carlo move evaluation ──────────────────────────────────────────────
+
+/**
+ * Evaluate a candidate move using Monte Carlo opponent hand sampling.
+ *
+ * Instead of using probability-weighted heuristics to estimate the opponent's
+ * threat, we:
+ *  1. Sample MC_SAMPLES plausible opponent hands from the unseen pool
+ *  2. For each sampled hand, compute the exact threat they pose after our move
+ *  3. Average the results
+ *
+ * This gives a much more accurate estimate of blocking value because it
+ * accounts for tile combinations the opponent might hold, not just individual
+ * pip probabilities.
+ */
+function mcEvaluateMove(
+  move: Move,
   state: BotMatchState,
-  botMove: Move,
-  unseenTiles: { low: number; high: number }[],
+  pool: Tile[],
+  holdWeights: Map<string, number>,
 ): number {
-  const preview1 = previewPlayMove(state, 'bot', botMove);
-  if (!preview1) return 0;
+  const botScore = state.players.bot.score;
+  const youScore = state.players.you.score;
+  const boneyardSize = state.boneyard.length;
 
-  const afterBot: BotMatchState = {
-    ...state,
-    board: preview1.nextBoard,
-    currentPlayer: 'you',
-    players: {
-      ...state.players,
-      bot: { ...state.players.bot, hand: preview1.nextHand },
-    },
-  };
+  // Instant win check
+  const preview = previewPlayMove(state, 'bot', move);
+  if (!preview) return -Infinity;
+  if (botScore + preview.immediateScore >= WIN_TARGET) return 1_000_000;
 
-  const oppMoves = getLegalMoves(afterBot, 'you').filter((m) => m.type === 'play');
-  if (oppMoves.length === 0) return preview1.immediateScore * 10;
+  // Chain tree search for this move
+  const chain = searchChainTree(state, move);
+  if (!chain) return -Infinity;
 
-  const likelyTiles = new Set(unseenTiles.map((tile) => `${tile.low}-${tile.high}`));
-  const knownMissing = new Set(state.opponentKnownMissing ?? []);
-  const weightedOppMoves = oppMoves.map((m) => {
-    const tile = m.tile!;
-    const tileKey = `${tile.low}-${tile.high}`;
-    const unlikely =
-      knownMissing.has(tile.low) || knownMissing.has(tile.high) || !likelyTiles.has(tileKey);
-    return { move: m, weight: unlikely ? 0.2 : 1.0 };
-  });
-  const totalWeight = weightedOppMoves.reduce((s, w) => s + w.weight, 0);
+  const { totalPoints, chainLength, finalHand, finalOpenEnds, finalOpenSum, drawCostAccum } = chain;
 
-  let worstNetScore = Infinity;
+  // Self position after chain
+  const selfSetup = selfOpportunity(finalOpenEnds, finalOpenSum, finalHand);
+  const mobilityAfter = handMobility(finalHand, finalOpenEnds);
+  const finalEndSet = new Set(finalOpenEnds);
+  const strandedDoubles = finalHand.filter((t) => isDoubleTile(t) && !finalEndSet.has(t.low)).length;
+  const finalPips = pipSum(finalHand);
+  const isLateGame = boneyardSize <= 6 || finalHand.length <= 3;
+  const pipBurdenPenalty = isLateGame ? finalPips * 0.8 : finalPips * 0.1;
 
-  for (const { move: oppMove, weight } of weightedOppMoves) {
-    if (weight < 0.01) continue;
-    const preview2 = previewPlayMove(afterBot, 'you', oppMove);
-    if (!preview2) continue;
+  // Branch discipline
+  const branchPen = branchPenalty(move, state, holdWeights);
 
-    const afterOpp: BotMatchState = {
-      ...afterBot,
-      board: preview2.nextBoard,
-      currentPlayer: 'bot',
-      players: {
-        ...afterBot.players,
-        you: { ...afterBot.players.you, hand: preview2.nextHand },
-      },
-    };
+  // Score proximity multipliers
+  const botProximity = botScore / WIN_TARGET;
+  const youProximity = youScore / WIN_TARGET;
+  const aggressionBoost = botProximity >= 0.85 ? 1.4 : botProximity >= 0.7 ? 1.2 : 1.0;
+  const defenseMultiplier =
+    youProximity >= 0.85 ? 3.0 :
+    youProximity >= 0.7  ? 1.8 :
+    youProximity >= 0.5  ? 1.2 : 1.0;
 
-    const botReplies = getLegalMoves(afterOpp, 'bot').filter((m) => m.type === 'play');
-    let bestReply3Score = 0;
-    for (const reply of botReplies) {
-      const preview3 = previewPlayMove(afterOpp, 'bot', reply);
-      if (!preview3) continue;
-      const s = preview3.immediateScore * 10 + preview3.nextHand.length * -2;
-      if (s > bestReply3Score) bestReply3Score = s;
-    }
+  // Monte Carlo threat estimation
+  // Sample opponent hands and compute exact threat for each
+  const youHandSize = state.players.you.hand.length;
+  const sampledHands = sampleOpponentHands(pool, holdWeights, youHandSize, MC_SAMPLES);
 
-    const netScore =
-      (preview1.immediateScore * 10 - preview2.immediateScore * 8 + bestReply3Score) *
-      (weight / totalWeight);
+  let totalThreat = 0;
+  let totalThreatBefore = 0;
 
-    if (netScore < worstNetScore) worstNetScore = netScore;
+  for (const sampledHand of sampledHands) {
+    const threatAfter = exactOpponentThreat(finalOpenEnds, finalOpenSum, sampledHand);
+    const threatBefore = exactOpponentThreat(preview.openEnds, preview.openSum, sampledHand);
+    totalThreat += threatAfter;
+    totalThreatBefore += threatBefore;
   }
 
-  return worstNetScore === Infinity ? preview1.immediateScore * 10 : worstNetScore;
+  const avgThreatAfter = sampledHands.length > 0 ? totalThreat / sampledHands.length : 0;
+  const avgThreatBefore = sampledHands.length > 0 ? totalThreatBefore / sampledHands.length : 0;
+  const threatDelta = avgThreatBefore - avgThreatAfter;
+
+  return (
+    totalPoints * 120 * aggressionBoost +
+    selfSetup * 25 +
+    threatDelta * 35 * defenseMultiplier +
+    -avgThreatAfter * 22 * defenseMultiplier +
+    mobilityAfter * 8 +
+    -strandedDoubles * 35 +
+    -branchPen +
+    -pipBurdenPenalty +
+    -drawCostAccum * 12 +
+    (chainLength > 1 ? chainLength * 5 : 0)
+  );
 }
 
-function evaluateBlockedGameOutcome(
-  state: BotMatchState,
-  afterPreview: BotMovePreview,
-): number {
-  const botPipsAfter = afterPreview.nextHand.reduce((s, t) => s + t.low + t.high, 0);
-  const youPipsEstimate = state.players.you.hand.reduce((s, t) => s + t.low + t.high, 0);
+// ─── Weighted random selection ────────────────────────────────────────────────
 
-  if (state.boneyard.length <= 3) {
-    if (botPipsAfter < youPipsEstimate) {
-      return (youPipsEstimate - botPipsAfter) * 4;
-    }
-    return (youPipsEstimate - botPipsAfter) * 3;
+function weightedSelect<T extends { score: number }>(scored: T[]): T {
+  if (scored.length === 1) return scored[0];
+  const top = scored.slice(0, Math.min(3, scored.length));
+  const best = top[0].score;
+  if (best >= 500_000 || (top.length > 1 && best - top[1].score > 200)) return top[0];
+
+  const weights = [0.65, 0.25, 0.10].slice(0, top.length);
+  let cumulative = 0;
+  const rand = Math.random() * weights.reduce((s, w) => s + w, 0);
+  for (let i = 0; i < top.length; i++) {
+    cumulative += weights[i];
+    if (rand <= cumulative) return top[i];
   }
-  return 0;
+  return top[0];
 }
 
-function scorePipArithmetic(
-  openEnds: number[],
-  openSum: number,
-  nextHand: { low: number; high: number }[],
-): number {
-  let bonus = 0;
-
-  for (const tile of nextHand) {
-    for (const end of openEnds) {
-      if (tile.low === end || tile.high === end) {
-        const pip = tile.low === end ? tile.high : tile.low;
-        const futureSum = openSum - end + pip;
-        if (futureSum > 0 && futureSum % 5 === 0) {
-          bonus += 8;
-        }
-        if (futureSum > 0 && futureSum % 10 === 0) {
-          bonus += 4;
-        }
-      }
-    }
-  }
-  return Math.min(bonus, 32);
-}
-
-function doubleTimingPenalty(
-  tile: { low: number; high: number },
-  openEnds: number[],
-  boneyard: { low: number; high: number }[],
-  hand: { low: number; high: number }[],
-): number {
-  if (tile.low !== tile.high) return 0;
-  const pip = tile.high;
-
-  const handMatches = hand.filter((t) => t.low === pip || t.high === pip).length;
-  const boneyardMatches = boneyard.filter((t) => t.low === pip || t.high === pip).length;
-
-  const endAlreadyOpen = openEnds.includes(pip);
-  if (endAlreadyOpen && boneyardMatches <= 2) {
-    return 18;
-  }
-
-  if (handMatches >= 2 && boneyard.length > 6) {
-    return 10;
-  }
-
-  return 0;
-}
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 export function chooseBotMove(
   state: BotMatchState,
-  difficulty: BotDifficulty = 'standard',
+  difficulty: BotDifficulty = 'hard',
 ): BotChoice | null {
-  const candidates: Move[] = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
-
+  const candidates = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
   if (candidates.length === 0) return null;
 
-  const botHandSize = state.players.bot.hand.length;
-  const youHandSize = state.players.you.hand.length;
-
-  if (difficulty === 'hard' && botHandSize <= 7 && youHandSize <= 7) {
-    // Use exact minimax instead of heuristics.
-    let bestMove = candidates[0];
-    let bestVal = -Infinity;
-    for (const move of candidates) {
-      const preview = previewPlayMove(state, 'bot', move);
-      if (!preview) continue;
-      if (preview.nextHand.length === 0 && move.tile && move.tile.low === move.tile.high) continue;
-      const next: BotMatchState = {
-        ...state,
-        board: preview.nextBoard,
-        currentPlayer: 'you',
-        players: {
-          ...state.players,
-          bot: { ...state.players.bot, hand: preview.nextHand },
-        },
-      };
-      const val = preview.immediateScore * 10 + minimaxEndgame(next, 8, false, -Infinity, Infinity);
-      if (val > bestVal) {
-        bestVal = val;
-        bestMove = move;
-      }
-    }
+  // ── Casual ───────────────────────────────────────────────────────────────
+  if (difficulty === 'casual') {
+    const best = candidates
+      .map((m) => ({ m, p: previewPlayMove(state, 'bot', m) }))
+      .filter(({ p }) => p != null)
+      .sort((a, b) => {
+        const sa = a.p!.immediateScore * 10 + (a.m.tile?.low ?? 0) + (a.m.tile?.high ?? 0);
+        const sb = b.p!.immediateScore * 10 + (b.m.tile?.low ?? 0) + (b.m.tile?.high ?? 0);
+        return sb - sa;
+      })[0];
+    if (!best) return null;
     return {
-      move: bestMove,
-      score: bestVal,
+      move: best.m,
+      score: best.p!.immediateScore,
       breakdown: {
-        immediate: 0,
-        doubleBias: 0,
-        mobility: 0,
-        denial: 0,
-        unload: 0,
+        immediate: best.p!.immediateScore,
+        doubleBias: best.m.tile && isDoubleTile(best.m.tile) ? 1 : 0,
+        mobility: 0, denial: 0,
+        unload: (best.m.tile?.low ?? 0) + (best.m.tile?.high ?? 0),
         replyRisk: 0,
       },
     };
   }
 
-  const inferredMissing = inferOpponentMissingPips(state);
-  const inferredState: BotMatchState =
-    inferredMissing.length === 0
-      ? state
-      : {
-          ...state,
-          opponentKnownMissing: [...new Set([...(state.opponentKnownMissing ?? []), ...inferredMissing])],
+  // ── Standard ─────────────────────────────────────────────────────────────
+  if (difficulty === 'standard') {
+    const pool = buildUnseenPool(state);
+    const missing = inferMissingPips(state);
+    const weights = opponentHoldWeights(pool, missing);
+
+    const scored = candidates
+      .map((m) => {
+        const p = previewPlayMove(state, 'bot', m);
+        if (!p) return null;
+        const threat = opponentThreat(p.openEnds, p.openSum, weights);
+        return {
+          move: m,
+          score:
+            p.immediateScore * 60 +
+            selfOpportunity(p.openEnds, p.openSum, p.nextHand) * 10 +
+            -threat * 8 +
+            handMobility(p.nextHand, p.openEnds) * 5 +
+            (m.tile ? m.tile.low + m.tile.high : 0) * 0.5,
+          breakdown: {
+            immediate: p.immediateScore,
+            doubleBias: m.tile && isDoubleTile(m.tile) ? 1 : 0,
+            mobility: handMobility(p.nextHand, p.openEnds),
+            denial: -threat,
+            unload: (m.tile?.low ?? 0) + (m.tile?.high ?? 0),
+            replyRisk: threat,
+          },
         };
-  const unseenTiles = inferUnseenTiles(inferredState);
+      })
+      .filter(Boolean) as Array<{ move: Move; score: number; breakdown: BotChoice['breakdown'] }>;
 
-  const scored = candidates.map((move) => {
-    const preview = previewPlayMove(state, 'bot', move)!;
-    const immediate = preview.immediateScore;
-    const doubleBias = preview.isDouble ? 1 : 0;
-    const mobility = estimateMobility(preview.nextHand, preview.openEnds);
-    const denial = -pipExposureLikelihood(preview.openEnds);
-    const unload = move.tile ? move.tile.low + move.tile.high : 0;
-    const replyRisk = estimateReplyRisk(preview.openEnds, preview.openSum);
-    const base = {
-      move,
-      score: 0,
-      breakdown: {
-        immediate,
-        doubleBias,
-        mobility,
-        denial,
-        unload,
-        replyRisk,
-      },
-      tie: tiebreak(move),
-    };
+    scored.sort((a, b) => b.score - a.score);
+    if (!scored[0]) return null;
+    return { move: scored[0].move, score: scored[0].score, breakdown: scored[0].breakdown };
+  }
 
-    let score = immediate * 100 + unload * 0.5;
-    if (difficulty === 'hard') {
-      const botScore = state.players.bot.score;
-      const youScore = state.players.you.score;
-      const winTarget = state.winningScore;
+  // ── Hard ─────────────────────────────────────────────────────────────────
+  const pool = buildUnseenPool(state);
+  const missing = inferMissingPips(state);
+  const weights = opponentHoldWeights(pool, missing);
+  const totalTiles = state.players.bot.hand.length + state.players.you.hand.length;
 
-      if (botScore + immediate >= winTarget) return { ...base, score: 10000 };
+  // Late game: deep exact minimax
+  if (totalTiles <= 6) {
+    let bestMove = candidates[0];
+    let bestVal = -Infinity;
 
-      const scoreDiff = botScore - youScore;
-      const aggressionMult = scoreDiff >= 15 ? 1.15 : scoreDiff <= -15 ? 0.88 : 1.0;
-
-      const oppWinProximity = youScore / winTarget;
-      const defenseUrgency = oppWinProximity >= 0.8 ? 1.8 : oppWinProximity >= 0.6 ? 1.3 : 1.0;
-
-      const stateWithInference: BotMatchState = {
-        ...state,
-        opponentKnownMissing: [...new Set([...(state.opponentKnownMissing ?? []), ...inferredMissing])],
-      };
-
-      const plyScore = threePlyScore(stateWithInference, move, unseenTiles);
-      const blockBonus = evaluateBlockedGameOutcome(state, preview);
-
-      const boneyardFactor =
-        state.boneyard.length <= 4 ? 2.0 : state.boneyard.length <= 10 ? 1.4 : 1.0;
-      const openEndSet = new Set(preview.openEnds);
-      const endDangerScore = preview.openEnds.reduce((sum, end) => {
-        const matches = unseenTiles.filter((t) => t.low === end || t.high === end).length;
-        return sum + matches;
-      }, 0);
-      const deadTiles = preview.nextHand.filter(
-        (t) => !openEndSet.has(t.low) && !openEndSet.has(t.high),
-      ).length;
-      const playableTiles = preview.nextHand.filter(
-        (t) => openEndSet.has(t.low) || openEndSet.has(t.high),
-      ).length;
-      const doubleDangerPenalty = preview.isDouble && youScore >= winTarget - 20 ? 30 : 0;
-
-      const pipSetupBonus = scorePipArithmetic(
-        preview.openEnds,
-        preview.openSum,
-        preview.nextHand,
-      );
-
-      const doubleTimingPen = doubleTimingPenalty(
-        move.tile!,
-        preview.openEnds,
-        state.boneyard,
-        preview.nextHand,
-      );
-      const defenseBonus = youScore >= winTarget - 10 ? denial * 0.6 : denial * 0.35;
-      const handSize = preview.nextHand.length;
-      const endgameBonus = handSize === 0 ? 500 : handSize === 1 ? 220 : handSize <= 3 ? 55 : 0;
-
-      score =
-        plyScore * 1.8 * aggressionMult +
-        immediate * 45 +
-        unload * 3.5 +
-        mobility * 10 * boneyardFactor +
-        playableTiles * 3 +
-        defenseBonus * defenseUrgency +
-        -deadTiles * 9 +
-        -endDangerScore * 3.5 +
-        -doubleDangerPenalty +
-        -doubleTimingPen +
-        pipSetupBonus +
-        endgameBonus +
-        blockBonus;
-    } else if (difficulty !== 'casual') {
-      score += mobility * 8 + denial * 0.35;
-      score += doubleBias * 2;
-    } else {
-      score += doubleBias * 4;
+    for (const move of candidates) {
+      const p = previewPlayMove(state, 'bot', move);
+      if (!p) continue;
+      const next = cloneState(state, {
+        board: p.nextBoard,
+        currentPlayer: p.turnContinues ? 'bot' : 'you',
+        players: { ...state.players, bot: { ...state.players.bot, hand: p.nextHand } },
+      });
+      const depth = totalTiles <= 4 ? 14 : 10;
+      const val = p.immediateScore * 100 + minimax(next, depth, p.turnContinues, -Infinity, Infinity, p.immediateScore);
+      if (val > bestVal) { bestVal = val; bestMove = move; }
     }
 
+    const bp = previewPlayMove(state, 'bot', bestMove);
     return {
-      ...base,
-      score,
+      move: bestMove,
+      score: bestVal,
+      breakdown: {
+        immediate: bp?.immediateScore ?? 0,
+        doubleBias: bestMove.tile && isDoubleTile(bestMove.tile) ? 1 : 0,
+        mobility: 0, denial: 0,
+        unload: (bestMove.tile?.low ?? 0) + (bestMove.tile?.high ?? 0),
+        replyRisk: 0,
+      },
     };
-  });
+  }
 
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return a.tie.localeCompare(b.tie);
-  });
+  // Mid/early game: chain tree + Monte Carlo evaluation + weighted selection
+  const scored = candidates
+    .map((move) => {
+      const p = previewPlayMove(state, 'bot', move);
+      return {
+        move,
+        score: mcEvaluateMove(move, state, pool, weights),
+        breakdown: {
+          immediate: p?.immediateScore ?? 0,
+          doubleBias: move.tile && isDoubleTile(move.tile) ? 1 : 0,
+          mobility: p ? handMobility(p.nextHand, p.openEnds) : 0,
+          denial: p ? -opponentThreat(p.openEnds, p.openSum, weights) : 0,
+          unload: (move.tile?.low ?? 0) + (move.tile?.high ?? 0),
+          replyRisk: p ? opponentThreat(p.openEnds, p.openSum, weights) : 0,
+        },
+      };
+    })
+    .sort((a, b) => b.score - a.score);
 
-  return {
-    move: scored[0].move,
-    score: scored[0].score,
-    breakdown: scored[0].breakdown,
-  };
+  const chosen = weightedSelect(scored);
+  return { move: chosen.move, score: chosen.score, breakdown: chosen.breakdown };
 }
