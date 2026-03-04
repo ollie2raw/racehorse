@@ -71,20 +71,24 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
           </button>
         </div>
         <div className="score-track-board">
-          {players.map((player) => {
+          {players.map((player, playerIndex) => {
             const pegAt = clampScore(player.score, target);
+            const isMirrored = playerIndex === 1;
             const topSoloPeg = pegAt === 0;
             const bottomSoloPeg = pegAt >= target;
             const topMainPeg = pegAt >= 1 && pegAt <= laneLength ? pegAt : null;
             const bottomMainPeg = pegAt > laneLength && pegAt < target ? pegAt : null;
             return (
-              <div className="score-track-lane" key={player.label}>
+              <div
+                className={`score-track-lane ${isMirrored ? 'score-track-lane--mirrored' : ''}`}
+                key={player.label}
+              >
                 <div className="score-track-meta">
                   <span className="score-track-name">{player.label}</span>
                   <span className="score-track-value">{player.score}</span>
                 </div>
                 <div className="score-track-lane-grid">
-                  <div className="score-track-holes">
+                  <div className="score-track-holes score-track-holes--outer">
                     {renderLane(topMainLane, topMainPeg, player, 'outer')}
                     <div className="score-gap score-gap-solo" aria-hidden="true" />
                     <div
@@ -92,7 +96,7 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
                       title={`${player.label}: start`}
                     />
                   </div>
-                  <div className="score-track-holes">
+                  <div className="score-track-holes score-track-holes--inner">
                     {renderLane(bottomMainLane, bottomMainPeg, player, 'inner')}
                     <div className="score-gap score-gap-solo" aria-hidden="true" />
                     <div

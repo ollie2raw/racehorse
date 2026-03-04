@@ -631,6 +631,22 @@ body {
   width: max-content;
 }
 
+.score-track-holes--outer {
+  grid-row: 1;
+}
+
+.score-track-holes--inner {
+  grid-row: 2;
+}
+
+.score-track-lane--mirrored .score-track-holes--outer {
+  grid-row: 2;
+}
+
+.score-track-lane--mirrored .score-track-holes--inner {
+  grid-row: 1;
+}
+
 .score-hole {
   width: clamp(10px, 0.92vw, 15px);
   height: clamp(10px, 0.92vw, 15px);
