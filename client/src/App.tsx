@@ -32,6 +32,7 @@ import LayoutScreen from './ui/LayoutScreen';
 import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from './analyzer/moveAnalyzer';
 import {
   type MoveEntry,
+  nextEndsForTile,
   pickEngineBestMove,
   snapshotBoardState,
   cloneBoardState,
@@ -2022,6 +2023,7 @@ export default function App() {
         handBefore,
         validMoves,
         pipDelta: 0,
+        pointsScored: 0,
         boardState: snapshotBoardState(state?.board ?? null),
         boardRenderState: cloneBoardState(state?.board ?? null),
         handSnapshot: handBefore,
@@ -2063,6 +2065,7 @@ export default function App() {
         handBefore,
         validMoves,
         pipDelta: 0,
+        pointsScored: 0,
         boardState: snapshotBoardState(state?.board ?? null),
         boardRenderState: cloneBoardState(state?.board ?? null),
         handSnapshot: handBefore,
@@ -2117,6 +2120,14 @@ export default function App() {
           handBefore,
           validMoves,
           pipDelta: -(playedTile[0] + playedTile[1]),
+          pointsScored: (() => {
+            const possibleEnds = nextEndsForTile(playedTile, boardEnds);
+            for (const ends of possibleEnds) {
+              const s = ends[0] + ends[1];
+              if (s > 0 && s % 5 === 0) return s / 5;
+            }
+            return 0;
+          })(),
           boardState: snapshotBoardState(state?.board ?? null),
           boardRenderState: cloneBoardState(state?.board ?? null),
           handSnapshot: handBefore,
@@ -2407,6 +2418,7 @@ export default function App() {
       handBefore: [],
       validMoves: [],
       pipDelta: 0,
+      pointsScored: 0,
       boardState: snapshotBoardState(prev.board),
       boardRenderState: cloneBoardState(prev.board),
       handSnapshot: (prev.players[you]?.hand ?? []).map(toTileTuple),

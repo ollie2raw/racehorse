@@ -69,44 +69,60 @@ function buildExplanation(
   bestTile: TileTuple | undefined,
   rating: MoveRating,
   playedBreakdown: EngineBestMove['breakdown'] | null,
-  bestBreakdown: { immediate: number; mobility: number; denial: number; unload: number } | null,
+  bestBreakdown: { immediate: number; mobility: number; denial: number; unload: number; replyRisk: number } | null,
 ): string {
+  const played = playedTile ? tileLabel(playedTile) : null;
+  const best = bestTile ? tileLabel(bestTile) : null;
+
   if (rating === 'Brilliant') {
-    const pts = bestBreakdown?.immediate ?? 0;
-    const mob = bestBreakdown?.mobility ?? 0;
     const parts: string[] = [];
-    if (pts > 0) parts.push(`scores ${pts} point${pts !== 1 ? 's' : ''}`);
-    if (mob >= 3) parts.push(`keeps ${mob} tiles playable`);
-    const detail = parts.length > 0 ? ` — ${parts.join(', ')}` : '';
-    return `Brilliant. You found the Fritz line${detail}.`;
+    if (bestBreakdown?.immediate && bestBreakdown.immediate > 0)
+      parts.push(`scores ${bestBreakdown.immediate} pt${bestBreakdown.immediate !== 1 ? 's' : ''}`);
+    if (bestBreakdown?.mobility && bestBreakdown.mobility >= 3)
+      parts.push(`keeps ${bestBreakdown.mobility} tiles in play`);
+    if (bestBreakdown?.replyRisk !== undefined && bestBreakdown.replyRisk < 3)
+      parts.push('low reply risk');
+    return `Brilliant — you matched Fritz's top choice${parts.length ? ` (${parts.join(', ')})` : ''}.`;
   }
-  if (!playedTile || !bestTile) return 'No alternatives available to compare.';
-  const played = tileLabel(playedTile);
-  const best = tileLabel(bestTile);
+
+  if (!played || !best) return 'No alternatives available to compare.';
+
   const reasons: string[] = [];
-  if (bestBreakdown) {
-    if (bestBreakdown.immediate > (playedBreakdown?.immediate ?? 0)) {
-      const diff = bestBreakdown.immediate - (playedBreakdown?.immediate ?? 0);
-      reasons.push(`scores ${diff} more point${diff !== 1 ? 's' : ''}`);
-    }
-    if (bestBreakdown.mobility > (playedBreakdown?.mobility ?? 0) + 1) {
-      reasons.push(`leaves more tiles playable`);
-    }
-    if (bestBreakdown.denial < (playedBreakdown?.denial ?? 0) - 2) {
-      reasons.push(`better board denial`);
-    }
-    if (bestBreakdown.unload > (playedBreakdown?.unload ?? 0)) {
-      reasons.push(`unloads higher pip liability`);
-    }
-  }
-  const reasonText = reasons.length > 0 ? ` — ${reasons.join(', ')}` : '';
-  if (rating === 'Great') return `Great move. Fritz also liked ${best}${reasonText}.`;
-  if (rating === 'Good') return `Good move. ${best} was slightly stronger${reasonText}.`;
+  const scoreDiff = (bestBreakdown?.immediate ?? 0) - (playedBreakdown?.immediate ?? 0);
+  const mobilityDiff = (bestBreakdown?.mobility ?? 0) - (playedBreakdown?.mobility ?? 0);
+  const unloadDiff = (bestBreakdown?.unload ?? 0) - (playedBreakdown?.unload ?? 0);
+  const riskDiff = (playedBreakdown?.replyRisk ?? 0) - (bestBreakdown?.replyRisk ?? 0);
+  const denialDiff = (bestBreakdown?.denial ?? 0) - (playedBreakdown?.denial ?? 0);
+
+  if (scoreDiff > 0)
+    reasons.push(`${best} scores ${scoreDiff} more pt${scoreDiff !== 1 ? 's' : ''}`);
+  if (mobilityDiff >= 2)
+    reasons.push(`keeps ${mobilityDiff} more tile${mobilityDiff !== 1 ? 's' : ''} playable`);
+  if (unloadDiff >= 3)
+    reasons.push(`sheds ${unloadDiff} more pips of dead weight`);
+  if (riskDiff >= 3)
+    reasons.push('reduces opponent scoring chance');
+  if (denialDiff > 5)
+    reasons.push('stronger board control');
+
+  const warnings: string[] = [];
+  if ((playedBreakdown?.replyRisk ?? 0) >= 7)
+    warnings.push('your move left the board open for opponent to score');
+  if ((playedBreakdown?.mobility ?? 0) <= 1 && (playedBreakdown?.unload ?? 0) <= 3)
+    warnings.push('low pip value and strands tiles in hand');
+
+  const reasonText = reasons.length > 0 ? ` — ${reasons.join('; ')}` : '';
+  const warningText = warnings.length > 0 ? `. Also: ${warnings.join(', ')}` : '';
+
+  if (rating === 'Great')
+    return `Great. ${best} was Fritz's top choice${reasonText}, but ${played} was close${warningText}.`;
+  if (rating === 'Good')
+    return `Good. ${best} was stronger${reasonText}${warningText}.`;
   if (rating === 'Inaccuracy')
-    return `Inaccuracy. You played ${played}, but ${best} was more accurate${reasonText}.`;
+    return `Inaccuracy. You played ${played}, but ${best} was noticeably better${reasonText}${warningText}.`;
   if (rating === 'Mistake')
-    return `Mistake. You played ${played}, but ${best} would have been significantly better${reasonText}.`;
-  return `Blunder. You played ${played}, but ${best} was a major upgrade${reasonText}.`;
+    return `Mistake. ${best} was a significant upgrade over ${played}${reasonText}${warningText}.`;
+  return `Blunder. ${best} was far stronger than ${played}${reasonText}${warningText}.`;
 }
 
 function computePlayedBreakdown(
@@ -242,7 +258,13 @@ function classifyMove(
     : 0;
   const diff = bestScore - playedScore;
 
-  if (diff <= 1.5) {
+  // Normalize diff as a percentage of bestScore so thresholds
+  // are scale-independent regardless of board complexity.
+  // A move within 8% of Fritz's best = Great
+  // 8-18% = Good, 18-32% = Inaccuracy, 32-50% = Mistake, 50%+ = Blunder
+  const normalizedDiff = bestScore > 0 ? diff / bestScore : diff / 10;
+
+  if (normalizedDiff <= 0.08) {
     return {
       score: 88,
       rating: 'Great',
@@ -251,7 +273,7 @@ function classifyMove(
       explanation: buildExplanation(entry.tile, bestForAdvice, 'Great', playedBreakdown, bestBreakdown),
     };
   }
-  if (diff <= 3.0) {
+  if (normalizedDiff <= 0.18) {
     return {
       score: 74,
       rating: 'Good',
@@ -260,7 +282,7 @@ function classifyMove(
       explanation: buildExplanation(entry.tile, bestForAdvice, 'Good', playedBreakdown, bestBreakdown),
     };
   }
-  if (diff <= 5.0) {
+  if (normalizedDiff <= 0.32) {
     return {
       score: 58,
       rating: 'Inaccuracy',
@@ -269,7 +291,7 @@ function classifyMove(
       explanation: buildExplanation(entry.tile, bestForAdvice, 'Inaccuracy', playedBreakdown, bestBreakdown),
     };
   }
-  if (diff <= 8.0) {
+  if (normalizedDiff <= 0.50) {
     return {
       score: 38,
       rating: 'Mistake',
@@ -339,11 +361,90 @@ export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
   });
 }
 
+function sequenceAdjustRatings(
+  analyzedMoves: AnalyzedMove[],
+  allEntries: MoveEntry[],
+): AnalyzedMove[] {
+  const pointsByMove = new Map<number, number>();
+  for (const entry of allEntries) {
+    if (entry.player === 'you') {
+      pointsByMove.set(entry.moveNumber, entry.pointsScored ?? 0);
+    }
+  }
+
+  const moveNumbers = analyzedMoves.map((m) => m.moveNumber);
+
+  return analyzedMoves.map((move, idx) => {
+    if (move.rating === 'Brilliant') return move;
+
+    const windowPts =
+      (pointsByMove.get(moveNumbers[idx]) ?? 0) +
+      (pointsByMove.get(moveNumbers[idx + 1]) ?? 0) +
+      (pointsByMove.get(moveNumbers[idx + 2]) ?? 0);
+
+    const fritzImmediate = move.engineBestMove?.breakdown?.immediate ?? 0;
+    const playedImmediate =
+      move.score >= 88 ? fritzImmediate : (move.bestBreakdown?.immediate ?? 0);
+
+    if (
+      (move.rating === 'Blunder' || move.rating === 'Mistake') &&
+      windowPts >= fritzImmediate + 2
+    ) {
+      const softenedRating: MoveRating =
+        move.rating === 'Blunder' ? 'Inaccuracy' : 'Good';
+      const softenedScore = move.rating === 'Blunder' ? 62 : 76;
+      return {
+        ...move,
+        rating: softenedRating,
+        score: softenedScore,
+        explanation:
+          move.explanation +
+          ` (Sequence context: you scored ${windowPts} pts over the next ${Math.min(3, moveNumbers.length - idx)} moves, suggesting a deliberate setup.)`,
+      };
+    }
+
+    if (
+      (move.rating === 'Good' || move.rating === 'Great') &&
+      windowPts === 0 &&
+      fritzImmediate >= 5 &&
+      idx < analyzedMoves.length - 2
+    ) {
+      const hardenedRating: MoveRating =
+        move.rating === 'Great' ? 'Good' : 'Inaccuracy';
+      const hardenedScore = move.rating === 'Great' ? 74 : 58;
+      return {
+        ...move,
+        rating: hardenedRating,
+        score: hardenedScore,
+        explanation:
+          move.explanation +
+          ` (Sequence context: the next ${Math.min(3, moveNumbers.length - idx)} moves scored 0 pts, suggesting this setup didn't pay off.)`,
+      };
+    }
+
+    if (
+      move.rating === 'Inaccuracy' &&
+      (pointsByMove.get(moveNumbers[idx + 1]) ?? 0) >= fritzImmediate
+    ) {
+      return {
+        ...move,
+        rating: 'Good',
+        score: 76,
+        explanation:
+          move.explanation +
+          ` (Sequence context: your next move scored ${pointsByMove.get(moveNumbers[idx + 1])} pts, indicating a successful setup.)`,
+      };
+    }
+
+    return move;
+  });
+}
+
 export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): GameAnalysis {
   const processedEntries = enrichWithFritz ? enrichMovesWithFritz(entries) : entries;
   const verdictByMoveNumber = new Map<number, ReturnType<typeof classifyMove>>();
   const myMoves = processedEntries.filter((entry) => entry.player === 'you');
-  const analyzedMoves: AnalyzedMove[] = myMoves.map((entry) => {
+  const rawAnalyzedMoves: AnalyzedMove[] = myMoves.map((entry) => {
     const verdict = classifyMove(entry);
     verdictByMoveNumber.set(entry.moveNumber, verdict);
     return {
@@ -365,6 +466,7 @@ export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): G
       bestBreakdown: entry.engineBestMove?.breakdown,
     };
   });
+  const analyzedMoves = sequenceAdjustRatings(rawAnalyzedMoves, processedEntries);
 
   const timeline = processedEntries.map((entry, moveIndex) => {
     if (entry.player === 'you') {

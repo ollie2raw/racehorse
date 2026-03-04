@@ -31,6 +31,7 @@ export type MoveEntry = {
   handBefore: TileTuple[];
   validMoves: TileTuple[];
   pipDelta: number;
+  pointsScored: number;
   boardState: BoardSnapshotEntry[];
   boardRenderState: BoardState | null;
   handSnapshot: TileTuple[];
