@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "nobrainer:validate": "node -e \"require('ts-node/register/transpile-only'); require('./scripts/validateNoBrainers.ts')\"",
-    "nobrainer:generate": "node -e \"require('ts-node/register/transpile-only'); require('./scripts/generateNoBrainers.ts')\""
+    "nobrainer:generate": "node -e \"require('ts-node/register/transpile-only'); require('./scripts/generateNoBrainers.ts')\"",
+    "gen:puzzles": "tsx src/generatePuzzles.ts"
   },
   "keywords": [],
   "author": "",
