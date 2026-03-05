@@ -25,7 +25,7 @@ export type Room = {
 
 const rooms = new Map<RoomCode, Room>();
 const drawSequencesByRoom = new Map<RoomCode, Promise<void>>();
-const DRAW_STEP_MS = 1400;
+const DRAW_STEP_MS = 500;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -81,6 +81,17 @@ export function getRoom(code: string): Room {
   return room;
 }
 
+export function reconcileDrawSequenceFlag(code: string): boolean {
+  const room = rooms.get(code);
+  if (!room?.state) return false;
+  const hasSequence = drawSequencesByRoom.has(code);
+  if (room.state.__drawSequenceActive && !hasSequence) {
+    room.state = withDrawSequenceFlag(room.state, false);
+    return true;
+  }
+  return false;
+}
+
 export function deleteRoom(code: string): boolean {
   return rooms.delete(code);
 }
@@ -101,7 +112,12 @@ export async function runDrawSequence(
 
   const sequence = (async () => {
     let current = getState();
-    if (current.__drawSequenceActive) return;
+    if (current.__drawSequenceActive) {
+      // Stale flag recovery: if no active sequence is registered but state says active,
+      // clear the flag so turn-driving logic cannot deadlock.
+      setState(withDrawSequenceFlag(current, false));
+      current = getState();
+    }
 
     const initialPlayable = getLegalMoves(current, playerId).some((move) => move.type === 'play');
     if (initialPlayable) return;

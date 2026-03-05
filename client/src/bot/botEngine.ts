@@ -6,7 +6,7 @@ import type {
   PlacedTile,
   Tile,
   TileOrientation,
-} from '../types';
+} from '../types.ts';
 
 export type BotPlayerId = 'you' | 'bot';
 export type BotHandEndReason = 'domino' | 'blocked';
@@ -26,6 +26,7 @@ export interface BotMatchState {
   currentPlayer: BotPlayerId;
   consecutivePasses: number;
   handNumber: number;
+  turnIndex?: number;
   handOver: boolean;
   gameOver: boolean;
   winnerId: BotPlayerId | null;
@@ -37,6 +38,7 @@ export interface BotMatchState {
   opponentPassedOnEnds?: number[];
   opponentDrawCount?: number;
   opponentKnownMissing?: number[];
+  opponentMissingEvidence?: Array<{ pip: number; handNumber: number; turnIndex: number }>;
 }
 
 export interface BotActionResult {
@@ -142,6 +144,7 @@ function createDealtHand(
     currentPlayer,
     consecutivePasses: 0,
     handNumber,
+    turnIndex: 0,
     handOver: false,
     gameOver: false,
     winnerId: null,
@@ -152,6 +155,7 @@ function createDealtHand(
     opponentPassedOnEnds: [],
     opponentDrawCount: 0,
     opponentKnownMissing: [],
+    opponentMissingEvidence: [],
   };
 }
 
@@ -698,6 +702,7 @@ export function applyPlayMove(
       },
     },
     consecutivePasses: 0,
+    turnIndex: (state.turnIndex ?? 0) + 1,
   };
 
   if (updatedHand.length === 0) {
@@ -767,6 +772,7 @@ export function drawOne(state: BotMatchState, player: BotPlayerId): BotActionRes
   return {
     state: {
       ...state,
+      turnIndex: (state.turnIndex ?? 0) + 1,
       boneyard: rest,
       players: {
         ...state.players,
@@ -788,6 +794,7 @@ export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionRe
   const nextConsecutive = state.consecutivePasses + 1;
   const moved = {
     ...state,
+    turnIndex: (state.turnIndex ?? 0) + 1,
     currentPlayer: nextPlayer(player),
     consecutivePasses: nextConsecutive,
   };
@@ -827,6 +834,31 @@ export function drawUntilPlayableOrEmpty(
   if (getPlayMoves(state, player).length > 0) return { state };
 
   let current = state;
+  // Capture the opponent's missing pips at draw-start only (pre-draw snapshot).
+  // This evidence is useful for pressure heuristics even after they draw.
+  if (player === 'you' && current.boneyard.length > BONEYARD_LOCKED_COUNT && current.board) {
+    const startEnds = getMatchableOpenEnds(current.board).map((e) => e.matchValue);
+    const turnIndex = current.turnIndex ?? 0;
+    const handNumber = current.handNumber;
+    const prevEvidence = current.opponentMissingEvidence ?? [];
+    const prevMissing = new Set<number>(current.opponentKnownMissing ?? []);
+    for (const pip of startEnds) prevMissing.add(pip);
+    const dedupKey = new Set(prevEvidence.map((e) => `${e.pip}:${e.handNumber}:${e.turnIndex}`));
+    const appended = [...prevEvidence];
+    for (const pip of startEnds) {
+      const key = `${pip}:${handNumber}:${turnIndex}`;
+      if (!dedupKey.has(key)) {
+        dedupKey.add(key);
+        appended.push({ pip, handNumber, turnIndex });
+      }
+    }
+    current = {
+      ...current,
+      opponentKnownMissing: Array.from(prevMissing),
+      opponentMissingEvidence: appended,
+    };
+  }
+
   let lastDrawn: Tile | null = null;
   while (current.boneyard.length > BONEYARD_LOCKED_COUNT) {
     const [drawn, ...rest] = current.boneyard;

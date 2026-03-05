@@ -4,6 +4,7 @@ export type TournamentPlayer = {
   socketId: string;
   username: string;
   userId?: string | null;
+  isBot?: boolean;
 };
 
 export type MatchStatus = 'pending' | 'active' | 'done';

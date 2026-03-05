@@ -1,43 +1,24 @@
 /**
- * botHeuristics.ts — Racehorse Domino AI (Hard Bot) v3
+ * botHeuristics.ts — Racehorse Domino AI (Hard Bot) v3.5
  *
- * Racehorse rules:
- *  - All Fives scoring: open-end sum divisible by 5 → sum/5 points
- *  - Playing a DOUBLE continues your turn
- *  - Playing a SCORING move continues your turn
- *  - Turn ends only on a non-scoring, non-double play
- *  - Turn must continue but no legal play → auto-draw until playable
- *  - Boneyard locks at 2 tiles (max 26 tiles seen per hand)
- *  - Doubles create branch arms (up to 4 open ends once both sides filled)
- *  - Hand ends: domino or blocked → winner scores round(loser_pips / 5)
- *  - Match: first to 60 points
- *
- * v3 upgrades over v2:
- *  1. CHAIN TREE SEARCH    — full branching tree over turn sequences instead
- *                            of greedy single-path simulation. Finds sequences
- *                            like "take 0 now, set up +3 two moves later" that
- *                            greedy misses entirely.
- *  2. MONTE CARLO SAMPLING — sample 8 plausible opponent hands from the
- *                            weighted pool, evaluate each, average the results.
- *                            Blocking/denial decisions are now based on what
- *                            the opponent can actually do, not just probability
- *                            weights on individual tiles.
- *  3. DRAW ANTICIPATION    — when a chain continuation would require drawing
- *                            (no legal play but turn continues), estimate the
- *                            boneyard draw cost and factor it into the move
- *                            score. Avoids committing to chains that force
- *                            expensive draws into bad tiles.
+ * v3.1: minimax pass-turn bug (currentPlayer flip + passDepth guard)
+ * v3.2: Codex review — null guard, depth cap 12, threshold ≤ 8, DEV-only logs
+ * v3.3: draw-until-playable modeled inside minimax; pip burden 0.8 → 1.5
+ * v3.4: perf guard (150ms budget); greedy fallback; consistent timing coverage
+ * v3.5: deadlineMs propagated into minimax itself (single branch can't overrun);
+ *       done() uses typed overloads — no brittle as-casts anywhere
  */
 
-import type { Move, Tile } from '../types';
-import type { BotMatchState } from './botEngine';
-import { getLegalMoves, previewPlayMove } from './botEngine';
+import type { Move, Tile } from '../types.ts';
+import type { BotMatchState } from './botEngine.ts';
+import { getLegalMoves, previewPlayMove } from './botEngine.ts';
 
 export type BotDifficulty = 'casual' | 'standard' | 'hard';
 
 export interface BotChoice {
   move: Move;
   score: number;
+  explanation?: string;
   breakdown: {
     immediate: number;
     doubleBias: number;
@@ -50,10 +31,16 @@ export interface BotChoice {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MC_SAMPLES = 8;          // Monte Carlo opponent hand samples
-const CHAIN_TREE_DEPTH = 5;    // Max moves to explore in chain tree
-const CHAIN_TREE_WIDTH = 3;    // Top N continuations to branch at each step
+const MC_SAMPLES = 8;
+const CHAIN_TREE_DEPTH = 5;
+const CHAIN_TREE_WIDTH = 3;
 const WIN_TARGET = 60;
+
+// Endgame minimax kicks in when total tiles (bot + you) is at or below this.
+// Was 6 in v3 — too late, MC gets noisy on tiny hands.
+// Set conservatively at 8; raise to 10 if endgame still feels weak.
+const ENDGAME_TILE_THRESHOLD = 8;
+const ENABLE_TWO_PLY_WORST_CASE = true;
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -89,6 +76,7 @@ function buildUnseenPool(state: BotMatchState): Tile[] {
     for (const pt of state.board.mainLine) known.add(tileKey(pt.tile));
     for (const hub of state.board.hubDoubles ?? []) {
       for (const branch of hub.branches ?? []) {
+        if (!branch) continue;  // null guard — undefined branches crash here without this
         for (const pt of branch.tiles ?? []) known.add(tileKey(pt.tile));
       }
     }
@@ -103,7 +91,6 @@ function buildUnseenPool(state: BotMatchState): Tile[] {
   return pool;
 }
 
-/** Single pass = confirmed missing pip (2-player game — this is exact). */
 function inferMissingPips(state: BotMatchState): Set<number> {
   const missing = new Set<number>(state.opponentKnownMissing ?? []);
   for (const end of state.opponentPassedOnEnds ?? []) missing.add(end);
@@ -121,13 +108,6 @@ function opponentHoldWeights(pool: Tile[], missingPips: Set<number>): Map<string
 
 // ─── Monte Carlo: sample plausible opponent hands ─────────────────────────────
 
-/**
- * Sample `n` plausible opponent hands from the unseen pool.
- * Uses weighted sampling without replacement — tiles the opponent is known
- * to be missing get very low weight (0.05) so they almost never appear.
- *
- * Returns an array of sampled hands (each is an array of Tiles).
- */
 function sampleOpponentHands(
   pool: Tile[],
   weights: Map<string, number>,
@@ -137,7 +117,6 @@ function sampleOpponentHands(
   const hands: Tile[][] = [];
 
   for (let s = 0; s < n; s++) {
-    // Weighted shuffle: Fisher-Yates with weighted selection
     const available = [...pool];
     const w = available.map((t) => weights.get(tileKey(t)) ?? 1.0);
     const hand: Tile[] = [];
@@ -151,19 +130,12 @@ function sampleOpponentHands(
       for (let j = 0; j < available.length; j++) {
         if (!available[j]) continue;
         rand -= w[j];
-        if (rand <= 0) {
-          chosen = j;
-          break;
-        }
+        if (rand <= 0) { chosen = j; break; }
       }
-      if (chosen === -1) {
-        // Fallback: pick first available
-        chosen = available.findIndex((t) => t != null);
-      }
+      if (chosen === -1) chosen = available.findIndex((t) => t != null);
       if (chosen === -1) break;
 
       hand.push(available[chosen]);
-      // Mark as taken
       (available as (Tile | null)[])[chosen] = null;
       w[chosen] = 0;
     }
@@ -200,10 +172,6 @@ function opponentThreat(
   return threat;
 }
 
-/**
- * Exact opponent threat given a known sampled hand.
- * Used in Monte Carlo evaluation.
- */
 function exactOpponentThreat(
   openEnds: number[],
   openSum: number,
@@ -244,19 +212,97 @@ function handMobility(hand: Tile[], openEnds: number[]): number {
   return hand.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
 }
 
+type HandPhase = 'early' | 'mid' | 'late';
+
+function phaseFor(handSizeAfter: number, totalTilesAfter: number): HandPhase {
+  if (handSizeAfter <= 3 || totalTilesAfter <= 8) return 'late';
+  if (handSizeAfter <= 7 || totalTilesAfter <= 16) return 'mid';
+  return 'early';
+}
+
+function pipTileFrequency(hand: Tile[]): number[] {
+  const freq = new Array<number>(7).fill(0);
+  for (const t of hand) {
+    freq[t.low] += 1;
+    if (t.high !== t.low) freq[t.high] += 1;
+  }
+  return freq;
+}
+
+function inferOpenEndsFromState(state: BotMatchState): number[] {
+  if (!state.board || !state.handOpen) return [];
+  const ends: number[] = [state.board.leftEnd, state.board.rightEnd];
+  for (const hub of state.board.hubDoubles ?? []) {
+    for (const b of hub.branches ?? []) {
+      if (!b) continue;
+      ends.push(b.openEnd);
+    }
+  }
+  return ends;
+}
+
+function countPlayableTiles(hand: Tile[], openEnds: number[]): number {
+  const endSet = new Set(openEnds);
+  return hand.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
+}
+
+function countOrphanTiles(hand: Tile[], openEnds: number[]): number {
+  const endSet = new Set(openEnds);
+  return hand.filter((t) => !endSet.has(t.low) && !endSet.has(t.high)).length;
+}
+
+function boardTileCount(board: BotMatchState['board']): number {
+  if (!board) return 0;
+  let count = board.mainLine.length;
+  for (const hub of board.hubDoubles ?? []) {
+    for (const branch of hub.branches ?? []) {
+      if (!branch) continue;
+      count += branch.tiles?.length ?? 0;
+    }
+  }
+  return count;
+}
+
+function estimateOpponentMobilityApprox(
+  openEnds: number[],
+  holdWeights: Map<string, number>,
+): number {
+  if (openEnds.length === 0) return 0;
+  let total = 0;
+  for (const end of openEnds) {
+    for (let pip = 0; pip <= 6; pip++) {
+      const lo = Math.min(end, pip);
+      const hi = Math.max(end, pip);
+      total += holdWeights.get(`${lo}|${hi}`) ?? 0;
+    }
+  }
+  return total / openEnds.length;
+}
+
+function hasExitInTwoMoves(state: BotMatchState): boolean {
+  if (state.players.bot.hand.length === 0) return true;
+  const firstMoves = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
+  for (const m1 of firstMoves) {
+    const p1 = previewPlayMove(state, 'bot', m1);
+    if (!p1) continue;
+    if (p1.nextHand.length === 0) return true;
+    if (!p1.turnContinues) continue;
+    const after1 = cloneState(state, {
+      board: p1.nextBoard,
+      players: { ...state.players, bot: { ...state.players.bot, hand: p1.nextHand } },
+      currentPlayer: 'bot',
+    });
+    const secondMoves = getLegalMoves(after1, 'bot').filter((m) => m.type === 'play');
+    for (const m2 of secondMoves) {
+      const p2 = previewPlayMove(after1, 'bot', m2);
+      if (p2 && p2.nextHand.length === 0) return true;
+    }
+  }
+  return false;
+}
+
 // ─── Draw anticipation ────────────────────────────────────────────────────────
 
-/**
- * Estimate the cost of being forced to draw during a chain continuation.
- *
- * When a move is a double or scores (turn continues) but we have no legal
- * play afterward, we must draw. This function estimates:
- *  - How likely are we to need to draw? (check if hand has no legal plays)
- *  - How many draws might we need? (how sparse is the pip in the boneyard)
- *  - What's the expected pip cost of drawing bad tiles?
- *
- * Returns a penalty value (positive = bad for bot).
- */
 function estimateDrawCost(
   nextHand: Tile[],
   openEnds: number[],
@@ -264,31 +310,22 @@ function estimateDrawCost(
 ): number {
   const endSet = new Set(openEnds);
   const playableAfter = nextHand.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
-
-  // If we have playable tiles, no draw risk
   if (playableAfter > 0) return 0;
 
-  // We'd need to draw. How many draws until we find a playable tile?
-  const boneyardAvailable = Math.max(0, boneyard.length - 2); // locked at 2
-  if (boneyardAvailable === 0) return 15; // completely stuck = high penalty
+  const boneyardAvailable = Math.max(0, boneyard.length - 2);
+  if (boneyardAvailable === 0) return 15;
 
-  // Count playable tiles in the boneyard
   const playableInBoneyard = boneyard
     .slice(0, boneyardAvailable)
     .filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
 
-  if (playableInBoneyard === 0) return 20; // no help in boneyard
+  if (playableInBoneyard === 0) return 20;
 
-  // Expected draws = boneyardAvailable / playableInBoneyard (geometric)
   const expectedDraws = boneyardAvailable / playableInBoneyard;
-
-  // Average pip value of a boneyard tile (we're drawing unknown tiles)
   const avgPip = boneyard.length > 0
     ? boneyard.reduce((s, t) => s + t.low + t.high, 0) / boneyard.length
     : 6;
 
-  // Cost: expected draws × average pip burden per draw
-  // (drawing is bad because it adds pips to our hand)
   return Math.min(expectedDraws * avgPip * 0.4, 25);
 }
 
@@ -304,16 +341,86 @@ interface ChainNode {
   drawCostAccum: number;
 }
 
+function dynamicChainParams(botHandSize: number, totalTiles: number): { depth: number; width: number } {
+  // Expand search in smaller/tighter states where exact ordering matters more.
+  if (botHandSize <= 6 || totalTiles <= 12) return { depth: 7, width: 5 };
+  if (botHandSize <= 8 || totalTiles <= 16) return { depth: 6, width: 4 };
+  return { depth: CHAIN_TREE_DEPTH, width: CHAIN_TREE_WIDTH };
+}
+
+function isBetterChain(a: ChainNode, b: ChainNode): boolean {
+  if (a.totalPoints !== b.totalPoints) return a.totalPoints > b.totalPoints;
+  if (a.chainLength !== b.chainLength) return a.chainLength < b.chainLength;
+  return a.drawCostAccum < b.drawCostAccum;
+}
+
 /**
- * Full chain tree search — explores branching turn sequences up to `maxDepth`
- * moves deep, keeping the top `width` continuations at each step.
- *
- * This replaces the greedy single-path simulation. It finds sequences like:
- *   "play 0|5 for 1pt → then double-0 continues → then 0|3 for 2pts"
- * even when the greedy approach would have taken a different 0|5 play instead.
- *
- * Returns the best ChainNode found (highest totalPoints, tiebreak by setup).
+ * Exact turn-chain solver for the bot's current turn.
+ * Enumerates all continuation orderings (subject to deadline) and picks the
+ * highest total turn points, which fixes suboptimal scoring order issues.
  */
+function searchExactTurnChain(
+  state: BotMatchState,
+  firstMove: Move,
+  deadlineMs: number,
+): ChainNode | null {
+  const firstPreview = previewPlayMove(state, 'bot', firstMove);
+  if (!firstPreview) return null;
+
+  const root: ChainNode = {
+    totalPoints: firstPreview.immediateScore,
+    chainLength: 1,
+    finalHand: firstPreview.nextHand,
+    finalOpenEnds: firstPreview.openEnds,
+    finalOpenSum: firstPreview.openSum,
+    finalBoard: firstPreview.nextBoard,
+    drawCostAccum: estimateDrawCost(firstPreview.nextHand, firstPreview.openEnds, state.boneyard),
+  };
+
+  if (!firstPreview.turnContinues) return root;
+  let best: ChainNode = root;
+
+  const dfs = (node: ChainNode): void => {
+    if (performance.now() > deadlineMs) return;
+
+    const tempState = cloneState(state, {
+      board: node.finalBoard,
+      players: {
+        ...state.players,
+        bot: { ...state.players.bot, hand: node.finalHand },
+      },
+      currentPlayer: 'bot',
+    });
+    const continuations = getLegalMoves(tempState, 'bot').filter((m) => m.type === 'play');
+    if (continuations.length === 0) {
+      if (isBetterChain(node, best)) best = node;
+      return;
+    }
+
+    for (const m of continuations) {
+      if (performance.now() > deadlineMs) return;
+      const p = previewPlayMove(tempState, 'bot', m);
+      if (!p) continue;
+
+      const child: ChainNode = {
+        totalPoints: node.totalPoints + p.immediateScore,
+        chainLength: node.chainLength + 1,
+        finalHand: p.nextHand,
+        finalOpenEnds: p.openEnds,
+        finalOpenSum: p.openSum,
+        finalBoard: p.nextBoard,
+        drawCostAccum: node.drawCostAccum + estimateDrawCost(p.nextHand, p.openEnds, state.boneyard),
+      };
+
+      if (p.turnContinues) dfs(child);
+      else if (isBetterChain(child, best)) best = child;
+    }
+  };
+
+  dfs(root);
+  return best;
+}
+
 function searchChainTree(
   state: BotMatchState,
   firstMove: Move,
@@ -341,7 +448,6 @@ function searchChainTree(
 
   if (!firstPreview.turnContinues) return root;
 
-  // BFS/beam: expand nodes level by level, keep top `width` at each level
   let frontier: ChainNode[] = [root];
   let bestLeaf: ChainNode = root;
 
@@ -360,12 +466,10 @@ function searchChainTree(
 
       const continuations = getLegalMoves(tempState, 'bot').filter((m) => m.type === 'play');
       if (continuations.length === 0) {
-        // Turn ends here (no legal plays left in chain)
         if (node.totalPoints > bestLeaf.totalPoints) bestLeaf = node;
         continue;
       }
 
-      // Score each continuation to select top `width`
       const scored = continuations
         .map((m) => {
           const p = previewPlayMove(tempState, 'bot', m);
@@ -395,7 +499,6 @@ function searchChainTree(
         if (p.turnContinues) {
           nextFrontier.push(child);
         } else {
-          // Chain ends here
           if (child.totalPoints > bestLeaf.totalPoints) bestLeaf = child;
         }
       }
@@ -403,17 +506,14 @@ function searchChainTree(
 
     if (nextFrontier.length === 0) break;
 
-    // Keep the most promising frontier nodes (by points scored so far)
     nextFrontier.sort((a, b) => b.totalPoints - a.totalPoints);
     frontier = nextFrontier.slice(0, width * 2);
 
-    // Track best leaf seen so far
     for (const node of frontier) {
       if (node.totalPoints > bestLeaf.totalPoints) bestLeaf = node;
     }
   }
 
-  // Also check all remaining frontier nodes as potential leaves
   for (const node of frontier) {
     if (node.totalPoints > bestLeaf.totalPoints) bestLeaf = node;
   }
@@ -449,7 +549,537 @@ function branchPenalty(
   return 0;
 }
 
+/**
+ * Aggressively discourage early non-scoring doubles unless strongly supported.
+ * This prevents opening the board for the opponent in the first phase of a hand.
+ */
+function earlyDoubleExposurePenalty(
+  move: Move,
+  state: BotMatchState,
+  holdWeights: Map<string, number>,
+  immediateScore: number,
+): number {
+  if (!move.tile || !isDoubleTile(move.tile)) return 0;
+
+  const tilesOnBoard = boardTileCount(state.board);
+  const earlyPhase = tilesOnBoard <= 8;
+  if (!earlyPhase) return 0;
+  if (immediateScore > 0) return 0; // scoring doubles are still fine
+
+  const pip = move.tile.low;
+  const followups = state.players.bot.hand.filter(
+    (t) => !isDoubleTile(t) && (t.low === pip || t.high === pip),
+  ).length;
+  const oppWeightOnPip = Array.from(holdWeights.entries())
+    .filter(([k]) => {
+      const [lo, hi] = k.split('|').map((n) => parseInt(n, 10));
+      return lo === pip || hi === pip;
+    })
+    .reduce((sum, [, w]) => sum + w, 0);
+
+  // Heavy baseline penalty in opening, softened if we have strong control.
+  let penalty = 55 + oppWeightOnPip * 6;
+  if (followups >= 3) penalty -= 25;
+  else if (followups >= 2) penalty -= 12;
+
+  return Math.max(0, penalty);
+}
+
+interface StrategicEval {
+  score: number;
+  immediateScore: number;
+  playableNext: number;
+  endControlScore: number;
+  endDangerPenalty: number;
+  pressureScore: number;
+  trapPenalty: number;
+  doubleScore: number;
+  refillRiskScore: number;
+  expectedDrawsIfForced: number;
+  goldenBonus: number;
+  safeFinishBonus: number;
+  exitBonus: number;
+  dominantEnd: number | null;
+  dominantEndSupport: number;
+  orphanTiles: number;
+}
+
+interface HardScoredCandidate {
+  move: Move;
+  strategic: StrategicEval;
+  strategicScore: number;
+  mcScore: number;
+  score: number;
+  breakdown: BotChoice['breakdown'];
+}
+
+function explainStrategicMove(
+  move: Move,
+  strategic: StrategicEval | null,
+): string {
+  if (!move.tile || !strategic) return 'Selected best available move.';
+  const tile = `${move.tile.low}-${move.tile.high}`;
+  const bits: string[] = [];
+  if (strategic.dominantEnd !== null) {
+    bits.push(`kept end on ${strategic.dominantEnd} (${strategic.dominantEndSupport} support)`);
+  }
+  if (strategic.orphanTiles === 0) {
+    bits.push('avoided orphan tiles');
+  } else {
+    bits.push(`left ${strategic.orphanTiles} orphan tile${strategic.orphanTiles === 1 ? '' : 's'}`);
+  }
+  if (isDoubleTile(move.tile)) {
+    bits.push(
+      strategic.doubleScore >= 0 ? 'double is supported' : 'double only accepted due to higher overall value',
+    );
+  }
+  if (strategic.pressureScore > 8) bits.push('kept pressure on inferred missing pips');
+  if (strategic.endDangerPenalty > 6) {
+    if (strategic.dominantEndSupport >= 3) {
+      bits.push('kept an easy end because we are long that pip');
+    } else {
+      bits.push('avoided leaving an easy end (many matching tiles remain unseen)');
+    }
+  }
+  if (strategic.expectedDrawsIfForced > 0) {
+    if (strategic.refillRiskScore >= 0) bits.push('forced a late draw sequence');
+    else bits.push('avoided risky early refill line');
+  }
+  if (strategic.goldenBonus > 0) bits.push('recognized golden finish pressure');
+  if (strategic.safeFinishBonus > 0) bits.push('kept a deterministic outlet finish');
+  if (strategic.exitBonus > 0) bits.push('detected near-exit line');
+  return `Played ${tile} to ${bits.join(' and ')}.`;
+}
+
+function computeMissingWeightByPip(state: BotMatchState): Map<number, number> {
+  const out = new Map<number, number>();
+  const nowTurn = state.turnIndex ?? 0;
+  const nowHand = state.handNumber ?? 0;
+
+  for (const p of state.opponentKnownMissing ?? []) {
+    out.set(p, Math.max(out.get(p) ?? 0, 5));
+  }
+  for (const p of state.opponentPassedOnEnds ?? []) {
+    out.set(p, Math.max(out.get(p) ?? 0, 4));
+  }
+  for (const ev of state.opponentMissingEvidence ?? []) {
+    const handDelta = Math.max(0, nowHand - ev.handNumber);
+    const turnDelta = Math.max(0, nowTurn - ev.turnIndex);
+    const age = handDelta * 12 + turnDelta;
+    const weight = Math.max(2, 18 - age * 1.5);
+    out.set(ev.pip, Math.max(out.get(ev.pip) ?? 0, weight));
+  }
+  return out;
+}
+
+function countTilesMatchingAny(tiles: Tile[], ends: number[]): number {
+  const endSet = new Set(ends);
+  return tiles.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
+}
+
+function countTilesMatchingPip(tiles: Tile[], pip: number): number {
+  return tiles.filter((t) => t.low === pip || t.high === pip).length;
+}
+
+function expectedDrawsApprox(endsAfter: number[], unseenPool: Tile[]): number {
+  if (endsAfter.length === 0 || unseenPool.length === 0) return 1;
+  const unseenMatchCount = countTilesMatchingAny(unseenPool, endsAfter);
+  const unseenTotal = unseenPool.length;
+  const ratio = (unseenTotal / Math.max(1, unseenMatchCount)) * 0.5;
+  return Math.max(1, Math.min(6, ratio));
+}
+
+function countValueOccurrences(values: number[]): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const v of values) m.set(v, (m.get(v) ?? 0) + 1);
+  return m;
+}
+
+function hasHubWithTwoOpenBranchesOnPip(
+  board: BotMatchState['board'],
+  pip: number,
+): boolean {
+  if (!board) return false;
+  for (const hub of board.hubDoubles ?? []) {
+    let count = 0;
+    for (const branch of hub.branches ?? []) {
+      if (!branch) continue;
+      if (branch.openEnd === pip) count += 1;
+    }
+    if (count >= 2) return true;
+  }
+  return false;
+}
+
+function hasNearSafeFinishSetup(
+  state: BotMatchState,
+  handAfter: Tile[],
+): boolean {
+  if (handAfter.length !== 2) return false;
+  const pseudo = cloneState(state, {
+    players: { ...state.players, bot: { ...state.players.bot, hand: handAfter } },
+    board: state.board,
+    currentPlayer: 'bot',
+    handOpen: true,
+  });
+  const moves = getLegalMoves(pseudo, 'bot').filter((m) => m.type === 'play');
+  for (const m of moves) {
+    const p = previewPlayMove(pseudo, 'bot', m);
+    if (!p || p.nextHand.length !== 1) continue;
+    const lastTile = p.nextHand[0];
+    if (p.openEnds.some((e) => lastTile.low === e || lastTile.high === e)) return true;
+  }
+  return false;
+}
+
+function evaluateStrategicMove(
+  state: BotMatchState,
+  move: Move,
+  holdWeights: Map<string, number>,
+): StrategicEval {
+  const p = previewPlayMove(state, 'bot', move);
+  if (!p || !move.tile) {
+    return {
+      score: -Infinity,
+      immediateScore: 0,
+      playableNext: 0,
+      endControlScore: 0,
+      endDangerPenalty: 0,
+      pressureScore: 0,
+      trapPenalty: 0,
+      doubleScore: 0,
+      refillRiskScore: 0,
+      expectedDrawsIfForced: 0,
+      goldenBonus: 0,
+      safeFinishBonus: 0,
+      exitBonus: 0,
+      dominantEnd: null,
+      dominantEndSupport: 0,
+      orphanTiles: 0,
+    };
+  }
+
+  const handAfter = p.nextHand;
+  const endsAfter = p.openEnds;
+  const totalTilesAfter = handAfter.length + state.players.you.hand.length;
+  const phase = phaseFor(handAfter.length, totalTilesAfter);
+  const freq = pipTileFrequency(handAfter);
+  const endsBefore = inferOpenEndsFromState(state);
+  const missingWeights = computeMissingWeightByPip(state);
+  const unseenPool = buildUnseenPool(state);
+
+  const endSupportWeight = phase === 'early' ? 7 : phase === 'mid' ? 5 : 3;
+  const endWeakPenalty = phase === 'early' ? 8 : phase === 'mid' ? 6 : 3;
+
+  const endControlScore =
+    endsAfter.reduce((sum, e) => sum + endSupportWeight * (freq[e] ?? 0), 0) -
+    endsAfter.reduce((sum, e) => sum + endWeakPenalty * Math.max(0, 2 - (freq[e] ?? 0)), 0);
+  let dominantEnd: number | null = null;
+  let dominantEndSupport = -1;
+  for (const e of endsAfter) {
+    const s = freq[e] ?? 0;
+    if (s > dominantEndSupport) {
+      dominantEndSupport = s;
+      dominantEnd = e;
+    }
+  }
+
+  const dangerWeight = 2.0;
+  let endDangerPenalty = endsAfter.reduce((sum, e) => {
+    const availableMatches = countTilesMatchingPip(unseenPool, e);
+    const support = freq[e] ?? 0;
+    return sum + (dangerWeight * availableMatches) / (1 + 0.6 * support);
+  }, 0);
+
+  const pressureBonus = endsAfter.reduce((sum, e) => sum + (missingWeights.get(e) ?? 0), 0);
+  const pressurePenalty = endsBefore
+    .filter((e) => !endsAfter.includes(e))
+    .reduce((sum, e) => sum + (missingWeights.get(e) ?? 0), 0);
+  const pressureScore = pressureBonus - pressurePenalty;
+
+  const playableNext = countPlayableTiles(handAfter, endsAfter);
+  const orphanTiles = countOrphanTiles(handAfter, endsAfter);
+  const bottleneck = playableNext <= 1 ? 1 : 0;
+  const targetPlayable = phase === 'early' ? 3 : phase === 'mid' ? 2 : 1;
+
+  const orphanPenalty = phase === 'early' ? 18 : phase === 'mid' ? 15 : 9;
+  const bottleneckPenalty = phase === 'early' ? 36 : phase === 'mid' ? 26 : 12;
+  const lowMobilityPenalty = phase === 'early' ? 10 : phase === 'mid' ? 8 : 4;
+
+  const trapPenalty =
+    orphanPenalty * orphanTiles +
+    bottleneckPenalty * bottleneck +
+    lowMobilityPenalty * Math.max(0, targetPlayable - playableNext);
+
+  const followUps = isDoubleTile(move.tile)
+    ? handAfter.filter((t) => t.low === move.tile!.low || t.high === move.tile!.low).length
+    : 0;
+  const oppMobilityAfter = estimateOpponentMobilityApprox(endsAfter, holdWeights);
+  const oppMobilityBefore = estimateOpponentMobilityApprox(inferOpenEndsFromState(state), holdWeights);
+  const oppDelta = Math.max(0, oppMobilityAfter - oppMobilityBefore);
+
+  let doubleScore = 0;
+  if (isDoubleTile(move.tile)) {
+    // Strong discipline rule: early unsupported non-scoring doubles are
+    // almost always bad unless forced.
+    if (phase === 'early' && followUps === 0 && p.immediateScore === 0) {
+      doubleScore -= 220;
+    }
+    if (phase === 'early' && followUps === 0) doubleScore -= 65;
+    doubleScore += Math.min(2, followUps) * 14;
+    if (followUps === 0) doubleScore -= 26;
+    if (oppDelta > Math.max(0, playableNext)) {
+      doubleScore -= 20 + (oppDelta - Math.max(0, playableNext)) * 8;
+    }
+  }
+
+  // Keep prior double guardrails; they still help in branch-rich boards.
+  const branchPen = branchPenalty(move, state, holdWeights);
+  const earlyDoublePen = earlyDoubleExposurePenalty(move, state, holdWeights, p.immediateScore);
+  doubleScore -= branchPen + earlyDoublePen;
+
+  let exitBonus = 0;
+  if (handAfter.length <= 3) {
+    const after = cloneState(state, {
+      board: p.nextBoard,
+      players: { ...state.players, bot: { ...state.players.bot, hand: p.nextHand } },
+      currentPlayer: p.turnContinues ? 'bot' : 'you',
+    });
+    if (hasExitInTwoMoves(after)) exitBonus += 140;
+  }
+
+  let refillRiskScore = 0;
+  let expectedDrawsIfForced = 0;
+  let forcedDraw = false;
+  const afterUs = simulateAfterPlay(state, 'bot', move);
+  if (afterUs && !afterUs.handOver && afterUs.currentPlayer === 'you') {
+    const oppMoves = getLegalMoves(afterUs, 'you').filter((m) => m.type === 'play');
+    if (oppMoves.length === 0 && afterUs.boneyard.length > 2) {
+      forcedDraw = true;
+      expectedDrawsIfForced = expectedDrawsApprox(endsAfter, unseenPool);
+      if (phase === 'early') {
+        // Early forced draws often refill the opponent into chains; penalize very heavily.
+        refillRiskScore -= 220 + expectedDrawsIfForced * 25;
+      } else if (phase === 'mid') {
+        refillRiskScore -= expectedDrawsIfForced * 4;
+      } else {
+        refillRiskScore += expectedDrawsIfForced * 8;
+      }
+    }
+  }
+
+  const outletTiles = handAfter.filter((t) => endsAfter.some((e) => t.low === e || t.high === e));
+  const outletCount = outletTiles.length;
+  let goldenBonus = 0;
+  let safeFinishBonus = 0;
+
+  if (forcedDraw && handAfter.length <= 2 && outletCount >= 1) {
+    goldenBonus = 90;
+    const endFreq = countValueOccurrences(endsAfter);
+    const outletPips = new Set<number>();
+    for (const t of outletTiles) {
+      if (endsAfter.includes(t.low)) outletPips.add(t.low);
+      if (endsAfter.includes(t.high)) outletPips.add(t.high);
+    }
+    const hasRepeatedOutletEnd = Array.from(outletPips).some((pip) => (endFreq.get(pip) ?? 0) > 1);
+    if (hasRepeatedOutletEnd) goldenBonus += 30;
+    const hasHubOutlet = Array.from(outletPips).some((pip) => hasHubWithTwoOpenBranchesOnPip(p.nextBoard, pip));
+    if (hasHubOutlet) goldenBonus += 30;
+    const drawable = Math.max(0, (afterUs?.boneyard.length ?? state.boneyard.length) - 2);
+    if (drawable <= 6) goldenBonus += 20;
+  }
+
+  if (handAfter.length === 1 && outletCount >= 1) {
+    safeFinishBonus += 140;
+  } else if (forcedDraw && handAfter.length === 2 && hasNearSafeFinishSetup(
+    cloneState(state, { board: p.nextBoard }),
+    handAfter,
+  )) {
+    safeFinishBonus += 90;
+  }
+
+  if (goldenBonus > 0) {
+    refillRiskScore *= 0.25;
+  }
+  if (goldenBonus > 0 || safeFinishBonus > 0) {
+    endDangerPenalty *= 0.25;
+  }
+
+  const unloadTieBreaker = (move.tile.low + move.tile.high) * 0.5;
+  const score =
+    p.immediateScore * 34 +
+    endControlScore -
+    endDangerPenalty -
+    trapPenalty +
+    pressureScore +
+    doubleScore +
+    refillRiskScore +
+    goldenBonus +
+    safeFinishBonus +
+    playableNext * 3 +
+    unloadTieBreaker +
+    exitBonus;
+
+  return {
+    score,
+    immediateScore: p.immediateScore,
+    playableNext,
+    endControlScore,
+    endDangerPenalty,
+    pressureScore,
+    trapPenalty,
+    doubleScore,
+    refillRiskScore,
+    expectedDrawsIfForced,
+    goldenBonus,
+    safeFinishBonus,
+    exitBonus,
+    dominantEnd,
+    dominantEndSupport: Math.max(0, dominantEndSupport),
+    orphanTiles,
+  };
+}
+
+function nextPlayer(player: 'bot' | 'you'): 'bot' | 'you' {
+  return player === 'bot' ? 'you' : 'bot';
+}
+
+function simulateAfterPlay(
+  state: BotMatchState,
+  player: 'bot' | 'you',
+  move: Move,
+): BotMatchState | null {
+  const p = previewPlayMove(state, player, move);
+  if (!p) return null;
+  const handAfter = p.nextHand;
+  const players = {
+    ...state.players,
+    [player]: {
+      ...state.players[player],
+      hand: handAfter,
+      score: state.players[player].score + p.immediateScore,
+    },
+  };
+  return cloneState(state, {
+    board: p.nextBoard,
+    players,
+    handOpen: true,
+    currentPlayer: handAfter.length === 0 ? nextPlayer(player) : (p.turnContinues ? player : nextPlayer(player)),
+    handOver: handAfter.length === 0 ? true : state.handOver,
+  });
+}
+
+function twoPlyWorstCaseValue(
+  state: BotMatchState,
+  ourMove: Move,
+  holdWeights: Map<string, number>,
+): number {
+  const afterUs = simulateAfterPlay(state, 'bot', ourMove);
+  if (!afterUs) return -Infinity;
+  if (afterUs.handOver || afterUs.players.bot.hand.length === 0) return 1_000_000;
+
+  // If our turn continues, score our best immediate continuation.
+  if (afterUs.currentPlayer === 'bot') {
+    const replies = getLegalMoves(afterUs, 'bot').filter((m) => m.type === 'play');
+    if (replies.length === 0) return 120;
+    return Math.max(...replies.map((m) => evaluateStrategicMove(afterUs, m, holdWeights).score));
+  }
+
+  const oppMoves = getLegalMoves(afterUs, 'you').filter((m) => m.type === 'play');
+  if (oppMoves.length === 0) {
+    // Phase C: forcing a draw sequence is not always good.
+    // Early: can refill opponent into chains. Late: strong tempo pressure.
+    if (afterUs.boneyard.length > 2) {
+      const ends = inferOpenEndsFromState(afterUs);
+      const draws = expectedDrawsApprox(ends, buildUnseenPool(afterUs));
+      const totalTiles = afterUs.players.bot.hand.length + afterUs.players.you.hand.length;
+      const phase = phaseFor(afterUs.players.bot.hand.length, totalTiles);
+      if (phase === 'early') return -320 - draws * 40;
+      if (phase === 'mid') return 120 - draws * 6;
+      return 260 + draws * 12;
+    }
+    return 220;
+  }
+
+  const K = Math.min(8, oppMoves.length);
+  const trimmedOpp = [...oppMoves]
+    .map((m) => {
+      const p = previewPlayMove(afterUs, 'you', m);
+      const mobility = p ? handMobility(p.nextHand, p.openEnds) : 0;
+      return { m, score: (p?.immediateScore ?? 0) * 20 + mobility * 6 };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, K)
+    .map((x) => x.m);
+
+  let worstCase = Infinity;
+  for (const r of trimmedOpp) {
+    const afterOpp = simulateAfterPlay(afterUs, 'you', r);
+    if (!afterOpp) continue;
+
+    // Opponent can keep chaining: pessimistically bad for us.
+    if (afterOpp.currentPlayer === 'you') {
+      worstCase = Math.min(worstCase, -220);
+      continue;
+    }
+
+    const ourReplies = getLegalMoves(afterOpp, 'bot').filter((m) => m.type === 'play');
+    if (ourReplies.length === 0) {
+      worstCase = Math.min(worstCase, -90);
+      continue;
+    }
+    const ourBest = Math.max(
+      ...ourReplies.map((m) => evaluateStrategicMove(afterOpp, m, holdWeights).score),
+    );
+    worstCase = Math.min(worstCase, ourBest);
+  }
+
+  return Number.isFinite(worstCase) ? worstCase : -180;
+}
+
 // ─── Endgame minimax ──────────────────────────────────────────────────────────
+
+/**
+ * FIX v3.1: Properly handles pass turns.
+ *
+ * Old bug: when moves.length === 0, it recursed with `!isBot` but never
+ * updated `state.currentPlayer`, causing the engine's getLegalMoves to keep
+ * returning empty (wrong player) — infinite-ish spiral → timeout → random fallback.
+ *
+ * v3.2 fix: When no play moves exist:
+ *   - If boneyard has tiles → simulate drawing until playable (draw modeling)
+ *   - If boneyard empty → pass (flip currentPlayer explicitly)
+ *   - passDepth >= 2 hard-stop when both players are stuck
+ *
+ * Draw modeling matters because in Racehorse, a player with a double or scoring
+ * move MUST continue their turn and draw if they have no legal play. Without this,
+ * minimax misjudges late states where the player is forced to draw bad tiles.
+ */
+const BONEYARD_LOCKED = 2; // mirrors botEngine constant
+
+function simulateDrawUntilPlayable(
+  state: BotMatchState,
+  player: 'bot' | 'you',
+): BotMatchState {
+  let current = state;
+  // Draw from boneyard until we find a playable tile or boneyard locks
+  while (current.boneyard.length > BONEYARD_LOCKED) {
+    const [drawn, ...rest] = current.boneyard;
+    const newHand = [...current.players[player].hand, drawn];
+    current = cloneState(current, {
+      boneyard: rest,
+      players: {
+        ...current.players,
+        [player]: { ...current.players[player], hand: newHand },
+      },
+    });
+    // Check if newly drawn tile is playable
+    const hasMoves = getLegalMoves(cloneState(current, { currentPlayer: player }), player)
+      .some((m) => m.type === 'play');
+    if (hasMoves) break;
+  }
+  return current;
+}
 
 function minimax(
   state: BotMatchState,
@@ -458,7 +1088,17 @@ function minimax(
   alpha: number,
   beta: number,
   pointsAccum: number,
+  passDepth: number = 0,
+  deadlineMs: number = Infinity,  // wall-clock deadline — early-return static eval if exceeded
 ): number {
+  // Deadline check first — even before terminal checks, so a single deep
+  // candidate can't blow the budget regardless of tree shape
+  if (performance.now() > deadlineMs) {
+    const botPips = pipSum(state.players.bot.hand);
+    const youPips = pipSum(state.players.you.hand);
+    return pointsAccum * 100 + (youPips - botPips);
+  }
+
   if (state.handOver || state.gameOver || depth === 0) {
     const botPips = pipSum(state.players.bot.hand);
     const youPips = pipSum(state.players.you.hand);
@@ -467,7 +1107,26 @@ function minimax(
 
   const player = isBot ? 'bot' : 'you';
   const moves = getLegalMoves(state, player).filter((m) => m.type === 'play');
-  if (moves.length === 0) return minimax(state, depth - 1, !isBot, alpha, beta, pointsAccum);
+
+  if (moves.length === 0) {
+    // Both stuck → terminate
+    if (passDepth >= 2) {
+      const botPips = pipSum(state.players.bot.hand);
+      const youPips = pipSum(state.players.you.hand);
+      return pointsAccum * 100 + (youPips - botPips);
+    }
+
+    // Boneyard has tiles → model drawing (adds pip burden, may unlock play)
+    if (state.boneyard.length > BONEYARD_LOCKED) {
+      const drawnState = simulateDrawUntilPlayable(state, player);
+      const afterDrawState = cloneState(drawnState, { currentPlayer: player });
+      return minimax(afterDrawState, depth - 1, isBot, alpha, beta, pointsAccum, passDepth, deadlineMs);
+    }
+
+    // Boneyard locked → genuine pass, flip player
+    const passedState = cloneState(state, { currentPlayer: isBot ? 'you' : 'bot' });
+    return minimax(passedState, depth - 1, !isBot, alpha, beta, pointsAccum, passDepth + 1, deadlineMs);
+  }
 
   const orderedMoves = [...moves].sort((a, b) => {
     const pa = previewPlayMove(state, player, a);
@@ -485,7 +1144,7 @@ function minimax(
         currentPlayer: p.turnContinues ? 'bot' : 'you',
         players: { ...state.players, bot: { ...state.players.bot, hand: p.nextHand } },
       });
-      const val = minimax(next, depth - 1, p.turnContinues ? true : false, alpha, beta, pointsAccum + p.immediateScore);
+      const val = minimax(next, depth - 1, p.turnContinues, alpha, beta, pointsAccum + p.immediateScore, 0, deadlineMs);
       best = Math.max(best, val);
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
@@ -501,7 +1160,7 @@ function minimax(
         currentPlayer: p.turnContinues ? 'you' : 'bot',
         players: { ...state.players, you: { ...state.players.you, hand: p.nextHand } },
       });
-      const val = minimax(next, depth - 1, p.turnContinues ? false : true, alpha, beta, pointsAccum - p.immediateScore);
+      const val = minimax(next, depth - 1, p.turnContinues ? false : true, alpha, beta, pointsAccum - p.immediateScore, 0, deadlineMs);
       best = Math.min(best, val);
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
@@ -512,19 +1171,6 @@ function minimax(
 
 // ─── Monte Carlo move evaluation ──────────────────────────────────────────────
 
-/**
- * Evaluate a candidate move using Monte Carlo opponent hand sampling.
- *
- * Instead of using probability-weighted heuristics to estimate the opponent's
- * threat, we:
- *  1. Sample MC_SAMPLES plausible opponent hands from the unseen pool
- *  2. For each sampled hand, compute the exact threat they pose after our move
- *  3. Average the results
- *
- * This gives a much more accurate estimate of blocking value because it
- * accounts for tile combinations the opponent might hold, not just individual
- * pip probabilities.
- */
 function mcEvaluateMove(
   move: Move,
   state: BotMatchState,
@@ -535,30 +1181,29 @@ function mcEvaluateMove(
   const youScore = state.players.you.score;
   const boneyardSize = state.boneyard.length;
 
-  // Instant win check
   const preview = previewPlayMove(state, 'bot', move);
   if (!preview) return -Infinity;
   if (botScore + preview.immediateScore >= WIN_TARGET) return 1_000_000;
 
-  // Chain tree search for this move
-  const chain = searchChainTree(state, move);
+  const totalTiles = state.players.bot.hand.length + state.players.you.hand.length;
+  const { depth, width } = dynamicChainParams(state.players.bot.hand.length, totalTiles);
+  const chain = searchChainTree(state, move, depth, width);
   if (!chain) return -Infinity;
 
   const { totalPoints, chainLength, finalHand, finalOpenEnds, finalOpenSum, drawCostAccum } = chain;
 
-  // Self position after chain
   const selfSetup = selfOpportunity(finalOpenEnds, finalOpenSum, finalHand);
   const mobilityAfter = handMobility(finalHand, finalOpenEnds);
   const finalEndSet = new Set(finalOpenEnds);
   const strandedDoubles = finalHand.filter((t) => isDoubleTile(t) && !finalEndSet.has(t.low)).length;
   const finalPips = pipSum(finalHand);
   const isLateGame = boneyardSize <= 6 || finalHand.length <= 3;
-  const pipBurdenPenalty = isLateGame ? finalPips * 0.8 : finalPips * 0.1;
+  // FIX: increased late-game pip burden from 0.8 → 1.5 so bot aggressively
+  // avoids holding heavy tiles when boneyard is thin
+  const pipBurdenPenalty = isLateGame ? finalPips * 1.5 : finalPips * 0.1;
 
-  // Branch discipline
   const branchPen = branchPenalty(move, state, holdWeights);
 
-  // Score proximity multipliers
   const botProximity = botScore / WIN_TARGET;
   const youProximity = youScore / WIN_TARGET;
   const aggressionBoost = botProximity >= 0.85 ? 1.4 : botProximity >= 0.7 ? 1.2 : 1.0;
@@ -567,8 +1212,6 @@ function mcEvaluateMove(
     youProximity >= 0.7  ? 1.8 :
     youProximity >= 0.5  ? 1.2 : 1.0;
 
-  // Monte Carlo threat estimation
-  // Sample opponent hands and compute exact threat for each
   const youHandSize = state.players.you.hand.length;
   const sampledHands = sampleOpponentHands(pool, holdWeights, youHandSize, MC_SAMPLES);
 
@@ -618,14 +1261,67 @@ function weightedSelect<T extends { score: number }>(scored: T[]): T {
   return top[0];
 }
 
+// ─── Endgame depth scaling ────────────────────────────────────────────────────
+
+/**
+ * FIX v3.2: Conservative depth scaling, capped at 12 to prevent UI hitching.
+ * Client-side JS has no worker thread here, so deep minimax blocks the render loop.
+ * Start here and tune up if endgame still feels weak — don't start high and tune down.
+ */
+function endgameDepth(totalTiles: number): number {
+  if (totalTiles <= 2) return 12;
+  if (totalTiles <= 4) return 10;
+  if (totalTiles <= 6) return 8;
+  return 6; // 7-8 tiles
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function chooseBotMove(
   state: BotMatchState,
   difficulty: BotDifficulty = 'hard',
 ): BotChoice | null {
+  const t0 = performance.now();
+  const isDevRuntime = Boolean((import.meta as any)?.env?.DEV);
+
+  // Hoisted before candidates so timing log is consistent even on early exit
+  const totalTilesForLog = state.players.bot.hand.length + state.players.you.hand.length;
+
+  // Typed overloads so callers are type-safe without assertions.
+  function done(result: null, label?: string): null;
+  function done(result: BotChoice, label?: string): BotChoice;
+  function done(result: BotChoice | null, label?: string): BotChoice | null {
+    if (isDevRuntime) {
+      const ms = (performance.now() - t0).toFixed(1);
+      console.debug(`[Fritz] chooseBotMove (${difficulty}, ${totalTilesForLog} tiles${label ? ', ' + label : ''}): ${ms}ms`);
+    }
+    return result;
+  }
+
   const candidates = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return done(null, 'no-moves');
+
+  // Greedy fallback — used when minimax budget is exceeded.
+  // Fast O(n) score-then-unload; not smart but never stalls the UI.
+  function greedyFallback(label: string): BotChoice {
+    const best = candidates
+      .map((m) => {
+        const p = previewPlayMove(state, 'bot', m);
+        return {
+          move: m,
+          score: (p?.immediateScore ?? 0) * 60 + (m.tile ? m.tile.low + m.tile.high : 0) * 0.5,
+          breakdown: {
+            immediate: p?.immediateScore ?? 0,
+            doubleBias: m.tile && isDoubleTile(m.tile) ? 1 : 0,
+            mobility: 0, denial: 0,
+            unload: (m.tile?.low ?? 0) + (m.tile?.high ?? 0),
+            replyRisk: 0,
+          },
+        };
+      })
+      .sort((a, b) => b.score - a.score)[0];
+    return done(best, label)
+  }
 
   // ── Casual ───────────────────────────────────────────────────────────────
   if (difficulty === 'casual') {
@@ -638,9 +1334,10 @@ export function chooseBotMove(
         return sb - sa;
       })[0];
     if (!best) return null;
-    return {
+    return done({
       move: best.m,
       score: best.p!.immediateScore,
+      explanation: `Played ${best.m.tile?.low}-${best.m.tile?.high} for immediate value.`,
       breakdown: {
         immediate: best.p!.immediateScore,
         doubleBias: best.m.tile && isDoubleTile(best.m.tile) ? 1 : 0,
@@ -648,7 +1345,7 @@ export function chooseBotMove(
         unload: (best.m.tile?.low ?? 0) + (best.m.tile?.high ?? 0),
         replyRisk: 0,
       },
-    };
+    }, 'casual')
   }
 
   // ── Standard ─────────────────────────────────────────────────────────────
@@ -684,21 +1381,32 @@ export function chooseBotMove(
 
     scored.sort((a, b) => b.score - a.score);
     if (!scored[0]) return null;
-    return { move: scored[0].move, score: scored[0].score, breakdown: scored[0].breakdown };
+    return done({ move: scored[0].move, score: scored[0].score, breakdown: scored[0].breakdown }, 'standard')
   }
 
   // ── Hard ─────────────────────────────────────────────────────────────────
   const pool = buildUnseenPool(state);
   const missing = inferMissingPips(state);
   const weights = opponentHoldWeights(pool, missing);
-  const totalTiles = state.players.bot.hand.length + state.players.you.hand.length;
+  const totalTiles = totalTilesForLog;
 
-  // Late game: deep exact minimax
-  if (totalTiles <= 6) {
+  // FIX v3.3: Endgame minimax threshold conservatively set at 8 tiles.
+  // MC/chain-tree is noisy on tiny hands — minimax is faster and more accurate here.
+  // Raise to 10 if endgame still feels weak after playtesting.
+  if (totalTiles <= ENDGAME_TILE_THRESHOLD) {
     let bestMove = candidates[0];
     let bestVal = -Infinity;
+    const depth = endgameDepth(totalTiles);
+    const MINIMAX_BUDGET_MS = 150; // hard wall — fall back to greedy if exceeded
+    const deadlineMs = performance.now() + MINIMAX_BUDGET_MS;
 
     for (const move of candidates) {
+      // Outer budget check — skip remaining candidates if time is up
+      if (performance.now() > deadlineMs) {
+        if (isDevRuntime) console.warn(`[Fritz] minimax budget exceeded, using best-so-far`);
+        break;
+      }
+
       const p = previewPlayMove(state, 'bot', move);
       if (!p) continue;
       const next = cloneState(state, {
@@ -706,15 +1414,20 @@ export function chooseBotMove(
         currentPlayer: p.turnContinues ? 'bot' : 'you',
         players: { ...state.players, bot: { ...state.players.bot, hand: p.nextHand } },
       });
-      const depth = totalTiles <= 4 ? 14 : 10;
-      const val = p.immediateScore * 100 + minimax(next, depth, p.turnContinues, -Infinity, Infinity, p.immediateScore);
+      // deadlineMs also passed into minimax so any single deep branch can't overrun
+      const val = p.immediateScore * 100 + minimax(next, depth, p.turnContinues, -Infinity, Infinity, p.immediateScore, 0, deadlineMs);
       if (val > bestVal) { bestVal = val; bestMove = move; }
     }
 
+    // If we never improved beyond the initial candidate (minimax returned -Infinity for all),
+    // fall back to greedy rather than returning a garbage result
+    if (bestVal === -Infinity) return greedyFallback('minimax-no-result');
+
     const bp = previewPlayMove(state, 'bot', bestMove);
-    return {
+    return done({
       move: bestMove,
       score: bestVal,
+      explanation: `Played ${bestMove.tile?.low}-${bestMove.tile?.high} from endgame minimax line.`,
       breakdown: {
         immediate: bp?.immediateScore ?? 0,
         doubleBias: bestMove.tile && isDoubleTile(bestMove.tile) ? 1 : 0,
@@ -722,28 +1435,82 @@ export function chooseBotMove(
         unload: (bestMove.tile?.low ?? 0) + (bestMove.tile?.high ?? 0),
         replyRisk: 0,
       },
-    };
+    }, 'minimax')
   }
 
-  // Mid/early game: chain tree + Monte Carlo evaluation + weighted selection
-  const scored = candidates
+  // Mid/early game: strategic base score + MC + optional 2-ply worst-case.
+  const prelim: HardScoredCandidate[] = candidates
     .map((move) => {
       const p = previewPlayMove(state, 'bot', move);
+      const strategic = evaluateStrategicMove(state, move, weights);
+      const mc = mcEvaluateMove(move, state, pool, weights);
       return {
         move,
-        score: mcEvaluateMove(move, state, pool, weights),
+        strategic,
+        strategicScore: strategic.score,
+        mcScore: mc,
+        score: strategic.score + mc * 0.35,
         breakdown: {
           immediate: p?.immediateScore ?? 0,
           doubleBias: move.tile && isDoubleTile(move.tile) ? 1 : 0,
-          mobility: p ? handMobility(p.nextHand, p.openEnds) : 0,
+          mobility: strategic.playableNext,
           denial: p ? -opponentThreat(p.openEnds, p.openSum, weights) : 0,
           unload: (move.tile?.low ?? 0) + (move.tile?.high ?? 0),
           replyRisk: p ? opponentThreat(p.openEnds, p.openSum, weights) : 0,
         },
-      };
+      } satisfies HardScoredCandidate;
     })
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.strategicScore - a.strategicScore);
 
-  const chosen = weightedSelect(scored);
-  return { move: chosen.move, score: chosen.score, breakdown: chosen.breakdown };
+  // Exact chain-order refinement for top candidates in low-to-mid tile states.
+  // This fixes common "good chain, wrong order" misses.
+  if (totalTiles <= 16 && prelim.length > 1) {
+    const exactDeadlineMs = performance.now() + 80;
+    const topN = Math.min(4, prelim.length);
+    for (let i = 0; i < topN; i++) {
+      if (performance.now() > exactDeadlineMs) break;
+      const exact = searchExactTurnChain(state, prelim[i].move, exactDeadlineMs);
+      if (!exact) continue;
+      prelim[i].strategicScore += exact.totalPoints * 22 + (exact.chainLength > 1 ? exact.chainLength * 8 : 0);
+      prelim[i].score = prelim[i].strategicScore + prelim[i].mcScore * 0.35;
+    }
+    prelim.sort((a, b) => b.strategicScore - a.strategicScore);
+  }
+
+  // Phase B: Top-N 2-ply worst-case wrapper on strategic candidates.
+  if (ENABLE_TWO_PLY_WORST_CASE && prelim.length > 1) {
+    const N = Math.min(5, prelim.length);
+    const top = prelim.slice(0, N);
+    for (const c of top) {
+      const worst = twoPlyWorstCaseValue(state, c.move, weights);
+      c.score = worst + c.strategicScore * 0.25 + c.mcScore * 0.1;
+    }
+    top.sort((a, b) => b.score - a.score);
+    // deterministic in low-tile states, otherwise slight weighted randomness.
+    const useDeterministicHard = totalTiles <= 12;
+    const chosen = useDeterministicHard ? top[0] : weightedSelect(top);
+    return done(
+      {
+        move: chosen.move,
+        score: chosen.score,
+        explanation: explainStrategicMove(chosen.move, chosen.strategic),
+        breakdown: chosen.breakdown,
+      },
+      '2ply',
+    );
+  }
+
+  // Fallback when wrapper is disabled or only one move remains.
+  prelim.sort((a, b) => b.score - a.score);
+  const useDeterministicHard = totalTiles <= 12;
+  const chosen = useDeterministicHard ? prelim[0] : weightedSelect(prelim);
+  return done(
+    {
+      move: chosen.move,
+      score: chosen.score,
+      explanation: explainStrategicMove(chosen.move, chosen.strategic),
+      breakdown: chosen.breakdown,
+    },
+    'mc',
+  )
 }

@@ -61,6 +61,12 @@ function emitWithAck<TResp>(
 
 // ─── Utilities ───────────────────────────────────────────────
 type RoomPlayer = { id: string; username: string; userId: string | null };
+type TournamentPlayer = {
+  socketId: string;
+  username: string;
+  userId?: string | null;
+  isBot?: boolean;
+};
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
@@ -107,6 +113,7 @@ function getBoardEnds(board: GameState['board']): [number, number] {
   if (!board) return [-1, -1];
   return [board.leftEnd, board.rightEnd];
 }
+
 
 function getBoardTileCount(board: GameState['board']): number {
   if (!board) return 0;
@@ -252,7 +259,7 @@ function HandView({
     const canPlay = isMyTurn && canPlayTile(tile);
     return (
       <DominoTile
-        key={`${idx}-${tile.low}-${tile.high}`}
+        key={`${tile.low}-${tile.high}`}
         tile={tile}
         size={tileSize}
         selected={isSel ?? false}
@@ -731,6 +738,8 @@ export default function App() {
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
   const [boneyardDisplayCount, setBoneyardDisplayCount] = useState<number | null>(null);
   const [drawStepMyHand, setDrawStepMyHand] = useState<Tile[] | null>(null);
+  const [drawStepActorId, setDrawStepActorId] = useState<string | null>(null);
+  const [optimisticPlayedTile, setOptimisticPlayedTile] = useState<Tile | null>(null);
   const [drawStepOpponentHandCount, setDrawStepOpponentHandCount] = useState<number | null>(null);
   const [drawSequenceActive, setDrawSequenceActive] = useState(false);
   const drawSequenceActiveRef = useRef(false);
@@ -1061,25 +1070,31 @@ export default function App() {
           hasState: Boolean(payload?.state),
         });
       }
-      setState(payload?.state ?? null);
+      const nextState = payload?.state ?? null;
+      setState(nextState);
+      setOptimisticPlayedTile((prev) => {
+        if (!prev) return null;
+        const nextHand = nextState?.players?.[youRef.current]?.hand ?? [];
+        // Keep optimistic hide until server state no longer contains the played tile.
+        return nextHand.some((t) => tileEquals(t, prev)) ? prev : null;
+      });
       setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       setCanDraw(Boolean(payload?.canDraw));
-      // If server confirms draw sequence is done, unlock immediately
-      if ((payload?.state as any)?.__drawSequenceActive === false) {
+      // Draw preview state is only valid while local draw-sequence mode is active.
+      // Server state:update payload intentionally does not include __drawSequenceActive.
+      if (!drawSequenceActiveRef.current) {
         if (drawSequenceTimeoutRef.current) {
           clearTimeout(drawSequenceTimeoutRef.current);
           drawSequenceTimeoutRef.current = null;
         }
         setDrawSequenceActiveBoth(false);
         setDrawStepMyHand(null);
-        setDrawStepOpponentHandCount(null);
-      } else if (!drawSequenceActiveRef.current) {
-        setDrawSequenceActiveBoth(false);
-        setDrawStepMyHand(null);
+        setDrawStepActorId(null);
         setDrawStepOpponentHandCount(null);
         setFlyingTiles([]);
       }
       setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
+
     };
     const onDrawStep = (payload: {
       playerId: string;
@@ -1090,6 +1105,7 @@ export default function App() {
       if (!payload) return;
       playDrawSound(isMutedRef.current);
       setDrawSequenceActiveBoth(true);
+      setDrawStepActorId(payload.playerId);
       if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
       drawSequenceTimeoutRef.current = setTimeout(() => {
         setDrawSequenceActiveBoth(false);
@@ -2151,21 +2167,25 @@ export default function App() {
     async (position: PlacementPosition) => {
       setActionError('');
       if (!socket || !joinedRoom || !selectedTile) return;
+      const tileToPlay = selectedTile;
       const selectedMove = legalMoves.find(
         (m) =>
           m.type === 'play' &&
           m.tile &&
           m.position === position &&
-          tileEquals(m.tile, selectedTile),
+          tileEquals(m.tile, tileToPlay),
       );
       emitDraggingState(false);
       setPendingUiAction('play');
+      setSelectedTile(null);
+      setOptimisticPlayedTile(tileToPlay);
+      setDrawStepMyHand(null);
       const boardEnds = getBoardEnds(state?.board ?? null);
       const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
       const validMoves = legalMoves
         .filter((m) => m.type === 'play' && m.tile)
         .map((m) => toTileTuple(m.tile as Tile));
-      const playedTile = toTileTuple(selectedTile);
+      const playedTile = toTileTuple(tileToPlay);
 
       try {
         const resp = await emitWithAck<any>(
@@ -2174,15 +2194,15 @@ export default function App() {
           joinedRoom,
           {
             type: 'MOVE',
-            move: { tile: selectedTile, position },
+            move: { tile: tileToPlay, position },
           },
         );
         if (!resp?.ok) {
           setActionError(resp?.error ?? 'Unable to play tile.');
-          setSelectedTile(null);
+          setOptimisticPlayedTile(null);
           return;
         }
-        flashLastPlayed(selectedMove?.tile ?? selectedTile);
+        flashLastPlayed(selectedMove?.tile ?? tileToPlay);
         appendMultiplayerMove({
           player: 'you',
           action: 'place',
@@ -2210,8 +2230,8 @@ export default function App() {
             handBefore,
           ),
         });
-        setSelectedTile(null);
       } catch (e) {
+        setOptimisticPlayedTile(null);
         showToast(e instanceof Error ? e.message : 'Action failed', 2000);
       } finally {
         setPendingUiAction((prev) => (prev === 'play' ? null : prev));
@@ -2224,7 +2244,12 @@ export default function App() {
   const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
   const isMyTurn = currentTurnId === you;
   const authoritativeMyHand = state?.players[you]?.hand ?? [];
-  const myHand = drawStepMyHand ?? authoritativeMyHand;
+  const handForRenderBase = drawSequenceActive && drawStepActorId === you
+    ? (drawStepMyHand ?? authoritativeMyHand)
+    : authoritativeMyHand;
+  const myHand = optimisticPlayedTile
+    ? handForRenderBase.filter((t) => !tileEquals(t, optimisticPlayedTile))
+    : handForRenderBase;
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const authoritativeOpponentTileCount =
     state && opponentId
@@ -2767,7 +2792,12 @@ export default function App() {
     );
   }
   if (appMode === 'tournament') {
-    const players = tournamentState?.players ?? [];
+    const players: TournamentPlayer[] = Array.isArray(tournamentState?.players)
+      ? tournamentState.players.filter(
+          (p: TournamentPlayer) =>
+            !(p.isBot || p.socketId?.startsWith('bot:fritz:') || p.username?.startsWith('Fritz')),
+        )
+      : [];
     const standingsRaw = (tournamentState as any)?.standings;
     const standings = Array.isArray(standingsRaw)
       ? standingsRaw
@@ -2778,7 +2808,11 @@ export default function App() {
     const matches = Array.isArray(matchesRaw) ? matchesRaw : [];
     const activeRoom = tournamentActiveRoom ?? tournamentState?.activeRoomCode ?? null;
     const activeMatchId = tournamentState?.activeMatchId ?? null;
-    const isHost = Boolean(tournamentState?.hostSocketId && socket?.id && tournamentState.hostSocketId === socket.id);
+    const isHost = Boolean(
+      socket?.id &&
+        ((tournamentState?.hostSocketId && tournamentState.hostSocketId === socket.id) ||
+          (tournamentState?.hostId && tournamentState.hostId === socket.id)),
+    );
 
     const mySocketId = socket?.id ?? null;
     const nameFor = (sid: string) =>
@@ -2820,15 +2854,34 @@ export default function App() {
     const showLobbySetup = !tournamentId || tournamentState?.status === 'lobby';
 
     const createLobby = () => {
-      if (!socket?.connected) {
+      if (!socket) {
         connect();
         return setError('Connecting to server…');
+      }
+      if (!socket.connected) {
+        connect();
+        setError('Connecting to server…');
+        const retry = () => {
+          socket.off('connect', retry);
+          socket.emit(
+            'tournament:create',
+            { username: authProfile?.username ?? 'Guest', userId: authUser?.id ?? null },
+            (resp: any) => {
+              if (!resp?.ok) return setError(resp?.error ? `Create failed: ${resp.error}` : 'Failed to create lobby.');
+              setTournamentId(resp.id);
+              setTournamentCode(resp.lobbyCode);
+              setError('');
+            },
+          );
+        };
+        socket.on('connect', retry);
+        return;
       }
       socket.emit(
         'tournament:create',
         { username: authProfile?.username ?? 'Guest', userId: authUser?.id ?? null },
         (resp: any) => {
-          if (!resp?.ok) return setError('Failed to create lobby.');
+          if (!resp?.ok) return setError(resp?.error ? `Create failed: ${resp.error}` : 'Failed to create lobby.');
           setTournamentId(resp.id);
           setTournamentCode(resp.lobbyCode);
           setError('');
@@ -2864,7 +2917,11 @@ export default function App() {
         return setError('Connecting to server…');
       }
       socket.emit('tournament:start', (resp: any) => {
-        if (!resp?.ok) return setError(resp?.error === 'need_4' ? 'Need 4+ players.' : 'Start failed.');
+        if (!resp?.ok) {
+          if (resp?.error === 'need_2') return setError('Need at least 2 players.');
+          if (resp?.error === 'need_4') return setError('Need 4+ players.');
+          return setError('Start failed.');
+        }
         setError('');
       });
     };
@@ -2920,99 +2977,165 @@ export default function App() {
 
         <div className="mode-actions tournament-mode-actions">
           {!tournamentId && (
-            <div className="tournament-grid tournament-grid-entry">
-              <button className="mode-option tournament-card tournament-card-create is-selected" onClick={createLobby}>
-                <span className="mode-option-title">Create Lobby</span>
-                <span className="mode-option-meta">Start a tournament lobby and share the code</span>
-              </button>
-              <div className="mode-option tournament-card tournament-card-join">
-                <span className="mode-option-title">Join Lobby</span>
-                <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
-                <div className="mode-join-row tournament-join-row">
-                  <input
-                    className="mode-join-input tournament-join-input"
-                    type="text"
-                    placeholder="Lobby Code"
-                    value={tournamentCode}
-                    onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
-                    maxLength={6}
-                  />
-                  <button className="mode-inline-btn tournament-join-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
-                    Join Lobby
-                  </button>
+            <div className="tournament-layout-2col">
+              <div className="tournament-col-left">
+                <button className="mode-option tournament-card tournament-card-create is-selected" onClick={createLobby}>
+                  <span className="mode-option-title">Create Lobby</span>
+                  <span className="mode-option-meta">Start a tournament lobby and share the code</span>
+                </button>
+              </div>
+              <div className="tournament-col-right">
+                <div className="mode-option tournament-card tournament-card-join">
+                  <span className="mode-option-title">Join Lobby</span>
+                  <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
+                  <div className="mode-join-row tournament-join-row">
+                    <input
+                      className="mode-join-input tournament-join-input"
+                      type="text"
+                      placeholder="Lobby Code"
+                      value={tournamentCode}
+                      onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
+                      maxLength={6}
+                    />
+                    <button className="mode-inline-btn tournament-join-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
+                      Join Lobby
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {tournamentId && tournamentState?.status !== 'running' && (
-            <div className="tournament-grid tournament-grid-waiting">
-              <button className="mode-option tournament-card tournament-card-create is-selected" onClick={createLobby}>
-                <span className="mode-option-title">Create Lobby</span>
-                <span className="mode-option-meta">Start a tournament lobby and share the code</span>
-              </button>
-              <div className="mode-option tournament-card tournament-card-join">
-                <span className="mode-option-title">Join Lobby</span>
-                <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
-                <div className="mode-join-row tournament-join-row">
-                  <input
-                    className="mode-join-input tournament-join-input"
-                    type="text"
-                    placeholder="Lobby Code"
-                    value={tournamentCode}
-                    onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
-                    maxLength={6}
-                  />
-                  <button className="mode-inline-btn tournament-join-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
-                    Join Lobby
-                  </button>
+            <div className="tournament-layout-2col">
+              <div className="tournament-col-left">
+                <div className="mode-option tournament-card tournament-card-code">
+                  <span className="mode-option-title">Lobby Code</span>
+                  <span className="mode-option-meta">Share this code to invite players</span>
+                  <div className="tournament-code-row">
+                    <div className="tournament-code-value">{tournamentCode || '------'}</div>
+                    <button
+                      className="btn text compact tournament-copy-btn"
+                      onClick={() => tournamentCode && navigator.clipboard?.writeText(String(tournamentCode))}
+                      title="Copy lobby code"
+                      disabled={!tournamentCode}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mode-option tournament-card tournament-card-players">
+                  <span className="mode-option-title">Players</span>
+                  <span className="mode-option-meta">{players.length}/4 in lobby</span>
+                  <div className="tournament-inner-list">
+                    {players.map((p) => {
+                      return (
+                        <div key={p.socketId} className="tournament-inner-row tournament-standings-row">
+                          <div className="tournament-row-main">
+                            <span className="tournament-row-name">{p.username ?? 'Player'}</span>
+                            {mySocketId && p.socketId === mySocketId && <span className="tournament-you-badge">You</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div className="mode-option tournament-card tournament-card-code">
-                <span className="mode-option-title">Lobby Code</span>
-                <span className="mode-option-meta">Share this code to invite players</span>
-                <div className="tournament-code-row">
-                  <div className="tournament-code-value">{tournamentCode || '------'}</div>
-                  <button
-                    className="btn text compact tournament-copy-btn"
-                    onClick={() => tournamentCode && navigator.clipboard?.writeText(String(tournamentCode))}
-                    title="Copy lobby code"
-                    disabled={!tournamentCode}
-                  >
-                    Copy
-                  </button>
+              <div className="tournament-col-right">
+                <div className="mode-option tournament-card tournament-card-join">
+                  <span className="mode-option-title">Join Lobby</span>
+                  <span className="mode-option-meta">Enter a lobby code to join an existing tournament</span>
+                  <div className="mode-join-row tournament-join-row">
+                    <input
+                      className="mode-join-input tournament-join-input"
+                      type="text"
+                      placeholder="Lobby Code"
+                      value={tournamentCode}
+                      onChange={(e) => setTournamentCode(e.target.value.toUpperCase())}
+                      maxLength={6}
+                    />
+                    <button className="mode-inline-btn tournament-join-btn" onClick={joinLobby} disabled={!tournamentCode.trim()}>
+                      Join Lobby
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {isHost && (
-                <button className="mode-option tournament-card tournament-card-start is-selected" onClick={start} disabled={players.length < 4}>
-                  <span className="mode-option-title">Start Tournament</span>
+                {isHost && (
+                  <button className="mode-option tournament-card tournament-card-start is-selected" onClick={start} disabled={players.length < 2}>
+                    <span className="mode-option-title">Start Tournament</span>
+                    <span className="mode-option-meta">
+                      {players.length < 2 ? 'Need at least 2 players to start' : 'Generate schedule and begin first match'}
+                    </span>
+                  </button>
+                )}
+
+                <div className="mode-option tournament-card tournament-card-status">
+                  <span className="mode-option-title">Status</span>
                   <span className="mode-option-meta">
-                    {players.length < 4 ? 'Need 4+ players to start' : 'Generate schedule and begin first match'}
+                    {yourStatus}
+                    {totalMatches ? ` • ${doneCount}/${totalMatches} complete` : ''}
                   </span>
-                </button>
-              )}
-
-              <div className="mode-option tournament-card tournament-card-status tournament-card-status-full">
-                <span className="mode-option-title">Status</span>
-                <span className="mode-option-meta">
-                  {yourStatus}
-                  {totalMatches ? ` • ${doneCount}/${totalMatches} complete` : ''}
-                </span>
-                <div className="tournament-status-row">
-                  <span className="tournament-status-key">Now Playing</span>
-                  <span className="tournament-status-value">
-                    {activeMatch ? `${nameFor(activeMatch.a)} vs ${nameFor(activeMatch.b)}` : 'Waiting…'}
-                  </span>
+                  <div className="tournament-status-row">
+                    <span className="tournament-status-key">Now Playing</span>
+                    <span className="tournament-status-value">
+                      {activeMatch ? `${nameFor(activeMatch.a)} vs ${nameFor(activeMatch.b)}` : 'Waiting…'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {tournamentId && tournamentState?.status === 'running' && (
-            <div className="tournament-grid tournament-grid-running">
-              <div className="tournament-running-top">
+            <div className="tournament-layout-2col">
+              <div className="tournament-col-left">
+                <div className="mode-option tournament-card tournament-card-standings">
+                  <span className="mode-option-title">Standings</span>
+                  <span className="mode-option-meta">Wins · point diff</span>
+                  <div className="tournament-inner-list">
+                    {standings.map((st: any, idx: number) => {
+                      const diff = (st.pointsFor ?? 0) - (st.pointsAgainst ?? 0);
+                      const me = Boolean(mySocketId && st.socketId === mySocketId);
+                      return (
+                        <div key={st.socketId} className={`tournament-inner-row tournament-standings-row ${me ? 'is-you' : ''}`}>
+                          <div className="tournament-row-main">
+                            <span className="tournament-row-rank">{idx + 1}</span>
+                            <span className="tournament-row-name">{st.username ?? 'Player'}</span>
+                            {me && <span className="tournament-you-badge">You</span>}
+                          </div>
+                          <span className="tournament-row-score">
+                            {st.wins ?? 0}W · {diff >= 0 ? '+' : ''}{diff}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mode-option tournament-card tournament-card-bracket">
+                  <span className="mode-option-title">Bracket</span>
+                  <span className="mode-option-meta">Round robin schedule</span>
+                  <div className="tournament-inner-list">
+                    {matches.map((m: any, i: number) => {
+                      const isActive = Boolean(activeMatch && m.id === activeMatch.id);
+                      const label = m.status === 'active' ? 'Playing' : m.status === 'done' ? 'Done' : 'Queued';
+                      return (
+                        <div key={m.id} className={`tournament-inner-row tournament-bracket-row ${isActive ? 'is-active' : ''}`}>
+                          <span className="tournament-row-index">Match {i + 1}</span>
+                          <span className="tournament-row-players">{nameFor(m.a)} vs {nameFor(m.b)}</span>
+                          <span className={`tournament-row-status tournament-row-status-badge ${m.status === 'active' ? 'is-playing' : ''}`}>
+                            {label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="tournament-col-right">
                 <div className="mode-option tournament-card tournament-card-code">
                   <span className="mode-option-title">Lobby Code</span>
                   <span className="mode-option-meta">Share this code to invite players</span>
@@ -3055,54 +3178,6 @@ export default function App() {
                       Watch match
                     </button>
                   )}
-                </div>
-              </div>
-
-              <div className="tournament-running-bottom">
-                <div className="mode-option tournament-card tournament-card-bracket">
-                  <span className="mode-option-title">Bracket</span>
-                  <span className="mode-option-meta">Round robin schedule</span>
-                  <div className="tournament-inner-list">
-                    {matches.map((m: any, i: number) => {
-                      const isActive = Boolean(activeMatch && m.id === activeMatch.id);
-                      const label = m.status === 'active' ? 'Playing' : m.status === 'done' ? 'Done' : 'Queued';
-                      return (
-                        <div key={m.id} className={`tournament-inner-row tournament-bracket-row ${isActive ? 'is-active' : ''}`}>
-                          <span className="tournament-row-index">Match {i + 1}</span>
-                          <span className="tournament-row-players">
-                            {nameFor(m.a)} vs {nameFor(m.b)}
-                          </span>
-                          <span className={`tournament-row-status tournament-row-status-badge ${m.status === 'active' ? 'is-playing' : ''}`}>
-                            {label}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="mode-option tournament-card tournament-card-standings">
-                  <span className="mode-option-title">Standings</span>
-                  <span className="mode-option-meta">Wins · point diff</span>
-                  <div className="tournament-inner-list">
-                    {standings.map((st: any, idx: number) => {
-                      const diff = (st.pointsFor ?? 0) - (st.pointsAgainst ?? 0);
-                      const me = Boolean(mySocketId && st.socketId === mySocketId);
-                      return (
-                        <div key={st.socketId} className={`tournament-inner-row tournament-standings-row ${me ? 'is-you' : ''}`}>
-                          <div className="tournament-row-main">
-                            <span className="tournament-row-rank">{idx + 1}</span>
-                            <span className="tournament-row-name">{st.username ?? 'Player'}</span>
-                            {me && <span className="tournament-you-badge">You</span>}
-                          </div>
-                          <span className="tournament-row-score">
-                            {st.wins ?? 0}W · {diff >= 0 ? '+' : ''}
-                            {diff}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               </div>
             </div>
@@ -4115,7 +4190,7 @@ export default function App() {
               <div className="tray-center" ref={trayCenterRef}>
                 <HandView
                   hand={myHand}
-                  selectedTile={selectedTile}
+                  selectedTile={isMyTurn ? selectedTile : null}
                   onSelect={handleTileTap}
                   isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
                   legalMoves={legalMoves}

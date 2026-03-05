@@ -57,6 +57,7 @@ type ReconnectSeat = {
 const reconnectSeatsByCode = new Map<string, ReconnectSeat[]>();
 const socketsByUserId = new Map<string, Set<string>>();
 const roomCleanupTimersByCode = new Map<string, ReturnType<typeof setTimeout>>();
+let finalizeTournamentMatchHook: ((room: any) => void) | null = null;
 
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -321,17 +322,19 @@ function broadcastStateUpdate(roomCode: string) {
     }
   }
 
-  const sockets = io.sockets.adapter.rooms.get(roomCode);
-  if (!sockets) return;
-
-  // Update hand-ended tracker before the loop so double
-  // broadcasts in the same tick don't send hand:ended twice.
-  if (room.state.handOver && !room.state.gameOver) {
-    room.lastHandEndedNotifiedHand = room.state.handNumber;
-  } else if (!room.state.handOver) {
-    room.lastHandEndedNotifiedHand = null;
+  // Self-heal Socket.IO room membership for active (human) match players.
+  for (const pid of room.state.playerIds) {
+    if (pid.startsWith('bot:fritz:')) continue;
+    const playerSocket = io.sockets.sockets.get(pid);
+    if (!playerSocket) continue;
+    if (!playerSocket.rooms.has(roomCode)) {
+      playerSocket.join(roomCode);
+      playerSocket.data.roomId = roomCode;
+    }
   }
 
+  const sockets = io.sockets.adapter.rooms.get(roomCode);
+  if (!sockets) return;
   const currentScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
@@ -375,28 +378,53 @@ function broadcastStateUpdate(roomCode: string) {
       });
 
       if (
-        isPlayer &&
         room.state.handOver &&
         !room.state.gameOver &&
         room.lastHandEndedNotifiedHand !== room.state.handNumber
       ) {
-        const opponentId = room.state.playerIds.find((pid) => pid !== socketId) ?? null;
-        const youScoreDelta =
-          (currentScores[socketId] ?? 0) -
-          (previousScores[socketId] ?? currentScores[socketId] ?? 0);
-        const opponentScoreDelta = opponentId
-          ? (currentScores[opponentId] ?? 0) -
-            (previousScores[opponentId] ?? currentScores[opponentId] ?? 0)
-          : 0;
+        room.lastHandEndedNotifiedHand = room.state.handNumber;
+        for (const pid of room.state.playerIds) {
+          if (pid.startsWith('bot:fritz:')) continue;
+          const playerSocket = io.sockets.sockets.get(pid);
+          if (!playerSocket) continue;
+          const opponentId = room.state.playerIds.find((id) => id !== pid) ?? null;
+          const opponentHand = opponentId ? (room.state.players[opponentId]?.hand ?? []) : [];
+          const myHand = room.state.players[pid]?.hand ?? [];
 
-        socket.emit('hand:ended', {
-          handNumber: room.state.handNumber,
-          opponentRemainingTiles: opponentId ? (room.state.players[opponentId]?.hand ?? []) : [],
-          pointsAwarded: {
-            you: youScoreDelta,
-            opponent: opponentScoreDelta,
-          },
-        });
+          // Compute awards directly from remaining tiles — do NOT use score deltas
+          // (scores are already applied to room.state before this runs)
+          const opponentPipSum = opponentHand.reduce((s, t) => s + t.high + t.low, 0);
+          const myPipSum = myHand.reduce((s, t) => s + t.high + t.low, 0);
+
+          // Winner is whoever went out (hand.length === 0), or lowest pips in blocked hand
+          const iWentOut = myHand.length === 0;
+          const opponentWentOut = opponentHand.length === 0;
+
+          const youScoreDelta = iWentOut
+            ? Math.round(opponentPipSum / 5)
+            : opponentWentOut
+            ? 0
+            : myPipSum <= opponentPipSum
+            ? Math.round(opponentPipSum / 5) // blocked hand, I had lower pips
+            : 0;
+
+          const opponentScoreDelta = opponentWentOut
+            ? Math.round(myPipSum / 5)
+            : iWentOut
+            ? 0
+            : opponentPipSum <= myPipSum
+            ? Math.round(myPipSum / 5) // blocked hand, opponent had lower pips
+            : 0;
+
+          playerSocket.emit('hand:ended', {
+            handNumber: room.state.handNumber,
+            opponentRemainingTiles: opponentHand,
+            pointsAwarded: {
+              you: youScoreDelta,
+              opponent: opponentScoreDelta,
+            },
+          });
+        }
       }
     }
   }
@@ -423,7 +451,34 @@ function broadcastStateUpdate(roomCode: string) {
     io.to(room.code).emit('state:spectate', { state: stateForSpectators });
   }
 
+  const roomAfter = (() => { try { return getRoom(roomCode); } catch { return null; } })();
+
+  // Auto-ready bots for next hand
+  if (roomAfter?.state?.handOver && !roomAfter.state.gameOver) {
+    for (const pid of roomAfter.players) {
+      if (pid.startsWith('bot:fritz:') && !roomAfter.nextHandReady.has(pid)) {
+        setTimeout(async () => {
+          try {
+            const result = await readyForNextHand(roomCode, pid, io);
+            if (result.started) {
+              broadcastStateUpdate(roomCode);
+              const freshRoom = (() => { try { return getRoom(roomCode); } catch { return null; } })();
+              if (freshRoom?.state && !freshRoom.state.handOver && !freshRoom.state.gameOver) {
+                // no-op
+              }
+            }
+          } catch (e) {
+            console.warn('[bot] auto-ready error', e);
+          }
+        }, 800);
+      }
+    }
+  }
+
   if (room.state.gameOver) {
+    if (isTournamentRoom) {
+      finalizeTournamentMatchHook?.(room);
+    }
     evaluateRoomLifecycle(room.code);
   }
 }
@@ -691,6 +746,7 @@ io.on('connection', (socket: Socket) => {
       .catch((err) => {
         console.warn('[tournament] failed to start match room', err);
       });
+
   };
 
   const maybeFinalizeTournamentMatch = (room: any) => {
@@ -723,6 +779,7 @@ io.on('connection', (socket: Socket) => {
     emitTournament(t);
     startNextMatch(t);
   };
+  finalizeTournamentMatchHook = maybeFinalizeTournamentMatch;
 
 // TOURNAMENT_HANDLERS
   socket.on('tournament:create', (arg1?: unknown, arg2?: unknown) => {
@@ -768,7 +825,9 @@ io.on('connection', (socket: Socket) => {
       // broadcast lobby state
       io.to(`tourn:${id}`).emit('tournament:lobby:update', { players: t.players, lobbyCode, hostSocketId: t.hostSocketId });
     } catch (e) {
-      cb?.({ ok: false, error: 'create_failed' });
+      const message = e instanceof Error ? e.message : 'create_failed';
+      console.warn('[tournament:create] failed', e);
+      cb?.({ ok: false, error: message });
     }
   });
 
@@ -814,13 +873,34 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
+  socket.on('tournament:add_bot', (arg1?: unknown, arg2?: unknown) => {
+    const cb = (typeof arg2 === 'function' ? arg2 : typeof arg1 === 'function' ? arg1 : undefined) as AckFn | undefined;
+    cb?.({ ok: false, error: 'bots_disabled' });
+  });
+
+  socket.on('tournament:remove_bot', (arg1?: unknown, arg2?: unknown) => {
+    const cb = (typeof arg2 === 'function' ? arg2 : typeof arg1 === 'function' ? arg1 : undefined) as AckFn | undefined;
+    cb?.({ ok: false, error: 'bots_disabled' });
+  });
+
   socket.on('tournament:start', (cb?: any) => {
     try {
       const t = getTournamentForSocket();
       if (!t) return cb?.({ ok: false, error: 'no_tournament' });
       if (socket.id != t.hostSocketId) return cb?.({ ok: false, error: 'not_host' });
       if (t.status !== 'lobby') return cb?.({ ok: false, error: 'already_started' });
-      if (t.players.length < 4) return cb?.({ ok: false, error: 'need_4' });
+      // Tournament bots are disabled; prune any stale bot entries before start.
+      const humanPlayers = t.players.filter(
+        (p) => !p.isBot && !p.socketId.startsWith('bot:fritz:') && !p.username.startsWith('Fritz'),
+      );
+      t.players = humanPlayers;
+      t.standings = Object.fromEntries(
+        Object.entries(t.standings).filter(([socketId]) =>
+          humanPlayers.some((player) => player.socketId === socketId),
+        ),
+      ) as typeof t.standings;
+
+      if (t.players.length < 2) return cb?.({ ok: false, error: 'need_2' });
 
       t.status = 'running';
       t.matches = buildRoundRobinMatches(t.players);

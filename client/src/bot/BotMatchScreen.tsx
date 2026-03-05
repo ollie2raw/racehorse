@@ -189,6 +189,7 @@ export default function BotMatchScreen({
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
   const gameOverSoundKeyRef = useRef('');
+  const botChainPauseRef = useRef(false);
   const matchRef = useRef(match);
   const prevTurnRef = useRef<BotPlayerId>(match.currentPlayer);
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
@@ -621,6 +622,8 @@ export default function BotMatchScreen({
     let cancelled = false;
     let actionResolved = false;
     let playedTileForHighlight: Tile | null = null;
+    const thinkDelayMs = botChainPauseRef.current ? 1300 : 760;
+    botChainPauseRef.current = false;
 
     const timer = setTimeout(() => {
       void (async () => {
@@ -691,6 +694,8 @@ export default function BotMatchScreen({
         if (chosen) setLastBotChoice(chosen);
         if (result) {
           actionResolved = true;
+          botChainPauseRef.current =
+            result.state.currentPlayer === 'bot' && !result.state.handOver && !result.state.gameOver;
           setSelectedTile(null);
           if (chosen?.move?.tile) {
             appendMove({
@@ -712,7 +717,7 @@ export default function BotMatchScreen({
           flashLastPlayed(playedTileForHighlight);
         }
       })();
-    }, 760);
+    }, thinkDelayMs);
 
     const maxThinkingTimer = setTimeout(() => {
       if (cancelled || actionResolved) return;
@@ -725,6 +730,8 @@ export default function BotMatchScreen({
       const beforeEndsRaw = getDisplayOpenEnds(live);
       const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
       const forcedResult = applyPlayMove(live, 'bot', fallbackPlay);
+      botChainPauseRef.current =
+        forcedResult.state.currentPlayer === 'bot' && !forcedResult.state.handOver && !forcedResult.state.gameOver;
       if (fallbackPlay.tile) {
         appendMove({
           player: 'opponent',
