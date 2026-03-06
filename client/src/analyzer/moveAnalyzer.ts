@@ -1,6 +1,6 @@
 import type { EngineBestMove, MoveEntry, TileTuple } from './moveLogger';
 import { sameTileTuple } from './moveLogger';
-import { chooseBotMove } from '../bot/botHeuristics';
+import { chooseBotMove, toBotVisibleState } from '../bot/botHeuristics';
 import { createBotMatch, previewPlayMove, getLegalMoves } from '../bot/botEngine';
 import type { BotMatchState } from '../bot/botEngine';
 
@@ -402,7 +402,7 @@ export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
       const evalState = buildEvalState(entry, 'bot');
       if (!evalState) return entry;
 
-      const choice = chooseBotMove(evalState, 'hard');
+      const choice = chooseBotMove(toBotVisibleState(evalState), 'hard');
       if (!choice || !choice.move.tile) return entry;
       return {
         ...entry,

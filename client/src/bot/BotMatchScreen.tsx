@@ -33,7 +33,7 @@ import {
   type BotMatchState,
   type BotPlayerId,
 } from './botEngine';
-import { chooseBotMove, type BotChoice } from './botHeuristics';
+import { chooseBotMove, toBotVisibleState, type BotChoice } from './botHeuristics';
 import { getLocalDateKey } from '../dailyPuzzle/date';
 import {
   playBlockedSound,
@@ -353,7 +353,7 @@ export default function BotMatchScreen({
           },
         }
       : state;
-    const choice = chooseBotMove(evalState, 'hard');
+    const choice = chooseBotMove(toBotVisibleState(evalState), 'hard');
     if (!choice || !choice.move.tile) return null;
     return {
       tile: toTileTuple(choice.move.tile as Tile),
@@ -675,7 +675,7 @@ export default function BotMatchScreen({
             if (afterDraw.length === 0) {
               result = drawPass;
             } else {
-              chosen = chooseBotMove(working, 'hard');
+              chosen = chooseBotMove(toBotVisibleState(working), 'hard');
               playedTileForHighlight = chosen?.move?.tile ?? afterDraw[0]?.tile ?? null;
               queueSound(() => playTileSound('deal', isMuted), 0);
               result = applyPlayMove(working, 'bot', chosen?.move ?? afterDraw[0]);
@@ -684,7 +684,7 @@ export default function BotMatchScreen({
             setDrawSequenceActiveBoth(false);
           }
         } else {
-          chosen = chooseBotMove(working, 'hard');
+          chosen = chooseBotMove(toBotVisibleState(working), 'hard');
           playedTileForHighlight = chosen?.move?.tile ?? botPlayable[0]?.tile ?? null;
           queueSound(() => playTileSound('deal', isMuted), 0);
           result = applyPlayMove(working, 'bot', chosen?.move ?? botPlayable[0]);

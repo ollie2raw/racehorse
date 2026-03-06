@@ -11,7 +11,7 @@
 
 import type { Move, Tile } from '../types.ts';
 import type { BotMatchState } from './botEngine.ts';
-import { getLegalMoves, previewPlayMove } from './botEngine.ts';
+import { computeOpenEndsSum, getLegalMoves, previewPlayMove } from './botEngine.ts';
 
 export type BotDifficulty = 'casual' | 'standard' | 'hard';
 
@@ -29,6 +29,12 @@ export interface BotChoice {
   };
 }
 
+export interface BotVisibleState extends BotMatchState {
+  readonly opponentTileCount: number;
+  readonly __fairMode: true;
+}
+type BotEvalState = BotVisibleState | BotMatchState;
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MC_SAMPLES = 8;
@@ -40,7 +46,52 @@ const WIN_TARGET = 60;
 // Was 6 in v3 — too late, MC gets noisy on tiny hands.
 // Set conservatively at 8; raise to 10 if endgame still feels weak.
 const ENDGAME_TILE_THRESHOLD = 8;
-const ENABLE_TWO_PLY_WORST_CASE = true;
+const ENABLE_TWO_PLY_WORST_CASE = false;
+const FAIR_BOT_MODE = true;
+let fairOpponentAccessWarned = false;
+
+function makeDevOpponentHandTrap(): Tile[] {
+  return new Proxy([] as Tile[], {
+    get(_target, prop) {
+      const key = String(prop);
+      throw new Error(`[FairBotMode] Illegal access to hidden opponent hand via players.you.hand.${key}`);
+    },
+  });
+}
+
+export function toBotVisibleState(state: BotMatchState): BotVisibleState {
+  const isDevRuntime = Boolean((import.meta as any)?.env?.DEV);
+  const opponentTileCount = state.players.you.hand.length;
+  return {
+    ...state,
+    players: {
+      bot: state.players.bot,
+      you: {
+        score: state.players.you.score,
+        hand: isDevRuntime ? makeDevOpponentHandTrap() : [],
+      },
+    },
+    opponentTileCount,
+    __fairMode: true,
+  };
+}
+
+function asVisibleState(state: BotEvalState): BotVisibleState {
+  if ((state as BotVisibleState).__fairMode) return state as BotVisibleState;
+  return toBotVisibleState(state as BotMatchState);
+}
+
+function getOpponentTileCount(state: BotEvalState): number {
+  const visibleCount = (state as Partial<BotVisibleState>).opponentTileCount;
+  if (typeof visibleCount === 'number') return Math.max(0, visibleCount);
+  return Math.max(0, state.players.you.hand.length);
+}
+
+function warnFairHiddenAccess(path: string) {
+  if (fairOpponentAccessWarned) return;
+  fairOpponentAccessWarned = true;
+  console.warn(`[FairBotMode] blocked hidden-opponent path: ${path}`);
+}
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -60,16 +111,16 @@ function racehorsePoints(sum: number): number {
   return sum > 0 && sum % 5 === 0 ? sum / 5 : 0;
 }
 
-function cloneState(
-  state: BotMatchState,
-  overrides: Partial<BotMatchState>,
-): BotMatchState {
+function cloneState<T extends BotMatchState>(
+  state: T,
+  overrides: Partial<T>,
+): T {
   return { ...state, ...overrides };
 }
 
 // ─── Tile pool & inference ────────────────────────────────────────────────────
 
-function buildUnseenPool(state: BotMatchState): Tile[] {
+function buildUnseenPool(state: BotEvalState): Tile[] {
   const known = new Set<string>();
   for (const t of state.players.bot.hand) known.add(tileKey(t));
   if (state.board) {
@@ -91,7 +142,7 @@ function buildUnseenPool(state: BotMatchState): Tile[] {
   return pool;
 }
 
-function inferMissingPips(state: BotMatchState): Set<number> {
+function inferMissingPips(state: BotEvalState): Set<number> {
   const missing = new Set<number>(state.opponentKnownMissing ?? []);
   for (const end of state.opponentPassedOnEnds ?? []) missing.add(end);
   return missing;
@@ -689,6 +740,20 @@ function expectedDrawsApprox(endsAfter: number[], unseenPool: Tile[]): number {
   return Math.max(1, Math.min(6, ratio));
 }
 
+function estimateOpponentCanPlayProbability(
+  openEnds: number[],
+  unseenPool: Tile[],
+  opponentTileCount: number,
+): number {
+  if (openEnds.length === 0 || unseenPool.length === 0 || opponentTileCount <= 0) return 0;
+  const endSet = new Set(openEnds);
+  const matchCount = unseenPool.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
+  if (matchCount <= 0) return 0;
+  const pSingle = Math.min(1, matchCount / unseenPool.length);
+  const pNone = Math.pow(1 - pSingle, Math.max(0, opponentTileCount));
+  return Math.max(0, Math.min(1, 1 - pNone));
+}
+
 function countValueOccurrences(values: number[]): Map<number, number> {
   const m = new Map<number, number>();
   for (const v of values) m.set(v, (m.get(v) ?? 0) + 1);
@@ -712,7 +777,7 @@ function hasHubWithTwoOpenBranchesOnPip(
 }
 
 function hasNearSafeFinishSetup(
-  state: BotMatchState,
+  state: BotEvalState,
   handAfter: Tile[],
 ): boolean {
   if (handAfter.length !== 2) return false;
@@ -733,7 +798,7 @@ function hasNearSafeFinishSetup(
 }
 
 function evaluateStrategicMove(
-  state: BotMatchState,
+  state: BotEvalState,
   move: Move,
   holdWeights: Map<string, number>,
 ): StrategicEval {
@@ -761,7 +826,7 @@ function evaluateStrategicMove(
 
   const handAfter = p.nextHand;
   const endsAfter = p.openEnds;
-  const totalTilesAfter = handAfter.length + state.players.you.hand.length;
+  const totalTilesAfter = handAfter.length + getOpponentTileCount(state);
   const phase = phaseFor(handAfter.length, totalTilesAfter);
   const freq = pipTileFrequency(handAfter);
   const endsBefore = inferOpenEndsFromState(state);
@@ -853,17 +918,22 @@ function evaluateStrategicMove(
   let forcedDraw = false;
   const afterUs = simulateAfterPlay(state, 'bot', move);
   if (afterUs && !afterUs.handOver && afterUs.currentPlayer === 'you') {
-    const oppMoves = getLegalMoves(afterUs, 'you').filter((m) => m.type === 'play');
-    if (oppMoves.length === 0 && afterUs.boneyard.length > 2) {
+    const oppPlayProbability = estimateOpponentCanPlayProbability(
+      inferOpenEndsFromState(afterUs),
+      buildUnseenPool(afterUs),
+      getOpponentTileCount(afterUs),
+    );
+    if (oppPlayProbability < 0.55 && afterUs.boneyard.length > 2) {
       forcedDraw = true;
       expectedDrawsIfForced = expectedDrawsApprox(endsAfter, unseenPool);
+      const certainty = Math.max(0.25, 1 - oppPlayProbability);
       if (phase === 'early') {
         // Early forced draws often refill the opponent into chains; penalize very heavily.
-        refillRiskScore -= 220 + expectedDrawsIfForced * 25;
+        refillRiskScore -= (220 + expectedDrawsIfForced * 25) * certainty;
       } else if (phase === 'mid') {
-        refillRiskScore -= expectedDrawsIfForced * 4;
+        refillRiskScore -= expectedDrawsIfForced * 4 * certainty;
       } else {
-        refillRiskScore += expectedDrawsIfForced * 8;
+        refillRiskScore += expectedDrawsIfForced * 8 * certainty;
       }
     }
   }
@@ -945,10 +1015,14 @@ function nextPlayer(player: 'bot' | 'you'): 'bot' | 'you' {
 }
 
 function simulateAfterPlay(
-  state: BotMatchState,
+  state: BotEvalState,
   player: 'bot' | 'you',
   move: Move,
 ): BotMatchState | null {
+  if (FAIR_BOT_MODE && player === 'you') {
+    warnFairHiddenAccess("simulateAfterPlay(..., 'you', ...)");
+    return null;
+  }
   const p = previewPlayMove(state, player, move);
   if (!p) return null;
   const handAfter = p.nextHand;
@@ -970,7 +1044,7 @@ function simulateAfterPlay(
 }
 
 function twoPlyWorstCaseValue(
-  state: BotMatchState,
+  state: BotEvalState,
   ourMove: Move,
   holdWeights: Map<string, number>,
 ): number {
@@ -985,56 +1059,26 @@ function twoPlyWorstCaseValue(
     return Math.max(...replies.map((m) => evaluateStrategicMove(afterUs, m, holdWeights).score));
   }
 
-  const oppMoves = getLegalMoves(afterUs, 'you').filter((m) => m.type === 'play');
-  if (oppMoves.length === 0) {
-    // Phase C: forcing a draw sequence is not always good.
-    // Early: can refill opponent into chains. Late: strong tempo pressure.
-    if (afterUs.boneyard.length > 2) {
-      const ends = inferOpenEndsFromState(afterUs);
-      const draws = expectedDrawsApprox(ends, buildUnseenPool(afterUs));
-      const totalTiles = afterUs.players.bot.hand.length + afterUs.players.you.hand.length;
-      const phase = phaseFor(afterUs.players.bot.hand.length, totalTiles);
-      if (phase === 'early') return -320 - draws * 40;
-      if (phase === 'mid') return 120 - draws * 6;
-      return 260 + draws * 12;
-    }
-    return 220;
+  const ends = inferOpenEndsFromState(afterUs);
+  const unseen = buildUnseenPool(afterUs);
+  const oppPlayProb = estimateOpponentCanPlayProbability(
+    ends,
+    unseen,
+    getOpponentTileCount(afterUs),
+  );
+  const openSum = afterUs.board ? computeOpenEndsSum(afterUs.board) : 0;
+  const threat = opponentThreat(ends, openSum, holdWeights);
+  const draws = expectedDrawsApprox(ends, unseen);
+  const totalTiles = afterUs.players.bot.hand.length + getOpponentTileCount(afterUs);
+  const phase = phaseFor(afterUs.players.bot.hand.length, totalTiles);
+
+  if (afterUs.boneyard.length > 2 && oppPlayProb < 0.35) {
+    if (phase === 'early') return -260 - draws * 26;
+    if (phase === 'mid') return 110 - draws * 5;
+    return 230 + draws * 10;
   }
 
-  const K = Math.min(8, oppMoves.length);
-  const trimmedOpp = [...oppMoves]
-    .map((m) => {
-      const p = previewPlayMove(afterUs, 'you', m);
-      const mobility = p ? handMobility(p.nextHand, p.openEnds) : 0;
-      return { m, score: (p?.immediateScore ?? 0) * 20 + mobility * 6 };
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, K)
-    .map((x) => x.m);
-
-  let worstCase = Infinity;
-  for (const r of trimmedOpp) {
-    const afterOpp = simulateAfterPlay(afterUs, 'you', r);
-    if (!afterOpp) continue;
-
-    // Opponent can keep chaining: pessimistically bad for us.
-    if (afterOpp.currentPlayer === 'you') {
-      worstCase = Math.min(worstCase, -220);
-      continue;
-    }
-
-    const ourReplies = getLegalMoves(afterOpp, 'bot').filter((m) => m.type === 'play');
-    if (ourReplies.length === 0) {
-      worstCase = Math.min(worstCase, -90);
-      continue;
-    }
-    const ourBest = Math.max(
-      ...ourReplies.map((m) => evaluateStrategicMove(afterOpp, m, holdWeights).score),
-    );
-    worstCase = Math.min(worstCase, ourBest);
-  }
-
-  return Number.isFinite(worstCase) ? worstCase : -180;
+  return (1 - oppPlayProb) * 90 - oppPlayProb * 70 - threat * 18;
 }
 
 // ─── Endgame minimax ──────────────────────────────────────────────────────────
@@ -1082,7 +1126,7 @@ function simulateDrawUntilPlayable(
 }
 
 function minimax(
-  state: BotMatchState,
+  state: BotEvalState,
   depth: number,
   isBot: boolean,
   alpha: number,
@@ -1091,6 +1135,10 @@ function minimax(
   passDepth: number = 0,
   deadlineMs: number = Infinity,  // wall-clock deadline — early-return static eval if exceeded
 ): number {
+  if (FAIR_BOT_MODE) {
+    warnFairHiddenAccess('minimax');
+    throw new Error('[FairBotMode] minimax disabled because it depends on hidden opponent hand.');
+  }
   // Deadline check first — even before terminal checks, so a single deep
   // candidate can't blow the budget regardless of tree shape
   if (performance.now() > deadlineMs) {
@@ -1185,7 +1233,7 @@ function mcEvaluateMove(
   if (!preview) return -Infinity;
   if (botScore + preview.immediateScore >= WIN_TARGET) return 1_000_000;
 
-  const totalTiles = state.players.bot.hand.length + state.players.you.hand.length;
+  const totalTiles = state.players.bot.hand.length + getOpponentTileCount(state);
   const { depth, width } = dynamicChainParams(state.players.bot.hand.length, totalTiles);
   const chain = searchChainTree(state, move, depth, width);
   if (!chain) return -Infinity;
@@ -1212,7 +1260,7 @@ function mcEvaluateMove(
     youProximity >= 0.7  ? 1.8 :
     youProximity >= 0.5  ? 1.2 : 1.0;
 
-  const youHandSize = state.players.you.hand.length;
+  const youHandSize = getOpponentTileCount(state);
   const sampledHands = sampleOpponentHands(pool, holdWeights, youHandSize, MC_SAMPLES);
 
   let totalThreat = 0;
@@ -1278,14 +1326,15 @@ function endgameDepth(totalTiles: number): number {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function chooseBotMove(
-  state: BotMatchState,
+  inputState: BotVisibleState | BotMatchState,
   difficulty: BotDifficulty = 'hard',
 ): BotChoice | null {
+  const state = asVisibleState(inputState);
   const t0 = performance.now();
   const isDevRuntime = Boolean((import.meta as any)?.env?.DEV);
 
   // Hoisted before candidates so timing log is consistent even on early exit
-  const totalTilesForLog = state.players.bot.hand.length + state.players.you.hand.length;
+  const totalTilesForLog = state.players.bot.hand.length + getOpponentTileCount(state);
 
   // Typed overloads so callers are type-safe without assertions.
   function done(result: null, label?: string): null;
@@ -1393,7 +1442,7 @@ export function chooseBotMove(
   // FIX v3.3: Endgame minimax threshold conservatively set at 8 tiles.
   // MC/chain-tree is noisy on tiny hands — minimax is faster and more accurate here.
   // Raise to 10 if endgame still feels weak after playtesting.
-  if (totalTiles <= ENDGAME_TILE_THRESHOLD) {
+  if (!FAIR_BOT_MODE && totalTiles <= ENDGAME_TILE_THRESHOLD) {
     let bestMove = candidates[0];
     let bestVal = -Infinity;
     const depth = endgameDepth(totalTiles);
