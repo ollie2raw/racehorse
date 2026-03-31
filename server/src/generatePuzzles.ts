@@ -63,6 +63,7 @@ interface CuratedDailyPuzzle {
 interface CliOptions {
   from: string;
   days: number;
+  overwriteExisting: boolean;
 }
 
 interface SupabasePuzzleRow {
@@ -79,9 +80,9 @@ interface SearchStep {
 const YOU_ID = 'you';
 const BOT_ID = 'bot';
 const MAX_PIPS = 6;
-const DEAL_SIZE = 7;
-const MAX_ATTEMPTS_PER_DATE = 50;
-const MIN_BEST_SCORE = 20;
+const DEAL_SIZE = 14;
+const MAX_ATTEMPTS_PER_DATE = 120;
+const MIN_BEST_SCORE = 35;
 const TITLE_ROTATION = [
   'Amber Crossroads',
   'Ashen Gallop',
@@ -108,6 +109,7 @@ const TITLE_ROTATION = [
 function parseCliArgs(argv: string[]): CliOptions {
   let from: string | null = null;
   let days = 30;
+  let overwriteExisting = false;
 
   for (let idx = 0; idx < argv.length; idx += 1) {
     const arg = argv[idx];
@@ -126,6 +128,10 @@ function parseCliArgs(argv: string[]): CliOptions {
       days = parsed;
       continue;
     }
+    if (arg === '--overwrite-existing') {
+      overwriteExisting = true;
+      continue;
+    }
     throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -136,7 +142,7 @@ function parseCliArgs(argv: string[]): CliOptions {
     throw new Error(`Invalid --from date: ${from}`);
   }
 
-  return { from, days };
+  return { from, days, overwriteExisting };
 }
 
 function isIsoDate(value: string): boolean {
@@ -569,6 +575,114 @@ function moveSortValue(step: SearchStep, prng: () => number): number {
   return step.delta + doubleBonus + pipBonus + prng() / 1000;
 }
 
+function shuffleTiles(tiles: Tile[], prng: () => number): Tile[] {
+  const out = [...tiles];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = randInt(prng, 0, i);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function makeSimState(dateSeed: string, attempt: number): GameState {
+  const prng = mulberry32(hashString(`${dateSeed}:${attempt}:sim:deal`));
+  const shuffled = shuffleTiles(buildFullDoubleSixSet(), prng);
+  const youHand = shuffled.slice(0, DEAL_SIZE);
+  const botHand = shuffled.slice(DEAL_SIZE, DEAL_SIZE * 2);
+
+  return {
+    config: {
+      maxPips: MAX_PIPS,
+      tilesPerPlayer: DEAL_SIZE,
+      deadTileCount: 0,
+      scoringMultiple: 5,
+      blockedHandRule: 'lowestPips',
+      endHandBonus: 'sumOpponentPenalties',
+      winningScore: 999,
+    },
+    playerIds: [YOU_ID, BOT_ID],
+    players: {
+      [YOU_ID]: { id: YOU_ID, hand: youHand.map(cloneTile), score: 0 },
+      [BOT_ID]: { id: BOT_ID, hand: botHand.map(cloneTile), score: 0 },
+    },
+    board: null,
+    boneyard: [],
+    deadTiles: [],
+    currentPlayerIndex: randInt(prng, 0, 1),
+    handNumber: 1,
+    handOpen: false,
+    handOver: false,
+    gameOver: false,
+    winnerId: null,
+    consecutivePasses: 0,
+  };
+}
+
+function evaluateSimMove(state: GameState, move: PlayMove, dateSeed: string, attempt: number): number {
+  const next = applyMove(state, state.playerIds[state.currentPlayerIndex], move as Move).state;
+  const delta =
+    next.players[state.playerIds[state.currentPlayerIndex]].score -
+    state.players[state.playerIds[state.currentPlayerIndex]].score;
+  const nextPlayerId = next.playerIds[next.currentPlayerIndex];
+  const nextOptions = getLegalMoves(next, nextPlayerId).filter((m): m is PlayMove => m.type === 'play').length;
+  const boardTiles = next.board ? countBoardTiles(next.board as BoardState) : 0;
+  const prng = mulberry32(hashString(`${dateSeed}:${attempt}:sim:rank:${tileKey(move.tile)}:${move.position}`));
+  return delta * 3 + nextOptions * 2 + boardTiles * 0.5 + (isDouble(move.tile) ? 2 : 0) + prng() * 0.001;
+}
+
+function pickTacticalMove(state: GameState, dateSeed: string, attempt: number): Move {
+  const currentId = state.playerIds[state.currentPlayerIndex];
+  const legal = getLegalMoves(state, currentId);
+  const plays = legal.filter((m): m is PlayMove => m.type === 'play');
+  if (plays.length === 0) return { type: 'pass' };
+
+  const ranked = plays
+    .map((move) => ({ move, rank: evaluateSimMove(state, move, dateSeed, attempt) }))
+    .sort((a, b) => b.rank - a.rank);
+  const prng = mulberry32(hashString(`${dateSeed}:${attempt}:sim:pick:${state.currentPlayerIndex}:${state.consecutivePasses}:${ranked.length}`));
+  const topN = Math.max(1, Math.min(3, ranked.length));
+  return ranked[randInt(prng, 0, topN - 1)].move;
+}
+
+function buildMidHandPuzzleState(
+  dateSeed: string,
+  attempt: number,
+): { board: BoardState; hand: Tile[] } {
+  const minTurns = 12;
+  const maxTurns = 140;
+  const minBoardTiles = 8;
+  const minOptions = 4;
+  const minHandSize = 8;
+
+  let state = makeSimState(dateSeed, attempt);
+
+  for (let turn = 0; turn < maxTurns; turn += 1) {
+    if (state.handOver || state.gameOver) {
+      throw new Error('Simulation ended before finding a tactical state.');
+    }
+
+    const currentId = state.playerIds[state.currentPlayerIndex];
+    const nextMove = pickTacticalMove(state, dateSeed, attempt + turn);
+    state = applyMove(state, currentId, nextMove as Move).state;
+
+    if (turn < minTurns) continue;
+    if (state.currentPlayerIndex !== 0) continue;
+    if (!state.board) continue;
+
+    const boardTiles = countBoardTiles(state.board as BoardState);
+    const options = getLegalMoves(state, YOU_ID).filter((m): m is PlayMove => m.type === 'play').length;
+    const handSize = state.players[YOU_ID].hand.length;
+    if (boardTiles < minBoardTiles || options < minOptions || handSize < minHandSize) continue;
+
+    return {
+      board: cloneBoard(state.board as BoardState),
+      hand: [...state.players[YOU_ID].hand].map(cloneTile).sort((a, b) => tileKey(a).localeCompare(tileKey(b))),
+    };
+  }
+
+  throw new Error('Could not synthesize tactical mid-hand puzzle state.');
+}
+
 function findScoringPath(board: BoardState, remainingPool: Tile[], dateSeed: string, attempt: number): Tile[] | null {
   const searchState = createSearchState(board, remainingPool);
   const memo = new Set<string>();
@@ -694,19 +808,13 @@ function buildTitle(dateSeed: string): string {
 }
 
 function createPuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
-  const { board, remainingPool } = buildBoard(dateSeed, attempt);
-  const pathTiles = findScoringPath(board, remainingPool, dateSeed, attempt);
-  if (!pathTiles) {
-    throw new Error('Unable to find a scoring path to 20+ points.');
-  }
-
-  const startingHand = buildHandFromPath(remainingPool, pathTiles, dateSeed, attempt);
+  const tactical = buildMidHandPuzzleState(dateSeed, attempt);
   const puzzle: CuratedDailyPuzzle = {
     id: `generated-${dateSeed}`,
     puzzleDate: dateSeed,
     title: buildTitle(dateSeed),
-    startingBoard: board,
-    startingHand,
+    startingBoard: tactical.board,
+    startingHand: tactical.hand,
     maxMoves: 1,
     targetScore: 999,
     puzzleType: 'one_turn_high_score',
@@ -755,31 +863,30 @@ function validateGeneratedPuzzle(puzzle: CuratedDailyPuzzle): { bestScore: numbe
   const tileCount = countBoardTiles(puzzle.startingBoard);
   const handSize = puzzle.startingHand.length;
   const handDoubles = puzzle.startingHand.filter(isDouble).length;
+  const optionsAtStart = getLegalMoves(createSearchState(puzzle.startingBoard, puzzle.startingHand), YOU_ID)
+    .filter((move): move is PlayMove => move.type === 'play').length;
   const bestScore = computeBestPossiblePuzzleScore(puzzle);
 
   if (puzzle.puzzleType !== 'one_turn_high_score') {
     throw new Error('Puzzle type must be one_turn_high_score.');
   }
-  if (puzzle.dealSize !== 7) {
-    throw new Error('Deal size must be 7.');
+  if (puzzle.dealSize !== DEAL_SIZE) {
+    throw new Error(`Deal size must be ${DEAL_SIZE}.`);
   }
-  if (!puzzle.startingBoard.hubDoubles[0]?.isCrossed) {
-    throw new Error('Spinner hub must be crossed.');
+  if (openEnds.length < 2 || openEnds.length > 8) {
+    throw new Error(`Board open end count must be 2-8, got ${openEnds.length}.`);
   }
-  if (puzzle.startingBoard.hubDoubles.length !== 1) {
-    throw new Error('Board must contain exactly one hub double entry.');
+  if (tileCount < 7 || tileCount > 24) {
+    throw new Error(`Board tile count must be 7-24, got ${tileCount}.`);
   }
-  if (openEnds.length < 3 || openEnds.length > 6) {
-    throw new Error(`Board open end count must be 3-6, got ${openEnds.length}.`);
+  if (handSize < 8 || handSize > DEAL_SIZE) {
+    throw new Error(`Hand size must be 8-${DEAL_SIZE}, got ${handSize}.`);
   }
-  if (tileCount < 4 || tileCount > 8) {
-    throw new Error(`Board tile count must be 4-8, got ${tileCount}.`);
+  if (handDoubles < 1 || handDoubles > 6) {
+    throw new Error(`Hand double count must be 1-6, got ${handDoubles}.`);
   }
-  if (handSize < 5 || handSize > 7) {
-    throw new Error(`Hand size must be 5-7, got ${handSize}.`);
-  }
-  if (handDoubles < 1 || handDoubles > 3) {
-    throw new Error(`Hand double count must be 1-3, got ${handDoubles}.`);
+  if (optionsAtStart < 4) {
+    throw new Error(`Playable options at start must be >= 4, got ${optionsAtStart}.`);
   }
   if (bestScore < MIN_BEST_SCORE) {
     throw new Error(`Best score ${bestScore} is below ${MIN_BEST_SCORE}.`);
@@ -872,7 +979,7 @@ async function main(): Promise<void> {
 
   for (let offset = 0; offset < options.days; offset += 1) {
     const dateSeed = addDays(options.from, offset);
-    if (existingDates.has(dateSeed)) {
+    if (existingDates.has(dateSeed) && !options.overwriteExisting) {
       console.log(`${dateSeed} | skipped | existing puzzle`);
       continue;
     }

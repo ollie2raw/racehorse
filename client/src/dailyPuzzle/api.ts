@@ -1,4 +1,4 @@
-import type { BoardState, Tile } from '../types';
+import type { BoardState, Tile, TileOrientation } from '../types';
 import { supabase } from '../lib/supabase';
 import type { CuratedDailyPuzzle, CuratedDailyPuzzleRow, DailyPuzzleType } from './types';
 import { getLocalDateKey, normalizeDateInputToLocalKey } from './date';
@@ -9,25 +9,66 @@ function isTile(value: unknown): value is Tile {
   return Number.isInteger(v.low) && Number.isInteger(v.high);
 }
 
+function normalizeTile(value: unknown): Tile | null {
+  if (Array.isArray(value) && value.length === 2) {
+    const a = Number(value[0]);
+    const b = Number(value[1]);
+    if (!Number.isInteger(a) || !Number.isInteger(b)) return null;
+    return { low: Math.min(a, b), high: Math.max(a, b) };
+  }
+
+  if (!value || typeof value !== 'object') return null;
+  const rec = value as Record<string, unknown>;
+  const lowRaw = rec.low ?? rec.left;
+  const highRaw = rec.high ?? rec.right;
+  const low = Number(lowRaw);
+  const high = Number(highRaw);
+  if (!Number.isInteger(low) || !Number.isInteger(high)) return null;
+  return { low: Math.min(low, high), high: Math.max(low, high) };
+}
+
+function normalizeOrientation(
+  value: unknown,
+  fallback: 'horizontal-normal' | 'vertical-normal',
+): TileOrientation {
+  if (
+    value === 'horizontal-normal' ||
+    value === 'horizontal-flipped' ||
+    value === 'vertical-normal' ||
+    value === 'vertical-flipped'
+  ) {
+    return value;
+  }
+  return fallback;
+}
+
 function normalizePlacement(
   value: unknown,
   defaultOrientation: 'horizontal-normal' | 'vertical-normal',
-): { tile: Tile; orientation: string } | null {
-  if (!value || typeof value !== 'object') return null;
+): { tile: Tile; orientation: TileOrientation } | null {
+  if (!value || typeof value !== 'object') {
+    const directTile = normalizeTile(value);
+    return directTile
+      ? { tile: directTile, orientation: defaultOrientation }
+      : null;
+  }
+
   const rec = value as Record<string, unknown>;
+  const tile = normalizeTile(rec.tile ?? rec);
+  if (!tile) return null;
+  return {
+    tile,
+    orientation: normalizeOrientation(rec.orientation, defaultOrientation),
+  };
+}
 
-  if (isTile(rec.tile) && typeof rec.orientation === 'string') {
-    return { tile: rec.tile, orientation: rec.orientation };
+function endpointFromPlacement(placement: { tile: Tile; orientation: TileOrientation }, side: 'left' | 'right'): number {
+  const { tile, orientation } = placement;
+  if (tile.low === tile.high) return tile.high;
+  if (orientation.endsWith('flipped')) {
+    return side === 'left' ? tile.high : tile.low;
   }
-
-  if (Number.isInteger(rec.left) && Number.isInteger(rec.right)) {
-    return {
-      tile: { low: Number(rec.left), high: Number(rec.right) },
-      orientation: defaultOrientation,
-    };
-  }
-
-  return null;
+  return side === 'left' ? tile.low : tile.high;
 }
 
 function isBoardState(value: unknown): value is BoardState {
@@ -68,59 +109,101 @@ function isBoardState(value: unknown): value is BoardState {
 }
 
 export function normalizeBoardState(raw: unknown): BoardState | null {
+  if (typeof raw === 'string') {
+    try {
+      return normalizeBoardState(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  }
   if (!raw || typeof raw !== 'object') return null;
   const board = raw as Record<string, unknown>;
+  const mainLineRaw = Array.isArray(board.mainLine)
+    ? board.mainLine
+    : Array.isArray(board.main_line)
+      ? board.main_line
+      : null;
 
-  if (
-    !Array.isArray(board.mainLine) ||
-    typeof board.leftEnd !== 'number' ||
-    typeof board.rightEnd !== 'number' ||
-    typeof board.leftEndIsDouble !== 'boolean' ||
-    typeof board.rightEndIsDouble !== 'boolean' ||
-    !Array.isArray(board.hubDoubles)
-  ) {
+  if (!mainLineRaw) {
     return null;
   }
 
-  const mainLine = board.mainLine.map((placement) =>
+  const mainLine = mainLineRaw.map((placement) =>
     normalizePlacement(placement, 'horizontal-normal'),
   );
-  if (mainLine.some((placement) => !placement)) return null;
+  if (mainLine.some((placement) => !placement) || mainLine.length === 0) return null;
 
-  const hubDoubles = board.hubDoubles.map((hubRaw) => {
+  const hubDoublesRaw = Array.isArray(board.hubDoubles)
+    ? board.hubDoubles
+    : Array.isArray(board.hub_doubles)
+      ? board.hub_doubles
+      : [];
+  const hubDoubles = hubDoublesRaw.map((hubRaw, hubIdx) => {
     if (!hubRaw || typeof hubRaw !== 'object') return null;
     const hub = hubRaw as Record<string, unknown>;
-    if (!Array.isArray(hub.branches)) return null;
+    const hubValueFallback = mainLine[0]?.tile.high ?? 0;
+    const branchesRaw = Array.isArray(hub.branches) ? hub.branches : [];
 
-    const branches = hub.branches.map((branchRaw) => {
-      if (!branchRaw || typeof branchRaw !== 'object') return null;
+    const branches = branchesRaw
+      .filter((branchRaw) => branchRaw && typeof branchRaw === 'object')
+      .map((branchRaw) => {
       const branch = branchRaw as Record<string, unknown>;
-      if (!Array.isArray(branch.tiles)) return null;
-      const tiles = branch.tiles.map((placement) =>
-        normalizePlacement(placement, 'vertical-normal'),
-      );
-      if (tiles.some((placement) => !placement)) return null;
+      const tilesRaw = Array.isArray(branch.tiles) ? branch.tiles : [];
+      const tiles = tilesRaw
+        .map((placement) =>
+          normalizePlacement(placement, 'vertical-normal'),
+        )
+        .filter((placement): placement is { tile: Tile; orientation: TileOrientation } =>
+          Boolean(placement),
+        );
+      const last = tiles[tiles.length - 1] ?? null;
       return {
         ...branch,
-        tiles: tiles as { tile: Tile; orientation: string }[],
+        openEnd:
+          typeof branch.openEnd === 'number'
+            ? branch.openEnd
+            : last
+              ? endpointFromPlacement(last, 'right')
+              : typeof hub.hubValue === 'number'
+                ? hub.hubValue
+                : hubValueFallback,
+        openEndIsDouble:
+          typeof branch.openEndIsDouble === 'boolean'
+            ? branch.openEndIsDouble
+            : Boolean(last && last.tile.low === last.tile.high),
+        tiles,
       };
     });
-
-    if (branches.some((branch) => !branch)) return null;
     return {
       ...hub,
+      tileIndex: Number.isInteger(hub.tileIndex) ? Number(hub.tileIndex) : hubIdx,
+      hubValue: typeof hub.hubValue === 'number' ? hub.hubValue : hubValueFallback,
+      isCrossed: typeof hub.isCrossed === 'boolean' ? hub.isCrossed : branches.length > 0,
       branches: branches as BoardState['hubDoubles'][number]['branches'],
     } as BoardState['hubDoubles'][number];
   });
 
   if (hubDoubles.some((hub) => !hub)) return null;
+  const firstPlacement = mainLine[0] as { tile: Tile; orientation: TileOrientation };
+  const lastPlacement = mainLine[mainLine.length - 1] as { tile: Tile; orientation: TileOrientation };
+  const leftEnd = typeof board.leftEnd === 'number' ? board.leftEnd : endpointFromPlacement(firstPlacement, 'left');
+  const rightEnd =
+    typeof board.rightEnd === 'number' ? board.rightEnd : endpointFromPlacement(lastPlacement, 'right');
+  const leftEndIsDouble =
+    typeof board.leftEndIsDouble === 'boolean'
+      ? board.leftEndIsDouble
+      : firstPlacement.tile.low === firstPlacement.tile.high;
+  const rightEndIsDouble =
+    typeof board.rightEndIsDouble === 'boolean'
+      ? board.rightEndIsDouble
+      : lastPlacement.tile.low === lastPlacement.tile.high;
 
   const normalized: BoardState = {
     mainLine: mainLine as BoardState['mainLine'],
-    leftEnd: board.leftEnd,
-    rightEnd: board.rightEnd,
-    leftEndIsDouble: board.leftEndIsDouble,
-    rightEndIsDouble: board.rightEndIsDouble,
+    leftEnd,
+    rightEnd,
+    leftEndIsDouble,
+    rightEndIsDouble,
     hubDoubles: hubDoubles as BoardState['hubDoubles'],
   };
 

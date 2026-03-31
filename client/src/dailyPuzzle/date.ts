@@ -1,7 +1,23 @@
 const pad = (n: number) => String(n).padStart(2, '0');
 
+const PACIFIC_TIMEZONE = 'America/Los_Angeles';
+
+function toPacificDateKey(d: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PACIFIC_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const year = parts.find((p) => p.type === 'year')?.value ?? `${d.getFullYear()}`;
+  const month = parts.find((p) => p.type === 'month')?.value ?? pad(d.getMonth() + 1);
+  const day = parts.find((p) => p.type === 'day')?.value ?? pad(d.getDate());
+  return `${year}-${month}-${day}`;
+}
+
 export function getLocalDateKey(d = new Date()): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // Daily Puzzle calendar is explicitly Pacific Time (midnight PT reset).
+  return toPacificDateKey(d);
 }
 
 export function normalizeDateInputToLocalKey(input: string): string {

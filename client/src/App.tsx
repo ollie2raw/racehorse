@@ -21,6 +21,7 @@ import BotMatchScreen from './bot/BotMatchScreen';
 import BotSetupScreen from './bot/BotSetupScreen';
 import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
 import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
+import GauntletScreen from './gauntlet/GauntletScreen';
 import GameOverModal from './components/GameOverModal';
 import GameReviewer from './analyzer/GameReviewer';
 import AuthModal from './auth/AuthModal';
@@ -577,7 +578,15 @@ export default function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [appMode, setAppMode] = useState<
-    'home' | 'multiplayer' | 'noBrainer' | 'botSetup' | 'bot' | 'daily' | 'dailyAdmin' | 'tournament'
+    | 'home'
+    | 'multiplayer'
+    | 'noBrainer'
+    | 'botSetup'
+    | 'bot'
+    | 'daily'
+    | 'gauntlet'
+    | 'dailyAdmin'
+    | 'tournament'
   >('home');
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -2767,6 +2776,36 @@ export default function App() {
     );
   }
 
+  if (appMode === 'gauntlet') {
+    if (!isAdmin) {
+      return (
+        <div className={appRootClassName}>
+          <LayoutScreen
+            className="screen lobby-screen mode-home-screen mode-subpage-screen"
+            badge="Racehorse Dominoes"
+            title="The Gauntlet"
+            subtitle="You are not authorized to access this mode."
+            contentClassName="screen-shell"
+          >
+            <button className="mode-inline-btn" onClick={() => setAppMode('home')}>
+              Back to Home
+            </button>
+          </LayoutScreen>
+        </div>
+      );
+    }
+    return (
+      <div className={appRootClassName}>
+        <GauntletScreen
+          user={authUser}
+          profile={authProfile}
+          isAdmin={isAdmin}
+          onBack={() => setAppMode('home')}
+        />
+      </div>
+    );
+  }
+
   if (appMode === 'dailyAdmin') {
     if (!isAdmin) {
       return (
@@ -3506,6 +3545,20 @@ export default function App() {
                         Solve today’s featured scenario and compare leaderboard results
                       </span>
                     </button>
+                    {isAdmin && (
+                      <button
+                        className="mode-option mode-option-secondary mode-option-primary mode-option-hero mode-accent-gauntlet mode-option-hero-outline mode-card-gauntlet"
+                        onClick={() => setAppMode('gauntlet')}
+                      >
+                        <span className="mode-option-title">
+                          <span className="mode-daily-crown" aria-hidden="true">⚔</span>
+                          The Gauntlet
+                        </span>
+                        <span className="mode-option-meta">
+                          Five seeded rounds daily. Bank or push for bigger multipliers.
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </section>
 
