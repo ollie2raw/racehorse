@@ -26,9 +26,19 @@ export function normalizeDateInputToLocalKey(input: string): string {
   if (!match) return getLocalDateKey();
 
   const year = Number(match[1]);
-  const monthIndex = Number(match[2]) - 1;
+  const month = Number(match[2]);
   const day = Number(match[3]);
-  const localDate = new Date(year, monthIndex, day);
-  if (Number.isNaN(localDate.getTime())) return getLocalDateKey();
-  return getLocalDateKey(localDate);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(parsed.getTime())) return getLocalDateKey();
+
+  const roundTripYear = parsed.getUTCFullYear();
+  const roundTripMonth = parsed.getUTCMonth() + 1;
+  const roundTripDay = parsed.getUTCDate();
+  if (roundTripYear !== year || roundTripMonth !== month || roundTripDay !== day) {
+    return getLocalDateKey();
+  }
+
+  // Treat explicit YYYY-MM-DD input as a calendar key, not as a moment in the
+  // viewer's local timezone. This avoids archive dates drifting by a day.
+  return `${match[1]}-${match[2]}-${match[3]}`;
 }

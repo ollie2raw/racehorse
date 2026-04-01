@@ -51,7 +51,7 @@ interface BoardState {
 interface CuratedDailyPuzzle {
   id: string;
   puzzleDate: string;
-  title: string;
+  title: string | null;
   startingBoard: BoardState;
   startingHand: Tile[];
   maxMoves: number;
@@ -83,29 +83,6 @@ const MAX_PIPS = 6;
 const DEAL_SIZE = 14;
 const MAX_ATTEMPTS_PER_DATE = 120;
 const MIN_BEST_SCORE = 35;
-const TITLE_ROTATION = [
-  'Amber Crossroads',
-  'Ashen Gallop',
-  'Blue Lantern Run',
-  'Brass Switchback',
-  'Cinder Spur',
-  'Copper Halo',
-  'Crown of Dust',
-  'Dawn Relay',
-  'Ember Meridian',
-  'Fallow Circuit',
-  'Flint Horizon',
-  'Golden Siding',
-  'Harbor of Pips',
-  'Iron Canopy',
-  'Last Light Junction',
-  'Lucky Semaphore',
-  'Marble Turn',
-  'Northbound Echo',
-  'Sable Current',
-  'Velvet Junction',
-];
-
 function parseCliArgs(argv: string[]): CliOptions {
   let from: string | null = null;
   let days = 30;
@@ -803,16 +780,12 @@ function buildHandFromPath(
   return hand.sort((a, b) => tileKey(a).localeCompare(tileKey(b)));
 }
 
-function buildTitle(dateSeed: string): string {
-  return TITLE_ROTATION[hashString(dateSeed) % TITLE_ROTATION.length];
-}
-
 function createPuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
   const tactical = buildMidHandPuzzleState(dateSeed, attempt);
   const puzzle: CuratedDailyPuzzle = {
     id: `generated-${dateSeed}`,
     puzzleDate: dateSeed,
-    title: buildTitle(dateSeed),
+    title: null,
     startingBoard: tactical.board,
     startingHand: tactical.hand,
     maxMoves: 1,
@@ -1005,7 +978,7 @@ async function main(): Promise<void> {
     }
 
     await upsertPuzzle(supabaseUrl, serviceKey, generated);
-    console.log(`${dateSeed} | ${generated.title} | ${bestScore} | ${openEnds.join(',')}`);
+    console.log(`${dateSeed} | ${bestScore} | ${openEnds.join(',')}`);
   }
 }
 

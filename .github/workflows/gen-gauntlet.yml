@@ -1,0 +1,28 @@
+name: Generate Daily Gauntlet
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install tsx
+        run: npm install -g tsx
+
+      - name: Generate gauntlet days (backfill + lookahead)
+        env:
+          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          export TZ=UTC
+          FROM=$(date -u -d "-1 day" +%Y-%m-%d 2>/dev/null || date -u -v-1d +%Y-%m-%d)
+          bash scripts/gen-gauntlet.sh --from "$FROM" --days 14 --overwrite-existing --seed-salt racehorse-prod

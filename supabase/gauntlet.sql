@@ -33,6 +33,7 @@ create table if not exists public.gauntlet_attempts (
   finished_at timestamptz null,
   rounds_played int not null default 0 check (rounds_played >= 0 and rounds_played <= 5),
   banked_out boolean not null default false,
+  current_loadout jsonb not null default '[]'::jsonb,
   total_score int not null default 0,
   elo_before int not null,
   elo_after int null,
@@ -51,6 +52,11 @@ create table if not exists public.gauntlet_round_results (
   speed_bonus int not null,
   optimality_pct double precision not null check (optimality_pct >= 0 and optimality_pct <= 1),
   optimality_bonus int not null,
+  duel_bonus int not null default 0,
+  dominance_bonus int not null default 0,
+  survival_bonus int not null default 0,
+  fritz_score int not null default 0,
+  encounter_result jsonb null,
   round_total int not null,
   created_at timestamptz not null default now(),
   unique (attempt_id, round_number)
@@ -82,6 +88,20 @@ create table if not exists public.gauntlet_replays (
   created_at timestamptz not null default now(),
   check (jsonb_typeof(replay_frames) = 'array')
 );
+
+alter table public.gauntlet_attempts
+  add column if not exists current_loadout jsonb not null default '[]'::jsonb;
+
+alter table public.gauntlet_round_results
+  add column if not exists duel_bonus int not null default 0;
+alter table public.gauntlet_round_results
+  add column if not exists dominance_bonus int not null default 0;
+alter table public.gauntlet_round_results
+  add column if not exists survival_bonus int not null default 0;
+alter table public.gauntlet_round_results
+  add column if not exists fritz_score int not null default 0;
+alter table public.gauntlet_round_results
+  add column if not exists encounter_result jsonb null;
 
 create index if not exists idx_gauntlet_days_date on public.gauntlet_days(date);
 create index if not exists idx_gauntlet_days_close on public.gauntlet_days(closes_at);
@@ -268,7 +288,8 @@ returns table (
   rounds_played int,
   total_score int,
   rating int,
-  division text
+  division text,
+  current_loadout jsonb
 )
 language plpgsql
 security definer
@@ -299,7 +320,8 @@ begin
     coalesce(a.rounds_played, 0),
     coalesce(a.total_score, 0),
     coalesce(r.rating, 1000),
-    coalesce(r.division, 'Bronze')
+    coalesce(r.division, 'Bronze'),
+    coalesce(a.current_loadout, '[]'::jsonb)
   from (select 1) one
   left join public.gauntlet_attempts a
     on a.gauntlet_day_id = v_day.id
@@ -379,6 +401,7 @@ begin
         finished_at = null,
         rounds_played = 0,
         banked_out = false,
+        current_loadout = '[]'::jsonb,
         total_score = 0,
         elo_before = coalesce(v_rating.rating, 1000),
         elo_after = null,
@@ -413,19 +436,68 @@ begin
 end;
 $$;
 
+drop function if exists public.gauntlet_submit_round(int, int, jsonb, int, int, jsonb);
+
+create or replace function public.gauntlet_set_loadout(
+  p_attempt_id int,
+  p_loadout jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_attempt public.gauntlet_attempts%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  if jsonb_typeof(coalesce(p_loadout, '[]'::jsonb)) <> 'array' then
+    raise exception 'p_loadout must be a json array';
+  end if;
+
+  select *
+    into v_attempt
+  from public.gauntlet_attempts
+  where id = p_attempt_id
+    and user_id = auth.uid()
+  limit 1;
+
+  if not found then
+    raise exception 'Attempt not found';
+  end if;
+
+  if v_attempt.status <> 'in_progress' then
+    raise exception 'Attempt is already finalized';
+  end if;
+
+  update public.gauntlet_attempts
+  set current_loadout = coalesce(p_loadout, '[]'::jsonb)
+  where id = v_attempt.id;
+end;
+$$;
+
 create or replace function public.gauntlet_submit_round(
   p_attempt_id int,
   p_round_number int,
   p_hand_played jsonb,
   p_time_taken_ms int,
   p_player_score int,
-  p_replay_frames jsonb default '[]'::jsonb
+  p_fritz_score int default 0,
+  p_replay_frames jsonb default '[]'::jsonb,
+  p_loadout jsonb default '[]'::jsonb,
+  p_encounter_result jsonb default null
 )
 returns table (
   base_score int,
   speed_bonus int,
   optimality_pct double precision,
   optimality_bonus int,
+  duel_bonus int,
+  dominance_bonus int,
+  survival_bonus int,
   round_total int,
   running_total int,
   rounds_played int,
@@ -443,12 +515,18 @@ declare
   v_speed_bonus int;
   v_optimality_pct double precision;
   v_optimality_bonus int;
+  v_duel_bonus int;
+  v_dominance_bonus int;
+  v_survival_bonus int;
   v_round_total int;
   v_rounds_played int;
   v_pre_total int;
   v_multiplier numeric;
   v_post_total int;
   v_solution jsonb;
+  v_player_hand_count int;
+  v_fritz_hand_count int;
+  v_player_won boolean;
 begin
   if auth.uid() is null then
     raise exception 'Authentication required';
@@ -458,6 +536,9 @@ begin
   end if;
   if p_time_taken_ms < 0 then
     raise exception 'time_taken_ms must be >= 0';
+  end if;
+  if p_fritz_score < 0 then
+    raise exception 'p_fritz_score must be >= 0';
   end if;
 
   select *
@@ -506,7 +587,34 @@ begin
   v_speed_bonus := greatest(0, round(500 * (1 - ((p_time_taken_ms::numeric / 1000.0) / 120.0))));
   v_optimality_pct := least(1.0, greatest(0.0, p_player_score::double precision / v_optimal_score::double precision));
   v_optimality_bonus := round(1000 * v_optimality_pct);
-  v_round_total := v_base_score + v_speed_bonus + v_optimality_bonus;
+  v_player_hand_count := greatest(0, coalesce((p_encounter_result ->> 'playerHandCount')::int, 0));
+  v_fritz_hand_count := greatest(0, coalesce((p_encounter_result ->> 'fritzHandCount')::int, 0));
+  v_player_won := coalesce((p_encounter_result ->> 'wonHand')::boolean, false);
+
+  v_duel_bonus := case
+    when p_player_score > p_fritz_score then least(320, 140 + ((p_player_score - p_fritz_score) * 8))
+    when p_player_score = p_fritz_score then 80
+    else greatest(0, 30 - ((p_fritz_score - p_player_score) * 4))
+  end;
+  v_dominance_bonus := case
+    when v_player_hand_count = 0 and v_player_won then 160
+    when v_player_won and v_player_hand_count <= 2 then 100
+    when p_player_score > p_fritz_score then 55
+    else 0
+  end;
+  v_survival_bonus := greatest(0, 90 - (v_fritz_hand_count * 12));
+  if coalesce(p_loadout, '[]'::jsonb) @> '[{"id":"safe_bank"}]'::jsonb and p_player_score >= p_fritz_score then
+    v_survival_bonus := v_survival_bonus + 25;
+  end if;
+  if coalesce(p_loadout, '[]'::jsonb) @> '[{"id":"double_down"}]'::jsonb and coalesce((p_encounter_result ->> 'handReason')::text, '') = 'domino' then
+    v_dominance_bonus := v_dominance_bonus + 25;
+  end if;
+
+  v_round_total := v_base_score + v_speed_bonus + v_optimality_bonus + v_duel_bonus + v_dominance_bonus + v_survival_bonus;
+
+  update public.gauntlet_attempts
+  set current_loadout = coalesce(p_loadout, current_loadout, '[]'::jsonb)
+  where id = v_attempt.id;
 
   insert into public.gauntlet_round_results (
     attempt_id,
@@ -518,6 +626,11 @@ begin
     speed_bonus,
     optimality_pct,
     optimality_bonus,
+    duel_bonus,
+    dominance_bonus,
+    survival_bonus,
+    fritz_score,
+    encounter_result,
     round_total
   )
   values (
@@ -530,6 +643,11 @@ begin
     v_speed_bonus,
     v_optimality_pct,
     v_optimality_bonus,
+    v_duel_bonus,
+    v_dominance_bonus,
+    v_survival_bonus,
+    p_fritz_score,
+    p_encounter_result,
     v_round_total
   )
   on conflict (attempt_id, round_number) do update
@@ -541,6 +659,11 @@ begin
     speed_bonus = excluded.speed_bonus,
     optimality_pct = excluded.optimality_pct,
     optimality_bonus = excluded.optimality_bonus,
+    duel_bonus = excluded.duel_bonus,
+    dominance_bonus = excluded.dominance_bonus,
+    survival_bonus = excluded.survival_bonus,
+    fritz_score = excluded.fritz_score,
+    encounter_result = excluded.encounter_result,
     round_total = excluded.round_total;
 
   select coalesce(sum(rr.round_total), 0), coalesce(max(rr.round_number), 0)
@@ -568,6 +691,9 @@ begin
     v_speed_bonus,
     v_optimality_pct,
     v_optimality_bonus,
+    v_duel_bonus,
+    v_dominance_bonus,
+    v_survival_bonus,
     v_round_total,
     v_post_total,
     v_rounds_played,
@@ -934,7 +1060,8 @@ $$;
 -- Lock down function execution; then grant only app-facing RPCs.
 revoke all on function public.gauntlet_today_summary() from public;
 revoke all on function public.gauntlet_start_attempt() from public;
-revoke all on function public.gauntlet_submit_round(int, int, jsonb, int, int, jsonb) from public;
+revoke all on function public.gauntlet_set_loadout(int, jsonb) from public;
+revoke all on function public.gauntlet_submit_round(int, int, jsonb, int, int, int, jsonb, jsonb, jsonb) from public;
 revoke all on function public.gauntlet_finalize_attempt(int, boolean, jsonb) from public;
 revoke all on function public.gauntlet_my_history(int) from public;
 revoke all on function public.gauntlet_rating(uuid) from public;
@@ -945,7 +1072,8 @@ revoke all on function public.gauntlet_publish_day(date, text, jsonb, jsonb, tim
 
 grant execute on function public.gauntlet_today_summary() to authenticated;
 grant execute on function public.gauntlet_start_attempt() to authenticated;
-grant execute on function public.gauntlet_submit_round(int, int, jsonb, int, int, jsonb) to authenticated;
+grant execute on function public.gauntlet_set_loadout(int, jsonb) to authenticated;
+grant execute on function public.gauntlet_submit_round(int, int, jsonb, int, int, int, jsonb, jsonb, jsonb) to authenticated;
 grant execute on function public.gauntlet_finalize_attempt(int, boolean, jsonb) to authenticated;
 grant execute on function public.gauntlet_my_history(int) to authenticated;
 grant execute on function public.gauntlet_rating(uuid) to authenticated;

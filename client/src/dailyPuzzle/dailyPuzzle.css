@@ -714,6 +714,101 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+.daily-archive-controls {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.daily-archive-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(226, 236, 245, 0.76);
+}
+
+.daily-archive-input {
+  width: min(260px, 100%);
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(7, 12, 24, 0.72);
+  color: rgba(240, 246, 250, 0.96);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  color-scheme: dark;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.daily-archive-input:hover {
+  border-color: rgba(240, 192, 64, 0.28);
+  background: rgba(9, 15, 28, 0.82);
+}
+
+.daily-archive-input:focus {
+  outline: none;
+  border-color: rgba(240, 192, 64, 0.48);
+  box-shadow:
+    0 0 0 1px rgba(240, 192, 64, 0.18),
+    0 0 0 4px rgba(240, 192, 64, 0.08);
+}
+
+.daily-archive-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.daily-archive-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 19, 32, 0.8);
+  color: rgba(234, 244, 241, 0.9);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.daily-archive-button:hover:not(:disabled) {
+  border-color: rgba(240, 192, 64, 0.42);
+  background: rgba(18, 28, 44, 0.92);
+  box-shadow: 0 0 0 1px rgba(240, 192, 64, 0.12);
+}
+
+.daily-archive-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.daily-archive-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.daily-archive-button-secondary {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(8, 14, 26, 0.42);
+  color: rgba(206, 223, 231, 0.84);
+}
+
 .daily-entry-meta-row {
   display: flex;
   align-items: center;
@@ -781,6 +876,21 @@
   opacity: 0.4 !important;
   border-color: rgba(255, 255, 255, 0.06) !important;
   background: transparent !important;
+}
+
+@media (max-width: 640px) {
+  .daily-archive-input {
+    width: 100%;
+  }
+
+  .daily-archive-actions {
+    width: 100%;
+  }
+
+  .daily-archive-button {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
 }
 
 .daily-entry-back-link .mode-option-title::before {

@@ -7,7 +7,14 @@ import {
   type BotPlayerId,
 } from '../bot/botEngine';
 import type { BoardState, Move, Tile } from '../types';
-import type { GauntletDifficulty, GauntletScenario, PublicGauntletScenario } from './types';
+import type {
+  FritzArchetype,
+  GauntletDifficulty,
+  GauntletRewardChoice,
+  GauntletRewardId,
+  GauntletScenario,
+  PublicGauntletScenario,
+} from './types';
 
 const DIFFICULTIES: GauntletDifficulty[] = ['intro', 'easy', 'medium', 'hard', 'brutal'];
 
@@ -25,6 +32,58 @@ const DIFFICULTY_CONFIG: Record<GauntletDifficulty, DifficultyConfig> = {
   hard: { targetHandMin: 7, boardTilesMin: 9, optionsMin: 4, simTurnsMin: 14 },
   brutal: { targetHandMin: 6, boardTilesMin: 10, optionsMin: 5, simTurnsMin: 16 },
 };
+
+const ROUND_ARCHETYPES: Record<number, FritzArchetype[]> = {
+  1: ['greedy', 'tempo'],
+  2: ['greedy', 'trap', 'tempo'],
+  3: ['trap', 'branchlord', 'mirror'],
+  4: ['branchlord', 'mirror', 'tempo'],
+  5: ['boss', 'mirror', 'branchlord'],
+};
+
+const ARCHETYPE_NAMES: Record<FritzArchetype, string[]> = {
+  greedy: ['Fritz Goldfang', 'Fritz Payday', 'Fritz Emberstack'],
+  trap: ['Fritz Snareline', 'Fritz Lockjaw', 'Fritz Wiretap'],
+  branchlord: ['Fritz Forkstorm', 'Fritz Arborhex', 'Fritz Splitrail'],
+  tempo: ['Fritz Blitzhand', 'Fritz Overclock', 'Fritz Quickmatch'],
+  mirror: ['Fritz Glassveil', 'Fritz Nullframe', 'Fritz Quietline'],
+  boss: ['Emperor Fritz', 'Fritz Blackstar', 'Fritz Endboss'],
+};
+
+const LANE_NAMES = ['Control Rail', 'Highwire Lane', 'Ashfall Spur', 'Vault Line', 'Signal Run'];
+const ARENA_NAMES = ['Cinder Yard', 'Walnut Dome', 'Dead Rail Annex', 'Switchback Arena', 'Midnight Exchange'];
+
+const MUTATIONS: Record<GauntletDifficulty, Array<{ title: string; description: string; threat: string }>> = {
+  intro: [
+    { title: 'Soft Launch', description: 'Fritz opens politely, but rewards fast scoring chains immediately.', threat: 'Warm-up' },
+    { title: 'Open Ledger', description: 'Early board is loose. Punish Fritz before the lane stabilizes.', threat: 'Low' },
+  ],
+  easy: [
+    { title: 'Tempo Tax', description: 'Any hesitation costs pace. Clean lines outrun sloppy greed.', threat: 'Rising' },
+    { title: 'Score Bait', description: 'Fritz leaves tempting points that can boomerang if you mis-sequence.', threat: 'Rising' },
+  ],
+  medium: [
+    { title: 'Fork Pressure', description: 'Branches unlock fast. Cross doubles with a plan or lose control.', threat: 'High' },
+    { title: 'Mirror Read', description: 'Safe moves are close in value. Precision matters now.', threat: 'High' },
+  ],
+  hard: [
+    { title: 'Collapse Window', description: 'One dead move and Fritz takes the lane. You need chain discipline.', threat: 'Severe' },
+    { title: 'Counterpunch', description: 'This encounter is built to punish lazy scoring grabs.', threat: 'Severe' },
+  ],
+  brutal: [
+    { title: 'Final Table', description: 'Fritz is playing for the leaderboard. Every pip is contested.', threat: 'Extreme' },
+    { title: 'Blackout Rule', description: 'The board is rich, but every wrong extension leaks EV instantly.', threat: 'Extreme' },
+  ],
+};
+
+const REWARD_POOL: GauntletRewardChoice[] = [
+  { id: 'tempo_buffer', title: 'Tempo Buffer', description: 'Reveal the speed-bonus timer bands before each fight.', rarity: 'common' },
+  { id: 'route_scan', title: 'Route Scan', description: 'Preview the next Fritz encounter and mutation before you commit.', rarity: 'rare' },
+  { id: 'branch_hunter', title: 'Branch Hunter', description: 'Display branch pressure and live playable-route counts mid-fight.', rarity: 'common' },
+  { id: 'safe_bank', title: 'Safe Bank', description: 'Bank prompts emphasize what you are protecting before the next jump.', rarity: 'common' },
+  { id: 'double_down', title: 'Double Down', description: 'Track live doubles in hand and highlight your explosive tiles.', rarity: 'rare' },
+  { id: 'ice_veins', title: 'Ice Veins', description: 'Surface calmer encounter intel so fast decisions stay readable.', rarity: 'common' },
+];
 
 function generateDoubleSixSet(): Tile[] {
   const tiles: Tile[] = [];
@@ -54,6 +113,70 @@ function cloneMove(move: Move): Move {
     type: move.type,
     tile: move.tile ? { ...move.tile } : undefined,
     position: move.position,
+  };
+}
+
+function pickOne<T>(rng: seedrandom.PRNG, items: readonly T[]): T {
+  return items[pickIndex(rng, items.length)];
+}
+
+function pickUniqueRewards(rng: seedrandom.PRNG, count = 3): GauntletRewardChoice[] {
+  const pool = shuffleWithRng(rng, REWARD_POOL);
+  return pool.slice(0, Math.min(count, pool.length));
+}
+
+function buildEncounterMeta(
+  rng: seedrandom.PRNG,
+  round: number,
+  difficulty: GauntletDifficulty,
+): Pick<
+  GauntletScenario,
+  | 'fritzArchetype'
+  | 'fritzName'
+  | 'encounterTitle'
+  | 'arenaName'
+  | 'laneName'
+  | 'mutationTitle'
+  | 'mutationDescription'
+  | 'briefing'
+  | 'taunt'
+  | 'threatLabel'
+  | 'rewardChoices'
+> {
+  const archetype = pickOne(rng, ROUND_ARCHETYPES[round] ?? ['mirror']);
+  const fritzName = pickOne(rng, ARCHETYPE_NAMES[archetype]);
+  const laneName = pickOne(rng, LANE_NAMES);
+  const arenaName = pickOne(rng, ARENA_NAMES);
+  const mutation = pickOne(rng, MUTATIONS[difficulty]);
+  const encounterTitle = round === 5 ? `${fritzName} Final` : `${fritzName} ${laneName}`;
+  const tauntByArchetype: Record<FritzArchetype, string> = {
+    greedy: 'I score first. You clean up what is left.',
+    trap: 'One wrong tile and the board closes on you.',
+    branchlord: 'Cross the double if you dare. I own the branches.',
+    tempo: 'Blink and the chain is gone.',
+    mirror: 'You know the right move. Can you actually find it?',
+    boss: 'Today ends at my table.',
+  };
+  const briefByArchetype: Record<FritzArchetype, string> = {
+    greedy: 'Fritz is hunting immediate points. Beat him by sequencing cleaner than the obvious line.',
+    trap: 'This board is rigged with bait. Fritz wants your first greedy misread.',
+    branchlord: 'Expect branch pressure and ugly lane geometry. Play for control, not comfort.',
+    tempo: 'This encounter rewards instant recognition and punishes dithering.',
+    mirror: 'Several lines are close. Separation comes from exactness, not luck.',
+    boss: 'This is the day-ending exam. Your run only matters if you hold form here.',
+  };
+  return {
+    fritzArchetype: archetype,
+    fritzName,
+    encounterTitle,
+    arenaName,
+    laneName,
+    mutationTitle: mutation.title,
+    mutationDescription: mutation.description,
+    briefing: briefByArchetype[archetype],
+    taunt: tauntByArchetype[archetype],
+    threatLabel: mutation.threat,
+    rewardChoices: round >= 5 ? [] : pickUniqueRewards(rng),
   };
 }
 
@@ -263,6 +386,7 @@ function generateMidHandState(rng: seedrandom.PRNG, difficulty: GauntletDifficul
 function generateRound(rng: seedrandom.PRNG, round: number): GauntletScenario {
   const difficulty = DIFFICULTIES[round - 1] ?? 'intro';
   const tactical = generateMidHandState(rng, difficulty);
+  const meta = buildEncounterMeta(rng, round, difficulty);
 
   const optimalSolution = computeOptimalSolution(tactical.playerHand, tactical.boardState);
   const optimalScore = scoreSequence(tactical.playerHand, tactical.boardState, optimalSolution);
@@ -273,6 +397,7 @@ function generateRound(rng: seedrandom.PRNG, round: number): GauntletScenario {
     playerHand: tactical.playerHand,
     boardState: tactical.boardState,
     opponentTiles: tactical.opponentTiles,
+    ...meta,
     optimalSolution,
     optimalScore,
   };

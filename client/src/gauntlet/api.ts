@@ -5,6 +5,7 @@ import type {
   GauntletAttemptHistoryRow,
   GauntletFinalizeResult,
   GauntletLeaderboardRow,
+  GauntletRewardChoice,
   GauntletRating,
   GauntletRoundSubmitResult,
   GauntletTodaySummary,
@@ -35,6 +36,22 @@ function normalizeError(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function normalizeRewardChoiceArray(raw: unknown): GauntletRewardChoice[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry): GauntletRewardChoice => {
+      const rec = entry as Partial<GauntletRewardChoice>;
+      return {
+        id: String(rec.id ?? '') as GauntletRewardChoice['id'],
+        title: String(rec.title ?? ''),
+        description: String(rec.description ?? ''),
+        rarity: rec.rarity === 'rare' ? 'rare' : 'common',
+      };
+    })
+    .filter((entry) => entry.id && entry.title);
+}
+
 export async function getTodayGauntletSummary(): Promise<GauntletTodaySummary | null> {
   if (!supabase) return null;
   const { data, error } = await withTimeout(
@@ -58,6 +75,7 @@ export async function getTodayGauntletSummary(): Promise<GauntletTodaySummary | 
     totalScore: Number(row.total_score ?? 0),
     rating: Number(row.rating ?? 1000),
     division: String(row.division ?? 'Bronze'),
+    currentLoadout: normalizeRewardChoiceArray((row as { current_loadout?: unknown }).current_loadout),
   };
 }
 
@@ -91,6 +109,35 @@ export async function startGauntletAttempt(): Promise<{
   };
 }
 
+export async function setGauntletLoadout(
+  attemptId: number,
+  loadout: GauntletRewardChoice[],
+): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabase is not configured.');
+  }
+
+  const { error } = await withTimeout(
+    Promise.resolve(
+      supabase.rpc('gauntlet_set_loadout', {
+        p_attempt_id: attemptId,
+        p_loadout: loadout,
+      }),
+    ),
+  );
+
+  if (error) {
+    if (error.message.includes('Could not find the function public.gauntlet_set_loadout')) {
+      return;
+    }
+    throw new Error(error.message);
+  }
+}
+
+function isMissingRpcSignature(message: string, fnName: string): boolean {
+  return message.includes(`Could not find the function public.${fnName}`);
+}
+
 export async function submitGauntletRound(params: {
   attemptId: number;
   roundNumber: number;
@@ -98,23 +145,52 @@ export async function submitGauntletRound(params: {
   replayFrames?: ReplayFrame[];
   timeTakenMs: number;
   playerScore: number;
+  fritzScore: number;
+  playerHandCount: number;
+  fritzHandCount: number;
+  loadout?: GauntletRewardChoice[];
+  encounterResult?: Record<string, unknown>;
 }): Promise<GauntletRoundSubmitResult> {
   if (!supabase) {
     throw new Error('Supabase is not configured.');
   }
 
-  const { data, error } = await withTimeout(
-    Promise.resolve(
-      supabase.rpc('gauntlet_submit_round', {
-        p_attempt_id: params.attemptId,
-        p_round_number: params.roundNumber,
-        p_hand_played: params.movesPlayed,
-        p_time_taken_ms: Math.max(0, Math.round(params.timeTakenMs)),
-        p_player_score: Math.max(0, Math.round(params.playerScore)),
-        p_replay_frames: params.replayFrames ?? [],
-      }),
-    ),
+  const primaryArgs = {
+    p_attempt_id: params.attemptId,
+    p_round_number: params.roundNumber,
+    p_hand_played: params.movesPlayed,
+    p_time_taken_ms: Math.max(0, Math.round(params.timeTakenMs)),
+    p_player_score: Math.max(0, Math.round(params.playerScore)),
+    p_fritz_score: Math.max(0, Math.round(params.fritzScore)),
+    p_replay_frames: params.replayFrames ?? [],
+    p_loadout: params.loadout ?? [],
+    p_encounter_result: {
+      ...(params.encounterResult ?? {}),
+      playerHandCount: Math.max(0, Math.round(params.playerHandCount)),
+      fritzHandCount: Math.max(0, Math.round(params.fritzHandCount)),
+    },
+  };
+
+  let { data, error } = await withTimeout(
+    Promise.resolve(supabase.rpc('gauntlet_submit_round', primaryArgs)),
   );
+
+  if (error && isMissingRpcSignature(error.message, 'gauntlet_submit_round')) {
+    const legacy = await withTimeout(
+      Promise.resolve(
+        supabase.rpc('gauntlet_submit_round', {
+          p_attempt_id: params.attemptId,
+          p_round_number: params.roundNumber,
+          p_hand_played: params.movesPlayed,
+          p_time_taken_ms: Math.max(0, Math.round(params.timeTakenMs)),
+          p_player_score: Math.max(0, Math.round(params.playerScore)),
+          p_replay_frames: params.replayFrames ?? [],
+        }),
+      ),
+    );
+    data = legacy.data;
+    error = legacy.error;
+  }
 
   if (error) {
     throw new Error(error.message);
@@ -130,6 +206,9 @@ export async function submitGauntletRound(params: {
     speedBonus: Number(row.speed_bonus ?? 0),
     optimalityPct: Number(row.optimality_pct ?? 0),
     optimalityBonus: Number(row.optimality_bonus ?? 0),
+    duelBonus: Number(row.duel_bonus ?? 0),
+    dominanceBonus: Number(row.dominance_bonus ?? 0),
+    survivalBonus: Number(row.survival_bonus ?? 0),
     roundTotal: Number(row.round_total ?? 0),
     runningTotal: Number(row.running_total ?? 0),
     roundsPlayed: Number(row.rounds_played ?? 0),
