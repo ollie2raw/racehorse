@@ -536,7 +536,7 @@ export default function BotMatchScreen({
   }, [ghostPlayedTile]);
 
   useEffect(() => {
-    if (!isGhostMode || !userId) return;
+    if (!userId) return;
     if (!match.gameOver) {
       ghostCompleteKeyRef.current = '';
       setGhostResult(null);
@@ -547,9 +547,12 @@ export default function BotMatchScreen({
     if (ghostCompleteKeyRef.current === key) return;
     ghostCompleteKeyRef.current = key;
     setGhostResultLoading(true);
+
+    const effectiveOpponentUserId = isGhostMode ? opponentUserId : (opponentUserId || 'fritz-bot');
+
     void completeGhostGame({
       userId,
-      opponentUserId,
+      opponentUserId: effectiveOpponentUserId,
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
       moveLog: ghostMoveLog,
@@ -580,7 +583,8 @@ export default function BotMatchScreen({
             : null,
         );
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('Failed to complete match ranking update:', err);
         setGhostResultLoading(false);
       });
   }, [
