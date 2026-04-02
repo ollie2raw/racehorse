@@ -312,6 +312,20 @@ describe('Crossed Doubles and Branching', () => {
     expect(board.leftEnd).toBe(2);
     expect(board.rightEnd).toBe(5);
     expect(board.hubDoubles[0].isCrossed).toBe(true);
+    expect(computeOpenEndsSum(board)).toBe(7);
+  });
+
+  it('crossed double contributes zero until a branch tile is played', () => {
+    let board = simulatePlacement(null, t(3, 3), 'left');
+    board = simulatePlacement(board, t(3, 4), 'left');
+    expect(computeOpenEndsSum(board)).toBe(10);
+
+    board = simulatePlacement(board, t(1, 3), 'right');
+    expect(board.hubDoubles[0].isCrossed).toBe(true);
+    expect(computeOpenEndsSum(board)).toBe(5);
+
+    board = simulatePlacement(board, t(2, 3), 'branch-0-0');
+    expect(computeOpenEndsSum(board)).toBe(7);
   });
 
   it('crossed double enables branching', () => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { fetchUserStats, type StatsSummary } from './statsApi';
+import { fetchUserStats, type StatsSummary, fetchRankingProfile, type RankingProfile } from './statsApi';
 
 interface StatsScreenProps {
   open: boolean;
@@ -27,6 +27,7 @@ const EMPTY_STATS: StatsSummary = {
 
 export default function StatsScreen({ open, user, profile, onClose }: StatsScreenProps) {
   const [stats, setStats] = useState<StatsSummary>(EMPTY_STATS);
+  const [rankingProfile, setRankingProfile] = useState<RankingProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -53,6 +54,11 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
         setLoading(false);
         setError('Unable to load stats. Please try again.');
       });
+
+    void fetchRankingProfile(user.id).then(({ data }) => {
+      if (requestId !== requestIdRef.current) return;
+      setRankingProfile(data);
+    });
   }, [user]);
 
   useEffect(() => {
@@ -165,6 +171,61 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
             Member
           </span>
         </div>
+
+        {rankingProfile && (
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '12px',
+              background: 'rgba(20, 28, 45, 0.72)',
+              border: '1px solid rgba(236, 252, 245, 0.12)',
+              display: 'grid',
+              gap: '10px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+               <span style={{ fontSize: '0.86rem', color: 'rgba(191,213,223,0.86)', fontWeight: 600 }}>Ranked Rating</span>
+               {rankingProfile.rank && (
+                 <span style={{ fontSize: '0.82rem', color: '#34d399', fontWeight: 700 }}>#{rankingProfile.rank} globally</span>
+               )}
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+               <span style={{ fontSize: '2.2rem', fontWeight: 800, color: '#fefefe', lineHeight: 1 }}>
+                 {Math.round(rankingProfile.glicko_rating).toLocaleString()}
+               </span>
+               {rankingProfile.provisional && (
+                 <span style={{ fontSize: '1.4rem', color: 'rgba(236,252,245,0.4)', fontWeight: 600 }}>?</span>
+               )}
+            </div>
+
+            {rankingProfile.provisional && (
+              <span style={{ fontSize: '0.76rem', color: 'rgba(191,213,223,0.6)', marginTop: '-4px' }}>
+                Confirmed after 20 ranked games
+              </span>
+            )}
+
+            <div style={{ height: '5px', width: '100%', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', marginTop: '2px' }}>
+              <div 
+                style={{ 
+                  height: '100%', 
+                  background: 'linear-gradient(90deg, #10b981, #34d399)',
+                  borderRadius: '3px',
+                  width: `${Math.max(10, 100 - (rankingProfile.glicko_rd - 50) * (90/300))}%`,
+                  boxShadow: '0 0 10px rgba(52, 211, 153, 0.25)',
+                  transition: 'width 600ms ease-out'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px', fontSize: '0.78rem', color: 'rgba(191,213,223,0.72)', marginTop: '2px' }}>
+               <span>Peak: <strong style={{ color: 'rgba(236,252,245,0.9)' }}>{Math.round(rankingProfile.peak_rating).toLocaleString()}</strong></span>
+               <span>Ranked Games: <strong style={{ color: 'rgba(236,252,245,0.9)' }}>{rankingProfile.ranked_games_played}</strong></span>
+            </div>
+          </div>
+        )}
 
         {loading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading stats...</p>}
         {error && (

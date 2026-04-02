@@ -27,7 +27,7 @@ export interface PracticeHint {
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
-  return a.high === b.high && a.low === b.low;
+  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
 function isDouble(tile: Tile): boolean {
@@ -408,7 +408,9 @@ function computeOpenEndsSum(board: BoardState): number {
   sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
 
   for (const hub of board.hubDoubles) {
-    for (const branch of hub.branches) {
+    if (!hub.isCrossed) continue;
+    for (let i = 0; i < 2; i++) {
+      const branch = hub.branches[i];
       if (!branch) continue;
       sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
     }

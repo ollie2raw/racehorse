@@ -72,6 +72,7 @@ interface BotMatchScreenProps {
   username?: string | null;
   winningScore?: number;
   opponentName?: string;
+  opponentUserId?: string | null;
   ghostProfile?: GhostProfileSummary | null;
   onGhostProfileChange?: ((summary: GhostProfileSummary | null) => void) | null;
   onMatchComplete?: ((result: {
@@ -174,6 +175,7 @@ export default function BotMatchScreen({
   username = null,
   winningScore = 60,
   opponentName = 'Fritz',
+  opponentUserId = null,
   ghostProfile = null,
   onGhostProfileChange = null,
   onMatchComplete = null,
@@ -547,6 +549,7 @@ export default function BotMatchScreen({
     setGhostResultLoading(true);
     void completeGhostGame({
       userId,
+      opponentUserId,
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
       moveLog: ghostMoveLog,
@@ -588,6 +591,7 @@ export default function BotMatchScreen({
     match.handNumber,
     match.players.bot.score,
     match.players.you.score,
+    opponentUserId,
     onGhostProfileChange,
     userId,
   ]);

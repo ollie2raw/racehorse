@@ -375,14 +375,21 @@ function getOpenEnds(board: BoardState): Array<{ value: number; isDouble: boolea
 
   for (const [hubIdx, hub] of board.hubDoubles.entries()) {
     if (!hub.isCrossed) continue;
-    for (let armIdx = 0; armIdx < Math.min(hub.branches.length, 2); armIdx += 1) {
+    for (let armIdx = 0; armIdx < 2; armIdx += 1) {
       const branch = hub.branches[armIdx];
-      if (!branch) continue;
-      ends.push({
-        value: branch.openEnd,
-        isDouble: branch.openEndIsDouble,
-        position: `branch-${hub.hubId ?? hubIdx}-${armIdx}`,
-      });
+      if (!branch) {
+        ends.push({
+          value: hub.hubValue,
+          isDouble: false,
+          position: `branch-${hub.hubId ?? hubIdx}-${armIdx}`,
+        });
+      } else {
+        ends.push({
+          value: branch.openEnd,
+          isDouble: branch.openEndIsDouble,
+          position: `branch-${hub.hubId ?? hubIdx}-${armIdx}`,
+        });
+      }
     }
   }
 
@@ -390,7 +397,25 @@ function getOpenEnds(board: BoardState): Array<{ value: number; isDouble: boolea
 }
 
 function computeOpenEndsSum(board: BoardState): number {
-  return getOpenEnds(board).reduce((sum, end) => sum + (end.isDouble ? end.value * 2 : end.value), 0);
+  if (board.mainLine.length === 1) {
+    const tile = board.mainLine[0]?.tile;
+    return tile ? tile.low + tile.high : 0;
+  }
+
+  let sum = 0;
+  sum += board.leftEndIsDouble ? board.leftEnd * 2 : board.leftEnd;
+  sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
+
+  for (const hub of board.hubDoubles) {
+    if (!hub.isCrossed) continue;
+    for (let armIdx = 0; armIdx < 2; armIdx += 1) {
+      const branch = hub.branches[armIdx];
+      if (!branch) continue;
+      sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
+    }
+  }
+
+  return sum;
 }
 
 function chooseMatchingNonDouble(

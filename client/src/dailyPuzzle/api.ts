@@ -88,13 +88,14 @@ function isBoardState(value: unknown): value is BoardState {
         Array.isArray(hub.branches) &&
         hub.branches.every(
           (branch) =>
-            Array.isArray(branch.tiles) &&
-            branch.tiles.every(
-              (placement) =>
-                Boolean(placement) &&
-                isTile(placement.tile) &&
-                typeof placement.orientation === 'string',
-            ),
+            !branch ||
+            (Array.isArray(branch.tiles) &&
+              branch.tiles.every(
+                (placement) =>
+                  Boolean(placement) &&
+                  isTile(placement.tile) &&
+                  typeof placement.orientation === 'string',
+              )),
         ),
     );
 
@@ -144,15 +145,12 @@ export function normalizeBoardState(raw: unknown): BoardState | null {
     const hubValueFallback = mainLine[0]?.tile.high ?? 0;
     const branchesRaw = Array.isArray(hub.branches) ? hub.branches : [];
 
-    const branches = branchesRaw
-      .filter((branchRaw) => branchRaw && typeof branchRaw === 'object')
-      .map((branchRaw) => {
+    const branches = branchesRaw.map((branchRaw) => {
+      if (!branchRaw || typeof branchRaw !== 'object') return null;
       const branch = branchRaw as Record<string, unknown>;
       const tilesRaw = Array.isArray(branch.tiles) ? branch.tiles : [];
       const tiles = tilesRaw
-        .map((placement) =>
-          normalizePlacement(placement, 'vertical-normal'),
-        )
+        .map((placement) => normalizePlacement(placement, 'vertical-normal'))
         .filter((placement): placement is { tile: Tile; orientation: TileOrientation } =>
           Boolean(placement),
         );

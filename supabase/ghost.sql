@@ -14,8 +14,11 @@ create table if not exists public.ghost_profiles (
   ghost_rating int not null default 800,
   last_updated timestamptz null,
   composite_log jsonb null,
+  style_profile jsonb null,
   games_played int not null default 0
 );
+
+alter table public.ghost_profiles add column if not exists style_profile jsonb null;
 
 alter table public.ghost_games enable row level security;
 alter table public.ghost_profiles enable row level security;

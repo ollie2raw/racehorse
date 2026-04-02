@@ -2,7 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
-import { completeGhostGame, getGhostProfileSummary } from './ghost/service';
+import {
+  completeGhostGame,
+  getGhostProfileSummary,
+  getGhostProfileSummaryByUsername,
+} from './ghost/service';
 import { assignPlayerToLeague } from './league/service';
 import { generateLeagueFixtures } from './league/schedule';
 import { recordLeagueFixtureResult } from './league/results';
@@ -20,6 +24,10 @@ import {
   type TournamentPlayer,
 } from './tournament/tournament';
 import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
+import { supabaseFetch } from './supabaseUtils';
+import { FRITZ_SYSTEM_ID } from './ranking/glicko2';
+import { startRankingCron } from './ranking/cron';
+import { getLeaderboard } from './ranking/periodService';
 
 import {
   createRoom,
@@ -43,6 +51,53 @@ app.get('/health', (_, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/ranking/profile/:userId', async (req, res) => {
+  const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+
+  try {
+    const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}`);
+    const profile = profileData?.[0];
+    if (!profile) {
+      res.status(404).json({ error: 'Profile not found' });
+      return;
+    }
+
+    // Get rank among non-provisional players
+    const allProfiles = await supabaseFetch<any[]>(`/rest/v1/profiles?provisional=eq.false&order=glicko_rating.desc`);
+    const rankIndex = allProfiles.findIndex(p => p.id === userId);
+    
+    res.json({
+      ok: true,
+      glicko_rating: profile.glicko_rating,
+      glicko_rd: profile.glicko_rd,
+      provisional: profile.provisional,
+      ranked_games_played: profile.ranked_games_played,
+      peak_rating: profile.peak_rating,
+      rank: rankIndex >= 0 ? rankIndex + 1 : null
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load ranking profile.',
+    });
+  }
+});
+
+app.get('/api/ranking/leaderboard', async (req, res) => {
+  const limit = Number(req.query.limit) || 50;
+  try {
+    const leaderboard = await getLeaderboard(limit);
+    res.json({ ok: true, leaderboard });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load leaderboard.',
+    });
+  }
+});
+
 app.get('/api/ghost/profile/:userId', async (req, res) => {
   const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
   if (!userId) {
@@ -60,8 +115,29 @@ app.get('/api/ghost/profile/:userId', async (req, res) => {
   }
 });
 
+app.get('/api/ghost/profile-by-username/:username', async (req, res) => {
+  const username = typeof req.params.username === 'string' ? req.params.username.trim() : '';
+  if (!username) {
+    res.status(400).json({ error: 'username is required.' });
+    return;
+  }
+
+  try {
+    const result = await getGhostProfileSummaryByUsername(username);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load ghost profile.',
+    });
+  }
+});
+
 app.post('/api/ghost/complete', async (req, res) => {
   const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+  const opponentUserId =
+    typeof req.body?.opponentUserId === 'string' && req.body.opponentUserId.trim()
+      ? req.body.opponentUserId.trim()
+      : null;
   const finalScore = Number(req.body?.finalScore);
   const opponentScore = Number(req.body?.opponentScore);
   const moveLog = Array.isArray(req.body?.moveLog) ? req.body.moveLog : null;
@@ -82,6 +158,7 @@ app.post('/api/ghost/complete', async (req, res) => {
   try {
     const result = await completeGhostGame({
       userId,
+      opponentUserId,
       finalScore,
       opponentScore,
       moveLog,
@@ -495,8 +572,40 @@ function broadcastStateUpdate(roomCode: string) {
             winnerSocketId,
             pointDiff: Math.abs(scoreA - scoreB),
           });
+
+          // RANKED GAMES LOGGING
+          const rankingParticipants = [
+            { me: a, opp: b, myScore: scoreA, oppScore: scoreB },
+            { me: b, opp: a, myScore: scoreB, oppScore: scoreA }
+          ];
+
+          for (const p of rankingParticipants) {
+            if (p.me.userId) {
+              const opponentId = p.opp.userId || (p.opp.id.startsWith('bot:fritz:') ? FRITZ_SYSTEM_ID : null);
+              if (opponentId) {
+                // Fetch profile to get current rating/rd
+                const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
+                const profile = profileData?.[0];
+                if (profile) {
+                  await supabaseFetch('/rest/v1/ranked_games', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      player_id: p.me.userId,
+                      opponent_id: opponentId,
+                      player_score: p.myScore,
+                      opponent_score: p.oppScore,
+                      game_type: opponentId === FRITZ_SYSTEM_ID ? 'fritz' : 'multiplayer',
+                      rating_before: profile.glicko_rating,
+                      rd_before: profile.glicko_rd,
+                      played_at: new Date().toISOString()
+                    })
+                  });
+                }
+              }
+            }
+          }
         } catch (err) {
-          console.warn('appendMatch failed', err);
+          console.warn('Ranking/Match logging failed', err);
         }
       })();
       (room as any)._matchLogged = true;
@@ -1538,4 +1647,5 @@ const PORT = 3001;
 
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
+  startRankingCron();
 });

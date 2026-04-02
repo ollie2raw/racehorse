@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
 import type { GhostProfileSummary } from './api';
-import { fetchGhostProfileSummary } from './api';
+import { fetchGhostProfileSummary, fetchGhostProfileSummaryByUsername } from './api';
 import { fetchFriends, type FriendRecord } from '../friends/friendsApi';
 import './ghostMode.css';
 
 interface GhostSetupScreenProps {
   userId: string | null;
   onBack: () => void;
-  onStart: (summary: GhostProfileSummary, opponentName: string) => void;
+  onStart: (
+    summary: GhostProfileSummary,
+    opponentName: string,
+    opponentUserId: string | null,
+  ) => void;
 }
+
+const FEATURED_GHOST_USERNAME = 'oliver';
 
 function renderSparkline(scores: number[]) {
   if (scores.length === 0) return null;
@@ -44,6 +50,26 @@ export default function GhostSetupScreen({ userId, onBack, onStart }: GhostSetup
   const [friends, setFriends] = useState<FriendRecord[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(userId);
   const [selectedUsername, setSelectedUsername] = useState<string>('Your Ghost');
+  const [featuredUserId, setFeaturedUserId] = useState<string | null>(null);
+  const [featuredUsername, setFeaturedUsername] = useState<string>(FEATURED_GHOST_USERNAME);
+
+  useEffect(() => {
+    let active = true;
+    void fetchGhostProfileSummaryByUsername(FEATURED_GHOST_USERNAME)
+      .then((result) => {
+        if (!active) return;
+        setFeaturedUserId(result.userId);
+        setFeaturedUsername(result.username);
+      })
+      .catch(() => {
+        if (!active) return;
+        setFeaturedUserId(null);
+        setFeaturedUsername(FEATURED_GHOST_USERNAME);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (userId) {
@@ -91,6 +117,16 @@ export default function GhostSetupScreen({ userId, onBack, onStart }: GhostSetup
     }
   };
 
+  const handleSelectFeatured = () => {
+    if (!featuredUserId) return;
+    setSelectedUserId(featuredUserId);
+    setSelectedUsername(`${featuredUsername} ⭐ Featured`);
+  };
+
+  const visibleFriends = friends.filter(
+    (friend) => !featuredUserId || friend.userId !== featuredUserId,
+  );
+
   return (
     <LayoutScreen
       className="ghost-setup-screen mode-home-screen mode-subpage-screen mode-accent-ghost"
@@ -101,7 +137,7 @@ export default function GhostSetupScreen({ userId, onBack, onStart }: GhostSetup
     >
       <div className="ghost-setup-grid">
         <div className="ghost-setup-left-col">
-          {userId && friends.length > 0 && (
+          {userId && (
             <div className="ghost-friend-selector">
               <p className="ghost-setup-eyebrow">Select Opponent</p>
               <div className="ghost-friend-list">
@@ -111,7 +147,16 @@ export default function GhostSetupScreen({ userId, onBack, onStart }: GhostSetup
                 >
                   You
                 </button>
-                {friends.map((f) => (
+                {featuredUserId && (
+                  <button
+                    className={`ghost-friend-btn ghost-friend-btn-featured ${selectedUserId === featuredUserId ? 'active' : ''}`}
+                    onClick={handleSelectFeatured}
+                  >
+                    <span className="ghost-featured-mark" aria-hidden="true">★</span>
+                    <span>@{featuredUsername} Featured</span>
+                  </button>
+                )}
+                {visibleFriends.map((f) => (
                   <button
                     key={f.userId}
                     className={`ghost-friend-btn ${selectedUserId === f.userId ? 'active' : ''}`}
@@ -218,7 +263,7 @@ export default function GhostSetupScreen({ userId, onBack, onStart }: GhostSetup
           <div className="mode-actions ghost-setup-actions">
             <button
               className="mode-option mode-option-primary mode-accent-ghost ghost-setup-start"
-              onClick={() => summary && onStart(summary, selectedUsername)}
+              onClick={() => summary && onStart(summary, selectedUsername, selectedUserId)}
               disabled={!summary}
             >
               <span className="mode-option-title">Play Ghost</span>

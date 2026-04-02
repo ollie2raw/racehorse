@@ -12,7 +12,13 @@ type GhostProfileRow = {
   ghost_rating: number;
   last_updated: string | null;
   composite_log: GhostCompositeLog | null;
+  style_profile: GhostStyleProfile | null;
   games_played: number;
+};
+
+type ProfileLookupRow = {
+  id: string;
+  username: string;
 };
 
 export type GhostMoveLogEntry = {
@@ -123,8 +129,18 @@ function normalizeMoveLog(raw: unknown): GhostMoveLogEntry[] {
 
 async function fetchGhostProfile(userId: string): Promise<GhostProfileRow | null> {
   const rows = await supabaseFetch<GhostProfileRow[]>(
-    `/rest/v1/ghost_profiles?select=user_id,ghost_rating,last_updated,composite_log,games_played` +
+    `/rest/v1/ghost_profiles?select=user_id,ghost_rating,last_updated,composite_log,style_profile,games_played` +
       `&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: 'GET' },
+  );
+  return rows[0] ?? null;
+}
+
+async function fetchProfileByUsername(username: string): Promise<ProfileLookupRow | null> {
+  const normalized = username.trim().replace(/^@/, '').toLowerCase();
+  if (!normalized) return null;
+  const rows = await supabaseFetch<ProfileLookupRow[]>(
+    `/rest/v1/profiles?select=id,username&username=eq.${encodeURIComponent(normalized)}&limit=1`,
     { method: 'GET' },
   );
   return rows[0] ?? null;
@@ -135,6 +151,7 @@ async function upsertGhostProfile(row: {
   ghost_rating: number;
   last_updated?: string | null;
   composite_log?: GhostCompositeLog | null;
+  style_profile?: GhostStyleProfile | null;
   games_played: number;
 }): Promise<GhostProfileRow> {
   const rows = await supabaseFetch<GhostProfileRow[]>(
@@ -160,6 +177,7 @@ async function ensureGhostProfile(userId: string): Promise<GhostProfileRow> {
     ghost_rating: 800,
     last_updated: null,
     composite_log: null,
+    style_profile: null,
     games_played: 0,
   });
 }
@@ -278,20 +296,20 @@ function analyzeStyle(games: GhostGameRow[]): GhostStyleProfile | null {
 }
 
 function computeRatingChange(
-  currentRating: number,
+  playerRating: number,
+  opponentRating: number,
   playerScore: number,
   opponentScore: number,
+  gamesPlayed: number,
 ): { newRating: number; delta: number } {
-  const k = 32;
-  const playerWon = playerScore > opponentScore;
-  const expected = 0.5;
-  const winActual = playerWon ? 1 : 0;
+  const k = gamesPlayed < 10 ? 40 : gamesPlayed < 30 ? 32 : 20;
+  const expected = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
   const total = Math.max(1, playerScore + opponentScore);
   const margin = Math.abs(playerScore - opponentScore) / total;
   const marginMultiplier = Math.log(margin * 10 + 1) / Math.log(11) + 0.5;
-
-  const delta = Math.round(k * (winActual - expected) * marginMultiplier);
-  const newRating = currentRating + delta;
+  const actual = playerScore > opponentScore ? 1 : 0;
+  const delta = Math.round(k * (actual - expected) * marginMultiplier);
+  const newRating = playerRating + delta;
 
   return {
     newRating,
@@ -299,15 +317,38 @@ function computeRatingChange(
   };
 }
 
+export function computeFritzRatingChange(
+  playerRating: number,
+  playerScore: number,
+  opponentScore: number,
+  gamesPlayed: number,
+): { newRating: number; delta: number } {
+  const kBase = gamesPlayed < 10 ? 40 : gamesPlayed < 30 ? 32 : 20;
+  const k = Math.min(20, kBase);
+  const opponentRating = 1000;
+  const expected = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
+  const total = Math.max(1, playerScore + opponentScore);
+  const margin = Math.abs(playerScore - opponentScore) / total;
+  const marginMultiplier = Math.log(margin * 10 + 1) / Math.log(11) + 0.5;
+  const actual = playerScore > opponentScore ? 1 : 0;
+  const delta = Math.round(k * (actual - expected) * marginMultiplier);
+  return { newRating: playerRating + delta, delta };
+}
+
 export async function getGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
   const profile = await ensureGhostProfile(userId);
   const recentGames = await fetchRecentGhostGames(userId, 5);
+  const styleGames = await fetchRecentGhostGames(userId, 50);
   const compositeLog =
     profile.composite_log && Array.isArray(profile.composite_log.states)
       ? profile.composite_log
       : recentGames.length > 0
         ? buildCompositeLog(recentGames)
         : null;
+  const styleProfile =
+    profile.style_profile && typeof profile.style_profile === 'object'
+      ? profile.style_profile
+      : analyzeStyle(styleGames);
 
   return {
     ghostRating: Number(profile.ghost_rating ?? 800),
@@ -316,7 +357,22 @@ export async function getGhostProfileSummary(userId: string): Promise<GhostProfi
     recentScores: recentGames.map((game) => Number(game.final_score ?? 0)).reverse(),
     paddingGames: Math.max(0, 5 - recentGames.length),
     compositeLog,
-    styleProfile: analyzeStyle(recentGames),
+    styleProfile,
+  };
+}
+
+export async function getGhostProfileSummaryByUsername(
+  username: string,
+): Promise<{ userId: string; username: string; summary: GhostProfileSummary }> {
+  const profile = await fetchProfileByUsername(username);
+  if (!profile) {
+    throw new Error(`Ghost profile not found for @${username.trim().replace(/^@/, '')}.`);
+  }
+  const summary = await getGhostProfileSummary(profile.id);
+  return {
+    userId: profile.id,
+    username: profile.username,
+    summary,
   };
 }
 
@@ -325,6 +381,7 @@ export async function completeGhostGame(params: {
   finalScore: number;
   opponentScore: number;
   moveLog: GhostMoveLogEntry[];
+  opponentUserId?: string | null;
 }): Promise<{
   newRating: number;
   ratingDelta: number;
@@ -335,6 +392,10 @@ export async function completeGhostGame(params: {
   styleProfile: GhostStyleProfile | null;
 }> {
   const profile = await ensureGhostProfile(params.userId);
+  const opponentProfile =
+    params.opponentUserId && params.opponentUserId !== params.userId
+      ? await fetchGhostProfile(params.opponentUserId)
+      : null;
 
   await supabaseFetch<GhostGameRow[]>(`/rest/v1/ghost_games`, {
     method: 'POST',
@@ -349,11 +410,15 @@ export async function completeGhostGame(params: {
   });
 
   const recentGames = await fetchRecentGhostGames(params.userId, 5);
+  const styleGames = await fetchRecentGhostGames(params.userId, 50);
   const compositeLog = buildCompositeLog(recentGames);
+  const styleProfile = analyzeStyle(styleGames);
   const rating = computeRatingChange(
     Number(profile.ghost_rating ?? 800),
+    Number(opponentProfile?.ghost_rating ?? 800),
     params.finalScore,
     params.opponentScore,
+    Number(profile.games_played ?? 0),
   );
 
   await upsertGhostProfile({
@@ -361,6 +426,7 @@ export async function completeGhostGame(params: {
     ghost_rating: rating.newRating,
     last_updated: new Date().toISOString(),
     composite_log: compositeLog,
+    style_profile: styleProfile,
     games_played: Number(profile.games_played ?? 0) + 1,
   });
 
@@ -371,6 +437,6 @@ export async function completeGhostGame(params: {
     ghostScore: Math.round(params.opponentScore),
     playerWon: params.finalScore > params.opponentScore,
     compositeLog,
-    styleProfile: analyzeStyle(recentGames),
+    styleProfile,
   };
 }

@@ -72,7 +72,7 @@ type TournamentPlayer = {
 };
 
 function tileEquals(a: Tile, b: Tile): boolean {
-  return a.high === b.high && a.low === b.low;
+  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
 function tileListEquals(a: Tile[], b: Tile[]): boolean {
@@ -683,6 +683,7 @@ export default function App() {
   });
   const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
   const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
+  const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState('');
   const [tournamentCode, setTournamentCode] = useState('');
@@ -2719,7 +2720,7 @@ export default function App() {
       const canvas = confettiCanvasRef.current;
       if (canvas) {
         const myConfetti = confetti.create(canvas, { resize: true, useWorker: true });
-        const colors = ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#fbbf24'];
+        const colors = ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#f59e0b'];
 
         myConfetti({
           particleCount: 120,
@@ -2869,9 +2870,10 @@ export default function App() {
         <GhostSetupScreen
           userId={authUser?.id ?? null}
           onBack={() => setAppMode('home')}
-          onStart={(summary, opponentName) => {
+          onStart={(summary, opponentName, opponentUserId) => {
             setGhostProfile(summary);
             setGhostOpponentName(opponentName);
+            setGhostOpponentUserId(opponentUserId);
             setAppMode('ghost');
           }}
         />
@@ -2889,6 +2891,7 @@ export default function App() {
           userId={authUser?.id ?? null}
           username={authProfile?.username ?? null}
           opponentName={ghostOpponentName}
+          opponentUserId={ghostOpponentUserId}
           ghostProfile={ghostProfile}
           onGhostProfileChange={setGhostProfile}
         />
@@ -2930,22 +2933,17 @@ export default function App() {
           subtitle="Choose a mode to play solo or against a bot."
           contentClassName="screen-shell"
         >
-          <div className="mode-hub-grid">
-            <section className="mode-hub-middle">
-              <div className="mode-actions">
+          <div className="mode-hub" style={{ width: '100%' }}>
+            <div className="mode-hub-grid">
+              <section className="mode-hub-middle" aria-label="Single player modes">
+                <p className="mode-section-label mode-section-label-practice">Choose Mode</p>
+                <div className="mode-hub-middle-cards single-player-hub-cards">
                 <button
                   className="mode-option mode-option-secondary mode-accent-bot mode-card-bot"
                   onClick={() => setAppMode('botSetup')}
                 >
                   <span className="mode-option-title">Play vs Fritz</span>
                   <span className="mode-option-meta">Test yourself against the toughest opponent in the room</span>
-                </button>
-                <button
-                  className="mode-option mode-option-secondary mode-accent-bot mode-card-practice"
-                  onClick={() => setAppMode('noBrainer')}
-                >
-                  <span className="mode-option-title">No Brainer Lab</span>
-                  <span className="mode-option-meta">Practice one turn clear runs with curated hands</span>
                 </button>
                 <button
                   className="mode-option mode-option-secondary mode-accent-ghost mode-card-ghost"
@@ -2966,7 +2964,7 @@ export default function App() {
                   </span>
                 </button>
                 <button
-                  className="mode-option mode-option-secondary mode-option-primary mode-option-hero mode-accent-league mode-option-hero-outline mode-card-league"
+                  className="mode-option mode-option-secondary mode-accent-league mode-card-league"
                   onClick={() => setAppMode('league')}
                 >
                   <span className="mode-option-title">
@@ -2977,11 +2975,19 @@ export default function App() {
                     One fixture a day. Climb the table, survive promotion and relegation.
                   </span>
                 </button>
-                <button className="mode-inline-btn" onClick={() => setAppMode('home')}>
-                  Back to Home
+                <button
+                  className="mode-option mode-option-secondary mode-accent-bot mode-card-practice"
+                  onClick={() => setAppMode('noBrainer')}
+                >
+                  <span className="mode-option-title">No Brainer Lab</span>
+                  <span className="mode-option-meta">Practice one turn clear runs with curated hands</span>
                 </button>
-              </div>
-            </section>
+                </div>
+              </section>
+            </div>
+            <button className="mode-inline-btn single-player-hub-back" onClick={() => setAppMode('home')}>
+              Back to Home
+            </button>
           </div>
         </LayoutScreen>
       </div>
@@ -3492,7 +3498,7 @@ export default function App() {
             </div>
             <div className="welcome-mode-row">
               <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#f0c040' }} aria-hidden="true" />
+                <span className="welcome-mode-dot" style={{ background: '#f59e0b' }} aria-hidden="true" />
                 Daily Puzzle
               </div>
               <div className="welcome-mode-desc">One puzzle per day, compete on the leaderboard</div>
@@ -3619,7 +3625,6 @@ export default function App() {
               </button>
             </span>
           }
-          subtitle="Choose how you want to play: live online matches, practice modes, or daily challenges."
           contentClassName="screen-shell"
         >
             <div className="mode-hub" style={{ width: '100%' }}>
@@ -3669,7 +3674,7 @@ export default function App() {
                   </div>
                   <div className="mode-hub-middle-cards">
                     <button
-                      className="mode-option mode-option-primary mode-option-hero mode-accent-bot mode-card-single-player"
+                      className="mode-option mode-option-primary mode-accent-bot mode-card-single-player"
                       onClick={() => setAppMode('singlePlayerHub')}
                     >
                       <span className="mode-option-title">Single Player Modes</span>
@@ -3691,10 +3696,7 @@ export default function App() {
                       className="mode-option mode-option-secondary mode-accent-daily mode-card-daily"
                       onClick={() => setAppMode('daily')}
                     >
-                      <span className="mode-option-title">
-                        <span className="mode-daily-crown" aria-hidden="true">👑</span>
-                        Daily Puzzle
-                      </span>
+                      <span className="mode-option-title">Daily Puzzle</span>
                       <span className="mode-option-meta">
                         Solve today’s featured scenario and compare leaderboard results
                       </span>

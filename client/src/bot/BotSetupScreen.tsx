@@ -21,9 +21,9 @@ export default function BotSetupScreen({
       badge="Practice"
       title="Play vs Fritz"
       subtitle="Choose deal size before the match starts."
-      contentClassName="screen-shell bot-setup-content"
+      contentClassName="multiplayer-menu-card screen-shell bot-setup-content"
     >
-      <div className="bot-setup-panel-shell">
+      <div className="mode-entry-panel bot-setup-panel-shell">
         <div className="bot-setup-segmented" role="group" aria-label="Bot deal size">
           <button
             type="button"

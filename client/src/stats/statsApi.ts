@@ -150,6 +150,31 @@ function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummar
   };
 }
 
+export interface RankingProfile {
+  glicko_rating: number;
+  glicko_rd: number;
+  provisional: boolean;
+  ranked_games_played: number;
+  peak_rating: number;
+  rank: number | null;
+}
+
+export async function fetchRankingProfile(
+  userId: string,
+): Promise<{ data: RankingProfile | null; error: string | null }> {
+  try {
+    const response = await fetch(`/api/ranking/profile/${userId}`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch ranking profile');
+    }
+    const data = await response.json();
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
 export async function fetchUserStats(
   user: User,
 ): Promise<{ data: StatsSummary | null; error: string | null }> {

@@ -122,9 +122,12 @@ export function computeOpenEndsSum(board: BoardState): number {
     sum += board.rightEnd;
   }
 
-  // Branch ends - doubles count twice
+  // Branch ends - doubles count twice. Empty branch arms are playable but do not
+  // contribute to the scoring total until a tile is actually placed there.
   for (const hub of board.hubDoubles) {
-    for (const branch of hub.branches) {
+    if (!hub.isCrossed) continue;
+    for (let i = 0; i < 2; i++) {
+      const branch = hub.branches[i];
       if (!branch) continue;
       if (branch.openEndIsDouble) {
         sum += branch.openEnd * 2;

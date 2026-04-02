@@ -3,7 +3,12 @@ import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import { Board, DominoTile } from '../components';
-import { applyPlayMove, getDisplayOpenEnds, getLegalMoves, type BotMatchState } from '../bot/botEngine';
+import {
+  applyPlayMove,
+  getDisplayOpenEnds,
+  getLegalMoves,
+  type BotMatchState,
+} from '../bot/botEngine';
 import type { Move, Tile } from '../types';
 import {
   fetchDailyPuzzleLeaderboard,
@@ -55,11 +60,11 @@ interface PendingWorkerJob<T> {
 }
 
 function puzzleCacheKey(dateSeed: string): string {
-  return `dailyPuzzle:cached:${dateSeed}`;
+  return `dailyPuzzle:cached:v2:${dateSeed}`;
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
-  return a.high === b.high && a.low === b.low;
+  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
 function progressKey(dateSeed: string): string {
@@ -1009,19 +1014,28 @@ export default function DailyPuzzleScreen({
         <LayoutScreen
           className="screen mode-home-screen mode-subpage-screen mode-accent-daily daily-entry-screen"
           badge="Daily Puzzle"
-          title={isArchiveMode ? 'Puzzle Archive' : stableDailyTitle}
-          subtitle={isArchiveMode ? 'Play any past daily puzzle just for fun. No leaderboard or streaks.' : 'Score as many points as you can in one turn.'}
-          contentClassName="screen-shell"
+          title={
+            isArchiveMode ? (
+              'Puzzle Archive'
+            ) : (
+              <span className="daily-entry-header-stack">
+                <span className="daily-entry-header-title">{stableDailyTitle}</span>
+                <span className="daily-entry-header-subtitle">Score as many points as you can in one turn.</span>
+                <span className="daily-entry-meta-row">
+                  <span className="lobby-server mode-subtitle daily-entry-date">{formattedDisplayDate}</span>
+                  {!isArchiveMode && (
+                    <span className="daily-entry-streak-badge">
+                      🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
+                    </span>
+                  )}
+                </span>
+              </span>
+            )
+          }
+          subtitle={isArchiveMode ? 'Play any past daily puzzle just for fun. No leaderboard or streaks.' : undefined}
+          contentClassName="multiplayer-menu-card screen-shell"
         >
-            <div className="daily-entry-meta-row">
-              <p className="lobby-server mode-subtitle daily-entry-date">{formattedDisplayDate}</p>
-              {!isArchiveMode && (
-                <div className="daily-entry-streak-badge">
-                  🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
-                </div>
-              )}
-            </div>
-            <div className="daily-entry-panel">
+            <div className="mode-entry-panel daily-entry-panel">
               <div className="daily-archive-controls">
                 <label className="daily-archive-label" htmlFor="daily-archive-date">Play by date</label>
                 <input

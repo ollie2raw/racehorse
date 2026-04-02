@@ -137,6 +137,9 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
       const rec = hub as Record<string, unknown>;
       const rawBranches = Array.isArray(rec.branches) ? rec.branches : [];
       const branches = rawBranches.map((branch, branchIdx) => {
+        if (branch == null) {
+          return null as unknown as BoardState['hubDoubles'][number]['branches'][number];
+        }
         if (!branch || typeof branch !== 'object') {
           throw new Error(
             `starting_board.hubDoubles[${hubIdx}].branches[${branchIdx}] must be an object.`,

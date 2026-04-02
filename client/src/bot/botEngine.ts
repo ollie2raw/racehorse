@@ -68,7 +68,7 @@ export interface BotMovePreview {
 const BONEYARD_LOCKED_COUNT = 2;
 
 function tileEquals(a: Tile, b: Tile): boolean {
-  return a.high === b.high && a.low === b.low;
+  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
 function isDouble(tile: Tile): boolean {
@@ -541,13 +541,42 @@ export function computeOpenEndsSum(board: BoardState): number {
   let sum = 0;
   sum += board.leftEndIsDouble ? board.leftEnd * 2 : board.leftEnd;
   sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
+
   for (const hub of board.hubDoubles) {
-    for (const branch of hub.branches) {
+    if (!hub.isCrossed) continue;
+    for (let i = 0; i < 2; i++) {
+      const branch = hub.branches[i];
       if (!branch) continue;
       sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
     }
   }
   return sum;
+}
+
+export function getScoringOpenEnds(board: BoardState | null): number[] {
+  if (!board) return [];
+  if (board.mainLine.length === 1) {
+    const t = board.mainLine[0].tile;
+    return [t.low, t.high];
+  }
+
+  const ends: number[] = [];
+  ends.push(board.leftEnd);
+  if (board.leftEndIsDouble) ends.push(board.leftEnd);
+  ends.push(board.rightEnd);
+  if (board.rightEndIsDouble) ends.push(board.rightEnd);
+
+  for (const hub of board.hubDoubles) {
+    if (!hub.isCrossed) continue;
+    for (let i = 0; i < 2; i++) {
+      const branch = hub.branches[i];
+      if (!branch) continue;
+      ends.push(branch.openEnd);
+      if (branch.openEndIsDouble) ends.push(branch.openEnd);
+    }
+  }
+
+  return ends;
 }
 
 export function computePlayScore(board: BoardState): number {

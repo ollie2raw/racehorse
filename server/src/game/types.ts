@@ -6,7 +6,7 @@ export interface Tile {
 }
 
 export function tileEquals(a: Tile, b: Tile): boolean {
-  return a.high === b.high && a.low === b.low;
+  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
 export function isDouble(tile: Tile): boolean {

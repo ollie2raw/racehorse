@@ -67,6 +67,12 @@ export type GhostResolvedMove = {
   source: 'composite' | 'random-padding' | 'best-score';
 };
 
+export type GhostProfileSummaryByUsername = {
+  userId: string;
+  username: string;
+  summary: GhostProfileSummary;
+};
+
 function resolveBaseUrl(): string {
   const configured = DEFAULT_SERVER_URL.trim();
   if (configured) return configured.replace(/\/$/, '');
@@ -113,8 +119,23 @@ export async function fetchGhostProfileSummary(userId: string): Promise<GhostPro
   return response.summary;
 }
 
+export async function fetchGhostProfileSummaryByUsername(
+  username: string,
+): Promise<GhostProfileSummaryByUsername> {
+  const response = await requestJson<{ ok: true } & GhostProfileSummaryByUsername>(
+    `/api/ghost/profile-by-username/${encodeURIComponent(username.replace(/^@/, '').trim())}`,
+    { method: 'GET' },
+  );
+  return {
+    userId: response.userId,
+    username: response.username,
+    summary: response.summary,
+  };
+}
+
 export async function completeGhostGame(params: {
   userId: string;
+  opponentUserId?: string | null;
   finalScore: number;
   opponentScore: number;
   moveLog: GhostMoveLogEntry[];

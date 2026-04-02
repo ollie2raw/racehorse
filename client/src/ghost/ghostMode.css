@@ -154,6 +154,30 @@
   font-size: 0.9rem;
 }
 
+.ghost-friend-btn-featured {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-color: rgba(255, 219, 110, 0.34);
+  background:
+    radial-gradient(circle at top left, rgba(255, 212, 98, 0.22), transparent 45%),
+    rgba(255, 255, 255, 0.05);
+  color: rgba(255, 245, 212, 0.96);
+}
+
+.ghost-featured-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 214, 102, 0.16);
+  color: #ffd666;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
 .ghost-friend-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.15);

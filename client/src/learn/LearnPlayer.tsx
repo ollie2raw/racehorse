@@ -323,6 +323,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     if (board.rightEndIsDouble) contributors.push(board.rightEnd);
     for (const hub of board.hubDoubles ?? []) {
       for (const branch of hub.branches ?? []) {
+        if (!branch) continue;
         contributors.push(branch.openEnd);
         if (branch.openEndIsDouble) contributors.push(branch.openEnd);
       }

@@ -37,7 +37,7 @@
   --tile-bg-gradient: linear-gradient(145deg, #fffef5 0%, #f5f0e0 100%);
   --tile-border: #8b7355;
   --tile-pip: #1a1a1a;
-  --tile-selected: #fbbf24;
+  --tile-selected: #f59e0b;
   --tile-highlight: #34d399;
   --tile-shadow: 0 3px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   --tile-shadow-hover: 0 6px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25);
@@ -698,6 +698,10 @@ button:hover:not(:disabled) {
   gap: calc(16px * var(--ui-presence));
 }
 
+.single-player-hub-back {
+  margin-top: calc(2px * var(--ui-presence));
+}
+
 .mode-social-proof {
   margin: -28px 0 36px;
   display: flex;
@@ -802,6 +806,10 @@ button:hover:not(:disabled) {
 
 .mode-option-hero .mode-option-title {
   font-size: 1.16rem !important;
+}
+
+.mode-home-screen .mode-option.mode-card-play-online.mode-option-hero .mode-option-title {
+  font-size: 1.5rem !important;
 }
 
 .mode-card {
@@ -1021,7 +1029,7 @@ button:hover:not(:disabled) {
 }
 
 .mode-card-daily {
-  --menu-section-color: #fbbf24;
+  --menu-section-color: #f59e0b;
 }
 
 .mode-card-league {
@@ -1033,8 +1041,8 @@ button:hover:not(:disabled) {
 }
 
 .mode-option.mode-card-daily {
-  border-color: rgba(251, 191, 36, 0.3) !important;
-  background: linear-gradient(135deg, rgba(240, 192, 64, 0.07) 0%, rgba(240, 192, 64, 0.02) 40%, transparent 70%) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(13, 18, 31, 0.5) !important;
 }
 
 .mode-option.mode-card-league {
@@ -1049,6 +1057,7 @@ button:hover:not(:disabled) {
 
 .mode-home-screen .mode-option.mode-card-daily {
   overflow: hidden;
+  border-left-color: #eab308 !important;
 }
 
 .mode-home-screen .mode-option.mode-card-league {
@@ -1060,7 +1069,8 @@ button:hover:not(:disabled) {
 }
 
 .mode-home-screen .mode-option.mode-card-daily .mode-option-title::before {
-  display: none;
+  display: block;
+  background: #eab308;
 }
 
 .mode-home-screen .mode-option.mode-card-league .mode-option-title::before {
@@ -1072,11 +1082,8 @@ button:hover:not(:disabled) {
 }
 
 .mode-home-screen .mode-option.mode-card-daily:hover {
-  border-color: rgba(251, 191, 36, 0.3) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 1px rgba(251, 191, 36, 0.1),
-    0 16px 30px rgba(20, 15, 10, 0.28);
+  border-color: var(--card-border) !important;
+  box-shadow: var(--card-shadow-hover) !important;
 }
 
 .mode-home-screen .mode-option.mode-card-league:hover {
@@ -1095,6 +1102,62 @@ button:hover:not(:disabled) {
     0 16px 30px rgba(22, 10, 28, 0.34);
 }
 
+.single-player-hub-cards .mode-option.mode-card-bot {
+  --accent-color: #f97316;
+  --menu-section-color: #f97316;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-left: 5px solid #f97316 !important;
+  background: rgba(13, 18, 31, 0.5) !important;
+}
+
+.single-player-hub-cards .mode-option.mode-card-practice {
+  --accent-color: #22d3ee;
+  --menu-section-color: #22d3ee;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-left: 5px solid #22d3ee !important;
+  background: rgba(13, 18, 31, 0.5) !important;
+}
+
+.single-player-hub-cards .mode-option.mode-card-ghost {
+  --accent-color: #c084fc;
+  --menu-section-color: #c084fc;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-left: 5px solid #c084fc !important;
+  background: rgba(13, 18, 31, 0.5) !important;
+}
+
+.single-player-hub-cards .mode-option.mode-card-league {
+  --accent-color: #10b981;
+  --menu-section-color: #10b981;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-left: 5px solid #10b981 !important;
+  background: rgba(13, 18, 31, 0.5) !important;
+}
+
+.single-player-hub-cards .mode-option.mode-card-bot:hover {
+  border-color: var(--card-border) !important;
+  border-left-color: #f97316 !important;
+  box-shadow: var(--card-shadow-hover) !important;
+}
+
+.single-player-hub-cards .mode-option.mode-card-practice:hover {
+  border-color: var(--card-border) !important;
+  border-left-color: #22d3ee !important;
+  box-shadow: var(--card-shadow-hover) !important;
+}
+
+.single-player-hub-cards .mode-option.mode-card-ghost:hover {
+  border-color: var(--card-border) !important;
+  border-left-color: #c084fc !important;
+  box-shadow: var(--card-shadow-hover) !important;
+}
+
+.single-player-hub-cards .mode-option.mode-card-league:hover {
+  border-color: var(--card-border) !important;
+  border-left-color: #10b981 !important;
+  box-shadow: var(--card-shadow-hover) !important;
+}
+
 .mode-option-submeta {
   font-size: 0.76rem;
   color: rgba(221, 216, 243, 0.78);
@@ -1111,7 +1174,7 @@ button:hover:not(:disabled) {
 }
 
 .screen.mode-accent-daily.mode-subpage-screen {
-  --menu-section-color: #f0c040;
+  --menu-section-color: #f59e0b;
 }
 
 .screen.mode-accent-league.mode-subpage-screen {
@@ -1141,31 +1204,31 @@ button:hover:not(:disabled) {
 }
 
 .screen.mode-accent-daily.mode-subpage-screen .mode-section-label {
-  color: #f0c040;
+  color: #f59e0b;
 }
 
 .screen.mode-accent-daily.mode-subpage-screen .layout-screen-badge {
-  color: #f0c040;
+  color: #f59e0b;
 }
 
 .screen.mode-accent-daily.mode-subpage-screen .mode-option {
-  --menu-section-color: #f0c040;
-  border: 1px solid rgba(240, 192, 64, 0.18);
-  background: rgba(240, 192, 64, 0.04);
+  --menu-section-color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  background: rgba(245, 158, 11, 0.04);
 }
 
 .screen.mode-accent-daily.mode-subpage-screen .mode-option-title::before {
-  background: #f0c040;
+  background: #f59e0b;
 }
 
 .screen.mode-accent-daily.mode-subpage-screen .mode-option:hover {
-  border-color: rgba(240, 192, 64, 0.5);
+  border-color: rgba(245, 158, 11, 0.5);
 }
 
 .screen.mode-accent-daily.mode-subpage-screen .mode-option-primary {
-  border-color: rgba(240, 192, 64, 0.45);
-  background: rgba(240, 192, 64, 0.09);
-  box-shadow: 0 0 0 1px rgba(240, 192, 64, 0.18), 0 8px 32px rgba(240, 192, 64, 0.08);
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.09);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.18), 0 8px 32px rgba(245, 158, 11, 0.08);
   position: relative;
   overflow: hidden;
 }
@@ -1174,7 +1237,7 @@ button:hover:not(:disabled) {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 35%, rgba(240, 192, 64, 0.15) 50%, transparent 65%);
+  background: linear-gradient(105deg, transparent 35%, rgba(245, 158, 11, 0.15) 50%, transparent 65%);
   transform: translateX(-100%);
   animation: dailyShimmer 4s ease-in-out infinite;
   pointer-events: none;
@@ -1191,15 +1254,7 @@ button:hover:not(:disabled) {
 }
 
 .mode-home-screen .mode-option.mode-card-daily::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 40%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(240, 192, 64, 0.06), transparent);
-  animation: dailyShimmer 4s ease-in-out infinite;
-  pointer-events: none;
+  display: none;
 }
 
 .mode-home-screen .mode-option.mode-card-play-online {
@@ -1222,7 +1277,8 @@ button:hover:not(:disabled) {
 .mode-daily-crown {
   font-size: 11px;
   margin-right: 4px;
-  opacity: 0.8;
+  color: #f59e0b;
+  opacity: 1;
 }
 
 .mode-card-track {
@@ -1331,7 +1387,7 @@ button:hover:not(:disabled) {
 }
 
 .mode-accent-daily {
-  --mode-accent: rgba(251, 191, 36, 0.66);
+  --mode-accent: rgba(245, 158, 11, 0.66);
   --mode-section-tone: rgba(252, 225, 145, 0.78);
   --mode-hover-border: rgba(252, 210, 101, 0.38);
 }
@@ -2763,7 +2819,7 @@ button:hover:not(:disabled) {
   border-color: var(--tile-selected);
   box-shadow:
     0 0 0 4px var(--tile-selected),
-    0 0 20px rgba(251, 191, 36, 0.24),
+    0 0 20px rgba(245, 158, 11, 0.24),
     var(--tile-shadow);
 }
 

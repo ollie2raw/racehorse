@@ -635,7 +635,62 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 24px 12px;
+  padding: 0 12px 24px;
+}
+
+.daily-entry-screen .layout-screen-inner {
+  gap: 8px;
+}
+
+.daily-entry-screen .layout-screen-header {
+  gap: 4px;
+}
+
+.daily-entry-screen .layout-screen-header:has(.layout-screen-subtitle) {
+  gap: 0 !important;
+}
+
+.daily-entry-screen .layout-screen-badge {
+  margin-bottom: 14px !important;
+  color: #f0c040 !important;
+}
+
+.daily-entry-screen .layout-screen-title {
+  margin-top: -30px !important;
+  margin-bottom: 14px !important;
+}
+
+.daily-entry-screen .layout-screen-subtitle {
+  margin-top: 0 !important;
+}
+
+.daily-entry-screen .layout-screen-content {
+  gap: 0;
+}
+
+.daily-entry-header-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.daily-entry-header-title {
+  display: block;
+}
+
+.daily-entry-header-subtitle {
+  display: block;
+  max-width: 760px;
+  font-size: 1.1rem !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
+  color: rgba(223, 236, 244, 0.84) !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+  white-space: normal;
+  font-family: Inter, -apple-system, sans-serif !important;
+  text-transform: none !important;
 }
 
 .daily-entry-glow {
@@ -699,19 +754,13 @@
 
 .daily-entry-actions {
   width: 100%;
-  max-width: 680px;
   margin: 0;
   gap: 10px;
 }
 
 .daily-entry-panel {
-  width: min(680px, 100%);
+  width: 100%;
   margin-top: 0;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(176deg, rgba(11, 18, 32, 0.68), rgba(8, 14, 26, 0.78));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .daily-archive-controls {
@@ -810,14 +859,25 @@
 }
 
 .daily-entry-meta-row {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
-  margin: 6px 0 24px;
+  margin: 10px 0 0;
+  font-size: 0.95rem !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+  font-family: Inter, -apple-system, sans-serif !important;
+  font-weight: 600 !important;
 }
 
 .daily-entry-date {
   margin: 0;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+  white-space: nowrap;
+  font: inherit;
 }
 
 .daily-entry-streak-badge {
@@ -829,6 +889,11 @@
   background: rgba(240, 192, 64, 0.12);
   border: 1px solid rgba(240, 192, 64, 0.25);
   color: #f0c040;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+  white-space: nowrap;
+  font-family: Inter, -apple-system, sans-serif !important;
+  font-weight: 600 !important;
 }
 
 .daily-start-hero {
@@ -841,6 +906,11 @@
 .daily-start-hero .mode-option-title {
   font-size: 16px !important;
   font-weight: 700 !important;
+}
+
+.daily-start-hero .mode-option-title::before,
+.daily-leaderboard-cta .mode-option-title::before {
+  background: #f0c040 !important;
 }
 
 .daily-leaderboard-cta {
