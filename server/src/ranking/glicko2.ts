@@ -4,7 +4,7 @@ export const EPSILON = 0.000001;
 export const DEFAULT_RATING = 1500;
 export const DEFAULT_RD = 350;
 export const DEFAULT_VOL = 0.06;
-export const FRITZ_SYSTEM_ID = 'fritz-bot';
+export const FRITZ_SYSTEM_ID = '00000000-0000-0000-0000-000000000001';
 export const FRITZ_RATING = 1800;
 export const FRITZ_RD = 50;
 

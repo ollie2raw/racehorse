@@ -548,7 +548,7 @@ export default function BotMatchScreen({
     ghostCompleteKeyRef.current = key;
     setGhostResultLoading(true);
 
-    const effectiveOpponentUserId = isGhostMode ? opponentUserId : (opponentUserId || 'fritz-bot');
+    const effectiveOpponentUserId = isGhostMode ? opponentUserId : (opponentUserId || '00000000-0000-0000-0000-000000000001');
 
     console.log('[Fritz Rating] calling completeGhostGame', {
       userId,
