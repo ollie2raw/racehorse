@@ -2959,10 +2959,8 @@ export default function App() {
                   <span className="mode-option-meta">
                     Beat the composite of your last 5 games
                   </span>
-                  <span className="mode-option-submeta">
-                    Ghost Rating: {ghostProfile?.ghostRating ?? '—'}
-                  </span>
-                </button>
+                  </button>
+
                 <button
                   className="mode-option mode-option-secondary mode-accent-league mode-card-league"
                   onClick={() => setAppMode('league')}

@@ -196,13 +196,9 @@ export default function GhostSetupScreen({ userId, onBack, onStart }: GhostSetup
           {selectedUserId && !loading && !error && summary && (
             <div className="ghost-setup-panel">
               <div className="ghost-setup-header">
-                <div>
-                  <p className="ghost-setup-eyebrow">{selectedUsername} Rating</p>
-                  <h3>👻 {summary.ghostRating}</h3>
-                </div>
-                <div className="ghost-setup-average">
-                  <span>Ghost Avg</span>
-                  <strong>{summary.avgScore == null ? '—' : `${summary.avgScore} pts`}</strong>
+                <div className="ghost-setup-average" style={{ textAlign: 'left' }}>
+                  <p className="ghost-setup-eyebrow">Ghost Avg</p>
+                  <h3>{summary.avgScore == null ? '—' : `${summary.avgScore} pts`}</h3>
                 </div>
               </div>
 
