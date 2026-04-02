@@ -1,3 +1,5 @@
+import { FRITZ_SYSTEM_ID } from '../ranking/glicko2';
+
 type GhostGameRow = {
   id: string;
   user_id: string;
@@ -413,20 +415,29 @@ export async function completeGhostGame(params: {
   const styleGames = await fetchRecentGhostGames(params.userId, 50);
   const compositeLog = buildCompositeLog(recentGames);
   const styleProfile = analyzeStyle(styleGames);
-  const rating = computeRatingChange(
-    Number(profile.ghost_rating ?? 800),
-    Number(opponentProfile?.ghost_rating ?? 800),
-    params.finalScore,
-    params.opponentScore,
-    Number(profile.games_played ?? 0),
-  );
+
+  const isFritz = params.opponentUserId === FRITZ_SYSTEM_ID;
+  const rating = isFritz
+    ? computeFritzRatingChange(
+        Number(profile.ghost_rating ?? 800),
+        params.finalScore,
+        params.opponentScore,
+        Number(profile.games_played ?? 0),
+      )
+    : computeRatingChange(
+        Number(profile.ghost_rating ?? 800),
+        Number(opponentProfile?.ghost_rating ?? 800),
+        params.finalScore,
+        params.opponentScore,
+        Number(profile.games_played ?? 0),
+      );
 
   await upsertGhostProfile({
     user_id: params.userId,
     ghost_rating: rating.newRating,
     last_updated: new Date().toISOString(),
-    composite_log: compositeLog,
-    style_profile: styleProfile,
+    composite_log: isFritz ? profile.composite_log : compositeLog,
+    style_profile: isFritz ? profile.style_profile : styleProfile,
     games_played: Number(profile.games_played ?? 0) + 1,
   });
 
@@ -436,7 +447,7 @@ export async function completeGhostGame(params: {
     playerScore: Math.round(params.finalScore),
     ghostScore: Math.round(params.opponentScore),
     playerWon: params.finalScore > params.opponentScore,
-    compositeLog,
-    styleProfile,
+    compositeLog: isFritz ? (profile.composite_log as GhostCompositeLog) : compositeLog,
+    styleProfile: isFritz ? profile.style_profile : styleProfile,
   };
 }
