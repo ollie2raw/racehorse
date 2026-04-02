@@ -44,6 +44,21 @@
   max-width: min(44vw, 460px);
 }
 
+.bot-match-screen .ghost-average-pill {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(118, 80, 175, 0.2);
+  border: 1px solid rgba(199, 177, 255, 0.24);
+  color: rgba(236, 230, 255, 0.94);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .bot-match-screen .bot-hud-right-cluster {
   justify-self: end;
   display: flex;
@@ -247,6 +262,130 @@
 
 .bot-match-screen button:active:not(:disabled) {
   transform: translateY(1px);
+}
+
+.bot-match-screen .ghost-agreement-indicator {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  z-index: 12;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(83, 176, 133, 0.2);
+  border: 1px solid rgba(132, 235, 189, 0.28);
+  color: #b6ffd8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  animation: ghost-agree-in 180ms ease;
+}
+
+.bot-match-screen .ghost-played-overlay {
+  position: absolute;
+  top: 68px;
+  left: 50%;
+  z-index: 12;
+  transform: translateX(-50%);
+  animation: ghost-play-fade 900ms ease forwards;
+  pointer-events: none;
+}
+
+.bot-match-screen .ghost-played-tile {
+  opacity: 0.6;
+  filter: grayscale(0.2) saturate(0.7) drop-shadow(0 10px 24px rgba(167, 136, 255, 0.22));
+}
+
+.bot-match-screen .ghost-board-pulse {
+  animation: ghost-board-pulse 420ms ease;
+}
+
+.ghost-result-card {
+  display: grid;
+  gap: 10px;
+  padding: 8px 2px 2px;
+}
+
+.ghost-result-row {
+  display: grid;
+  grid-template-columns: 74px 92px 1fr;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+}
+
+.ghost-result-row strong {
+  font-size: 1rem;
+  color: rgba(242, 246, 252, 0.96);
+}
+
+.ghost-result-bar {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.ghost-result-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.ghost-result-bar-fill.is-you {
+  background: linear-gradient(90deg, #6ff0c8, #b8ffe4);
+}
+
+.ghost-result-bar-fill.is-ghost {
+  background: linear-gradient(90deg, #9f7aea, #d6bcfa);
+}
+
+.ghost-result-rating {
+  color: rgba(232, 226, 255, 0.9);
+  font-size: 0.96rem;
+  font-weight: 600;
+}
+
+.ghost-result-message {
+  margin: 2px 0 0;
+  color: #efd9ff;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+@keyframes ghost-play-fade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.94);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(1);
+  }
+}
+
+@keyframes ghost-agree-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ghost-board-pulse {
+  0% {
+    box-shadow: inset 0 0 0 0 rgba(201, 173, 255, 0);
+  }
+  40% {
+    box-shadow: inset 0 0 0 5px rgba(201, 173, 255, 0.18);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(201, 173, 255, 0);
+  }
 }
 
 .bot-debug-panel {

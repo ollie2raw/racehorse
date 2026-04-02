@@ -19,6 +19,10 @@ const EMPTY_STATS: StatsSummary = {
   winRate: 0,
   currentWinStreak: 0,
   gamesThisWeek: 0,
+  ghostRating: null,
+  ghostGamesThisWeek: 0,
+  ghostRatingChangeThisWeek: 0,
+  ghostBestWinMarginThisWeek: null,
 };
 
 export default function StatsScreen({ open, user, profile, onClose }: StatsScreenProps) {
@@ -145,6 +149,18 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           <strong style={{ fontSize: '1.08rem' }}>
             {profile?.username ? `@${profile.username}` : user?.email ?? 'Guest'}
           </strong>
+          {stats.ghostRating != null && (
+            <span
+              style={{
+                fontSize: '0.92rem',
+                color: '#d8b4fe',
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+              }}
+            >
+              👻 {stats.ghostRating}
+            </span>
+          )}
           <span style={{ fontSize: '0.8rem', color: 'rgba(188, 212, 222, 0.72)', letterSpacing: '0.04em' }}>
             Member
           </span>
@@ -198,6 +214,23 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
               { label: 'Best Streak', value: stats.longestWinStreak, icon: '⚡', tone: 'neutral' },
               { label: 'This Week', value: stats.gamesThisWeek, icon: '🎮', tone: 'neutral' },
               { label: 'Online Games', value: stats.onlineGamesPlayed, icon: '🧩', tone: 'neutral' },
+              { label: 'Ghost Rating', value: stats.ghostRating ?? '—', icon: '👻', tone: 'neutral' },
+              { label: 'Ghost Games', value: stats.ghostGamesThisWeek, icon: '🫥', tone: 'neutral' },
+              {
+                label: 'Ghost Weekly Δ',
+                value:
+                  stats.ghostRatingChangeThisWeek === 0
+                    ? '0'
+                    : `${stats.ghostRatingChangeThisWeek > 0 ? '+' : ''}${stats.ghostRatingChangeThisWeek}`,
+                icon: '📈',
+                tone: stats.ghostRatingChangeThisWeek >= 0 ? 'teal' : 'red',
+              },
+              {
+                label: 'Best Ghost Win',
+                value: stats.ghostBestWinMarginThisWeek == null ? '—' : `${stats.ghostBestWinMarginThisWeek} pts`,
+                icon: '💨',
+                tone: 'neutral',
+              },
             ].map((item) => (
               <div
                 key={item.label}

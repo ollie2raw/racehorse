@@ -2,6 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
+import { completeGhostGame, getGhostProfileSummary } from './ghost/service';
+import { assignPlayerToLeague } from './league/service';
+import { generateLeagueFixtures } from './league/schedule';
+import { recordLeagueFixtureResult } from './league/results';
+import { runLeagueForfeitJob } from './league/forfeit';
+import { runLeagueSundayRollover } from './league/rollover';
+import { getLeagueStateForPlayer } from './league/state';
 import {
   makeCode,
   makeId,
@@ -30,9 +37,183 @@ import {
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 app.get('/health', (_, res) => {
   res.json({ ok: true });
+});
+
+app.get('/api/ghost/profile/:userId', async (req, res) => {
+  const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+
+  try {
+    const summary = await getGhostProfileSummary(userId);
+    res.json({ ok: true, summary });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load ghost profile.',
+    });
+  }
+});
+
+app.post('/api/ghost/complete', async (req, res) => {
+  const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+  const finalScore = Number(req.body?.finalScore);
+  const opponentScore = Number(req.body?.opponentScore);
+  const moveLog = Array.isArray(req.body?.moveLog) ? req.body.moveLog : null;
+
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+  if (!Number.isFinite(finalScore) || !Number.isFinite(opponentScore)) {
+    res.status(400).json({ error: 'finalScore and opponentScore are required.' });
+    return;
+  }
+  if (!moveLog) {
+    res.status(400).json({ error: 'moveLog is required.' });
+    return;
+  }
+
+  try {
+    const result = await completeGhostGame({
+      userId,
+      finalScore,
+      opponentScore,
+      moveLog,
+    });
+    res.json({ ok: true, result });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to complete ghost game.',
+    });
+  }
+});
+
+app.post('/league/assign-player', async (req, res) => {
+  const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+
+  try {
+    const assignment = await assignPlayerToLeague(userId);
+    res.json({ ok: true, assignment });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to assign player to league.',
+    });
+  }
+});
+
+app.post('/league/generate-fixtures', async (req, res) => {
+  const leagueId = typeof req.body?.leagueId === 'string' ? req.body.leagueId.trim() : '';
+  if (!leagueId) {
+    res.status(400).json({ error: 'leagueId is required.' });
+    return;
+  }
+
+  try {
+    const schedule = await generateLeagueFixtures(leagueId);
+    res.json({
+      ok: true,
+      schedule,
+      note:
+        'Seven-member round robin requires 7 matchdays with one bye per day. This supersedes the earlier 6-day assumption.',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate league fixtures.',
+    });
+  }
+});
+
+app.post('/league/report-result', async (req, res) => {
+  const fixtureId = typeof req.body?.fixtureId === 'string' ? req.body.fixtureId.trim() : '';
+  const homeScore = req.body?.homeScore;
+  const awayScore = req.body?.awayScore;
+
+  if (!fixtureId) {
+    res.status(400).json({ error: 'fixtureId is required.' });
+    return;
+  }
+
+  try {
+    const result = await recordLeagueFixtureResult(
+      fixtureId,
+      Number(homeScore),
+      Number(awayScore),
+    );
+    res.json({ ok: true, result });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to record league result.',
+    });
+  }
+});
+
+app.post('/league/run-forfeits', async (req, res) => {
+  const throughDate =
+    typeof req.body?.throughDate === 'string' && req.body.throughDate.trim()
+      ? req.body.throughDate.trim()
+      : undefined;
+
+  try {
+    const result = await runLeagueForfeitJob(throughDate);
+    res.json({
+      ok: true,
+      result,
+      note:
+        'Current Step 5 behavior only auto-forfeits fixtures where exactly one side is a bot. Real-vs-real and bot-vs-bot scheduled fixtures are reported as skipped for now.',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to run league forfeit job.',
+    });
+  }
+});
+
+app.post('/league/run-rollover', async (req, res) => {
+  const throughDate =
+    typeof req.body?.throughDate === 'string' && req.body.throughDate.trim()
+      ? req.body.throughDate.trim()
+      : undefined;
+
+  try {
+    const result = await runLeagueSundayRollover(throughDate);
+    res.json({
+      ok: true,
+      result,
+      note:
+        'Rollover is idempotent at the weekly level: once next-week active leagues exist, reruns will not create duplicate successor leagues.',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to run league Sunday rollover.',
+    });
+  }
+});
+
+app.get('/league/state/:userId', async (req, res) => {
+  const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+
+  try {
+    const state = await getLeagueStateForPlayer(userId);
+    res.json({ ok: true, state });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load league state.',
+    });
+  }
 });
 
 const server = http.createServer(app);

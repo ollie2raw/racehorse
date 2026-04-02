@@ -36,6 +36,20 @@ import {
 import { chooseBotMove, toBotVisibleState, type BotChoice } from './botHeuristics';
 import { getLocalDateKey } from '../dailyPuzzle/date';
 import {
+  completeGhostGame,
+  type GhostCompletionResult,
+  type GhostMoveLogEntry,
+  type GhostProfileSummary,
+  type GhostResolvedMove,
+} from '../ghost/api';
+import {
+  isSameResolvedMove,
+  resolveGhostMove,
+  serializeGhostBoardState,
+  toTileKey,
+} from '../ghost/logic';
+import { shareGhostResultCard } from '../ghost/share';
+import {
   playBlockedSound,
   playDrawSound,
   playHandLoseSound,
@@ -52,9 +66,19 @@ import './botMatch.css';
 interface BotMatchScreenProps {
   onBack: () => void;
   dealSize: BotDealSize;
+  mode?: 'bot' | 'ghost';
   dailyPuzzleDate?: string | null;
   userId?: string | null;
   username?: string | null;
+  winningScore?: number;
+  opponentName?: string;
+  ghostProfile?: GhostProfileSummary | null;
+  onGhostProfileChange?: ((summary: GhostProfileSummary | null) => void) | null;
+  onMatchComplete?: ((result: {
+    winner: 'you' | 'bot' | null;
+    yourScore: number;
+    botScore: number;
+  }) => void) | null;
 }
 
 interface BotHandReveal {
@@ -65,6 +89,14 @@ interface BotHandReveal {
   calcText: string;
   yourRemainingTiles: Tile[];
   botRemainingTiles: Tile[];
+}
+
+function getGhostResultMessage(playerScore: number, ghostScore: number): string {
+  const margin = playerScore - ghostScore;
+  if (margin >= 15) return "You've outgrown your ghost.";
+  if (margin >= 1) return 'Closer than it looks. Ghost is watching.';
+  if (margin <= -15) return "Ghost didn't even break a sweat.";
+  return 'Your ghost remembers this.';
 }
 
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
@@ -124,28 +156,34 @@ function asPlayMoves(moves: Move[]): Move[] {
   return moves.filter((m) => m.type === 'play');
 }
 
-function toastFromResult(result: BotActionResult): string {
+function toastFromResult(result: BotActionResult, opponentLabel: string): string {
   if (result.handEnded) {
-    const winner = result.handEnded.winner === 'you' ? 'You' : 'Fritz';
+    const winner = result.handEnded.winner === 'you' ? 'You' : opponentLabel;
     return `${winner} won hand (${result.handEnded.reason}) +${result.handEnded.pointsAwarded}`;
   }
-  if (result.passed) return `${result.passed.player === 'you' ? 'You' : 'Fritz'} passed`;
+  if (result.passed) return `${result.passed.player === 'you' ? 'You' : opponentLabel} passed`;
   return '';
 }
 
 export default function BotMatchScreen({
   onBack,
   dealSize,
+  mode = 'bot',
   dailyPuzzleDate = null,
   userId = null,
   username = null,
+  winningScore = 60,
+  opponentName = 'Fritz',
+  ghostProfile = null,
+  onGhostProfileChange = null,
+  onMatchComplete = null,
 }: BotMatchScreenProps) {
   const DRAW_STEP_MS = 700;
   const rootRef = useRef<HTMLDivElement>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
-  const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(60, dealSize));
+  const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(winningScore, dealSize));
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState('');
@@ -169,6 +207,7 @@ export default function BotMatchScreen({
   const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
   const [dailyLeaderboardError, setDailyLeaderboardError] = useState<string | null>(null);
   const [moveLog, setMoveLog] = useState<MoveEntry[]>([]);
+  const [ghostMoveLog, setGhostMoveLog] = useState<GhostMoveLogEntry[]>([]);
   const [handTileSize, setHandTileSize] = useState(56);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
@@ -181,6 +220,11 @@ export default function BotMatchScreen({
   const moveCounterRef = useRef(1);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
+  const [ghostAgreementVisible, setGhostAgreementVisible] = useState(false);
+  const [ghostBoardPulse, setGhostBoardPulse] = useState(false);
+  const [ghostPlayedTile, setGhostPlayedTile] = useState<Tile | null>(null);
+  const [ghostResult, setGhostResult] = useState<GhostCompletionResult | null>(null);
+  const [ghostResultLoading, setGhostResultLoading] = useState(false);
   const dailyResultSyncKeyRef = useRef('');
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -189,13 +233,17 @@ export default function BotMatchScreen({
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
   const gameOverSoundKeyRef = useRef('');
+  const matchCompleteKeyRef = useRef('');
+  const ghostCompleteKeyRef = useRef('');
   const botChainPauseRef = useRef(false);
   const matchRef = useRef(match);
   const prevTurnRef = useRef<BotPlayerId>(match.currentPlayer);
+  const isGhostMode = mode === 'ghost';
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
+  const opponentLabel = isGhostMode ? 'Ghost' : opponentName.trim() || 'Fritz';
   const showDevCapture = Boolean(
     adminEmail &&
     typeof window !== 'undefined' &&
@@ -291,7 +339,7 @@ export default function BotMatchScreen({
   };
 
   const showScoreToast = (player: 'you' | 'bot', points: number) => {
-    showBoardToast(`${player === 'you' ? 'You' : 'Fritz'} scored +${points}`, player);
+    showBoardToast(`${player === 'you' ? 'You' : opponentLabel} scored +${points}`, player);
   };
 
   function flashLastPlayed(tile: Tile | null) {
@@ -335,6 +383,10 @@ export default function BotMatchScreen({
       entry.player === 'you' ? moveCounterRef.current++ : moveCounterRef.current;
     setMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
   };
+
+  const appendGhostMove = useCallback((entry: GhostMoveLogEntry) => {
+    setGhostMoveLog((prev) => [...prev, entry]);
+  }, []);
 
   const getFritzBestMove = useCallback((state: BotMatchState): EngineBestMove | null => {
     // chooseBotMove always evaluates for 'bot' player.
@@ -410,17 +462,25 @@ export default function BotMatchScreen({
     flashLastPlayed(null);
     setLastBotChoice(null);
     setHandReveal(null);
+    setGhostPlayedTile(null);
+    setGhostAgreementVisible(false);
+    setGhostBoardPulse(false);
+    setGhostResult(null);
+    setGhostResultLoading(false);
     setMovesUsed(0);
     setDailyLeaderboard([]);
     setDailyLeaderboardError(null);
     setDailyLeaderboardLoading(false);
     setMoveLog([]);
+    setGhostMoveLog([]);
     moveCounterRef.current = 1;
     setCurrentAnalysis(null);
     setAnalyzerOpen(false);
     dailyResultSyncKeyRef.current = '';
     gameWinConfettiKeyRef.current = '';
-    setMatch(createBotMatch(60, dealSize));
+    matchCompleteKeyRef.current = '';
+    ghostCompleteKeyRef.current = '';
+    setMatch(createBotMatch(winningScore, dealSize));
   };
 
   useEffect(() => {
@@ -451,10 +511,103 @@ export default function BotMatchScreen({
     }
   }, [match.gameOver, match.winnerId, match.handNumber, match.players.you.score, match.players.bot.score, isMuted]);
 
+  useEffect(() => {
+    if (!onMatchComplete) return;
+    if (!match.gameOver) {
+      matchCompleteKeyRef.current = '';
+      return;
+    }
+    const key = `${match.handNumber}:${match.winnerId}:${match.players.you.score}:${match.players.bot.score}`;
+    if (matchCompleteKeyRef.current === key) return;
+    matchCompleteKeyRef.current = key;
+    onMatchComplete({
+      winner: match.winnerId,
+      yourScore: match.players.you.score,
+      botScore: match.players.bot.score,
+    });
+  }, [match.gameOver, match.handNumber, match.winnerId, match.players.you.score, match.players.bot.score, onMatchComplete]);
+
+  useEffect(() => {
+    if (!ghostPlayedTile) return;
+    const timer = window.setTimeout(() => setGhostPlayedTile(null), 900);
+    return () => window.clearTimeout(timer);
+  }, [ghostPlayedTile]);
+
+  useEffect(() => {
+    if (!isGhostMode || !userId) return;
+    if (!match.gameOver) {
+      ghostCompleteKeyRef.current = '';
+      setGhostResult(null);
+      setGhostResultLoading(false);
+      return;
+    }
+    const key = `${userId}:${match.handNumber}:${match.players.you.score}:${match.players.bot.score}`;
+    if (ghostCompleteKeyRef.current === key) return;
+    ghostCompleteKeyRef.current = key;
+    setGhostResultLoading(true);
+    void completeGhostGame({
+      userId,
+      finalScore: match.players.you.score,
+      opponentScore: match.players.bot.score,
+      moveLog: ghostMoveLog,
+    })
+      .then((result) => {
+        setGhostResult(result);
+        setGhostResultLoading(false);
+        if (!onGhostProfileChange) return;
+        onGhostProfileChange(
+          ghostProfile
+            ? {
+                ...ghostProfile,
+                ghostRating: result.newRating,
+                gamesPlayed: (ghostProfile.gamesPlayed ?? 0) + 1,
+                recentScores: [...ghostProfile.recentScores, match.players.you.score].slice(-5),
+                avgScore:
+                  Math.round(
+                    ([...ghostProfile.recentScores, match.players.you.score].slice(-5).reduce(
+                      (sum, score) => sum + score,
+                      0,
+                    ) /
+                      Math.max(1, [...ghostProfile.recentScores, match.players.you.score].slice(-5).length)) *
+                      10,
+                  ) / 10,
+                paddingGames: Math.max(0, 5 - ((ghostProfile.gamesPlayed ?? 0) + 1)),
+                compositeLog: result.compositeLog,
+              }
+            : null,
+        );
+      })
+      .catch(() => {
+        setGhostResultLoading(false);
+      });
+  }, [
+    ghostMoveLog,
+    ghostProfile,
+    isGhostMode,
+    match.gameOver,
+    match.handNumber,
+    match.players.bot.score,
+    match.players.you.score,
+    onGhostProfileChange,
+    userId,
+  ]);
+
   const userLegalMoves = useMemo(() => {
     return match.currentPlayer === 'you' ? getLegalMoves(match, 'you') : [];
   }, [match]);
   const userPlayMoves = useMemo(() => asPlayMoves(userLegalMoves), [userLegalMoves]);
+  const ghostSuggestedPlayerMove = useMemo(
+    () =>
+      isGhostMode
+        ? resolveGhostMove({
+            state: match,
+            player: 'you',
+            legalMoves: userPlayMoves,
+            profile: ghostProfile,
+          })
+        : null,
+    [ghostProfile, isGhostMode, match, userPlayMoves],
+  );
 
   const applyAndNotify = (result: BotActionResult) => {
     setMatch((prev) => {
@@ -515,7 +668,7 @@ export default function BotMatchScreen({
     if (result.drew && result.drew.player === 'you') {
       showBoardToast('You drew a tile', 'bot');
     }
-    const msg = toastFromResult(result);
+    const msg = toastFromResult(result, opponentLabel);
     if (msg) pushToast(msg);
   };
 
@@ -591,16 +744,39 @@ export default function BotMatchScreen({
     const boardEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [boardEndsRaw[0] ?? -1, boardEndsRaw[1] ?? -1];
     const handBefore = match.players.you.hand.map(toTileTuple);
+    const ghostHandBefore = match.players.you.hand.map(toTileKey);
     const validMoves = userPlayMoves
       .filter((m) => m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
     const beforePips = sumTilePips(match.players.you.hand);
+    const boardStateKey = serializeGhostBoardState(match.board);
     const result = applyPlayMove(match, 'you', move);
     const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
+    if (isGhostMode && selectedTile && ghostSuggestedPlayerMove?.source === 'composite') {
+      const actualMove =
+        move.tile && move.position ? { tile: move.tile, position: move.position } : null;
+      const agrees = isSameResolvedMove(actualMove, ghostSuggestedPlayerMove);
+      if (agrees) {
+        setGhostAgreementVisible(true);
+        window.setTimeout(() => setGhostAgreementVisible(false), 1300);
+      } else {
+        setGhostBoardPulse(true);
+        window.setTimeout(() => setGhostBoardPulse(false), 520);
+      }
+      appendGhostMove({
+        turn: (match.turnIndex ?? 0) + 1,
+        actor: 'you',
+        board_state: boardStateKey,
+        tile_played: selectedTile ? toTileKey(selectedTile) : null,
+        branch: typeof position === 'string' ? position : null,
+        hand_before: ghostHandBefore,
+        score_delta: result.scored?.points ?? 0,
+      });
+    }
     appendMove({
       player: 'you',
       action: 'place',
@@ -630,8 +806,11 @@ export default function BotMatchScreen({
         let working = match;
         let result: BotActionResult | null = null;
         let chosen: BotChoice | null = null;
+        let ghostChosen: GhostResolvedMove | null = null;
         const beforeEndsRaw = getDisplayOpenEnds(match);
         const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
+        const ghostBoardStateKey = serializeGhostBoardState(match.board);
+        const ghostHandBefore = match.players.bot.hand.map(toTileKey);
 
         const botPlayable = asPlayMoves(getLegalMoves(working, 'bot'));
         if (botPlayable.length === 0) {
@@ -642,6 +821,17 @@ export default function BotMatchScreen({
             working = drawPass.state;
 
             if (drawPass.drew) {
+              if (isGhostMode) {
+                appendGhostMove({
+                  turn: (match.turnIndex ?? 0) + 1,
+                  actor: 'ghost',
+                  board_state: ghostBoardStateKey,
+                  tile_played: null,
+                  branch: 'draw',
+                  hand_before: ghostHandBefore,
+                  score_delta: 0,
+                });
+              }
               appendMove({
                 player: 'opponent',
                 action: 'draw',
@@ -657,6 +847,17 @@ export default function BotMatchScreen({
               });
             }
             if (drawPass.passed) {
+              if (isGhostMode) {
+                appendGhostMove({
+                  turn: (working.turnIndex ?? 0) + 1,
+                  actor: 'ghost',
+                  board_state: ghostBoardStateKey,
+                  tile_played: null,
+                  branch: 'pass',
+                  hand_before: ghostHandBefore,
+                  score_delta: 0,
+                });
+              }
               appendMove({
                 player: 'opponent',
                 action: 'pass',
@@ -675,33 +876,79 @@ export default function BotMatchScreen({
             if (afterDraw.length === 0) {
               result = drawPass;
             } else {
-              chosen = chooseBotMove(toBotVisibleState(working), 'hard');
-              playedTileForHighlight = chosen?.move?.tile ?? afterDraw[0]?.tile ?? null;
+              if (isGhostMode) {
+                ghostChosen = resolveGhostMove({
+                  state: working,
+                  player: 'bot',
+                  legalMoves: afterDraw,
+                  profile: ghostProfile,
+                });
+              } else {
+                chosen = chooseBotMove(toBotVisibleState(working), 'hard');
+              }
+              playedTileForHighlight =
+                ghostChosen?.tile ?? chosen?.move?.tile ?? afterDraw[0]?.tile ?? null;
               queueSound(() => playTileSound('deal', isMuted), 0);
-              result = applyPlayMove(working, 'bot', chosen?.move ?? afterDraw[0]);
+              result = applyPlayMove(
+                working,
+                'bot',
+                ghostChosen
+                  ? { type: 'play', tile: ghostChosen.tile, position: ghostChosen.position }
+                  : chosen?.move ?? afterDraw[0],
+              );
             }
           } finally {
             setDrawSequenceActiveBoth(false);
           }
         } else {
-          chosen = chooseBotMove(toBotVisibleState(working), 'hard');
-          playedTileForHighlight = chosen?.move?.tile ?? botPlayable[0]?.tile ?? null;
+          if (isGhostMode) {
+            ghostChosen = resolveGhostMove({
+              state: working,
+              player: 'bot',
+              legalMoves: botPlayable,
+              profile: ghostProfile,
+            });
+          } else {
+            chosen = chooseBotMove(toBotVisibleState(working), 'hard');
+          }
+          playedTileForHighlight = ghostChosen?.tile ?? chosen?.move?.tile ?? botPlayable[0]?.tile ?? null;
           queueSound(() => playTileSound('deal', isMuted), 0);
-          result = applyPlayMove(working, 'bot', chosen?.move ?? botPlayable[0]);
+          result = applyPlayMove(
+            working,
+            'bot',
+            ghostChosen
+              ? { type: 'play', tile: ghostChosen.tile, position: ghostChosen.position }
+              : chosen?.move ?? botPlayable[0],
+          );
         }
 
         if (cancelled || actionResolved) return;
         if (chosen) setLastBotChoice(chosen);
+        if (isGhostMode) {
+          setLastBotChoice(null);
+          setGhostPlayedTile(ghostChosen?.tile ?? null);
+        }
         if (result) {
           actionResolved = true;
           botChainPauseRef.current =
             result.state.currentPlayer === 'bot' && !result.state.handOver && !result.state.gameOver;
           setSelectedTile(null);
-          if (chosen?.move?.tile) {
+          if (isGhostMode && ghostChosen) {
+            appendGhostMove({
+              turn: (working.turnIndex ?? 0) + 1,
+              actor: 'ghost',
+              board_state: ghostBoardStateKey,
+              tile_played: toTileKey(ghostChosen.tile),
+              branch: ghostChosen.position,
+              hand_before: ghostHandBefore,
+              score_delta: result.scored?.points ?? 0,
+            });
+          }
+          if (chosen?.move?.tile || ghostChosen?.tile) {
             appendMove({
               player: 'opponent',
               action: 'place',
-              tile: toTileTuple(chosen.move.tile),
+              tile: toTileTuple((ghostChosen?.tile ?? chosen?.move?.tile) as Tile),
               boardEnds,
               handBefore: [],
               validMoves: [],
@@ -710,7 +957,13 @@ export default function BotMatchScreen({
               boardState: snapshotBoardState(match.board),
               boardRenderState: cloneBoardState(match.board),
               handSnapshot: match.players.you.hand.map(toTileTuple),
-              engineBestMove: toEngineBestFromChoice(chosen),
+              engineBestMove: ghostChosen
+                ? {
+                    tile: toTileTuple(ghostChosen.tile),
+                    position: ghostChosen.position,
+                    score: 0,
+                  }
+                : toEngineBestFromChoice(chosen),
             });
           }
           applyAndNotify(result);
@@ -768,6 +1021,9 @@ export default function BotMatchScreen({
   }, [
     match,
     appendMove,
+    appendGhostMove,
+    ghostProfile,
+    isGhostMode,
     runDrawSequenceLocal,
     setDrawSequenceActiveBoth,
     isMuted,
@@ -821,6 +1077,17 @@ export default function BotMatchScreen({
         if (cancelled) return;
         setSelectedTile(null);
         if (result.drew) {
+          if (isGhostMode) {
+            appendGhostMove({
+              turn: (match.turnIndex ?? 0) + 1,
+              actor: 'you',
+              board_state: serializeGhostBoardState(match.board),
+              tile_played: null,
+              branch: 'draw',
+              hand_before: handBefore.map(([low, high]) => `${low}|${high}`),
+              score_delta: 0,
+            });
+          }
           appendMove({
             player: 'you',
             action: 'draw',
@@ -836,6 +1103,17 @@ export default function BotMatchScreen({
           });
         }
         if (result.passed) {
+          if (isGhostMode) {
+            appendGhostMove({
+              turn: (match.turnIndex ?? 0) + 1,
+              actor: 'you',
+              board_state: serializeGhostBoardState(match.board),
+              tile_played: null,
+              branch: 'pass',
+              hand_before: handBefore.map(([low, high]) => `${low}|${high}`),
+              score_delta: 0,
+            });
+          }
           appendMove({
             player: 'you',
             action: 'pass',
@@ -858,7 +1136,7 @@ export default function BotMatchScreen({
     return () => {
       cancelled = true;
     };
-  }, [match, userPlayMoves.length, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, isMuted, getFritzBestMove]);
+  }, [match, userPlayMoves.length, appendGhostMove, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, isGhostMode, isMuted, getFritzBestMove]);
 
   useEffect(() => {
     if (!isDailyPuzzleRun || !dailyPuzzleDate || !match.gameOver) return;
@@ -936,14 +1214,33 @@ export default function BotMatchScreen({
     ? match.gameOver
       ? match.winnerId === 'you'
         ? 'You win the match'
-        : 'Fritz wins the match'
+        : `${opponentLabel} wins the match`
       : 'Hand complete'
     : botTurn
-      ? 'Fritz thinking'
+      ? `${opponentLabel} thinking`
       : 'Your move';
 
   const openEnds = getDisplayOpenEnds(match);
   const openEndsSum = match.board ? computeOpenEndsSum(match.board) : 0;
+  const ghostAverageLabel =
+    ghostProfile?.avgScore == null ? '—' : `${ghostProfile.avgScore} pts`;
+  const ghostResultMessage = getGhostResultMessage(match.players.you.score, match.players.bot.score);
+  const previousGhostRating =
+    ghostResult == null
+      ? ghostProfile?.ghostRating ?? 800
+      : ghostResult.newRating - ghostResult.ratingDelta;
+  const onShareGhostCard = async () => {
+    const result = ghostResult;
+    if (!result) return;
+    await shareGhostResultCard({
+      playerScore: result.playerScore,
+      ghostScore: result.ghostScore,
+      previousRating: previousGhostRating,
+      newRating: result.newRating,
+      ratingDelta: result.ratingDelta,
+      message: ghostResultMessage,
+    });
+  };
   return (
     <div
       ref={rootRef}
@@ -952,9 +1249,9 @@ export default function BotMatchScreen({
       <ScoreTrackOverlay
         open={scoreTrackOpen}
         onClose={() => setScoreTrackOpen(false)}
-        target={60}
+        target={winningScore}
         players={[
-          { label: 'Fritz', score: match.players.bot.score, tone: 'opp' },
+          { label: opponentLabel, score: match.players.bot.score, tone: 'opp' },
           { label: 'You', score: match.players.you.score, tone: 'you' },
         ]}
       />
@@ -1002,7 +1299,7 @@ export default function BotMatchScreen({
             >
               {handReveal.winner === 'you'
                 ? `🎉 You won this hand  +${handReveal.pointsAwarded} pts`
-                : `Fritz won this hand  +${handReveal.pointsAwarded} pts`}
+                : `${opponentLabel} won this hand  +${handReveal.pointsAwarded} pts`}
             </p>
 
             {handReveal.reason === 'blocked' ? (
@@ -1042,7 +1339,7 @@ export default function BotMatchScreen({
                       textAlign: 'center',
                     }}
                   >
-                    Fritz Remaining Tiles
+                    {opponentLabel} Remaining Tiles
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
                     {handReveal.botRemainingTiles.map((tile, idx) => (
@@ -1076,7 +1373,7 @@ export default function BotMatchScreen({
                     textAlign: 'center',
                   }}
                 >
-                  Fritz had {handReveal.botRemainingTiles.length} tile
+                  {opponentLabel} had {handReveal.botRemainingTiles.length} tile
                   {handReveal.botRemainingTiles.length === 1 ? '' : 's'} remaining:
                 </div>
                 {handReveal.botRemainingTiles.length > 0 && (
@@ -1102,7 +1399,7 @@ export default function BotMatchScreen({
                     textAlign: 'center',
                   }}
                 >
-                  Fritz cleared their hand
+                  {opponentLabel} cleared their hand
                 </div>
                 <div
                   style={{
@@ -1156,24 +1453,24 @@ export default function BotMatchScreen({
       {match.gameOver && (
         <GameOverModal
           open
-          ariaLabel="Fritz match over"
-          title={match.winnerId === 'you' ? 'Champion!' : 'Fritz Wins'}
+          ariaLabel={`${opponentLabel} match over`}
+          title={isGhostMode ? '👻 Ghost Mode' : match.winnerId === 'you' ? 'Champion!' : `${opponentLabel} Wins`}
           subtitle={`Final hand ${match.handNumber} · ${match.dealSize}-tile mode`}
           scores={[
             {
               label: 'You',
-              value: match.players.you.score,
+              value: isGhostMode ? `${match.players.you.score} pts` : match.players.you.score,
               winner: match.winnerId === 'you',
               showCrown: match.winnerId === 'you',
             },
             {
-              label: 'Fritz',
-              value: match.players.bot.score,
+              label: opponentLabel,
+              value: isGhostMode ? `${match.players.bot.score} pts` : match.players.bot.score,
               winner: match.winnerId === 'bot',
               showCrown: match.winnerId === 'bot',
             },
           ]}
-          primaryLabel="New Match"
+          primaryLabel={isGhostMode ? 'Play Again' : 'New Match'}
           onPrimary={startFreshMatch}
           secondaryLabel="Home"
           onSecondary={onBack}
@@ -1181,6 +1478,52 @@ export default function BotMatchScreen({
           onExtraAction={openAnalyzer}
           onClose={onBack}
         >
+          {isGhostMode && (
+            <div className="ghost-result-card">
+              <div className="ghost-result-row">
+                <span>YOU</span>
+                <strong>{match.players.you.score} pts</strong>
+                <div className="ghost-result-bar">
+                  <div
+                    className="ghost-result-bar-fill is-you"
+                    style={{
+                      width: `${(match.players.you.score / Math.max(match.players.you.score, match.players.bot.score, 1)) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="ghost-result-row">
+                <span>GHOST</span>
+                <strong>{match.players.bot.score} pts</strong>
+                <div className="ghost-result-bar">
+                  <div
+                    className="ghost-result-bar-fill is-ghost"
+                    style={{
+                      width: `${(match.players.bot.score / Math.max(match.players.you.score, match.players.bot.score, 1)) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="ghost-result-rating">
+                {ghostResultLoading ? (
+                  <span>Updating Ghost Rating...</span>
+                ) : ghostResult ? (
+                  <span>
+                    Ghost Rating: {previousGhostRating} → {ghostResult.newRating}{' '}
+                    <strong>{ghostResult.ratingDelta >= 0 ? `↑${ghostResult.ratingDelta}` : `↓${Math.abs(ghostResult.ratingDelta)}`}</strong>
+                  </span>
+                ) : (
+                  <span>Ghost Rating: {ghostProfile?.ghostRating ?? 800}</span>
+                )}
+              </div>
+              <p className="ghost-result-message">{ghostResultMessage}</p>
+              {ghostResult && (
+                <button className="mode-inline-btn" onClick={() => void onShareGhostCard()}>
+                  Share Card
+                </button>
+              )}
+            </div>
+          )}
           {isDailyPuzzleRun && (
             <div style={{ margin: '2px 0 4px', textAlign: 'left' }}>
               <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Today&apos;s Top Scores</h3>
@@ -1250,15 +1593,15 @@ export default function BotMatchScreen({
               style={{ width: 110, minWidth: 'unset' }}
             >
               <div className="wl-pill-top">
-                <span className="wl-player-label">Fritz</span>
+                <span className="wl-player-label">{opponentLabel}</span>
               </div>
               <span className="wl-player-score">{match.players.bot.score}</span>
             </button>
             <TileRack
-              count={match.players.bot.hand.length}
-              isActive={botTurn}
-            />
-          </div>
+                  count={match.players.bot.hand.length}
+                  isActive={botTurn}
+                  variant="default"
+                />          </div>
         </div>
 
         <div
@@ -1334,7 +1677,10 @@ export default function BotMatchScreen({
       </div>
 
       <div className="wl-stage-shell">
-        <div className="board-area wl-board-area" data-ui="board">
+        <div
+          className={`board-area wl-board-area ${ghostBoardPulse ? 'ghost-board-pulse' : ''}`}
+          data-ui="board"
+        >
           {scoreToast && (
             <div
               style={{
@@ -1396,6 +1742,14 @@ export default function BotMatchScreen({
               {match.boneyard.length > 0 && match.boneyard.length <= 2 ? (
                 <span className="boneyard-meta">locked</span>
               ) : null}
+            </div>
+          )}
+          {isGhostMode && ghostAgreementVisible && (
+            <div className="ghost-agreement-indicator">✓ Ghost agrees</div>
+          )}
+          {isGhostMode && ghostPlayedTile && (
+            <div className="ghost-played-overlay" aria-hidden="true">
+              <DominoTile tile={ghostPlayedTile} size={52} className="ghost-played-tile" />
             </div>
           )}
           <Board
@@ -1552,7 +1906,7 @@ export default function BotMatchScreen({
       {showDebug && (
         <aside className="bot-debug-panel">
           <div>
-            <strong>Fritz hand:</strong>{' '}
+            <strong>{opponentLabel} hand:</strong>{' '}
             {match.players.bot.hand.map((t) => `[${t.low}|${t.high}]`).join(' ')}
           </div>
           <div>

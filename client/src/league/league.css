@@ -1,0 +1,168 @@
+.league-screen .screen-shell {
+  width: min(1120px, 100%);
+}
+
+.league-hub {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.league-table-card,
+.league-fixture-card,
+.league-recent-card,
+.league-schedule-card,
+.league-opponent-card,
+.league-post-card {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(176deg, rgba(11, 18, 32, 0.72), rgba(8, 14, 26, 0.82));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 16px;
+}
+
+.league-table-head,
+.league-table-row {
+  display: grid;
+  grid-template-columns: 34px minmax(140px, 1fr) repeat(8, minmax(34px, 56px));
+  gap: 8px;
+  align-items: center;
+}
+
+.league-table-head {
+  padding: 0 10px 10px;
+  color: rgba(201, 218, 228, 0.64);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.league-table-row {
+  padding: 10px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(234, 244, 241, 0.94);
+  font-size: 0.9rem;
+}
+
+.league-table-row.is-promo {
+  border-left-color: rgba(68, 214, 137, 0.88);
+}
+
+.league-table-row.is-relegation {
+  border-left-color: rgba(233, 86, 86, 0.88);
+}
+
+.league-table-row.is-you {
+  background: rgba(240, 192, 64, 0.08);
+  font-weight: 700;
+}
+
+.league-table-row.is-fritz {
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.12), rgba(212, 175, 55, 0.03));
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.18);
+}
+
+.league-side-column {
+  display: grid;
+  gap: 14px;
+}
+
+.league-card-label {
+  margin: 0 0 10px;
+  color: rgba(201, 218, 228, 0.66);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.league-fixture-card h3,
+.league-opponent-name {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.league-fixture-result,
+.league-opponent-meta,
+.league-post-summary,
+.league-opponent-quote {
+  margin: 0;
+  color: rgba(225, 237, 243, 0.82);
+}
+
+.league-opponent-card {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.league-opponent-card.is-fritz {
+  border-color: rgba(212, 175, 55, 0.45);
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.16), 0 16px 42px rgba(212, 175, 55, 0.08);
+}
+
+.league-play-now {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.league-recent-list,
+.league-schedule-list {
+  display: grid;
+  gap: 8px;
+}
+
+.league-recent-item,
+.league-schedule-item {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.league-actions-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.league-schedule-card summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: rgba(238, 247, 244, 0.92);
+}
+
+.league-post-card {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.league-scoreline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 960px) {
+  .league-hub {
+    grid-template-columns: 1fr;
+  }
+
+  .league-table-head,
+  .league-table-row {
+    grid-template-columns: 28px minmax(110px, 1fr) repeat(8, minmax(28px, 48px));
+    gap: 6px;
+    font-size: 0.8rem;
+  }
+}

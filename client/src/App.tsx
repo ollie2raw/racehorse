@@ -19,9 +19,10 @@ import {
 import NoBrainerLabScreen from './practice/NoBrainerLabScreen';
 import BotMatchScreen from './bot/BotMatchScreen';
 import BotSetupScreen from './bot/BotSetupScreen';
+import GhostSetupScreen from './ghost/GhostSetupScreen';
 import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
 import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
-import GauntletScreen from './gauntlet/GauntletScreen';
+import LeagueScreen from './league/LeagueScreen';
 import GameOverModal from './components/GameOverModal';
 import GameReviewer from './analyzer/GameReviewer';
 import AuthModal from './auth/AuthModal';
@@ -39,7 +40,8 @@ import {
   cloneBoardState,
   toTileTuple,
 } from './analyzer/moveLogger';
-import { recordMatchResult } from './stats/statsApi';
+import { fetchUserStatsByUserId, recordMatchResult } from './stats/statsApi';
+import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 import type { BotDealSize } from './bot/botEngine';
 
@@ -373,11 +375,18 @@ function WeeklyStatsScreen({
   open,
   onClose,
   awards,
+  userId,
 }: {
   open: boolean;
   onClose: () => void;
   awards: any | null;
+  userId: string | null;
 }) {
+  const [ghostWeek, setGhostWeek] = useState<{
+    ghostGamesThisWeek: number;
+    ghostRatingChangeThisWeek: number;
+    ghostBestWinMarginThisWeek: number | null;
+  } | null>(null);
   const now = new Date();
   const day = now.getDay(); // 0=Sun
   const mondayOffset = day === 0 ? -6 : 1 - day;
@@ -434,6 +443,29 @@ function WeeklyStatsScreen({
     return 'most-wins';
   };
 
+  useEffect(() => {
+    if (!open || !userId) {
+      setGhostWeek(null);
+      return;
+    }
+    let active = true;
+    void fetchUserStatsByUserId(userId)
+      .then((resp) => {
+        if (!active || resp.error || !resp.data) return;
+        setGhostWeek({
+          ghostGamesThisWeek: resp.data.ghostGamesThisWeek,
+          ghostRatingChangeThisWeek: resp.data.ghostRatingChangeThisWeek,
+          ghostBestWinMarginThisWeek: resp.data.ghostBestWinMarginThisWeek,
+        });
+      })
+      .catch(() => {
+        if (active) setGhostWeek(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, userId]);
+
   return (
     <div
       role="dialog"
@@ -486,6 +518,51 @@ function WeeklyStatsScreen({
             Close
           </button>
         </div>
+
+        {ghostWeek && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: 10,
+            }}
+          >
+            {[
+              { label: 'Ghost Games', value: ghostWeek.ghostGamesThisWeek },
+              {
+                label: 'Ghost Rating Δ',
+                value:
+                  ghostWeek.ghostRatingChangeThisWeek === 0
+                    ? '0'
+                    : `${ghostWeek.ghostRatingChangeThisWeek > 0 ? '+' : ''}${ghostWeek.ghostRatingChangeThisWeek}`,
+              },
+              {
+                label: 'Best Ghost Win',
+                value:
+                  ghostWeek.ghostBestWinMarginThisWeek == null
+                    ? '—'
+                    : `${ghostWeek.ghostBestWinMarginThisWeek} pts`,
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(215, 186, 255, 0.18)',
+                  background: 'rgba(48, 27, 72, 0.28)',
+                  padding: '12px',
+                  display: 'grid',
+                  gap: 4,
+                }}
+              >
+                <span style={{ fontSize: '0.82rem', color: 'rgba(225,212,248,0.82)' }}>
+                  👻 {item.label}
+                </span>
+                <strong style={{ fontSize: '1.18rem', color: '#f2e8ff' }}>{item.value}</strong>
+              </div>
+            ))}
+          </div>
+        )}
 
         {hasRows ? (
           <div style={{ display: 'grid', gap: 10 }}>
@@ -583,9 +660,11 @@ export default function App() {
     | 'noBrainer'
     | 'botSetup'
     | 'bot'
+    | 'ghostSetup'
+    | 'ghost'
     | 'daily'
-    | 'gauntlet'
-    | 'dailyAdmin'
+    | 'league'
+    | 'singlePlayerHub'
     | 'tournament'
   >('home');
   const [isMuted, setIsMuted] = useState<boolean>(() => {
@@ -602,6 +681,8 @@ export default function App() {
     const stored = window.localStorage.getItem('racehorse_bot_deal_size');
     return stored === '14' ? 14 : 7;
   });
+  const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
+  const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
 
   const [roomCode, setRoomCode] = useState('');
   const [tournamentCode, setTournamentCode] = useState('');
@@ -705,6 +786,24 @@ export default function App() {
     roomCode: string;
     inviteUrl: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (!authUser) {
+      setGhostProfile(null);
+      return;
+    }
+    let active = true;
+    void fetchGhostProfileSummary(authUser.id)
+      .then((summary) => {
+        if (active) setGhostProfile(summary);
+      })
+      .catch(() => {
+        if (active) setGhostProfile(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authUser]);
 
   const loadWeeklyAwards = useCallback(() => {
     if (!socket || !socket.connected) return;
@@ -2764,6 +2863,39 @@ export default function App() {
     );
   }
 
+  if (appMode === 'ghostSetup') {
+    return (
+      <div className={appRootClassName}>
+        <GhostSetupScreen
+          userId={authUser?.id ?? null}
+          onBack={() => setAppMode('home')}
+          onStart={(summary, opponentName) => {
+            setGhostProfile(summary);
+            setGhostOpponentName(opponentName);
+            setAppMode('ghost');
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (appMode === 'ghost') {
+    return (
+      <div className={appRootClassName}>
+        <BotMatchScreen
+          onBack={() => setAppMode('home')}
+          dealSize={botDealSize}
+          mode="ghost"
+          userId={authUser?.id ?? null}
+          username={authProfile?.username ?? null}
+          opponentName={ghostOpponentName}
+          ghostProfile={ghostProfile}
+          onGhostProfileChange={setGhostProfile}
+        />
+      </div>
+    );
+  }
+
   if (appMode === 'daily') {
     return (
       <div className={appRootClassName}>
@@ -2776,61 +2908,87 @@ export default function App() {
     );
   }
 
-  if (appMode === 'gauntlet') {
-    if (!isAdmin) {
-      return (
-        <div className={appRootClassName}>
-          <LayoutScreen
-            className="screen lobby-screen mode-home-screen mode-subpage-screen"
-            badge="Racehorse Dominoes"
-            title="The Gauntlet"
-            subtitle="You are not authorized to access this mode."
-            contentClassName="screen-shell"
-          >
-            <button className="mode-inline-btn" onClick={() => setAppMode('home')}>
-              Back to Home
-            </button>
-          </LayoutScreen>
-        </div>
-      );
-    }
+  if (appMode === 'league') {
     return (
       <div className={appRootClassName}>
-        <GauntletScreen
+        <LeagueScreen
           user={authUser}
           profile={authProfile}
-          isAdmin={isAdmin}
           onBack={() => setAppMode('home')}
         />
       </div>
     );
   }
 
-  if (appMode === 'dailyAdmin') {
-    if (!isAdmin) {
-      return (
-        <div className={appRootClassName}>
-          <LayoutScreen
-            className="screen lobby-screen mode-home-screen mode-subpage-screen"
-            badge="Racehorse Dominoes"
-            title="Admin: Daily Puzzles"
-            subtitle="You are not authorized to access the puzzle editor."
-            contentClassName="screen-shell"
-          >
-            <button className="mode-inline-btn" onClick={() => setAppMode('home')}>
-              Back to Home
-            </button>
-          </LayoutScreen>
-        </div>
-      );
-    }
+  if (appMode === 'singlePlayerHub') {
     return (
       <div className={appRootClassName}>
-        <DailyPuzzleAdminScreen onBack={() => setAppMode('home')} />
+        <LayoutScreen
+          className="screen lobby-screen mode-home-screen mode-subpage-screen"
+          badge="Racehorse Dominoes"
+          title="Single Player Modes"
+          subtitle="Choose a mode to play solo or against a bot."
+          contentClassName="screen-shell"
+        >
+          <div className="mode-hub-grid">
+            <section className="mode-hub-middle">
+              <div className="mode-actions">
+                <button
+                  className="mode-option mode-option-secondary mode-accent-bot mode-card-bot"
+                  onClick={() => setAppMode('botSetup')}
+                >
+                  <span className="mode-option-title">Play vs Fritz</span>
+                  <span className="mode-option-meta">Test yourself against the toughest opponent in the room</span>
+                </button>
+                <button
+                  className="mode-option mode-option-secondary mode-accent-bot mode-card-practice"
+                  onClick={() => setAppMode('noBrainer')}
+                >
+                  <span className="mode-option-title">No Brainer Lab</span>
+                  <span className="mode-option-meta">Practice one turn clear runs with curated hands</span>
+                </button>
+                <button
+                  className="mode-option mode-option-secondary mode-accent-ghost mode-card-ghost"
+                  onClick={() => {
+                    if (!authUser) {
+                      setAuthModalOpen(true);
+                      return;
+                    }
+                    setAppMode('ghostSetup');
+                  }}
+                >
+                  <span className="mode-option-title">👻 Ghost Mode</span>
+                  <span className="mode-option-meta">
+                    Beat the composite of your last 5 games
+                  </span>
+                  <span className="mode-option-submeta">
+                    Ghost Rating: {ghostProfile?.ghostRating ?? '—'}
+                  </span>
+                </button>
+                <button
+                  className="mode-option mode-option-secondary mode-option-primary mode-option-hero mode-accent-league mode-option-hero-outline mode-card-league"
+                  onClick={() => setAppMode('league')}
+                >
+                  <span className="mode-option-title">
+                    <span className="mode-daily-crown" aria-hidden="true">🏁</span>
+                    Your League
+                  </span>
+                  <span className="mode-option-meta">
+                    One fixture a day. Climb the table, survive promotion and relegation.
+                  </span>
+                </button>
+                <button className="mode-inline-btn" onClick={() => setAppMode('home')}>
+                  Back to Home
+                </button>
+              </div>
+            </section>
+          </div>
+        </LayoutScreen>
       </div>
     );
-  }
-  if (appMode === 'tournament') {
+    }
+
+    if (appMode === 'tournament') {
     const players: TournamentPlayer[] = Array.isArray(tournamentState?.players)
       ? tournamentState.players.filter(
           (p: TournamentPlayer) =>
@@ -3398,6 +3556,7 @@ export default function App() {
               <button className="mode-inline-btn home-top-btn home-top-btn-user" onClick={() => setUsernameModalOpen(true)}>
                 <span className="home-top-online-dot" aria-hidden="true" />
                 {myHandle}
+                {ghostProfile?.ghostRating != null ? `  👻 ${ghostProfile.ghostRating}` : ''}
               </button>
               <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setStatsOpen(true)}>
                 Stats
@@ -3505,17 +3664,18 @@ export default function App() {
               <div className="mode-hub-grid">
                 <section className="mode-hub-middle" aria-label="Practice and compete modes">
                   <div className="mode-hub-middle-labels">
-                    <p className="mode-section-label mode-section-label-practice">Practice</p>
-                    <p className="mode-section-label mode-section-label-compete">Compete</p>
+                    <p className="mode-section-label">Compete</p>
+                    <p className="mode-section-label">Practice</p>
                   </div>
                   <div className="mode-hub-middle-cards">
                     <button
-                      className="mode-option mode-option-secondary mode-accent-bot mode-card-bot"
-                      onClick={() => setAppMode('botSetup')}
+                      className="mode-option mode-option-primary mode-option-hero mode-accent-bot mode-card-single-player"
+                      onClick={() => setAppMode('singlePlayerHub')}
                     >
-                      <span className="mode-option-title">Play vs Fritz</span>
-                      <span className="mode-option-meta">Test yourself against the toughest opponent in the room</span>
+                      <span className="mode-option-title">Single Player Modes</span>
+                      <span className="mode-option-meta">Play vs Fritz, Ghost Mode, Your League, & No Brainer Lab</span>
                     </button>
+
                     <button
                       className="mode-option mode-accent-tournament mode-card-compete"
                       onClick={() => {
@@ -3526,15 +3686,9 @@ export default function App() {
                       <span className="mode-option-title">Tournament Mode</span>
                       <span className="mode-option-meta">Round robin (4+ players), matches to 30, play everyone once</span>
                     </button>
+
                     <button
-                      className="mode-option mode-option-secondary mode-accent-bot mode-card-practice"
-                      onClick={() => setAppMode('noBrainer')}
-                    >
-                      <span className="mode-option-title">No Brainer Lab</span>
-                      <span className="mode-option-meta">Practice one turn clear runs with curated hands</span>
-                    </button>
-                    <button
-                      className="mode-option mode-option-secondary mode-option-primary mode-option-hero mode-accent-daily mode-option-hero-outline mode-card-daily"
+                      className="mode-option mode-option-secondary mode-accent-daily mode-card-daily"
                       onClick={() => setAppMode('daily')}
                     >
                       <span className="mode-option-title">
@@ -3545,26 +3699,7 @@ export default function App() {
                         Solve today’s featured scenario and compare leaderboard results
                       </span>
                     </button>
-                    {isAdmin && (
-                      <button
-                        className="mode-option mode-option-secondary mode-option-primary mode-option-hero mode-accent-gauntlet mode-option-hero-outline mode-card-gauntlet"
-                        onClick={() => setAppMode('gauntlet')}
-                      >
-                        <span className="mode-option-title">
-                          <span className="mode-daily-crown" aria-hidden="true">⚔</span>
-                          The Gauntlet
-                        </span>
-                        <span className="mode-option-meta">
-                          Five seeded rounds daily. Bank or push for bigger multipliers.
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                </section>
 
-                <section className="mode-hub-section mode-hub-section-track">
-                  <p className="mode-section-label">Track</p>
-                  <div className="mode-actions">
                     <button
                       className="mode-option mode-option-secondary mode-accent-track mode-card-track"
                       onClick={() => setWeeklyStatsOpen(true)}
@@ -3572,17 +3707,6 @@ export default function App() {
                       <span className="mode-option-title">Weekly Stats</span>
                       <span className="mode-option-meta">See weekly highlights, awards, and leaderboard snapshots</span>
                     </button>
-                    {isAdmin && (
-                      <button
-                        className="mode-option mode-option-secondary mode-card-track"
-                        onClick={() => setAppMode('dailyAdmin')}
-                      >
-                        <span className="mode-option-title">Admin: Daily Puzzles</span>
-                        <span className="mode-option-meta">
-                          Create or edit curated daily puzzle entries
-                        </span>
-                      </button>
-                    )}
                   </div>
                 </section>
               </div>
@@ -3643,6 +3767,7 @@ export default function App() {
           open={weeklyStatsOpen}
           onClose={() => setWeeklyStatsOpen(false)}
           awards={weeklyAwards}
+          userId={authUser?.id ?? null}
         />
         {friendInvitePopup}
 </div>

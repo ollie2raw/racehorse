@@ -1012,6 +1012,10 @@ button:hover:not(:disabled) {
   --menu-section-color: #818cf8;
 }
 
+.mode-card-single-player {
+  --menu-section-color: #818cf8;
+}
+
 .mode-card-compete {
   --menu-section-color: #f87171;
 }
@@ -1020,8 +1024,12 @@ button:hover:not(:disabled) {
   --menu-section-color: #fbbf24;
 }
 
-.mode-card-gauntlet {
-  --menu-section-color: #f97316;
+.mode-card-league {
+  --menu-section-color: #22c55e;
+}
+
+.mode-card-ghost {
+  --menu-section-color: #a855f7;
 }
 
 .mode-option.mode-card-daily {
@@ -1029,16 +1037,25 @@ button:hover:not(:disabled) {
   background: linear-gradient(135deg, rgba(240, 192, 64, 0.07) 0%, rgba(240, 192, 64, 0.02) 40%, transparent 70%) !important;
 }
 
-.mode-option.mode-card-gauntlet {
-  border-color: rgba(249, 115, 22, 0.33) !important;
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(249, 115, 22, 0.03) 45%, transparent 72%) !important;
+.mode-option.mode-card-league {
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.09) 0%, rgba(34, 197, 94, 0.03) 45%, transparent 72%) !important;
+}
+
+.mode-option.mode-card-ghost {
+  border-color: rgba(168, 85, 247, 0.3) !important;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(168, 85, 247, 0.03) 45%, transparent 72%) !important;
 }
 
 .mode-home-screen .mode-option.mode-card-daily {
   overflow: hidden;
 }
 
-.mode-home-screen .mode-option.mode-card-gauntlet {
+.mode-home-screen .mode-option.mode-card-league {
+  overflow: hidden;
+}
+
+.mode-home-screen .mode-option.mode-card-ghost {
   overflow: hidden;
 }
 
@@ -1046,7 +1063,11 @@ button:hover:not(:disabled) {
   display: none;
 }
 
-.mode-home-screen .mode-option.mode-card-gauntlet .mode-option-title::before {
+.mode-home-screen .mode-option.mode-card-league .mode-option-title::before {
+  display: none;
+}
+
+.mode-home-screen .mode-option.mode-card-ghost .mode-option-title::before {
   display: none;
 }
 
@@ -1058,12 +1079,26 @@ button:hover:not(:disabled) {
     0 16px 30px rgba(20, 15, 10, 0.28);
 }
 
-.mode-home-screen .mode-option.mode-card-gauntlet:hover {
-  border-color: rgba(249, 115, 22, 0.38) !important;
+.mode-home-screen .mode-option.mode-card-league:hover {
+  border-color: rgba(34, 197, 94, 0.38) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 1px rgba(249, 115, 22, 0.16),
-    0 16px 30px rgba(25, 12, 8, 0.34);
+    0 0 0 1px rgba(34, 197, 94, 0.12),
+    0 16px 30px rgba(8, 22, 12, 0.28);
+}
+
+.mode-home-screen .mode-option.mode-card-ghost:hover {
+  border-color: rgba(168, 85, 247, 0.38) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 1px rgba(168, 85, 247, 0.14),
+    0 16px 30px rgba(22, 10, 28, 0.34);
+}
+
+.mode-option-submeta {
+  font-size: 0.76rem;
+  color: rgba(221, 216, 243, 0.78);
+  font-weight: 700;
 }
 
 @keyframes dailyShimmer {
@@ -1079,30 +1114,30 @@ button:hover:not(:disabled) {
   --menu-section-color: #f0c040;
 }
 
-.screen.mode-accent-gauntlet.mode-subpage-screen {
-  --menu-section-color: #f97316;
+.screen.mode-accent-league.mode-subpage-screen {
+  --menu-section-color: #22c55e;
 }
 
-.screen.mode-accent-gauntlet.mode-subpage-screen .mode-section-label {
-  color: #f97316;
+.screen.mode-accent-league.mode-subpage-screen .mode-section-label {
+  color: #22c55e;
 }
 
-.screen.mode-accent-gauntlet.mode-subpage-screen .layout-screen-badge {
-  color: #f97316;
+.screen.mode-accent-league.mode-subpage-screen .layout-screen-badge {
+  color: #22c55e;
 }
 
-.screen.mode-accent-gauntlet.mode-subpage-screen .mode-option {
-  --menu-section-color: #f97316;
-  border: 1px solid rgba(249, 115, 22, 0.22);
-  background: rgba(249, 115, 22, 0.05);
+.screen.mode-accent-league.mode-subpage-screen .mode-option {
+  --menu-section-color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  background: rgba(34, 197, 94, 0.05);
 }
 
-.screen.mode-accent-gauntlet.mode-subpage-screen .mode-option-title::before {
-  background: #f97316;
+.screen.mode-accent-league.mode-subpage-screen .mode-option-title::before {
+  background: #22c55e;
 }
 
-.screen.mode-accent-gauntlet.mode-subpage-screen .mode-option:hover {
-  border-color: rgba(249, 115, 22, 0.52);
+.screen.mode-accent-league.mode-subpage-screen .mode-option:hover {
+  border-color: rgba(34, 197, 94, 0.52);
 }
 
 .screen.mode-accent-daily.mode-subpage-screen .mode-section-label {
@@ -1164,19 +1199,6 @@ button:hover:not(:disabled) {
   height: 100%;
   background: linear-gradient(90deg, transparent, rgba(240, 192, 64, 0.06), transparent);
   animation: dailyShimmer 4s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.mode-home-screen .mode-option.mode-card-gauntlet::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 40%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.1), transparent);
-  animation: dailyShimmer 4s ease-in-out infinite;
-  animation-delay: 1s;
   pointer-events: none;
 }
 
@@ -1302,10 +1324,22 @@ button:hover:not(:disabled) {
   --mode-hover-border: rgba(169, 178, 249, 0.36);
 }
 
+.mode-accent-ghost {
+  --mode-accent: rgba(168, 85, 247, 0.64);
+  --mode-section-tone: rgba(229, 204, 255, 0.8);
+  --mode-hover-border: rgba(196, 124, 255, 0.38);
+}
+
 .mode-accent-daily {
   --mode-accent: rgba(251, 191, 36, 0.66);
   --mode-section-tone: rgba(252, 225, 145, 0.78);
   --mode-hover-border: rgba(252, 210, 101, 0.38);
+}
+
+.mode-accent-league {
+  --mode-accent: rgba(34, 197, 94, 0.66);
+  --mode-section-tone: rgba(177, 242, 197, 0.78);
+  --mode-hover-border: rgba(97, 223, 133, 0.38);
 }
 
 .mode-accent-tournament {

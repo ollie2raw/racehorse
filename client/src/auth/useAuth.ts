@@ -6,6 +6,7 @@ export interface UserProfile {
   id: string;
   username: string;
   created_at?: string;
+  ghost_rating?: number | null;
 }
 
 interface AuthResult {
@@ -147,7 +148,28 @@ export function useAuth() {
         setProfile(fallbackProfile(sessionUser));
         return;
       }
-      setProfile(result.data as UserProfile);
+      let ghostRating: number | null = null;
+      try {
+        const ghostResp = await Promise.race([
+          supabase
+            .from('ghost_profiles')
+            .select('ghost_rating')
+            .eq('user_id', sessionUser.id)
+            .maybeSingle()
+            .then(({ data }) => data),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), PROFILE_REQUEST_TIMEOUT_MS)),
+        ]);
+        ghostRating =
+          ghostResp && typeof ghostResp === 'object' && 'ghost_rating' in ghostResp
+            ? Number((ghostResp as { ghost_rating?: unknown }).ghost_rating ?? 800)
+            : null;
+      } catch {
+        ghostRating = null;
+      }
+      setProfile({
+        ...(result.data as UserProfile),
+        ghost_rating: ghostRating,
+      });
     } catch (err) {
       console.warn('[auth] refreshProfile errored; using fallback profile', err);
       setProfile(fallbackProfile(sessionUser));

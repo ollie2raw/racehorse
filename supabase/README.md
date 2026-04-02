@@ -3,8 +3,7 @@
 1. Create a Supabase project.
 2. Open **SQL Editor** and run `supabase/schema.sql`.
 3. Run `supabase/daily_puzzle.sql` to add Daily Puzzle tables/policies.
-4. Run `supabase/gauntlet.sql` to add Gauntlet tables, policies, and RPCs.
-5. In `client/.env` (or `.env.local`) set:
+4. In `client/.env` (or `.env.local`) set:
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co

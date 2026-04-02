@@ -5,6 +5,20 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
+    proxy: {
+      '/api/ghost': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/league': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
     headers: {
       'Content-Security-Policy':
         "script-src 'self' 'unsafe-eval' 'unsafe-inline'; worker-src 'self' blob:;",

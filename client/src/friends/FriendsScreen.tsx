@@ -33,6 +33,10 @@ const EMPTY_STATS: StatsSummary = {
   winRate: 0,
   currentWinStreak: 0,
   gamesThisWeek: 0,
+  ghostRating: null,
+  ghostGamesThisWeek: 0,
+  ghostRatingChangeThisWeek: 0,
+  ghostBestWinMarginThisWeek: null,
 };
 
 export default function FriendsScreen({

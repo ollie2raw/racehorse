@@ -68,6 +68,10 @@ export interface StatsSummary {
   winRate: number;
   currentWinStreak: number;
   gamesThisWeek: number;
+  ghostRating: number | null;
+  ghostGamesThisWeek: number;
+  ghostRatingChangeThisWeek: number;
+  ghostBestWinMarginThisWeek: number | null;
 }
 
 type MatchSummaryRow = {
@@ -76,6 +80,12 @@ type MatchSummaryRow = {
   mode: string | null;
   avg_move_quality?: number | null;
   created_at?: string | null;
+};
+
+type GhostGameSummaryRow = {
+  final_score: number | null;
+  opponent_score: number | null;
+  played_at?: string | null;
 };
 
 function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummary {
@@ -133,6 +143,10 @@ function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummar
     winRate,
     currentWinStreak,
     gamesThisWeek,
+    ghostRating: null,
+    ghostGamesThisWeek: 0,
+    ghostRatingChangeThisWeek: 0,
+    ghostBestWinMarginThisWeek: null,
   };
 }
 
@@ -184,8 +198,72 @@ export async function fetchUserStatsByUserId(
   const rows = (historyResp.data ?? []) as MatchSummaryRow[];
   const summary = buildStatsSummary(userId, rows);
 
+  let ghostRating: number | null = null;
+  try {
+    const ghostProfileResp = await supabase
+      .from('ghost_profiles')
+      .select('ghost_rating')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!ghostProfileResp.error && ghostProfileResp.data) {
+      ghostRating = Number(ghostProfileResp.data.ghost_rating ?? 800);
+    }
+  } catch {
+    ghostRating = null;
+  }
+
+  let ghostGamesThisWeek = 0;
+  let ghostRatingChangeThisWeek = 0;
+  let ghostBestWinMarginThisWeek: number | null = null;
+  try {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = (day + 6) % 7;
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(now.getDate() - diffToMonday);
+
+    const ghostGamesResp = await supabase
+      .from('ghost_games')
+      .select('final_score, opponent_score, played_at')
+      .eq('user_id', userId)
+      .gte('played_at', weekStart.toISOString())
+      .order('played_at', { ascending: false });
+
+    if (!ghostGamesResp.error) {
+      const ghostRows = (ghostGamesResp.data ?? []) as GhostGameSummaryRow[];
+      ghostGamesThisWeek = ghostRows.length;
+      let winsThisWeek = 0;
+      let lossesThisWeek = 0;
+      for (const row of ghostRows) {
+        const finalScore = Number(row.final_score ?? 0);
+        const opponentScore = Number(row.opponent_score ?? 0);
+        const margin = finalScore - opponentScore;
+        if (margin > 0) winsThisWeek += 1;
+        if (margin < 0) lossesThisWeek += 1;
+        if (margin > 0) {
+          ghostBestWinMarginThisWeek =
+            ghostBestWinMarginThisWeek == null
+              ? margin
+              : Math.max(ghostBestWinMarginThisWeek, margin);
+        }
+      }
+      ghostRatingChangeThisWeek = (winsThisWeek - lossesThisWeek) * 16;
+    }
+  } catch {
+    ghostGamesThisWeek = 0;
+    ghostRatingChangeThisWeek = 0;
+    ghostBestWinMarginThisWeek = null;
+  }
+
   return {
-    data: summary,
+    data: {
+      ...summary,
+      ghostRating,
+      ghostGamesThisWeek,
+      ghostRatingChangeThisWeek,
+      ghostBestWinMarginThisWeek,
+    },
     error: null,
   };
 }
