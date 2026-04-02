@@ -428,13 +428,7 @@ export async function completeGhostGame(params: {
         params.opponentScore,
         Number(profile.games_played ?? 0),
       )
-    : computeRatingChange(
-        Number(profile.ghost_rating ?? 800),
-        Number(opponentProfile?.ghost_rating ?? 800),
-        params.finalScore,
-        params.opponentScore,
-        Number(profile.games_played ?? 0),
-      );
+    : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 };
 
   await upsertGhostProfile({
     user_id: params.userId,

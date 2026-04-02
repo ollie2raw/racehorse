@@ -1524,22 +1524,14 @@ export default function BotMatchScreen({
               </div>
               <div className="ghost-result-rating">
                 {ghostResultLoading ? (
-                  <span>Updating Ghost Rating...</span>
+                  <span>Analyzing play style...</span>
                 ) : ghostResult ? (
-                  <span>
-                    Ghost Rating: {previousGhostRating} → {ghostResult.newRating}{' '}
-                    <strong>{ghostResult.ratingDelta >= 0 ? `↑${ghostResult.ratingDelta}` : `↓${Math.abs(ghostResult.ratingDelta)}`}</strong>
-                  </span>
+                  <span>Style profile updated</span>
                 ) : (
-                  <span>Ghost Rating: {ghostProfile?.ghostRating ?? 800}</span>
+                  <span>Analyzing play style...</span>
                 )}
               </div>
               <p className="ghost-result-message">{ghostResultMessage}</p>
-              {ghostResult && (
-                <button className="mode-inline-btn" onClick={() => void onShareGhostCard()}>
-                  Share Card
-                </button>
-              )}
             </div>
           )}
           {isDailyPuzzleRun && (
