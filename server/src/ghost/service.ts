@@ -393,6 +393,10 @@ export async function completeGhostGame(params: {
   compositeLog: GhostCompositeLog;
   styleProfile: GhostStyleProfile | null;
 }> {
+  console.log('[Ghost Service] called', {
+    userId: params.userId,
+    opponentUserId: params.opponentUserId,
+  });
   const profile = await ensureGhostProfile(params.userId);
   const opponentProfile =
     params.opponentUserId && params.opponentUserId !== params.userId

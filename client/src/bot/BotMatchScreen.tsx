@@ -550,6 +550,13 @@ export default function BotMatchScreen({
 
     const effectiveOpponentUserId = isGhostMode ? opponentUserId : (opponentUserId || 'fritz-bot');
 
+    console.log('[Fritz Rating] calling completeGhostGame', {
+      userId,
+      effectiveOpponentUserId,
+      finalScore: match.players.you.score,
+      opponentScore: match.players.bot.score,
+    });
+
     void completeGhostGame({
       userId,
       opponentUserId: effectiveOpponentUserId,
@@ -558,9 +565,11 @@ export default function BotMatchScreen({
       moveLog: ghostMoveLog,
     })
       .then((result) => {
+        console.log('[Fritz Rating] success:', result);
         setGhostResult(result);
         setGhostResultLoading(false);
         if (!onGhostProfileChange) return;
+
         onGhostProfileChange(
           ghostProfile
             ? {
@@ -584,9 +593,10 @@ export default function BotMatchScreen({
         );
       })
       .catch((err) => {
-        console.error('Failed to complete match ranking update:', err);
+        console.error('[Fritz Rating] failed:', err);
         setGhostResultLoading(false);
       });
+
   }, [
     ghostMoveLog,
     ghostProfile,
