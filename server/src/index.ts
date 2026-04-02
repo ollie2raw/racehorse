@@ -27,7 +27,7 @@ import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 import { supabaseFetch } from './supabaseUtils';
 import { FRITZ_SYSTEM_ID } from './ranking/glicko2';
 import { startRankingCron } from './ranking/cron';
-import { getLeaderboard } from './ranking/periodService';
+import { getLeaderboard, processRatingPeriod } from './ranking/periodService';
 
 import {
   createRoom,
@@ -94,6 +94,30 @@ app.get('/api/ranking/leaderboard', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to load leaderboard.',
+    });
+  }
+});
+
+app.post('/api/ranking/process/:userId', async (req, res) => {
+  const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
+  const adminKey = req.body?.adminKey;
+
+  if (adminKey !== process.env.ADMIN_SECRET) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+
+  try {
+    const result = await processRatingPeriod(userId);
+    res.json({ ok: true, result });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to process rating period.',
     });
   }
 });

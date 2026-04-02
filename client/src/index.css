@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap');
+
 /* Reset and base styles */
 *,
 *::before,
@@ -46,4 +48,35 @@ button {
 /* Remove default input styling */
 input {
   font-family: inherit;
+}
+
+/* 1. FONT UPGRADES */
+.mode-home-badge-wordmark,
+.mode-title-with-help span:first-child,
+.mode-option-title,
+.mode-section-label {
+  font-family: 'Rajdhani', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+/* 2. LIVE BADGE PULSE */
+@keyframes pulse-live {
+  0% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 8px 2px rgba(16, 185, 129, 0.6);
+  }
+  100% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+}
+
+.mode-live-badge {
+  animation: pulse-live 2s ease-in-out infinite;
 }
