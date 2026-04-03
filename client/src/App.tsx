@@ -23,6 +23,7 @@ import GhostSetupScreen from './ghost/GhostSetupScreen';
 import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
 import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
 import LeagueScreen from './league/LeagueScreen';
+import RatingHistoryPage from './ranking/RatingHistoryPage';
 import GameOverModal from './components/GameOverModal';
 import GameReviewer from './analyzer/GameReviewer';
 import AuthModal from './auth/AuthModal';
@@ -44,6 +45,7 @@ import { fetchUserStatsByUserId, recordMatchResult } from './stats/statsApi';
 import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 import type { BotDealSize } from './bot/botEngine';
+import type { FritzTier } from './bot/fritzConfig';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -300,6 +302,11 @@ interface GameOverOverlayProps {
   secondaryLabel: string;
   waitingText?: string;
   players: RoomPlayer[];
+  ratingSummary?: {
+    pending: boolean;
+    delta: number | null;
+    newRating: number | null;
+  } | null;
   extraActionLabel?: string;
   onExtraAction?: () => void;
 }
@@ -326,6 +333,7 @@ function GameOverOverlay({
   secondaryLabel,
   waitingText,
   players,
+  ratingSummary = null,
   extraActionLabel,
   onExtraAction,
 }: GameOverOverlayProps) {
@@ -363,6 +371,32 @@ function GameOverOverlay({
       onExtraAction={onExtraAction}
       onClose={onExit}
     >
+      {ratingSummary && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '10px 12px',
+            borderRadius: 12,
+            border: '1px solid rgba(96, 165, 250, 0.22)',
+            background: 'rgba(12, 20, 34, 0.5)',
+            color: 'rgba(232, 241, 246, 0.94)',
+          }}
+        >
+          <span style={{ fontSize: '0.82rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(191, 213, 223, 0.72)' }}>
+            Rating
+          </span>
+          <strong style={{ fontSize: '1rem', fontWeight: 800 }}>
+            {ratingSummary.pending
+              ? 'Updating...'
+              : ratingSummary.delta != null && ratingSummary.newRating != null
+                ? `${ratingSummary.delta >= 0 ? '+' : ''}${ratingSummary.delta}  •  ${ratingSummary.newRating}`
+                : 'Updated'}
+          </strong>
+        </div>
+      )}
       {waitingText && (
         <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', fontSize: '0.92rem' }}>{waitingText}</p>
       )}
@@ -664,6 +698,7 @@ export default function App() {
     | 'ghost'
     | 'daily'
     | 'league'
+    | 'ratingHistory'
     | 'singlePlayerHub'
     | 'tournament'
   >('home');
@@ -681,6 +716,7 @@ export default function App() {
     const stored = window.localStorage.getItem('racehorse_bot_deal_size');
     return stored === '14' ? 14 : 7;
   });
+  const [botFritzTier, setBotFritzTier] = useState<FritzTier>('elite');
   const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
   const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
   const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
@@ -691,6 +727,9 @@ export default function App() {
   const [tournamentState, setTournamentState] = useState<any>(null);
   const [tournamentActiveRoom, setTournamentActiveRoom] = useState<string | null>(null);
   const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
+  const [multiplayerRatingBaseline, setMultiplayerRatingBaseline] = useState<number | null>(null);
+  const [multiplayerRatingPending, setMultiplayerRatingPending] = useState(false);
+  const multiplayerRatingRefreshKeyRef = useRef('');
   const sendRoomChat = (text: string) => {
     const t = String(text ?? '').trim();
     if (!t) return;
@@ -771,6 +810,8 @@ export default function App() {
     resetPassword,
     signOut,
     updateUsername,
+    refreshAuthProfile,
+    applyProfilePatch,
   } = useAuth();
   const authUserRef = useRef(authUser);
   const authProfileRef = useRef(authProfile);
@@ -2028,6 +2069,55 @@ export default function App() {
     }
   }, [socket, roomCode, authProfile?.username, authUser?.id, showToast]);
 
+  const openLeagueLiveRoom = useCallback(
+    async (code: string) => {
+      const normalizedCode = normalizeRoomCode(code);
+      if (!normalizedCode) {
+        throw new Error('Live room code is invalid.');
+      }
+
+      setRoomCode(normalizedCode);
+      setAppMode('multiplayer');
+      setError('');
+      setActionError('');
+
+      const activeSocket = socketRef.current;
+      if (activeSocket?.connected) {
+        const resp = await emitWithAck<any>(
+          activeSocket,
+          'room:join',
+          normalizedCode,
+          {
+            username: authProfileRef.current?.username ?? 'Guest',
+            userId: authUserRef.current?.id ?? null,
+          },
+        );
+        if (!resp?.ok) {
+          throw new Error(resp?.error ?? 'Unable to join live room.');
+        }
+        setJoinedRoom(resp.roomCode);
+        setState(resp.state ?? null);
+        setPlayers(normalizeRoomPlayers(resp.players));
+        setSelectedTile(null);
+        setLegalMoves([]);
+        setCanDraw(false);
+        autoJoinAttemptedRef.current = false;
+        preventAutoRejoinRef.current = false;
+        return;
+      }
+
+      reconnectRoomCodeRef.current = normalizedCode;
+      reconnectShouldJoinRef.current = true;
+      preventAutoRejoinRef.current = false;
+      autoJoinAttemptedRef.current = false;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(LAST_ROOM_STORAGE_KEY, normalizedCode);
+      }
+      connectRef.current();
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!socket || !socket.connected || joinedRoom || autoJoinAttemptedRef.current) return;
     if (inviteJoinInFlightRef.current) return;
@@ -2419,6 +2509,25 @@ export default function App() {
         return readyNames ? `Waiting for opponent... Ready: ${readyNames}` : 'Waiting for opponent...';
       })()
     : undefined;
+  const multiplayerRatingEligible = Boolean(
+    !isTournamentMatch &&
+    !isSpectatingMatch &&
+    authUser &&
+    players.length === 2 &&
+    players.every((p) => Boolean(p.userId)),
+  );
+  const multiplayerRatingSummary =
+    multiplayerRatingEligible && state?.gameOver
+      ? {
+          pending: multiplayerRatingPending,
+          delta:
+            multiplayerRatingBaseline != null && authProfile?.glicko_rating != null
+              ? Math.round(Number(authProfile.glicko_rating) - multiplayerRatingBaseline)
+              : null,
+          newRating:
+            authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : null,
+        }
+      : null;
 
   const handleTileTap = useCallback(
     (tile: Tile) => {
@@ -2446,7 +2555,43 @@ export default function App() {
     previousStateForAnalysisRef.current = null;
     setOpponentDragging(false);
     draggingStateRef.current = false;
-  }, [joinedRoom]);
+    setMultiplayerRatingBaseline(authProfile?.glicko_rating != null ? Number(authProfile.glicko_rating) : null);
+    setMultiplayerRatingPending(false);
+    multiplayerRatingRefreshKeyRef.current = '';
+  }, [authProfile?.glicko_rating, joinedRoom]);
+
+  useEffect(() => {
+    if (!joinedRoom || state?.gameOver) return;
+    if (multiplayerRatingBaseline != null) return;
+    if (authProfile?.glicko_rating == null) return;
+    setMultiplayerRatingBaseline(Number(authProfile.glicko_rating));
+  }, [authProfile?.glicko_rating, joinedRoom, multiplayerRatingBaseline, state?.gameOver]);
+
+  useEffect(() => {
+    if (!state?.gameOver || !joinedRoom || !authUser || isSpectatingMatch || isTournamentMatch) return;
+    const ratingEligible = players.length === 2 && players.every((p) => Boolean(p.userId));
+    if (!ratingEligible) return;
+    const key = `${joinedRoom}:${state.handNumber}:${state.players[you]?.score ?? 0}:${state.winnerId ?? ''}`;
+    if (multiplayerRatingRefreshKeyRef.current === key) return;
+    multiplayerRatingRefreshKeyRef.current = key;
+    setMultiplayerRatingPending(true);
+    void Promise.resolve(refreshAuthProfile())
+      .catch((err) => {
+        console.warn('[Multiplayer Rating] profile refresh failed:', err);
+      })
+      .finally(() => {
+        setMultiplayerRatingPending(false);
+      });
+  }, [
+    authUser,
+    isSpectatingMatch,
+    isTournamentMatch,
+    joinedRoom,
+    players,
+    refreshAuthProfile,
+    state,
+    you,
+  ]);
 
   useEffect(() => {
     if (!isMyTurn || state?.gameOver || state?.handOver) {
@@ -2843,7 +2988,9 @@ export default function App() {
       <div className={appRootClassName}>
         <BotSetupScreen
           dealSize={botDealSize}
+          fritzTier={botFritzTier}
           onDealSizeChange={setBotDealSize}
+          onFritzTierChange={setBotFritzTier}
           onStart={() => setAppMode('bot')}
           onBack={() => setAppMode('home')}
         />
@@ -2857,8 +3004,12 @@ export default function App() {
         <BotMatchScreen
           onBack={() => setAppMode('home')}
           dealSize={botDealSize}
+          fritzTier={botFritzTier}
           userId={authUser?.id ?? null}
           username={authProfile?.username ?? null}
+          currentGlickoRating={authProfile?.glicko_rating ?? null}
+          onProfileRefresh={refreshAuthProfile}
+          onProfilePatch={applyProfilePatch}
         />
       </div>
     );
@@ -2892,8 +3043,11 @@ export default function App() {
           username={authProfile?.username ?? null}
           opponentName={ghostOpponentName}
           opponentUserId={ghostOpponentUserId}
+          currentGlickoRating={authProfile?.glicko_rating ?? null}
           ghostProfile={ghostProfile}
           onGhostProfileChange={setGhostProfile}
+          onProfileRefresh={refreshAuthProfile}
+          onProfilePatch={applyProfilePatch}
         />
       </div>
     );
@@ -2917,6 +3071,19 @@ export default function App() {
         <LeagueScreen
           user={authUser}
           profile={authProfile}
+          onBack={() => setAppMode('home')}
+          onOpenLiveMatch={openLeagueLiveRoom}
+        />
+      </div>
+    );
+  }
+
+  if (appMode === 'ratingHistory') {
+    return (
+      <div className={appRootClassName}>
+        <RatingHistoryPage
+          userId={authUser?.id ?? null}
+          username={authProfile?.username ?? null}
           onBack={() => setAppMode('home')}
         />
       </div>
@@ -2957,7 +3124,7 @@ export default function App() {
                 >
                   <span className="mode-option-title">👻 Ghost Mode</span>
                   <span className="mode-option-meta">
-                    Beat the composite of your last 5 games
+                    Play against a ghost trained on your own playstyle
                   </span>
                   </button>
 
@@ -2970,7 +3137,7 @@ export default function App() {
                     Your League
                   </span>
                   <span className="mode-option-meta">
-                    One fixture a day. Climb the table, survive promotion and relegation.
+                    One match a day. Climb the table, survive promotion and relegation.
                   </span>
                 </button>
                 <button
@@ -3155,7 +3322,7 @@ export default function App() {
       <LayoutScreen
         className={`screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-tournament tournament-screen ${tournamentState?.status === 'running' ? 'tournament-screen-running' : ''}`}
         badge="Compete"
-        title={tournamentId ? 'Tournament Hub' : 'Join or Create a Lobby'}
+        title={tournamentId ? 'Tournament Hub' : 'Create or Join a Lobby'}
         subtitle={
           tournamentId
             ? 'Finish your match, then wait here for the next round. Watch live games and track the standings.'
@@ -3560,10 +3727,13 @@ export default function App() {
               <button className="mode-inline-btn home-top-btn home-top-btn-user" onClick={() => setUsernameModalOpen(true)}>
                 <span className="home-top-online-dot" aria-hidden="true" />
                 {myHandle}
-                {ghostProfile?.ghostRating != null ? `  👻 ${ghostProfile.ghostRating}` : ''}
+                {authProfile?.glicko_rating != null ? `  🏆 ${Math.round(authProfile.glicko_rating)}` : ''}
               </button>
               <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setStatsOpen(true)}>
                 Stats
+              </button>
+              <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setAppMode('ratingHistory')}>
+                Rating History
               </button>
               <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setFriendsOpen(true)}>
                 Friends
@@ -3656,10 +3826,10 @@ export default function App() {
                   className="mode-option mode-option-primary mode-option-hero mode-accent-multiplayer mode-card-play-online"
                   onClick={() => setAppMode('multiplayer')}
                 >
-                  <span className="mode-option-title">
-                    Multiplayer Online
+                  <div className="mode-card-play-online-head">
+                    <span className="mode-option-title">Multiplayer Online</span>
                     <span className="mode-live-badge">Live</span>
-                  </span>
+                  </div>
                   <span className="mode-option-meta">Create a private room and play head to head in real time</span>
                 </button>
               </section>
@@ -3993,6 +4163,7 @@ export default function App() {
               secondaryLabel={canUseRematch ? 'Home' : 'Back'}
               waitingText={canUseRematch ? rematchWaitingText : undefined}
               players={players}
+              ratingSummary={multiplayerRatingSummary}
               extraActionLabel="Analyze Game"
               onExtraAction={openMultiplayerAnalyzer}
             />

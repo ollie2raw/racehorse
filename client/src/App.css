@@ -142,10 +142,10 @@
 
 .layout-screen-badge {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 1.71rem;
   font-weight: 600;
   letter-spacing: 0.16em;
-  text-transform: uppercase;
+  text-transform: none;
   color: rgba(240, 248, 255, 0.78);
 }
 
@@ -372,7 +372,7 @@ body {
   margin: 0 0 10px;
   font-size: 0.78rem;
   letter-spacing: 0.12em;
-  text-transform: uppercase;
+  text-transform: none;
   color: rgba(240, 248, 255, 0.72);
 }
 
@@ -430,7 +430,7 @@ body {
 
 .welcome-modal-title {
   font-size: 1.5rem;
-  font-weight: 800;
+  font-weight: 850;
   color: rgba(255, 255, 255, 0.95);
   margin-bottom: 4px;
 }
@@ -620,7 +620,7 @@ button:hover:not(:disabled) {
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 1rem;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 2px;
   text-align: center;
 }
@@ -785,8 +785,8 @@ button:hover:not(:disabled) {
   font-size: 0.78rem;
   line-height: 1.2;
   font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  text-transform: none;
   transform: none;
   color: color-mix(in srgb, var(--mode-section-tone), white 10%);
 }
@@ -809,7 +809,32 @@ button:hover:not(:disabled) {
 }
 
 .mode-home-screen .mode-option.mode-card-play-online.mode-option-hero .mode-option-title {
-  font-size: 1.5rem !important;
+  font-size: 1.83rem !important;
+  font-weight: 850 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.12 !important;
+  text-transform: none !important;
+}
+
+.mode-home-screen .mode-card-play-online .mode-option-title,
+.mode-home-screen .mode-card-single-player .mode-option-title,
+.mode-home-screen .mode-card-compete .mode-option-title,
+.mode-home-screen .mode-card-daily .mode-option-title,
+.mode-home-screen .mode-card-track .mode-option-title {
+  font-size: 1.71rem !important;
+  font-weight: 850 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  text-transform: none;
+}
+
+.mode-home-screen .mode-card-play-online .mode-option-meta,
+.mode-home-screen .mode-card-single-player .mode-option-meta,
+.mode-home-screen .mode-card-compete .mode-option-meta,
+.mode-home-screen .mode-card-daily .mode-option-meta,
+.mode-home-screen .mode-card-track .mode-option-meta {
+  font-size: 1.56rem !important;
+  line-height: 1.32;
 }
 
 .mode-card {
@@ -833,7 +858,7 @@ button:hover:not(:disabled) {
 .mode-card .lobby-kicker {
   margin-bottom: 8px;
   font-size: 0.72rem;
-  letter-spacing: 0.14em;
+  letter-spacing: -0.02em;
 }
 
 .mode-card h2 {
@@ -884,11 +909,15 @@ button:hover:not(:disabled) {
   border-radius: 18px;
   background: rgba(16, 25, 40, 0.66);
   color: rgba(242, 248, 246, 0.97);
-  padding: 18px 20px;
+  padding: 16px 20px;
   text-align: left;
   cursor: pointer;
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 64px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition:
     border-color 180ms ease,
@@ -916,14 +945,18 @@ button:hover:not(:disabled) {
 
 .mode-option-title {
   font-size: 1.2rem;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.15;
   letter-spacing: 0.02em;
+  margin: 0;
 }
 
 .mode-option-meta {
-  font-size: 0.95rem;
-  color: rgba(212, 224, 231, 0.78);
+  font-size: 0.9rem;
+  line-height: 1.3;
+  color: rgba(212, 224, 231, 0.72);
   letter-spacing: 0.01em;
+  margin: 0;
 }
 
 .mode-home-screen .mode-actions,
@@ -1082,8 +1115,13 @@ button:hover:not(:disabled) {
 }
 
 .mode-home-screen .mode-option.mode-card-daily:hover {
-  border-color: var(--card-border) !important;
-  box-shadow: var(--card-shadow-hover) !important;
+  border-color: rgba(234, 179, 8, 0.38) !important;
+  border-left-color: #eab308 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 1px rgba(234, 179, 8, 0.14),
+    0 0 24px rgba(234, 179, 8, 0.18),
+    0 16px 30px rgba(28, 20, 8, 0.28) !important;
 }
 
 .mode-home-screen .mode-option.mode-card-league:hover {
@@ -1295,9 +1333,15 @@ button:hover:not(:disabled) {
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   line-height: 1;
   padding: 0.3em 0.55em;
+}
+
+.mode-card-play-online-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .mode-home-screen .mode-option-meta,
@@ -1518,7 +1562,7 @@ button:hover:not(:disabled) {
   padding: 15px 16px;
   font-size: 1rem;
   letter-spacing: 0.11em;
-  text-transform: uppercase;
+  text-transform: none;
   outline: none;
 }
 
@@ -1570,7 +1614,7 @@ button:hover:not(:disabled) {
 .home-help-btn {
   width: 36px;
   min-width: 36px;
-  height: 36px;
+  height: 28px;
   padding: 0;
   border-radius: 999px;
   display: inline-flex;
@@ -1589,8 +1633,8 @@ button:hover:not(:disabled) {
 .mode-home-screen .mode-home-badge-lockup {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  opacity: 0.6;
+  gap: 14px;
+  opacity: 1;
   transition: opacity 0.15s ease;
 }
 
@@ -1600,17 +1644,37 @@ button:hover:not(:disabled) {
 
 .mode-home-screen .mode-home-badge-icon {
   width: auto;
-  height: 20px;
-  color: rgba(255, 255, 255, 0.7);
-  opacity: 0.7;
+  height: 28px;
+  color: rgba(255, 255, 255, 0.84);
+  opacity: 0.9;
 }
 
 .mode-home-screen .mode-home-badge-wordmark {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.2rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.rating-history-screen {
+  --hero-top: clamp(20px, 3.2vh, 40px);
+  --hero-block-gap: 10px;
+  --hero-to-content-gap: 8px;
+}
+
+.rating-history-screen .layout-screen-inner {
+  max-width: 1160px;
+  gap: 14px;
+}
+
+.rating-history-screen .layout-screen-header {
+  gap: 10px;
+}
+
+.rating-history-content {
+  width: 100%;
+  max-width: 100%;
 }
 
 .mode-home-screen .mode-title-help-btn {
@@ -1823,7 +1887,7 @@ button:hover:not(:disabled) {
 
 .multiplayer-screen-room .multiplayer-room-code {
   color: #38bdf8;
-  font-weight: 800;
+  font-weight: 850;
 }
 
 .multiplayer-screen-room .multiplayer-players-panel {
@@ -1837,7 +1901,7 @@ button:hover:not(:disabled) {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  text-transform: uppercase;
+  text-transform: none;
   color: rgba(255, 255, 255, 0.35);
   margin-bottom: 12px;
 }
@@ -1950,7 +2014,7 @@ button:hover:not(:disabled) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
   width: 100%;
 }
 
@@ -1959,6 +2023,11 @@ button:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.tournament-screen:not(.tournament-screen-running) .tournament-col-left,
+.tournament-screen:not(.tournament-screen-running) .tournament-col-right {
+  height: 100%;
 }
 
 .tournament-screen .tournament-grid-entry,
@@ -2002,6 +2071,22 @@ button:hover:not(:disabled) {
   box-shadow: none;
 }
 
+.tournament-screen:not(.tournament-screen-running) .tournament-card-create,
+.tournament-screen:not(.tournament-screen-running) .tournament-card-join {
+  min-height: 128px;
+  padding: 24px 26px;
+  gap: 12px;
+}
+
+.tournament-screen:not(.tournament-screen-running) .tournament-card-create {
+  height: 100%;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding-top: 16px;
+  padding-bottom: 32px;
+  gap: 8px;
+}
+
 .tournament-screen .tournament-card:hover {
   border-color: rgba(255, 255, 255, 0.12);
   background: #1e2838;
@@ -2017,6 +2102,14 @@ button:hover:not(:disabled) {
   letter-spacing: -0.005em;
 }
 
+.tournament-screen:not(.tournament-screen-running) .tournament-card-create .mode-option-title,
+.tournament-screen:not(.tournament-screen-running) .tournament-card-join .mode-option-title {
+  font-size: 2rem !important;
+  font-weight: 850 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.08 !important;
+}
+
 .tournament-screen .tournament-card .mode-option-title::before {
   width: 8px;
   height: 8px;
@@ -2028,6 +2121,14 @@ button:hover:not(:disabled) {
   font-size: 12.5px;
   color: #6b7a8d;
   letter-spacing: 0;
+}
+
+.tournament-screen:not(.tournament-screen-running) .tournament-card-create .mode-option-meta,
+.tournament-screen:not(.tournament-screen-running) .tournament-card-join .mode-option-meta {
+  padding-left: 18px;
+  font-size: 1.3rem !important;
+  line-height: 1.38 !important;
+  color: rgba(223, 236, 244, 0.72) !important;
 }
 
 .tournament-screen .tournament-running-top > .tournament-card {
@@ -2109,7 +2210,7 @@ button:hover:not(:disabled) {
 }
 
 .tournament-screen .tournament-join-row {
-  margin-top: 2px;
+  margin-top: 6px;
 }
 
 .tournament-screen .tournament-join-input {
@@ -2117,7 +2218,9 @@ button:hover:not(:disabled) {
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #e8edf2;
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 12px 16px;
+  min-height: 46px;
+  font-size: 1rem;
 }
 
 .tournament-screen .tournament-join-input::placeholder {
@@ -2128,8 +2231,10 @@ button:hover:not(:disabled) {
   background: rgba(192, 57, 43, 0.12);
   border: 1px solid rgba(192, 57, 43, 0.35);
   color: #c0392b;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: 10px;
+  min-height: 46px;
+  padding-inline: 16px;
 }
 
 .tournament-screen .tournament-join-btn:hover:not(:disabled) {
@@ -2513,7 +2618,7 @@ button:hover:not(:disabled) {
 .scoreboard-title {
   font-size: 0.7rem;
   color: var(--text-muted);
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.5px;
 }
 
@@ -2559,7 +2664,7 @@ button:hover:not(:disabled) {
 .player-label {
   font-size: 0.65rem;
   color: rgba(233, 240, 248, 0.86);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .player-score.active .player-label {
@@ -2939,7 +3044,7 @@ button:hover:not(:disabled) {
 .opponent-tile-number {
   font-size: 1.8rem;
   line-height: 0.96;
-  font-weight: 800;
+  font-weight: 850;
   color: rgba(248, 252, 255, 0.98);
 }
 
@@ -3163,7 +3268,7 @@ button:hover:not(:disabled) {
   margin: 0 0 10px;
   color: rgba(232, 240, 250, 0.74);
   font-size: 0.72rem;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.08em;
 }
 
@@ -3236,7 +3341,7 @@ button:hover:not(:disabled) {
   margin: 2px 0 12px;
   font-size: 0.82rem;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   color: rgba(223, 238, 245, 0.72);
 }
 
@@ -3557,7 +3662,7 @@ button:hover:not(:disabled) {
   line-height: 1;
   font-size: 0.66em;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   opacity: 0.72;
 }
 
@@ -3623,7 +3728,7 @@ button:hover:not(:disabled) {
 }
 
 .large-mode .boneyard-count {
-  font-weight: 800;
+  font-weight: 850;
 
   font-size: 1.48rem !important;
 }
@@ -3868,4 +3973,17 @@ button:hover:not(:disabled) {
   .layout-screen-inner {
     font-size: 13px;
   }
+}
+
+.single-player-hub-cards .mode-option-title {
+  font-size: 1.71rem !important;
+  font-weight: 850 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  text-transform: none;
+}
+
+.single-player-hub-cards .mode-option-meta {
+  font-size: 1.56rem !important;
+  line-height: 1.32;
 }

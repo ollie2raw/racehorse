@@ -34,6 +34,7 @@ import {
   type BotPlayerId,
 } from './botEngine';
 import { chooseBotMove, toBotVisibleState, type BotChoice } from './botHeuristics';
+import { FRITZ_TIERS, type FritzTier } from './fritzConfig';
 import { getLocalDateKey } from '../dailyPuzzle/date';
 import {
   completeGhostGame,
@@ -66,6 +67,7 @@ import './botMatch.css';
 interface BotMatchScreenProps {
   onBack: () => void;
   dealSize: BotDealSize;
+  fritzTier?: FritzTier;
   mode?: 'bot' | 'ghost';
   dailyPuzzleDate?: string | null;
   userId?: string | null;
@@ -73,8 +75,11 @@ interface BotMatchScreenProps {
   winningScore?: number;
   opponentName?: string;
   opponentUserId?: string | null;
+  currentGlickoRating?: number | null;
   ghostProfile?: GhostProfileSummary | null;
   onGhostProfileChange?: ((summary: GhostProfileSummary | null) => void) | null;
+  onProfileRefresh?: (() => Promise<void> | void) | null;
+  onProfilePatch?: ((patch: { glicko_rating?: number | null }) => void) | null;
   onMatchComplete?: ((result: {
     winner: 'you' | 'bot' | null;
     yourScore: number;
@@ -169,6 +174,7 @@ function toastFromResult(result: BotActionResult, opponentLabel: string): string
 export default function BotMatchScreen({
   onBack,
   dealSize,
+  fritzTier = 'elite',
   mode = 'bot',
   dailyPuzzleDate = null,
   userId = null,
@@ -176,11 +182,15 @@ export default function BotMatchScreen({
   winningScore = 60,
   opponentName = 'Fritz',
   opponentUserId = null,
+  currentGlickoRating = null,
   ghostProfile = null,
   onGhostProfileChange = null,
+  onProfileRefresh = null,
+  onProfilePatch = null,
   onMatchComplete = null,
 }: BotMatchScreenProps) {
   const DRAW_STEP_MS = 700;
+  const fritzConfig = FRITZ_TIERS[fritzTier];
   const rootRef = useRef<HTMLDivElement>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
@@ -227,6 +237,10 @@ export default function BotMatchScreen({
   const [ghostPlayedTile, setGhostPlayedTile] = useState<Tile | null>(null);
   const [ghostResult, setGhostResult] = useState<GhostCompletionResult | null>(null);
   const [ghostResultLoading, setGhostResultLoading] = useState(false);
+  const [ghostResultError, setGhostResultError] = useState<string | null>(null);
+  const [matchStartGlickoRating, setMatchStartGlickoRating] = useState<number | null>(
+    currentGlickoRating != null ? Number(currentGlickoRating) : null,
+  );
   const dailyResultSyncKeyRef = useRef('');
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -407,7 +421,7 @@ export default function BotMatchScreen({
           },
         }
       : state;
-    const choice = chooseBotMove(toBotVisibleState(evalState), 'hard');
+    const choice = chooseBotMove(toBotVisibleState(evalState), fritzConfig.difficulty);
     if (!choice || !choice.move.tile) return null;
     return {
       tile: toTileTuple(choice.move.tile as Tile),
@@ -415,7 +429,7 @@ export default function BotMatchScreen({
       score: choice.score,
       breakdown: choice.breakdown,
     };
-  }, []);
+  }, [fritzConfig.difficulty]);
 
   const toEngineBestFromChoice = useCallback((choice: BotChoice | null): EngineBestMove | null => {
     if (!choice || !choice.move.tile) return null;
@@ -469,6 +483,7 @@ export default function BotMatchScreen({
     setGhostBoardPulse(false);
     setGhostResult(null);
     setGhostResultLoading(false);
+    setGhostResultError(null);
     setMovesUsed(0);
     setDailyLeaderboard([]);
     setDailyLeaderboardError(null);
@@ -482,8 +497,22 @@ export default function BotMatchScreen({
     gameWinConfettiKeyRef.current = '';
     matchCompleteKeyRef.current = '';
     ghostCompleteKeyRef.current = '';
+    setMatchStartGlickoRating(
+      currentGlickoRating != null
+        ? Number(currentGlickoRating)
+        : ghostResult?.glickoRating != null
+          ? Number(ghostResult.glickoRating)
+          : matchStartGlickoRating,
+    );
     setMatch(createBotMatch(winningScore, dealSize));
   };
+
+  useEffect(() => {
+    if (match.gameOver) return;
+    if (currentGlickoRating == null) return;
+    if (matchStartGlickoRating != null) return;
+    setMatchStartGlickoRating(Number(currentGlickoRating));
+  }, [currentGlickoRating, match.gameOver, matchStartGlickoRating]);
 
   useEffect(() => {
     if (!match.gameOver || match.winnerId !== 'you') return;
@@ -541,14 +570,16 @@ export default function BotMatchScreen({
       ghostCompleteKeyRef.current = '';
       setGhostResult(null);
       setGhostResultLoading(false);
+      setGhostResultError(null);
       return;
     }
     const key = `${userId}:${match.handNumber}:${match.players.you.score}:${match.players.bot.score}`;
     if (ghostCompleteKeyRef.current === key) return;
     ghostCompleteKeyRef.current = key;
     setGhostResultLoading(true);
+    setGhostResultError(null);
 
-    const effectiveOpponentUserId = isGhostMode ? opponentUserId : (opponentUserId || '00000000-0000-0000-0000-000000000001');
+    const effectiveOpponentUserId = isGhostMode ? opponentUserId : (opponentUserId || fritzConfig.id);
 
     console.log('[Fritz Rating] calling completeGhostGame', {
       userId,
@@ -568,6 +599,17 @@ export default function BotMatchScreen({
         console.log('[Fritz Rating] success:', result);
         setGhostResult(result);
         setGhostResultLoading(false);
+        if (result.glickoRating != null && onProfilePatch) {
+          onProfilePatch({ glicko_rating: Number(result.glickoRating) });
+        }
+        if (onProfileRefresh) {
+          void Promise.resolve(onProfileRefresh()).catch((err) => {
+            console.warn('[Fritz Rating] profile refresh failed:', err);
+          });
+          window.setTimeout(() => {
+            void Promise.resolve(onProfileRefresh()).catch(() => {});
+          }, 1200);
+        }
         if (!onGhostProfileChange) return;
 
         onGhostProfileChange(
@@ -588,6 +630,7 @@ export default function BotMatchScreen({
                   ) / 10,
                 paddingGames: Math.max(0, 5 - ((ghostProfile.gamesPlayed ?? 0) + 1)),
                 compositeLog: result.compositeLog,
+                styleProfile: result.styleProfile,
               }
             : null,
         );
@@ -595,6 +638,7 @@ export default function BotMatchScreen({
       .catch((err) => {
         console.error('[Fritz Rating] failed:', err);
         setGhostResultLoading(false);
+        setGhostResultError(err instanceof Error ? err.message : 'Rating update failed.');
       });
 
   }, [
@@ -607,7 +651,10 @@ export default function BotMatchScreen({
     match.players.you.score,
     opponentUserId,
     onGhostProfileChange,
+    onProfilePatch,
+    onProfileRefresh,
     userId,
+    fritzConfig.id,
   ]);
 
   const userLegalMoves = useMemo(() => {
@@ -787,12 +834,14 @@ export default function BotMatchScreen({
       }
       appendGhostMove({
         turn: (match.turnIndex ?? 0) + 1,
+        hand_number: match.handNumber,
         actor: 'you',
         board_state: boardStateKey,
         tile_played: selectedTile ? toTileKey(selectedTile) : null,
         branch: typeof position === 'string' ? position : null,
         hand_before: ghostHandBefore,
         score_delta: result.scored?.points ?? 0,
+        forced_draw: Boolean(result.drew?.player === 'you'),
       });
     }
     appendMove({
@@ -816,7 +865,7 @@ export default function BotMatchScreen({
     let cancelled = false;
     let actionResolved = false;
     let playedTileForHighlight: Tile | null = null;
-    const thinkDelayMs = botChainPauseRef.current ? 1300 : 760;
+    const thinkDelayMs = botChainPauseRef.current ? 1500 : 1500;
     botChainPauseRef.current = false;
 
     const timer = setTimeout(() => {
@@ -842,12 +891,14 @@ export default function BotMatchScreen({
               if (isGhostMode) {
                 appendGhostMove({
                   turn: (match.turnIndex ?? 0) + 1,
+                  hand_number: match.handNumber,
                   actor: 'ghost',
                   board_state: ghostBoardStateKey,
                   tile_played: null,
                   branch: 'draw',
                   hand_before: ghostHandBefore,
                   score_delta: 0,
+                  forced_draw: false,
                 });
               }
               appendMove({
@@ -868,12 +919,14 @@ export default function BotMatchScreen({
               if (isGhostMode) {
                 appendGhostMove({
                   turn: (working.turnIndex ?? 0) + 1,
+                  hand_number: working.handNumber,
                   actor: 'ghost',
                   board_state: ghostBoardStateKey,
                   tile_played: null,
                   branch: 'pass',
                   hand_before: ghostHandBefore,
                   score_delta: 0,
+                  forced_draw: false,
                 });
               }
               appendMove({
@@ -902,7 +955,7 @@ export default function BotMatchScreen({
                   profile: ghostProfile,
                 });
               } else {
-                chosen = chooseBotMove(toBotVisibleState(working), 'hard');
+                chosen = chooseBotMove(toBotVisibleState(working), fritzConfig.difficulty);
               }
               playedTileForHighlight =
                 ghostChosen?.tile ?? chosen?.move?.tile ?? afterDraw[0]?.tile ?? null;
@@ -927,7 +980,7 @@ export default function BotMatchScreen({
               profile: ghostProfile,
             });
           } else {
-            chosen = chooseBotMove(toBotVisibleState(working), 'hard');
+            chosen = chooseBotMove(toBotVisibleState(working), fritzConfig.difficulty);
           }
           playedTileForHighlight = ghostChosen?.tile ?? chosen?.move?.tile ?? botPlayable[0]?.tile ?? null;
           queueSound(() => playTileSound('deal', isMuted), 0);
@@ -954,12 +1007,14 @@ export default function BotMatchScreen({
           if (isGhostMode && ghostChosen) {
             appendGhostMove({
               turn: (working.turnIndex ?? 0) + 1,
+              hand_number: working.handNumber,
               actor: 'ghost',
               board_state: ghostBoardStateKey,
               tile_played: toTileKey(ghostChosen.tile),
               branch: ghostChosen.position,
               hand_before: ghostHandBefore,
               score_delta: result.scored?.points ?? 0,
+              forced_draw: Boolean(result.drew?.player === 'bot'),
             });
           }
           if (chosen?.move?.tile || ghostChosen?.tile) {
@@ -1098,12 +1153,14 @@ export default function BotMatchScreen({
           if (isGhostMode) {
             appendGhostMove({
               turn: (match.turnIndex ?? 0) + 1,
+              hand_number: match.handNumber,
               actor: 'you',
               board_state: serializeGhostBoardState(match.board),
               tile_played: null,
               branch: 'draw',
               hand_before: handBefore.map(([low, high]) => `${low}|${high}`),
               score_delta: 0,
+              forced_draw: false,
             });
           }
           appendMove({
@@ -1124,12 +1181,14 @@ export default function BotMatchScreen({
           if (isGhostMode) {
             appendGhostMove({
               turn: (match.turnIndex ?? 0) + 1,
+              hand_number: match.handNumber,
               actor: 'you',
               board_state: serializeGhostBoardState(match.board),
               tile_played: null,
               branch: 'pass',
               hand_before: handBefore.map(([low, high]) => `${low}|${high}`),
               score_delta: 0,
+              forced_draw: false,
             });
           }
           appendMove({
@@ -1247,6 +1306,14 @@ export default function BotMatchScreen({
     ghostResult == null
       ? ghostProfile?.ghostRating ?? 800
       : ghostResult.newRating - ghostResult.ratingDelta;
+  const fritzGlickoDelta =
+    !isGhostMode && ghostResult?.glickoRating != null && matchStartGlickoRating != null
+      ? Math.round(ghostResult.glickoRating - matchStartGlickoRating)
+      : null;
+  const fritzNewGlickoRating =
+    !isGhostMode && ghostResult?.glickoRating != null
+      ? Math.round(ghostResult.glickoRating)
+      : null;
   const onShareGhostCard = async () => {
     const result = ghostResult;
     if (!result) return;
@@ -1496,6 +1563,34 @@ export default function BotMatchScreen({
           onExtraAction={openAnalyzer}
           onClose={onBack}
         >
+          {!isGhostMode && (ghostResultLoading || ghostResultError || fritzGlickoDelta != null || fritzNewGlickoRating != null) && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid rgba(96, 165, 250, 0.22)',
+                background: 'rgba(12, 20, 34, 0.5)',
+                color: 'rgba(232, 241, 246, 0.94)',
+              }}
+            >
+              <span style={{ fontSize: '0.82rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(191, 213, 223, 0.72)' }}>
+                Rating
+              </span>
+              <strong style={{ fontSize: '1rem', fontWeight: 800 }}>
+                {ghostResultLoading
+                  ? 'Updating...'
+                  : ghostResultError
+                    ? 'Update failed'
+                  : fritzGlickoDelta != null && fritzNewGlickoRating != null
+                    ? `${fritzGlickoDelta >= 0 ? '+' : ''}${fritzGlickoDelta}  •  ${fritzNewGlickoRating}`
+                    : 'Updated'}
+              </strong>
+            </div>
+          )}
           {isGhostMode && (
             <div className="ghost-result-card">
               <div className="ghost-result-row">

@@ -1,4 +1,5 @@
-import type { LeaguePlayerState, LeagueStandingRow } from './types';
+import { supabase } from '../lib/supabase';
+import type { LeagueHistoryResponse, LeaguePlayerState, LeagueStandingRow } from './types';
 
 const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
 const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
@@ -11,12 +12,25 @@ function resolveBaseUrl(): string {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const {
+    data: { session },
+    error: sessionError,
+  } = supabase ? await supabase.auth.getSession() : { data: { session: null }, error: null };
+  if (sessionError) {
+    throw sessionError;
+  }
+  const accessToken = session?.access_token;
+  if (!accessToken) {
+    throw new Error('You must be signed in to use League Mode.');
+  }
+
   const url = `${resolveBaseUrl()}${path}`;
   let response: Response;
   try {
     response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
         ...(init?.headers ?? {}),
       },
       ...init,
@@ -63,16 +77,58 @@ export async function ensureLeagueReady(userId: string): Promise<LeaguePlayerSta
 }
 
 export async function reportLeagueResult(
-  fixtureId: string,
-  homeScore: number,
-  awayScore: number,
-): Promise<{ standings: LeagueStandingRow[] }> {
-  const response = await requestJson<{ ok: true; result: { standings: LeagueStandingRow[] } }>(
+  input: {
+    fixtureId: string;
+    homeScore: number;
+    awayScore: number;
+    mode: 'ghost' | 'bot' | 'live';
+    playerMemberId: string;
+    opponentMemberId: string;
+    roomCode?: string | null;
+  },
+): Promise<{
+  standings: LeagueStandingRow[];
+  fixture: LeaguePlayerState['todaysFixture'];
+  isCanonicalProvisional?: boolean;
+}> {
+  const response = await requestJson<{
+    ok: true;
+    result: {
+      standings: LeagueStandingRow[];
+      fixture: LeaguePlayerState['todaysFixture'];
+      isCanonicalProvisional?: boolean;
+    };
+  }>(
     '/league/report-result',
     {
       method: 'POST',
-      body: JSON.stringify({ fixtureId, homeScore, awayScore }),
+      body: JSON.stringify(input),
     },
   );
-  return { standings: response.result.standings };
+  return {
+    standings: response.result.standings,
+    fixture: response.result.fixture,
+    isCanonicalProvisional: response.result.isCanonicalProvisional,
+  };
+}
+
+export async function fetchLeagueHistory(userId: string): Promise<LeagueHistoryResponse> {
+  const response = await requestJson<{ ok: true; history: LeagueHistoryResponse }>(
+    `/league/history/${encodeURIComponent(userId)}`,
+    { method: 'GET' },
+  );
+  return response.history;
+}
+
+export async function openLeagueLiveRoom(
+  fixtureId: string,
+): Promise<{ fixtureId: string; roomCode: string }> {
+  const response = await requestJson<{ ok: true; fixtureId: string; roomCode: string }>(
+    `/league/fixture/${encodeURIComponent(fixtureId)}/live-room`,
+    { method: 'POST' },
+  );
+  return {
+    fixtureId: response.fixtureId,
+    roomCode: response.roomCode,
+  };
 }

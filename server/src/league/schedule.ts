@@ -10,8 +10,10 @@ export interface FixtureRecord {
   away_member_id: string;
   home_score: number | null;
   away_score: number | null;
-  status: 'scheduled' | 'completed' | 'forfeit';
+  status: 'scheduled' | 'provisional' | 'completed' | 'forfeit';
   completed_at: string | null;
+  live_room_code?: string | null;
+  live_room_opened_at?: string | null;
   created_at: string;
 }
 
@@ -70,10 +72,15 @@ async function supabaseFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-function addUtcDays(dateSeed: string, days: number): string {
-  const date = new Date(`${dateSeed}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+function addPstDays(dateSeed: string, days: number): string {
+  const [yearText, monthText, dayText] = dateSeed.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0));
+  return date.toLocaleDateString('en-CA', {
+    timeZone: 'America/Los_Angeles',
+  });
 }
 
 export function buildRoundRobinSchedule(
@@ -93,7 +100,7 @@ export function buildRoundRobinSchedule(
   const byesByMatchday: GeneratedLeagueSchedule['byesByMatchday'] = [];
 
   for (let round = 0; round < rotation.length - 1; round += 1) {
-    const scheduledDate = addUtcDays(weekStart, round);
+    const scheduledDate = addPstDays(weekStart, round);
     const left = rotation.slice(0, rotation.length / 2);
     const right = rotation.slice(rotation.length / 2).reverse();
 
@@ -152,7 +159,7 @@ async function fetchLeagueMembers(leagueId: string): Promise<LeagueMemberRecord[
 
 async function fetchExistingFixtures(leagueId: string, season: number): Promise<FixtureRecord[]> {
   return await supabaseFetch<FixtureRecord[]>(
-    `/rest/v1/fixtures?select=id,league_id,season,matchday,scheduled_date,home_member_id,away_member_id,home_score,away_score,status,completed_at,created_at` +
+    `/rest/v1/fixtures?select=id,league_id,season,matchday,scheduled_date,home_member_id,away_member_id,home_score,away_score,status,completed_at,live_room_code,live_room_opened_at,created_at` +
       `&league_id=eq.${leagueId}&season=eq.${season}&order=matchday.asc,scheduled_date.asc`,
     { method: 'GET' },
   );

@@ -1,4 +1,4 @@
-import { GameState, Config, PlacementPosition, Move, Tile } from './game/types';
+import { GameState, Config, PlacementPosition, Move, Tile, BoardState } from './game/types';
 import type { Server } from 'socket.io';
 import {
   createInitialState,
@@ -9,6 +9,8 @@ import {
   getOpenEnds,
   canDraw,
 } from './game/engine';
+import { computePlayScore, simulatePlacement } from './game/scoring';
+import type { GhostMoveLogEntry } from './ghost/service';
 
 export type RoomCode = string;
 
@@ -21,6 +23,8 @@ export type Room = {
   rematchReady: Set<string>;
   lastHandEndedNotifiedHand: number | null;
   lastBroadcastScores: Record<string, number>;
+  ghostMoveLogs: Record<string, GhostMoveLogEntry[]>;
+  ghostTurnIndex: number;
 };
 
 const rooms = new Map<RoomCode, Room>();
@@ -31,6 +35,58 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 function withDrawSequenceFlag(state: GameState, active: boolean): GameState {
   return { ...state, __drawSequenceActive: active };
+}
+
+function normalizeTileKey(tile: Tile): string {
+  const low = Math.min(tile.low, tile.high);
+  const high = Math.max(tile.low, tile.high);
+  return `${low}|${high}`;
+}
+
+function serializeGhostBoardState(board: BoardState | null): string {
+  if (!board) return 'board:empty';
+  return JSON.stringify({
+    mainLine: board.mainLine.map((placed) => ({
+      tile: [placed.tile.low, placed.tile.high],
+      orientation: placed.orientation,
+    })),
+    leftEnd: board.leftEnd,
+    rightEnd: board.rightEnd,
+    leftEndIsDouble: board.leftEndIsDouble,
+    rightEndIsDouble: board.rightEndIsDouble,
+    hubs: board.hubDoubles.map((hub, hubIndex) => ({
+      hubId: hub.hubId ?? hub.tileIndex ?? hubIndex,
+      laneType: hub.laneType ?? null,
+      laneRef: hub.laneRef ?? null,
+      branchDepth: hub.branchDepth ?? null,
+      tileIndex: hub.tileIndex,
+      mainlineIndex: hub.mainlineIndex ?? null,
+      hubValue: hub.hubValue,
+      leftSideFilled: Boolean(hub.leftSideFilled),
+      rightSideFilled: Boolean(hub.rightSideFilled),
+      isCrossed: Boolean(hub.isCrossed),
+      branches: hub.branches.map((branch) =>
+        branch
+          ? {
+              openEnd: branch.openEnd,
+              openEndIsDouble: branch.openEndIsDouble,
+              tiles: branch.tiles.map((placed) => ({
+                tile: [placed.tile.low, placed.tile.high],
+                orientation: placed.orientation,
+              })),
+            }
+          : null,
+      ),
+    })),
+  });
+}
+
+function appendGhostMove(room: Room, socketId: string, entry: GhostMoveLogEntry): void {
+  room.ghostMoveLogs[socketId] = [...(room.ghostMoveLogs[socketId] ?? []), entry];
+}
+
+function currentGhostTurn(room: Room): number {
+  return room.ghostTurnIndex + 1;
 }
 
 function makeCode(len = 5): string {
@@ -55,9 +111,37 @@ export function createRoom(hostSocketId: string, config: Partial<Config> = {}): 
     rematchReady: new Set<string>(),
     lastHandEndedNotifiedHand: null,
     lastBroadcastScores: {},
+    ghostMoveLogs: {},
+    ghostTurnIndex: 0,
   };
 
   rooms.set(code, room);
+  return room;
+}
+
+export function createReservedRoom(code: string, config: Partial<Config> = {}): Room {
+  const normalizedCode = code.trim().toUpperCase();
+  if (!normalizedCode) {
+    throw new Error('Room code is required.');
+  }
+  if (rooms.has(normalizedCode)) {
+    return rooms.get(normalizedCode)!;
+  }
+
+  const room: Room = {
+    code: normalizedCode,
+    players: [],
+    state: null,
+    config,
+    nextHandReady: new Set<string>(),
+    rematchReady: new Set<string>(),
+    lastHandEndedNotifiedHand: null,
+    lastBroadcastScores: {},
+    ghostMoveLogs: {},
+    ghostTurnIndex: 0,
+  };
+
+  rooms.set(normalizedCode, room);
   return room;
 }
 
@@ -147,6 +231,20 @@ export async function runDrawSequence(
         const drawableCount = Math.max(0, current.boneyard.length - current.config.deadTileCount);
         if (drawableCount === 0) break;
 
+        const room = getRoom(roomId);
+        const handBefore = current.players[playerId]?.hand ?? [];
+        appendGhostMove(room, playerId, {
+          turn: currentGhostTurn(room),
+          hand_number: current.handNumber,
+          actor: 'you',
+          board_state: serializeGhostBoardState(current.board),
+          tile_played: null,
+          branch: 'draw',
+          hand_before: handBefore.map(normalizeTileKey),
+          score_delta: 0,
+          forced_draw: false,
+        });
+
         const { state: next, drew } = drawOne(current, playerId);
         current = next;
         setState(withDrawSequenceFlag(current, true));
@@ -200,6 +298,8 @@ export async function startGame(code: string, io: Server): Promise<Room> {
   const state0 = createInitialState(room.players, room.config);
   const state1 = startNewHand(state0);
   room.state = withDrawSequenceFlag(state1, false);
+  room.ghostMoveLogs = Object.fromEntries(room.players.map((playerId) => [playerId, []]));
+  room.ghostTurnIndex = 0;
   const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
   await runDrawSequence(
     room.code,
@@ -234,6 +334,7 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
   // Start new hand
   const state1 = startNewHand(room.state);
   room.state = withDrawSequenceFlag(state1, false);
+  room.ghostTurnIndex = 0;
   const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
   await runDrawSequence(
     room.code,
@@ -343,7 +444,21 @@ export async function act(
       position,
     };
 
+    const handBefore = state.players[socketId]?.hand ?? [];
+    const scoreDelta = computePlayScore(simulatePlacement(state.board, move.tile, position), state.config);
     const { state: stateAfterMove, forcedDraw } = applyMove(state, socketId, move);
+    appendGhostMove(room, socketId, {
+      turn: currentGhostTurn(room),
+      hand_number: state.handNumber,
+      actor: 'you',
+      board_state: serializeGhostBoardState(state.board),
+      tile_played: normalizeTileKey(move.tile),
+      branch: position,
+      hand_before: handBefore.map(normalizeTileKey),
+      score_delta: scoreDelta,
+      forced_draw: Boolean(forcedDraw),
+    });
+    room.ghostTurnIndex += 1;
     room.state = stateAfterMove;
     if (forcedDraw) {
       onStateReady(room.code);
@@ -365,6 +480,18 @@ export async function act(
   // PASS
   // ─────────────────────────────
   if (type === 'PASS') {
+    appendGhostMove(room, socketId, {
+      turn: currentGhostTurn(room),
+      hand_number: state.handNumber,
+      actor: 'you',
+      board_state: serializeGhostBoardState(state.board),
+      tile_played: null,
+      branch: 'pass',
+      hand_before: (state.players[socketId]?.hand ?? []).map(normalizeTileKey),
+      score_delta: 0,
+      forced_draw: false,
+    });
+    room.ghostTurnIndex += 1;
     room.state = applyMove(state, socketId, { type: 'pass' }).state;
     return room;
   }

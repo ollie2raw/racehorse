@@ -221,6 +221,11 @@ export default function GhostSetupScreen({ userId, onBack, onStart }: GhostSetup
               {summary.styleProfile && (
                 <div className="ghost-style-profile">
                   <p className="ghost-setup-eyebrow">Style Profile</p>
+                  {summary.styleProfile && (
+                    <p className="ghost-setup-note">
+                      Style profile: {Math.round(summary.styleProfile.confidence * 100)}% confidence
+                    </p>
+                  )}
                   <div className="ghost-style-grid">
                     <div className="ghost-style-item">
                       <span>Scoring Bias</span>

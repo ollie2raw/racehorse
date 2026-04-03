@@ -1,4 +1,9 @@
-import { FRITZ_SYSTEM_ID } from '../ranking/glicko2';
+import { FRITZ_ELITE_ID, getFritzConfig, isFritzId } from '../ranking/glicko2';
+import { processRatingPeriod } from '../ranking/periodService';
+import { getLegalMoves } from '../game/engine';
+import { computePlayScore, getOpenEnds, simulatePlacement } from '../game/scoring';
+import { parseBranchPosition } from '../game/types';
+import type { BoardState, GameState, PlacementPosition, Tile, TileOrientation } from '../game/types';
 
 type GhostGameRow = {
   id: string;
@@ -23,14 +28,22 @@ type ProfileLookupRow = {
   username: string;
 };
 
+type RankingProfileRow = {
+  id: string;
+  glicko_rating: number;
+  glicko_rd: number;
+};
+
 export type GhostMoveLogEntry = {
   turn: number;
+  hand_number?: number;
   actor?: 'you' | 'ghost';
   board_state: string;
   tile_played: string | null;
   branch: string | null;
   hand_before: string[];
   score_delta: number;
+  forced_draw?: boolean;
 };
 
 export type GhostCompositeCandidate = {
@@ -48,17 +61,40 @@ export type GhostCompositeState = {
   candidates: GhostCompositeCandidate[];
 };
 
+export type GhostGameStyleSnapshot = {
+  gameId: string;
+  playedAt: string;
+  scoringBias: number;
+  doublePriority: number;
+  branchingFrequency: number;
+  spinnerControl: number;
+  avgTurnPoints: number;
+  drawPriority: number;
+  pointSuppression: number;
+  handSize: number;
+  attackSetup: number;
+  consistency: number;
+};
+
 export type GhostCompositeLog = {
   generatedAt: string;
   sourceGameIds: string[];
   states: GhostCompositeState[];
+  recentGameStyles: GhostGameStyleSnapshot[];
 };
 
 export type GhostStyleProfile = {
   scoringBias: number; // 0.0 to 1.0 (0=control, 1=points)
   doublePriority: number; // 0.0 to 1.0
   branchingFrequency: number; // 0.0 to 1.0
+  spinnerControl: number; // 0.0 to 1.0
   avgTurnPoints: number;
+  drawPriority: number;
+  pointSuppression: number;
+  handSize: number;
+  attackSetup: number;
+  consistency: number;
+  confidence: number;
 };
 
 export type GhostProfileSummary = {
@@ -116,6 +152,10 @@ function normalizeMoveLog(raw: unknown): GhostMoveLogEntry[] {
       const rec = entry as Record<string, unknown>;
       return {
         turn: Number(rec.turn ?? 0),
+        hand_number:
+          rec.hand_number == null || !Number.isFinite(Number(rec.hand_number))
+            ? undefined
+            : Number(rec.hand_number),
         actor: rec.actor === 'ghost' ? ('ghost' as const) : ('you' as const),
         board_state: String(rec.board_state ?? ''),
         tile_played: rec.tile_played == null ? null : String(rec.tile_played),
@@ -124,6 +164,7 @@ function normalizeMoveLog(raw: unknown): GhostMoveLogEntry[] {
           ? rec.hand_before.map((item) => String(item))
           : [],
         score_delta: Number(rec.score_delta ?? 0),
+        forced_draw: Boolean(rec.forced_draw),
       };
     })
     .filter((entry) => entry.turn > 0 && entry.board_state);
@@ -193,7 +234,355 @@ async function fetchRecentGhostGames(userId: string, limit = 5): Promise<GhostGa
   );
 }
 
-function buildCompositeLog(games: GhostGameRow[]): GhostCompositeLog {
+function parseTileKey(value: string | null | undefined): Tile | null {
+  if (!value) return null;
+  const normalized = String(value).replace('-', '|');
+  const [aRaw, bRaw] = normalized.split('|');
+  const a = Number(aRaw);
+  const b = Number(bRaw);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return { low: Math.min(a, b), high: Math.max(a, b) };
+}
+
+function parseGhostBoardState(value: string): BoardState | null {
+  if (!value || value === 'board:empty') return null;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Record<string, unknown>;
+  const mainLineRaw = Array.isArray(rec.mainLine) ? rec.mainLine : [];
+  const hubsRaw = Array.isArray(rec.hubs) ? rec.hubs : [];
+  const parseOrientation = (
+    orientation: unknown,
+    fallback: TileOrientation,
+  ): TileOrientation => {
+    return orientation === 'horizontal-normal' ||
+      orientation === 'horizontal-flipped' ||
+      orientation === 'vertical-normal' ||
+      orientation === 'vertical-flipped'
+      ? orientation
+      : fallback;
+  };
+
+  const parseLaneType = (value: unknown): 'mainline' | 'branch' | undefined => {
+    return value === 'mainline' || value === 'branch' ? value : undefined;
+  };
+
+  return {
+    mainLine: mainLineRaw
+      .map((placed) => {
+        if (!placed || typeof placed !== 'object') return null;
+        const placedRec = placed as Record<string, unknown>;
+        const tile = Array.isArray(placedRec.tile)
+          ? parseTileKey(`${placedRec.tile[0]}|${placedRec.tile[1]}`)
+          : null;
+        if (!tile) return null;
+        return {
+          tile,
+          orientation: parseOrientation(placedRec.orientation, 'horizontal-normal'),
+        };
+      })
+      .filter((placed): placed is NonNullable<typeof placed> => Boolean(placed)),
+    leftEnd: Number(rec.leftEnd ?? 0),
+    rightEnd: Number(rec.rightEnd ?? 0),
+    leftEndIsDouble: Boolean(rec.leftEndIsDouble),
+    rightEndIsDouble: Boolean(rec.rightEndIsDouble),
+    hubDoubles: hubsRaw
+      .map((hub, hubIndex) => {
+        if (!hub || typeof hub !== 'object') return null;
+        const hubRec = hub as Record<string, unknown>;
+        const branchesRaw = Array.isArray(hubRec.branches) ? hubRec.branches : [];
+        return {
+          hubId:
+            hubRec.hubId == null || !Number.isFinite(Number(hubRec.hubId))
+              ? hubIndex
+              : Number(hubRec.hubId),
+          laneType: parseLaneType(hubRec.laneType),
+          laneRef: hubRec.laneRef == null ? undefined : String(hubRec.laneRef),
+          branchDepth:
+            hubRec.branchDepth == null || !Number.isFinite(Number(hubRec.branchDepth))
+              ? undefined
+              : Number(hubRec.branchDepth),
+          tileIndex: Number(hubRec.tileIndex ?? hubIndex),
+          mainlineIndex:
+            hubRec.mainlineIndex == null || !Number.isFinite(Number(hubRec.mainlineIndex))
+              ? undefined
+              : Number(hubRec.mainlineIndex),
+          hubValue: Number(hubRec.hubValue ?? 0),
+          leftSideFilled: Boolean(hubRec.leftSideFilled),
+          rightSideFilled: Boolean(hubRec.rightSideFilled),
+          isCrossed: Boolean(hubRec.isCrossed),
+          branches: branchesRaw.map((branch) => {
+            if (!branch || typeof branch !== 'object') return null;
+            const branchRec = branch as Record<string, unknown>;
+            const tilesRaw = Array.isArray(branchRec.tiles) ? branchRec.tiles : [];
+            return {
+              openEnd: Number(branchRec.openEnd ?? 0),
+              openEndIsDouble: Boolean(branchRec.openEndIsDouble),
+              tiles: tilesRaw
+                .map((placed) => {
+                  if (!placed || typeof placed !== 'object') return null;
+                  const placedRec = placed as Record<string, unknown>;
+                  const tile = Array.isArray(placedRec.tile)
+                    ? parseTileKey(`${placedRec.tile[0]}|${placedRec.tile[1]}`)
+                    : null;
+                  if (!tile) return null;
+                  return {
+                    tile,
+                    orientation: parseOrientation(placedRec.orientation, 'vertical-normal'),
+                  };
+                })
+                .filter((placed): placed is NonNullable<typeof placed> => Boolean(placed)),
+            };
+          }) as unknown as BoardState['hubDoubles'][number]['branches'],
+        };
+      })
+      .filter((hub): hub is NonNullable<typeof hub> => Boolean(hub)),
+  };
+}
+
+function buildAnalysisState(board: BoardState | null, hand: Tile[]): GameState {
+  return {
+    config: {
+      maxPips: 6,
+      tilesPerPlayer: 7,
+      deadTileCount: 2,
+      scoringMultiple: 5,
+      blockedHandRule: 'lowestPips',
+      endHandBonus: 'sumOpponentPenalties',
+      winningScore: 60,
+    },
+    playerIds: ['you', 'opp'],
+    players: {
+      you: { id: 'you', hand, score: 0 },
+      opp: { id: 'opp', hand: [], score: 0 },
+    },
+    board,
+    boneyard: [],
+    deadTiles: [],
+    currentPlayerIndex: 0,
+    handNumber: 1,
+    handOpen: board !== null,
+    handOver: false,
+    gameOver: false,
+    winnerId: null,
+    consecutivePasses: 0,
+  };
+}
+
+function roundMetric(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function averageMetric(values: number[]): number {
+  if (values.length === 0) return 0;
+  return roundMetric(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function weightedAverageMetric(
+  values: number[],
+  weights: number[],
+): number {
+  if (values.length === 0 || weights.length === 0) return 0;
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  if (totalWeight <= 0) return 0;
+  const weightedSum = values.reduce((sum, value, index) => sum + value * (weights[index] ?? 0), 0);
+  return roundMetric(weightedSum / totalWeight);
+}
+
+function variance(values: number[]): number {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return values.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / values.length;
+}
+
+function tileMatchesValue(tile: Tile, pipValue: number): boolean {
+  return tile.low === pipValue || tile.high === pipValue;
+}
+
+function tileMatchesTile(a: Tile, b: Tile): boolean {
+  return a.low === b.low && a.high === b.high;
+}
+
+function countMatchingValueAfterPlay(hand: Tile[], tileToPlay: Tile, pipValue: number): number {
+  let removed = false;
+  let count = 0;
+
+  for (const tile of hand) {
+    if (!removed && tileMatchesTile(tile, tileToPlay)) {
+      removed = true;
+      continue;
+    }
+    if (tileMatchesValue(tile, pipValue)) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function isNewSpinnerBranchOpportunity(
+  board: BoardState | null,
+  hand: Tile[],
+  move: { tile: Tile; position: PlacementPosition },
+): boolean {
+  if (!board) return false;
+  const branchPos = parseBranchPosition(move.position);
+  if (!branchPos) return false;
+
+  const hubIndex = board.hubDoubles.findIndex((hub, idx) => (hub.hubId ?? idx) === branchPos.hubIndex);
+  const hub = hubIndex >= 0 ? board.hubDoubles[hubIndex] : null;
+  if (!hub || !hub.isCrossed || hub.branches[branchPos.armIndex]) return false;
+
+  const remainingMatches = countMatchingValueAfterPlay(hand, move.tile, hub.hubValue);
+  return remainingMatches <= 1;
+}
+
+function analyzeGameStyle(game: GhostGameRow): GhostGameStyleSnapshot | null {
+  const moveLog = normalizeMoveLog(game.move_log);
+  if (moveLog.length === 0) return null;
+
+  let totalPoints = 0;
+  let playCount = 0;
+  let doublesPlayed = 0;
+  let branchesOpened = 0;
+  let forcedDrawPlays = 0;
+  let scoringWithoutDraw = 0;
+  let scoringOpportunities = 0;
+  let suppressedScoringOpportunities = 0;
+  let spinnerControlOpportunities = 0;
+  let spinnerControlDecisions = 0;
+  let totalHandSize = 0;
+  let attackIncreases = 0;
+  let attackClosures = 0;
+  const handScores = new Map<number, number>();
+
+  for (const move of moveLog) {
+    if (move.actor === 'ghost') continue;
+    if (!move.tile_played || move.branch === 'draw' || move.branch === 'pass') continue;
+
+    const tile = parseTileKey(move.tile_played);
+    const board = parseGhostBoardState(move.board_state);
+    const hand = move.hand_before.map((entry) => parseTileKey(entry)).filter((entry): entry is Tile => Boolean(entry));
+    if (!tile) continue;
+
+    playCount += 1;
+    totalPoints += move.score_delta;
+    totalHandSize += hand.length;
+    if (tile.low === tile.high) doublesPlayed += 1;
+    if (move.branch && move.branch !== 'left' && move.branch !== 'right' && move.branch !== 'main') {
+      branchesOpened += 1;
+    }
+    if (move.forced_draw) {
+      forcedDrawPlays += 1;
+    } else if (move.score_delta > 0) {
+      scoringWithoutDraw += 1;
+    }
+
+    const handNumber = Number.isFinite(move.hand_number) ? Number(move.hand_number) : move.turn;
+    handScores.set(handNumber, (handScores.get(handNumber) ?? 0) + move.score_delta);
+
+    const state = buildAnalysisState(board, hand);
+    const legalMoves = getLegalMoves(state, 'you').filter(
+      (candidate): candidate is { type: 'play'; tile: Tile; position: PlacementPosition } =>
+        candidate.type === 'play',
+    );
+    const riskySpinnerBranchMoves = legalMoves.filter((candidate) =>
+      isNewSpinnerBranchOpportunity(board, hand, candidate),
+    );
+    if (riskySpinnerBranchMoves.length > 0) {
+      spinnerControlOpportunities += 1;
+      const choseRiskySpinnerBranch = riskySpinnerBranchMoves.some(
+        (candidate) =>
+          tileMatchesTile(candidate.tile, tile) && candidate.position === (move.branch ?? 'left'),
+      );
+      if (!choseRiskySpinnerBranch) {
+        spinnerControlDecisions += 1;
+      }
+    }
+    const legalScores = legalMoves.map((candidate) =>
+      computePlayScore(simulatePlacement(board, candidate.tile, candidate.position), state.config),
+    );
+    const hadScoringOpportunity = legalScores.some((score) => score >= 5);
+    if (hadScoringOpportunity) {
+      scoringOpportunities += 1;
+      if (move.score_delta < 5) suppressedScoringOpportunities += 1;
+    }
+
+    const afterBoard = simulatePlacement(board, tile, (move.branch ?? 'left') as PlacementPosition);
+    const beforeOpenEnds = getOpenEnds(board).length;
+    const afterOpenEnds = getOpenEnds(afterBoard).length;
+    if (afterOpenEnds > beforeOpenEnds) {
+      attackIncreases += 1;
+    } else if (afterOpenEnds < beforeOpenEnds) {
+      attackClosures += 1;
+    }
+  }
+
+  if (playCount === 0) return null;
+
+  const perHandTotals = Array.from(handScores.values());
+  return {
+    gameId: game.id,
+    playedAt: game.played_at,
+    scoringBias: roundMetric(Math.min(1, totalPoints / (playCount * 10))),
+    doublePriority: roundMetric(Math.min(1, doublesPlayed / playCount)),
+    branchingFrequency: roundMetric(Math.min(1, branchesOpened / playCount)),
+    spinnerControl: roundMetric(
+      spinnerControlOpportunities === 0 ? 0 : spinnerControlDecisions / spinnerControlOpportunities,
+    ),
+    avgTurnPoints: roundMetric(totalPoints / playCount),
+    drawPriority: roundMetric(
+      forcedDrawPlays + scoringWithoutDraw === 0
+        ? 0
+        : forcedDrawPlays / (forcedDrawPlays + scoringWithoutDraw),
+    ),
+    pointSuppression: roundMetric(
+      scoringOpportunities === 0 ? 0 : suppressedScoringOpportunities / scoringOpportunities,
+    ),
+    handSize: roundMetric(totalHandSize / playCount),
+    attackSetup: roundMetric(
+      attackIncreases + attackClosures === 0
+        ? 0.5
+        : attackIncreases / (attackIncreases + attackClosures),
+    ),
+    consistency: roundMetric(variance(perHandTotals)),
+  };
+}
+
+function buildStyleProfileFromSnapshots(
+  snapshots: GhostGameStyleSnapshot[],
+): GhostStyleProfile | null {
+  if (snapshots.length === 0) return null;
+  const weights = snapshots.map((_, index) => roundMetric(Math.pow(0.85, index)));
+  const gameCount = snapshots.length;
+  const confidence =
+    gameCount < 5
+      ? roundMetric((gameCount / 5) * 0.5)
+      : gameCount < 15
+        ? roundMetric(0.5 + ((gameCount - 5) / 10) * 0.35)
+        : roundMetric(Math.min(1, 0.85 + Math.min(gameCount - 15, 5) / 5 * 0.15));
+
+  return {
+    scoringBias: weightedAverageMetric(snapshots.map((entry) => entry.scoringBias), weights),
+    doublePriority: weightedAverageMetric(snapshots.map((entry) => entry.doublePriority), weights),
+    branchingFrequency: weightedAverageMetric(snapshots.map((entry) => entry.branchingFrequency), weights),
+    spinnerControl: weightedAverageMetric(snapshots.map((entry) => entry.spinnerControl), weights),
+    avgTurnPoints: weightedAverageMetric(snapshots.map((entry) => entry.avgTurnPoints), weights),
+    drawPriority: weightedAverageMetric(snapshots.map((entry) => entry.drawPriority), weights),
+    pointSuppression: weightedAverageMetric(snapshots.map((entry) => entry.pointSuppression), weights),
+    handSize: weightedAverageMetric(snapshots.map((entry) => entry.handSize), weights),
+    attackSetup: weightedAverageMetric(snapshots.map((entry) => entry.attackSetup), weights),
+    consistency: weightedAverageMetric(snapshots.map((entry) => entry.consistency), weights),
+    confidence,
+  };
+}
+
+function buildCompositeLog(games: GhostGameRow[], styleGames: GhostGameRow[]): GhostCompositeLog {
   const states = new Map<
     string,
     {
@@ -252,10 +641,16 @@ function buildCompositeLog(games: GhostGameRow[]): GhostCompositeLog {
       return a.boardState.localeCompare(b.boardState);
     });
 
+  const recentGameStyles = styleGames
+    .map((game) => analyzeGameStyle(game))
+    .filter((entry): entry is GhostGameStyleSnapshot => Boolean(entry))
+    .slice(0, 20);
+
   return {
     generatedAt: new Date().toISOString(),
     sourceGameIds: games.map((game) => game.id),
     states: compositeStates,
+    recentGameStyles,
   };
 }
 
@@ -263,38 +658,6 @@ function computeAverageScore(games: GhostGameRow[]): number | null {
   if (games.length === 0) return null;
   const total = games.reduce((sum, game) => sum + Number(game.final_score ?? 0), 0);
   return Math.round((total / games.length) * 10) / 10;
-}
-
-function analyzeStyle(games: GhostGameRow[]): GhostStyleProfile | null {
-  if (games.length === 0) return null;
-  let totalPoints = 0;
-  let moveCount = 0;
-  let doublesPlayed = 0;
-  let branchesOpened = 0;
-
-  for (const game of games) {
-    const moveLog = normalizeMoveLog(game.move_log);
-    for (const move of moveLog) {
-      if (move.actor === 'ghost') continue;
-      moveCount++;
-      totalPoints += move.score_delta;
-      if (move.tile_played && move.tile_played.split('-')[0] === move.tile_played.split('-')[1]) {
-        doublesPlayed++;
-      }
-      if (move.branch && move.branch !== 'main') {
-        branchesOpened++;
-      }
-    }
-  }
-
-  if (moveCount === 0) return null;
-
-  return {
-    scoringBias: Math.min(1.0, totalPoints / (moveCount * 10)),
-    doublePriority: Math.min(1.0, doublesPlayed / (moveCount * 0.25)),
-    branchingFrequency: Math.min(1.0, branchesOpened / (moveCount * 0.3)),
-    avgTurnPoints: totalPoints / moveCount,
-  };
 }
 
 function computeRatingChange(
@@ -325,8 +688,7 @@ export function computeFritzRatingChange(
   opponentScore: number,
   gamesPlayed: number,
 ): { newRating: number; delta: number } {
-  const kBase = gamesPlayed < 10 ? 40 : gamesPlayed < 30 ? 32 : 20;
-  const k = Math.min(20, kBase);
+  const k = gamesPlayed < 20 ? 40 : gamesPlayed < 50 ? 32 : 20;
   const opponentRating = 1000;
   const expected = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
   const total = Math.max(1, playerScore + opponentScore);
@@ -340,17 +702,11 @@ export function computeFritzRatingChange(
 export async function getGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
   const profile = await ensureGhostProfile(userId);
   const recentGames = await fetchRecentGhostGames(userId, 5);
-  const styleGames = await fetchRecentGhostGames(userId, 50);
-  const compositeLog =
-    profile.composite_log && Array.isArray(profile.composite_log.states)
-      ? profile.composite_log
-      : recentGames.length > 0
-        ? buildCompositeLog(recentGames)
-        : null;
-  const styleProfile =
-    profile.style_profile && typeof profile.style_profile === 'object'
-      ? profile.style_profile
-      : analyzeStyle(styleGames);
+  const styleGames = await fetchRecentGhostGames(userId, 20);
+  const compositeLog = recentGames.length > 0 ? buildCompositeLog(recentGames, styleGames) : null;
+  const styleProfile = compositeLog
+    ? buildStyleProfileFromSnapshots(compositeLog.recentGameStyles)
+    : null;
 
   return {
     ghostRating: Number(profile.ghost_rating ?? 800),
@@ -387,6 +743,7 @@ export async function completeGhostGame(params: {
 }): Promise<{
   newRating: number;
   ratingDelta: number;
+  glickoRating: number | null;
   playerScore: number;
   ghostScore: number;
   playerWon: boolean;
@@ -416,11 +773,11 @@ export async function completeGhostGame(params: {
   });
 
   const recentGames = await fetchRecentGhostGames(params.userId, 5);
-  const styleGames = await fetchRecentGhostGames(params.userId, 50);
-  const compositeLog = buildCompositeLog(recentGames);
-  const styleProfile = analyzeStyle(styleGames);
+  const styleGames = await fetchRecentGhostGames(params.userId, 20);
+  const compositeLog = buildCompositeLog(recentGames, styleGames);
+  const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
 
-  const isFritz = params.opponentUserId === FRITZ_SYSTEM_ID;
+  const isFritz = Boolean(params.opponentUserId && isFritzId(params.opponentUserId));
   const rating = isFritz
     ? computeFritzRatingChange(
         Number(profile.ghost_rating ?? 800),
@@ -430,22 +787,63 @@ export async function completeGhostGame(params: {
       )
     : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 };
 
+  let glickoRating: number | null = null;
+  if (isFritz) {
+    const fritzId = params.opponentUserId ?? FRITZ_ELITE_ID;
+    const fritzConfig = getFritzConfig(fritzId);
+    const rankingProfiles = await supabaseFetch<RankingProfileRow[]>(
+      `/rest/v1/profiles?select=id,glicko_rating,glicko_rd&id=eq.${encodeURIComponent(params.userId)}&limit=1`,
+      { method: 'GET' },
+    );
+    const rankingProfile = rankingProfiles[0];
+    if (!rankingProfile) {
+      throw new Error('Ranking profile not found for Fritz match.');
+    }
+
+    const now = new Date().toISOString();
+    await supabaseFetch(`/rest/v1/ranked_games`, {
+      method: 'POST',
+      body: JSON.stringify([
+        {
+          player_id: params.userId,
+          opponent_id: fritzId,
+          player_score: Math.round(params.finalScore),
+          opponent_score: Math.round(params.opponentScore),
+          game_type:
+            fritzConfig.difficulty === 'casual'
+              ? 'fritz_rookie'
+              : fritzConfig.difficulty === 'standard'
+                ? 'fritz_standard'
+                : 'fritz_elite',
+          played_at: now,
+          rating_before: rankingProfile.glicko_rating,
+          rd_before: rankingProfile.glicko_rd,
+          rating_after: null,
+        },
+      ]),
+    });
+
+    const ratingResult = await processRatingPeriod(params.userId);
+    glickoRating = ratingResult.newRating;
+  }
+
   await upsertGhostProfile({
     user_id: params.userId,
     ghost_rating: rating.newRating,
     last_updated: new Date().toISOString(),
-    composite_log: isFritz ? profile.composite_log : compositeLog,
-    style_profile: isFritz ? profile.style_profile : styleProfile,
+    composite_log: compositeLog,
+    style_profile: styleProfile,
     games_played: Number(profile.games_played ?? 0) + 1,
   });
 
   return {
     newRating: rating.newRating,
     ratingDelta: rating.delta,
+    glickoRating,
     playerScore: Math.round(params.finalScore),
     ghostScore: Math.round(params.opponentScore),
     playerWon: params.finalScore > params.opponentScore,
-    compositeLog: isFritz ? (profile.composite_log as GhostCompositeLog) : compositeLog,
-    styleProfile: isFritz ? profile.style_profile : styleProfile,
+    compositeLog,
+    styleProfile,
   };
 }

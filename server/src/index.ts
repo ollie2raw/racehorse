@@ -9,10 +9,16 @@ import {
 } from './ghost/service';
 import { assignPlayerToLeague } from './league/service';
 import { generateLeagueFixtures } from './league/schedule';
-import { recordLeagueFixtureResult } from './league/results';
+import {
+  recordLeagueAsyncResult,
+  recordLeagueFixtureResult,
+  openLeagueFixtureLiveRoom,
+  recordLeagueLiveResult,
+} from './league/results';
 import { runLeagueForfeitJob } from './league/forfeit';
 import { runLeagueSundayRollover } from './league/rollover';
 import { getLeagueStateForPlayer } from './league/state';
+import { getLeagueHistoryForPlayer } from './league/history';
 import {
   makeCode,
   makeId,
@@ -25,12 +31,13 @@ import {
 } from './tournament/tournament';
 import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 import { supabaseFetch } from './supabaseUtils';
-import { FRITZ_SYSTEM_ID } from './ranking/glicko2';
+import { DEFAULT_RATING, DEFAULT_RD, FRITZ_SYSTEM_ID, isFritzId } from './ranking/glicko2';
 import { startRankingCron } from './ranking/cron';
-import { getLeaderboard, processRatingPeriod } from './ranking/periodService';
+import { getLeaderboard, processRatingPeriod, processRealtimeMultiplayerGame } from './ranking/periodService';
 
 import {
   createRoom,
+  createReservedRoom,
   joinRoom,
   startGame,
   act,
@@ -46,6 +53,30 @@ import {
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+async function getAuthenticatedUserId(req: express.Request): Promise<string | null> {
+  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match?.[1]?.trim();
+  if (!token) return null;
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error('Supabase auth configuration is required.');
+  }
+
+  const response = await fetch(new URL('/auth/v1/user', supabaseUrl), {
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) return null;
+
+  const user = (await response.json()) as { id?: unknown };
+  return typeof user.id === 'string' ? user.id : null;
+}
 
 app.get('/health', (_, res) => {
   res.json({ ok: true });
@@ -94,6 +125,61 @@ app.get('/api/ranking/leaderboard', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to load leaderboard.',
+    });
+  }
+});
+
+app.get('/api/ranking/history/:userId', async (req, res) => {
+  const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
+    const profile = profileData?.[0];
+    if (!profile) {
+      res.status(404).json({ error: 'Profile not found' });
+      return;
+    }
+
+    const games = await supabaseFetch<any[]>(
+      `/rest/v1/ranked_games?player_id=eq.${userId}` +
+        `&rating_after=not.is.null&select=played_at,rating_after,rd_after,delta,opponent_id,player_score,opponent_score` +
+        `&order=played_at.asc,id.asc`,
+    );
+
+    res.json({
+      ok: true,
+      games: games.map((game) => ({
+        played_at: game.played_at,
+        rating_after: Number(game.rating_after ?? 0),
+        rd_after: Number(game.rd_after ?? 350),
+        delta: Number(game.delta ?? 0),
+        opponent_id: String(game.opponent_id ?? ''),
+        player_score: Number(game.player_score ?? 0),
+        opponent_score: Number(game.opponent_score ?? 0),
+        is_fritz: isFritzId(game.opponent_id),
+      })),
+      currentRating: Number(profile.glicko_rating ?? DEFAULT_RATING),
+      peakRating: Number(profile.peak_rating ?? profile.glicko_rating ?? DEFAULT_RATING),
+      provisional: Boolean(profile.provisional),
+      rd: Number(profile.glicko_rd ?? DEFAULT_RD),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load rating history.',
     });
   }
 });
@@ -203,6 +289,15 @@ app.post('/league/assign-player', async (req, res) => {
   }
 
   try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
     const assignment = await assignPlayerToLeague(userId);
     res.json({ ok: true, assignment });
   } catch (error) {
@@ -220,6 +315,11 @@ app.post('/league/generate-fixtures', async (req, res) => {
   }
 
   try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
     const schedule = await generateLeagueFixtures(leagueId);
     res.json({
       ok: true,
@@ -238,6 +338,12 @@ app.post('/league/report-result', async (req, res) => {
   const fixtureId = typeof req.body?.fixtureId === 'string' ? req.body.fixtureId.trim() : '';
   const homeScore = req.body?.homeScore;
   const awayScore = req.body?.awayScore;
+  const submittedMode = typeof req.body?.mode === 'string' ? req.body.mode.trim() : '';
+  const playerMemberId =
+    typeof req.body?.playerMemberId === 'string' ? req.body.playerMemberId.trim() : '';
+  const opponentMemberId =
+    typeof req.body?.opponentMemberId === 'string' ? req.body.opponentMemberId.trim() : '';
+  const roomCode = typeof req.body?.roomCode === 'string' ? req.body.roomCode.trim() : '';
 
   if (!fixtureId) {
     res.status(400).json({ error: 'fixtureId is required.' });
@@ -245,11 +351,124 @@ app.post('/league/report-result', async (req, res) => {
   }
 
   try {
-    const result = await recordLeagueFixtureResult(
-      fixtureId,
-      Number(homeScore),
-      Number(awayScore),
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const parsedHomeScore = Number(homeScore);
+    const parsedAwayScore = Number(awayScore);
+    if (
+      !Number.isInteger(parsedHomeScore) ||
+      !Number.isInteger(parsedAwayScore) ||
+      parsedHomeScore < 0 ||
+      parsedAwayScore < 0 ||
+      parsedHomeScore > 200 ||
+      parsedAwayScore > 200
+    ) {
+      res.status(400).json({ error: 'Scores must be integers between 0 and 200.' });
+      return;
+    }
+
+    const fixtureRows = await supabaseFetch<any[]>(
+      `/rest/v1/fixtures?select=id,league_id,season,home_member_id,away_member_id,status&id=eq.${fixtureId}&limit=1`,
     );
+    const fixture = fixtureRows?.[0];
+    if (!fixture) {
+      res.status(404).json({ error: 'Fixture not found.' });
+      return;
+    }
+    if (fixture.status === 'completed' || fixture.status === 'forfeit') {
+      res.status(409).json({ error: `Fixture ${fixtureId} is already ${fixture.status}.` });
+      return;
+    }
+    const leagueRows = await supabaseFetch<any[]>(
+      `/rest/v1/leagues?select=id,status&id=eq.${fixture.league_id}&limit=1`,
+    );
+    const league = leagueRows?.[0];
+    if (!league || league.status !== 'active') {
+      res.status(409).json({ error: 'This fixture is no longer playable.' });
+      return;
+    }
+
+    const membershipRows = await supabaseFetch<any[]>(
+      `/rest/v1/league_members?select=id,player_user_id,member_type&id=in.("${fixture.home_member_id}","${fixture.away_member_id}")`,
+    );
+    const homeMember = membershipRows.find((member) => member?.id === fixture.home_member_id) ?? null;
+    const awayMember = membershipRows.find((member) => member?.id === fixture.away_member_id) ?? null;
+    if (!homeMember || !awayMember) {
+      res.status(500).json({ error: 'Fixture membership is invalid.' });
+      return;
+    }
+
+    const reporterMember =
+      homeMember.player_user_id === authenticatedUserId
+        ? homeMember
+        : awayMember.player_user_id === authenticatedUserId
+          ? awayMember
+          : null;
+    if (!reporterMember) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const otherMember = reporterMember.id === homeMember.id ? awayMember : homeMember;
+    const resolvedMode =
+      submittedMode === 'ghost' || submittedMode === 'bot' || submittedMode === 'live'
+        ? submittedMode
+        : otherMember.member_type === 'bot'
+          ? 'bot'
+          : 'ghost';
+
+    if (playerMemberId && playerMemberId !== reporterMember.id) {
+      res.status(400).json({ error: 'playerMemberId does not match the reporting fixture member.' });
+      return;
+    }
+    if (opponentMemberId && opponentMemberId !== otherMember.id) {
+      res.status(400).json({ error: 'opponentMemberId does not match the fixture opponent.' });
+      return;
+    }
+
+    if (resolvedMode === 'live' && (homeMember.member_type !== 'player' || awayMember.member_type !== 'player')) {
+      res.status(400).json({ error: 'Live mode is only valid for player-vs-player fixtures.' });
+      return;
+    }
+    if ((resolvedMode === 'ghost' || resolvedMode === 'bot') && fixture.status !== 'scheduled' && fixture.status !== 'provisional') {
+      res.status(409).json({ error: `Fixture ${fixtureId} is not currently playable async.` });
+      return;
+    }
+    if (resolvedMode === 'ghost' && otherMember.member_type !== 'player') {
+      res.status(400).json({ error: 'Ghost mode is only valid for player-vs-player fixtures.' });
+      return;
+    }
+    if (resolvedMode === 'bot' && otherMember.member_type !== 'bot' && submittedMode === 'bot') {
+      // Bot stand-in submissions for real opponents are allowed, but only if explicitly handled by the client.
+      // This stays permissive for the async-first league flow.
+    }
+
+    const result =
+      resolvedMode === 'live'
+        ? await recordLeagueLiveResult({
+            fixtureId,
+            playerMemberId: reporterMember.id,
+            opponentMemberId: otherMember.id,
+            homeScore: parsedHomeScore,
+            awayScore: parsedAwayScore,
+            sourceUserId: authenticatedUserId,
+            roomCode: roomCode || null,
+            metadata: { via: 'league-report-route' },
+          })
+        : await recordLeagueAsyncResult({
+            fixtureId,
+            mode: resolvedMode,
+            playerMemberId: reporterMember.id,
+            opponentMemberId: otherMember.id,
+            homeScore: parsedHomeScore,
+            awayScore: parsedAwayScore,
+            sourceUserId: authenticatedUserId,
+            metadata: { via: 'league-report-route' },
+          });
     res.json({ ok: true, result });
   } catch (error) {
     res.status(500).json({
@@ -259,6 +478,10 @@ app.post('/league/report-result', async (req, res) => {
 });
 
 app.post('/league/run-forfeits', async (req, res) => {
+  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
   const throughDate =
     typeof req.body?.throughDate === 'string' && req.body.throughDate.trim()
       ? req.body.throughDate.trim()
@@ -280,6 +503,10 @@ app.post('/league/run-forfeits', async (req, res) => {
 });
 
 app.post('/league/run-rollover', async (req, res) => {
+  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
   const throughDate =
     typeof req.body?.throughDate === 'string' && req.body.throughDate.trim()
       ? req.body.throughDate.trim()
@@ -308,11 +535,139 @@ app.get('/league/state/:userId', async (req, res) => {
   }
 
   try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
     const state = await getLeagueStateForPlayer(userId);
+    if (state?.todaysOpponent?.memberType === 'player') {
+      const opponentMember =
+        state.members.find((member) => member.id === state.todaysOpponent?.memberId) ?? null;
+      const opponentUserId = opponentMember?.player_user_id ?? null;
+      state.todaysOpponent.online = Boolean(opponentUserId && socketsByUserId.get(opponentUserId)?.size);
+    }
     res.json({ ok: true, state });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to load league state.',
+    });
+  }
+});
+
+app.get('/league/history/:userId', async (req, res) => {
+  const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const history = await getLeagueHistoryForPlayer(userId);
+    res.json({ ok: true, history });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load league history.',
+    });
+  }
+});
+
+app.post('/league/fixture/:fixtureId/live-room', async (req, res) => {
+  const fixtureId = typeof req.params.fixtureId === 'string' ? req.params.fixtureId.trim() : '';
+  if (!fixtureId) {
+    res.status(400).json({ error: 'fixtureId is required.' });
+    return;
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const fixtureRows = await supabaseFetch<any[]>(
+      `/rest/v1/fixtures?select=id,league_id,status,home_member_id,away_member_id,live_room_code&id=eq.${fixtureId}&limit=1`,
+    );
+    const fixture = fixtureRows?.[0];
+    if (!fixture) {
+      res.status(404).json({ error: 'Fixture not found.' });
+      return;
+    }
+    if (fixture.status === 'completed' || fixture.status === 'forfeit') {
+      res.status(409).json({ error: `Fixture ${fixtureId} is already ${fixture.status}.` });
+      return;
+    }
+    const leagueRows = await supabaseFetch<any[]>(
+      `/rest/v1/leagues?select=id,status&id=eq.${fixture.league_id}&limit=1`,
+    );
+    const league = leagueRows?.[0];
+    if (!league || league.status !== 'active') {
+      res.status(409).json({ error: 'This fixture is no longer available for live play.' });
+      return;
+    }
+
+    const membershipRows = await supabaseFetch<any[]>(
+      `/rest/v1/league_members?select=id,player_user_id,member_type&id=in.("${fixture.home_member_id}","${fixture.away_member_id}")`,
+    );
+    const homeMember = membershipRows.find((member) => member?.id === fixture.home_member_id) ?? null;
+    const awayMember = membershipRows.find((member) => member?.id === fixture.away_member_id) ?? null;
+    if (!homeMember || !awayMember) {
+      res.status(500).json({ error: 'Fixture membership is invalid.' });
+      return;
+    }
+    if (homeMember.member_type !== 'player' || awayMember.member_type !== 'player') {
+      res.status(400).json({ error: 'Live play is only available for player-vs-player fixtures.' });
+      return;
+    }
+    if (homeMember.player_user_id !== authenticatedUserId && awayMember.player_user_id !== authenticatedUserId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const existingCode =
+      typeof fixture.live_room_code === 'string' && fixture.live_room_code.trim()
+        ? fixture.live_room_code.trim().toUpperCase()
+        : '';
+    let roomCode = existingCode;
+    if (roomCode) {
+      try {
+        getRoom(roomCode);
+      } catch {
+        createReservedRoom(roomCode, { winningScore: 30 });
+      }
+    } else {
+      do {
+        roomCode = `LG-${makeCode(4)}`;
+        try {
+          getRoom(roomCode);
+          roomCode = '';
+        } catch {
+          // Unused room code, safe to reserve for this fixture.
+        }
+      } while (!roomCode);
+      roomCode = createReservedRoom(roomCode, { winningScore: 30 }).code;
+      await openLeagueFixtureLiveRoom(fixtureId, roomCode);
+    }
+
+    res.json({ ok: true, fixtureId, roomCode });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to open live room.',
     });
   }
 });
@@ -486,6 +841,10 @@ function migrateRoomSeat(roomCode: string, oldSocketId: string, newSocketId: str
       delete room.lastBroadcastScores[oldSocketId];
     }
   }
+  if (room.ghostMoveLogs[oldSocketId]) {
+    room.ghostMoveLogs[newSocketId] = room.ghostMoveLogs[oldSocketId];
+    delete room.ghostMoveLogs[oldSocketId];
+  }
 
   if (room.nextHandReady.has(oldSocketId)) {
     room.nextHandReady.delete(oldSocketId);
@@ -602,17 +961,27 @@ function broadcastStateUpdate(roomCode: string) {
             { me: a, opp: b, myScore: scoreA, oppScore: scoreB },
             { me: b, opp: a, myScore: scoreB, oppScore: scoreA }
           ];
+          const rankingProfiles = new Map<string, any>();
+          const insertedRankedGames = new Map<string, any>();
 
           for (const p of rankingParticipants) {
             if (p.me.userId) {
               const opponentId = p.opp.userId || (p.opp.id.startsWith('bot:fritz:') ? FRITZ_SYSTEM_ID : null);
               if (opponentId) {
-                // Fetch profile to get current rating/rd
-                const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
-                const profile = profileData?.[0];
+                let profile = rankingProfiles.get(p.me.userId);
+                if (!profile) {
+                  const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
+                  profile = profileData?.[0];
+                  if (profile) {
+                    rankingProfiles.set(p.me.userId, profile);
+                  }
+                }
                 if (profile) {
-                  await supabaseFetch('/rest/v1/ranked_games', {
+                  const insertedGames = await supabaseFetch<any[]>('/rest/v1/ranked_games', {
                     method: 'POST',
+                    headers: {
+                      Prefer: 'return=representation',
+                    },
                     body: JSON.stringify({
                       player_id: p.me.userId,
                       opponent_id: opponentId,
@@ -624,8 +993,101 @@ function broadcastStateUpdate(roomCode: string) {
                       played_at: new Date().toISOString()
                     })
                   });
+                  const insertedGame = insertedGames?.[0];
+                  if (insertedGame) {
+                    insertedRankedGames.set(p.me.userId, insertedGame);
+                  }
+                }
+
+                const moveLog = room.ghostMoveLogs[p.me.id] ?? [];
+                if (moveLog.length > 0) {
+                  await completeGhostGame({
+                    userId: p.me.userId,
+                    opponentUserId: opponentId,
+                    finalScore: p.myScore,
+                    opponentScore: p.oppScore,
+                    moveLog,
+                  });
                 }
               }
+            }
+          }
+
+          if (a.userId && b.userId) {
+            const playerAProfile = rankingProfiles.get(a.userId);
+            const playerBProfile = rankingProfiles.get(b.userId);
+            const playerAGame = insertedRankedGames.get(a.userId);
+            const playerBGame = insertedRankedGames.get(b.userId);
+
+            if (playerAProfile && playerBProfile && playerAGame && playerBGame) {
+              try {
+                await processRealtimeMultiplayerGame({
+                  playerAProfile,
+                  playerBProfile,
+                  playerAGame,
+                  playerBGame,
+                });
+                console.log('[Ranking] Real-time update complete', {
+                  playerA: a.userId,
+                  playerB: b.userId,
+                });
+              } catch (err) {
+                console.error('[Ranking] Real-time update failed:', err);
+              }
+            } else {
+              console.warn('[Ranking] Skipping real-time update — missing data', {
+                hasPlayerAProfile: !!playerAProfile,
+                hasPlayerBProfile: !!playerBProfile,
+                hasPlayerAGame: !!playerAGame,
+                hasPlayerBGame: !!playerBGame,
+              });
+            }
+          }
+
+          const linkedFixtureRows = await supabaseFetch<any[]>(
+            `/rest/v1/fixtures?select=id,status,home_member_id,away_member_id,live_room_code&live_room_code=eq.${room.code}&limit=1`,
+          );
+          const linkedFixture = linkedFixtureRows?.[0];
+          if (linkedFixture && linkedFixture.status !== 'completed' && linkedFixture.status !== 'forfeit') {
+            const fixtureMembers = await supabaseFetch<any[]>(
+              `/rest/v1/league_members?select=id,player_user_id&id=in.("${linkedFixture.home_member_id}","${linkedFixture.away_member_id}")`,
+            );
+            const homeMember = fixtureMembers.find((member) => member?.id === linkedFixture.home_member_id) ?? null;
+            const awayMember = fixtureMembers.find((member) => member?.id === linkedFixture.away_member_id) ?? null;
+            const livePlayers = [a, b];
+            const homePlayer = livePlayers.find((player) => player.userId === homeMember?.player_user_id) ?? null;
+            const awayPlayer = livePlayers.find((player) => player.userId === awayMember?.player_user_id) ?? null;
+
+            if (homeMember && awayMember && homePlayer && awayPlayer) {
+              const homeScore = homePlayer.id === a.id ? scoreA : scoreB;
+              const awayScore = awayPlayer.id === a.id ? scoreA : scoreB;
+              try {
+                await recordLeagueLiveResult({
+                  fixtureId: linkedFixture.id,
+                  playerMemberId: homeMember.id,
+                  opponentMemberId: awayMember.id,
+                  homeScore,
+                  awayScore,
+                  sourceUserId: a.userId ?? b.userId ?? null,
+                  roomCode: room.code,
+                  metadata: { via: 'live-room-auto-finalize' },
+                });
+                console.log('[League] Live fixture finalized', {
+                  fixtureId: linkedFixture.id,
+                  roomCode: room.code,
+                });
+              } catch (err) {
+                console.error('[League] Live fixture finalization failed:', err);
+              }
+            } else {
+              console.warn('[League] Skipping live fixture finalization — player mapping missing', {
+                fixtureId: linkedFixture.id,
+                roomCode: room.code,
+                hasHomeMember: !!homeMember,
+                hasAwayMember: !!awayMember,
+                hasHomePlayer: !!homePlayer,
+                hasAwayPlayer: !!awayPlayer,
+              });
             }
           }
         } catch (err) {

@@ -29,9 +29,21 @@ export interface FixtureRecord {
   away_member_id: string;
   home_score: number | null;
   away_score: number | null;
-  status: 'scheduled' | 'completed' | 'forfeit';
+  status: 'scheduled' | 'provisional' | 'completed' | 'forfeit';
   completed_at: string | null;
+  live_room_code?: string | null;
+  live_room_opened_at?: string | null;
   created_at: string;
+}
+
+export interface FixtureResolutionMeta {
+  effectiveStatus: FixtureRecord['status'];
+  effectiveMode: 'live' | 'ghost' | 'bot' | null;
+  asyncAttempts: number;
+  liveAttempts: number;
+  liveCanOverride: boolean;
+  liveRoomCode: string | null;
+  liveRoomOpenedAt: string | null;
 }
 
 export interface LeagueStandingRow {
@@ -49,9 +61,27 @@ export interface LeagueStandingRow {
   position: number;
 }
 
+export interface LeagueHistorySeason {
+  season: number;
+  division: number;
+  finalPosition: number;
+  promoted: boolean;
+  relegated: boolean;
+  wins: number;
+  draws: number;
+  losses: number;
+  createdAt: string;
+}
+
+export interface LeagueHistoryResponse {
+  seasons: LeagueHistorySeason[];
+  currentDivision: number | null;
+}
+
 export interface LeaguePlayerState {
   league: LeagueRecord;
   members: LeagueMemberRecord[];
+  memberMeta: Record<string, { personality: string | null; isFritz: boolean }>;
   standings: LeagueStandingRow[];
   you: LeagueMemberRecord;
   todaysFixture: FixtureRecord | null;
@@ -59,6 +89,7 @@ export interface LeaguePlayerState {
     memberId: string;
     displayName: string;
     memberType: 'player' | 'bot';
+    online: boolean;
     personality: string | null;
     difficulty: number | null;
     isFritz: boolean;
@@ -66,6 +97,8 @@ export interface LeaguePlayerState {
     record: { wins: number; draws: number; losses: number } | null;
   } | null;
   isByeDay: boolean;
+  newRealPlayerJoined: boolean;
   recentResults: FixtureRecord[];
   fullSchedule: FixtureRecord[];
+  fixtureResolutionById: Record<string, FixtureResolutionMeta>;
 }

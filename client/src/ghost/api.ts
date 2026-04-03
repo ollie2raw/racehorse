@@ -5,12 +5,14 @@ const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
 
 export type GhostMoveLogEntry = {
   turn: number;
+  hand_number?: number;
   actor?: 'you' | 'ghost';
   board_state: string;
   tile_played: string | null;
   branch: string | null;
   hand_before: string[];
   score_delta: number;
+  forced_draw?: boolean;
 };
 
 export type GhostCompositeCandidate = {
@@ -28,17 +30,40 @@ export type GhostCompositeState = {
   candidates: GhostCompositeCandidate[];
 };
 
+export type GhostGameStyleSnapshot = {
+  gameId: string;
+  playedAt: string;
+  scoringBias: number;
+  doublePriority: number;
+  branchingFrequency: number;
+  spinnerControl: number;
+  avgTurnPoints: number;
+  drawPriority: number;
+  pointSuppression: number;
+  handSize: number;
+  attackSetup: number;
+  consistency: number;
+};
+
 export type GhostCompositeLog = {
   generatedAt: string;
   sourceGameIds: string[];
   states: GhostCompositeState[];
+  recentGameStyles: GhostGameStyleSnapshot[];
 };
 
 export type GhostStyleProfile = {
   scoringBias: number;
   doublePriority: number;
   branchingFrequency: number;
+  spinnerControl: number;
   avgTurnPoints: number;
+  drawPriority: number;
+  pointSuppression: number;
+  handSize: number;
+  attackSetup: number;
+  consistency: number;
+  confidence: number;
 };
 
 export type GhostProfileSummary = {
@@ -54,6 +79,7 @@ export type GhostProfileSummary = {
 export type GhostCompletionResult = {
   newRating: number;
   ratingDelta: number;
+  glickoRating: number | null;
   playerScore: number;
   ghostScore: number;
   playerWon: boolean;

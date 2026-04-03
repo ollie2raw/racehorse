@@ -295,3 +295,67 @@ body, #root {
 .mode-section-label, .mode-hub-middle-labels, .mode-title-help-btn {
   display: none !important;
 }
+
+/* Normalize Multiplayer card title size to match other home cards */
+.mode-card-play-online .mode-option-title {
+  font-size: 1.14rem !important;
+  font-weight: 740 !important;
+  margin-bottom: 0 !important;
+  gap: 8px !important;
+}
+
+/* Fix Multiplayer title alignment by isolating LIVE badge */
+.mode-card-play-online .mode-option-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Push LIVE badge to the right so it doesn't shrink title */
+.mode-card-play-online .mode-live-badge {
+  margin-left: auto;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.18);
+}
+
+
+/* Fix Multiplayer title alignment by isolating LIVE badge */
+.mode-card-play-online .mode-option-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Push LIVE badge to the right so it doesn't shrink title */
+.mode-card-play-online .mode-live-badge {
+  margin-left: auto;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.18);
+}
+
+
+/* Layout for Multiplayer title + LIVE badge */
+.mode-card-play-online-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mode-card-play-online-head .mode-option-title {
+  margin: 0 !important;
+}
+
+.mode-card-play-online-head .mode-live-badge {
+  position: relative;
+  top: 1px;
+}
+
+/* Slightly increase Multiplayer title size */
+.mode-card-play-online-head .mode-option-title {
+  font-size: calc(1.71rem + 3px) !important;
+}
+

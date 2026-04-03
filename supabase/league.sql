@@ -56,12 +56,30 @@ create table if not exists public.fixtures (
   away_member_id uuid not null references public.league_members(id) on delete cascade,
   home_score int null check (home_score is null or home_score >= 0),
   away_score int null check (away_score is null or away_score >= 0),
-  status text not null default 'scheduled' check (status in ('scheduled', 'completed', 'forfeit')),
+  status text not null default 'scheduled' check (status in ('scheduled', 'provisional', 'completed', 'forfeit')),
   completed_at timestamptz null,
+  live_room_code text null,
+  live_room_opened_at timestamptz null,
   created_at timestamptz not null default now(),
   check (home_member_id <> away_member_id),
   unique (league_id, matchday, home_member_id),
   unique (league_id, matchday, away_member_id)
+);
+
+create table if not exists public.fixture_match_results (
+  id uuid primary key default gen_random_uuid(),
+  fixture_id uuid not null references public.fixtures(id) on delete cascade,
+  mode text not null check (mode in ('live', 'ghost', 'bot')),
+  status text not null check (status in ('recorded', 'superseded')),
+  player_member_id uuid not null references public.league_members(id) on delete cascade,
+  opponent_member_id uuid not null references public.league_members(id) on delete cascade,
+  home_score int not null check (home_score between 0 and 200),
+  away_score int not null check (away_score between 0 and 200),
+  source_user_id uuid null references auth.users(id) on delete set null,
+  room_code text null,
+  metadata jsonb not null default '{}'::jsonb,
+  superseded_at timestamptz null,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists public.player_league_history (
@@ -108,6 +126,10 @@ create index if not exists idx_fixtures_league_day
 create index if not exists idx_fixtures_status_day
   on public.fixtures (status, scheduled_date);
 
+create index if not exists idx_fixtures_live_room_code
+  on public.fixtures (live_room_code)
+  where live_room_code is not null;
+
 create index if not exists idx_fixtures_home_member
   on public.fixtures (home_member_id, scheduled_date);
 
@@ -117,11 +139,18 @@ create index if not exists idx_fixtures_away_member
 create index if not exists idx_player_league_history_player
   on public.player_league_history (player_user_id, season desc);
 
+create index if not exists idx_fixture_match_results_fixture
+  on public.fixture_match_results (fixture_id, created_at asc);
+
+create index if not exists idx_fixture_match_results_mode
+  on public.fixture_match_results (fixture_id, mode, created_at asc);
+
 alter table public.league_bots enable row level security;
 alter table public.leagues enable row level security;
 alter table public.league_members enable row level security;
 alter table public.fixtures enable row level security;
 alter table public.player_league_history enable row level security;
+alter table public.fixture_match_results enable row level security;
 
 drop policy if exists "league_bots_select_all" on public.league_bots;
 create policy "league_bots_select_all"
@@ -158,6 +187,13 @@ create policy "player_league_history_select_own"
   to authenticated
   using (player_user_id = auth.uid());
 
+drop policy if exists "fixture_match_results_select_authenticated" on public.fixture_match_results;
+create policy "fixture_match_results_select_authenticated"
+  on public.fixture_match_results
+  for select
+  to authenticated
+  using (true);
+
 drop policy if exists "league_bots_no_client_write" on public.league_bots;
 create policy "league_bots_no_client_write"
   on public.league_bots
@@ -193,6 +229,14 @@ create policy "fixtures_no_client_write"
 drop policy if exists "player_league_history_no_client_write" on public.player_league_history;
 create policy "player_league_history_no_client_write"
   on public.player_league_history
+  for all
+  to anon, authenticated
+  using (false)
+  with check (false);
+
+drop policy if exists "fixture_match_results_no_client_write" on public.fixture_match_results;
+create policy "fixture_match_results_no_client_write"
+  on public.fixture_match_results
   for all
   to anon, authenticated
   using (false)

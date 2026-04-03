@@ -1044,3 +1044,50 @@
     transform-origin: top left;
   }
 }
+
+/* Daily Puzzle entry button spacing polish */
+.daily-entry-actions .mode-option {
+  min-height: 84px;
+  justify-content: center;
+  gap: 4px;
+}
+
+.daily-start-hero,
+.daily-leaderboard-cta {
+  padding: 16px 22px !important;
+}
+
+.daily-entry-actions .mode-option-title,
+.daily-entry-actions .mode-option-meta {
+  margin: 0;
+}
+
+.daily-entry-actions .mode-option-title {
+  line-height: 1.12;
+}
+
+.daily-entry-actions .mode-option-meta {
+  line-height: 1.25;
+}
+
+/* Force Daily Puzzle entry button content to center as a block */
+.daily-entry-actions .mode-option {
+  display: grid;
+  align-content: center;
+}
+
+.daily-entry-actions .mode-option-title,
+.daily-entry-actions .mode-option-meta {
+  display: block;
+}
+
+/* Optical vertical alignment tweak (slightly lower text) */
+.daily-entry-actions .mode-option {
+  padding-top: 20px !important;
+  padding-bottom: 14px !important;
+}
+
+/* Increase button title size (Daily Puzzle only) */
+.daily-entry-actions .mode-option-title {
+  font-size: 1.45rem !important;
+}

@@ -12,9 +12,28 @@ interface BotRecord {
   active: boolean;
 }
 
+interface FixtureMatchResultRecord {
+  id: string;
+  fixture_id: string;
+  mode: 'live' | 'ghost' | 'bot';
+  status: 'recorded' | 'superseded';
+  created_at: string;
+}
+
+export interface FixtureResolutionMeta {
+  effectiveStatus: FixtureRecord['status'];
+  effectiveMode: 'live' | 'ghost' | 'bot' | null;
+  asyncAttempts: number;
+  liveAttempts: number;
+  liveCanOverride: boolean;
+  liveRoomCode: string | null;
+  liveRoomOpenedAt: string | null;
+}
+
 export interface LeaguePlayerState {
   league: LeagueRecord;
   members: LeagueMemberRecord[];
+  memberMeta: Record<string, { personality: string | null; isFritz: boolean }>;
   standings: LeagueStandingRow[];
   you: LeagueMemberRecord;
   todaysFixture: FixtureRecord | null;
@@ -22,6 +41,7 @@ export interface LeaguePlayerState {
     memberId: string;
     displayName: string;
     memberType: 'player' | 'bot';
+    online: boolean;
     personality: string | null;
     difficulty: number | null;
     isFritz: boolean;
@@ -29,8 +49,10 @@ export interface LeaguePlayerState {
     record: { wins: number; draws: number; losses: number } | null;
   } | null;
   isByeDay: boolean;
+  newRealPlayerJoined: boolean;
   recentResults: FixtureRecord[];
   fullSchedule: FixtureRecord[];
+  fixtureResolutionById: Record<string, FixtureResolutionMeta>;
 }
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -48,8 +70,10 @@ function getConfig() {
   };
 }
 
-function todayUtcDate(): string {
-  return new Date().toISOString().slice(0, 10);
+function todayPstDate(): string {
+  return new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/Los_Angeles',
+  });
 }
 
 function startOfUtcDay(d: Date): Date {
@@ -120,7 +144,7 @@ async function fetchLeagueMembers(leagueId: string): Promise<LeagueMemberRecord[
 
 async function fetchLeagueFixtures(leagueId: string, season: number): Promise<FixtureRecord[]> {
   return await supabaseFetch<FixtureRecord[]>(
-    `/rest/v1/fixtures?select=id,league_id,season,matchday,scheduled_date,home_member_id,away_member_id,home_score,away_score,status,completed_at,created_at` +
+    `/rest/v1/fixtures?select=id,league_id,season,matchday,scheduled_date,home_member_id,away_member_id,home_score,away_score,status,completed_at,live_room_code,live_room_opened_at,created_at` +
       `&league_id=eq.${leagueId}&season=eq.${season}&order=matchday.asc,scheduled_date.asc,created_at.asc`,
     { method: 'GET' },
   );
@@ -130,6 +154,51 @@ async function fetchBots(): Promise<BotRecord[]> {
   return await supabaseFetch<BotRecord[]>(
     `/rest/v1/league_bots?select=id,display_name,division,personality,difficulty,is_fritz,active&active=eq.true`,
     { method: 'GET' },
+  );
+}
+
+async function fetchFixtureResults(fixtureIds: string[]): Promise<FixtureMatchResultRecord[]> {
+  if (fixtureIds.length === 0) return [];
+  return await supabaseFetch<FixtureMatchResultRecord[]>(
+    `/rest/v1/fixture_match_results?select=id,fixture_id,mode,status,created_at&fixture_id=in.(${fixtureIds.map((id) => `"${id}"`).join(',')})` +
+      `&order=created_at.asc,id.asc`,
+    { method: 'GET' },
+  );
+}
+
+function buildFixtureResolutionMeta(
+  fixtures: FixtureRecord[],
+  results: FixtureMatchResultRecord[],
+): Record<string, FixtureResolutionMeta> {
+  const resultsByFixture = new Map<string, FixtureMatchResultRecord[]>();
+  for (const result of results) {
+    const bucket = resultsByFixture.get(result.fixture_id) ?? [];
+    bucket.push(result);
+    resultsByFixture.set(result.fixture_id, bucket);
+  }
+
+  return Object.fromEntries(
+    fixtures.map((fixture) => {
+      const fixtureResults = resultsByFixture.get(fixture.id) ?? [];
+      const active = fixtureResults.filter((result) => result.status === 'recorded');
+      const live = active.find((result) => result.mode === 'live') ?? null;
+      const earliestAsync =
+        active.find((result) => result.mode === 'ghost' || result.mode === 'bot') ?? null;
+      return [
+        fixture.id,
+        {
+          effectiveStatus: fixture.status,
+          effectiveMode: live?.mode ?? earliestAsync?.mode ?? null,
+          asyncAttempts: fixtureResults.filter(
+            (result) => result.mode === 'ghost' || result.mode === 'bot',
+          ).length,
+          liveAttempts: fixtureResults.filter((result) => result.mode === 'live').length,
+          liveCanOverride: fixture.status === 'provisional',
+          liveRoomCode: fixture.live_room_code ?? null,
+          liveRoomOpenedAt: fixture.live_room_opened_at ?? null,
+        },
+      ] satisfies [string, FixtureResolutionMeta];
+    }),
   );
 }
 
@@ -149,9 +218,11 @@ export async function getLeagueStateForPlayer(userId: string): Promise<LeaguePla
   ]);
   const hydratedFixtures =
     fixtures.length > 0 ? fixtures : (await generateLeagueFixtures(league.id)).fixtures;
+  const fixtureResults = await fetchFixtureResults(hydratedFixtures.map((fixture) => fixture.id));
+  const fixtureResolutionById = buildFixtureResolutionMeta(hydratedFixtures, fixtureResults);
 
   const standings = computeLeagueStandings(members, hydratedFixtures);
-  const today = todayUtcDate();
+  const today = todayPstDate();
   const todaysFixture =
     hydratedFixtures.find(
       (fixture) =>
@@ -175,6 +246,18 @@ export async function getLeagueStateForPlayer(userId: string): Promise<LeaguePla
 
   const memberById = new Map(members.map((member) => [member.id, member]));
   const botById = new Map(bots.map((bot) => [bot.id, bot]));
+  const memberMeta = Object.fromEntries(
+    members.map((member) => {
+      const bot = member.bot_id ? botById.get(member.bot_id) ?? null : null;
+      return [
+        member.id,
+        {
+          personality: bot?.personality ?? null,
+          isFritz: Boolean(bot?.is_fritz),
+        },
+      ];
+    }),
+  );
   const todaysOpponentMember =
     todaysFixture
       ? memberById.get(
@@ -188,10 +271,18 @@ export async function getLeagueStateForPlayer(userId: string): Promise<LeaguePla
     : null;
   const opponentBot =
     todaysOpponentMember?.bot_id ? botById.get(todaysOpponentMember.bot_id) ?? null : null;
+  const joinedThreshold = Date.now() - 24 * 60 * 60 * 1000;
+  const newRealPlayerJoined = members.some((member) => {
+    if (member.member_type !== 'player') return false;
+    if (member.player_user_id === userId) return false;
+    const joinedAt = Date.parse(member.joined_at);
+    return Number.isFinite(joinedAt) && joinedAt >= joinedThreshold;
+  });
 
   return {
     league,
     members,
+    memberMeta,
     standings,
     you: membership,
     todaysFixture,
@@ -200,6 +291,7 @@ export async function getLeagueStateForPlayer(userId: string): Promise<LeaguePla
           memberId: todaysOpponentMember.id,
           displayName: todaysOpponentMember.display_name,
           memberType: todaysOpponentMember.member_type,
+          online: false,
           personality: opponentBot?.personality ?? null,
           difficulty: opponentBot?.difficulty ?? null,
           isFritz: Boolean(opponentBot?.is_fritz),
@@ -214,7 +306,9 @@ export async function getLeagueStateForPlayer(userId: string): Promise<LeaguePla
         }
       : null,
     isByeDay,
+    newRealPlayerJoined,
     recentResults,
     fullSchedule: hydratedFixtures,
+    fixtureResolutionById,
   };
 }

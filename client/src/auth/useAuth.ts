@@ -6,6 +6,7 @@ export interface UserProfile {
   id: string;
   username: string;
   created_at?: string;
+  glicko_rating?: number | null;
   ghost_rating?: number | null;
 }
 
@@ -130,7 +131,7 @@ export function useAuth() {
       });
       const queryPromise = supabase
         .from('profiles')
-        .select('id, username, created_at')
+        .select('id, username, created_at, glicko_rating')
         .eq('id', sessionUser.id)
         .maybeSingle()
         .then(({ data, error }) => ({ timedOut: false as const, data, error }));
@@ -512,6 +513,15 @@ export function useAuth() {
     }
   }, []);
 
+  const refreshAuthProfile = useCallback(async (): Promise<void> => {
+    if (!user) return;
+    await hydrateProfile(user);
+  }, [hydrateProfile, user]);
+
+  const applyProfilePatch = useCallback((patch: Partial<UserProfile>): void => {
+    setProfile((prev) => (prev ? { ...prev, ...patch } : prev));
+  }, []);
+
   return {
     user,
     profile,
@@ -524,5 +534,7 @@ export function useAuth() {
     signOut,
     updateUsername,
     resetPassword,
+    refreshAuthProfile,
+    applyProfilePatch,
   };
 }

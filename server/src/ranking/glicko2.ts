@@ -1,10 +1,17 @@
 
 export const TAU = 0.5;
 export const EPSILON = 0.000001;
-export const DEFAULT_RATING = 1500;
-export const DEFAULT_RD = 350;
+export const DEFAULT_RATING = 800;
+export const DEFAULT_RD = 200;
 export const DEFAULT_VOL = 0.06;
-export const FRITZ_SYSTEM_ID = '00000000-0000-0000-0000-000000000001';
+export const FRITZ_ROOKIE_ID = '00000000-0000-0000-0000-000000000002';
+export const FRITZ_STANDARD_ID = '00000000-0000-0000-0000-000000000003';
+export const FRITZ_ELITE_ID = '00000000-0000-0000-0000-000000000001';
+export const FRITZ_SYSTEM_ID = FRITZ_ELITE_ID;
+export const FRITZ_ROOKIE_RATING = 1000;
+export const FRITZ_ROOKIE_RD = 50;
+export const FRITZ_STANDARD_RATING = 1400;
+export const FRITZ_STANDARD_RD = 50;
 export const FRITZ_RATING = 1800;
 export const FRITZ_RD = 50;
 
@@ -147,4 +154,22 @@ export function isProvisional(gamesPlayed: number): boolean {
 
 export function displayRating(rating: number): number {
   return Math.round(rating);
+}
+
+export function getFritzConfig(fritzId: string): {
+  rating: number;
+  rd: number;
+  difficulty: 'casual' | 'standard' | 'hard';
+} {
+  if (fritzId === FRITZ_ROOKIE_ID) {
+    return { rating: FRITZ_ROOKIE_RATING, rd: FRITZ_ROOKIE_RD, difficulty: 'casual' };
+  }
+  if (fritzId === FRITZ_STANDARD_ID) {
+    return { rating: FRITZ_STANDARD_RATING, rd: FRITZ_STANDARD_RD, difficulty: 'standard' };
+  }
+  return { rating: FRITZ_RATING, rd: FRITZ_RD, difficulty: 'hard' };
+}
+
+export function isFritzId(id: string): boolean {
+  return id === FRITZ_ELITE_ID || id === FRITZ_STANDARD_ID || id === FRITZ_ROOKIE_ID;
 }
