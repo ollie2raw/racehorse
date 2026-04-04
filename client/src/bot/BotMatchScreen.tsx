@@ -1551,11 +1551,19 @@ export default function BotMatchScreen({
     !isGhostMode && ghostResult == null && currentGlickoRating != null
       ? Math.round(Number(currentGlickoRating))
       : null;
-  const hasConfirmedFritzRatingUpdate =
-    fritzGlickoDelta != null ||
-    (fritzFallbackGlickoDelta != null && fritzFallbackGlickoDelta !== 0);
-  const displayedFritzGlickoDelta = fritzGlickoDelta ?? fritzFallbackGlickoDelta;
-  const displayedFritzNewGlickoRating = fritzNewGlickoRating ?? fritzFallbackNewGlickoRating;
+  const hasFallbackFritzRatingUpdate =
+    fritzFallbackGlickoDelta != null &&
+    fritzFallbackNewGlickoRating != null &&
+    fritzFallbackGlickoDelta !== 0;
+  const hasConfirmedFritzRatingUpdate = fritzGlickoDelta != null || hasFallbackFritzRatingUpdate;
+  const displayedFritzGlickoDelta =
+    fritzGlickoDelta != null ? fritzGlickoDelta : hasFallbackFritzRatingUpdate ? fritzFallbackGlickoDelta : null;
+  const displayedFritzNewGlickoRating =
+    fritzNewGlickoRating != null
+      ? fritzNewGlickoRating
+      : hasFallbackFritzRatingUpdate
+        ? fritzFallbackNewGlickoRating
+        : null;
   const onShareGhostCard = async () => {
     const result = ghostResult;
     if (!result) return;
@@ -1806,7 +1814,7 @@ export default function BotMatchScreen({
           onClose={onBack}
         >
           {!isGhostMode &&
-            (ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || displayedFritzNewGlickoRating != null) && (
+            (ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null) && (
             <div
               style={{
                 display: 'flex',
@@ -1828,10 +1836,10 @@ export default function BotMatchScreen({
                   ? 'Updating...'
                   : displayedFritzGlickoDelta != null && displayedFritzNewGlickoRating != null
                     ? `${displayedFritzGlickoDelta >= 0 ? '+' : ''}${displayedFritzGlickoDelta}  •  ${displayedFritzNewGlickoRating}`
-                  : displayedFritzNewGlickoRating != null
-                    ? `${displayedFritzNewGlickoRating}`
+                  : fritzNewGlickoRating != null
+                    ? `${fritzNewGlickoRating}`
                   : ghostResultError
-                    ? 'Update failed'
+                    ? 'Syncing...'
                     : 'Updated'}
               </strong>
             </div>
