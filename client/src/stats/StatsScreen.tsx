@@ -98,14 +98,16 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           zIndex: 1901,
           pointerEvents: 'auto',
           width: 'min(760px, calc(100vw - 24px))',
+          maxHeight: 'min(92vh, 760px)',
           borderRadius: '16px',
           border: '1px solid rgba(236,252,245,0.2)',
           background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
           boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '18px',
+          padding: '16px',
           color: 'rgba(235,245,242,0.96)',
           display: 'grid',
-          gap: '14px',
+          gap: '12px',
+          overflow: 'hidden',
         }}
       >
         <div
@@ -130,20 +132,20 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           style={{
             display: 'grid',
             justifyItems: 'center',
-            gap: 8,
-            padding: '4px 0 2px',
+            gap: 6,
+            padding: '0 0 2px',
           }}
         >
           <div
             style={{
-              width: 72,
-              height: 72,
+              width: 62,
+              height: 62,
               borderRadius: '50%',
               display: 'grid',
               placeItems: 'center',
               background: 'linear-gradient(140deg, #34d399, #0ea5a3)',
               color: '#04211c',
-              fontSize: '2rem',
+              fontSize: '1.72rem',
               fontWeight: 800,
               letterSpacing: '0.02em',
               border: '1px solid rgba(236,252,245,0.34)',
@@ -152,7 +154,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           >
             {(profile?.username?.[0] ?? user?.email?.[0] ?? 'G').toUpperCase()}
           </div>
-          <strong style={{ fontSize: '1.08rem' }}>
+          <strong style={{ fontSize: '1rem' }}>
             {profile?.username ? `@${profile.username}` : user?.email ?? 'Guest'}
           </strong>
           {stats.ghostRating != null && (
@@ -167,7 +169,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
               👻 {stats.ghostRating}
             </span>
           )}
-          <span style={{ fontSize: '0.8rem', color: 'rgba(188, 212, 222, 0.72)', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: '0.8rem', color: 'rgba(188, 212, 222, 0.72)', letterSpacing: '0.04em' }}>
             Member
           </span>
         </div>
@@ -175,25 +177,25 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
         {rankingProfile && (
           <div
             style={{
-              padding: '16px',
+              padding: '14px 16px',
               borderRadius: '12px',
               background: 'rgba(20, 28, 45, 0.72)',
               border: '1px solid rgba(236, 252, 245, 0.12)',
               display: 'grid',
-              gap: '10px',
+              gap: '8px',
               position: 'relative',
               overflow: 'hidden'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-               <span style={{ fontSize: '0.86rem', color: 'rgba(191,213,223,0.86)', fontWeight: 600 }}>Ranked Rating</span>
+               <span style={{ fontSize: '0.82rem', color: 'rgba(191,213,223,0.86)', fontWeight: 600 }}>Ranked Rating</span>
                {rankingProfile.rank && (
                  <span style={{ fontSize: '0.82rem', color: '#34d399', fontWeight: 700 }}>#{rankingProfile.rank} globally</span>
                )}
             </div>
             
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-               <span style={{ fontSize: '2.2rem', fontWeight: 800, color: '#fefefe', lineHeight: 1 }}>
+               <span style={{ fontSize: '1.95rem', fontWeight: 800, color: '#fefefe', lineHeight: 1 }}>
                  {Math.round(rankingProfile.glicko_rating).toLocaleString()}
                </span>
                {rankingProfile.provisional && (

@@ -31,7 +31,16 @@ import {
 } from './tournament/tournament';
 import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 import { supabaseFetch } from './supabaseUtils';
-import { DEFAULT_RATING, DEFAULT_RD, FRITZ_SYSTEM_ID, isFritzId } from './ranking/glicko2';
+import {
+  DEFAULT_RATING,
+  DEFAULT_RD,
+  FRITZ_ELITE_ID,
+  FRITZ_MASTER_ID,
+  FRITZ_ROOKIE_ID,
+  FRITZ_STANDARD_ID,
+  FRITZ_SYSTEM_ID,
+  isFritzId,
+} from './ranking/glicko2';
 import { startRankingCron } from './ranking/cron';
 import { getLeaderboard, processRatingPeriod, processRealtimeMultiplayerGame } from './ranking/periodService';
 
@@ -58,6 +67,10 @@ async function getAuthenticatedUserId(req: express.Request): Promise<string | nu
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   const token = match?.[1]?.trim();
+  return getAuthenticatedUserIdFromToken(token ?? null);
+}
+
+async function getAuthenticatedUserIdFromToken(token: string | null): Promise<string | null> {
   if (!token) return null;
 
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -676,7 +689,7 @@ app.post('/bot-matches/cleanup-stale', async (_req, res) => {
   try {
     const threshold = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const staleRows = await supabaseFetch<any[]>(
-      `/rest/v1/bot_match_pending?select=id,user_id,room_code,started_at,resolved&resolved=eq.false&started_at=lt.${encodeURIComponent(threshold)}&order=started_at.asc`,
+      `/rest/v1/bot_match_pending?select=id,user_id,room_code,fritz_tier,started_at,resolved&resolved=eq.false&started_at=lt.${encodeURIComponent(threshold)}&order=started_at.asc`,
     );
 
     let processed = 0;
@@ -686,7 +699,7 @@ app.post('/bot-matches/cleanup-stale', async (_req, res) => {
         method: 'PATCH',
         body: JSON.stringify({ resolved: true }),
       });
-      await recordPendingFritzDisconnectLoss(row.user_id);
+      await recordPendingFritzDisconnectLoss(row.user_id, row.fritz_tier);
       processed += 1;
     }
 
@@ -757,6 +770,14 @@ function getPendingFritzMatchContext(room: Room): { realPlayer: RoomPlayer; frit
   };
 }
 
+function getFritzIdentityForTier(rawTier: unknown): { fritzId: string; gameType: string } {
+  const tier = typeof rawTier === 'string' ? rawTier.trim().toLowerCase() : '';
+  if (tier === 'rookie') return { fritzId: FRITZ_ROOKIE_ID, gameType: 'fritz_rookie' };
+  if (tier === 'standard') return { fritzId: FRITZ_STANDARD_ID, gameType: 'fritz_standard' };
+  if (tier === 'master') return { fritzId: FRITZ_MASTER_ID, gameType: 'fritz_elite' };
+  return { fritzId: FRITZ_ELITE_ID, gameType: 'fritz_elite' };
+}
+
 async function insertPendingFritzMatch(room: Room) {
   const pendingContext = getPendingFritzMatchContext(room);
   if (!pendingContext) return;
@@ -783,22 +804,23 @@ async function resolvePendingFritzMatch(roomCode: string) {
   );
 }
 
-async function recordPendingFritzDisconnectLoss(userId: string) {
+async function recordPendingFritzDisconnectLoss(userId: string, fritzTier: unknown = 'elite') {
   const profileRows = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
   const profile = profileRows?.[0];
   if (!profile) {
     throw new Error(`Ranking profile not found for user ${userId}`);
   }
+  const { fritzId, gameType } = getFritzIdentityForTier(fritzTier);
 
   await supabaseFetch('/rest/v1/ranked_games', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
       player_id: userId,
-      opponent_id: FRITZ_SYSTEM_ID,
+      opponent_id: fritzId,
       player_score: 0,
       opponent_score: 60,
-      game_type: 'fritz',
+      game_type: gameType,
       rating_before: profile.glicko_rating,
       rd_before: profile.glicko_rd,
       played_at: new Date().toISOString(),
@@ -807,6 +829,119 @@ async function recordPendingFritzDisconnectLoss(userId: string) {
 
   await processRatingPeriod(userId);
 }
+
+app.post('/api/bot-matches/local/start', async (req, res) => {
+  const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+  const fritzTier = typeof req.body?.fritzTier === 'string' ? req.body.fritzTier.trim().toLowerCase() : 'elite';
+  const localMatchId = typeof req.body?.localMatchId === 'string' ? req.body.localMatchId.trim() : '';
+  if (!userId || !localMatchId) {
+    res.status(400).json({ error: 'userId and localMatchId are required.' });
+    return;
+  }
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const roomCode = `local:${localMatchId}`;
+    const existing = await supabaseFetch<any[]>(
+      `/rest/v1/bot_match_pending?select=id&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&limit=1`,
+    );
+    if (!existing?.[0]?.id) {
+      await supabaseFetch('/rest/v1/bot_match_pending', {
+        method: 'POST',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          user_id: userId,
+          fritz_tier: fritzTier,
+          room_code: roomCode,
+          resolved: false,
+        }),
+      });
+    }
+    res.json({ ok: true, roomCode });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to start pending bot match.',
+    });
+  }
+});
+
+app.post('/api/bot-matches/local/resolve', async (req, res) => {
+  const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+  const localMatchId = typeof req.body?.localMatchId === 'string' ? req.body.localMatchId.trim() : '';
+  if (!userId || !localMatchId) {
+    res.status(400).json({ error: 'userId and localMatchId are required.' });
+    return;
+  }
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const roomCode = `local:${localMatchId}`;
+    await supabaseFetch(`/rest/v1/bot_match_pending?room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false`, {
+      method: 'PATCH',
+      body: JSON.stringify({ resolved: true }),
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to resolve pending bot match.',
+    });
+  }
+});
+
+app.post('/api/bot-matches/local/abandon', async (req, res) => {
+  const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+  const localMatchId = typeof req.body?.localMatchId === 'string' ? req.body.localMatchId.trim() : '';
+  const bodyToken = typeof req.body?.accessToken === 'string' ? req.body.accessToken.trim() : '';
+  if (!userId || !localMatchId) {
+    res.status(400).json({ error: 'userId and localMatchId are required.' });
+    return;
+  }
+  try {
+    const authenticatedUserId =
+      (await getAuthenticatedUserId(req)) || (await getAuthenticatedUserIdFromToken(bodyToken || null));
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const roomCode = `local:${localMatchId}`;
+    const pendingRows = await supabaseFetch<any[]>(
+      `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
+    );
+    const pending = pendingRows?.[0];
+    if (!pending?.id) {
+      res.json({ ok: true, processed: false });
+      return;
+    }
+    await supabaseFetch(`/rest/v1/bot_match_pending?id=eq.${pending.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ resolved: true }),
+    });
+    await recordPendingFritzDisconnectLoss(userId, pending.fritz_tier);
+    res.json({ ok: true, processed: true });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to abandon bot match.',
+    });
+  }
+});
 
 function getRoomPlayersWithFallback(roomCode: string, socketIds: string[]): RoomPlayer[] {
   const existing = roomPlayersByCode.get(roomCode) ?? [];
@@ -2240,7 +2375,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
       void (async () => {
         try {
           const pendingRows = await supabaseFetch<any[]>(
-            `/rest/v1/bot_match_pending?room_code=eq.${roomCode}&user_id=eq.${userId}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
+            `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${roomCode}&user_id=eq.${userId}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
           );
           const pending = pendingRows?.[0];
           if (!pending?.id) return;
@@ -2249,7 +2384,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
             method: 'PATCH',
             body: JSON.stringify({ resolved: true }),
           });
-          await recordPendingFritzDisconnectLoss(userId);
+          await recordPendingFritzDisconnectLoss(userId, pending.fritz_tier);
         } catch (error) {
           console.error('[Fritz] disconnect loss handling failed:', error);
         }

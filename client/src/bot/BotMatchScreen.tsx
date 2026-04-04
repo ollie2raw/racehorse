@@ -62,6 +62,7 @@ import {
   playYourTurnSound,
   queueSound,
 } from '../utils/sound';
+import { supabase } from '../lib/supabase';
 import './botMatch.css';
 
 interface BotMatchScreenProps {
@@ -80,6 +81,7 @@ interface BotMatchScreenProps {
   onGhostProfileChange?: ((summary: GhostProfileSummary | null) => void) | null;
   onProfileRefresh?: (() => Promise<void> | void) | null;
   onProfilePatch?: ((patch: { glicko_rating?: number | null }) => void) | null;
+  resumeKey?: string | null;
   onMatchComplete?: ((result: {
     winner: 'you' | 'bot' | null;
     yourScore: number;
@@ -171,6 +173,21 @@ function toastFromResult(result: BotActionResult, opponentLabel: string): string
   return '';
 }
 
+function moveEntriesToGhostMoveLog(entries: MoveEntry[]): GhostMoveLogEntry[] {
+  return entries
+    .filter((entry) => entry.player === 'you')
+    .map((entry) => ({
+      turn: entry.moveNumber,
+      actor: 'you',
+      board_state: serializeGhostBoardState(entry.boardRenderState),
+      tile_played: entry.action === 'place' && entry.tile ? `${entry.tile[0]}|${entry.tile[1]}` : null,
+      branch: entry.action === 'draw' ? 'draw' : entry.action === 'pass' ? 'pass' : entry.action === 'place' && entry.tile ? (entry.boardState.find(s => s.tile[0] === entry.tile![0] && s.tile[1] === entry.tile![1])?.position ?? 'left') : null,
+      hand_before: entry.handBefore.map(([low, high]) => `${low}|${high}`),
+      score_delta: entry.pointsScored,
+      forced_draw: entry.action === 'draw',
+    }));
+}
+
 export default function BotMatchScreen({
   onBack,
   dealSize,
@@ -187,15 +204,55 @@ export default function BotMatchScreen({
   onGhostProfileChange = null,
   onProfileRefresh = null,
   onProfilePatch = null,
+  resumeKey = null,
   onMatchComplete = null,
 }: BotMatchScreenProps) {
+  const LEAGUE_MATCH_META_KEY = 'racehorse:league-match-meta';
+  const leagueResumeStorageKey = resumeKey ? `racehorse:league-match:${resumeKey}` : null;
+  const resolveServerBaseUrl = () => {
+    const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim() ?? '';
+    if (configured) return configured.replace(/\/$/, '');
+    if (typeof window !== 'undefined' && window.location.port === '5173') return '';
+    return 'http://localhost:3001';
+  };
+  const createLocalMatchId = () =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const loadPersistedLeagueMatch = () => {
+    if (!leagueResumeStorageKey || typeof window === 'undefined') return null;
+    try {
+      const raw = window.sessionStorage.getItem(leagueResumeStorageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        resumeKey?: string;
+        mode?: 'bot' | 'ghost';
+        opponentName?: string;
+        winningScore?: number;
+        dealSize?: number;
+        match?: BotMatchState;
+        movesUsed?: number;
+        moveLog?: MoveEntry[];
+        ghostMoveLog?: GhostMoveLogEntry[];
+        ghostProfile?: GhostProfileSummary | null;
+        matchStartGlickoRating?: number | null;
+      };
+      if (parsed.resumeKey !== resumeKey || !parsed.match) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+  const initialPersistedLeagueMatch = loadPersistedLeagueMatch();
   const DRAW_STEP_MS = 700;
   const fritzConfig = FRITZ_TIERS[fritzTier];
   const rootRef = useRef<HTMLDivElement>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
-  const [match, setMatch] = useState<BotMatchState>(() => createBotMatch(winningScore, dealSize));
+  const [match, setMatch] = useState<BotMatchState>(
+    () => initialPersistedLeagueMatch?.match ?? createBotMatch(winningScore, dealSize),
+  );
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState('');
@@ -214,12 +271,12 @@ export default function BotMatchScreen({
   });
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const [movesUsed, setMovesUsed] = useState(0);
+  const [movesUsed, setMovesUsed] = useState(initialPersistedLeagueMatch?.movesUsed ?? 0);
   const [dailyLeaderboard, setDailyLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
   const [dailyLeaderboardError, setDailyLeaderboardError] = useState<string | null>(null);
-  const [moveLog, setMoveLog] = useState<MoveEntry[]>([]);
-  const [ghostMoveLog, setGhostMoveLog] = useState<GhostMoveLogEntry[]>([]);
+  const [moveLog, setMoveLog] = useState<MoveEntry[]>(initialPersistedLeagueMatch?.moveLog ?? []);
+  const [ghostMoveLog, setGhostMoveLog] = useState<GhostMoveLogEntry[]>(initialPersistedLeagueMatch?.ghostMoveLog ?? []);
   const [handTileSize, setHandTileSize] = useState(56);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
@@ -239,8 +296,13 @@ export default function BotMatchScreen({
   const [ghostResultLoading, setGhostResultLoading] = useState(false);
   const [ghostResultError, setGhostResultError] = useState<string | null>(null);
   const [matchStartGlickoRating, setMatchStartGlickoRating] = useState<number | null>(
-    currentGlickoRating != null ? Number(currentGlickoRating) : null,
+    initialPersistedLeagueMatch?.matchStartGlickoRating != null
+      ? Number(initialPersistedLeagueMatch.matchStartGlickoRating)
+      : currentGlickoRating != null
+        ? Number(currentGlickoRating)
+        : null,
   );
+  const [activeLocalMatchId, setActiveLocalMatchId] = useState<string>(createLocalMatchId);
   const dailyResultSyncKeyRef = useRef('');
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -254,8 +316,13 @@ export default function BotMatchScreen({
   const botChainPauseRef = useRef(false);
   const matchRef = useRef(match);
   const prevTurnRef = useRef<BotPlayerId>(match.currentPlayer);
+  const localPendingRegisteredRef = useRef(false);
+  const localPendingResolvedRef = useRef(false);
+  const accessTokenRef = useRef<string | null>(null);
   const isGhostMode = mode === 'ghost';
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
+  const isLeagueMatch = Boolean(onMatchComplete && resumeKey);
+  const isStandaloneFritzMatch = Boolean(userId && !isGhostMode && !isDailyPuzzleRun && !onMatchComplete);
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
@@ -273,6 +340,55 @@ export default function BotMatchScreen({
         return false;
       }
     })(),
+  );
+
+  const clearPersistedLeagueMatch = useCallback(() => {
+    if (!leagueResumeStorageKey || typeof window === 'undefined') return;
+    window.sessionStorage.removeItem(leagueResumeStorageKey);
+    window.sessionStorage.removeItem(LEAGUE_MATCH_META_KEY);
+  }, [leagueResumeStorageKey]);
+
+  const postLocalBotMatch = useCallback(
+    async (
+      path: '/api/bot-matches/local/start' | '/api/bot-matches/local/resolve' | '/api/bot-matches/local/abandon',
+      body: Record<string, unknown>,
+      options?: { keepalive?: boolean },
+    ) => {
+      const response = await fetch(`${resolveServerBaseUrl()}${path}`, {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: options?.keepalive ?? false,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessTokenRef.current ? { Authorization: `Bearer ${accessTokenRef.current}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(text || `${path} failed with ${response.status}`);
+      }
+    },
+    [],
+  );
+
+  const abandonStandaloneFritzMatch = useCallback(
+    async (useBeacon = false) => {
+      if (!isStandaloneFritzMatch || !userId || localPendingResolvedRef.current) return;
+      const payload = {
+        userId,
+        localMatchId: activeLocalMatchId,
+        accessToken: accessTokenRef.current,
+      };
+      localPendingResolvedRef.current = true;
+      if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(`${resolveServerBaseUrl()}/api/bot-matches/local/abandon`, blob);
+        return;
+      }
+      await postLocalBotMatch('/api/bot-matches/local/abandon', payload, { keepalive: true });
+    },
+    [activeLocalMatchId, isStandaloneFritzMatch, postLocalBotMatch, userId],
   );
 
   const [uiTheme, setUiTheme] = useState<'green' | 'brown'>(() => {
@@ -474,6 +590,9 @@ export default function BotMatchScreen({
   };
 
   const startFreshMatch = () => {
+    clearPersistedLeagueMatch();
+    localPendingRegisteredRef.current = false;
+    localPendingResolvedRef.current = false;
     setSelectedTile(null);
     flashLastPlayed(null);
     setLastBotChoice(null);
@@ -504,6 +623,7 @@ export default function BotMatchScreen({
           ? Number(ghostResult.glickoRating)
           : matchStartGlickoRating,
     );
+    setActiveLocalMatchId(createLocalMatchId());
     setMatch(createBotMatch(winningScore, dealSize));
   };
 
@@ -513,6 +633,109 @@ export default function BotMatchScreen({
     if (matchStartGlickoRating != null) return;
     setMatchStartGlickoRating(Number(currentGlickoRating));
   }, [currentGlickoRating, match.gameOver, matchStartGlickoRating]);
+
+  useEffect(() => {
+    matchRef.current = match;
+  }, [match]);
+
+  useEffect(() => {
+    if (!isLeagueMatch || !leagueResumeStorageKey || typeof window === 'undefined') return;
+    if (match.gameOver) {
+      clearPersistedLeagueMatch();
+      return;
+    }
+    const payload = {
+      resumeKey,
+      mode,
+      opponentName,
+      winningScore,
+      dealSize,
+      match,
+      movesUsed,
+      moveLog,
+      ghostMoveLog,
+      ghostProfile,
+      matchStartGlickoRating,
+    };
+    window.sessionStorage.setItem(leagueResumeStorageKey, JSON.stringify(payload));
+    window.sessionStorage.setItem(
+      LEAGUE_MATCH_META_KEY,
+      JSON.stringify({
+        resumeKey,
+        mode,
+        ghostProfile,
+      }),
+    );
+  }, [
+    clearPersistedLeagueMatch,
+    dealSize,
+    ghostMoveLog,
+    ghostProfile,
+    isLeagueMatch,
+    leagueResumeStorageKey,
+    match,
+    matchStartGlickoRating,
+    mode,
+    moveLog,
+    movesUsed,
+    opponentName,
+    resumeKey,
+    winningScore,
+  ]);
+
+  useEffect(() => {
+    if (!isStandaloneFritzMatch || !userId) return;
+    let cancelled = false;
+    void (async () => {
+      if (supabase) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          accessTokenRef.current = data.session?.access_token ?? null;
+        } catch {
+          accessTokenRef.current = null;
+        }
+      }
+      if (cancelled || localPendingRegisteredRef.current || match.gameOver) return;
+      try {
+        await postLocalBotMatch('/api/bot-matches/local/start', {
+          userId,
+          fritzTier,
+          localMatchId: activeLocalMatchId,
+        });
+        localPendingRegisteredRef.current = true;
+      } catch (err) {
+        console.warn('[Fritz Pending] start failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLocalMatchId, fritzTier, isStandaloneFritzMatch, match.gameOver, postLocalBotMatch, userId]);
+
+  useEffect(() => {
+    if (!isStandaloneFritzMatch || !userId || !match.gameOver || localPendingResolvedRef.current === true) return;
+    void postLocalBotMatch('/api/bot-matches/local/resolve', {
+      userId,
+      localMatchId: activeLocalMatchId,
+    })
+      .then(() => {
+        localPendingResolvedRef.current = true;
+      })
+      .catch((err) => {
+        console.warn('[Fritz Pending] resolve failed', err);
+      });
+  }, [activeLocalMatchId, isStandaloneFritzMatch, match.gameOver, postLocalBotMatch, userId]);
+
+  useEffect(() => {
+    if (!isStandaloneFritzMatch || match.gameOver) return;
+    const handlePageHide = () => {
+      void abandonStandaloneFritzMatch(true);
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [abandonStandaloneFritzMatch, isStandaloneFritzMatch, match.gameOver]);
 
   useEffect(() => {
     if (!match.gameOver || match.winnerId !== 'you') return;
@@ -594,6 +817,7 @@ export default function BotMatchScreen({
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
       moveLog: ghostMoveLog,
+      playerMoveLog: !isGhostMode ? moveEntriesToGhostMoveLog(moveLog) : undefined,
     })
       .then((result) => {
         console.log('[Fritz Rating] success:', result);
@@ -2107,7 +2331,21 @@ export default function BotMatchScreen({
                 Cancel
               </button>
               <button
-                onClick={onBack}
+                onClick={() => {
+                  clearPersistedLeagueMatch();
+                  if (isStandaloneFritzMatch && !match.gameOver) {
+                    void abandonStandaloneFritzMatch()
+                      .catch((err) => {
+                        console.warn('[Fritz Pending] abandon failed', err);
+                      })
+                      .finally(() => {
+                        void Promise.resolve(onProfileRefresh?.()).catch(() => {});
+                        onBack();
+                      });
+                    return;
+                  }
+                  onBack();
+                }}
                 style={{
                   flex: 1,
                   background: 'rgba(180,40,40,0.25)',

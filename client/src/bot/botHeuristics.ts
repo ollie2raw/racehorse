@@ -8,6 +8,8 @@
  * v3.5: deadlineMs propagated into minimax itself (single branch can't overrun);
  *       done() uses typed overloads — no brittle as-casts anywhere
  * v3.6: master difficulty uses sampled-hand endgame search (fair IS-MCTS style)
+ * v3.7: master gets elevated MC samples (20 vs 8), wider chain search, two-ply
+ *       worst-case wrapper enabled, endgame IS-MCTS threshold raised 8 → 12 tiles
  */
 
 import type { Move, Tile } from '../types.ts';
@@ -393,8 +395,16 @@ interface ChainNode {
   drawCostAccum: number;
 }
 
-function dynamicChainParams(botHandSize: number, totalTiles: number): { depth: number; width: number } {
-  // Expand search in smaller/tighter states where exact ordering matters more.
+function dynamicChainParams(
+  botHandSize: number,
+  totalTiles: number,
+  isMaster: boolean = false,
+): { depth: number; width: number } {
+  if (isMaster) {
+    if (botHandSize <= 6 || totalTiles <= 12) return { depth: 8, width: 6 };
+    if (botHandSize <= 8 || totalTiles <= 16) return { depth: 7, width: 5 };
+    return { depth: 6, width: 4 };
+  }
   if (botHandSize <= 6 || totalTiles <= 12) return { depth: 7, width: 5 };
   if (botHandSize <= 8 || totalTiles <= 16) return { depth: 6, width: 4 };
   return { depth: CHAIN_TREE_DEPTH, width: CHAIN_TREE_WIDTH };
@@ -1221,6 +1231,7 @@ function mcEvaluateMove(
   state: BotMatchState,
   pool: Tile[],
   holdWeights: Map<string, number>,
+  mcSamples: number = MC_SAMPLES,
 ): number {
   const botScore = state.players.bot.score;
   const youScore = state.players.you.score;
@@ -1231,7 +1242,11 @@ function mcEvaluateMove(
   if (botScore + preview.immediateScore >= WIN_TARGET) return 1_000_000;
 
   const totalTiles = state.players.bot.hand.length + getOpponentTileCount(state);
-  const { depth, width } = dynamicChainParams(state.players.bot.hand.length, totalTiles);
+  const { depth, width } = dynamicChainParams(
+    state.players.bot.hand.length,
+    totalTiles,
+    mcSamples > MC_SAMPLES,
+  );
   const chain = searchChainTree(state, move, depth, width);
   if (!chain) return -Infinity;
 
@@ -1258,7 +1273,7 @@ function mcEvaluateMove(
     youProximity >= 0.5  ? 1.2 : 1.0;
 
   const youHandSize = getOpponentTileCount(state);
-  const sampledHands = sampleOpponentHands(pool, holdWeights, youHandSize, MC_SAMPLES);
+  const sampledHands = sampleOpponentHands(pool, holdWeights, youHandSize, mcSamples);
 
   let totalThreat = 0;
   let totalThreatBefore = 0;
@@ -1439,10 +1454,11 @@ export function chooseBotMove(
   // Master endgame: sample plausible opponent hands from the unseen pool,
   // run full-information minimax on each sampled state, then vote on the
   // best move. This preserves fairness while restoring strong late-game play.
-  if (difficulty === 'master' && totalTiles <= ENDGAME_TILE_THRESHOLD) {
-    const SAMPLE_COUNT = 10;
+  const masterEndgameThreshold = 12;
+  if (difficulty === 'master' && totalTiles <= masterEndgameThreshold) {
+    const SAMPLE_COUNT = 16;
     const depth = endgameDepth(totalTiles);
-    const deadlineMs = performance.now() + 150;
+    const deadlineMs = performance.now() + 200;
     const moveVotes = new Map<Move, number>();
 
     const sampledHands = sampleOpponentHands(pool, weights, getOpponentTileCount(state), SAMPLE_COUNT);
@@ -1557,7 +1573,7 @@ export function chooseBotMove(
     .map((move) => {
       const p = previewPlayMove(state, 'bot', move);
       const strategic = evaluateStrategicMove(state, move, weights);
-      const mc = mcEvaluateMove(move, state, pool, weights);
+      const mc = mcEvaluateMove(move, state, pool, weights, difficulty === 'master' ? 20 : MC_SAMPLES);
       return {
         move,
         strategic,
@@ -1592,7 +1608,7 @@ export function chooseBotMove(
   }
 
   // Phase B: Top-N 2-ply worst-case wrapper on strategic candidates.
-  if (ENABLE_TWO_PLY_WORST_CASE && prelim.length > 1) {
+  if ((ENABLE_TWO_PLY_WORST_CASE || difficulty === 'master') && prelim.length > 1) {
     const N = Math.min(5, prelim.length);
     const top = prelim.slice(0, N);
     for (const c of top) {

@@ -18,7 +18,7 @@ export default function LayoutScreen({
   children,
 }: LayoutScreenProps) {
   return (
-    <div className={`layout-screen${className ? ` ${className}` : ''}`}>
+    <div className={`layout-screen screen${className ? ` ${className}` : ''}`}>
       <div className="layout-screen-bg" aria-hidden="true" />
       <div className="layout-screen-beam" aria-hidden="true" />
       <div className="layout-screen-vignette" aria-hidden="true" />

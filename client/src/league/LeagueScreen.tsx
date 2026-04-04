@@ -27,6 +27,7 @@ const TOTAL_DIVISIONS = 3;
 const PROMOTION_SLOTS = 2;
 const RELEGATION_SLOTS = 2;
 const RELEGATION_START = 6;
+const LEAGUE_MATCH_META_KEY = 'racehorse:league-match-meta';
 
 type ResultChip = {
   code: ResultCode;
@@ -464,6 +465,31 @@ export default function LeagueScreen({ user, profile, onBack, onOpenLiveMatch }:
     };
   }, [state?.todaysOpponent, state?.members]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!state?.todaysFixture || stage !== 'hub') return;
+    try {
+      const raw = window.sessionStorage.getItem(LEAGUE_MATCH_META_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        resumeKey?: string;
+        mode?: 'ghost' | 'bot';
+        ghostProfile?: GhostProfileSummary | null;
+      };
+      if (parsed.resumeKey !== state.todaysFixture.id) return;
+      if (state.todaysFixture.status !== 'scheduled' && state.todaysFixture.status !== 'provisional') {
+        window.sessionStorage.removeItem(LEAGUE_MATCH_META_KEY);
+        window.sessionStorage.removeItem(`racehorse:league-match:${state.todaysFixture.id}`);
+        return;
+      }
+      setMatchMode(parsed.mode === 'ghost' ? 'ghost' : 'bot');
+      setGhostProfile(parsed.ghostProfile ?? null);
+      setStage('match');
+    } catch {
+      window.sessionStorage.removeItem(LEAGUE_MATCH_META_KEY);
+    }
+  }, [stage, state?.todaysFixture]);
+
   const derived = useMemo(() => {
     if (!state) return null;
     const memberById = new Map(state.members.map((member) => [member.id, member]));
@@ -704,7 +730,7 @@ export default function LeagueScreen({ user, profile, onBack, onOpenLiveMatch }:
 
   if (!user) {
     return (
-      <LayoutScreen className="screen mode-home-screen mode-subpage-screen mode-accent-league" badge="Your League" title="Sign In Required" subtitle="League Mode is tied to your account and season progression." contentClassName="screen-shell">
+      <LayoutScreen className="screen mode-subpage-screen mode-accent-league mode-auth-gate-screen" badge="Your League" title="Sign In Required" subtitle="League Mode is tied to your account and season progression." contentClassName="mode-auth-gate-content">
         <button className="mode-inline-btn" onClick={onBack}>Back to Home</button>
       </LayoutScreen>
     );
@@ -712,13 +738,13 @@ export default function LeagueScreen({ user, profile, onBack, onOpenLiveMatch }:
 
   if (loading) {
     return (
-      <LayoutScreen className="screen mode-home-screen mode-subpage-screen mode-accent-league" badge="Your League" title="Loading League" subtitle="Building your table and today’s fixture." contentClassName="screen-shell" />
+      <LayoutScreen className="screen mode-subpage-screen mode-accent-league" badge="Your League" title="Loading League" subtitle="Building your table and today’s fixture." contentClassName="" />
     );
   }
 
   if (error || !state || !derived) {
     return (
-      <LayoutScreen className="screen mode-home-screen mode-subpage-screen mode-accent-league" badge="Your League" title="League Unavailable" subtitle="Unable to load your current season." contentClassName="screen-shell">
+      <LayoutScreen className="screen mode-subpage-screen mode-accent-league" badge="Your League" title="League Unavailable" subtitle="Unable to load your current season." contentClassName="">
         {error ? <p className="auth-inline-error">{error}</p> : null}
         <div className="league-actions-inline">
           <button className="mode-inline-btn" onClick={() => void loadState()}>Retry</button>
@@ -730,7 +756,7 @@ export default function LeagueScreen({ user, profile, onBack, onOpenLiveMatch }:
 
   if (stage === 'history' && history) {
     return (
-      <LayoutScreen className="screen mode-home-screen mode-subpage-screen mode-accent-league league-screen" badge="Season History" title="League History" subtitle="Career performance across completed seasons." contentClassName="screen-shell">
+      <LayoutScreen className="screen mode-subpage-screen mode-accent-league league-screen" badge="Season History" title="League History" subtitle="Career performance across completed seasons." contentClassName="">
         <LeagueHistoryScreen history={history} onBack={() => setStage('hub')} />
       </LayoutScreen>
     );
@@ -745,6 +771,7 @@ export default function LeagueScreen({ user, profile, onBack, onOpenLiveMatch }:
         mode={matchMode}
         opponentName={state.todaysOpponent.displayName}
         ghostProfile={matchMode === 'ghost' ? ghostProfile : null}
+        resumeKey={state.todaysFixture.id}
         onMatchComplete={(result) => void handleMatchComplete(result)}
       />
     );
@@ -753,7 +780,7 @@ export default function LeagueScreen({ user, profile, onBack, onOpenLiveMatch }:
   if (stage === 'pre' && state.todaysOpponent) {
     const opponentStanding = state.standings.find((row) => row.memberId === state.todaysOpponent?.memberId) ?? null;
     return (
-      <LayoutScreen className="screen mode-home-screen mode-subpage-screen mode-accent-league league-screen" badge="Matchday Preview" title={state.todaysOpponent.displayName} subtitle="One match today. First to 30 wins the points." contentClassName="screen-shell">
+      <LayoutScreen className="screen mode-subpage-screen mode-accent-league league-screen" badge="Matchday Preview" title={state.todaysOpponent.displayName} subtitle="One match today. First to 30 wins the points." contentClassName="">
         <div className={`league-opponent-card ${state.todaysOpponent.isFritz ? 'is-fritz' : ''}`}>
           <div className="league-opponent-hero">
             <div>
@@ -822,7 +849,7 @@ export default function LeagueScreen({ user, profile, onBack, onOpenLiveMatch }:
       return Math.abs(row.position - postMatch.currentPosition) <= 1;
     });
     return (
-      <LayoutScreen className="screen mode-home-screen mode-subpage-screen mode-accent-league league-screen" badge="Match Result" title={postMatch.winner === 'you' ? 'Full-Time Win' : postMatch.winner === 'bot' ? `${todaysOpponentName} Took It` : 'Points Shared'} subtitle={postMatch.isProvisional ? 'Table updated from the current provisional async result.' : 'Table updated from the final match result.'} contentClassName="screen-shell">
+      <LayoutScreen className="screen mode-subpage-screen mode-accent-league league-screen" badge="Match Result" title={postMatch.winner === 'you' ? 'Full-Time Win' : postMatch.winner === 'bot' ? `${todaysOpponentName} Took It` : 'Points Shared'} subtitle={postMatch.isProvisional ? 'Table updated from the current provisional async result.' : 'Table updated from the final match result.'} contentClassName="">
         <div className="league-post-card league-post-card-rich">
           <div className="league-score-banner">
             <div className="league-scoreline is-big"><span>{profile?.username ? `@${profile.username}` : 'You'}</span><strong>{postMatch.yourScore}</strong></div>
@@ -880,7 +907,7 @@ export default function LeagueScreen({ user, profile, onBack, onOpenLiveMatch }:
   }
 
   return (
-    <LayoutScreen className="screen mode-home-screen mode-subpage-screen mode-accent-league league-screen" badge="Your League" title={`Division ${state.league.division}`} subtitle={`Season ends in ${seasonEndsIn} day${seasonEndsIn === 1 ? '' : 's'}`} contentClassName="screen-shell">
+    <LayoutScreen className="screen mode-subpage-screen mode-accent-league league-screen" badge="Your League" title={`Division ${state.league.division}`} subtitle={`Season ends in ${seasonEndsIn} day${seasonEndsIn === 1 ? '' : 's'}`} contentClassName="">
       <div className="league-help-corner">
         <button
           type="button"

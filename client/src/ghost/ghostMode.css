@@ -1,26 +1,33 @@
 .ghost-setup-content {
   gap: 18px;
-  max-width: 1100px;
+  max-width: 1320px;
   margin: 0 auto;
 }
 
 .ghost-setup-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 24px;
-  align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
 }
 
 .ghost-setup-left-col {
   display: grid;
   gap: 18px;
+  height: 100%;
+}
+
+.ghost-setup-middle-col {
+  display: grid;
+  gap: 18px;
+  height: 100%;
 }
 
 .ghost-setup-right-col {
   display: grid;
   gap: 18px;
-  position: sticky;
-  top: 0;
+  height: 100%;
+  grid-template-rows: 1fr auto;
 }
 
 .ghost-setup-actions {
@@ -39,8 +46,15 @@
   .ghost-setup-grid {
     grid-template-columns: 1fr;
   }
+
+  .ghost-setup-left-col,
+  .ghost-setup-middle-col,
   .ghost-setup-right-col {
-    position: static;
+    height: auto;
+  }
+
+  .ghost-setup-right-col {
+    grid-template-rows: auto;
   }
 }
 
@@ -54,6 +68,14 @@
     radial-gradient(circle at top right, rgba(142, 109, 255, 0.14), transparent 34%),
     linear-gradient(160deg, rgba(20, 20, 40, 0.92), rgba(12, 12, 24, 0.94));
   box-shadow: 0 20px 44px rgba(8, 8, 20, 0.32);
+}
+
+.ghost-setup-left-col > .ghost-explainer-panel,
+.ghost-setup-middle-col > .ghost-setup-panel,
+.ghost-setup-middle-col > .ghost-locked-panel,
+.ghost-setup-right-col > .ghost-friend-selector {
+  height: 100%;
+  align-content: start;
 }
 
 .ghost-setup-panel h3,
@@ -127,6 +149,12 @@
   color: #c7b4ff;
 }
 
+.ghost-setup-panel .ghost-sparkline,
+.ghost-locked-panel .ghost-sparkline {
+  width: 100%;
+  max-width: 100%;
+}
+
 .ghost-friend-selector {
   display: grid;
   gap: 10px;
@@ -137,8 +165,8 @@
 }
 
 .ghost-friend-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -152,6 +180,8 @@
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 0.9rem;
+  width: 100%;
+  text-align: center;
 }
 
 .ghost-friend-btn-featured {
@@ -229,4 +259,245 @@
 .ghost-setup-note {
   color: rgba(224, 216, 246, 0.78);
   font-size: 0.92rem;
+}
+
+.ghost-explainer-panel {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(142, 109, 255, 0.15);
+  background:
+    radial-gradient(circle at top left, rgba(142, 109, 255, 0.16), transparent 42%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.ghost-explainer-title {
+  margin: 0;
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  line-height: 1.15;
+  font-weight: 800;
+  color: rgba(248, 244, 255, 0.98);
+}
+
+.ghost-explainer-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.ghost-explainer-step {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ghost-explainer-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(142, 109, 255, 0.22);
+  border: 1px solid rgba(142, 109, 255, 0.35);
+  color: rgba(248, 244, 255, 0.98);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.ghost-explainer-step-title {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.2;
+  font-weight: 700;
+  color: rgba(248, 244, 255, 0.96);
+}
+
+.ghost-explainer-step-copy {
+  margin: 4px 0 0;
+  font-size: 0.96rem;
+  line-height: 1.45;
+  color: rgba(230, 224, 246, 0.82);
+}
+
+.ghost-explainer-callout {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(142, 109, 255, 0.12);
+  border: 1px solid rgba(142, 109, 255, 0.26);
+  color: rgba(244, 238, 255, 0.96);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.ghost-explainer-text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: rgba(224, 216, 246, 0.82);
+}
+
+.ghost-explainer-text strong {
+  color: rgba(244, 238, 255, 0.95);
+  font-weight: 650;
+}
+
+.ghost-tier-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ghost-tier-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease;
+}
+
+.ghost-tier-pill.active {
+  border-color: rgba(142, 109, 255, 0.45);
+  color: rgba(199, 180, 255, 0.9);
+  background: rgba(142, 109, 255, 0.12);
+}
+
+.ghost-locked-panel {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(142, 109, 255, 0.2);
+  background: radial-gradient(circle at top left, rgba(142, 109, 255, 0.08), transparent 60%),
+    rgba(255, 255, 255, 0.02);
+}
+
+.ghost-locked-title {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.15;
+  font-weight: 800;
+  color: rgba(244, 238, 255, 0.95);
+}
+
+.ghost-locked-sub {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: rgba(224, 216, 246, 0.7);
+}
+
+.ghost-locked-sub strong {
+  color: rgba(244, 238, 255, 0.96);
+  font-weight: 800;
+}
+
+.ghost-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.ghost-progress-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.ghost-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #8e6dff, #c7b4ff);
+  transition: width 0.4s ease;
+}
+
+.ghost-progress-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: rgba(199, 180, 255, 0.9);
+  white-space: nowrap;
+}
+
+.ghost-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.ghost-tier-badge--early {
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: rgba(253, 224, 132, 0.9);
+}
+
+.ghost-tier-badge--trained {
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: rgba(110, 231, 183, 0.9);
+}
+
+.ghost-confidence-ring {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.ghost-ring-svg {
+  width: 52px;
+  height: 52px;
+}
+
+.ghost-ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(199, 180, 255, 0.9);
+}
+
+.ghost-friend-btn-coming-soon {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+@media (max-width: 900px) {
+  .ghost-explainer-title {
+    font-size: 1.25rem;
+  }
+
+  .ghost-explainer-step {
+    grid-template-columns: 32px 1fr;
+    padding: 10px 12px;
+  }
+
+  .ghost-explainer-step-num {
+    width: 32px;
+    height: 32px;
+    font-size: 0.92rem;
+  }
+
+  .ghost-friend-list {
+    grid-template-columns: 1fr;
+  }
 }

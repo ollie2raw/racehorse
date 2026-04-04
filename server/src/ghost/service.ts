@@ -525,7 +525,9 @@ function analyzeGameStyle(game: GhostGameRow): GhostGameStyleSnapshot | null {
 
   if (playCount === 0) return null;
 
-  const perHandTotals = Array.from(handScores.values());
+  const avgPerTurn = playCount > 0 ? totalPoints / playCount : 0;
+  const aboveAvgTurns = Array.from(handScores.values()).filter((score) => score >= avgPerTurn).length;
+  const consistency = handScores.size > 0 ? aboveAvgTurns / handScores.size : 0;
   return {
     gameId: game.id,
     playedAt: game.played_at,
@@ -550,7 +552,7 @@ function analyzeGameStyle(game: GhostGameRow): GhostGameStyleSnapshot | null {
         ? 0.5
         : attackIncreases / (attackIncreases + attackClosures),
     ),
-    consistency: roundMetric(variance(perHandTotals)),
+    consistency: roundMetric(consistency),
   };
 }
 
@@ -701,8 +703,8 @@ export function computeFritzRatingChange(
 
 export async function getGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
   const profile = await ensureGhostProfile(userId);
-  const recentGames = await fetchRecentGhostGames(userId, 5);
-  const styleGames = await fetchRecentGhostGames(userId, 20);
+  const recentGames = await fetchRecentGhostGames(userId, 20);
+  const styleGames = await fetchRecentGhostGames(userId, 50);
   const compositeLog = recentGames.length > 0 ? buildCompositeLog(recentGames, styleGames) : null;
   const styleProfile = compositeLog
     ? buildStyleProfileFromSnapshots(compositeLog.recentGameStyles)
@@ -739,6 +741,7 @@ export async function completeGhostGame(params: {
   finalScore: number;
   opponentScore: number;
   moveLog: GhostMoveLogEntry[];
+  playerMoveLog?: GhostMoveLogEntry[];
   opponentUserId?: string | null;
 }): Promise<{
   newRating: number;
@@ -759,6 +762,12 @@ export async function completeGhostGame(params: {
     params.opponentUserId && params.opponentUserId !== params.userId
       ? await fetchGhostProfile(params.opponentUserId)
       : null;
+  const isFritz = Boolean(params.opponentUserId && isFritzId(params.opponentUserId));
+  const trainingMoveLog = normalizeMoveLog(
+    isFritz && Array.isArray(params.playerMoveLog) && params.playerMoveLog.length > 0
+      ? params.playerMoveLog
+      : params.moveLog,
+  );
 
   await supabaseFetch<GhostGameRow[]>(`/rest/v1/ghost_games`, {
     method: 'POST',
@@ -767,17 +776,16 @@ export async function completeGhostGame(params: {
         user_id: params.userId,
         final_score: Math.round(params.finalScore),
         opponent_score: Math.round(params.opponentScore),
-        move_log: params.moveLog,
+        move_log: trainingMoveLog,
       },
     ]),
   });
 
-  const recentGames = await fetchRecentGhostGames(params.userId, 5);
-  const styleGames = await fetchRecentGhostGames(params.userId, 20);
+  const recentGames = await fetchRecentGhostGames(params.userId, 20);
+  const styleGames = await fetchRecentGhostGames(params.userId, 50);
   const compositeLog = buildCompositeLog(recentGames, styleGames);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
 
-  const isFritz = Boolean(params.opponentUserId && isFritzId(params.opponentUserId));
   const rating = isFritz
     ? computeFritzRatingChange(
         Number(profile.ghost_rating ?? 800),

@@ -8,6 +8,7 @@ export interface UserProfile {
   created_at?: string;
   glicko_rating?: number | null;
   ghost_rating?: number | null;
+  ranked_games_played?: number | null;
 }
 
 interface AuthResult {
@@ -21,6 +22,18 @@ const SESSION_BOOTSTRAP_TIMEOUT_MS = 8000;
 const SIGN_OUT_TIMEOUT_MS = 1200;
 const AUTH_RETRY_DELAY_MS = 350;
 const PROFILE_REQUEST_TIMEOUT_MS = 5000;
+const DEFAULT_GLICKO_RATING = 800;
+const DEFAULT_GLICKO_RD = 200;
+const DEFAULT_GLICKO_VOL = 0.06;
+
+function needsLegacyRatingNormalization(profile: Record<string, unknown> | null | undefined): boolean {
+  if (!profile) return false;
+  const rating = Number(profile.glicko_rating ?? NaN);
+  const games = Number(profile.ranked_games_played ?? 0);
+  const peakRaw = profile.peak_rating;
+  const peak = peakRaw == null ? null : Number(peakRaw);
+  return games === 0 && rating === 1500 && (peak === null || peak === 0 || peak === 1500);
+}
 
 export function isTemporaryUsername(username: string | null | undefined): boolean {
   if (!username) return true;
@@ -36,7 +49,19 @@ async function ensureProfile(userId: string): Promise<void> {
     });
     const upsertPromise = supabase
       .from('profiles')
-      .upsert({ id: userId, username: tempUsername }, { onConflict: 'id', ignoreDuplicates: true })
+      .upsert(
+        {
+          id: userId,
+          username: tempUsername,
+          glicko_rating: DEFAULT_GLICKO_RATING,
+          glicko_rd: DEFAULT_GLICKO_RD,
+          glicko_vol: DEFAULT_GLICKO_VOL,
+          provisional: true,
+          peak_rating: DEFAULT_GLICKO_RATING,
+          ranked_games_played: 0,
+        },
+        { onConflict: 'id', ignoreDuplicates: true },
+      )
       .then(({ error }) => ({ timedOut: false as const, error }));
 
     const result = await Promise.race([upsertPromise, timeoutPromise]);
@@ -131,7 +156,9 @@ export function useAuth() {
       });
       const queryPromise = supabase
         .from('profiles')
-        .select('id, username, created_at, glicko_rating')
+        .select(
+          'id, username, created_at, glicko_rating, glicko_rd, glicko_vol, provisional, peak_rating, ranked_games_played',
+        )
         .eq('id', sessionUser.id)
         .maybeSingle()
         .then(({ data, error }) => ({ timedOut: false as const, data, error }));
@@ -148,6 +175,38 @@ export function useAuth() {
         }
         setProfile(fallbackProfile(sessionUser));
         return;
+      }
+      let profileData = result.data as Record<string, unknown>;
+      if (needsLegacyRatingNormalization(profileData)) {
+        const normalizedPatch = {
+          glicko_rating: DEFAULT_GLICKO_RATING,
+          glicko_rd: DEFAULT_GLICKO_RD,
+          glicko_vol: DEFAULT_GLICKO_VOL,
+          provisional: true,
+          peak_rating: DEFAULT_GLICKO_RATING,
+          ranked_games_played: 0,
+        };
+        try {
+          const { data: normalizedData } = await supabase
+            .from('profiles')
+            .update(normalizedPatch)
+            .eq('id', sessionUser.id)
+            .eq('ranked_games_played', 0)
+            .select(
+              'id, username, created_at, glicko_rating, glicko_rd, glicko_vol, provisional, peak_rating, ranked_games_played',
+            )
+            .maybeSingle();
+          profileData = (normalizedData as Record<string, unknown> | null) ?? {
+            ...profileData,
+            ...normalizedPatch,
+          };
+        } catch (err) {
+          console.warn('[auth] profile normalization failed; using local fallback values', err);
+          profileData = {
+            ...profileData,
+            ...normalizedPatch,
+          };
+        }
       }
       let ghostRating: number | null = null;
       try {
@@ -168,7 +227,7 @@ export function useAuth() {
         ghostRating = null;
       }
       setProfile({
-        ...(result.data as UserProfile),
+        ...(profileData as unknown as UserProfile),
         ghost_rating: ghostRating,
       });
     } catch (err) {
@@ -318,7 +377,19 @@ export function useAuth() {
               try {
                 await supabase
                   .from('profiles')
-                  .upsert({ id: data.user.id, username: normalized }, { onConflict: 'id' });
+                  .upsert(
+                    {
+                      id: data.user.id,
+                      username: normalized,
+                      glicko_rating: DEFAULT_GLICKO_RATING,
+                      glicko_rd: DEFAULT_GLICKO_RD,
+                      glicko_vol: DEFAULT_GLICKO_VOL,
+                      provisional: true,
+                      peak_rating: DEFAULT_GLICKO_RATING,
+                      ranked_games_played: 0,
+                    },
+                    { onConflict: 'id', ignoreDuplicates: true },
+                  );
               } catch {
                 // ignore profile write failures during sign up
               }

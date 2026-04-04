@@ -94,7 +94,7 @@
   min-height: 100dvh;
   height: auto;
   width: 100%;
-  padding-top: 0;
+  padding-top: 32px;
   padding-inline: clamp(20px, 6vw, 60px);
   padding-bottom: var(--space-lg);
   overflow-y: auto;
@@ -144,7 +144,7 @@
   z-index: 1;
   width: 100%;
   max-width: 1000px;
-  margin: clamp(6px, 1vh, 12px) auto 0;
+  margin: clamp(4px, 0.8vh, 10px) auto 0;
   display: grid;
   grid-template-columns: 1fr;
   gap: calc(var(--space-md) * var(--ui-presence));
@@ -158,11 +158,38 @@
 
 .layout-screen-badge {
   margin: 0;
-  font-size: 1.71rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: none;
-  color: rgba(240, 248, 255, 0.78);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(240, 248, 255, 0.6);
+}
+
+.subpage-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.subpage-brand-iconbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+}
+
+.subpage-brand-icon {
+  width: auto;
+  height: 18px;
+  color: rgba(243, 249, 255, 0.88);
+}
+
+.subpage-brand-wordmark {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: rgba(229, 238, 246, 0.78);
 }
 
 .layout-screen-title {
@@ -707,6 +734,64 @@ button:hover:not(:disabled) {
   width: min(840px, 92vw);
   max-width: 840px;
   margin: 0 auto;
+}
+
+.screen.mode-subpage-screen.layout-screen {
+  padding-top: 20px;
+}
+
+.screen.mode-subpage-screen:not(.league-screen) .layout-screen-inner {
+  max-width: 1000px;
+  margin-top: clamp(18px, 3.2vh, 34px);
+  gap: 8px;
+}
+
+.screen.mode-subpage-screen .layout-screen-header {
+  gap: 8px;
+}
+
+.screen.mode-subpage-screen:not(.league-screen) .layout-screen-content {
+  gap: 8px;
+}
+
+.screen.mode-subpage-screen.mode-auth-gate-screen .layout-screen-inner {
+  max-width: none;
+  min-height: calc(100vh - 108px);
+  margin-top: 0;
+  align-content: center;
+  justify-items: center;
+  gap: 16px;
+}
+
+.screen.mode-subpage-screen.mode-auth-gate-screen .layout-screen-header {
+  justify-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.screen.mode-subpage-screen.mode-auth-gate-screen .layout-screen-title {
+  font-size: clamp(42px, 5.6vw, 78px);
+  line-height: 1.02;
+}
+
+.screen.mode-subpage-screen.mode-auth-gate-screen .layout-screen-subtitle {
+  max-width: 800px;
+  font-size: clamp(1.18rem, 2vw, 1.55rem);
+  line-height: 1.45;
+  color: rgba(232, 241, 246, 0.9);
+}
+
+.mode-auth-gate-content {
+  width: min(800px, 100%);
+  justify-items: center;
+  gap: 20px;
+}
+
+.mode-auth-gate-content .mode-inline-btn {
+  width: 100%;
+  min-height: 62px;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .mode-hub {
@@ -1850,7 +1935,7 @@ button:hover:not(:disabled) {
 
 .home-lobby-shell {
   width: 100%;
-  max-width: 1140px;
+  max-width: none;
   margin: 0 auto;
 }
 
@@ -1858,15 +1943,14 @@ button:hover:not(:disabled) {
   position: relative;
   isolation: isolate;
   padding-top: 0 !important;
-  padding-inline: clamp(16px, 1.7vw, 24px);
-  padding-bottom: 10px;
+  padding-bottom: 34px;
 }
 
 .home-brand-row {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
-  min-height: 38px;
+  gap: 16px;
+  min-height: 44px;
 }
 
 .home-brand-iconbox {
@@ -1879,12 +1963,12 @@ button:hover:not(:disabled) {
 
 .home-brand-icon {
   width: auto;
-  height: 21px;
+  height: 24px;
   color: rgba(243, 249, 255, 0.9);
 }
 
 .home-brand-wordmark {
-  font-size: 1.02rem;
+  font-size: 1.16rem;
   font-weight: 700;
   letter-spacing: 0.2em;
   color: rgba(242, 248, 255, 0.92);
@@ -1902,14 +1986,20 @@ button:hover:not(:disabled) {
   display: grid;
   gap: 0;
   padding-top: 0;
-  max-width: 940px;
+  max-width: none;
   margin: 0 auto;
+  width: 100%;
 }
 
 .home-restored-cards {
-  width: min(100%, 940px) !important;
+  width: 100% !important;
   gap: 10px;
   margin: 0 auto 0;
+  height: calc(100vh - 72px);
+}
+
+.home-restored-cards .mode-hub-grid {
+  height: 100%;
 }
 
 .home-utility-grid {
@@ -1923,9 +2013,11 @@ button:hover:not(:disabled) {
 .home-utility-brand {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
+  gap: 16px;
   min-height: 58px;
-  padding: 0 8px 0 0;
+  width: 100%;
+  padding: 0;
 }
 
 .home-utility-brand .home-brand-iconbox {
@@ -1939,7 +2031,7 @@ button:hover:not(:disabled) {
 }
 
 .home-utility-brand .home-brand-wordmark {
-  font-size: 1.02rem;
+  font-size: 1.16rem;
   font-weight: 700;
   letter-spacing: 0.2em;
   color: rgba(229, 238, 246, 0.76);
@@ -1948,8 +2040,8 @@ button:hover:not(:disabled) {
 
 .home-utility-card {
   min-height: 58px !important;
-  padding: 10px 14px !important;
-  gap: 4px !important;
+  padding: 0 18px !important;
+  gap: 0 !important;
   border-radius: var(--card-radius) !important;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.022)) !important;
@@ -1959,6 +2051,10 @@ button:hover:not(:disabled) {
     0 8px 18px rgba(3, 8, 18, 0.12) !important;
   backdrop-filter: blur(12px);
   position: relative;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
 }
 
 .home-utility-card::before {
@@ -1983,23 +2079,36 @@ button:hover:not(:disabled) {
 }
 
 .home-utility-card .mode-option-title {
-  font-size: 1.18rem !important;
-  font-weight: 790 !important;
-  line-height: 1.1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+  margin: 0 !important;
   letter-spacing: 0.01em !important;
+  text-align: center !important;
 }
 
 .home-utility-profile-line {
   display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
   min-width: 0;
+  width: 100% !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 .home-utility-profile-rating {
-  font-size: 0.96rem;
-  font-weight: 700;
-  color: rgba(219, 232, 244, 0.9);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 1);
   white-space: nowrap;
 }
 
@@ -2029,30 +2138,6 @@ button:hover:not(:disabled) {
   pointer-events: none;
 }
 
-.home-play-online-cue {
-  position: absolute;
-  right: 18px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(125, 211, 252, 0.26);
-  background: linear-gradient(180deg, rgba(20, 33, 48, 0.78), rgba(12, 19, 31, 0.92));
-  color: rgba(240, 248, 255, 0.92);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 0 18px rgba(56, 189, 248, 0.1);
-  pointer-events: none;
-}
-
 .home-restored-cards .mode-hub-primary {
   gap: 4px;
 }
@@ -2075,7 +2160,7 @@ button:hover:not(:disabled) {
 }
 
 .home-restored-cards .mode-option.mode-card-play-online {
-  min-height: 70px;
+  min-height: 92px;
   padding-top: 10px;
   padding-bottom: 10px;
 }
@@ -2084,7 +2169,7 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-option.mode-card-compete,
 .home-restored-cards .mode-option.mode-card-daily,
 .home-restored-cards .mode-option.mode-card-track {
-  min-height: 94px;
+  min-height: 128px;
   padding-top: 10px;
   padding-bottom: 10px;
 }
@@ -2094,8 +2179,8 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-card-compete .mode-option-title,
 .home-restored-cards .mode-card-daily .mode-option-title,
 .home-restored-cards .mode-card-track .mode-option-title {
-  font-size: clamp(1.72rem, 2.75vw, 2.55rem) !important;
-  line-height: 1.06;
+  font-size: clamp(1.72rem, 2.75vw, 2.25rem) !important;
+  font-size: clamp(1.9rem, 3vw, 2.9rem) !important;
   color: rgba(255, 255, 255, 0.97);
 }
 
@@ -2111,9 +2196,9 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-card-compete .mode-option-meta,
 .home-restored-cards .mode-card-daily .mode-option-meta,
 .home-restored-cards .mode-card-track .mode-option-meta {
-  font-size: 1.26rem !important;
+  font-size: 16px !important;
   line-height: 1.22;
-  color: rgba(255, 255, 255, 0.74);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .home-feature-card {
@@ -4681,4 +4766,12 @@ button:hover:not(:disabled) {
 .home-lobby-screen .layout-screen-inner {
   position: relative;
   z-index: 1;
+}
+
+
+.home-utility-profile-sep {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 2px;
 }

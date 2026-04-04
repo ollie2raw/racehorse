@@ -165,6 +165,7 @@ export async function completeGhostGame(params: {
   finalScore: number;
   opponentScore: number;
   moveLog: GhostMoveLogEntry[];
+  playerMoveLog?: GhostMoveLogEntry[];
 }): Promise<GhostCompletionResult> {
   const response = await requestJson<{ ok: true; result: GhostCompletionResult }>(
     '/api/ghost/complete',

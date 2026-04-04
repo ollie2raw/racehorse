@@ -2474,7 +2474,7 @@ export default function App() {
     const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('');
     return initials || source.slice(0, 2).toUpperCase();
   }, [authProfile?.username, authUser?.email]);
-  const homeRatingLabel = (authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : 1581).toLocaleString();
+  const homeRatingLabel = (authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : 800).toLocaleString();
   const homeFriendsOnline = 3;
   const homePlayersOnline = playersOnlineCount ?? 142;
   const homeActiveRooms = Math.max(12, Math.round(homePlayersOnline / 12));
@@ -3035,6 +3035,7 @@ export default function App() {
       <div className={appRootClassName}>
         <GhostSetupScreen
           userId={authUser?.id ?? null}
+          fritzGamesPlayed={authProfile?.ranked_games_played ?? 0}
           onBack={() => setAppMode('home')}
           onStart={(summary, opponentName, opponentUserId) => {
             setGhostProfile(summary);
@@ -3110,7 +3111,14 @@ export default function App() {
       <div className={appRootClassName}>
         <LayoutScreen
           className="screen lobby-screen mode-home-screen mode-subpage-screen"
-          badge="⬜ RACEHORSE DOMINOES"
+          badge={
+            <span className="subpage-brand-lockup" aria-label="Racehorse">
+              <span className="subpage-brand-iconbox" aria-hidden="true">
+                <BoneyardStackIcon className="subpage-brand-icon" />
+              </span>
+              <span className="subpage-brand-wordmark">RACEHORSE</span>
+            </span>
+          }
           title="Single Player Modes"
           subtitle="Choose a mode to play solo or against a bot."
           contentClassName="screen-shell"
@@ -3129,13 +3137,7 @@ export default function App() {
                 </button>
                 <button
                   className="mode-option mode-option-secondary mode-accent-ghost mode-card-ghost"
-                  onClick={() => {
-                    if (!authUser) {
-                      setAuthModalOpen(true);
-                      return;
-                    }
-                    setAppMode('ghostSetup');
-                  }}
+                  onClick={() => setAppMode('ghostSetup')}
                 >
                   <span className="mode-option-title">Ghost Mode</span>
                   <span className="mode-option-meta">
@@ -3720,12 +3722,12 @@ export default function App() {
   if (appMode === 'home') {
     return (
       <div ref={appRootRef} className={appRootClassName}>
-        <div className="layout-screen screen lobby-screen mode-home-screen mode-accent-multiplayer home-lobby-screen">
+        <div className="layout-screen screen lobby-screen mode-home-screen mode-accent-multiplayer home-lobby-screen" style={{ paddingLeft: '65px', paddingRight: '65px' }}>
           <div className="layout-screen-bg" aria-hidden="true" />
           <div className="layout-screen-beam" aria-hidden="true" />
           <div className="layout-screen-vignette" aria-hidden="true" />
           <div className="layout-screen-inner home-lobby-shell">
-            <div className="home-main-column">
+            <div className="home-main-column" style={{ paddingLeft: "35px", paddingRight: "35px" }}>
               <div className="mode-hub home-restored-cards" style={{ width: '100%' }}>
                   <section className="home-utility-grid is-quad" aria-label="Quick actions">
                     <div className="home-utility-brand" aria-label="Racehorse">
@@ -3743,6 +3745,7 @@ export default function App() {
                       >
                         <span className="home-utility-profile-line">
                           <span className="mode-option-title">{myHandle}</span>
+                          <span className="home-utility-profile-sep">·</span>
                           <span className="home-utility-profile-rating">{homeRatingLabel}</span>
                         </span>
                       </button>
@@ -3774,7 +3777,6 @@ export default function App() {
                         <span className="mode-live-badge">Live</span>
                       </div>
                       <span className="mode-option-meta">Create a private room and play head to head in real time</span>
-                      <span className="home-play-online-cue" aria-hidden="true">Play now ›</span>
                     </button>
                   </section>
 

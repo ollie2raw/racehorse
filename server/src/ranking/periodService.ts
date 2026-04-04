@@ -1,5 +1,5 @@
 
-import { computeGlicko2, decayRD, getFritzConfig, isFritzId } from './glicko2';
+import { computeGlicko2, decayRD, DEFAULT_RATING, DEFAULT_RD, DEFAULT_VOL, getFritzConfig, isFritzId } from './glicko2';
 import { supabaseFetch } from '../supabaseUtils';
 
 interface Profile {
@@ -34,10 +34,38 @@ interface OpponentSnapshot {
   rd: number;
 }
 
+function needsLegacyRatingNormalization(profile: Profile): boolean {
+  return (
+    Number(profile.ranked_games_played ?? 0) === 0 &&
+    Number(profile.glicko_rating ?? NaN) === 1500 &&
+    [null, undefined, 0, 1500].includes(profile.peak_rating as number | null | undefined)
+  );
+}
+
+async function normalizeLegacyStartingProfile(profile: Profile): Promise<Profile> {
+  if (!needsLegacyRatingNormalization(profile)) return profile;
+  const patch = {
+    glicko_rating: DEFAULT_RATING,
+    glicko_rd: DEFAULT_RD,
+    glicko_vol: DEFAULT_VOL,
+    provisional: true,
+    peak_rating: DEFAULT_RATING,
+    ranked_games_played: 0,
+  };
+  await supabaseFetch(`/rest/v1/profiles?id=eq.${profile.id}&ranked_games_played=eq.0`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  return {
+    ...profile,
+    ...patch,
+  };
+}
+
 async function getProfile(userId: string): Promise<Profile> {
   const [profile] = await supabaseFetch<Profile[]>(`/rest/v1/profiles?id=eq.${userId}`);
   if (!profile) throw new Error('Player not found');
-  return profile;
+  return normalizeLegacyStartingProfile(profile);
 }
 
 async function getPendingGames(userId: string): Promise<RankedGame[]> {

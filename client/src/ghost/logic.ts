@@ -1,7 +1,7 @@
 import type { BoardState, Move, PlacementPosition, Tile } from '../types';
 import type { BotMatchState, BotPlayerId } from '../bot/botEngine';
 import { getMatchableOpenEnds, previewPlayMove } from '../bot/botEngine';
-import type { GhostProfileSummary, GhostResolvedMove } from './api';
+import type { GhostCompositeState, GhostProfileSummary, GhostResolvedMove } from './api';
 import { chooseBotMove } from '../bot/botHeuristics';
 
 const STYLE_PRIORS = {
@@ -71,6 +71,15 @@ export function serializeGhostBoardState(board: BoardState | null): string {
       ),
     })),
   });
+}
+
+function parseGhostBoardState(value: string): BoardState | null {
+  if (!value || value === 'board:empty') return null;
+  try {
+    return JSON.parse(value) as BoardState;
+  } catch {
+    return null;
+  }
 }
 
 function sameMove(move: Move, tile: Tile, position: PlacementPosition): boolean {
@@ -176,6 +185,107 @@ function forcedDrawAfterPlay(
   );
 }
 
+function boardFingerprint(board: BoardState | null, hand: Tile[]): string {
+  if (!board) return 'empty';
+  const openEnds = [
+    board.leftEnd,
+    board.rightEnd,
+    ...board.hubDoubles.flatMap((hub) =>
+      hub.branches.filter(Boolean).map((branch) => branch!.openEnd),
+    ),
+  ]
+    .sort((a, b) => a - b)
+    .join(',');
+  const tileCount =
+    board.mainLine.length +
+    board.hubDoubles.reduce(
+      (sum, hub) =>
+        sum +
+        hub.branches.filter(Boolean).reduce((branchSum, branch) => branchSum + (branch?.tiles.length ?? 0), 0),
+      0,
+    );
+  const hubCount = board.hubDoubles.filter((hub) => hub.isCrossed).length;
+  const handPips = hand
+    .map((tile) => `${tile.low}|${tile.high}`)
+    .sort()
+    .join(',');
+  return `${openEnds}__${tileCount}__${hubCount}__${handPips}`;
+}
+
+function buildCompositeFingerprintMap(
+  states: GhostCompositeState[] | null | undefined,
+  currentHand: Tile[],
+): Map<string, GhostCompositeState[]> {
+  const byFingerprint = new Map<string, GhostCompositeState[]>();
+  for (const state of states ?? []) {
+    const fingerprint = boardFingerprint(parseGhostBoardState(state.boardState), currentHand);
+    const bucket = byFingerprint.get(fingerprint) ?? [];
+    bucket.push(state);
+    byFingerprint.set(fingerprint, bucket);
+  }
+  return byFingerprint;
+}
+
+function estimateFritzThreat(state: BotMatchState): number {
+  const openEnds = state.board ? [state.board.leftEnd, state.board.rightEnd] : [];
+  const openSum = state.board ? openEnds.reduce((sum, end) => sum + end, 0) : 0;
+  const dangerous = state.boneyard.filter((tile) =>
+    openEnds.some((end) => tile.low === end || tile.high === end) &&
+    openEnds.reduce((sum, end) => {
+      const pip = tile.low === end ? tile.high : tile.low;
+      const newSum = openSum - end + pip;
+      return sum + (newSum > 0 && newSum % 5 === 0 ? newSum / 5 : 0);
+    }, 0) > 0,
+  ).length;
+  return dangerous / Math.max(1, state.boneyard.length);
+}
+
+function pickCompositeMove(
+  state: BotMatchState,
+  playMoves: Array<Move & { type: 'play'; tile: Tile; position: PlacementPosition }>,
+  profile: GhostProfileSummary | null,
+): GhostResolvedMove | null {
+  const currentHand = state.players.you.hand;
+  const fingerprint = boardFingerprint(state.board, currentHand);
+  const byFingerprint = buildCompositeFingerprintMap(profile?.compositeLog?.states, currentHand);
+  const candidates = byFingerprint.get(fingerprint) ?? [];
+  if (candidates.length === 0) return null;
+
+  const currentHandKeys = new Set(currentHand.map(toTileKey));
+  const scoredCandidates = candidates
+    .flatMap((composite) =>
+      composite.candidates.map((candidate) => ({
+        candidate,
+        score:
+          candidate.count * 3 +
+          candidate.bestScoreDelta * 0.5 +
+          (currentHandKeys.has(candidate.tilePlayed) ? 10 : -100),
+      })),
+    )
+    .sort((a, b) => {
+      if (a.score !== b.score) return b.score - a.score;
+      if (a.candidate.count !== b.candidate.count) return b.candidate.count - a.candidate.count;
+      return a.candidate.tilePlayed.localeCompare(b.candidate.tilePlayed);
+    });
+
+  for (const entry of scoredCandidates) {
+    if (!currentHandKeys.has(entry.candidate.tilePlayed)) continue;
+    const tile = parseTileKey(entry.candidate.tilePlayed);
+    if (!tile) continue;
+    const position = (entry.candidate.branch ?? 'left') as PlacementPosition;
+    const legal = playMoves.find((move) => sameMove(move, tile, position));
+    if (legal?.tile && legal.position) {
+      return {
+        tile: legal.tile,
+        position: legal.position,
+        source: 'composite',
+      };
+    }
+  }
+
+  return null;
+}
+
 function pickStyleWeightedMove(
   state: BotMatchState,
   player: BotPlayerId,
@@ -188,6 +298,7 @@ function pickStyleWeightedMove(
   const suppressionInfluence = influenceAbove(style.pointSuppression, 0.5);
   const attackInfluence = influenceAbove(style.attackSetup, 0.6);
   const spinnerControlInfluence = influenceAbove(style.spinnerControl, 0.6);
+  const fritzThreatScore = estimateFritzThreat(state);
 
   const botChoice = chooseBotMove(state, 'hard');
   const scored = playMoves
@@ -204,10 +315,28 @@ function pickStyleWeightedMove(
       const attackScore = setupDelta * 6 + futureMobility * 1.5;
       const positionalScore = attackScore + (preview.turnContinues ? 2 : 0);
       const spinnerBranchValue = getSpinnerBranchOpeningValue(state.board, move.position, preview.nextBoard);
+      const totalHandPips = preview.nextHand.reduce((sum, tile) => sum + tile.low + tile.high, 0);
+      const isLateGame = state.boneyard.length <= 6 || preview.nextHand.length <= 3;
+      const pipBurden = isLateGame ? totalHandPips * 0.8 : totalHandPips * 0.05;
+      const turnContinueBonus =
+        (style.avgTurnPoints ?? 0) > 1.5 && preview.turnContinues
+          ? (style.avgTurnPoints ?? 0) * 2.5
+          : 0;
+      const fritzMissingBonus =
+        ((state.opponentPassedOnEnds ?? []).filter((pip) => preview.openEnds.includes(pip)).length * 4) *
+        (style.attackSetup ?? 0.5);
+      const defensiveBonus =
+        fritzThreatScore > 0.3 && (style.pointSuppression ?? 0) > 0.5 && preview.openEnds.length < beforeOpenEnds
+          ? (style.pointSuppression ?? 0.5) * 10
+          : 0;
 
       let total = baseScore + positionalScore;
       total += drawBonus * (2 + drawInfluence * 18);
       total += attackScore * (attackInfluence * 2.2);
+      total -= pipBurden;
+      total += turnContinueBonus;
+      total += fritzMissingBonus;
+      total += defensiveBonus;
 
       if (suppressionInfluence > 0 && preview.immediateScore >= 5) {
         const easyPointsPenalty = preview.immediateScore * (1.2 + suppressionInfluence * 2.8);
@@ -247,7 +376,7 @@ function pickStyleWeightedMove(
   return {
     tile: best.tile,
     position: best.position,
-    source: 'best-score',
+    source: 'style-weighted' as GhostResolvedMove['source'],
   };
 }
 
@@ -263,28 +392,10 @@ export function resolveGhostMove(params: {
   );
   if (playMoves.length === 0) return null;
 
-  const turn = (params.state.turnIndex ?? 0) + 1;
-  const boardState = serializeGhostBoardState(params.state.board);
-  const composite = params.profile?.compositeLog?.states.find(
-    (state) => state.turn === turn && state.boardState === boardState,
-  );
+  const compositeMatch = pickCompositeMove(params.state, playMoves, params.profile);
+  if (compositeMatch) return compositeMatch;
 
-  if (composite) {
-    const tile = parseTileKey(composite.recommendedMove.tilePlayed);
-    if (tile) {
-      const position = (composite.recommendedMove.branch ?? 'left') as PlacementPosition;
-      const legal = playMoves.find((move) => sameMove(move, tile, position));
-      if (legal?.tile && legal.position) {
-        return {
-          tile: legal.tile,
-          position: legal.position,
-          source: 'composite',
-        };
-      }
-    }
-  }
-
-  if ((params.profile?.gamesPlayed ?? 0) < 5) {
+  if ((params.profile?.gamesPlayed ?? 0) === 0) {
     const randomMove = playMoves[Math.floor(Math.random() * playMoves.length)];
     return randomMove?.tile && randomMove.position
       ? {
