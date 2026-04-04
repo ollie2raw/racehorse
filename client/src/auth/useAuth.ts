@@ -149,12 +149,79 @@ export function useAuth() {
       setProfile(fallbackProfile(sessionUser));
       return;
     }
+    const client = supabase;
 
     try {
+      const applyResolvedProfile = async (rawProfileData: Record<string, unknown>) => {
+        let profileData = rawProfileData;
+        if (needsLegacyRatingNormalization(profileData)) {
+          const normalizedPatch = {
+            glicko_rating: DEFAULT_GLICKO_RATING,
+            glicko_rd: DEFAULT_GLICKO_RD,
+            glicko_vol: DEFAULT_GLICKO_VOL,
+            provisional: true,
+            peak_rating: DEFAULT_GLICKO_RATING,
+            ranked_games_played: 0,
+          };
+          try {
+            const { data: normalizedData } = await client
+              .from('profiles')
+              .update(normalizedPatch)
+              .eq('id', sessionUser.id)
+              .eq('ranked_games_played', 0)
+              .select(
+                'id, username, created_at, glicko_rating, glicko_rd, glicko_vol, provisional, peak_rating, ranked_games_played',
+              )
+              .maybeSingle();
+            profileData = (normalizedData as Record<string, unknown> | null) ?? {
+              ...profileData,
+              ...normalizedPatch,
+            };
+          } catch (err) {
+            console.warn('[auth] profile normalization failed; using local fallback values', err);
+            profileData = {
+              ...profileData,
+              ...normalizedPatch,
+            };
+          }
+        }
+        let ghostRating: number | null = null;
+        try {
+          const ghostResp = await Promise.race([
+            client
+              .from('ghost_profiles')
+              .select('ghost_rating')
+              .eq('user_id', sessionUser.id)
+              .maybeSingle()
+              .then(({ data }) => data),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), PROFILE_REQUEST_TIMEOUT_MS)),
+          ]);
+          ghostRating =
+            ghostResp && typeof ghostResp === 'object' && 'ghost_rating' in ghostResp
+              ? Number((ghostResp as { ghost_rating?: unknown }).ghost_rating ?? 800)
+              : null;
+        } catch {
+          ghostRating = null;
+        }
+        setProfile((prev) => {
+          if (prev && prev.id === sessionUser.id) {
+            return {
+              ...prev,
+              ...(profileData as unknown as UserProfile),
+              ghost_rating: ghostRating,
+            };
+          }
+          return {
+            ...(profileData as unknown as UserProfile),
+            ghost_rating: ghostRating,
+          };
+        });
+      };
+
       const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
         setTimeout(() => resolve({ timedOut: true }), PROFILE_REQUEST_TIMEOUT_MS);
       });
-      const queryPromise = supabase
+      const queryPromise = client
         .from('profiles')
         .select(
           'id, username, created_at, glicko_rating, glicko_rd, glicko_vol, provisional, peak_rating, ranked_games_played',
@@ -165,74 +232,30 @@ export function useAuth() {
 
       const result = await Promise.race([queryPromise, timeoutPromise]);
       if ('timedOut' in result && result.timedOut) {
-        console.warn('[auth] refreshProfile timed out; using fallback profile');
-        setProfile(fallbackProfile(sessionUser));
+        console.warn('[auth] refreshProfile timed out; preserving current profile until the response arrives');
+        void queryPromise.then(
+          async (lateResult) => {
+            if (lateResult.error || !lateResult.data) return;
+            await applyResolvedProfile(lateResult.data as Record<string, unknown>);
+          },
+          (err: unknown) => {
+            console.warn('[auth] late refreshProfile resolution failed', err);
+          },
+        );
+        setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
         return;
       }
       if (result.error || !result.data) {
         if (result.error) {
-          console.warn('[auth] refreshProfile failed; using fallback profile', result.error);
+          console.warn('[auth] refreshProfile failed; preserving current profile', result.error);
         }
-        setProfile(fallbackProfile(sessionUser));
+        setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
         return;
       }
-      let profileData = result.data as Record<string, unknown>;
-      if (needsLegacyRatingNormalization(profileData)) {
-        const normalizedPatch = {
-          glicko_rating: DEFAULT_GLICKO_RATING,
-          glicko_rd: DEFAULT_GLICKO_RD,
-          glicko_vol: DEFAULT_GLICKO_VOL,
-          provisional: true,
-          peak_rating: DEFAULT_GLICKO_RATING,
-          ranked_games_played: 0,
-        };
-        try {
-          const { data: normalizedData } = await supabase
-            .from('profiles')
-            .update(normalizedPatch)
-            .eq('id', sessionUser.id)
-            .eq('ranked_games_played', 0)
-            .select(
-              'id, username, created_at, glicko_rating, glicko_rd, glicko_vol, provisional, peak_rating, ranked_games_played',
-            )
-            .maybeSingle();
-          profileData = (normalizedData as Record<string, unknown> | null) ?? {
-            ...profileData,
-            ...normalizedPatch,
-          };
-        } catch (err) {
-          console.warn('[auth] profile normalization failed; using local fallback values', err);
-          profileData = {
-            ...profileData,
-            ...normalizedPatch,
-          };
-        }
-      }
-      let ghostRating: number | null = null;
-      try {
-        const ghostResp = await Promise.race([
-          supabase
-            .from('ghost_profiles')
-            .select('ghost_rating')
-            .eq('user_id', sessionUser.id)
-            .maybeSingle()
-            .then(({ data }) => data),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), PROFILE_REQUEST_TIMEOUT_MS)),
-        ]);
-        ghostRating =
-          ghostResp && typeof ghostResp === 'object' && 'ghost_rating' in ghostResp
-            ? Number((ghostResp as { ghost_rating?: unknown }).ghost_rating ?? 800)
-            : null;
-      } catch {
-        ghostRating = null;
-      }
-      setProfile({
-        ...(profileData as unknown as UserProfile),
-        ghost_rating: ghostRating,
-      });
+      await applyResolvedProfile(result.data as Record<string, unknown>);
     } catch (err) {
-      console.warn('[auth] refreshProfile errored; using fallback profile', err);
-      setProfile(fallbackProfile(sessionUser));
+      console.warn('[auth] refreshProfile errored; preserving current profile', err);
+      setProfile((prev) => (prev && prev.id === sessionUser.id ? prev : fallbackProfile(sessionUser)));
     }
   }, [fallbackProfile]);
 
