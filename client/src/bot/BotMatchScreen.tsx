@@ -212,7 +212,11 @@ export default function BotMatchScreen({
   const resolveServerBaseUrl = () => {
     const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim() ?? '';
     if (configured) return configured.replace(/\/$/, '');
-    if (typeof window !== 'undefined' && window.location.port === '5173') return '';
+    if (typeof window !== 'undefined') {
+      const { hostname, port } = window.location;
+      if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
+      return '';
+    }
     return 'http://localhost:3001';
   };
   const createLocalMatchId = () =>
