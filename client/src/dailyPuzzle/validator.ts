@@ -5,6 +5,11 @@ import {
   type BotMatchState,
 } from '../bot/botEngine';
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
+import type { Move } from '../types';
+
+function isPlayMove(move: Move): move is Move & { type: 'play'; tile: NonNullable<Move['tile']> } {
+  return move.type === 'play' && Boolean(move.tile);
+}
 
 function cloneState(state: BotMatchState): BotMatchState {
   return {
@@ -84,6 +89,21 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
     };
   }
 
+  if (puzzle.puzzleType === 'setup_and_strike') {
+    const validation = validateSetupAndStrikePuzzle(puzzle);
+    const solvable = validation.solvable;
+    if (!solvable) {
+      // eslint-disable-next-line no-console
+      console.error('[DailyPuzzleValidator] invalid setup_and_strike puzzle', {
+        puzzleId: puzzle.id,
+        date: puzzle.puzzleDate,
+        bestScore: validation.bestScore,
+        reason: validation.reason,
+      });
+    }
+    return validation;
+  }
+
   const keyOf = (state: BotMatchState, movesUsed: number): string => {
     const handKey = [...state.players.you.hand]
       .map((t) => `${t.low}-${t.high}`)
@@ -159,6 +179,63 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
     hasScoringMove,
     exploredStates,
     reason,
+  };
+}
+
+function validateSetupAndStrikePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResult {
+  const initial = createPuzzleMatchState(puzzle);
+  const firstMoves = getLegalMoves(initial, 'you').filter(
+    (move): move is Move & { type: 'play'; tile: NonNullable<Move['tile']> } => isPlayMove(move),
+  );
+  let bestStrikeScore = 0;
+
+  for (const move of firstMoves) {
+    const setupApplied = applyPlayMove(initial, 'you', move);
+    const setupScore = setupApplied.scored?.points ?? 0;
+    if (setupScore !== 0) continue;
+
+    const beforeEnds = getDisplayOpenEnds(initial).join(',');
+    const afterEnds = getDisplayOpenEnds(setupApplied.state).join(',');
+    if (beforeEnds === afterEnds) continue;
+
+    const followUpMoves = getLegalMoves(setupApplied.state, 'you').filter(
+      (nextMove): nextMove is Move & { type: 'play'; tile: NonNullable<Move['tile']> } =>
+        isPlayMove(nextMove),
+    );
+    for (const strikeMove of followUpMoves) {
+      const strikeApplied = applyPlayMove(setupApplied.state, 'you', strikeMove);
+      const strikeScore = strikeApplied.scored?.points ?? 0;
+      bestStrikeScore = Math.max(bestStrikeScore, strikeScore);
+      if (strikeScore < 20) continue;
+
+      const directStrike = firstMoves.find(
+        (candidate) =>
+          candidate.tile.low === strikeMove.tile.low &&
+          candidate.tile.high === strikeMove.tile.high,
+      );
+
+      if (directStrike) {
+        const directApplied = applyPlayMove(initial, 'you', directStrike);
+        const directScore = directApplied.scored?.points ?? 0;
+        if (directScore >= 10) continue;
+      }
+
+      return {
+        solvable: true,
+        bestScore: strikeScore,
+        hasScoringMove: true,
+        exploredStates: firstMoves.length + followUpMoves.length,
+        reason: 'OK',
+      };
+    }
+  }
+
+  return {
+    solvable: false,
+    bestScore: bestStrikeScore,
+    hasScoringMove: bestStrikeScore > 0,
+    exploredStates: firstMoves.length,
+    reason: 'No setup+strike sequence found',
   };
 }
 

@@ -3,6 +3,13 @@ import { supabase } from '../lib/supabase';
 import type { CuratedDailyPuzzle, CuratedDailyPuzzleRow, DailyPuzzleType } from './types';
 import { getLocalDateKey, normalizeDateInputToLocalKey } from './date';
 
+const DAILY_PUZZLE_TYPE_ORDER: DailyPuzzleType[] = [
+  'one_turn_high_score',
+  'setup_and_strike',
+  'branch_mastery',
+  'reach_target',
+];
+
 function isTile(value: unknown): value is Tile {
   if (!value || typeof value !== 'object') return false;
   const v = value as { low?: unknown; high?: unknown };
@@ -226,7 +233,10 @@ function coercePuzzleRow(row: CuratedDailyPuzzleRow): CuratedDailyPuzzle {
 
   const puzzleTypeRaw = row.puzzle_type;
   const puzzleType: DailyPuzzleType =
-    puzzleTypeRaw === 'reach_target' || puzzleTypeRaw === 'one_turn_high_score'
+    puzzleTypeRaw === 'reach_target' ||
+    puzzleTypeRaw === 'one_turn_high_score' ||
+    puzzleTypeRaw === 'setup_and_strike' ||
+    puzzleTypeRaw === 'branch_mastery'
       ? puzzleTypeRaw
       : 'one_turn_high_score';
   const dealSize =
@@ -263,7 +273,10 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs = 10000): Promise<T
   });
 }
 
-export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuzzle | null> {
+export async function getDailyPuzzleForDate(
+  date: Date,
+  puzzleType: DailyPuzzleType = 'one_turn_high_score',
+): Promise<CuratedDailyPuzzle | null> {
   if (!supabase) return null;
 
   const seed = getLocalDateKey(date);
@@ -276,6 +289,7 @@ export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuz
           'id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at',
         )
         .eq('puzzle_date', seed)
+        .eq('puzzle_type', puzzleType)
         .maybeSingle(),
     ),
     8000,
@@ -294,8 +308,40 @@ export async function getDailyPuzzleForDate(date: Date): Promise<CuratedDailyPuz
   return coercePuzzleRow(data as CuratedDailyPuzzleRow);
 }
 
+export async function getAllDailyPuzzlesForDate(date: Date): Promise<CuratedDailyPuzzle[]> {
+  if (!supabase) return [];
+
+  const seed = getLocalDateKey(date);
+  const { data, error } = await withTimeout(
+    Promise.resolve(
+      supabase
+        .from('daily_puzzles')
+        .select(
+          'id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at',
+        )
+        .eq('puzzle_date', seed),
+    ),
+    8000,
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) return [];
+
+  return (data as CuratedDailyPuzzleRow[])
+    .map(coercePuzzleRow)
+    .sort(
+      (a, b) =>
+        DAILY_PUZZLE_TYPE_ORDER.indexOf(a.puzzleType) -
+        DAILY_PUZZLE_TYPE_ORDER.indexOf(b.puzzleType),
+    );
+}
+
 export async function getDailyPuzzleByDateSeed(
   dateSeed: string,
+  puzzleType: DailyPuzzleType = 'one_turn_high_score',
 ): Promise<CuratedDailyPuzzle | null> {
   if (!supabase) return null;
 
@@ -309,6 +355,7 @@ export async function getDailyPuzzleByDateSeed(
           'id, puzzle_date, title, starting_board, starting_hand, max_moves, target_score, puzzle_type, deal_size, created_at',
         )
         .eq('puzzle_date', canonicalDate)
+        .eq('puzzle_type', puzzleType)
         .maybeSingle())(),
     8000,
   );
@@ -360,7 +407,7 @@ export async function upsertDailyPuzzle(input: UpsertPuzzleInput): Promise<void>
           puzzle_type: input.puzzleType,
           deal_size: input.dealSize,
         },
-        { onConflict: 'puzzle_date' },
+        { onConflict: 'puzzle_date,puzzle_type' },
       ))(),
     20000,
   );

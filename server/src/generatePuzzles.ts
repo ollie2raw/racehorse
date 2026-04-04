@@ -1,7 +1,7 @@
 import { applyMove, getLegalMoves } from './game/engine';
 import type { GameState, Move, PlayMove, PlacementPosition } from './game/types';
 
-type DailyPuzzleType = 'one_turn_high_score';
+type DailyPuzzleType = 'one_turn_high_score' | 'setup_and_strike';
 
 interface Tile {
   low: number;
@@ -68,6 +68,7 @@ interface CliOptions {
 
 interface SupabasePuzzleRow {
   puzzle_date: string;
+  puzzle_type: DailyPuzzleType | string | null;
 }
 
 interface SearchStep {
@@ -447,6 +448,34 @@ function chooseMatchingNonDouble(
   return picked;
 }
 
+function getBoardPipProfile(dateSeed: string): {
+  preferredMainLine: number[] | null;
+  preferredBranches: number[] | null;
+  preferredLeft?: number[] | null;
+  preferredRight?: number[] | null;
+} {
+  const profile = hashString(`${dateSeed}:profile`) % 5;
+
+  if (profile === 0) {
+    return { preferredMainLine: [1, 2, 3], preferredBranches: [1, 2, 3] };
+  }
+  if (profile === 1) {
+    return { preferredMainLine: [2, 3, 4], preferredBranches: [2, 3, 4] };
+  }
+  if (profile === 2) {
+    return { preferredMainLine: [4, 5, 6], preferredBranches: [4, 5, 6] };
+  }
+  if (profile === 3) {
+    return {
+      preferredMainLine: null,
+      preferredBranches: [0, 1, 2, 5, 6],
+      preferredLeft: [5, 6],
+      preferredRight: [0, 1, 2],
+    };
+  }
+  return { preferredMainLine: null, preferredBranches: null };
+}
+
 function buildBoard(dateSeed: string, attempt: number): { board: BoardState; remainingPool: Tile[] } {
   const prng = mulberry32(hashString(`${dateSeed}:${attempt}:board`));
   const spinnerValue = randInt(prng, 0, MAX_PIPS);
@@ -459,13 +488,19 @@ function buildBoard(dateSeed: string, attempt: number): { board: BoardState; rem
   const leftSteps = extraMainLineTileOnLeft ? 2 : 1;
   const rightSteps = mainLineSize - 1 - leftSteps;
   const branchLengths = [randInt(prng, 1, 2), randInt(prng, 1, 2)];
+  const pipProfile = getBoardPipProfile(dateSeed);
 
   let board = createSpinnerBoard(spinner);
   let currentLeft = spinnerValue;
   let currentRight = spinnerValue;
 
   for (let idx = 0; idx < leftSteps; idx += 1) {
-    const tile = chooseMatchingNonDouble(pool, currentLeft, prng, [5, 6, spinnerValue]);
+    const tile = chooseMatchingNonDouble(
+      pool,
+      currentLeft,
+      prng,
+      pipProfile.preferredLeft ?? pipProfile.preferredMainLine ?? undefined,
+    );
     if (!tile) {
       throw new Error('Unable to build left main line.');
     }
@@ -474,7 +509,12 @@ function buildBoard(dateSeed: string, attempt: number): { board: BoardState; rem
   }
 
   for (let idx = 0; idx < rightSteps; idx += 1) {
-    const tile = chooseMatchingNonDouble(pool, currentRight, prng, [5, 6, spinnerValue]);
+    const tile = chooseMatchingNonDouble(
+      pool,
+      currentRight,
+      prng,
+      pipProfile.preferredRight ?? pipProfile.preferredMainLine ?? undefined,
+    );
     if (!tile) {
       throw new Error('Unable to build right main line.');
     }
@@ -489,7 +529,12 @@ function buildBoard(dateSeed: string, attempt: number): { board: BoardState; rem
   for (let armIdx = 0; armIdx < branchLengths.length; armIdx += 1) {
     let current = spinnerValue;
     for (let depth = 0; depth < branchLengths[armIdx]; depth += 1) {
-      const tile = chooseMatchingNonDouble(pool, current, prng, [4, 5, 6]);
+      const tile = chooseMatchingNonDouble(
+        pool,
+        current,
+        prng,
+        pipProfile.preferredBranches ?? undefined,
+      );
       if (!tile) {
         throw new Error(`Unable to build branch ${armIdx}.`);
       }
@@ -743,15 +788,15 @@ function buildHandFromPath(
     hand.push(cloneTile(tile));
   }
 
-  if (hand.length > 7) {
+  if (hand.length > DEAL_SIZE) {
     throw new Error('Path exceeds hand size limit.');
   }
 
   const currentDoubles = hand.filter(isDouble).length;
-  const targetHandSize = Math.max(hand.length + 1, randInt(prng, 5, 7));
-  const desiredDoubleCount = Math.max(1, Math.min(3, Math.max(currentDoubles, randInt(prng, 1, 3))));
+  const targetHandSize = Math.max(hand.length + 1, randInt(prng, 8, DEAL_SIZE));
+  const desiredDoubleCount = Math.max(1, Math.min(4, Math.max(currentDoubles, randInt(prng, 1, 4))));
 
-  if (currentDoubles > 3) {
+  if (currentDoubles > 4) {
     throw new Error('Path uses too many doubles for the final hand.');
   }
 
@@ -770,7 +815,7 @@ function buildHandFromPath(
   }
 
   const fillerSlots = targetHandSize - hand.length;
-  const maxExtraDoubles = Math.max(0, 3 - hand.filter(isDouble).length);
+  const maxExtraDoubles = Math.max(0, 4 - hand.filter(isDouble).length);
   const fillerDoubles = Math.min(maxExtraDoubles, Math.max(0, randInt(prng, 0, Math.min(1, fillerSlots))));
   const fillerDoubleTiles = sampleWithoutReplacement(
     handPool.filter(isDouble),
@@ -793,26 +838,31 @@ function buildHandFromPath(
   }
   hand.push(...fillers.map(cloneTile));
 
-  if (hand.length < 5 || hand.length > 7) {
+  if (hand.length < 8 || hand.length > DEAL_SIZE) {
     throw new Error(`Hand size out of range: ${hand.length}`);
   }
 
   const doubles = hand.filter(isDouble).length;
-  if (doubles < 1 || doubles > 3) {
+  if (doubles < 1 || doubles > 4) {
     throw new Error(`Hand double count out of range: ${doubles}`);
   }
 
   return hand.sort((a, b) => tileKey(a).localeCompare(tileKey(b)));
 }
 
-function createPuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
-  const tactical = buildMidHandPuzzleState(dateSeed, attempt);
+function createHighScorePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
+  const { board, remainingPool } = buildBoard(dateSeed, attempt);
+  const pathTiles = findScoringPath(board, remainingPool, dateSeed, attempt);
+  if (!pathTiles) {
+    throw new Error('Unable to find high-score path.');
+  }
+  const hand = buildHandFromPath(remainingPool, pathTiles, dateSeed, attempt);
   const puzzle: CuratedDailyPuzzle = {
     id: `generated-${dateSeed}`,
     puzzleDate: dateSeed,
     title: null,
-    startingBoard: tactical.board,
-    startingHand: tactical.hand,
+    startingBoard: board,
+    startingHand: hand,
     maxMoves: 1,
     targetScore: 999,
     puzzleType: 'one_turn_high_score',
@@ -821,6 +871,133 @@ function createPuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
 
   validateGeneratedPuzzle(puzzle);
   return puzzle;
+}
+
+function boardShapeSignature(board: BoardState): string {
+  const ends = getOpenEnds(board)
+    .map((end) => `${end.position}:${end.value}`)
+    .sort()
+    .join('|');
+  return `${board.leftEnd}:${board.rightEnd}:${ends}`;
+}
+
+function buildSetupHand(
+  remainingPool: Tile[],
+  setupTile: Tile,
+  strikeTile: Tile,
+  dateSeed: string,
+  attempt: number,
+): Tile[] {
+  const prng = mulberry32(hashString(`${dateSeed}:${attempt}:setup-hand`));
+  const pool = remainingPool.map(cloneTile);
+  const hand: Tile[] = [];
+
+  for (const tile of [setupTile, strikeTile]) {
+    if (!removeTileOnce(pool, tile)) {
+      throw new Error(`Setup path tile missing from pool: ${tileKey(tile)}`);
+    }
+    hand.push(cloneTile(tile));
+  }
+
+  const currentDoubles = hand.filter(isDouble).length;
+  const targetHandSize = randInt(prng, 6, 10);
+  const desiredDoubleCount = Math.max(1, Math.min(2, Math.max(currentDoubles, randInt(prng, 1, 2))));
+  const doublesNeeded = Math.max(0, desiredDoubleCount - currentDoubles);
+  const availableDoubles = pool.filter(isDouble);
+  if (availableDoubles.length < doublesNeeded) {
+    throw new Error('Not enough doubles remain for setup hand.');
+  }
+
+  const selectedDoubles = sampleWithoutReplacement(availableDoubles, doublesNeeded, prng);
+  for (const tile of selectedDoubles) {
+    removeTileOnce(pool, tile);
+    hand.push(cloneTile(tile));
+  }
+
+  const remainingSlots = targetHandSize - hand.length;
+  const fillers = sampleWithoutReplacement(pool, remainingSlots, prng);
+  if (fillers.length !== remainingSlots) {
+    throw new Error('Not enough filler tiles remain for setup hand.');
+  }
+  hand.push(...fillers.map(cloneTile));
+
+  const doubles = hand.filter(isDouble).length;
+  if (hand.length < 6 || hand.length > 10) {
+    throw new Error(`Setup hand size out of range: ${hand.length}`);
+  }
+  if (doubles < 1 || doubles > 2) {
+    throw new Error(`Setup hand double count out of range: ${doubles}`);
+  }
+
+  return hand.sort((a, b) => tileKey(a).localeCompare(tileKey(b)));
+}
+
+function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
+  const { board, remainingPool } = buildBoard(dateSeed, attempt);
+  const initialState = createSearchState(board, remainingPool);
+  const openingMoves = getLegalMoves(initialState, YOU_ID).filter(
+    (move): move is PlayMove => move.type === 'play',
+  );
+
+  for (const setupMove of openingMoves) {
+    const setupResult = applyMove(initialState, YOU_ID, setupMove as Move).state;
+    const setupScore =
+      setupResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
+    if (setupScore !== 0) continue;
+    const setupBoard = setupResult.board as BoardState | null;
+    if (!setupBoard) continue;
+    if (boardShapeSignature(setupBoard) === boardShapeSignature(board)) continue;
+
+    const setupRemaining = remainingPool.map(cloneTile);
+    removeTileOnce(setupRemaining, setupMove.tile);
+    const followUpState = createSearchState(setupBoard, setupRemaining);
+    const followUpMoves = getLegalMoves(followUpState, YOU_ID).filter(
+      (move): move is PlayMove => move.type === 'play',
+    );
+
+    const strikeCandidate = followUpMoves
+      .map((move) => {
+        const next = applyMove(followUpState, YOU_ID, move as Move).state;
+        const delta = next.players[YOU_ID].score - followUpState.players[YOU_ID].score;
+        return { move, delta };
+      })
+      .filter((entry) => entry.delta >= 20)
+      .sort((a, b) => b.delta - a.delta)[0];
+
+    if (!strikeCandidate) continue;
+
+    const directStrike = openingMoves.find((move) => tileKey(move.tile) === tileKey(strikeCandidate.move.tile));
+    if (directStrike) {
+      const directResult = applyMove(initialState, YOU_ID, directStrike as Move).state;
+      const directScore = directResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
+      if (directScore >= 10) continue;
+    }
+
+    const hand = buildSetupHand(
+      remainingPool,
+      setupMove.tile,
+      strikeCandidate.move.tile,
+      dateSeed,
+      attempt,
+    );
+
+    const puzzle: CuratedDailyPuzzle = {
+      id: `generated-${dateSeed}-setup`,
+      puzzleDate: dateSeed,
+      title: null,
+      startingBoard: board,
+      startingHand: hand,
+      maxMoves: 2,
+      targetScore: 999,
+      puzzleType: 'setup_and_strike',
+      dealSize: DEAL_SIZE,
+    };
+
+    validateGeneratedPuzzle(puzzle);
+    return puzzle;
+  }
+
+  throw new Error('Unable to find setup-and-strike sequence.');
 }
 
 function computeBestPossiblePuzzleScore(puzzle: CuratedDailyPuzzle): number {
@@ -861,13 +1038,22 @@ function validateGeneratedPuzzle(puzzle: CuratedDailyPuzzle): { bestScore: numbe
   const tileCount = countBoardTiles(puzzle.startingBoard);
   const handSize = puzzle.startingHand.length;
   const handDoubles = puzzle.startingHand.filter(isDouble).length;
-  const optionsAtStart = getLegalMoves(createSearchState(puzzle.startingBoard, puzzle.startingHand), YOU_ID)
-    .filter((move): move is PlayMove => move.type === 'play').length;
+  const initialState = createSearchState(puzzle.startingBoard, puzzle.startingHand);
+  const openingMoves = getLegalMoves(initialState, YOU_ID).filter(
+    (move): move is PlayMove => move.type === 'play',
+  );
+  const optionsAtStart = openingMoves.length;
   const bestScore = computeBestPossiblePuzzleScore(puzzle);
+  const singleMoveScores = openingMoves
+    .map((move) => {
+      const next = applyMove(initialState, YOU_ID, move as Move).state;
+      return next.players[YOU_ID].score - initialState.players[YOU_ID].score;
+    })
+    .filter((score) => score > 0)
+    .sort((a, b) => b - a);
+  const topSingleMoveScore = singleMoveScores[0] ?? 0;
+  const secondSingleMoveScore = singleMoveScores[1] ?? null;
 
-  if (puzzle.puzzleType !== 'one_turn_high_score') {
-    throw new Error('Puzzle type must be one_turn_high_score.');
-  }
   if (puzzle.dealSize !== DEAL_SIZE) {
     throw new Error(`Deal size must be ${DEAL_SIZE}.`);
   }
@@ -877,23 +1063,95 @@ function validateGeneratedPuzzle(puzzle: CuratedDailyPuzzle): { bestScore: numbe
   if (tileCount < 7 || tileCount > 24) {
     throw new Error(`Board tile count must be 7-24, got ${tileCount}.`);
   }
-  if (handSize < 8 || handSize > DEAL_SIZE) {
-    throw new Error(`Hand size must be 8-${DEAL_SIZE}, got ${handSize}.`);
-  }
-  if (handDoubles < 1 || handDoubles > 6) {
-    throw new Error(`Hand double count must be 1-6, got ${handDoubles}.`);
-  }
-  if (optionsAtStart < 4) {
-    throw new Error(`Playable options at start must be >= 4, got ${optionsAtStart}.`);
-  }
-  if (bestScore < MIN_BEST_SCORE) {
-    throw new Error(`Best score ${bestScore} is below ${MIN_BEST_SCORE}.`);
+  if (puzzle.puzzleType === 'one_turn_high_score') {
+    if (handSize < 8 || handSize > DEAL_SIZE) {
+      throw new Error(`Hand size must be 8-${DEAL_SIZE}, got ${handSize}.`);
+    }
+    if (handDoubles < 1 || handDoubles > 6) {
+      throw new Error(`Hand double count must be 1-6, got ${handDoubles}.`);
+    }
+    if (optionsAtStart < 4) {
+      throw new Error(`Playable options at start must be >= 4, got ${optionsAtStart}.`);
+    }
+    if (bestScore < MIN_BEST_SCORE) {
+      throw new Error(`Best score ${bestScore} is below ${MIN_BEST_SCORE}.`);
+    }
+    if (topSingleMoveScore < MIN_BEST_SCORE) {
+      throw new Error(`Best single-move score ${topSingleMoveScore} is below ${MIN_BEST_SCORE}.`);
+    }
+    if (
+      secondSingleMoveScore !== null &&
+      topSingleMoveScore - secondSingleMoveScore < 5
+    ) {
+      throw new Error(
+        `Puzzle is too obvious: top two single-move scores are ${topSingleMoveScore} and ${secondSingleMoveScore}.`,
+      );
+    }
+  } else if (puzzle.puzzleType === 'setup_and_strike') {
+    if (handSize < 6 || handSize > 10) {
+      throw new Error(`Hand size must be 6-10, got ${handSize}.`);
+    }
+    if (handDoubles < 1 || handDoubles > 2) {
+      throw new Error(`Hand double count must be 1-2, got ${handDoubles}.`);
+    }
+    const setupValidation = validateSetupAndStrikeGeneratedPuzzle(puzzle);
+    if (!setupValidation.valid) {
+      throw new Error(setupValidation.reason);
+    }
+  } else {
+    throw new Error(`Unsupported puzzle type: ${puzzle.puzzleType}`);
   }
   if (computeOpenEndsSum(puzzle.startingBoard) < 0) {
     throw new Error('Open ends sum computation failed.');
   }
 
   return { bestScore, openEnds };
+}
+
+function validateSetupAndStrikeGeneratedPuzzle(
+  puzzle: CuratedDailyPuzzle,
+): { valid: boolean; reason: string; bestScore: number } {
+  const initialState = createSearchState(puzzle.startingBoard, puzzle.startingHand);
+  const firstMoves = getLegalMoves(initialState, YOU_ID).filter(
+    (move): move is PlayMove => move.type === 'play',
+  );
+
+  let bestStrikeScore = 0;
+
+  for (const setupMove of firstMoves) {
+    const setupResult = applyMove(initialState, YOU_ID, setupMove as Move).state;
+    const setupScore = setupResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
+    if (setupScore !== 0) continue;
+    const setupBoard = setupResult.board as BoardState | null;
+    if (!setupBoard) continue;
+    if (boardShapeSignature(setupBoard) === boardShapeSignature(puzzle.startingBoard)) continue;
+
+    const followUpMoves = getLegalMoves(setupResult, YOU_ID).filter(
+      (move): move is PlayMove => move.type === 'play',
+    );
+
+    for (const strikeMove of followUpMoves) {
+      const strikeResult = applyMove(setupResult, YOU_ID, strikeMove as Move).state;
+      const strikeScore = strikeResult.players[YOU_ID].score - setupResult.players[YOU_ID].score;
+      bestStrikeScore = Math.max(bestStrikeScore, strikeScore);
+      if (strikeScore < 20) continue;
+
+      const directStrike = firstMoves.find((move) => tileKey(move.tile) === tileKey(strikeMove.tile));
+      if (directStrike) {
+        const directResult = applyMove(initialState, YOU_ID, directStrike as Move).state;
+        const directScore = directResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
+        if (directScore >= 10) continue;
+      }
+
+      return { valid: true, reason: 'OK', bestScore: strikeScore };
+    }
+  }
+
+  return {
+    valid: false,
+    reason: 'No setup+strike sequence found.',
+    bestScore: bestStrikeScore,
+  };
 }
 
 async function fetchExistingPuzzleDates(
@@ -903,7 +1161,7 @@ async function fetchExistingPuzzleDates(
   to: string,
 ): Promise<Set<string>> {
   const url = new URL('/rest/v1/daily_puzzles', supabaseUrl);
-  url.searchParams.set('select', 'puzzle_date');
+  url.searchParams.set('select', 'puzzle_date,puzzle_type');
   url.searchParams.append('puzzle_date', `gte.${from}`);
   url.searchParams.append('puzzle_date', `lte.${to}`);
 
@@ -919,7 +1177,7 @@ async function fetchExistingPuzzleDates(
   }
 
   const rows = (await response.json()) as SupabasePuzzleRow[];
-  return new Set(rows.map((row) => row.puzzle_date));
+  return new Set(rows.map((row) => `${row.puzzle_date}::${row.puzzle_type ?? 'one_turn_high_score'}`));
 }
 
 async function upsertPuzzle(
@@ -928,7 +1186,7 @@ async function upsertPuzzle(
   puzzle: CuratedDailyPuzzle,
 ): Promise<void> {
   const url = new URL('/rest/v1/daily_puzzles', supabaseUrl);
-  url.searchParams.set('on_conflict', 'puzzle_date');
+  url.searchParams.set('on_conflict', 'puzzle_date,puzzle_type');
 
   const response = await fetch(url, {
     method: 'POST',
@@ -977,33 +1235,46 @@ async function main(): Promise<void> {
 
   for (let offset = 0; offset < options.days; offset += 1) {
     const dateSeed = addDays(options.from, offset);
-    if (existingDates.has(dateSeed) && !options.overwriteExisting) {
-      console.log(`${dateSeed} | skipped | existing puzzle`);
-      continue;
-    }
+    const generators: Array<{
+      puzzleType: DailyPuzzleType;
+      build: (seed: string, attempt: number) => CuratedDailyPuzzle;
+    }> = [
+      { puzzleType: 'one_turn_high_score', build: createHighScorePuzzle },
+      { puzzleType: 'setup_and_strike', build: generateSetupAndStrikePuzzle },
+    ];
 
-    let generated: CuratedDailyPuzzle | null = null;
-    let bestScore = 0;
-    let openEnds: number[] = [];
-
-    for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_DATE; attempt += 1) {
-      try {
-        generated = createPuzzle(dateSeed, attempt);
-        const validation = validateGeneratedPuzzle(generated);
-        bestScore = validation.bestScore;
-        openEnds = validation.openEnds;
-        break;
-      } catch {
-        generated = null;
+    for (const generator of generators) {
+      const existingKey = `${dateSeed}::${generator.puzzleType}`;
+      if (existingDates.has(existingKey) && !options.overwriteExisting) {
+        console.log(`${dateSeed} | ${generator.puzzleType} | skipped | existing puzzle`);
+        continue;
       }
-    }
 
-    if (!generated) {
-      throw new Error(`Failed to generate a valid puzzle for ${dateSeed} after ${MAX_ATTEMPTS_PER_DATE} attempts.`);
-    }
+      let generated: CuratedDailyPuzzle | null = null;
+      let bestScore = 0;
+      let openEnds: number[] = [];
 
-    await upsertPuzzle(supabaseUrl, serviceKey, generated);
-    console.log(`${dateSeed} | ${bestScore} | ${openEnds.join(',')}`);
+      for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_DATE; attempt += 1) {
+        try {
+          generated = generator.build(dateSeed, attempt);
+          const validation = validateGeneratedPuzzle(generated);
+          bestScore = validation.bestScore;
+          openEnds = validation.openEnds;
+          break;
+        } catch {
+          generated = null;
+        }
+      }
+
+      if (!generated) {
+        throw new Error(
+          `Failed to generate ${generator.puzzleType} for ${dateSeed} after ${MAX_ATTEMPTS_PER_DATE} attempts.`,
+        );
+      }
+
+      await upsertPuzzle(supabaseUrl, serviceKey, generated);
+      console.log(`${dateSeed} | ${generator.puzzleType} | ${bestScore} | ${openEnds.join(',')}`);
+    }
   }
 }
 
