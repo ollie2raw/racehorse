@@ -9,7 +9,7 @@ export const FRITZ_TIERS = {
   rookie: {
     id: FRITZ_ROOKIE_ID,
     label: 'Rookie',
-    ratingLabel: '1000',
+    ratingLabel: '600',
     description: 'Learning the game. Good for beginners.',
     subdescription: undefined as string | undefined,
     difficulty: 'casual' as const,
@@ -18,7 +18,7 @@ export const FRITZ_TIERS = {
   standard: {
     id: FRITZ_STANDARD_ID,
     label: 'Standard',
-    ratingLabel: '1400',
+    ratingLabel: '1000',
     description: 'Solid fundamentals. A real challenge.',
     subdescription: undefined as string | undefined,
     difficulty: 'standard' as const,
@@ -27,7 +27,7 @@ export const FRITZ_TIERS = {
   elite: {
     id: FRITZ_ELITE_ID,
     label: 'Elite',
-    ratingLabel: '1800',
+    ratingLabel: '1600',
     description: 'Maximum strength. Unforgiving.',
     subdescription: 'The original Fritz.' as string | undefined,
     difficulty: 'hard' as const,
