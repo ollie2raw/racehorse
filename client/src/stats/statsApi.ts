@@ -1,6 +1,9 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
+const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
+
 export type MatchMode = 'bot' | 'online' | 'practice';
 
 export interface RecordMatchInput {
@@ -159,11 +162,24 @@ export interface RankingProfile {
   rank: number | null;
 }
 
+function resolveBaseUrl(): string {
+  const configured = DEFAULT_SERVER_URL.trim();
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window !== 'undefined') {
+    const { hostname, port } = window.location;
+    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
+    return '';
+  }
+  return DEFAULT_SERVER_ORIGIN;
+}
+
 export async function fetchRankingProfile(
   userId: string,
 ): Promise<{ data: RankingProfile | null; error: string | null }> {
   try {
-    const response = await fetch(`/api/ranking/profile/${userId}`);
+    const response = await fetch(`${resolveBaseUrl()}/api/ranking/profile/${userId}`, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.error || 'Failed to fetch ranking profile');
