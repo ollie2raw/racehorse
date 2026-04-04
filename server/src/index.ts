@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors';
+import cors, { type CorsOptions } from 'cors';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import {
@@ -59,8 +59,37 @@ import {
   type Room,
 } from './rooms';
 
+const allowedOriginPatterns = [
+  /^http:\/\/localhost(?::\d+)?$/i,
+  /^http:\/\/127\.0\.0\.1(?::\d+)?$/i,
+  /^https:\/\/racehorsedoms\.vercel\.app$/i,
+  /^https:\/\/.*\.vercel\.app$/i,
+];
+
+const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const isAllowedOrigin = (origin: string | undefined): boolean => {
+  if (!origin) return true;
+  if (configuredCorsOrigins.includes(origin)) return true;
+  return allowedOriginPatterns.some((pattern) => pattern.test(origin));
+};
+
+const corsOptions: CorsOptions = {
+  origin(origin, callback) {
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error(`CORS blocked for origin: ${origin ?? 'unknown'}`));
+  },
+  credentials: true,
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 async function getAuthenticatedUserId(req: express.Request): Promise<string | null> {
@@ -714,7 +743,16 @@ app.post('/bot-matches/cleanup-stale', async (_req, res) => {
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { origin: '*' },
+  cors: {
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Socket.IO CORS blocked for origin: ${origin ?? 'unknown'}`));
+    },
+    credentials: true,
+  },
 });
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
