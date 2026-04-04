@@ -54,6 +54,14 @@
   justify-self: center;
 }
 
+.daily-runtime-instruction {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(223, 236, 244, 0.74);
+}
+
 .daily-puzzle-screen .daily-controls-right {
   display: flex;
   align-items: center;
@@ -763,6 +771,30 @@
   margin-top: 0;
 }
 
+.daily-puzzle-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.daily-puzzle-type-card {
+  min-height: 88px;
+  justify-content: center !important;
+}
+
+.daily-puzzle-type-card.is-active {
+  border-color: rgba(240, 192, 64, 0.4) !important;
+  box-shadow:
+    0 0 0 1px rgba(240, 192, 64, 0.14),
+    0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.daily-puzzle-type-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .daily-archive-controls {
   display: grid;
   gap: 8px;
@@ -949,6 +981,10 @@
 }
 
 @media (max-width: 640px) {
+  .daily-puzzle-type-grid {
+    grid-template-columns: 1fr;
+  }
+
   .daily-archive-input {
     width: 100%;
   }

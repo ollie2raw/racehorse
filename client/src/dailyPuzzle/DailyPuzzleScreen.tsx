@@ -12,6 +12,7 @@ import {
 import type { Move, Tile } from '../types';
 import {
   fetchDailyPuzzleLeaderboard,
+  getAllDailyPuzzlesForDate,
   getDailyPuzzleByDateSeed,
   getDailyPuzzleForDate,
   getLocalDateKey,
@@ -59,24 +60,28 @@ interface PendingWorkerJob<T> {
   reject: (reason?: unknown) => void;
 }
 
-function puzzleCacheKey(dateSeed: string): string {
-  return `dailyPuzzle:cached:v2:${dateSeed}`;
+function puzzleInstanceKey(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): string {
+  return `${dateSeed}:${puzzleType}`;
+}
+
+function puzzleCacheKey(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): string {
+  return `dailyPuzzle:cached:v3:${puzzleInstanceKey(dateSeed, puzzleType)}`;
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
-function progressKey(dateSeed: string): string {
-  return `dailyPuzzle:${dateSeed}`;
+function progressKey(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): string {
+  return `dailyPuzzle:${puzzleInstanceKey(dateSeed, puzzleType)}`;
 }
 
-function readProgress(dateSeed: string): DailyProgress {
+function readProgress(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): DailyProgress {
   if (typeof window === 'undefined') {
     return { attempts: 0, bestMoves: null, lastResult: null };
   }
   try {
-    const raw = window.localStorage.getItem(progressKey(dateSeed));
+    const raw = window.localStorage.getItem(progressKey(dateSeed, puzzleType));
     if (!raw) return { attempts: 0, bestMoves: null, lastResult: null };
     const parsed = JSON.parse(raw) as DailyProgress;
     return {
@@ -89,15 +94,22 @@ function readProgress(dateSeed: string): DailyProgress {
   }
 }
 
-function writeProgress(dateSeed: string, progress: DailyProgress): void {
+function writeProgress(
+  dateSeed: string,
+  puzzleType: CuratedDailyPuzzle['puzzleType'],
+  progress: DailyProgress,
+): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(progressKey(dateSeed), JSON.stringify(progress));
+  window.localStorage.setItem(progressKey(dateSeed, puzzleType), JSON.stringify(progress));
 }
 
-function readCachedPuzzle(dateSeed: string): CuratedDailyPuzzle | null {
+function readCachedPuzzle(
+  dateSeed: string,
+  puzzleType: CuratedDailyPuzzle['puzzleType'],
+): CuratedDailyPuzzle | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(puzzleCacheKey(dateSeed));
+    const raw = window.localStorage.getItem(puzzleCacheKey(dateSeed, puzzleType));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CuratedDailyPuzzle;
     if (
@@ -117,7 +129,10 @@ function readCachedPuzzle(dateSeed: string): CuratedDailyPuzzle | null {
 function writeCachedPuzzle(puzzle: CuratedDailyPuzzle): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(puzzleCacheKey(puzzle.puzzleDate), JSON.stringify(puzzle));
+    window.localStorage.setItem(
+      puzzleCacheKey(puzzle.puzzleDate, puzzle.puzzleType),
+      JSON.stringify(puzzle),
+    );
   } catch {
     // no-op
   }
@@ -250,6 +265,8 @@ export default function DailyPuzzleScreen({
   const [selectedDateSeed, setSelectedDateSeed] = useState(localDateKey);
   const [archiveDateInput, setArchiveDateInput] = useState(localDateKey);
   const [puzzle, setPuzzle] = useState<CuratedDailyPuzzle | null>(null);
+  const [availablePuzzles, setAvailablePuzzles] = useState<CuratedDailyPuzzle[]>([]);
+  const [selectedPuzzleType, setSelectedPuzzleType] = useState<CuratedDailyPuzzle['puzzleType']>('one_turn_high_score');
   const [validation, setValidation] = useState<PuzzleValidationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -298,7 +315,8 @@ export default function DailyPuzzleScreen({
   const archiveTargetIsToday = archiveTargetDate === localDateKey;
   const displayDateSeed = puzzle?.puzzleDate ?? (showLobby ? archiveTargetDate : selectedDateSeed);
   const formattedDisplayDate = formatPuzzleDateLabel(displayDateSeed);
-  const selectedPuzzleReady = puzzle?.puzzleDate === selectedDateSeed;
+  const selectedPuzzleReady =
+    puzzle?.puzzleDate === selectedDateSeed && puzzle?.puzzleType === selectedPuzzleType;
 
   const flashLastPlayed = useCallback((tile: Tile | null) => {
     if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
@@ -509,7 +527,7 @@ export default function DailyPuzzleScreen({
       setLoading(true);
       setLoadError(null);
       setShowLobby(true);
-      const cached = readCachedPuzzle(loadKey);
+      const cached = readCachedPuzzle(loadKey, selectedPuzzleType);
       let hasCachedFallback = false;
       if (cached) {
         if (cancelled || loadId !== loadIdRef.current) return;
@@ -530,7 +548,7 @@ export default function DailyPuzzleScreen({
             ? 'Running score: 0 — keep playing'
             : `Score Attack — Reach ${cached.targetScore} in ${cached.maxMoves} moves.`,
         );
-        const cachedProgress = readProgress(cached.puzzleDate);
+        const cachedProgress = readProgress(cached.puzzleDate, cached.puzzleType);
         setAttempts(cachedProgress.attempts);
         setBestMoves(cachedProgress.bestMoves);
         setStreakDays(getDisplayStreak(cached.puzzleDate));
@@ -542,21 +560,29 @@ export default function DailyPuzzleScreen({
         }
       }
       try {
-        const today = loadKey === localDateKey
-          ? await getDailyPuzzleForDate(new Date())
-          : await getDailyPuzzleByDateSeed(loadKey);
+        const dailyPuzzles = loadKey === localDateKey
+          ? await getAllDailyPuzzlesForDate(new Date())
+          : await Promise.all([
+              getDailyPuzzleByDateSeed(loadKey, 'one_turn_high_score'),
+              getDailyPuzzleByDateSeed(loadKey, 'setup_and_strike'),
+            ]).then((rows) => rows.filter((row): row is CuratedDailyPuzzle => Boolean(row)));
         if (cancelled || loadId !== loadIdRef.current) return;
-        if (!today) {
+        setAvailablePuzzles(dailyPuzzles);
+        const nextPuzzle =
+          dailyPuzzles.find((candidate) => candidate.puzzleType === selectedPuzzleType) ??
+          dailyPuzzles[0] ??
+          null;
+        if (!nextPuzzle) {
           setPuzzle(null);
           setValidation(null);
           return;
         }
 
         const check = null;
-        setPuzzle(today);
+        setPuzzle(nextPuzzle);
         setRuntimeState(null);
         setRuntimeInitError(null);
-        writeCachedPuzzle(today);
+        writeCachedPuzzle(nextPuzzle);
         setValidation(check);
         setBestPossibleScore(0);
         setStatus('IN_PROGRESS');
@@ -566,19 +592,22 @@ export default function DailyPuzzleScreen({
         setFinalScore(null);
         runningScoreRef.current = 0;
         setStatusMessage(
-          today.puzzleType === 'one_turn_high_score'
+          nextPuzzle.puzzleType === 'one_turn_high_score'
             ? 'Running score: 0 — keep playing'
-            : `Score Attack — Reach ${today.targetScore} in ${today.maxMoves} moves.`,
+            : 'Play a setup move first, then strike for maximum points.',
         );
 
-        const progress = readProgress(today.puzzleDate);
+        const progress = readProgress(nextPuzzle.puzzleDate, nextPuzzle.puzzleType);
         if (loadKey === localDateKey) {
           const nextAttempts = progress.attempts + 1;
-          writeProgress(today.puzzleDate, { ...progress, attempts: nextAttempts });
+          writeProgress(nextPuzzle.puzzleDate, nextPuzzle.puzzleType, {
+            ...progress,
+            attempts: nextAttempts,
+          });
           setAttempts(nextAttempts);
           setBestMoves(progress.bestMoves);
-          void refreshLeaderboard(today.puzzleDate);
-          setStreakDays(getDisplayStreak(today.puzzleDate));
+          void refreshLeaderboard(nextPuzzle.puzzleDate);
+          setStreakDays(getDisplayStreak(nextPuzzle.puzzleDate));
         } else {
           setAttempts(progress.attempts);
           setBestMoves(progress.bestMoves);
@@ -614,7 +643,7 @@ export default function DailyPuzzleScreen({
         loadInFlightKeyRef.current = null;
       }
     };
-  }, [selectedDateSeed, localDateKey, timezone, refreshLeaderboard, isArchiveMode]);
+  }, [selectedDateSeed, selectedPuzzleType, localDateKey, timezone, refreshLeaderboard, isArchiveMode]);
 
   useEffect(() => {
     if (!puzzle) return;
@@ -739,9 +768,9 @@ export default function DailyPuzzleScreen({
     );
 
     if (!isArchiveMode) {
-      const progress = readProgress(puzzle.puzzleDate);
+      const progress = readProgress(puzzle.puzzleDate, puzzle.puzzleType);
       const nextAttempts = progress.attempts + 1;
-      writeProgress(puzzle.puzzleDate, { ...progress, attempts: nextAttempts });
+      writeProgress(puzzle.puzzleDate, puzzle.puzzleType, { ...progress, attempts: nextAttempts });
       setAttempts(nextAttempts);
     }
   };
@@ -752,7 +781,7 @@ export default function DailyPuzzleScreen({
     finalScoreValue: number,
   ) => {
     if (!puzzle) return;
-    const progress = readProgress(puzzle.puzzleDate);
+    const progress = readProgress(puzzle.puzzleDate, puzzle.puzzleType);
     let resolvedStreak = streakDays;
 
     if (!isArchiveMode && nextStatus === 'SOLVED' && solvedMoves !== null) {
@@ -761,14 +790,14 @@ export default function DailyPuzzleScreen({
       resolvedStreak = nextStreak;
       const nextBest =
         progress.bestMoves === null ? solvedMoves : Math.min(progress.bestMoves, solvedMoves);
-      writeProgress(puzzle.puzzleDate, {
+      writeProgress(puzzle.puzzleDate, puzzle.puzzleType, {
         ...progress,
         bestMoves: nextBest,
         lastResult: nextStatus,
       });
       setBestMoves(nextBest);
     } else if (!isArchiveMode) {
-      writeProgress(puzzle.puzzleDate, { ...progress, lastResult: nextStatus });
+      writeProgress(puzzle.puzzleDate, puzzle.puzzleType, { ...progress, lastResult: nextStatus });
     }
 
     if (!isArchiveMode && user && !submittedRef.current) {
@@ -1009,6 +1038,8 @@ export default function DailyPuzzleScreen({
   );
 
   if (showLobby) {
+    const selectedLobbyPuzzle =
+      availablePuzzles.find((candidate) => candidate.puzzleType === selectedPuzzleType) ?? null;
     return (
       <>
         <LayoutScreen
@@ -1076,6 +1107,26 @@ export default function DailyPuzzleScreen({
                   </button>
                 </div>
               </div>
+              <div className="daily-puzzle-type-grid">
+                <button
+                  className={`mode-option daily-puzzle-type-card ${selectedPuzzleType === 'one_turn_high_score' ? 'is-active' : ''}`}
+                  type="button"
+                  onClick={() => setSelectedPuzzleType('one_turn_high_score')}
+                  disabled={!availablePuzzles.some((candidate) => candidate.puzzleType === 'one_turn_high_score')}
+                >
+                  <span className="mode-option-title">High Score</span>
+                  <span className="mode-option-meta">Find the highest scoring turn.</span>
+                </button>
+                <button
+                  className={`mode-option daily-puzzle-type-card ${selectedPuzzleType === 'setup_and_strike' ? 'is-active' : ''}`}
+                  type="button"
+                  onClick={() => setSelectedPuzzleType('setup_and_strike')}
+                  disabled={!availablePuzzles.some((candidate) => candidate.puzzleType === 'setup_and_strike')}
+                >
+                  <span className="mode-option-title">Setup &amp; Strike</span>
+                  <span className="mode-option-meta">Play a setup move first, then strike big.</span>
+                </button>
+              </div>
               <div className="mode-actions daily-entry-actions">
                 <button
                   className="mode-option mode-option-primary mode-accent-daily daily-start-hero"
@@ -1092,11 +1143,26 @@ export default function DailyPuzzleScreen({
                       setDailyLeaderboardOpen(false);
                       return;
                     }
-                    if (!puzzle || puzzle.puzzleDate !== nextDate) return;
+                    if (
+                      !puzzle ||
+                      puzzle.puzzleDate !== nextDate ||
+                      puzzle.puzzleType !== selectedPuzzleType
+                    ) return;
                     void startDailyPuzzle();
                   }}
                 >
-                  <span className="mode-option-title">{archiveTargetIsToday ? "▶ Start Today's Puzzle" : '▶ Play Archived Puzzle'}</span>
+                  <span className="mode-option-title">
+                    {archiveTargetIsToday
+                      ? `▶ Start ${selectedPuzzleType === 'setup_and_strike' ? 'Setup & Strike' : 'High Score'}`
+                      : '▶ Play Archived Puzzle'}
+                  </span>
+                  {selectedLobbyPuzzle && (
+                    <span className="mode-option-meta">
+                      {selectedLobbyPuzzle.puzzleType === 'setup_and_strike'
+                        ? 'Play a setup move first, then strike for maximum points.'
+                        : 'Keep the existing high score rules and scoring flow.'}
+                    </span>
+                  )}
                 </button>
                 {archiveTargetIsToday && (
                   <button
@@ -1112,7 +1178,7 @@ export default function DailyPuzzleScreen({
                 </button>
               </div>
               {loadError ? <p className="auth-inline-error">{loadError}</p> : null}
-              {!loading && !loadError && !puzzle ? (
+              {!loading && !loadError && !selectedLobbyPuzzle ? (
                 <p className="auth-inline-error">
                   {isArchiveMode
                     ? `No puzzle exists for ${formattedDisplayDate}.`
@@ -1172,6 +1238,10 @@ export default function DailyPuzzleScreen({
   const solvableWarning = Boolean(validation && !validation.solvable);
   const isOneTurnHighScore = puzzle.puzzleType === 'one_turn_high_score';
   const formattedPuzzleDate = formatPuzzleDateLabel(puzzle.puzzleDate);
+  const puzzleInstruction =
+    puzzle.puzzleType === 'setup_and_strike'
+      ? 'Play a setup move first, then strike for maximum points.'
+      : 'Score as many points as you can in one turn.';
   const currentScore = runtimeState?.players.you.score ?? 0;
   const completedScore = isOneTurnHighScore
     ? (finalScore ?? currentScore)
@@ -1220,6 +1290,7 @@ export default function DailyPuzzleScreen({
           <div className="wl-center-status">
             <span className="wl-turn-label your-turn">{isArchiveMode ? 'ARCHIVE PUZZLE' : 'DAILY PUZZLE'}</span>
             <span className="wl-room-code">{formattedPuzzleDate}</span>
+            <span className="daily-runtime-instruction">{puzzleInstruction}</span>
           </div>
         </div>
         <div className="daily-top-actions-pill">

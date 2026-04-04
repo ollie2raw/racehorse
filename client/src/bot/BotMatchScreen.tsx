@@ -863,6 +863,11 @@ export default function BotMatchScreen({
         console.error('[Fritz Rating] failed:', err);
         setGhostResultLoading(false);
         setGhostResultError(err instanceof Error ? err.message : 'Rating update failed.');
+        if (onProfileRefresh) {
+          void Promise.resolve(onProfileRefresh()).catch((refreshErr) => {
+            console.warn('[Fritz Rating] profile refresh after error failed:', refreshErr);
+          });
+        }
       });
 
   }, [
@@ -1538,6 +1543,19 @@ export default function BotMatchScreen({
     !isGhostMode && ghostResult?.glickoRating != null
       ? Math.round(ghostResult.glickoRating)
       : null;
+  const fritzFallbackGlickoDelta =
+    !isGhostMode && ghostResult == null && currentGlickoRating != null && matchStartGlickoRating != null
+      ? Math.round(Number(currentGlickoRating) - matchStartGlickoRating)
+      : null;
+  const fritzFallbackNewGlickoRating =
+    !isGhostMode && ghostResult == null && currentGlickoRating != null
+      ? Math.round(Number(currentGlickoRating))
+      : null;
+  const hasConfirmedFritzRatingUpdate =
+    fritzGlickoDelta != null ||
+    (fritzFallbackGlickoDelta != null && fritzFallbackGlickoDelta !== 0);
+  const displayedFritzGlickoDelta = fritzGlickoDelta ?? fritzFallbackGlickoDelta;
+  const displayedFritzNewGlickoRating = fritzNewGlickoRating ?? fritzFallbackNewGlickoRating;
   const onShareGhostCard = async () => {
     const result = ghostResult;
     if (!result) return;
@@ -1787,7 +1805,8 @@ export default function BotMatchScreen({
           onExtraAction={openAnalyzer}
           onClose={onBack}
         >
-          {!isGhostMode && (ghostResultLoading || ghostResultError || fritzGlickoDelta != null || fritzNewGlickoRating != null) && (
+          {!isGhostMode &&
+            (ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || displayedFritzNewGlickoRating != null) && (
             <div
               style={{
                 display: 'flex',
@@ -1807,10 +1826,12 @@ export default function BotMatchScreen({
               <strong style={{ fontSize: '1rem', fontWeight: 800 }}>
                 {ghostResultLoading
                   ? 'Updating...'
+                  : displayedFritzGlickoDelta != null && displayedFritzNewGlickoRating != null
+                    ? `${displayedFritzGlickoDelta >= 0 ? '+' : ''}${displayedFritzGlickoDelta}  •  ${displayedFritzNewGlickoRating}`
+                  : displayedFritzNewGlickoRating != null
+                    ? `${displayedFritzNewGlickoRating}`
                   : ghostResultError
                     ? 'Update failed'
-                  : fritzGlickoDelta != null && fritzNewGlickoRating != null
-                    ? `${fritzGlickoDelta >= 0 ? '+' : ''}${fritzGlickoDelta}  •  ${fritzNewGlickoRating}`
                     : 'Updated'}
               </strong>
             </div>
