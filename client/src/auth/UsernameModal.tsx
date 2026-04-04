@@ -5,6 +5,8 @@ interface UsernameModalProps {
   currentUsername: string | null;
   onSave: (username: string) => Promise<{ error: string | null }>;
   onClose?: () => void;
+  onSignOut?: () => void | Promise<void>;
+  signingOut?: boolean;
 }
 
 export default function UsernameModal({
@@ -12,6 +14,8 @@ export default function UsernameModal({
   currentUsername,
   onSave,
   onClose,
+  onSignOut,
+  signingOut = false,
 }: UsernameModalProps) {
   const [username, setUsername] = useState(currentUsername ?? '');
   const [saving, setSaving] = useState(false);
@@ -88,7 +92,7 @@ export default function UsernameModal({
         >
           <h3 style={{ margin: 0 }}>Pick your username</h3>
           {onClose && (
-            <button type="button" className="mode-inline-btn" onClick={onClose} disabled={saving}>
+            <button type="button" className="mode-inline-btn" onClick={onClose} disabled={saving || signingOut}>
               Not now
             </button>
           )}
@@ -122,10 +126,39 @@ export default function UsernameModal({
           type="button"
           className="mode-option mode-option-primary auth-submit"
           onClick={submit}
-          disabled={saving}
+          disabled={saving || signingOut}
         >
           <span className="mode-option-title">{saving ? 'Saving...' : 'Save username'}</span>
         </button>
+
+        {onSignOut ? (
+          <div
+            style={{
+              marginTop: 4,
+              paddingTop: 12,
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+              display: 'grid',
+              gap: 10,
+            }}
+          >
+            <button
+              type="button"
+              className="mode-inline-btn"
+              onClick={() => {
+                void onSignOut();
+              }}
+              disabled={saving || signingOut}
+              style={{
+                justifySelf: 'start',
+                color: 'rgba(255, 228, 228, 0.88)',
+                borderColor: 'rgba(248, 113, 113, 0.22)',
+                background: 'linear-gradient(180deg, rgba(40,18,24,0.72), rgba(18,10,14,0.86))',
+              }}
+            >
+              {signingOut ? 'Signing out...' : 'Sign out'}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

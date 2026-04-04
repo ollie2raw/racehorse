@@ -2465,6 +2465,20 @@ export default function App() {
     : authUser?.email
       ? `@${authUser.email.split('@')[0]}`
       : '@player';
+  const homeInitials = useMemo(() => {
+    const source = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'racehorse';
+    const parts = source
+      .replace(/[^a-zA-Z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+    const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('');
+    return initials || source.slice(0, 2).toUpperCase();
+  }, [authProfile?.username, authUser?.email]);
+  const homeRatingLabel = (authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : 1581).toLocaleString();
+  const homeFriendsOnline = 3;
+  const homePlayersOnline = playersOnlineCount ?? 142;
+  const homeActiveRooms = Math.max(12, Math.round(homePlayersOnline / 12));
+  const homeLeaderRating = '1,820';
   const weeklyAwardRows = Array.isArray(weeklyAwards?.awards) ? weeklyAwards.awards : [];
   const weeklyLeaderHandle = useMemo(() => {
     const mostWins = weeklyAwardRows.find((entry: any) =>
@@ -2474,6 +2488,7 @@ export default function App() {
     const username = mostWins?.leader?.username ?? fallback?.leader?.username ?? null;
     return username ? `@${username}` : null;
   }, [weeklyAwardRows]);
+  const homeLeaderHandle = weeklyLeaderHandle ?? '@kai';
   const weeklyRank: number | null = null;
   const hasSocialProofData =
     playersOnlineCount !== null && weeklyLeaderHandle !== null && weeklyRank !== null;
@@ -3095,7 +3110,7 @@ export default function App() {
       <div className={appRootClassName}>
         <LayoutScreen
           className="screen lobby-screen mode-home-screen mode-subpage-screen"
-          badge="Racehorse Dominoes"
+          badge="⬜ RACEHORSE DOMINOES"
           title="Single Player Modes"
           subtitle="Choose a mode to play solo or against a bot."
           contentClassName="screen-shell"
@@ -3122,7 +3137,7 @@ export default function App() {
                     setAppMode('ghostSetup');
                   }}
                 >
-                  <span className="mode-option-title">👻 Ghost Mode</span>
+                  <span className="mode-option-title">Ghost Mode</span>
                   <span className="mode-option-meta">
                     Play against a ghost trained on your own playstyle
                   </span>
@@ -3133,7 +3148,7 @@ export default function App() {
                   onClick={() => setAppMode('league')}
                 >
                   <span className="mode-option-title">
-                    <span className="mode-daily-crown" aria-hidden="true">🏁</span>
+                    
                     Your League
                   </span>
                   <span className="mode-option-meta">
@@ -3705,180 +3720,106 @@ export default function App() {
   if (appMode === 'home') {
     return (
       <div ref={appRootRef} className={appRootClassName}>
-        <div
-          className="home-top-actions"
-          style={{
-            position: 'absolute',
-            top: 14,
-            right: 16,
-            zIndex: 120,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          {!authUser && (
-            <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setAuthModalOpen(true)}>
-              Sign in
-            </button>
-          )}
-          {authUser && (
-            <>
-              <button className="mode-inline-btn home-top-btn home-top-btn-user" onClick={() => setUsernameModalOpen(true)}>
-                <span className="home-top-online-dot" aria-hidden="true" />
-                {myHandle}
-                {authProfile?.glicko_rating != null ? `  🏆 ${Math.round(authProfile.glicko_rating)}` : ''}
-              </button>
-              <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setStatsOpen(true)}>
-                Stats
-              </button>
-              <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setAppMode('ratingHistory')}>
-                Rating History
-              </button>
-              <button className="mode-inline-btn home-top-btn home-top-btn-action" onClick={() => setFriendsOpen(true)}>
-                Friends
-              </button>
-              <button
-                className="mode-inline-btn home-top-btn home-top-btn-signout"
-                disabled={signingOut}
-                onClick={async () => {
-                  reconnectShouldJoinRef.current = false;
-                  reconnectRoomCodeRef.current = null;
-                  preventAutoRejoinRef.current = true;
-                  setSigningOut(true);
-                  // Reset UI immediately; complete remote sign-out in the background.
-                  setAppMode('home');
-                  setJoinedRoom(null);
-                  setState(null);
-                  setPlayers([]);
-                  setLegalMoves([]);
-                  setCanDraw(false);
-                  setSelectedTile(null);
-                  setHandReveal(null);
-                  setScoreTrackOpen(false);
-                  setError('');
-                  setActionError('');
-                  try {
-                    void signOut().catch(() => {});
-                  } catch {
-                    // no-op
-                  } finally {
-                    setSigningOut(false);
-                  }
-                }}
-              >
-                {signingOut ? 'Signing out...' : 'Sign out'}
-              </button>
-            </>
-          )}
-        </div>
-        <LayoutScreen
-          className="screen lobby-screen mode-home-screen mode-accent-multiplayer"
-          badge={
-            <span className="mode-home-badge-lockup">
-              <BoneyardStackIcon className="mode-home-badge-icon" />
-              <span className="mode-home-badge-wordmark">Racehorse Dominoes</span>
-            </span>
-          }
-          title={
-            <span className="mode-title-with-help">
-              <span>Choose Game Mode</span>
-              <button
-                className="mode-inline-btn mode-title-help-btn"
-                onClick={() => setWelcomeOpen(true)}
-                aria-label="Open help and how to play"
-                title="How to play"
-              >
-                ?
-              </button>
-            </span>
-          }
-          contentClassName="screen-shell"
-        >
-            <div className="mode-hub" style={{ width: '100%' }}>
-              {
-                // TODO: unhide when presence/stats data is wired up.
-                hasSocialProofData && (
-                  <p className="mode-social-proof" aria-live="polite">
-                    <span>
-                      🟢 {playersOnlineCount === null ? '-- players online' : `${playersOnlineCount} players online`}
-                    </span>
-                    <span className="mode-social-proof-sep" aria-hidden="true">•</span>
-                    <span>
-                      {
-                        // TODO: wire weekly rank to a dedicated stats rank endpoint when available.
-                        `🏆 You're rank #${weeklyRank} this week`
-                      }
-                    </span>
-                    <span className="mode-social-proof-sep" aria-hidden="true">•</span>
-                    <span>
-                      {
-                        // TODO: wire weekly leader to a dedicated leaderboard endpoint if weekly awards are unavailable.
-                        weeklyLeaderHandle ? `👑 This week's leader: ${weeklyLeaderHandle}` : '👑 Weekly leader: --'
-                      }
-                    </span>
-                  </p>
-                )
-              }
-              <section className="mode-hub-primary mode-hub-section-multiplayer">
-                <p className="mode-section-label">Play Online</p>
-                <button
-                  className="mode-option mode-option-primary mode-option-hero mode-accent-multiplayer mode-card-play-online"
-                  onClick={() => setAppMode('multiplayer')}
-                >
-                  <div className="mode-card-play-online-head">
-                    <span className="mode-option-title">Multiplayer Online</span>
-                    <span className="mode-live-badge">Live</span>
-                  </div>
-                  <span className="mode-option-meta">Create a private room and play head to head in real time</span>
-                </button>
-              </section>
-
-              <div className="mode-hub-grid">
-                <section className="mode-hub-middle" aria-label="Practice and compete modes">
-                  <div className="mode-hub-middle-labels">
-                    <p className="mode-section-label">Compete</p>
-                    <p className="mode-section-label">Practice</p>
-                  </div>
-                  <div className="mode-hub-middle-cards">
-                    <button
-                      className="mode-option mode-option-primary mode-accent-bot mode-card-single-player"
-                      onClick={() => setAppMode('singlePlayerHub')}
-                    >
-                      <span className="mode-option-title">Single Player Modes</span>
-                      <span className="mode-option-meta">Play vs Fritz, Ghost Mode, Your League, & No Brainer Lab</span>
-                    </button>
-
-                    <button
-                      className="mode-option mode-accent-tournament mode-card-compete"
-                      onClick={() => {
-                        setError('');
-                        setAppMode('tournament');
-                      }}
-                    >
-                      <span className="mode-option-title">Tournament Mode</span>
-                      <span className="mode-option-meta">Round robin (4+ players), matches to 30, play everyone once</span>
-                    </button>
-
-                    <button
-                      className="mode-option mode-option-secondary mode-accent-daily mode-card-daily"
-                      onClick={() => setAppMode('daily')}
-                    >
-                      <span className="mode-option-title">Daily Puzzle</span>
-                      <span className="mode-option-meta">
-                        Solve today’s featured scenario and compare leaderboard results
+        <div className="layout-screen screen lobby-screen mode-home-screen mode-accent-multiplayer home-lobby-screen">
+          <div className="layout-screen-bg" aria-hidden="true" />
+          <div className="layout-screen-beam" aria-hidden="true" />
+          <div className="layout-screen-vignette" aria-hidden="true" />
+          <div className="layout-screen-inner home-lobby-shell">
+            <div className="home-main-column">
+              <div className="mode-hub home-restored-cards" style={{ width: '100%' }}>
+                  <section className="home-utility-grid is-quad" aria-label="Quick actions">
+                    <div className="home-utility-brand" aria-label="Racehorse">
+                      <span className="home-brand-iconbox" aria-hidden="true">
+                        <BoneyardStackIcon className="home-brand-icon" />
                       </span>
+                      <span className="home-brand-wordmark">RACEHORSE</span>
+                    </div>
+
+                    {authUser ? (
+                      <button
+                        className="mode-option home-utility-card mode-accent-multiplayer"
+                        onClick={() => setUsernameModalOpen(true)}
+                        aria-label="Open player profile"
+                      >
+                        <span className="home-utility-profile-line">
+                          <span className="mode-option-title">{myHandle}</span>
+                          <span className="home-utility-profile-rating">{homeRatingLabel}</span>
+                        </span>
+                      </button>
+                    ) : (
+                      <button className="mode-option home-utility-card mode-accent-multiplayer" onClick={() => setAuthModalOpen(true)}>
+                        <span className="home-utility-profile-line">
+                          <span className="mode-option-title">Sign in</span>
+                          <span className="home-utility-profile-rating">Profile</span>
+                        </span>
+                      </button>
+                    )}
+
+                    <button className="mode-option home-utility-card mode-accent-bot" onClick={() => setStatsOpen(true)}>
+                      <span className="mode-option-title">My Stats</span>
                     </button>
 
-                    <button
-                      className="mode-option mode-option-secondary mode-accent-track mode-card-track"
-                      onClick={() => setWeeklyStatsOpen(true)}
-                    >
-                      <span className="mode-option-title">Weekly Stats</span>
-                      <span className="mode-option-meta">See weekly highlights, awards, and leaderboard snapshots</span>
+                    <button className="mode-option home-utility-card mode-accent-track" onClick={() => setFriendsOpen(true)}>
+                      <span className="mode-option-title">Friends</span>
                     </button>
+                  </section>
+
+                  <section className="mode-hub-primary mode-hub-section-multiplayer">
+                    <button
+                      className="mode-option mode-option-primary mode-option-hero mode-accent-multiplayer mode-card-play-online"
+                      onClick={() => setAppMode('multiplayer')}
+                    >
+                      <div className="mode-card-play-online-head">
+                        <span className="mode-option-title">Multiplayer Online</span>
+                        <span className="mode-live-badge">Live</span>
+                      </div>
+                      <span className="mode-option-meta">Create a private room and play head to head in real time</span>
+                      <span className="home-play-online-cue" aria-hidden="true">Play now ›</span>
+                    </button>
+                  </section>
+
+                  <div className="mode-hub-grid">
+                    <section className="mode-hub-middle" aria-label="Practice and compete modes">
+                      <div className="mode-hub-middle-cards">
+                        <button
+                          className="mode-option mode-option-primary mode-accent-bot mode-card-single-player"
+                          onClick={() => setAppMode('singlePlayerHub')}
+                        >
+                          <span className="mode-option-title">Single Player Modes</span>
+                          <span className="mode-option-meta">Play vs Fritz, Ghost Mode, Your League, & No Brainer Lab</span>
+                        </button>
+
+                        <button
+                          className="mode-option mode-accent-tournament mode-card-compete"
+                          onClick={() => {
+                            setError('');
+                            setAppMode('tournament');
+                          }}
+                        >
+                          <span className="mode-option-title">Tournament Mode</span>
+                          <span className="mode-option-meta">Round robin (4+ players), matches to 30, play everyone once</span>
+                        </button>
+
+                        <button
+                          className="mode-option mode-option-secondary mode-accent-daily mode-card-daily"
+                          onClick={() => setAppMode('daily')}
+                        >
+                          <span className="mode-option-title">Daily Puzzle</span>
+                          <span className="mode-option-meta">
+                            Solve today’s featured scenario and compare leaderboard results
+                          </span>
+                        </button>
+
+                        <button
+                          className="mode-option mode-option-secondary mode-accent-track mode-card-track"
+                          onClick={() => setWeeklyStatsOpen(true)}
+                        >
+                          <span className="mode-option-title">Weekly Stats</span>
+                          <span className="mode-option-meta">See weekly highlights, awards, and leaderboard snapshots</span>
+                        </button>
+                      </div>
+                    </section>
                   </div>
-                </section>
               </div>
             </div>
 
@@ -3887,7 +3828,8 @@ export default function App() {
                 {supabaseConfigError ?? 'Supabase not configured.'}
               </p>
             )}
-        </LayoutScreen>
+          </div>
+        </div>
         {welcomeModal}
         <AuthModal
           open={authModalOpen}
@@ -3915,6 +3857,31 @@ export default function App() {
             setOnboardingDismissed(true);
             setUsernameModalOpen(false);
           }}
+          onSignOut={async () => {
+            reconnectShouldJoinRef.current = false;
+            reconnectRoomCodeRef.current = null;
+            preventAutoRejoinRef.current = true;
+            setSigningOut(true);
+            setAppMode('home');
+            setJoinedRoom(null);
+            setState(null);
+            setPlayers([]);
+            setLegalMoves([]);
+            setCanDraw(false);
+            setSelectedTile(null);
+            setHandReveal(null);
+            setScoreTrackOpen(false);
+            setError('');
+            setActionError('');
+            try {
+              void signOut().catch(() => {});
+            } catch {
+              // no-op
+            } finally {
+              setSigningOut(false);
+            }
+          }}
+          signingOut={signingOut}
         />
         <StatsScreen
           open={statsOpen}

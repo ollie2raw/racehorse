@@ -672,6 +672,32 @@ app.post('/league/fixture/:fixtureId/live-room', async (req, res) => {
   }
 });
 
+app.post('/bot-matches/cleanup-stale', async (_req, res) => {
+  try {
+    const threshold = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const staleRows = await supabaseFetch<any[]>(
+      `/rest/v1/bot_match_pending?select=id,user_id,room_code,started_at,resolved&resolved=eq.false&started_at=lt.${encodeURIComponent(threshold)}&order=started_at.asc`,
+    );
+
+    let processed = 0;
+    for (const row of staleRows ?? []) {
+      if (!row?.id || !row?.user_id) continue;
+      await supabaseFetch(`/rest/v1/bot_match_pending?id=eq.${row.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ resolved: true }),
+      });
+      await recordPendingFritzDisconnectLoss(row.user_id);
+      processed += 1;
+    }
+
+    res.json({ ok: true, processed });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to clean stale bot matches.',
+    });
+  }
+});
+
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -705,6 +731,81 @@ function normalizeUserId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const raw = value.trim();
   return raw || null;
+}
+
+function getFritzTierForRoom(room: Room, botPlayerId: string | null): string {
+  const cfg = (room as any).config ?? {};
+  if (typeof cfg.fritzTier === 'string' && cfg.fritzTier.trim()) {
+    return cfg.fritzTier.trim().toLowerCase();
+  }
+
+  const rawBotId = typeof botPlayerId === 'string' ? botPlayerId.toLowerCase() : '';
+  if (rawBotId.includes('rookie')) return 'rookie';
+  if (rawBotId.includes('standard')) return 'standard';
+  if (rawBotId.includes('master')) return 'master';
+  return 'elite';
+}
+
+function getPendingFritzMatchContext(room: Room): { realPlayer: RoomPlayer; fritzTier: string } | null {
+  const roster = roomPlayersByCode.get(room.code) ?? getRoomPlayersWithFallback(room.code, room.players);
+  const botPlayer = roster.find((player) => typeof player.id === 'string' && player.id.startsWith('bot:fritz:')) ?? null;
+  const realPlayers = roster.filter((player) => player.userId);
+  if (!botPlayer || realPlayers.length !== 1) return null;
+  return {
+    realPlayer: realPlayers[0],
+    fritzTier: getFritzTierForRoom(room, botPlayer.id),
+  };
+}
+
+async function insertPendingFritzMatch(room: Room) {
+  const pendingContext = getPendingFritzMatchContext(room);
+  if (!pendingContext) return;
+
+  await supabaseFetch('/rest/v1/bot_match_pending', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      user_id: pendingContext.realPlayer.userId,
+      fritz_tier: pendingContext.fritzTier,
+      room_code: room.code,
+      resolved: false,
+    }),
+  });
+}
+
+async function resolvePendingFritzMatch(roomCode: string) {
+  await supabaseFetch(
+    `/rest/v1/bot_match_pending?room_code=eq.${roomCode}&resolved=eq.false`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ resolved: true }),
+    },
+  );
+}
+
+async function recordPendingFritzDisconnectLoss(userId: string) {
+  const profileRows = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
+  const profile = profileRows?.[0];
+  if (!profile) {
+    throw new Error(`Ranking profile not found for user ${userId}`);
+  }
+
+  await supabaseFetch('/rest/v1/ranked_games', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({
+      player_id: userId,
+      opponent_id: FRITZ_SYSTEM_ID,
+      player_score: 0,
+      opponent_score: 60,
+      game_type: 'fritz',
+      rating_before: profile.glicko_rating,
+      rd_before: profile.glicko_rd,
+      played_at: new Date().toISOString(),
+    }),
+  });
+
+  await processRatingPeriod(userId);
 }
 
 function getRoomPlayersWithFallback(roomCode: string, socketIds: string[]): RoomPlayer[] {
@@ -936,6 +1037,10 @@ function broadcastStateUpdate(roomCode: string) {
 
       void (async () => {
         try {
+          if (getPendingFritzMatchContext(room)) {
+            await resolvePendingFritzMatch(room.code);
+          }
+
           await appendMatch({
             endedAtMs: Date.now(),
             roomCode: room.code,
@@ -1984,6 +2089,9 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
       console.log(
         `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,
       );
+      if (getPendingFritzMatchContext(room)) {
+        await insertPendingFritzMatch(room);
+      }
       broadcastStateUpdate(room.code);
       if (typeof cb === 'function') cb({ ok: true });
     } catch (err: unknown) {
@@ -2109,14 +2217,17 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
   socket.on('disconnect', () => {
     removeSocketPresence();
     const roomCode = (socket.data?.roomId as string | undefined) ?? undefined;
+    const userId = normalizeUserId(socket.data?.userId);
+    let wasActiveRoomPlayer = false;
     if (roomCode) {
       try {
         const room = getRoom(roomCode);
         if (room.players.includes(socket.id)) {
+          wasActiveRoomPlayer = true;
           reserveReconnectSeat(roomCode, {
             oldSocketId: socket.id,
             username: normalizeUsername(socket.data?.username),
-            userId: normalizeUserId(socket.data?.userId),
+            userId,
           });
         }
       } catch {
@@ -2125,6 +2236,25 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
     clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
     evaluateRoomLifecycle(roomCode);
+    if (userId && roomCode && wasActiveRoomPlayer) {
+      void (async () => {
+        try {
+          const pendingRows = await supabaseFetch<any[]>(
+            `/rest/v1/bot_match_pending?room_code=eq.${roomCode}&user_id=eq.${userId}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
+          );
+          const pending = pendingRows?.[0];
+          if (!pending?.id) return;
+
+          await supabaseFetch(`/rest/v1/bot_match_pending?id=eq.${pending.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ resolved: true }),
+          });
+          await recordPendingFritzDisconnectLoss(userId);
+        } catch (error) {
+          console.error('[Fritz] disconnect loss handling failed:', error);
+        }
+      })();
+    }
     console.log('Client disconnected:', socket.id);
   });
 });

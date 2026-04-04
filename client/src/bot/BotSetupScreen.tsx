@@ -48,7 +48,7 @@ export default function BotSetupScreen({
                   <span className="bot-setup-tier-label">{config.label}</span>
                   <span className="bot-setup-tier-rating">{config.ratingLabel}</span>
                 </div>
-                <p className="bot-setup-tier-description">{config.description}</p>
+                <p className="bot-setup-tier-description">{config.description}{config.subdescription && <span className="bot-setup-tier-subdescription"> {config.subdescription}</span>}</p>
               </button>
             ),
           )}
