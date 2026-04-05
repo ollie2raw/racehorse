@@ -754,6 +754,34 @@ button:hover:not(:disabled) {
   gap: 8px;
 }
 
+.screen.mode-subpage-screen .layout-screen-badge {
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: rgba(240, 248, 255, 0.72);
+}
+
+.screen.mode-subpage-screen .layout-screen-subtitle {
+  font-size: 1.04rem;
+  line-height: 1.5;
+  font-weight: 500;
+  color: rgba(223, 236, 244, 0.78);
+}
+
+.screen.mode-subpage-screen .mode-option-title {
+  font-size: 1.32rem;
+  font-weight: 850;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+}
+
+.screen.mode-subpage-screen .mode-option-meta {
+  font-size: 1.04rem;
+  line-height: 1.5;
+  font-weight: 500;
+  color: rgba(223, 236, 244, 0.74);
+}
+
 .screen.mode-subpage-screen.mode-auth-gate-screen .layout-screen-inner {
   max-width: none;
   min-height: calc(100vh - 108px);

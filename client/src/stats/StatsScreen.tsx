@@ -160,13 +160,21 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           {stats.ghostRating != null && (
             <span
               style={{
-                fontSize: '0.92rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 999,
+                fontSize: '0.8rem',
                 color: '#d8b4fe',
                 fontWeight: 700,
                 letterSpacing: '0.04em',
+                background: 'rgba(168, 85, 247, 0.1)',
+                border: '1px solid rgba(216, 180, 254, 0.18)',
               }}
             >
-              👻 {stats.ghostRating}
+              <span aria-hidden="true">👻</span>
+              <span>Ghost Rating {stats.ghostRating}</span>
             </span>
           )}
             <span style={{ fontSize: '0.8rem', color: 'rgba(188, 212, 222, 0.72)', letterSpacing: '0.04em' }}>

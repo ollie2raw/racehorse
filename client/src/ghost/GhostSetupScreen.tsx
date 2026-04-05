@@ -148,7 +148,7 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
 
   return (
     <LayoutScreen
-      className="ghost-setup-screen mode-home-screen mode-subpage-screen mode-accent-ghost"
+      className="ghost-setup-screen mode-subpage-screen mode-accent-ghost"
       badge="Compete"
       title="Ghost Mode"
       subtitle="Play against a version of yourself — or a friend — trained on real Fritz matches."

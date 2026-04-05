@@ -15,9 +15,9 @@
 
 .bot-setup-screen .layout-screen-badge {
   margin-bottom: 12px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.13em;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #818cf8;
 }
@@ -115,14 +115,14 @@
 }
 
 .bot-setup-tier-label {
-  font-size: 1.14rem;
-  font-weight: 820;
+  font-size: 1.32rem;
+  font-weight: 850;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .bot-setup-tier-rating {
-  font-size: 1.36rem;
+  font-size: 1.48rem;
   font-weight: 860;
   letter-spacing: 0.01em;
   color: var(--tier-color, rgba(191, 219, 254, 0.92));
@@ -132,9 +132,9 @@
 .bot-setup-tier-description {
   margin: 0;
   color: rgba(214, 225, 235, 0.82);
-  font-size: 0.98rem;
-  font-weight: 560;
-  line-height: 1.42;
+  font-size: 1.04rem;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .bot-setup-segmented {
@@ -163,8 +163,8 @@
   border: 1px solid rgba(255, 255, 255, 0.02);
   background: rgba(255, 255, 255, 0.02);
   color: rgba(255, 255, 255, 0.54);
-  font-size: 0.96rem;
-  font-weight: 720;
+  font-size: 1.04rem;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
@@ -206,13 +206,16 @@
 }
 
 .bot-setup-start .mode-option-title {
-  font-weight: 820 !important;
-  font-size: 1.08rem !important;
+  font-weight: 850 !important;
+  font-size: 1.32rem !important;
   color: rgba(255, 255, 255, 0.95) !important;
 }
 
 .bot-setup-start .mode-option-meta {
-  color: rgba(225, 233, 244, 0.72) !important;
+  font-size: 1.04rem !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
+  color: rgba(225, 233, 244, 0.74) !important;
 }
 
 .bot-setup-start:hover {
@@ -230,12 +233,14 @@
 }
 
 .bot-setup-actions .mode-option-title {
-  font-size: 1.14rem !important;
-  font-weight: 740 !important;
+  font-size: 1.32rem !important;
+  font-weight: 850 !important;
 }
 
 .bot-setup-actions .mode-option-meta {
   font-size: 1.04rem !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
   margin-top: 2px !important;
 }
 
@@ -250,13 +255,16 @@
 }
 
 .bot-setup-back .mode-option-title {
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  color: rgba(255, 255, 255, 0.4) !important;
+  font-size: 1.32rem !important;
+  font-weight: 850 !important;
+  color: rgba(255, 255, 255, 0.86) !important;
 }
 
 .bot-setup-back .mode-option-meta {
-  color: rgba(255, 255, 255, 0.45) !important;
+  font-size: 1.04rem !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
+  color: rgba(223, 236, 244, 0.72) !important;
 }
 
 .bot-setup-back .mode-option-title::before {
@@ -316,6 +324,6 @@
   display: block;
   margin-top: 3px;
   color: rgba(214, 225, 235, 0.58);
-  font-size: 0.88rem;
-  font-weight: 480;
+  font-size: 0.96rem;
+  font-weight: 500;
 }
