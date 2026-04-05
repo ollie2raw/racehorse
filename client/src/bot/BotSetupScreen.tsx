@@ -24,7 +24,7 @@ export default function BotSetupScreen({
 
   return (
     <LayoutScreen
-      className="bot-setup-screen mode-home-screen mode-subpage-screen mode-accent-bot"
+      className="bot-setup-screen mode-subpage-screen mode-accent-bot"
       badge="Practice"
       title="Play vs Fritz"
       subtitle="Choose deal size before the match starts."

@@ -193,6 +193,8 @@ function validateSetupAndStrikePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidat
     const setupApplied = applyPlayMove(initial, 'you', move);
     const setupScore = setupApplied.scored?.points ?? 0;
     if (setupScore !== 0) continue;
+    if (move.tile.low !== move.tile.high) continue;
+    if (setupApplied.state.currentPlayer !== 'you') continue;
 
     const beforeEnds = getDisplayOpenEnds(initial).join(',');
     const afterEnds = getDisplayOpenEnds(setupApplied.state).join(',');
@@ -206,7 +208,7 @@ function validateSetupAndStrikePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidat
       const strikeApplied = applyPlayMove(setupApplied.state, 'you', strikeMove);
       const strikeScore = strikeApplied.scored?.points ?? 0;
       bestStrikeScore = Math.max(bestStrikeScore, strikeScore);
-      if (strikeScore < 20) continue;
+      if (strikeScore < 5) continue;
 
       const directStrike = firstMoves.find(
         (candidate) =>
@@ -217,7 +219,7 @@ function validateSetupAndStrikePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidat
       if (directStrike) {
         const directApplied = applyPlayMove(initial, 'you', directStrike);
         const directScore = directApplied.scored?.points ?? 0;
-        if (directScore >= 10) continue;
+        if (directScore >= Math.max(3, strikeScore - 2)) continue;
       }
 
       return {

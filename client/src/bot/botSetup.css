@@ -4,13 +4,34 @@
   width: 100%;
   position: relative;
   overflow: hidden;
+  padding-inline: 24px !important;
 }
 
 .bot-setup-content {
   width: 100%;
+  max-width: none;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: calc(100vh - 180px);
+}
+
+.bot-setup-screen .screen-shell {
+  width: 100%;
+  max-width: none;
+  overflow: visible;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+}
+
+.bot-setup-screen .layout-screen-header,
+.bot-setup-screen .layout-screen-inner,
+.bot-setup-screen .layout-screen-content {
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
 }
 
 .bot-setup-screen .layout-screen-badge {
@@ -25,8 +46,9 @@
 .bot-setup-panel-shell {
   width: 100%;
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 16px;
+  padding: 18px;
+  min-height: calc(100vh - 260px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
   background:
@@ -46,8 +68,8 @@
 .bot-setup-tier-card {
   position: relative;
   overflow: hidden;
-  min-height: 132px;
-  padding: 18px 18px 16px;
+  min-height: clamp(154px, 20vh, 188px);
+  padding: 22px 20px 18px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-left: 5px solid var(--tier-color, #818cf8);
@@ -115,14 +137,14 @@
 }
 
 .bot-setup-tier-label {
-  font-size: 1.32rem;
+  font-size: clamp(1.72rem, 2.2vw, 2.18rem);
   font-weight: 850;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .bot-setup-tier-rating {
-  font-size: 1.48rem;
+  font-size: clamp(1.86rem, 2.4vw, 2.34rem);
   font-weight: 860;
   letter-spacing: 0.01em;
   color: var(--tier-color, rgba(191, 219, 254, 0.92));
@@ -132,14 +154,14 @@
 .bot-setup-tier-description {
   margin: 0;
   color: rgba(214, 225, 235, 0.82);
-  font-size: 1.04rem;
+  font-size: 1.18rem;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.58;
 }
 
 .bot-setup-segmented {
-  margin-top: 4px;
-  margin-bottom: 8px;
+  margin-top: 6px;
+  margin-bottom: 10px;
   display: inline-flex;
   align-self: flex-start;
   width: fit-content;
@@ -156,14 +178,14 @@
 }
 
 .bot-setup-size-btn {
-  min-height: 44px;
-  min-width: 132px;
-  padding: 8px 20px;
+  min-height: 52px;
+  min-width: 152px;
+  padding: 10px 22px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.02);
   background: rgba(255, 255, 255, 0.02);
   color: rgba(255, 255, 255, 0.54);
-  font-size: 1.04rem;
+  font-size: 1.2rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -194,6 +216,24 @@
   max-width: 100%;
 }
 
+.bot-setup-actions .mode-option {
+  min-height: 112px;
+  padding: 24px 24px;
+}
+
+.bot-setup-actions .mode-option-title {
+  font-size: clamp(2.12rem, 2.9vw, 2.78rem) !important;
+  font-weight: 850 !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.bot-setup-actions .mode-option-meta {
+  font-size: 1.24rem !important;
+  font-weight: 500 !important;
+  line-height: 1.52 !important;
+}
+
 .bot-setup-start {
   --menu-section-color: var(--bot-tier-color, #818cf8);
   background:
@@ -206,15 +246,10 @@
 }
 
 .bot-setup-start .mode-option-title {
-  font-weight: 850 !important;
-  font-size: 1.32rem !important;
   color: rgba(255, 255, 255, 0.95) !important;
 }
 
 .bot-setup-start .mode-option-meta {
-  font-size: 1.04rem !important;
-  font-weight: 500 !important;
-  line-height: 1.5 !important;
   color: rgba(225, 233, 244, 0.74) !important;
 }
 
@@ -229,19 +264,15 @@
 }
 
 .bot-setup-actions .mode-option {
-  padding: 16px 20px !important;
+  padding: 24px 24px !important;
 }
 
 .bot-setup-actions .mode-option-title {
-  font-size: 1.32rem !important;
-  font-weight: 850 !important;
+  margin: 0 !important;
 }
 
 .bot-setup-actions .mode-option-meta {
-  font-size: 1.04rem !important;
-  font-weight: 500 !important;
-  line-height: 1.5 !important;
-  margin-top: 2px !important;
+  margin-top: 4px !important;
 }
 
 .bot-setup-actions .mode-option-secondary {
@@ -255,15 +286,10 @@
 }
 
 .bot-setup-back .mode-option-title {
-  font-size: 1.32rem !important;
-  font-weight: 850 !important;
   color: rgba(255, 255, 255, 0.86) !important;
 }
 
 .bot-setup-back .mode-option-meta {
-  font-size: 1.04rem !important;
-  font-weight: 500 !important;
-  line-height: 1.5 !important;
   color: rgba(223, 236, 244, 0.72) !important;
 }
 

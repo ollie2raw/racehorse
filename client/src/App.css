@@ -202,8 +202,8 @@
 
 .layout-screen-subtitle {
   margin: 0;
-  font-size: 1.05rem;
-  line-height: 1.5;
+  font-size: clamp(1.5rem, 2.05vw, 1.9rem);
+  line-height: 1.55;
   color: rgba(223, 236, 242, 0.85);
   max-width: 860px;
 }
@@ -762,8 +762,8 @@ button:hover:not(:disabled) {
 }
 
 .screen.mode-subpage-screen .layout-screen-subtitle {
-  font-size: 1.04rem;
-  line-height: 1.5;
+  font-size: clamp(1.5rem, 2.05vw, 1.9rem);
+  line-height: 1.55;
   font-weight: 500;
   color: rgba(223, 236, 244, 0.78);
 }
@@ -1004,8 +1004,8 @@ button:hover:not(:disabled) {
 }
 
 .mode-home-screen .layout-screen-subtitle {
-  font-size: 1.1rem;
-  line-height: 1.5;
+  font-size: clamp(1.5rem, 2.05vw, 1.9rem);
+  line-height: 1.55;
   color: rgba(223, 236, 244, 0.84);
   max-width: 760px;
 }
@@ -2023,7 +2023,7 @@ button:hover:not(:disabled) {
   width: 100% !important;
   gap: 10px;
   margin: 0 auto 0;
-  height: calc(100vh - 72px);
+  min-height: calc(100vh - 52px);
 }
 
 .home-restored-cards .mode-hub-grid {
@@ -2188,18 +2188,18 @@ button:hover:not(:disabled) {
 }
 
 .home-restored-cards .mode-option.mode-card-play-online {
-  min-height: 92px;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  min-height: clamp(112px, 15vh, 146px);
+  padding-top: 14px;
+  padding-bottom: 14px;
 }
 
 .home-restored-cards .mode-option.mode-card-single-player,
 .home-restored-cards .mode-option.mode-card-compete,
 .home-restored-cards .mode-option.mode-card-daily,
 .home-restored-cards .mode-option.mode-card-track {
-  min-height: 128px;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  min-height: clamp(176px, 24vh, 232px);
+  padding-top: 16px;
+  padding-bottom: 16px;
 }
 
 .home-restored-cards .mode-card-play-online .mode-option-title,
@@ -2207,13 +2207,12 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-card-compete .mode-option-title,
 .home-restored-cards .mode-card-daily .mode-option-title,
 .home-restored-cards .mode-card-track .mode-option-title {
-  font-size: clamp(1.72rem, 2.75vw, 2.25rem) !important;
-  font-size: clamp(1.9rem, 3vw, 2.9rem) !important;
+  font-size: clamp(2.08rem, 3.2vw, 3.08rem) !important;
   color: rgba(255, 255, 255, 0.97);
 }
 
 .mode-home-screen .home-restored-cards .mode-option.mode-card-play-online.mode-option-hero .mode-option-title {
-  font-size: 2.66rem !important;
+  font-size: clamp(2.38rem, 3.8vw, 3.32rem) !important;
   font-weight: 840 !important;
   line-height: 1.06 !important;
   letter-spacing: -0.02em !important;
@@ -2224,8 +2223,8 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-card-compete .mode-option-meta,
 .home-restored-cards .mode-card-daily .mode-option-meta,
 .home-restored-cards .mode-card-track .mode-option-meta {
-  font-size: 16px !important;
-  line-height: 1.22;
+  font-size: 18px !important;
+  line-height: 1.34;
   color: rgba(255, 255, 255, 0.75);
 }
 
@@ -4618,7 +4617,8 @@ button:hover:not(:disabled) {
   }
 
   .layout-screen-subtitle {
-    font-size: 13px;
+    font-size: 1.08rem;
+    line-height: 1.45;
   }
 
   .layout-screen-content {

@@ -84,6 +84,7 @@ const MAX_PIPS = 6;
 const DEAL_SIZE = 14;
 const MAX_ATTEMPTS_PER_DATE = 120;
 const MIN_BEST_SCORE = 35;
+const SETUP_STRIKE_MIN_SCORE = 5;
 function parseCliArgs(argv: string[]): CliOptions {
   let from: string | null = null;
   let days = 30;
@@ -730,6 +731,51 @@ function buildMidHandPuzzleState(
   throw new Error('Could not synthesize tactical mid-hand puzzle state.');
 }
 
+function buildSetupMidHandPuzzleState(
+  dateSeed: string,
+  attempt: number,
+): { board: BoardState; hand: Tile[]; setupTile: Tile; strikeTile: Tile } {
+  const minTurns = 8;
+  const maxTurns = 220;
+  const minBoardTiles = 6;
+  const minHandSize = 6;
+
+  let state = makeSimState(dateSeed, attempt);
+
+  for (let turn = 0; turn < maxTurns; turn += 1) {
+    if (state.handOver || state.gameOver) {
+      throw new Error('Simulation ended before finding a setup state.');
+    }
+
+    const currentId = state.playerIds[state.currentPlayerIndex];
+    const nextMove = pickTacticalMove(state, dateSeed, attempt + turn);
+    state = applyMove(state, currentId, nextMove as Move).state;
+
+    if (turn < minTurns) continue;
+    if (state.currentPlayerIndex !== 0) continue;
+    if (!state.board) continue;
+
+    const boardTiles = countBoardTiles(state.board as BoardState);
+    const handSize = state.players[YOU_ID].hand.length;
+    if (boardTiles < minBoardTiles || handSize < minHandSize) continue;
+
+    const sequence = findSetupAndStrikeSequence(
+      state.board as BoardState,
+      [...state.players[YOU_ID].hand].map(cloneTile),
+    );
+    if (!sequence) continue;
+
+    return {
+      board: cloneBoard(state.board as BoardState),
+      hand: [...state.players[YOU_ID].hand].map(cloneTile).sort((a, b) => tileKey(a).localeCompare(tileKey(b))),
+      setupTile: sequence.setupTile,
+      strikeTile: sequence.strikeTile,
+    };
+  }
+
+  throw new Error('Could not synthesize setup-and-strike mid-hand puzzle state.');
+}
+
 function findScoringPath(board: BoardState, remainingPool: Tile[], dateSeed: string, attempt: number): Tile[] | null {
   const searchState = createSearchState(board, remainingPool);
   const memo = new Set<string>();
@@ -851,26 +897,44 @@ function buildHandFromPath(
 }
 
 function createHighScorePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
-  const { board, remainingPool } = buildBoard(dateSeed, attempt);
-  const pathTiles = findScoringPath(board, remainingPool, dateSeed, attempt);
-  if (!pathTiles) {
-    throw new Error('Unable to find high-score path.');
-  }
-  const hand = buildHandFromPath(remainingPool, pathTiles, dateSeed, attempt);
-  const puzzle: CuratedDailyPuzzle = {
-    id: `generated-${dateSeed}`,
-    puzzleDate: dateSeed,
-    title: null,
-    startingBoard: board,
-    startingHand: hand,
-    maxMoves: 1,
-    targetScore: 999,
-    puzzleType: 'one_turn_high_score',
-    dealSize: DEAL_SIZE,
-  };
+  try {
+    const { board, remainingPool } = buildBoard(dateSeed, attempt);
+    const pathTiles = findScoringPath(board, remainingPool, dateSeed, attempt);
+    if (!pathTiles) {
+      throw new Error('Unable to find high-score path.');
+    }
+    const hand = buildHandFromPath(remainingPool, pathTiles, dateSeed, attempt);
+    const puzzle: CuratedDailyPuzzle = {
+      id: `generated-${dateSeed}`,
+      puzzleDate: dateSeed,
+      title: null,
+      startingBoard: board,
+      startingHand: hand,
+      maxMoves: 1,
+      targetScore: 999,
+      puzzleType: 'one_turn_high_score',
+      dealSize: DEAL_SIZE,
+    };
 
-  validateGeneratedPuzzle(puzzle);
-  return puzzle;
+    validateGeneratedPuzzle(puzzle);
+    return puzzle;
+  } catch {
+    const fallback = buildMidHandPuzzleState(dateSeed, attempt);
+    const puzzle: CuratedDailyPuzzle = {
+      id: `generated-${dateSeed}`,
+      puzzleDate: dateSeed,
+      title: null,
+      startingBoard: fallback.board,
+      startingHand: fallback.hand,
+      maxMoves: 1,
+      targetScore: 999,
+      puzzleType: 'one_turn_high_score',
+      dealSize: DEAL_SIZE,
+    };
+
+    validateGeneratedPuzzle(puzzle);
+    return puzzle;
+  }
 }
 
 function boardShapeSignature(board: BoardState): string {
@@ -915,7 +979,8 @@ function buildSetupHand(
   }
 
   const remainingSlots = targetHandSize - hand.length;
-  const fillers = sampleWithoutReplacement(pool, remainingSlots, prng);
+  const fillerPool = pool.filter((tile) => !isDouble(tile));
+  const fillers = sampleWithoutReplacement(fillerPool, remainingSlots, prng);
   if (fillers.length !== remainingSlots) {
     throw new Error('Not enough filler tiles remain for setup hand.');
   }
@@ -932,51 +997,353 @@ function buildSetupHand(
   return hand.sort((a, b) => tileKey(a).localeCompare(tileKey(b)));
 }
 
-function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
-  const { board, remainingPool } = buildBoard(dateSeed, attempt);
-  const initialState = createSearchState(board, remainingPool);
+function buildConstructiveSetupAndStrikeState(
+  dateSeed: string,
+  attempt: number,
+): { board: BoardState; remainingPool: Tile[]; setupTile: Tile; strikeTile: Tile } {
+  const prng = mulberry32(hashString(`${dateSeed}:${attempt}:setup-constructive`));
+
+  const fixedTemplate = (() => {
+    const spinner = normalizeTile(1, 1);
+    const setupTile = normalizeTile(6, 6);
+    const strikeTile = normalizeTile(2, 6);
+    const leftOne = normalizeTile(1, 5);
+    const leftTwo = normalizeTile(5, 6);
+    const rightOne = normalizeTile(0, 1);
+    const rightTwo = normalizeTile(0, 2);
+    const branchTileA = normalizeTile(1, 4);
+    const branchTileB = normalizeTile(1, 3);
+    const requiredTiles = [leftOne, leftTwo, rightOne, rightTwo, branchTileA, branchTileB];
+
+    const pool = buildFullDoubleSixSet();
+    let removable = true;
+    for (const tile of [spinner, ...requiredTiles]) {
+      if (!removeTileOnce(pool, tile)) {
+        removable = false;
+        break;
+      }
+    }
+    if (!removable) return null;
+
+    let board = createSpinnerBoard(spinner);
+    board = placeMainLineTile(board, leftOne, 'left');
+    board = placeMainLineTile(board, rightOne, 'right');
+    if (!board.hubDoubles[0]?.isCrossed) return null;
+    board = placeMainLineTile(board, leftTwo, 'left');
+    board = placeMainLineTile(board, rightTwo, 'right');
+    board = placeBranchTile(board, branchTileA, 0);
+    board = placeBranchTile(board, branchTileB, 1);
+
+    const initialState = createSearchState(board, [setupTile, strikeTile]);
+    const setupMove = getLegalMoves(initialState, YOU_ID).find(
+      (move): move is PlayMove => move.type === 'play' && tileKey(move.tile) === tileKey(setupTile),
+    );
+    const strikeDirectMove = getLegalMoves(initialState, YOU_ID).find(
+      (move): move is PlayMove => move.type === 'play' && tileKey(move.tile) === tileKey(strikeTile),
+    );
+    if (!setupMove || !strikeDirectMove) return null;
+
+    const setupState = applyMove(initialState, YOU_ID, setupMove as Move).state;
+    const setupScore = setupState.players[YOU_ID].score - initialState.players[YOU_ID].score;
+    if (setupScore !== 0 || setupState.currentPlayerIndex !== 0) return null;
+
+    const strikeAfterSetupMove = getLegalMoves(setupState, YOU_ID).find(
+      (move): move is PlayMove => move.type === 'play' && tileKey(move.tile) === tileKey(strikeTile),
+    );
+    if (!strikeAfterSetupMove) return null;
+
+    const strikeAfterSetupState = applyMove(setupState, YOU_ID, strikeAfterSetupMove as Move).state;
+    const strikeScore =
+      strikeAfterSetupState.players[YOU_ID].score - setupState.players[YOU_ID].score;
+    if (strikeScore < SETUP_STRIKE_MIN_SCORE) return null;
+
+    const directStrikeState = applyMove(initialState, YOU_ID, strikeDirectMove as Move).state;
+    const directStrikeScore =
+      directStrikeState.players[YOU_ID].score - initialState.players[YOU_ID].score;
+    if (directStrikeScore >= Math.max(3, strikeScore - 2)) return null;
+
+    return {
+      board,
+      remainingPool: pool,
+      setupTile,
+      strikeTile,
+    };
+  })();
+
+  if (fixedTemplate) {
+    return fixedTemplate;
+  }
+
+  const shuffledPips = (): number[] => {
+    const pips = Array.from({ length: MAX_PIPS + 1 }, (_, idx) => idx);
+    for (let idx = pips.length - 1; idx > 0; idx -= 1) {
+      const swapIdx = randInt(prng, 0, idx);
+      [pips[idx], pips[swapIdx]] = [pips[swapIdx], pips[idx]];
+    }
+    return pips;
+  };
+
+  const spinnerValues = shuffledPips();
+  const strikeEnds = shuffledPips().filter((pip) => pip !== 1 && pip !== 6);
+  const strikeOthers = shuffledPips();
+  const branchAValues = shuffledPips();
+  const branchBValues = shuffledPips();
+  const leftMids = shuffledPips();
+  const rightMids = shuffledPips();
+
+  for (const spinnerValue of spinnerValues) {
+    for (const strikeEnd of strikeEnds) {
+      for (const strikeOther of strikeOthers) {
+        for (const branchA of branchAValues) {
+          for (const branchB of branchBValues) {
+            if (strikeOther + branchA + branchB !== 13) continue;
+            if (new Set([strikeOther, branchA, branchB]).size !== 3) continue;
+            if ([strikeOther, branchA, branchB].includes(spinnerValue)) continue;
+
+            for (const leftMid of leftMids) {
+              if (leftMid === spinnerValue || leftMid === 6) continue;
+              for (const rightMid of rightMids) {
+                if (rightMid === spinnerValue || rightMid === strikeEnd) continue;
+
+                const spinner = normalizeTile(spinnerValue, spinnerValue);
+                const setupTile = normalizeTile(6, 6);
+                const strikeTile = normalizeTile(strikeEnd, strikeOther);
+
+                const leftOne = normalizeTile(spinnerValue, leftMid);
+                const leftTwo = normalizeTile(leftMid, 6);
+                const rightOne = normalizeTile(spinnerValue, rightMid);
+                const rightTwo = normalizeTile(rightMid, strikeEnd);
+                const branchTileA = normalizeTile(spinnerValue, branchA);
+                const branchTileB = normalizeTile(spinnerValue, branchB);
+
+                const requiredTiles = [leftOne, leftTwo, rightOne, rightTwo, branchTileA, branchTileB];
+                if (requiredTiles.some((tile) => isDouble(tile)) || isDouble(strikeTile)) continue;
+
+                const seenKeys = new Set<string>([tileKey(spinner), tileKey(setupTile), tileKey(strikeTile)]);
+                let hasCollision = false;
+                for (const tile of requiredTiles) {
+                  const key = tileKey(tile);
+                  if (seenKeys.has(key)) {
+                    hasCollision = true;
+                    break;
+                  }
+                  seenKeys.add(key);
+                }
+                if (hasCollision) continue;
+
+                const pool = buildFullDoubleSixSet();
+                let removable = true;
+                for (const tile of [spinner, ...requiredTiles]) {
+                  if (!removeTileOnce(pool, tile)) {
+                    removable = false;
+                    break;
+                  }
+                }
+                if (!removable) continue;
+
+                let board = createSpinnerBoard(spinner);
+                board = placeMainLineTile(board, leftOne, 'left');
+                board = placeMainLineTile(board, rightOne, 'right');
+                if (!board.hubDoubles[0]?.isCrossed) continue;
+                board = placeMainLineTile(board, leftTwo, 'left');
+                board = placeMainLineTile(board, rightTwo, 'right');
+                board = placeBranchTile(board, branchTileA, 0);
+                board = placeBranchTile(board, branchTileB, 1);
+
+                const initialState = createSearchState(board, [setupTile, strikeTile]);
+                const setupMove = getLegalMoves(initialState, YOU_ID).find(
+                  (move): move is PlayMove => move.type === 'play' && tileKey(move.tile) === tileKey(setupTile),
+                );
+                const strikeDirectMove = getLegalMoves(initialState, YOU_ID).find(
+                  (move): move is PlayMove => move.type === 'play' && tileKey(move.tile) === tileKey(strikeTile),
+                );
+                if (!setupMove || !strikeDirectMove) continue;
+
+                const setupState = applyMove(initialState, YOU_ID, setupMove as Move).state;
+                const setupScore = setupState.players[YOU_ID].score - initialState.players[YOU_ID].score;
+                if (setupScore !== 0 || setupState.currentPlayerIndex !== 0) continue;
+
+                const strikeAfterSetupMove = getLegalMoves(setupState, YOU_ID).find(
+                  (move): move is PlayMove => move.type === 'play' && tileKey(move.tile) === tileKey(strikeTile),
+                );
+                if (!strikeAfterSetupMove) continue;
+
+                const strikeAfterSetupState = applyMove(setupState, YOU_ID, strikeAfterSetupMove as Move).state;
+                const strikeScore =
+                  strikeAfterSetupState.players[YOU_ID].score - setupState.players[YOU_ID].score;
+                if (strikeScore < SETUP_STRIKE_MIN_SCORE) continue;
+
+                const directStrikeState = applyMove(initialState, YOU_ID, strikeDirectMove as Move).state;
+                const directStrikeScore =
+                  directStrikeState.players[YOU_ID].score - initialState.players[YOU_ID].score;
+                if (directStrikeScore >= Math.max(3, strikeScore - 2)) continue;
+
+                return {
+                  board,
+                  remainingPool: pool,
+                  setupTile,
+                  strikeTile,
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  throw new Error('Unable to construct setup-and-strike board.');
+}
+
+function findSetupAndStrikeSequence(
+  board: BoardState,
+  candidateTiles: Tile[],
+): { setupTile: Tile; strikeTile: Tile; bestScore: number } | null {
+  const initialState = createSearchState(board, candidateTiles);
   const openingMoves = getLegalMoves(initialState, YOU_ID).filter(
     (move): move is PlayMove => move.type === 'play',
   );
 
+  let bestFound: { setupTile: Tile; strikeTile: Tile; bestScore: number } | null = null;
+
   for (const setupMove of openingMoves) {
     const setupResult = applyMove(initialState, YOU_ID, setupMove as Move).state;
-    const setupScore =
-      setupResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
+    const setupScore = setupResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
     if (setupScore !== 0) continue;
+    if (!isDouble(setupMove.tile)) continue;
+    if (setupResult.currentPlayerIndex !== 0) continue;
     const setupBoard = setupResult.board as BoardState | null;
     if (!setupBoard) continue;
     if (boardShapeSignature(setupBoard) === boardShapeSignature(board)) continue;
 
-    const setupRemaining = remainingPool.map(cloneTile);
-    removeTileOnce(setupRemaining, setupMove.tile);
-    const followUpState = createSearchState(setupBoard, setupRemaining);
-    const followUpMoves = getLegalMoves(followUpState, YOU_ID).filter(
+    const followUpMoves = getLegalMoves(setupResult, YOU_ID).filter(
       (move): move is PlayMove => move.type === 'play',
     );
 
-    const strikeCandidate = followUpMoves
-      .map((move) => {
-        const next = applyMove(followUpState, YOU_ID, move as Move).state;
-        const delta = next.players[YOU_ID].score - followUpState.players[YOU_ID].score;
-        return { move, delta };
-      })
-      .filter((entry) => entry.delta >= 20)
-      .sort((a, b) => b.delta - a.delta)[0];
+    for (const strikeMove of followUpMoves) {
+      const strikeResult = applyMove(setupResult, YOU_ID, strikeMove as Move).state;
+      const strikeScore = strikeResult.players[YOU_ID].score - setupResult.players[YOU_ID].score;
+      if (strikeScore < SETUP_STRIKE_MIN_SCORE) continue;
 
-    if (!strikeCandidate) continue;
+      const directStrike = openingMoves.find((move) => tileKey(move.tile) === tileKey(strikeMove.tile));
+      if (directStrike) {
+        const directResult = applyMove(initialState, YOU_ID, directStrike as Move).state;
+        const directScore = directResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
+        if (directScore >= Math.max(3, strikeScore - 2)) continue;
+      }
 
-    const directStrike = openingMoves.find((move) => tileKey(move.tile) === tileKey(strikeCandidate.move.tile));
-    if (directStrike) {
-      const directResult = applyMove(initialState, YOU_ID, directStrike as Move).state;
-      const directScore = directResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
-      if (directScore >= 10) continue;
+      if (!bestFound || strikeScore > bestFound.bestScore) {
+        bestFound = {
+          setupTile: cloneTile(setupMove.tile),
+          strikeTile: cloneTile(strikeMove.tile),
+          bestScore: strikeScore,
+        };
+      }
+    }
+  }
+
+  return bestFound;
+}
+
+function buildSetupHandFromExistingHand(
+  existingHand: Tile[],
+  setupTile: Tile,
+  strikeTile: Tile,
+  dateSeed: string,
+  attempt: number,
+): Tile[] {
+  const prng = mulberry32(hashString(`${dateSeed}:${attempt}:setup-existing-hand`));
+  const pool = existingHand.map(cloneTile);
+  const hand: Tile[] = [];
+
+  for (const tile of [setupTile, strikeTile]) {
+    if (!removeTileOnce(pool, tile)) {
+      throw new Error(`Setup path tile missing from existing hand: ${tileKey(tile)}`);
+    }
+    hand.push(cloneTile(tile));
+  }
+
+  const currentDoubles = hand.filter(isDouble).length;
+  if (currentDoubles > 2) {
+    throw new Error('Setup pair uses too many doubles.');
+  }
+
+  const targetHandSize = Math.min(pool.length + hand.length, randInt(prng, 6, 10));
+  const desiredDoubleCount = Math.max(1, Math.min(2, Math.max(currentDoubles, randInt(prng, 1, 2))));
+  const doublesNeeded = Math.max(0, desiredDoubleCount - currentDoubles);
+  const availableDoubles = pool.filter(isDouble);
+  if (availableDoubles.length < doublesNeeded) {
+    throw new Error('Not enough doubles remain in existing hand.');
+  }
+
+  const selectedDoubles = sampleWithoutReplacement(availableDoubles, doublesNeeded, prng);
+  for (const tile of selectedDoubles) {
+    removeTileOnce(pool, tile);
+    hand.push(cloneTile(tile));
+  }
+
+  const remainingSlots = targetHandSize - hand.length;
+  const fillerPool = pool.filter((tile) => !isDouble(tile));
+  const fillers = sampleWithoutReplacement(fillerPool, remainingSlots, prng);
+  if (fillers.length !== remainingSlots) {
+    throw new Error('Not enough filler tiles remain in existing hand.');
+  }
+  hand.push(...fillers.map(cloneTile));
+
+  const doubles = hand.filter(isDouble).length;
+  if (hand.length < 6 || hand.length > 10) {
+    throw new Error(`Setup hand size out of range: ${hand.length}`);
+  }
+  if (doubles < 1 || doubles > 2) {
+    throw new Error(`Setup hand double count out of range: ${doubles}`);
+  }
+
+  return hand.sort((a, b) => tileKey(a).localeCompare(tileKey(b)));
+}
+
+function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
+  try {
+    const constructed = buildConstructiveSetupAndStrikeState(dateSeed, attempt);
+    const hand = buildSetupHand(
+      constructed.remainingPool,
+      constructed.setupTile,
+      constructed.strikeTile,
+      dateSeed,
+      attempt,
+    );
+
+    const puzzle: CuratedDailyPuzzle = {
+      id: `generated-${dateSeed}-setup`,
+      puzzleDate: dateSeed,
+      title: null,
+      startingBoard: constructed.board,
+      startingHand: hand,
+      maxMoves: 2,
+      targetScore: 999,
+      puzzleType: 'setup_and_strike',
+      dealSize: DEAL_SIZE,
+    };
+
+    validateGeneratedPuzzle(puzzle);
+    return puzzle;
+  } catch (error) {
+    if (process.env.DEBUG_SETUP_STRIKE === '1' && attempt === 0) {
+      console.error('[setup_and_strike][constructive] failed:', error);
+    }
+    // Fall through to opportunistic search paths below.
+  }
+
+  try {
+    const { board, remainingPool } = buildBoard(dateSeed, attempt);
+    const sequence = findSetupAndStrikeSequence(board, remainingPool);
+    if (!sequence) {
+      throw new Error('Unable to find setup-and-strike sequence.');
     }
 
     const hand = buildSetupHand(
       remainingPool,
-      setupMove.tile,
-      strikeCandidate.move.tile,
+      sequence.setupTile,
+      sequence.strikeTile,
       dateSeed,
       attempt,
     );
@@ -995,9 +1362,34 @@ function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): Curate
 
     validateGeneratedPuzzle(puzzle);
     return puzzle;
-  }
+  } catch (error) {
+    if (process.env.DEBUG_SETUP_STRIKE === '1' && attempt === 0) {
+      console.error('[setup_and_strike][direct-board] failed:', error);
+    }
+    const fallback = buildSetupMidHandPuzzleState(dateSeed, attempt);
+    const hand = buildSetupHandFromExistingHand(
+      fallback.hand,
+      fallback.setupTile,
+      fallback.strikeTile,
+      dateSeed,
+      attempt,
+    );
 
-  throw new Error('Unable to find setup-and-strike sequence.');
+    const puzzle: CuratedDailyPuzzle = {
+      id: `generated-${dateSeed}-setup`,
+      puzzleDate: dateSeed,
+      title: null,
+      startingBoard: fallback.board,
+      startingHand: hand,
+      maxMoves: 2,
+      targetScore: 999,
+      puzzleType: 'setup_and_strike',
+      dealSize: DEAL_SIZE,
+    };
+
+    validateGeneratedPuzzle(puzzle);
+    return puzzle;
+  }
 }
 
 function computeBestPossiblePuzzleScore(puzzle: CuratedDailyPuzzle): number {
@@ -1134,13 +1526,13 @@ function validateSetupAndStrikeGeneratedPuzzle(
       const strikeResult = applyMove(setupResult, YOU_ID, strikeMove as Move).state;
       const strikeScore = strikeResult.players[YOU_ID].score - setupResult.players[YOU_ID].score;
       bestStrikeScore = Math.max(bestStrikeScore, strikeScore);
-      if (strikeScore < 20) continue;
+      if (strikeScore < SETUP_STRIKE_MIN_SCORE) continue;
 
       const directStrike = firstMoves.find((move) => tileKey(move.tile) === tileKey(strikeMove.tile));
       if (directStrike) {
         const directResult = applyMove(initialState, YOU_ID, directStrike as Move).state;
         const directScore = directResult.players[YOU_ID].score - initialState.players[YOU_ID].score;
-        if (directScore >= 10) continue;
+        if (directScore >= Math.max(6, strikeScore - 4)) continue;
       }
 
       return { valid: true, reason: 'OK', bestScore: strikeScore };
@@ -1232,6 +1624,7 @@ async function main(): Promise<void> {
     options.from,
     finalDate,
   );
+  let hadFailures = false;
 
   for (let offset = 0; offset < options.days; offset += 1) {
     const dateSeed = addDays(options.from, offset);
@@ -1240,7 +1633,6 @@ async function main(): Promise<void> {
       build: (seed: string, attempt: number) => CuratedDailyPuzzle;
     }> = [
       { puzzleType: 'one_turn_high_score', build: createHighScorePuzzle },
-      { puzzleType: 'setup_and_strike', build: generateSetupAndStrikePuzzle },
     ];
 
     for (const generator of generators) {
@@ -1254,7 +1646,8 @@ async function main(): Promise<void> {
       let bestScore = 0;
       let openEnds: number[] = [];
 
-      for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_DATE; attempt += 1) {
+      const maxAttempts = MAX_ATTEMPTS_PER_DATE;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         try {
           generated = generator.build(dateSeed, attempt);
           const validation = validateGeneratedPuzzle(generated);
@@ -1267,14 +1660,20 @@ async function main(): Promise<void> {
       }
 
       if (!generated) {
-        throw new Error(
-          `Failed to generate ${generator.puzzleType} for ${dateSeed} after ${MAX_ATTEMPTS_PER_DATE} attempts.`,
+        hadFailures = true;
+        console.error(
+          `${dateSeed} | ${generator.puzzleType} | failed after ${maxAttempts} attempts`,
         );
+        continue;
       }
 
       await upsertPuzzle(supabaseUrl, serviceKey, generated);
       console.log(`${dateSeed} | ${generator.puzzleType} | ${bestScore} | ${openEnds.join(',')}`);
     }
+  }
+
+  if (hadFailures) {
+    process.exitCode = 1;
   }
 }
 
