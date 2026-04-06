@@ -817,16 +817,7 @@ export async function completeGhostGame(params: {
           opponent_id: fritzId,
           player_score: Math.round(params.finalScore),
           opponent_score: Math.round(params.opponentScore),
-          game_type:
-            fritzConfig.difficulty === 'casual'
-              ? 'fritz_rookie'
-              : fritzConfig.difficulty === 'standard'
-                ? 'fritz_standard'
-                : fritzConfig.difficulty === 'master'
-                  ? 'fritz_master'
-                  : fritzConfig.difficulty === 'grandmaster'
-                    ? 'fritz_master'
-                    : 'fritz_elite',
+          game_type: 'fritz',
           played_at: now,
           rating_before: rankingProfile.glicko_rating,
           rd_before: rankingProfile.glicko_rd,

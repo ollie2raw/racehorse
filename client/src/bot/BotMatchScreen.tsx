@@ -1098,7 +1098,7 @@ export default function BotMatchScreen({
     let cancelled = false;
     let actionResolved = false;
     let playedTileForHighlight: Tile | null = null;
-    const thinkDelayMs = isGhostMode ? 1500 : 2200;
+    const thinkDelayMs = isGhostMode ? 1500 : 1000;
     botChainPauseRef.current = false;
 
     const timer = setTimeout(() => {
@@ -1843,7 +1843,7 @@ export default function BotMatchScreen({
                   : fritzNewGlickoRating != null
                     ? `${fritzNewGlickoRating}`
                   : ghostResultError
-                    ? 'Syncing...'
+                    ? ghostResultError
                     : 'Updated'}
               </strong>
             </div>

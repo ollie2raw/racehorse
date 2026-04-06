@@ -807,12 +807,12 @@ function getPendingFritzMatchContext(room: Room): { realPlayer: RoomPlayer; frit
 
 function getFritzIdentityForTier(rawTier: unknown): { fritzId: string; gameType: string } {
   const tier = typeof rawTier === 'string' ? rawTier.trim().toLowerCase() : '';
-  if (tier === 'rookie') return { fritzId: FRITZ_ROOKIE_ID, gameType: 'fritz_rookie' };
-  if (tier === 'standard') return { fritzId: FRITZ_STANDARD_ID, gameType: 'fritz_standard' };
-  if (tier === 'master') return { fritzId: FRITZ_MASTER_ID, gameType: 'fritz_master' };
-  // Keep storage-compatible game_type while rating identity stays distinct via opponent_id.
-  if (tier === 'grandmaster') return { fritzId: FRITZ_GRANDMASTER_ID, gameType: 'fritz_master' };
-  return { fritzId: FRITZ_ELITE_ID, gameType: 'fritz_elite' };
+  // Keep storage-compatible legacy game_type while rating identity stays distinct via opponent_id.
+  if (tier === 'rookie') return { fritzId: FRITZ_ROOKIE_ID, gameType: 'fritz' };
+  if (tier === 'standard') return { fritzId: FRITZ_STANDARD_ID, gameType: 'fritz' };
+  if (tier === 'master') return { fritzId: FRITZ_MASTER_ID, gameType: 'fritz' };
+  if (tier === 'grandmaster') return { fritzId: FRITZ_GRANDMASTER_ID, gameType: 'fritz' };
+  return { fritzId: FRITZ_ELITE_ID, gameType: 'fritz' };
 }
 
 async function insertPendingFritzMatch(room: Room) {
