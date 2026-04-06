@@ -825,7 +825,7 @@ export async function completeGhostGame(params: {
                 : fritzConfig.difficulty === 'master'
                   ? 'fritz_master'
                   : fritzConfig.difficulty === 'grandmaster'
-                    ? 'fritz_grandmaster'
+                    ? 'fritz_master'
                     : 'fritz_elite',
           played_at: now,
           rating_before: rankingProfile.glicko_rating,

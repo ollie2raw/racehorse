@@ -810,7 +810,8 @@ function getFritzIdentityForTier(rawTier: unknown): { fritzId: string; gameType:
   if (tier === 'rookie') return { fritzId: FRITZ_ROOKIE_ID, gameType: 'fritz_rookie' };
   if (tier === 'standard') return { fritzId: FRITZ_STANDARD_ID, gameType: 'fritz_standard' };
   if (tier === 'master') return { fritzId: FRITZ_MASTER_ID, gameType: 'fritz_master' };
-  if (tier === 'grandmaster') return { fritzId: FRITZ_GRANDMASTER_ID, gameType: 'fritz_grandmaster' };
+  // Keep storage-compatible game_type while rating identity stays distinct via opponent_id.
+  if (tier === 'grandmaster') return { fritzId: FRITZ_GRANDMASTER_ID, gameType: 'fritz_master' };
   return { fritzId: FRITZ_ELITE_ID, gameType: 'fritz_elite' };
 }
 
