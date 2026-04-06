@@ -38,7 +38,6 @@ const TIER_LABELS: Record<FritzTierKey, string> = {
   standard: 'Standard',
   elite: 'Elite',
   master: 'Master',
-  grandmaster: 'Grandmaster',
 };
 
 export default function StatsScreen({

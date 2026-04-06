@@ -1,5 +1,5 @@
 /**
- * botHeuristics.ts — Racehorse Domino AI (Hard Bot) v3.5
+ * botHeuristics.ts — Racehorse Domino AI (Hard Bot) v3.7
  *
  * v3.1: minimax pass-turn bug (currentPlayer flip + passDepth guard)
  * v3.2: Codex review — null guard, depth cap 12, threshold ≤ 8, DEV-only logs
@@ -10,15 +10,14 @@
  * v3.6: master difficulty uses sampled-hand endgame search (fair IS-MCTS style)
  * v3.7: master gets elevated MC samples (20 vs 8), wider chain search, two-ply
  *       worst-case wrapper enabled, endgame IS-MCTS threshold raised 8 → 12 tiles
- * v3.8: grandmaster tier adds stronger fair sampled-hand search, deeper chain
- *       refinement, wider 2-ply candidate set, and earlier heavier endgame solve
  */
 
 import type { Move, Tile } from '../types.ts';
+export type { Move, Tile };
 import type { BotMatchState } from './botEngine.ts';
 import { computeOpenEndsSum, getLegalMoves, previewPlayMove } from './botEngine.ts';
 
-export type BotDifficulty = 'casual' | 'standard' | 'hard' | 'master' | 'grandmaster';
+export type BotDifficulty = 'casual' | 'standard' | 'hard' | 'master';
 
 export interface BotChoice {
   move: Move;
@@ -48,8 +47,6 @@ const CHAIN_TREE_WIDTH = 3;
 const WIN_TARGET = 60;
 
 // Endgame minimax kicks in when total tiles (bot + you) is at or below this.
-// Was 6 in v3 — too late, MC gets noisy on tiny hands.
-// Set conservatively at 8; raise to 10 if endgame still feels weak.
 const ENDGAME_TILE_THRESHOLD = 8;
 const ENABLE_TWO_PLY_WORST_CASE = false;
 const FAIR_BOT_MODE = true;
@@ -132,7 +129,7 @@ function buildUnseenPool(state: BotEvalState): Tile[] {
     for (const pt of state.board.mainLine) known.add(tileKey(pt.tile));
     for (const hub of state.board.hubDoubles ?? []) {
       for (const branch of hub.branches ?? []) {
-        if (!branch) continue;  // null guard — undefined branches crash here without this
+        if (!branch) continue;
         for (const pt of branch.tiles ?? []) known.add(tileKey(pt.tile));
       }
     }
@@ -400,14 +397,8 @@ interface ChainNode {
 function dynamicChainParams(
   botHandSize: number,
   totalTiles: number,
-  strength: 'base' | 'master' | 'grandmaster' = 'base',
+  strength: 'base' | 'master' = 'base',
 ): { depth: number; width: number } {
-  if (strength === 'grandmaster') {
-    if (botHandSize <= 5 || totalTiles <= 10) return { depth: 9, width: 7 };
-    if (botHandSize <= 7 || totalTiles <= 14) return { depth: 8, width: 6 };
-    if (botHandSize <= 9 || totalTiles <= 18) return { depth: 7, width: 5 };
-    return { depth: 6, width: 5 };
-  }
   if (strength === 'master') {
     if (botHandSize <= 6 || totalTiles <= 12) return { depth: 8, width: 6 };
     if (botHandSize <= 8 || totalTiles <= 16) return { depth: 7, width: 5 };
@@ -1102,22 +1093,6 @@ function twoPlyWorstCaseValue(
 
 // ─── Endgame minimax ──────────────────────────────────────────────────────────
 
-/**
- * FIX v3.1: Properly handles pass turns.
- *
- * Old bug: when moves.length === 0, it recursed with `!isBot` but never
- * updated `state.currentPlayer`, causing the engine's getLegalMoves to keep
- * returning empty (wrong player) — infinite-ish spiral → timeout → random fallback.
- *
- * v3.2 fix: When no play moves exist:
- *   - If boneyard has tiles → simulate drawing until playable (draw modeling)
- *   - If boneyard empty → pass (flip currentPlayer explicitly)
- *   - passDepth >= 2 hard-stop when both players are stuck
- *
- * Draw modeling matters because in Racehorse, a player with a double or scoring
- * move MUST continue their turn and draw if they have no legal play. Without this,
- * minimax misjudges late states where the player is forced to draw bad tiles.
- */
 const BONEYARD_LOCKED = 2; // mirrors botEngine constant
 
 function simulateDrawUntilPlayable(
@@ -1152,10 +1127,8 @@ function minimaxFull(
   beta: number,
   pointsAccum: number,
   passDepth: number = 0,
-  deadlineMs: number = Infinity,  // wall-clock deadline — early-return static eval if exceeded
+  deadlineMs: number = Infinity,
 ): number {
-  // Deadline check first — even before terminal checks, so a single deep
-  // candidate can't blow the budget regardless of tree shape
   if (performance.now() > deadlineMs) {
     const botPips = pipSum(state.players.bot.hand);
     const youPips = pipSum(state.players.you.hand);
@@ -1172,21 +1145,18 @@ function minimaxFull(
   const moves = getLegalMoves(state, player).filter((m) => m.type === 'play');
 
   if (moves.length === 0) {
-    // Both stuck → terminate
     if (passDepth >= 2) {
       const botPips = pipSum(state.players.bot.hand);
       const youPips = pipSum(state.players.you.hand);
       return pointsAccum * 100 + (youPips - botPips);
     }
 
-    // Boneyard has tiles → model drawing (adds pip burden, may unlock play)
     if (state.boneyard.length > BONEYARD_LOCKED) {
       const drawnState = simulateDrawUntilPlayable(state, player);
       const afterDrawState = cloneState(drawnState, { currentPlayer: player });
       return minimaxFull(afterDrawState, depth - 1, isBot, alpha, beta, pointsAccum, passDepth, deadlineMs);
     }
 
-    // Boneyard locked → genuine pass, flip player
     const passedState = cloneState(state, { currentPlayer: isBot ? 'you' : 'bot' });
     return minimaxFull(passedState, depth - 1, !isBot, alpha, beta, pointsAccum, passDepth + 1, deadlineMs);
   }
@@ -1254,7 +1224,7 @@ function mcEvaluateMove(
   const { depth, width } = dynamicChainParams(
     state.players.bot.hand.length,
     totalTiles,
-    difficulty === 'grandmaster' ? 'grandmaster' : difficulty === 'master' ? 'master' : 'base',
+    difficulty === 'master' ? 'master' : 'base',
   );
   const chain = searchChainTree(state, move, depth, width);
   if (!chain) return -Infinity;
@@ -1267,8 +1237,6 @@ function mcEvaluateMove(
   const strandedDoubles = finalHand.filter((t) => isDoubleTile(t) && !finalEndSet.has(t.low)).length;
   const finalPips = pipSum(finalHand);
   const isLateGame = boneyardSize <= 6 || finalHand.length <= 3;
-  // FIX: increased late-game pip burden from 0.8 → 1.5 so bot aggressively
-  // avoids holding heavy tiles when boneyard is thin
   const pipBurdenPenalty = isLateGame ? finalPips * 1.5 : finalPips * 0.1;
 
   const branchPen = branchPenalty(move, state, holdWeights);
@@ -1332,11 +1300,6 @@ function weightedSelect<T extends { score: number }>(scored: T[]): T {
 
 // ─── Endgame depth scaling ────────────────────────────────────────────────────
 
-/**
- * FIX v3.2: Conservative depth scaling, capped at 12 to prevent UI hitching.
- * Client-side JS has no worker thread here, so deep minimax blocks the render loop.
- * Start here and tune up if endgame still feels weak — don't start high and tune down.
- */
 function endgameDepth(totalTiles: number): number {
   if (totalTiles <= 2) return 12;
   if (totalTiles <= 4) return 10;
@@ -1354,10 +1317,8 @@ export function chooseBotMove(
   const t0 = performance.now();
   const isDevRuntime = Boolean((import.meta as any)?.env?.DEV);
 
-  // Hoisted before candidates so timing log is consistent even on early exit
   const totalTilesForLog = state.players.bot.hand.length + getOpponentTileCount(state);
 
-  // Typed overloads so callers are type-safe without assertions.
   function done(result: null, label?: string): null;
   function done(result: BotChoice, label?: string): BotChoice;
   function done(result: BotChoice | null, label?: string): BotChoice | null {
@@ -1371,8 +1332,6 @@ export function chooseBotMove(
   const candidates = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
   if (candidates.length === 0) return done(null, 'no-moves');
 
-  // Greedy fallback — used when minimax budget is exceeded.
-  // Fast O(n) score-then-unload; not smart but never stalls the UI.
   function greedyFallback(label: string): BotChoice {
     const best = candidates
       .map((m) => {
@@ -1393,7 +1352,6 @@ export function chooseBotMove(
     return done(best, label)
   }
 
-  // ── Casual ───────────────────────────────────────────────────────────────
   if (difficulty === 'casual') {
     const best = candidates
       .map((m) => ({ m, p: previewPlayMove(state, 'bot', m) }))
@@ -1418,11 +1376,10 @@ export function chooseBotMove(
     }, 'casual')
   }
 
-  // ── Standard ─────────────────────────────────────────────────────────────
   if (difficulty === 'standard') {
     const pool = buildUnseenPool(state);
     const missing = inferMissingPips(state);
-    const weights = opponentHoldWeights(pool, missing);
+    const weights = opponentHoldWeights(pool, new Set(missing));
 
     const scored = candidates
       .map((m) => {
@@ -1454,22 +1411,17 @@ export function chooseBotMove(
     return done({ move: scored[0].move, score: scored[0].score, breakdown: scored[0].breakdown }, 'standard')
   }
 
-  // ── Hard ─────────────────────────────────────────────────────────────────
+  // ── Hard / Master ─────────────────────────────────────────────────────────
   const pool = buildUnseenPool(state);
   const missing = inferMissingPips(state);
   const weights = opponentHoldWeights(pool, missing);
   const totalTiles = totalTilesForLog;
-  const isMasterLike = difficulty === 'master' || difficulty === 'grandmaster';
-  const isGrandmaster = difficulty === 'grandmaster';
 
-  // Master endgame: sample plausible opponent hands from the unseen pool,
-  // run full-information minimax on each sampled state, then vote on the
-  // best move. This preserves fairness while restoring strong late-game play.
-  const masterEndgameThreshold = isGrandmaster ? 16 : 12;
-  if (isMasterLike && totalTiles <= masterEndgameThreshold) {
-    const SAMPLE_COUNT = isGrandmaster ? 28 : 16;
+  const masterEndgameThreshold = 12;
+  if (difficulty === 'master' && totalTiles <= masterEndgameThreshold) {
+    const SAMPLE_COUNT = 16;
     const depth = endgameDepth(totalTiles);
-    const deadlineMs = performance.now() + (isGrandmaster ? 320 : 200);
+    const deadlineMs = performance.now() + 200;
     const moveVotes = new Map<Move, number>();
     const moveScoreTotals = new Map<Move, number>();
 
@@ -1519,7 +1471,7 @@ export function chooseBotMove(
           return (moveScoreTotals.get(b[0]) ?? -Infinity) - (moveScoreTotals.get(a[0]) ?? -Infinity);
         })[0]?.[0] ?? candidates[0];
     const bestPreview = previewPlayMove(state, 'bot', bestMove);
-    if (!bestPreview) return greedyFallback(isGrandmaster ? 'grandmaster-endgame-fallback' : 'master-endgame-fallback');
+    if (!bestPreview) return greedyFallback('master-endgame-fallback');
 
     return done(
       {
@@ -1528,7 +1480,7 @@ export function chooseBotMove(
           bestPreview.immediateScore * 100 +
           (moveVotes.get(bestMove) ?? 0) +
           (moveScoreTotals.get(bestMove) ?? 0) * 0.001,
-        explanation: `Played ${bestMove.tile?.low}-${bestMove.tile?.high} from sampled ${isGrandmaster ? 'grandmaster' : 'master'} endgame search.`,
+        explanation: `Played ${bestMove.tile?.low}-${bestMove.tile?.high} from sampled master endgame search.`,
         breakdown: {
           immediate: bestPreview.immediateScore,
           doubleBias: bestMove.tile && isDoubleTile(bestMove.tile) ? 1 : 0,
@@ -1538,58 +1490,10 @@ export function chooseBotMove(
           replyRisk: 0,
         },
       },
-      isGrandmaster ? 'grandmaster-endgame' : 'master-endgame',
+      'master-endgame',
     );
   }
 
-  // Legacy hidden-hand minimax remains disabled in fair mode.
-  // Master uses the sampled-hand path above instead.
-  if (!FAIR_BOT_MODE && totalTiles <= ENDGAME_TILE_THRESHOLD) {
-    let bestMove = candidates[0];
-    let bestVal = -Infinity;
-    const depth = endgameDepth(totalTiles);
-    const MINIMAX_BUDGET_MS = 150; // hard wall — fall back to greedy if exceeded
-    const deadlineMs = performance.now() + MINIMAX_BUDGET_MS;
-
-    for (const move of candidates) {
-      // Outer budget check — skip remaining candidates if time is up
-      if (performance.now() > deadlineMs) {
-        if (isDevRuntime) console.warn(`[Fritz] minimax budget exceeded, using best-so-far`);
-        break;
-      }
-
-      const p = previewPlayMove(state, 'bot', move);
-      if (!p) continue;
-      const next = cloneState(state, {
-        board: p.nextBoard,
-        currentPlayer: p.turnContinues ? 'bot' : 'you',
-        players: { ...state.players, bot: { ...state.players.bot, hand: p.nextHand } },
-      });
-      // deadlineMs also passed into minimax so any single deep branch can't overrun
-      const val = p.immediateScore * 100 + minimaxFull(next, depth, p.turnContinues, -Infinity, Infinity, p.immediateScore, 0, deadlineMs);
-      if (val > bestVal) { bestVal = val; bestMove = move; }
-    }
-
-    // If we never improved beyond the initial candidate (minimax returned -Infinity for all),
-    // fall back to greedy rather than returning a garbage result
-    if (bestVal === -Infinity) return greedyFallback('minimax-no-result');
-
-    const bp = previewPlayMove(state, 'bot', bestMove);
-    return done({
-      move: bestMove,
-      score: bestVal,
-      explanation: `Played ${bestMove.tile?.low}-${bestMove.tile?.high} from endgame minimax line.`,
-      breakdown: {
-        immediate: bp?.immediateScore ?? 0,
-        doubleBias: bestMove.tile && isDoubleTile(bestMove.tile) ? 1 : 0,
-        mobility: 0, denial: 0,
-        unload: (bestMove.tile?.low ?? 0) + (bestMove.tile?.high ?? 0),
-        replyRisk: 0,
-      },
-    }, 'minimax')
-  }
-
-  // Mid/early game: strategic base score + MC + optional 2-ply worst-case.
   const prelim: HardScoredCandidate[] = candidates
     .map((move) => {
       const p = previewPlayMove(state, 'bot', move);
@@ -1599,7 +1503,7 @@ export function chooseBotMove(
         state,
         pool,
         weights,
-        difficulty === 'grandmaster' ? 40 : difficulty === 'master' ? 20 : MC_SAMPLES,
+        difficulty === 'master' ? 20 : MC_SAMPLES,
         difficulty,
       );
       return {
@@ -1620,35 +1524,30 @@ export function chooseBotMove(
     })
     .sort((a, b) => b.strategicScore - a.strategicScore);
 
-  // Exact chain-order refinement for top candidates in low-to-mid tile states.
-  // This fixes common "good chain, wrong order" misses.
   if (totalTiles <= 16 && prelim.length > 1) {
-    const exactDeadlineMs = performance.now() + (isGrandmaster ? 140 : 80);
-    const topN = Math.min(isGrandmaster ? 6 : 4, prelim.length);
+    const exactDeadlineMs = performance.now() + 80;
+    const topN = Math.min(4, prelim.length);
     for (let i = 0; i < topN; i++) {
       if (performance.now() > exactDeadlineMs) break;
       const exact = searchExactTurnChain(state, prelim[i].move, exactDeadlineMs);
       if (!exact) continue;
       prelim[i].strategicScore +=
-        exact.totalPoints * (isGrandmaster ? 26 : 22) +
-        (exact.chainLength > 1 ? exact.chainLength * (isGrandmaster ? 10 : 8) : 0);
+        exact.totalPoints * 22 +
+        (exact.chainLength > 1 ? exact.chainLength * 8 : 0);
       prelim[i].score = prelim[i].strategicScore + prelim[i].mcScore * 0.35;
     }
     prelim.sort((a, b) => b.strategicScore - a.strategicScore);
   }
 
-  // Phase B: Top-N 2-ply worst-case wrapper on strategic candidates.
-  if ((ENABLE_TWO_PLY_WORST_CASE || isMasterLike) && prelim.length > 1) {
-    const N = Math.min(isGrandmaster ? 6 : 5, prelim.length);
+  if ((ENABLE_TWO_PLY_WORST_CASE || difficulty === 'master') && prelim.length > 1) {
+    const N = Math.min(5, prelim.length);
     const top = prelim.slice(0, N);
     for (const c of top) {
       const worst = twoPlyWorstCaseValue(state, c.move, weights);
-      c.score = worst + c.strategicScore * (isGrandmaster ? 0.3 : 0.25) + c.mcScore * (isGrandmaster ? 0.14 : 0.1);
+      c.score = worst + c.strategicScore * 0.25 + c.mcScore * 0.1;
     }
     top.sort((a, b) => b.score - a.score);
-    // deterministic in low-tile states, otherwise slight weighted randomness.
-    const useDeterministicHard = isMasterLike || totalTiles <= 12;
-    const chosen = useDeterministicHard ? top[0] : weightedSelect(top);
+    const chosen = (difficulty === 'master' || totalTiles <= 12) ? top[0] : weightedSelect(top);
     return done(
       {
         move: chosen.move,
@@ -1660,10 +1559,8 @@ export function chooseBotMove(
     );
   }
 
-  // Fallback when wrapper is disabled or only one move remains.
   prelim.sort((a, b) => b.score - a.score);
-  const useDeterministicHard = isMasterLike || totalTiles <= 12;
-  const chosen = useDeterministicHard ? prelim[0] : weightedSelect(prelim);
+  const chosen = (difficulty === 'master' || totalTiles <= 12) ? prelim[0] : weightedSelect(prelim);
   return done(
     {
       move: chosen.move,
