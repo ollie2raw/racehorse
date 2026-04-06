@@ -823,6 +823,7 @@ export default function App() {
   const intentionalDisconnectRef = useRef(false);
   const reconnectAttemptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptCountRef = useRef(0);
+  const previousMultiplayerGameOverRef = useRef(false);
   const [isRecoveringConnection, setIsRecoveringConnection] = useState(false);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
@@ -1467,9 +1468,7 @@ export default function App() {
     s.on('disconnect', (_reason) => {
       const roomBeforeDisconnect = joinedRoomRef.current;
       const stateBeforeDisconnect = stateRef.current;
-      const isRecoverableSession =
-        !stateBeforeDisconnect ||
-        (!stateBeforeDisconnect.gameOver && !stateBeforeDisconnect.handOver);
+      const isRecoverableSession = !stateBeforeDisconnect || !stateBeforeDisconnect.gameOver;
       const shouldAttemptReconnect =
         Boolean(roomBeforeDisconnect) &&
         isRecoverableSession &&
@@ -1653,12 +1652,16 @@ export default function App() {
           }, 2000);
           return;
         }
-        console.warn('[nav] redirect home after reconnect failure', {
-          attempts: nextAttempt - 1,
+        console.warn('[socket] reconnect attempt failed, entering slow retry mode', {
+          attempts: nextAttempt,
           roomCode: reconnectRoomCodeRef.current,
         });
-        setIsRecoveringConnection(false);
-        disconnect('reconnect failed');
+        setIsRecoveringConnection(true);
+        setError('Connection unstable. Trying to reconnect…');
+        clearReconnectAttemptTimer();
+        reconnectAttemptTimerRef.current = setTimeout(() => {
+          connectRef.current?.();
+        }, 5000);
         return;
       }
       setServerWaking(true);
@@ -2526,7 +2529,8 @@ export default function App() {
     setMultiplayerRatingBaseline(authProfile?.glicko_rating != null ? Number(authProfile.glicko_rating) : null);
     setMultiplayerRatingPending(false);
     multiplayerRatingRefreshKeyRef.current = '';
-  }, [authProfile?.glicko_rating, joinedRoom]);
+    previousMultiplayerGameOverRef.current = false;
+  }, [joinedRoom]);
 
   useEffect(() => {
     if (!joinedRoom || state?.gameOver) return;
@@ -2534,6 +2538,17 @@ export default function App() {
     if (authProfile?.glicko_rating == null) return;
     setMultiplayerRatingBaseline(Number(authProfile.glicko_rating));
   }, [authProfile?.glicko_rating, joinedRoom, multiplayerRatingBaseline, state?.gameOver]);
+
+  useEffect(() => {
+    const wasGameOver = previousMultiplayerGameOverRef.current;
+    const isGameOver = Boolean(state?.gameOver);
+    if (wasGameOver && !isGameOver) {
+      setMultiplayerRatingBaseline(authProfile?.glicko_rating != null ? Number(authProfile.glicko_rating) : null);
+      setMultiplayerRatingPending(false);
+      multiplayerRatingRefreshKeyRef.current = '';
+    }
+    previousMultiplayerGameOverRef.current = isGameOver;
+  }, [authProfile?.glicko_rating, state?.gameOver]);
 
   useEffect(() => {
     if (!state?.gameOver || !joinedRoom || !authUser || isSpectatingMatch || isTournamentMatch) return;

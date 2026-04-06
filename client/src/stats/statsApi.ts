@@ -100,6 +100,7 @@ export interface FritzStatsSummary {
   currentStreak: number;
   bestStreak: number;
   bestWinMargin: number | null;
+  averagePointsScored: number | null;
   highestScore: number | null;
   gamesThisWeek: number;
   ratingChangeThisWeek: number;
@@ -229,6 +230,7 @@ function deriveFritzSummary(
   let streakTracker = 0;
   let bestWinMargin: number | null = null;
   let highestScore: number | null = null;
+  let totalPointsScored = 0;
   let gamesThisWeek = 0;
   let ratingChangeThisWeek = 0;
   let bestWinMarginThisWeek: number | null = null;
@@ -238,6 +240,7 @@ function deriveFritzSummary(
     const playerScore = Number(game.player_score ?? 0);
     const margin = Number(game.player_score ?? 0) - Number(game.opponent_score ?? 0);
     highestScore = highestScore == null ? playerScore : Math.max(highestScore, playerScore);
+    totalPointsScored += playerScore;
     tierRecords[tier].gamesPlayed += 1;
     if (margin > 0) {
       wins += 1;
@@ -273,6 +276,7 @@ function deriveFritzSummary(
 
   const gamesPlayed = wins + losses;
   const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 1000) / 10 : 0;
+  const averagePointsScored = gamesPlayed > 0 ? Math.round((totalPointsScored / gamesPlayed) * 10) / 10 : null;
 
   return {
     gamesPlayed,
@@ -282,6 +286,7 @@ function deriveFritzSummary(
     currentStreak,
     bestStreak,
     bestWinMargin,
+    averagePointsScored,
     highestScore,
     gamesThisWeek,
     ratingChangeThisWeek,
@@ -488,18 +493,24 @@ export async function fetchUserStats(
 export async function fetchPersonalStatsInsights(
   user: User,
 ): Promise<{ data: PersonalStatsInsights | null; error: string | null }> {
+  return fetchPersonalStatsInsightsByUserId(user.id);
+}
+
+export async function fetchPersonalStatsInsightsByUserId(
+  userId: string,
+): Promise<{ data: PersonalStatsInsights | null; error: string | null }> {
   if (!supabase) return { data: null, error: 'Supabase not configured.' };
 
   const [baseResp, rankingResp, historyResp] = await Promise.all([
-    fetchUserStats(user),
-    fetchRankingProfile(user.id),
-    fetchRatingHistory(user.id),
+    fetchUserStatsByUserId(userId),
+    fetchRankingProfile(userId),
+    fetchRatingHistory(userId),
   ]);
 
   if (baseResp.error) return { data: null, error: baseResp.error };
 
   const weekStart = getWeekStart();
-  const base = baseResp.data ?? buildStatsSummary(user.id, []);
+  const base = baseResp.data ?? buildStatsSummary(userId, []);
   const rankingProfile = rankingResp.data ?? null;
   const historyGames = historyResp.data?.games ?? [];
   const fritz = deriveFritzSummary(historyGames, weekStart);
@@ -509,7 +520,7 @@ export async function fetchPersonalStatsInsights(
     const ghostGamesResp = await supabase
       .from('ghost_games')
       .select('final_score, opponent_score, played_at')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('played_at', { ascending: false });
     if (!ghostGamesResp.error) {
       ghostRows = (ghostGamesResp.data ?? []) as GhostGameSummaryRow[];
@@ -527,12 +538,12 @@ export async function fetchPersonalStatsInsights(
       supabase
         .from('daily_puzzle_completions')
         .select('puzzle_date, current_streak, score, perfect, updated_at')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('puzzle_date', { ascending: false }),
       supabase
         .from('daily_puzzle_scores')
         .select('puzzle_date, best_score, updated_at')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('puzzle_date', { ascending: false }),
     ]);
     if (!completionResp.error) completionRows = (completionResp.data ?? []) as PuzzleCompletionRow[];

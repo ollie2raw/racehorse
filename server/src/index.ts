@@ -184,11 +184,6 @@ app.get('/api/ranking/history/:userId', async (req, res) => {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    if (authenticatedUserId !== userId) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
-
     const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
     const profile = profileData?.[0];
     if (!profile) {

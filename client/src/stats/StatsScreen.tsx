@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import {
   fetchPersonalStatsInsights,
+  fetchPersonalStatsInsightsByUserId,
   type FritzTierKey,
   type PersonalStatsInsights,
   type StatsSummary,
@@ -11,7 +12,9 @@ import {
 interface StatsScreenProps {
   open: boolean;
   user: User | null;
+  targetUserId?: string | null;
   profile: UserProfile | null;
+  title?: string;
   onClose: () => void;
 }
 
@@ -37,7 +40,14 @@ const TIER_LABELS: Record<FritzTierKey, string> = {
   master: 'Master',
 };
 
-export default function StatsScreen({ open, user, profile, onClose }: StatsScreenProps) {
+export default function StatsScreen({
+  open,
+  user,
+  targetUserId = null,
+  profile,
+  title,
+  onClose,
+}: StatsScreenProps) {
   const [stats, setStats] = useState<StatsSummary>(EMPTY_STATS);
   const [insights, setInsights] = useState<PersonalStatsInsights | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,13 +55,21 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
   const requestIdRef = useRef(0);
 
   const loadStats = useCallback(() => {
-    if (!user) return;
+    const statsUserId = targetUserId ?? user?.id ?? null;
+    if (!statsUserId) return;
 
     const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
 
-    void fetchPersonalStatsInsights(user)
+    const loader =
+      targetUserId && targetUserId !== user?.id
+        ? fetchPersonalStatsInsightsByUserId(statsUserId)
+        : user
+          ? fetchPersonalStatsInsights(user)
+          : fetchPersonalStatsInsightsByUserId(statsUserId);
+
+    void loader
       .then((result) => {
         if (requestId !== requestIdRef.current) return;
         setLoading(false);
@@ -67,7 +85,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
         setLoading(false);
         setError('Unable to load stats. Please try again.');
       });
-  }, [user]);
+  }, [targetUserId, user]);
 
   const rankingProfile = insights?.rankingProfile ?? null;
   const fritz = insights?.fritz ?? null;
@@ -126,13 +144,21 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
   );
 
   useEffect(() => {
-    if (!open || !user) return;
+    if (!open || (!user && !targetUserId)) return;
     loadStats();
 
     return () => {
       requestIdRef.current += 1;
     };
-  }, [loadStats, open, user]);
+  }, [loadStats, open, targetUserId, user]);
+
+  const inferredTitle =
+    profile?.username
+      ? `@${profile.username} / Stats`
+      : user?.email
+        ? `${user.email} / Stats`
+        : 'Profile / Stats';
+  const headerTitle = title ?? inferredTitle;
 
   return (
     <div
@@ -161,16 +187,16 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           position: 'relative',
           zIndex: 1901,
           pointerEvents: 'auto',
-          width: 'min(1240px, calc(100vw - 32px))',
-          maxHeight: 'min(94vh, 980px)',
+          width: 'min(1320px, calc(100vw - 24px))',
+          maxHeight: 'min(96vh, 980px)',
           borderRadius: '20px',
           border: '1px solid rgba(236,252,245,0.2)',
           background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
           boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '22px',
+          padding: '18px',
           color: 'rgba(235,245,242,0.96)',
           display: 'grid',
-          gap: '16px',
+          gap: '12px',
           overflow: 'auto',
         }}
       >
@@ -182,67 +208,38 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
             gap: 10,
           }}
         >
-          <h3 style={{ margin: 0, fontSize: '1.4rem' }}>Profile / Stats</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: '1.4rem' }}>{headerTitle}</h3>
+            {stats.ghostRating != null && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  borderRadius: 999,
+                  fontSize: '0.9rem',
+                  color: '#d8b4fe',
+                  fontWeight: 700,
+                  letterSpacing: '0.03em',
+                  background: 'rgba(168, 85, 247, 0.1)',
+                  border: '1px solid rgba(216, 180, 254, 0.18)',
+                }}
+              >
+                <span aria-hidden="true">👻</span>
+                <span>Ghost Rating {stats.ghostRating}</span>
+              </span>
+            )}
+          </div>
           <button className="mode-inline-btn" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            justifyItems: 'center',
-            gap: 8,
-            padding: '0 0 2px',
-          }}
-        >
-          <div
-            style={{
-              width: 84,
-              height: 84,
-              borderRadius: '50%',
-              display: 'grid',
-              placeItems: 'center',
-              background: 'linear-gradient(140deg, #34d399, #0ea5a3)',
-              color: '#04211c',
-              fontSize: '2.2rem',
-              fontWeight: 800,
-              letterSpacing: '0.02em',
-              border: '1px solid rgba(236,252,245,0.34)',
-              boxShadow: '0 10px 24px rgba(14, 116, 102, 0.28)',
-            }}
-          >
-            {(profile?.username?.[0] ?? user?.email?.[0] ?? 'G').toUpperCase()}
-          </div>
-          <strong style={{ fontSize: '1.22rem' }}>
-            {profile?.username ? `@${profile.username}` : user?.email ?? 'Guest'}
-          </strong>
-          {stats.ghostRating != null && (
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '7px 14px',
-                borderRadius: 999,
-                fontSize: '0.96rem',
-                color: '#d8b4fe',
-                fontWeight: 700,
-                letterSpacing: '0.04em',
-                background: 'rgba(168, 85, 247, 0.1)',
-                border: '1px solid rgba(216, 180, 254, 0.18)',
-              }}
-            >
-              <span aria-hidden="true">👻</span>
-              <span>Ghost Rating {stats.ghostRating}</span>
-            </span>
-          )}
-        </div>
-
         {rankingProfile && (
           <div
             style={{
-              padding: '18px 20px',
+              padding: '16px 18px',
               borderRadius: '12px',
               background: 'rgba(20, 28, 45, 0.72)',
               border: '1px solid rgba(236, 252, 245, 0.12)',
@@ -331,10 +328,10 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
                 >
                   {[
                     statCard('Fritz Win Rate', `${fritz.winRate}%`, '📊'),
-                    statCard('Fritz Wins', fritz.wins, '🏆', 'teal'),
-                    statCard('Fritz Losses', fritz.losses, '📉', 'red'),
+                    statCard('Fritz Record', `${fritz.wins}-${fritz.losses}`, '🏆'),
                     statCard('Current Fritz Streak', fritz.currentStreak, '🔥'),
                     statCard('Best Fritz Streak', fritz.bestStreak, '⚡'),
+                    statCard('Avg Points Scored', fritz.averagePointsScored == null ? '—' : `${fritz.averagePointsScored} pts`, '🎯'),
                     statCard('Most Points Scored', fritz.highestScore == null ? '—' : `${fritz.highestScore} pts`, '💥'),
                   ]}
                 </div>

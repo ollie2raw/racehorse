@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Socket } from 'socket.io-client';
-import { fetchUserStatsByUserId, type StatsSummary } from '../stats/statsApi';
+import StatsScreen from '../stats/StatsScreen';
 import {
   acceptFriendRequest,
   declineFriendRequest,
@@ -24,21 +24,6 @@ interface FriendsScreenProps {
   onCreatePrivateRoom?: () => Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }>;
 }
 
-const EMPTY_STATS: StatsSummary = {
-  onlineGamesPlayed: 0,
-  wins: 0,
-  losses: 0,
-  avgMoveQuality: null,
-  longestWinStreak: 0,
-  winRate: 0,
-  currentWinStreak: 0,
-  gamesThisWeek: 0,
-  ghostRating: null,
-  ghostGamesThisWeek: 0,
-  ghostRatingChangeThisWeek: 0,
-  ghostBestWinMarginThisWeek: null,
-};
-
 export default function FriendsScreen({
   open,
   user,
@@ -57,9 +42,6 @@ export default function FriendsScreen({
   const [outgoing, setOutgoing] = useState<FriendRequestRecord[]>([]);
   const [query, setQuery] = useState('');
   const [selectedFriend, setSelectedFriend] = useState<FriendRecord | null>(null);
-  const [friendStats, setFriendStats] = useState<StatsSummary>(EMPTY_STATS);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [statsError, setStatsError] = useState<string | null>(null);
   const [copiedFriendId, setCopiedFriendId] = useState<string | null>(null);
 
   const loadFriends = useCallback(async () => {
@@ -97,20 +79,6 @@ export default function FriendsScreen({
       socket.off('connect', checkPresence);
     };
   }, [open, socket, friends.length]);
-
-  useEffect(() => {
-    if (!selectedFriend) return;
-    setStatsLoading(true);
-    setStatsError(null);
-    fetchUserStatsByUserId(selectedFriend.userId).then((resp) => {
-      setStatsLoading(false);
-      if (resp.error) {
-        setStatsError(resp.error);
-        return;
-      }
-      setFriendStats(resp.data ?? EMPTY_STATS);
-    });
-  }, [selectedFriend]);
 
   const headerText = useMemo(() => {
     if (!user) return 'Sign in to use Friends';
@@ -392,76 +360,21 @@ export default function FriendsScreen({
           </>
         )}
       </div>
-
-      {selectedFriend && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Friend stats"
-          onClick={() => setSelectedFriend(null)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1950,
-            display: 'grid',
-            placeItems: 'center',
-            background: 'rgba(6,10,18,0.54)',
-            backdropFilter: 'blur(3px)',
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(620px, calc(100vw - 24px))',
-              borderRadius: 16,
-              border: '1px solid rgba(236,252,245,0.2)',
-              background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-              padding: 16,
-              color: 'rgba(235,245,242,0.96)',
-              display: 'grid',
-              gap: 10,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h3 style={{ margin: 0 }}>@{selectedFriend.username} / Stats</h3>
-              <button className="mode-inline-btn" onClick={() => setSelectedFriend(null)}>
-                Close
-              </button>
-            </div>
-            {statsLoading && <p style={{ margin: 0 }}>Loading stats...</p>}
-            {statsError && <p className="auth-inline-error">{statsError}</p>}
-            {!statsLoading && !statsError && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-                {[
-                  { label: 'Win Rate', value: friendStats.onlineGamesPlayed > 0 ? `${Math.round((friendStats.wins / friendStats.onlineGamesPlayed) * 100)}%` : '0%', icon: '📊', tone: 'neutral' },
-                  { label: 'Wins', value: friendStats.wins, icon: '🏆', tone: 'teal' },
-                  { label: 'Losses', value: friendStats.losses, icon: '📉', tone: 'red' },
-                  { label: 'Best Streak', value: friendStats.longestWinStreak, icon: '⚡', tone: 'neutral' },
-                  { label: 'Online Games', value: friendStats.onlineGamesPlayed, icon: '🧩', tone: 'neutral' },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    style={{
-                      borderRadius: 10,
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      background: 'rgba(12,20,34,0.68)',
-                      padding: 12,
-                      display: 'grid',
-                      gap: 6,
-                      alignContent: 'start',
-                      boxShadow: item.tone === 'teal' ? 'inset 0 0 0 1px rgba(52,211,153,0.2)' : item.tone === 'red' ? 'inset 0 0 0 1px rgba(248,113,113,0.2)' : 'none',
-                    }}
-                  >
-                    <span style={{ fontSize: '0.9rem', color: 'rgba(191,213,223,0.86)' }}>{item.icon} {item.label}</span>
-                    <strong style={{ fontSize: '1.4rem', color: item.tone === 'teal' ? 'rgba(52,211,153,0.95)' : item.tone === 'red' ? 'rgba(248,113,113,0.95)' : 'rgba(235,245,242,0.96)' }}>{item.value}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <StatsScreen
+        open={Boolean(selectedFriend)}
+        user={user}
+        targetUserId={selectedFriend?.userId ?? null}
+        profile={
+          selectedFriend
+            ? {
+                id: selectedFriend.userId,
+                username: selectedFriend.username,
+              }
+            : null
+        }
+        title={selectedFriend ? `@${selectedFriend.username} / Stats` : 'Friend Stats'}
+        onClose={() => setSelectedFriend(null)}
+      />
     </div>
   );
 }
