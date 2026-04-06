@@ -1,5 +1,19 @@
 import { supabase } from '../lib/supabase';
 
+const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
+const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
+
+function resolveBaseUrl(): string {
+  const configured = DEFAULT_SERVER_URL.trim();
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window !== 'undefined') {
+    const { hostname, port } = window.location;
+    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
+    return '';
+  }
+  return DEFAULT_SERVER_ORIGIN;
+}
+
 export type RatingHistoryGame = {
   played_at: string;
   rating_after: number;
@@ -39,10 +53,11 @@ export async function fetchRatingHistory(
       return { data: null, error: 'You must be signed in to view rating history.' };
     }
 
-    const response = await fetch(`/api/ranking/history/${encodeURIComponent(userId)}`, {
+    const response = await fetch(`${resolveBaseUrl()}/api/ranking/history/${encodeURIComponent(userId)}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
+      credentials: 'include',
     });
     const body = (await response.json()) as RatingHistoryResponse & { error?: string; ok?: boolean };
     if (!response.ok) {

@@ -1200,7 +1200,6 @@ export default function DailyPuzzleScreen({
   const solvableWarning = Boolean(validation && !validation.solvable);
   const isOneTurnHighScore = puzzle.puzzleType === 'one_turn_high_score';
   const formattedPuzzleDate = formatPuzzleDateLabel(puzzle.puzzleDate);
-  const puzzleInstruction = 'Score as many points as you can in one turn.';
   const currentScore = runtimeState?.players.you.score ?? 0;
   const completedScore = isOneTurnHighScore
     ? (finalScore ?? currentScore)
@@ -1249,7 +1248,6 @@ export default function DailyPuzzleScreen({
           <div className="wl-center-status">
             <span className="wl-turn-label your-turn">{isArchiveMode ? 'ARCHIVE PUZZLE' : 'DAILY PUZZLE'}</span>
             <span className="wl-room-code">{formattedPuzzleDate}</span>
-            <span className="daily-runtime-instruction">{puzzleInstruction}</span>
           </div>
         </div>
         <div className="daily-top-actions-pill">
