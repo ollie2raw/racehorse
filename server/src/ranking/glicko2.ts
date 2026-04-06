@@ -8,6 +8,7 @@ export const FRITZ_ROOKIE_ID = '00000000-0000-0000-0000-000000000002';
 export const FRITZ_STANDARD_ID = '00000000-0000-0000-0000-000000000003';
 export const FRITZ_ELITE_ID = '00000000-0000-0000-0000-000000000001';
 export const FRITZ_MASTER_ID = '00000000-0000-0000-0000-000000000004';
+export const FRITZ_GRANDMASTER_ID = '00000000-0000-0000-0000-000000000005';
 export const FRITZ_SYSTEM_ID = FRITZ_ELITE_ID;
 export const FRITZ_ROOKIE_RATING = 600;
 export const FRITZ_ROOKIE_RD = 50;
@@ -17,6 +18,8 @@ export const FRITZ_RATING = 1600;
 export const FRITZ_RD = 50;
 export const FRITZ_MASTER_RATING = 2000;
 export const FRITZ_MASTER_RD = 50;
+export const FRITZ_GRANDMASTER_RATING = 2200;
+export const FRITZ_GRANDMASTER_RD = 45;
 
 export interface GlickoPlayer {
   rating: number;
@@ -162,13 +165,16 @@ export function displayRating(rating: number): number {
 export function getFritzConfig(fritzId: string): {
   rating: number;
   rd: number;
-  difficulty: 'casual' | 'standard' | 'hard' | 'master';
+  difficulty: 'casual' | 'standard' | 'hard' | 'master' | 'grandmaster';
 } {
   if (fritzId === FRITZ_ROOKIE_ID) {
     return { rating: FRITZ_ROOKIE_RATING, rd: FRITZ_ROOKIE_RD, difficulty: 'casual' };
   }
   if (fritzId === FRITZ_STANDARD_ID) {
     return { rating: FRITZ_STANDARD_RATING, rd: FRITZ_STANDARD_RD, difficulty: 'standard' };
+  }
+  if (fritzId === FRITZ_GRANDMASTER_ID) {
+    return { rating: FRITZ_GRANDMASTER_RATING, rd: FRITZ_GRANDMASTER_RD, difficulty: 'grandmaster' };
   }
   if (fritzId === FRITZ_MASTER_ID) {
     return { rating: FRITZ_MASTER_RATING, rd: FRITZ_MASTER_RD, difficulty: 'master' };
@@ -177,5 +183,5 @@ export function getFritzConfig(fritzId: string): {
 }
 
 export function isFritzId(id: string): boolean {
-  return id === FRITZ_ELITE_ID || id === FRITZ_STANDARD_ID || id === FRITZ_ROOKIE_ID || id === FRITZ_MASTER_ID;
+  return id === FRITZ_ELITE_ID || id === FRITZ_STANDARD_ID || id === FRITZ_ROOKIE_ID || id === FRITZ_MASTER_ID || id === FRITZ_GRANDMASTER_ID;
 }

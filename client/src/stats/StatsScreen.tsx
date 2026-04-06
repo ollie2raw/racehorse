@@ -38,6 +38,7 @@ const TIER_LABELS: Record<FritzTierKey, string> = {
   standard: 'Standard',
   elite: 'Elite',
   master: 'Master',
+  grandmaster: 'Grandmaster',
 };
 
 export default function StatsScreen({
@@ -338,7 +339,7 @@ export default function StatsScreen({
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
                     gap: '10px',
                   }}
                 >

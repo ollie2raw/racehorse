@@ -61,15 +61,15 @@
 
 .bot-setup-tier-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
 .bot-setup-tier-card {
   position: relative;
   overflow: hidden;
-  min-height: clamp(154px, 20vh, 188px);
-  padding: 22px 20px 18px;
+  min-height: clamp(122px, 16vh, 154px);
+  padding: 18px 16px 15px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-left: 5px solid var(--tier-color, #818cf8);
@@ -132,19 +132,19 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .bot-setup-tier-label {
-  font-size: clamp(1.72rem, 2.2vw, 2.18rem);
+  font-size: clamp(1.1rem, 1.45vw, 1.5rem);
   font-weight: 850;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .bot-setup-tier-rating {
-  font-size: clamp(1.86rem, 2.4vw, 2.34rem);
+  font-size: clamp(1.28rem, 1.65vw, 1.72rem);
   font-weight: 860;
   letter-spacing: 0.01em;
   color: var(--tier-color, rgba(191, 219, 254, 0.92));
@@ -154,9 +154,9 @@
 .bot-setup-tier-description {
   margin: 0;
   color: rgba(214, 225, 235, 0.82);
-  font-size: 1.18rem;
+  font-size: 0.95rem;
   font-weight: 500;
-  line-height: 1.58;
+  line-height: 1.45;
 }
 
 .bot-setup-segmented {
@@ -350,6 +350,6 @@
   display: block;
   margin-top: 3px;
   color: rgba(214, 225, 235, 0.58);
-  font-size: 0.96rem;
+  font-size: 0.84rem;
   font-weight: 500;
 }

@@ -822,7 +822,11 @@ export async function completeGhostGame(params: {
               ? 'fritz_rookie'
               : fritzConfig.difficulty === 'standard'
                 ? 'fritz_standard'
-                : 'fritz_elite',
+                : fritzConfig.difficulty === 'master'
+                  ? 'fritz_master'
+                  : fritzConfig.difficulty === 'grandmaster'
+                    ? 'fritz_grandmaster'
+                    : 'fritz_elite',
           played_at: now,
           rating_before: rankingProfile.glicko_rating,
           rd_before: rankingProfile.glicko_rd,

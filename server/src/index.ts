@@ -35,6 +35,7 @@ import {
   DEFAULT_RATING,
   DEFAULT_RD,
   FRITZ_ELITE_ID,
+  FRITZ_GRANDMASTER_ID,
   FRITZ_MASTER_ID,
   FRITZ_ROOKIE_ID,
   FRITZ_STANDARD_ID,
@@ -788,6 +789,7 @@ function getFritzTierForRoom(room: Room, botPlayerId: string | null): string {
   const rawBotId = typeof botPlayerId === 'string' ? botPlayerId.toLowerCase() : '';
   if (rawBotId.includes('rookie')) return 'rookie';
   if (rawBotId.includes('standard')) return 'standard';
+  if (rawBotId.includes('grandmaster')) return 'grandmaster';
   if (rawBotId.includes('master')) return 'master';
   return 'elite';
 }
@@ -807,7 +809,8 @@ function getFritzIdentityForTier(rawTier: unknown): { fritzId: string; gameType:
   const tier = typeof rawTier === 'string' ? rawTier.trim().toLowerCase() : '';
   if (tier === 'rookie') return { fritzId: FRITZ_ROOKIE_ID, gameType: 'fritz_rookie' };
   if (tier === 'standard') return { fritzId: FRITZ_STANDARD_ID, gameType: 'fritz_standard' };
-  if (tier === 'master') return { fritzId: FRITZ_MASTER_ID, gameType: 'fritz_elite' };
+  if (tier === 'master') return { fritzId: FRITZ_MASTER_ID, gameType: 'fritz_master' };
+  if (tier === 'grandmaster') return { fritzId: FRITZ_GRANDMASTER_ID, gameType: 'fritz_grandmaster' };
   return { fritzId: FRITZ_ELITE_ID, gameType: 'fritz_elite' };
 }
 

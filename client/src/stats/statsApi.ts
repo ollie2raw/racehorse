@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { fetchRatingHistory } from '../ranking/api';
 import {
   FRITZ_ELITE_ID,
+  FRITZ_GRANDMASTER_ID,
   FRITZ_MASTER_ID,
   FRITZ_ROOKIE_ID,
   FRITZ_STANDARD_ID,
@@ -84,7 +85,7 @@ export interface StatsSummary {
   ghostBestWinMarginThisWeek: number | null;
 }
 
-export type FritzTierKey = 'rookie' | 'standard' | 'elite' | 'master';
+export type FritzTierKey = 'rookie' | 'standard' | 'elite' | 'master' | 'grandmaster';
 
 export interface FritzTierRecord {
   wins: number;
@@ -196,6 +197,7 @@ function emptyTierRecord(): FritzTierRecord {
 function tierFromOpponentId(opponentId: string): FritzTierKey {
   if (opponentId === FRITZ_ROOKIE_ID) return 'rookie';
   if (opponentId === FRITZ_STANDARD_ID) return 'standard';
+  if (opponentId === FRITZ_GRANDMASTER_ID) return 'grandmaster';
   if (opponentId === FRITZ_MASTER_ID) return 'master';
   return 'elite';
 }
@@ -221,6 +223,7 @@ function deriveFritzSummary(
     standard: emptyTierRecord(),
     elite: emptyTierRecord(),
     master: emptyTierRecord(),
+    grandmaster: emptyTierRecord(),
   };
 
   let wins = 0;

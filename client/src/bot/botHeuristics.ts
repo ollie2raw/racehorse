@@ -10,13 +10,15 @@
  * v3.6: master difficulty uses sampled-hand endgame search (fair IS-MCTS style)
  * v3.7: master gets elevated MC samples (20 vs 8), wider chain search, two-ply
  *       worst-case wrapper enabled, endgame IS-MCTS threshold raised 8 → 12 tiles
+ * v3.8: grandmaster tier adds stronger fair sampled-hand search, deeper chain
+ *       refinement, wider 2-ply candidate set, and earlier heavier endgame solve
  */
 
 import type { Move, Tile } from '../types.ts';
 import type { BotMatchState } from './botEngine.ts';
 import { computeOpenEndsSum, getLegalMoves, previewPlayMove } from './botEngine.ts';
 
-export type BotDifficulty = 'casual' | 'standard' | 'hard' | 'master';
+export type BotDifficulty = 'casual' | 'standard' | 'hard' | 'master' | 'grandmaster';
 
 export interface BotChoice {
   move: Move;
@@ -398,9 +400,15 @@ interface ChainNode {
 function dynamicChainParams(
   botHandSize: number,
   totalTiles: number,
-  isMaster: boolean = false,
+  strength: 'base' | 'master' | 'grandmaster' = 'base',
 ): { depth: number; width: number } {
-  if (isMaster) {
+  if (strength === 'grandmaster') {
+    if (botHandSize <= 5 || totalTiles <= 10) return { depth: 9, width: 7 };
+    if (botHandSize <= 7 || totalTiles <= 14) return { depth: 8, width: 6 };
+    if (botHandSize <= 9 || totalTiles <= 18) return { depth: 7, width: 5 };
+    return { depth: 6, width: 5 };
+  }
+  if (strength === 'master') {
     if (botHandSize <= 6 || totalTiles <= 12) return { depth: 8, width: 6 };
     if (botHandSize <= 8 || totalTiles <= 16) return { depth: 7, width: 5 };
     return { depth: 6, width: 4 };
@@ -1232,6 +1240,7 @@ function mcEvaluateMove(
   pool: Tile[],
   holdWeights: Map<string, number>,
   mcSamples: number = MC_SAMPLES,
+  difficulty: BotDifficulty = 'hard',
 ): number {
   const botScore = state.players.bot.score;
   const youScore = state.players.you.score;
@@ -1245,7 +1254,7 @@ function mcEvaluateMove(
   const { depth, width } = dynamicChainParams(
     state.players.bot.hand.length,
     totalTiles,
-    mcSamples > MC_SAMPLES,
+    difficulty === 'grandmaster' ? 'grandmaster' : difficulty === 'master' ? 'master' : 'base',
   );
   const chain = searchChainTree(state, move, depth, width);
   if (!chain) return -Infinity;
@@ -1450,16 +1459,19 @@ export function chooseBotMove(
   const missing = inferMissingPips(state);
   const weights = opponentHoldWeights(pool, missing);
   const totalTiles = totalTilesForLog;
+  const isMasterLike = difficulty === 'master' || difficulty === 'grandmaster';
+  const isGrandmaster = difficulty === 'grandmaster';
 
   // Master endgame: sample plausible opponent hands from the unseen pool,
   // run full-information minimax on each sampled state, then vote on the
   // best move. This preserves fairness while restoring strong late-game play.
-  const masterEndgameThreshold = 12;
-  if (difficulty === 'master' && totalTiles <= masterEndgameThreshold) {
-    const SAMPLE_COUNT = 16;
+  const masterEndgameThreshold = isGrandmaster ? 16 : 12;
+  if (isMasterLike && totalTiles <= masterEndgameThreshold) {
+    const SAMPLE_COUNT = isGrandmaster ? 28 : 16;
     const depth = endgameDepth(totalTiles);
-    const deadlineMs = performance.now() + 200;
+    const deadlineMs = performance.now() + (isGrandmaster ? 320 : 200);
     const moveVotes = new Map<Move, number>();
+    const moveScoreTotals = new Map<Move, number>();
 
     const sampledHands = sampleOpponentHands(pool, weights, getOpponentTileCount(state), SAMPLE_COUNT);
 
@@ -1496,18 +1508,27 @@ export function chooseBotMove(
       }
 
       moveVotes.set(bestMove, (moveVotes.get(bestMove) ?? 0) + 1);
+      moveScoreTotals.set(bestMove, (moveScoreTotals.get(bestMove) ?? 0) + bestVal);
     }
 
     const bestMove =
-      [...moveVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? candidates[0];
+      [...moveVotes.entries()]
+        .sort((a, b) => {
+          const voteDiff = b[1] - a[1];
+          if (voteDiff !== 0) return voteDiff;
+          return (moveScoreTotals.get(b[0]) ?? -Infinity) - (moveScoreTotals.get(a[0]) ?? -Infinity);
+        })[0]?.[0] ?? candidates[0];
     const bestPreview = previewPlayMove(state, 'bot', bestMove);
-    if (!bestPreview) return greedyFallback('master-endgame-fallback');
+    if (!bestPreview) return greedyFallback(isGrandmaster ? 'grandmaster-endgame-fallback' : 'master-endgame-fallback');
 
     return done(
       {
         move: bestMove,
-        score: bestPreview.immediateScore * 100 + (moveVotes.get(bestMove) ?? 0),
-        explanation: `Played ${bestMove.tile?.low}-${bestMove.tile?.high} from sampled endgame search.`,
+        score:
+          bestPreview.immediateScore * 100 +
+          (moveVotes.get(bestMove) ?? 0) +
+          (moveScoreTotals.get(bestMove) ?? 0) * 0.001,
+        explanation: `Played ${bestMove.tile?.low}-${bestMove.tile?.high} from sampled ${isGrandmaster ? 'grandmaster' : 'master'} endgame search.`,
         breakdown: {
           immediate: bestPreview.immediateScore,
           doubleBias: bestMove.tile && isDoubleTile(bestMove.tile) ? 1 : 0,
@@ -1517,7 +1538,7 @@ export function chooseBotMove(
           replyRisk: 0,
         },
       },
-      'master-endgame',
+      isGrandmaster ? 'grandmaster-endgame' : 'master-endgame',
     );
   }
 
@@ -1573,7 +1594,14 @@ export function chooseBotMove(
     .map((move) => {
       const p = previewPlayMove(state, 'bot', move);
       const strategic = evaluateStrategicMove(state, move, weights);
-      const mc = mcEvaluateMove(move, state, pool, weights, difficulty === 'master' ? 20 : MC_SAMPLES);
+      const mc = mcEvaluateMove(
+        move,
+        state,
+        pool,
+        weights,
+        difficulty === 'grandmaster' ? 40 : difficulty === 'master' ? 20 : MC_SAMPLES,
+        difficulty,
+      );
       return {
         move,
         strategic,
@@ -1595,29 +1623,31 @@ export function chooseBotMove(
   // Exact chain-order refinement for top candidates in low-to-mid tile states.
   // This fixes common "good chain, wrong order" misses.
   if (totalTiles <= 16 && prelim.length > 1) {
-    const exactDeadlineMs = performance.now() + 80;
-    const topN = Math.min(4, prelim.length);
+    const exactDeadlineMs = performance.now() + (isGrandmaster ? 140 : 80);
+    const topN = Math.min(isGrandmaster ? 6 : 4, prelim.length);
     for (let i = 0; i < topN; i++) {
       if (performance.now() > exactDeadlineMs) break;
       const exact = searchExactTurnChain(state, prelim[i].move, exactDeadlineMs);
       if (!exact) continue;
-      prelim[i].strategicScore += exact.totalPoints * 22 + (exact.chainLength > 1 ? exact.chainLength * 8 : 0);
+      prelim[i].strategicScore +=
+        exact.totalPoints * (isGrandmaster ? 26 : 22) +
+        (exact.chainLength > 1 ? exact.chainLength * (isGrandmaster ? 10 : 8) : 0);
       prelim[i].score = prelim[i].strategicScore + prelim[i].mcScore * 0.35;
     }
     prelim.sort((a, b) => b.strategicScore - a.strategicScore);
   }
 
   // Phase B: Top-N 2-ply worst-case wrapper on strategic candidates.
-  if ((ENABLE_TWO_PLY_WORST_CASE || difficulty === 'master') && prelim.length > 1) {
-    const N = Math.min(5, prelim.length);
+  if ((ENABLE_TWO_PLY_WORST_CASE || isMasterLike) && prelim.length > 1) {
+    const N = Math.min(isGrandmaster ? 6 : 5, prelim.length);
     const top = prelim.slice(0, N);
     for (const c of top) {
       const worst = twoPlyWorstCaseValue(state, c.move, weights);
-      c.score = worst + c.strategicScore * 0.25 + c.mcScore * 0.1;
+      c.score = worst + c.strategicScore * (isGrandmaster ? 0.3 : 0.25) + c.mcScore * (isGrandmaster ? 0.14 : 0.1);
     }
     top.sort((a, b) => b.score - a.score);
     // deterministic in low-tile states, otherwise slight weighted randomness.
-    const useDeterministicHard = difficulty === 'master' || totalTiles <= 12;
+    const useDeterministicHard = isMasterLike || totalTiles <= 12;
     const chosen = useDeterministicHard ? top[0] : weightedSelect(top);
     return done(
       {
@@ -1632,7 +1662,7 @@ export function chooseBotMove(
 
   // Fallback when wrapper is disabled or only one move remains.
   prelim.sort((a, b) => b.score - a.score);
-  const useDeterministicHard = difficulty === 'master' || totalTiles <= 12;
+  const useDeterministicHard = isMasterLike || totalTiles <= 12;
   const chosen = useDeterministicHard ? prelim[0] : weightedSelect(prelim);
   return done(
     {
