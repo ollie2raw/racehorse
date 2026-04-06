@@ -1,5 +1,12 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { fetchRatingHistory } from '../ranking/api';
+import {
+  FRITZ_ELITE_ID,
+  FRITZ_MASTER_ID,
+  FRITZ_ROOKIE_ID,
+  FRITZ_STANDARD_ID,
+} from '../bot/fritzConfig';
 
 const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
 const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
@@ -77,6 +84,66 @@ export interface StatsSummary {
   ghostBestWinMarginThisWeek: number | null;
 }
 
+export type FritzTierKey = 'rookie' | 'standard' | 'elite' | 'master';
+
+export interface FritzTierRecord {
+  wins: number;
+  losses: number;
+  gamesPlayed: number;
+}
+
+export interface FritzStatsSummary {
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  currentStreak: number;
+  bestStreak: number;
+  bestWinMargin: number | null;
+  highestScore: number | null;
+  gamesThisWeek: number;
+  ratingChangeThisWeek: number;
+  bestWinMarginThisWeek: number | null;
+  tierRecords: Record<FritzTierKey, FritzTierRecord>;
+}
+
+export interface GhostStatsSummary {
+  rating: number | null;
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  bestWinMargin: number | null;
+  gamesThisWeek: number;
+  ratingChangeThisWeek: number;
+  bestWinMarginThisWeek: number | null;
+}
+
+export interface PuzzleStatsSummary {
+  currentStreak: number;
+  completions: number;
+  completionsThisWeek: number;
+  bestScoreToday: number | null;
+  bestScoreEver: number | null;
+  perfectDays: number;
+}
+
+export interface PersonalStatsInsights {
+  base: StatsSummary;
+  rankingProfile: RankingProfile | null;
+  fritz: FritzStatsSummary;
+  ghost: GhostStatsSummary;
+  puzzle: PuzzleStatsSummary;
+}
+
+export interface WeeklyRecap {
+  weekLabel: string;
+  fritz: Pick<FritzStatsSummary, 'gamesThisWeek' | 'ratingChangeThisWeek' | 'bestWinMarginThisWeek'>;
+  ghost: Pick<GhostStatsSummary, 'gamesThisWeek' | 'ratingChangeThisWeek' | 'bestWinMarginThisWeek'>;
+  puzzle: Pick<PuzzleStatsSummary, 'completionsThisWeek'> & { bestScoreToday: number | null };
+  multiplayer: Pick<StatsSummary, 'gamesThisWeek' | 'wins' | 'losses'>;
+}
+
 type MatchSummaryRow = {
   winner_user_id: string | null;
   loser_user_id: string | null;
@@ -90,6 +157,224 @@ type GhostGameSummaryRow = {
   opponent_score: number | null;
   played_at?: string | null;
 };
+
+type PuzzleCompletionRow = {
+  puzzle_date: string | null;
+  current_streak: number | null;
+  score: number | null;
+  perfect: boolean | null;
+  updated_at?: string | null;
+};
+
+type PuzzleScoreRow = {
+  puzzle_date: string | null;
+  best_score: number | null;
+  updated_at?: string | null;
+};
+
+function getWeekStart(now = new Date()): Date {
+  const day = now.getDay();
+  const diffToMonday = (day + 6) % 7;
+  const weekStart = new Date(now);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(now.getDate() - diffToMonday);
+  return weekStart;
+}
+
+function toLocalDateKey(value: Date): string {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, '0');
+  const day = `${value.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function emptyTierRecord(): FritzTierRecord {
+  return { wins: 0, losses: 0, gamesPlayed: 0 };
+}
+
+function tierFromOpponentId(opponentId: string): FritzTierKey {
+  if (opponentId === FRITZ_ROOKIE_ID) return 'rookie';
+  if (opponentId === FRITZ_STANDARD_ID) return 'standard';
+  if (opponentId === FRITZ_MASTER_ID) return 'master';
+  return 'elite';
+}
+
+function formatWeekLabel(weekStart: Date): string {
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  return `Week of ${weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+}
+
+function deriveFritzSummary(
+  games: Array<{
+    played_at: string;
+    opponent_id: string;
+    player_score: number;
+    opponent_score: number;
+    delta: number;
+  }>,
+  weekStart: Date,
+): FritzStatsSummary {
+  const tierRecords: Record<FritzTierKey, FritzTierRecord> = {
+    rookie: emptyTierRecord(),
+    standard: emptyTierRecord(),
+    elite: emptyTierRecord(),
+    master: emptyTierRecord(),
+  };
+
+  let wins = 0;
+  let losses = 0;
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let streakTracker = 0;
+  let bestWinMargin: number | null = null;
+  let highestScore: number | null = null;
+  let gamesThisWeek = 0;
+  let ratingChangeThisWeek = 0;
+  let bestWinMarginThisWeek: number | null = null;
+
+  for (const game of games) {
+    const tier = tierFromOpponentId(game.opponent_id);
+    const playerScore = Number(game.player_score ?? 0);
+    const margin = Number(game.player_score ?? 0) - Number(game.opponent_score ?? 0);
+    highestScore = highestScore == null ? playerScore : Math.max(highestScore, playerScore);
+    tierRecords[tier].gamesPlayed += 1;
+    if (margin > 0) {
+      wins += 1;
+      tierRecords[tier].wins += 1;
+      streakTracker += 1;
+      bestStreak = Math.max(bestStreak, streakTracker);
+      bestWinMargin = bestWinMargin == null ? margin : Math.max(bestWinMargin, margin);
+    } else {
+      losses += 1;
+      tierRecords[tier].losses += 1;
+      streakTracker = 0;
+    }
+
+    const playedMs = new Date(game.played_at).getTime();
+    if (Number.isFinite(playedMs) && playedMs >= weekStart.getTime()) {
+      gamesThisWeek += 1;
+      ratingChangeThisWeek += Number(game.delta ?? 0);
+      if (margin > 0) {
+        bestWinMarginThisWeek =
+          bestWinMarginThisWeek == null ? margin : Math.max(bestWinMarginThisWeek, margin);
+      }
+    }
+  }
+
+  for (let i = games.length - 1; i >= 0; i -= 1) {
+    const margin = Number(games[i].player_score ?? 0) - Number(games[i].opponent_score ?? 0);
+    if (margin > 0) {
+      currentStreak += 1;
+      continue;
+    }
+    break;
+  }
+
+  const gamesPlayed = wins + losses;
+  const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 1000) / 10 : 0;
+
+  return {
+    gamesPlayed,
+    wins,
+    losses,
+    winRate,
+    currentStreak,
+    bestStreak,
+    bestWinMargin,
+    highestScore,
+    gamesThisWeek,
+    ratingChangeThisWeek,
+    bestWinMarginThisWeek,
+    tierRecords,
+  };
+}
+
+function deriveGhostSummary(
+  rows: GhostGameSummaryRow[],
+  rating: number | null,
+  weekStart: Date,
+): GhostStatsSummary {
+  let wins = 0;
+  let losses = 0;
+  let bestWinMargin: number | null = null;
+  let gamesThisWeek = 0;
+  let ratingChangeThisWeek = 0;
+  let bestWinMarginThisWeek: number | null = null;
+
+  for (const row of rows) {
+    const finalScore = Number(row.final_score ?? 0);
+    const opponentScore = Number(row.opponent_score ?? 0);
+    const margin = finalScore - opponentScore;
+    if (margin > 0) {
+      wins += 1;
+      bestWinMargin = bestWinMargin == null ? margin : Math.max(bestWinMargin, margin);
+    }
+    if (margin < 0) losses += 1;
+
+    const playedMs = new Date(row.played_at ?? 0).getTime();
+    if (Number.isFinite(playedMs) && playedMs >= weekStart.getTime()) {
+      gamesThisWeek += 1;
+      if (margin > 0) {
+        bestWinMarginThisWeek =
+          bestWinMarginThisWeek == null ? margin : Math.max(bestWinMarginThisWeek, margin);
+      }
+      if (margin > 0) ratingChangeThisWeek += 16;
+      if (margin < 0) ratingChangeThisWeek -= 16;
+    }
+  }
+
+  const gamesPlayed = rows.length;
+  const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 1000) / 10 : 0;
+
+  return {
+    rating,
+    gamesPlayed,
+    wins,
+    losses,
+    winRate,
+    bestWinMargin,
+    gamesThisWeek,
+    ratingChangeThisWeek,
+    bestWinMarginThisWeek,
+  };
+}
+
+function derivePuzzleSummary(
+  completionRows: PuzzleCompletionRow[],
+  scoreRows: PuzzleScoreRow[],
+  weekStart: Date,
+): PuzzleStatsSummary {
+  const todayKey = toLocalDateKey(new Date());
+  const completions = completionRows.length;
+  const perfectDays = completionRows.filter((row) => Boolean(row.perfect)).length;
+  const currentStreak =
+    [...completionRows]
+      .sort((a, b) => String(b.puzzle_date ?? '').localeCompare(String(a.puzzle_date ?? '')))[0]
+      ?.current_streak ?? 0;
+  const completionsThisWeek = completionRows.filter((row) => {
+    const value = row.updated_at ?? row.puzzle_date ?? '';
+    const ms = new Date(value).getTime();
+    return Number.isFinite(ms) && ms >= weekStart.getTime();
+  }).length;
+  const bestScoreToday =
+    scoreRows.find((row) => row.puzzle_date === todayKey)?.best_score == null
+      ? null
+      : Number(scoreRows.find((row) => row.puzzle_date === todayKey)?.best_score ?? 0);
+  const bestScoreEver =
+    scoreRows.length > 0
+      ? Math.max(...scoreRows.map((row) => Number(row.best_score ?? 0)))
+      : null;
+
+  return {
+    currentStreak: Number(currentStreak ?? 0),
+    completions,
+    completionsThisWeek,
+    bestScoreToday,
+    bestScoreEver,
+    perfectDays,
+  };
+}
 
 function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummary {
   const onlineRows = rows
@@ -198,6 +483,114 @@ export async function fetchUserStats(
 
   const { data, error } = await fetchUserStatsByUserId(user.id);
   return { data, error };
+}
+
+export async function fetchPersonalStatsInsights(
+  user: User,
+): Promise<{ data: PersonalStatsInsights | null; error: string | null }> {
+  if (!supabase) return { data: null, error: 'Supabase not configured.' };
+
+  const [baseResp, rankingResp, historyResp] = await Promise.all([
+    fetchUserStats(user),
+    fetchRankingProfile(user.id),
+    fetchRatingHistory(user.id),
+  ]);
+
+  if (baseResp.error) return { data: null, error: baseResp.error };
+
+  const weekStart = getWeekStart();
+  const base = baseResp.data ?? buildStatsSummary(user.id, []);
+  const rankingProfile = rankingResp.data ?? null;
+  const historyGames = historyResp.data?.games ?? [];
+  const fritz = deriveFritzSummary(historyGames, weekStart);
+
+  let ghostRows: GhostGameSummaryRow[] = [];
+  try {
+    const ghostGamesResp = await supabase
+      .from('ghost_games')
+      .select('final_score, opponent_score, played_at')
+      .eq('user_id', user.id)
+      .order('played_at', { ascending: false });
+    if (!ghostGamesResp.error) {
+      ghostRows = (ghostGamesResp.data ?? []) as GhostGameSummaryRow[];
+    }
+  } catch {
+    ghostRows = [];
+  }
+
+  const ghost = deriveGhostSummary(ghostRows, base.ghostRating, weekStart);
+
+  let completionRows: PuzzleCompletionRow[] = [];
+  let scoreRows: PuzzleScoreRow[] = [];
+  try {
+    const [completionResp, scoreResp] = await Promise.all([
+      supabase
+        .from('daily_puzzle_completions')
+        .select('puzzle_date, current_streak, score, perfect, updated_at')
+        .eq('user_id', user.id)
+        .order('puzzle_date', { ascending: false }),
+      supabase
+        .from('daily_puzzle_scores')
+        .select('puzzle_date, best_score, updated_at')
+        .eq('user_id', user.id)
+        .order('puzzle_date', { ascending: false }),
+    ]);
+    if (!completionResp.error) completionRows = (completionResp.data ?? []) as PuzzleCompletionRow[];
+    if (!scoreResp.error) scoreRows = (scoreResp.data ?? []) as PuzzleScoreRow[];
+  } catch {
+    completionRows = [];
+    scoreRows = [];
+  }
+
+  const puzzle = derivePuzzleSummary(completionRows, scoreRows, weekStart);
+
+  return {
+    data: {
+      base,
+      rankingProfile,
+      fritz,
+      ghost,
+      puzzle,
+    },
+    error: null,
+  };
+}
+
+export async function fetchWeeklyRecap(
+  user: User,
+): Promise<{ data: WeeklyRecap | null; error: string | null }> {
+  const insightsResp = await fetchPersonalStatsInsights(user);
+  if (insightsResp.error || !insightsResp.data) {
+    return { data: null, error: insightsResp.error ?? 'Unable to load weekly recap.' };
+  }
+
+  const weekStart = getWeekStart();
+  const { base, fritz, ghost, puzzle } = insightsResp.data;
+  return {
+    data: {
+      weekLabel: formatWeekLabel(weekStart),
+      fritz: {
+        gamesThisWeek: fritz.gamesThisWeek,
+        ratingChangeThisWeek: fritz.ratingChangeThisWeek,
+        bestWinMarginThisWeek: fritz.bestWinMarginThisWeek,
+      },
+      ghost: {
+        gamesThisWeek: ghost.gamesThisWeek,
+        ratingChangeThisWeek: ghost.ratingChangeThisWeek,
+        bestWinMarginThisWeek: ghost.bestWinMarginThisWeek,
+      },
+      puzzle: {
+        completionsThisWeek: puzzle.completionsThisWeek,
+        bestScoreToday: puzzle.bestScoreToday,
+      },
+      multiplayer: {
+        gamesThisWeek: base.gamesThisWeek,
+        wins: base.wins,
+        losses: base.losses,
+      },
+    },
+    error: null,
+  };
 }
 
 export async function fetchUserStatsByUserId(

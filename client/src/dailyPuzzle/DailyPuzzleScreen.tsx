@@ -1075,7 +1075,7 @@ export default function DailyPuzzleScreen({
                   <button
                     type="button"
                     className="daily-archive-button"
-                    disabled={!archiveInputHasCompleteDate || !archiveDateDirty}
+                    disabled={!archiveInputHasCompleteDate}
                     onClick={applyArchiveDate}
                   >
                     Load Date
@@ -1083,7 +1083,6 @@ export default function DailyPuzzleScreen({
                   <button
                     type="button"
                     className="daily-archive-button daily-archive-button-secondary"
-                    disabled={!archiveDateDirty && archiveTargetIsToday}
                     onClick={() => {
                       setArchiveDateInput(localDateKey);
                       setSelectedDateSeed(localDateKey);
@@ -1122,7 +1121,7 @@ export default function DailyPuzzleScreen({
                   </span>
                   {selectedLobbyPuzzle && (
                     <span className="mode-option-meta">
-                      Keep the existing daily puzzle rules and scoring flow.
+                      Find the best scoring move from today&apos;s puzzle board.
                     </span>
                   )}
                 </button>

@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import type { User } from '@supabase/supabase-js';
 import confetti from 'canvas-confetti';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import { traceSocketEvent } from "./debug/socketTrace";
@@ -41,7 +42,7 @@ import {
   cloneBoardState,
   toTileTuple,
 } from './analyzer/moveLogger';
-import { fetchUserStatsByUserId, recordMatchResult } from './stats/statsApi';
+import { fetchUserStatsByUserId, fetchWeeklyRecap, recordMatchResult } from './stats/statsApi';
 import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 import type { BotDealSize } from './bot/botEngine';
@@ -408,97 +409,107 @@ function GameOverOverlay({
 function WeeklyStatsScreen({
   open,
   onClose,
-  awards,
-  userId,
+  user,
 }: {
   open: boolean;
   onClose: () => void;
-  awards: any | null;
-  userId: string | null;
+  user: User | null;
 }) {
-  const [ghostWeek, setGhostWeek] = useState<{
-    ghostGamesThisWeek: number;
-    ghostRatingChangeThisWeek: number;
-    ghostBestWinMarginThisWeek: number | null;
-  } | null>(null);
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setHours(0, 0, 0, 0);
-  monday.setDate(now.getDate() + mondayOffset);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  const rangeFmt = new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-  const weekRange = `${rangeFmt.format(monday)} – ${rangeFmt.format(sunday)}`;
-
-  const items = Array.isArray(awards?.awards) ? awards.awards : [];
-  const hasRows = items.length > 0;
-  const iconFor = (key: string, title: string): string => {
-    const s = `${key} ${title}`.toLowerCase();
-    if (s.includes('most wins')) return '🥇';
-    if (s.includes('most games')) return '🎮';
-    if (s.includes('biggest win')) return '💥';
-    if (s.includes('closest win')) return '🎯';
-    if (s.includes('biggest comeback')) return '🔥';
-    if (s.includes('longest win streak')) return '⚡';
-    return '🥇';
-  };
-  const unitFor = (key: string, title: string): string => {
-    const s = `${key} ${title}`.toLowerCase();
-    if (s.includes('most wins')) return 'wins';
-    if (s.includes('most games')) return 'games';
-    if (s.includes('streak')) return 'wins';
-    if (s.includes('margin') || s.includes('closest') || s.includes('comeback')) return 'pts';
-    return '';
-  };
-  const accentFor = (key: string, title: string): string => {
-    const s = `${key} ${title}`.toLowerCase();
-    if (s.includes('most wins')) return '#f5c76a';
-    if (s.includes('most games')) return '#4da3ff';
-    if (s.includes('biggest win')) return '#ff6b6b';
-    if (s.includes('closest win')) return '#3ddc97';
-    if (s.includes('biggest comeback')) return '#ff9f43';
-    if (s.includes('longest win streak') || s.includes('longest streak')) return '#6c8cff';
-    return '#f5c76a';
-  };
-  const accentClassFor = (key: string, title: string): string => {
-    const s = `${key} ${title}`.toLowerCase();
-    if (s.includes('most wins')) return 'most-wins';
-    if (s.includes('most games')) return 'most-games';
-    if (s.includes('biggest win')) return 'biggest-win';
-    if (s.includes('closest win')) return 'closest-win';
-    if (s.includes('biggest comeback')) return 'biggest-comeback';
-    if (s.includes('longest win streak') || s.includes('longest streak')) return 'longest-streak';
-    return 'most-wins';
-  };
+  const [recap, setRecap] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open || !userId) {
-      setGhostWeek(null);
+    if (!open || !user) {
+      setRecap(null);
+      setError(null);
       return;
     }
     let active = true;
-    void fetchUserStatsByUserId(userId)
+    setLoading(true);
+    setError(null);
+    void fetchWeeklyRecap(user)
       .then((resp) => {
-        if (!active || resp.error || !resp.data) return;
-        setGhostWeek({
-          ghostGamesThisWeek: resp.data.ghostGamesThisWeek,
-          ghostRatingChangeThisWeek: resp.data.ghostRatingChangeThisWeek,
-          ghostBestWinMarginThisWeek: resp.data.ghostBestWinMarginThisWeek,
-        });
+        if (!active) return;
+        setLoading(false);
+        if (resp.error || !resp.data) {
+          setError(resp.error ?? 'Unable to load weekly recap.');
+          setRecap(null);
+          return;
+        }
+        setRecap(resp.data);
       })
       .catch(() => {
-        if (active) setGhostWeek(null);
+        if (!active) return;
+        setLoading(false);
+        setError('Unable to load weekly recap.');
       });
     return () => {
       active = false;
     };
-  }, [open, userId]);
+  }, [open, user]);
+
+  const recapSections = recap
+    ? [
+        {
+          title: 'Fritz This Week',
+          icon: '🤖',
+          tone: 'rgba(94, 234, 212, 0.16)',
+          rows: [
+            { label: 'Ranked Games', value: recap.fritz.gamesThisWeek },
+            {
+              label: 'Rating Δ',
+              value:
+                Math.round(recap.fritz.ratingChangeThisWeek) === 0
+                  ? '0'
+                  : `${recap.fritz.ratingChangeThisWeek > 0 ? '+' : ''}${Math.round(recap.fritz.ratingChangeThisWeek)}`,
+            },
+            {
+              label: 'Best Win',
+              value: recap.fritz.bestWinMarginThisWeek == null ? '—' : `${recap.fritz.bestWinMarginThisWeek} pts`,
+            },
+          ],
+        },
+        {
+          title: 'Ghost This Week',
+          icon: '👻',
+          tone: 'rgba(216, 180, 254, 0.16)',
+          rows: [
+            { label: 'Ghost Games', value: recap.ghost.gamesThisWeek },
+            {
+              label: 'Rating Δ',
+              value:
+                Math.round(recap.ghost.ratingChangeThisWeek) === 0
+                  ? '0'
+                  : `${recap.ghost.ratingChangeThisWeek > 0 ? '+' : ''}${Math.round(recap.ghost.ratingChangeThisWeek)}`,
+            },
+            {
+              label: 'Best Win',
+              value: recap.ghost.bestWinMarginThisWeek == null ? '—' : `${recap.ghost.bestWinMarginThisWeek} pts`,
+            },
+          ],
+        },
+        {
+          title: 'Puzzle This Week',
+          icon: '🧩',
+          tone: 'rgba(240, 192, 64, 0.16)',
+          rows: [
+            { label: 'Completions', value: recap.puzzle.completionsThisWeek },
+            { label: 'Best Today', value: recap.puzzle.bestScoreToday == null ? '—' : recap.puzzle.bestScoreToday },
+          ],
+        },
+        {
+          title: 'Multiplayer This Week',
+          icon: '🌐',
+          tone: 'rgba(148, 163, 184, 0.16)',
+          rows: [
+            { label: 'Online Games', value: recap.multiplayer.gamesThisWeek },
+            { label: 'Wins', value: recap.multiplayer.wins },
+            { label: 'Losses', value: recap.multiplayer.losses },
+          ],
+        },
+      ]
+    : [];
 
   return (
     <div
@@ -527,25 +538,27 @@ function WeeklyStatsScreen({
           position: 'relative',
           zIndex: 1901,
           pointerEvents: 'auto',
-          width: 'min(720px, calc(100vw - 24px))',
-          borderRadius: '16px',
+          width: 'min(1120px, calc(100vw - 32px))',
+          maxHeight: 'min(92vh, 920px)',
+          borderRadius: '20px',
           border: '1px solid rgba(236,252,245,0.2)',
           background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
           boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '18px',
+          padding: '22px',
           color: 'rgba(235,245,242,0.96)',
           display: 'grid',
-          gap: '12px',
+          gap: '16px',
+          overflow: 'auto',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ display: 'grid', gap: 4 }}>
+          <div style={{ display: 'grid', gap: 6 }}>
             <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span aria-hidden="true">🏆</span>
-              <span>Weekly Leaderboard</span>
+              <span>Weekly Recap</span>
             </h3>
-            <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
-              Week of {weekRange}
+            <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', fontSize: '1.12rem' }}>
+              {recap?.weekLabel ?? 'This week'}
             </p>
           </div>
           <button className="mode-inline-btn" onClick={onClose}>
@@ -553,117 +566,57 @@ function WeeklyStatsScreen({
           </button>
         </div>
 
-        {ghostWeek && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-              gap: 10,
-            }}
-          >
-            {[
-              { label: 'Ghost Games', value: ghostWeek.ghostGamesThisWeek },
-              {
-                label: 'Ghost Rating Δ',
-                value:
-                  ghostWeek.ghostRatingChangeThisWeek === 0
-                    ? '0'
-                    : `${ghostWeek.ghostRatingChangeThisWeek > 0 ? '+' : ''}${ghostWeek.ghostRatingChangeThisWeek}`,
-              },
-              {
-                label: 'Best Ghost Win',
-                value:
-                  ghostWeek.ghostBestWinMarginThisWeek == null
-                    ? '—'
-                    : `${ghostWeek.ghostBestWinMarginThisWeek} pts`,
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  borderRadius: '10px',
-                  border: '1px solid rgba(215, 186, 255, 0.18)',
-                  background: 'rgba(48, 27, 72, 0.28)',
-                  padding: '12px',
-                  display: 'grid',
-                  gap: 4,
-                }}
-              >
-                <span style={{ fontSize: '0.82rem', color: 'rgba(225,212,248,0.82)' }}>
-                  👻 {item.label}
-                </span>
-                <strong style={{ fontSize: '1.18rem', color: '#f2e8ff' }}>{item.value}</strong>
-              </div>
-            ))}
-          </div>
-        )}
+        {loading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading weekly recap...</p>}
+        {error && <p className="auth-inline-error" style={{ margin: 0 }}>{error}</p>}
 
-        {hasRows ? (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {items.map((a: any) => (
+        {!loading && !error && recapSections.length > 0 ? (
+          <div style={{ display: 'grid', gap: 14 }}>
+            {recapSections.map((section) => (
               <div
-                key={a.key}
-                className={`weekly-award-row ${accentClassFor(String(a.key ?? ''), String(a.title ?? ''))}`}
+                key={section.title}
                 style={{
-                  ['--accent' as any]: accentFor(String(a.key ?? ''), String(a.title ?? '')),
-                  borderRadius: '10px',
-                  border: '1px solid color-mix(in srgb, var(--accent), transparent 75%)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255,255,255,0.14)',
                   background: 'rgba(12,20,34,0.68)',
-                  padding: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
+                  padding: '16px',
+                  display: 'grid',
+                  gap: 14,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <span aria-hidden="true" style={{ fontSize: '1rem' }}>
-                    {iconFor(String(a.key ?? ''), String(a.title ?? ''))}
-                  </span>
-                  <span style={{ fontSize: '0.92rem', color: 'rgba(191,213,223,0.92)' }}>{a.title}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span aria-hidden="true" style={{ fontSize: '1.22rem' }}>{section.icon}</span>
+                  <strong style={{ fontSize: '1.16rem', color: 'rgba(240,248,255,0.96)' }}>{section.title}</strong>
                 </div>
                 <div
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    minWidth: 0,
-                    justifyContent: 'flex-end',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: 12,
                   }}
                 >
-                  <strong
-                    style={{
-                      fontSize: '1.02rem',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 700,
-                      color: 'rgba(245,252,248,0.96)',
-                    }}
-                  >
-                    {a.leader?.username ?? '—'}
-                  </strong>
-                  {a.leader ? (
-                    <span
-                      className="weekly-award-value-pill"
+                  {section.rows.map((row) => (
+                    <div
+                      key={row.label}
                       style={{
-                        whiteSpace: 'nowrap',
-                        borderRadius: 999,
-                        padding: '4px 8px',
-                        border: '1px solid color-mix(in srgb, var(--accent), transparent 70%)',
-                        fontSize: '0.8rem',
-                        fontWeight: 700,
-                        letterSpacing: '0.01em',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: section.tone,
+                        padding: '14px 16px',
+                        display: 'grid',
+                        gap: 6,
                       }}
                     >
-                      {a.leader.value} {unitFor(String(a.key ?? ''), String(a.title ?? ''))}
-                    </span>
-                  ) : null}
+                      <span style={{ fontSize: '0.98rem', color: 'rgba(191,213,223,0.88)', fontWeight: 700 }}>{row.label}</span>
+                      <strong style={{ fontSize: '1.56rem', color: '#f8fafc' }}>{row.value}</strong>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
         ) : (
           <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
-            No games played this week yet. Be the first!
+            No weekly recap available yet.
           </p>
         )}
       </div>
@@ -3902,11 +3855,10 @@ export default function App() {
           onCreatePrivateRoom={onCreatePrivateRoom}
           onClose={() => setFriendsOpen(false)}
         />
-              <WeeklyStatsScreen
+        <WeeklyStatsScreen
           open={weeklyStatsOpen}
           onClose={() => setWeeklyStatsOpen(false)}
-          awards={weeklyAwards}
-          userId={authUser?.id ?? null}
+          user={authUser}
         />
         {friendInvitePopup}
 </div>

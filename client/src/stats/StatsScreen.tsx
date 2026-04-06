@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { fetchUserStats, type StatsSummary, fetchRankingProfile, type RankingProfile } from './statsApi';
+import {
+  fetchPersonalStatsInsights,
+  type FritzTierKey,
+  type PersonalStatsInsights,
+  type StatsSummary,
+} from './statsApi';
 
 interface StatsScreenProps {
   open: boolean;
@@ -25,9 +30,16 @@ const EMPTY_STATS: StatsSummary = {
   ghostBestWinMarginThisWeek: null,
 };
 
+const TIER_LABELS: Record<FritzTierKey, string> = {
+  rookie: 'Rookie',
+  standard: 'Standard',
+  elite: 'Elite',
+  master: 'Master',
+};
+
 export default function StatsScreen({ open, user, profile, onClose }: StatsScreenProps) {
   const [stats, setStats] = useState<StatsSummary>(EMPTY_STATS);
-  const [rankingProfile, setRankingProfile] = useState<RankingProfile | null>(null);
+  const [insights, setInsights] = useState<PersonalStatsInsights | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -39,7 +51,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
     setLoading(true);
     setError(null);
 
-    void fetchUserStats(user)
+    void fetchPersonalStatsInsights(user)
       .then((result) => {
         if (requestId !== requestIdRef.current) return;
         setLoading(false);
@@ -47,19 +59,71 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           setError(result.error);
           return;
         }
-        setStats(result.data ?? EMPTY_STATS);
+        setInsights(result.data);
+        setStats(result.data?.base ?? EMPTY_STATS);
       })
       .catch(() => {
         if (requestId !== requestIdRef.current) return;
         setLoading(false);
         setError('Unable to load stats. Please try again.');
       });
-
-    void fetchRankingProfile(user.id).then(({ data }) => {
-      if (requestId !== requestIdRef.current) return;
-      setRankingProfile(data);
-    });
   }, [user]);
+
+  const rankingProfile = insights?.rankingProfile ?? null;
+  const fritz = insights?.fritz ?? null;
+  const ghost = insights?.ghost ?? null;
+  const puzzle = insights?.puzzle ?? null;
+
+  const statCard = (
+    label: string,
+    value: string | number,
+    icon: string,
+    tone: 'neutral' | 'teal' | 'red' = 'neutral',
+    subtitle?: string | null,
+  ) => (
+    <div
+      key={label}
+      style={{
+        borderRadius: '10px',
+        border: '1px solid rgba(255,255,255,0.16)',
+        background: 'rgba(12,20,34,0.68)',
+        padding: '16px',
+        display: 'grid',
+        gap: '8px',
+        alignContent: 'start',
+        boxShadow:
+          tone === 'teal'
+            ? 'inset 0 0 0 1px rgba(52,211,153,0.2)'
+            : tone === 'red'
+              ? 'inset 0 0 0 1px rgba(248,113,113,0.2)'
+              : 'none',
+      }}
+    >
+      <span style={{ fontSize: '1rem', color: 'rgba(191,213,223,0.9)', fontWeight: 700 }}>
+        {icon} {label}
+      </span>
+      <strong
+        style={{
+          fontSize: '1.82rem',
+          lineHeight: 1.05,
+          letterSpacing: '0.01em',
+          color:
+            tone === 'teal'
+              ? '#5eead4'
+              : tone === 'red'
+                ? '#fca5a5'
+                : 'rgba(236,248,245,0.95)',
+        }}
+      >
+        {value}
+      </strong>
+      {subtitle ? (
+        <span style={{ fontSize: '0.92rem', color: 'rgba(191,213,223,0.84)', fontWeight: 600, lineHeight: 1.45 }}>
+          {subtitle}
+        </span>
+      ) : null}
+    </div>
+  );
 
   useEffect(() => {
     if (!open || !user) return;
@@ -97,17 +161,17 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           position: 'relative',
           zIndex: 1901,
           pointerEvents: 'auto',
-          width: 'min(760px, calc(100vw - 24px))',
-          maxHeight: 'min(92vh, 760px)',
-          borderRadius: '16px',
+          width: 'min(1240px, calc(100vw - 32px))',
+          maxHeight: 'min(94vh, 980px)',
+          borderRadius: '20px',
           border: '1px solid rgba(236,252,245,0.2)',
           background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
           boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '16px',
+          padding: '22px',
           color: 'rgba(235,245,242,0.96)',
           display: 'grid',
-          gap: '12px',
-          overflow: 'hidden',
+          gap: '16px',
+          overflow: 'auto',
         }}
       >
         <div
@@ -118,34 +182,30 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
             gap: 10,
           }}
         >
-          <h3 style={{ margin: 0 }}>Profile / Stats</h3>
+          <h3 style={{ margin: 0, fontSize: '1.4rem' }}>Profile / Stats</h3>
           <button className="mode-inline-btn" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)', fontSize: '1.02rem' }}>
-          {profile?.username ? `@${profile.username}` : 'Guest'}
-        </p>
-
         <div
           style={{
             display: 'grid',
             justifyItems: 'center',
-            gap: 6,
+            gap: 8,
             padding: '0 0 2px',
           }}
         >
           <div
             style={{
-              width: 62,
-              height: 62,
+              width: 84,
+              height: 84,
               borderRadius: '50%',
               display: 'grid',
               placeItems: 'center',
               background: 'linear-gradient(140deg, #34d399, #0ea5a3)',
               color: '#04211c',
-              fontSize: '1.72rem',
+              fontSize: '2.2rem',
               fontWeight: 800,
               letterSpacing: '0.02em',
               border: '1px solid rgba(236,252,245,0.34)',
@@ -154,7 +214,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
           >
             {(profile?.username?.[0] ?? user?.email?.[0] ?? 'G').toUpperCase()}
           </div>
-          <strong style={{ fontSize: '1rem' }}>
+          <strong style={{ fontSize: '1.22rem' }}>
             {profile?.username ? `@${profile.username}` : user?.email ?? 'Guest'}
           </strong>
           {stats.ghostRating != null && (
@@ -163,9 +223,9 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6,
-                padding: '4px 10px',
+                padding: '7px 14px',
                 borderRadius: 999,
-                fontSize: '0.8rem',
+                fontSize: '0.96rem',
                 color: '#d8b4fe',
                 fontWeight: 700,
                 letterSpacing: '0.04em',
@@ -177,15 +237,12 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
               <span>Ghost Rating {stats.ghostRating}</span>
             </span>
           )}
-            <span style={{ fontSize: '0.8rem', color: 'rgba(188, 212, 222, 0.72)', letterSpacing: '0.04em' }}>
-            Member
-          </span>
         </div>
 
         {rankingProfile && (
           <div
             style={{
-              padding: '14px 16px',
+              padding: '18px 20px',
               borderRadius: '12px',
               background: 'rgba(20, 28, 45, 0.72)',
               border: '1px solid rgba(236, 252, 245, 0.12)',
@@ -196,23 +253,23 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-               <span style={{ fontSize: '0.82rem', color: 'rgba(191,213,223,0.86)', fontWeight: 600 }}>Ranked Rating</span>
+               <span style={{ fontSize: '1rem', color: 'rgba(191,213,223,0.9)', fontWeight: 700 }}>Ranked Rating</span>
                {rankingProfile.rank && (
-                 <span style={{ fontSize: '0.82rem', color: '#34d399', fontWeight: 700 }}>#{rankingProfile.rank} globally</span>
+                 <span style={{ fontSize: '0.96rem', color: '#34d399', fontWeight: 700 }}>#{rankingProfile.rank} globally</span>
                )}
             </div>
             
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-               <span style={{ fontSize: '1.95rem', fontWeight: 800, color: '#fefefe', lineHeight: 1 }}>
+               <span style={{ fontSize: '2.5rem', fontWeight: 800, color: '#fefefe', lineHeight: 1 }}>
                  {Math.round(rankingProfile.glicko_rating).toLocaleString()}
                </span>
                {rankingProfile.provisional && (
-                 <span style={{ fontSize: '1.4rem', color: 'rgba(236,252,245,0.4)', fontWeight: 600 }}>?</span>
+                 <span style={{ fontSize: '1.7rem', color: 'rgba(236,252,245,0.4)', fontWeight: 600 }}>?</span>
                )}
             </div>
 
             {rankingProfile.provisional && (
-              <span style={{ fontSize: '0.76rem', color: 'rgba(191,213,223,0.6)', marginTop: '-4px' }}>
+              <span style={{ fontSize: '0.92rem', color: 'rgba(191,213,223,0.74)', marginTop: '-4px', lineHeight: 1.4 }}>
                 Confirmed after 20 ranked games
               </span>
             )}
@@ -230,7 +287,7 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '16px', fontSize: '0.78rem', color: 'rgba(191,213,223,0.72)', marginTop: '2px' }}>
+            <div style={{ display: 'flex', gap: '18px', fontSize: '0.92rem', color: 'rgba(191,213,223,0.82)', marginTop: '4px', flexWrap: 'wrap' }}>
                <span>Peak: <strong style={{ color: 'rgba(236,252,245,0.9)' }}>{Math.round(rankingProfile.peak_rating).toLocaleString()}</strong></span>
                <span>Ranked Games: <strong style={{ color: 'rgba(236,252,245,0.9)' }}>{rankingProfile.ranked_games_played}</strong></span>
             </div>
@@ -250,113 +307,137 @@ export default function StatsScreen({ open, user, profile, onClose }: StatsScree
         )}
 
         {!loading && !error && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-              gap: '12px',
-              minHeight: '220px',
-            }}
-          >
-            {[
-              { label: 'Win Rate', value: `${stats.winRate}%`, icon: '📊', tone: 'neutral' },
-              { label: 'Wins', value: stats.wins, icon: '🏆', tone: 'teal' },
-              { label: 'Losses', value: stats.losses, icon: '📉', tone: 'red' },
-              {
-                label: 'Avg Move Quality',
-                value: stats.avgMoveQuality == null ? '—' : `${Math.round(stats.avgMoveQuality)}%`,
-                subtitle:
-                  stats.avgMoveQuality == null
-                    ? 'Not enough data'
-                    : stats.avgMoveQuality >= 85
-                      ? 'Excellent'
-                      : stats.avgMoveQuality >= 70
-                        ? 'Good'
-                        : 'Developing',
-                icon: '🎯',
-                tone:
-                  stats.avgMoveQuality == null
-                    ? 'neutral'
-                    : stats.avgMoveQuality >= 85
-                      ? 'teal'
-                      : 'neutral',
-              },
-              { label: 'Current Streak', value: stats.currentWinStreak, icon: '🔥', tone: 'neutral' },
-              { label: 'Best Streak', value: stats.longestWinStreak, icon: '⚡', tone: 'neutral' },
-              { label: 'This Week', value: stats.gamesThisWeek, icon: '🎮', tone: 'neutral' },
-              { label: 'Online Games', value: stats.onlineGamesPlayed, icon: '🧩', tone: 'neutral' },
-              { label: 'Ghost Rating', value: stats.ghostRating ?? '—', icon: '👻', tone: 'neutral' },
-              { label: 'Ghost Games', value: stats.ghostGamesThisWeek, icon: '🫥', tone: 'neutral' },
-              {
-                label: 'Ghost Weekly Δ',
-                value:
-                  stats.ghostRatingChangeThisWeek === 0
-                    ? '0'
-                    : `${stats.ghostRatingChangeThisWeek > 0 ? '+' : ''}${stats.ghostRatingChangeThisWeek}`,
-                icon: '📈',
-                tone: stats.ghostRatingChangeThisWeek >= 0 ? 'teal' : 'red',
-              },
-              {
-                label: 'Best Ghost Win',
-                value: stats.ghostBestWinMarginThisWeek == null ? '—' : `${stats.ghostBestWinMarginThisWeek} pts`,
-                icon: '💨',
-                tone: 'neutral',
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
+          <div style={{ display: 'grid', gap: '12px', minHeight: '220px' }}>
+            {fritz && (
+              <section
                 style={{
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  background: 'rgba(12,20,34,0.68)',
-                  padding: '12px',
                   display: 'grid',
-                  gap: '6px',
-                  alignContent: 'start',
-                  boxShadow:
-                    item.tone === 'teal'
-                      ? 'inset 0 0 0 1px rgba(52,211,153,0.2)'
-                      : item.tone === 'red'
-                        ? 'inset 0 0 0 1px rgba(248,113,113,0.2)'
-                        : 'none',
+                  gap: '12px',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(94, 234, 212, 0.14)',
+                  background: 'rgba(8, 18, 30, 0.52)',
                 }}
               >
-                <span style={{ fontSize: '0.86rem', color: 'rgba(191,213,223,0.86)' }}>
-                  {item.icon} {item.label}
-                </span>
-                <strong
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <strong style={{ fontSize: '1.18rem', color: 'rgba(240,248,255,0.96)' }}>Fritz / Ranked</strong>
+                </div>
+                <div
                   style={{
-                    fontSize: '1.4rem',
-                    lineHeight: 1.05,
-                    letterSpacing: '0.01em',
-                    color:
-                      item.tone === 'teal'
-                        ? '#5eead4'
-                        : item.tone === 'red'
-                          ? '#fca5a5'
-                          : 'rgba(236,248,245,0.95)',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '12px',
                   }}
                 >
-                  {item.value}
-                </strong>
-                {'subtitle' in item && item.subtitle && (
-                  <span
-                    style={{
-                      fontSize: '0.78rem',
-                      color:
-                        item.subtitle === 'Excellent'
-                          ? '#5eead4'
-                          : item.subtitle === 'Good'
-                            ? 'rgba(236,248,245,0.9)'
-                            : 'rgba(191,213,223,0.8)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {item.subtitle}
-                  </span>
-                )}
-              </div>
-            ))}
+                  {[
+                    statCard('Fritz Win Rate', `${fritz.winRate}%`, '📊'),
+                    statCard('Fritz Wins', fritz.wins, '🏆', 'teal'),
+                    statCard('Fritz Losses', fritz.losses, '📉', 'red'),
+                    statCard('Current Fritz Streak', fritz.currentStreak, '🔥'),
+                    statCard('Best Fritz Streak', fritz.bestStreak, '⚡'),
+                    statCard('Most Points Scored', fritz.highestScore == null ? '—' : `${fritz.highestScore} pts`, '💥'),
+                  ]}
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                    gap: '10px',
+                  }}
+                >
+                  {(Object.keys(TIER_LABELS) as FritzTierKey[]).map((tier) => {
+                    const record = fritz.tierRecords[tier];
+                    return (
+                      <div
+                        key={tier}
+                        style={{
+                          borderRadius: '10px',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          background: 'rgba(14, 24, 38, 0.74)',
+                          padding: '14px 14px',
+                          display: 'grid',
+                          gap: 6,
+                        }}
+                      >
+                        <strong style={{ fontSize: '1rem', color: 'rgba(235,245,242,0.95)' }}>{TIER_LABELS[tier]}</strong>
+                        <span style={{ fontSize: '1.28rem', color: '#f8fafc', fontWeight: 800 }}>
+                          {record.wins}-{record.losses}
+                        </span>
+                        <span style={{ fontSize: '0.9rem', color: 'rgba(191,213,223,0.8)' }}>
+                          {record.gamesPlayed} game{record.gamesPlayed === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            <div
+              style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                    gap: '12px',
+              }}
+            >
+              <section
+                style={{
+                  display: 'grid',
+                  gap: '12px',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(216, 180, 254, 0.16)',
+                  background: 'rgba(33, 18, 52, 0.28)',
+                }}
+              >
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <strong style={{ fontSize: '1.18rem', color: 'rgba(240,248,255,0.96)' }}>Ghost Mode</strong>
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '12px',
+                  }}
+                >
+                  {[
+                    statCard('Ghost Rating', ghost?.rating ?? '—', '👻'),
+                    statCard('Ghost Games', ghost?.gamesPlayed ?? 0, '🫥'),
+                    statCard('Ghost Win Rate', `${ghost?.winRate ?? 0}%`, '📊'),
+                    statCard('Best Ghost Win', ghost?.bestWinMargin == null ? '—' : `${ghost.bestWinMargin} pts`, '💨'),
+                  ]}
+                </div>
+              </section>
+
+              <section
+                style={{
+                  display: 'grid',
+                  gap: '12px',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(240, 192, 64, 0.16)',
+                  background: 'rgba(44, 31, 10, 0.24)',
+                }}
+              >
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <strong style={{ fontSize: '1.18rem', color: 'rgba(240,248,255,0.96)' }}>Daily Puzzle</strong>
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gap: '12px',
+                  }}
+                >
+                  {[
+                    statCard('Puzzle Streak', puzzle?.currentStreak ?? 0, '🔥'),
+                    statCard('Completions', puzzle?.completions ?? 0, '🗓️'),
+                    statCard('Best Today', puzzle?.bestScoreToday == null ? '—' : `${puzzle.bestScoreToday}`, '🎯'),
+                    statCard('Perfect Days', puzzle?.perfectDays ?? 0, '✨'),
+                  ]}
+                </div>
+              </section>
+            </div>
           </div>
         )}
       </div>

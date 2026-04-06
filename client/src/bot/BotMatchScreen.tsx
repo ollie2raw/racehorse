@@ -1098,7 +1098,7 @@ export default function BotMatchScreen({
     let cancelled = false;
     let actionResolved = false;
     let playedTileForHighlight: Tile | null = null;
-    const thinkDelayMs = botChainPauseRef.current ? 1500 : 1500;
+    const thinkDelayMs = isGhostMode ? 1500 : 2200;
     botChainPauseRef.current = false;
 
     const timer = setTimeout(() => {
