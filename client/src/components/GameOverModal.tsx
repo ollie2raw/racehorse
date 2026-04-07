@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 
 interface ScoreRow {
-  label: string;
+  label: ReactNode;
   value: number | string;
   winner?: boolean;
   showCrown?: boolean;

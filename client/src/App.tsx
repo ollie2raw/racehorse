@@ -824,7 +824,12 @@ export default function App() {
   const reconnectAttemptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptCountRef = useRef(0);
   const previousMultiplayerGameOverRef = useRef(false);
+  const maxSequenceRef = useRef<number>(-1);
   const [isRecoveringConnection, setIsRecoveringConnection] = useState(false);
+
+  useEffect(() => {
+    maxSequenceRef.current = -1;
+  }, [joinedRoom]);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
@@ -1168,13 +1173,27 @@ export default function App() {
       legalMoves?: Move[];
       canDraw?: boolean;
     }) => {
+      const nextState = payload?.state ?? null;
+      if (nextState) {
+        if (typeof nextState.sequence === 'number' && nextState.sequence < maxSequenceRef.current) {
+          if (import.meta.env.DEV) {
+            console.warn('[state:update] ignored stale sequence', {
+              incoming: nextState.sequence,
+              current: maxSequenceRef.current,
+            });
+          }
+          return;
+        }
+        maxSequenceRef.current = nextState.sequence ?? -1;
+      }
+
       if (import.meta.env.DEV) {
         console.log('[state:update]', {
           joinedRoom: joinedRoomRef.current,
           hasState: Boolean(payload?.state),
+          sequence: nextState?.sequence,
         });
       }
-      const nextState = payload?.state ?? null;
       setState(nextState);
       setOptimisticPlayedTile((prev) => {
         if (!prev) return null;

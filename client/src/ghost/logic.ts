@@ -38,7 +38,7 @@ export function parseTileKey(value: string): Tile | null {
 export function serializeGhostBoardState(board: BoardState | null): string {
   if (!board) return 'board:empty';
   return JSON.stringify({
-    mainLine: board.mainLine.map((placed) => ({
+    mainLine: (board.mainLine ?? []).map((placed) => ({
       tile: [placed.tile.low, placed.tile.high],
       orientation: placed.orientation,
     })),
@@ -46,7 +46,7 @@ export function serializeGhostBoardState(board: BoardState | null): string {
     rightEnd: board.rightEnd,
     leftEndIsDouble: board.leftEndIsDouble,
     rightEndIsDouble: board.rightEndIsDouble,
-    hubs: board.hubDoubles.map((hub, hubIndex) => ({
+    hubs: (board.hubDoubles ?? []).map((hub, hubIndex) => ({
       hubId: hub.hubId ?? hub.tileIndex ?? hubIndex,
       laneType: hub.laneType ?? null,
       laneRef: hub.laneRef ?? null,
@@ -57,12 +57,12 @@ export function serializeGhostBoardState(board: BoardState | null): string {
       leftSideFilled: Boolean(hub.leftSideFilled),
       rightSideFilled: Boolean(hub.rightSideFilled),
       isCrossed: Boolean(hub.isCrossed),
-      branches: hub.branches.map((branch) =>
+      branches: (hub.branches ?? []).map((branch) =>
         branch
           ? {
               openEnd: branch.openEnd,
               openEndIsDouble: branch.openEndIsDouble,
-              tiles: branch.tiles.map((placed) => ({
+              tiles: (branch.tiles ?? []).map((placed) => ({
                 tile: [placed.tile.low, placed.tile.high],
                 orientation: placed.orientation,
               })),
@@ -185,30 +185,39 @@ function forcedDrawAfterPlay(
   );
 }
 
-function boardFingerprint(board: BoardState | null, hand: Tile[]): string {
+function boardFingerprint(board: BoardState | null | undefined, hand: Tile[] | undefined): string {
   if (!board) return 'empty';
+  
+  const hubDoubles = board.hubDoubles ?? [];
+  const mainLine = board.mainLine ?? [];
+  const safeHand = hand ?? [];
+
   const openEnds = [
-    board.leftEnd,
-    board.rightEnd,
-    ...board.hubDoubles.flatMap((hub) =>
-      hub.branches.filter(Boolean).map((branch) => branch!.openEnd),
+    board.leftEnd ?? 0,
+    board.rightEnd ?? 0,
+    ...hubDoubles.flatMap((hub) =>
+      (hub?.branches ?? []).filter(Boolean).map((branch) => branch?.openEnd ?? 0),
     ),
   ]
     .sort((a, b) => a - b)
     .join(',');
+
   const tileCount =
-    board.mainLine.length +
-    board.hubDoubles.reduce(
+    mainLine.length +
+    hubDoubles.reduce(
       (sum, hub) =>
         sum +
-        hub.branches.filter(Boolean).reduce((branchSum, branch) => branchSum + (branch?.tiles.length ?? 0), 0),
+        (hub?.branches ?? []).filter(Boolean).reduce((branchSum, branch) => branchSum + (branch?.tiles?.length ?? 0), 0),
       0,
     );
-  const hubCount = board.hubDoubles.filter((hub) => hub.isCrossed).length;
-  const handPips = hand
-    .map((tile) => `${tile.low}|${tile.high}`)
+
+  const hubCount = hubDoubles.filter((hub) => hub?.isCrossed).length;
+  
+  const handPips = safeHand
+    .map((tile) => `${tile?.low ?? 0}|${tile?.high ?? 0}`)
     .sort()
     .join(',');
+
   return `${openEnds}__${tileCount}__${hubCount}__${handPips}`;
 }
 
@@ -386,6 +395,11 @@ export function resolveGhostMove(params: {
   legalMoves: Move[];
   profile: GhostProfileSummary | null;
 }): GhostResolvedMove | null {
+  // Ensure we have a valid state with players
+  if (!params.state || !params.state.players || !params.state.players.you || !params.state.players.bot) {
+    return null;
+  }
+
   const playMoves = params.legalMoves.filter(
     (move): move is Move & { type: 'play'; tile: Tile; position: PlacementPosition } =>
       move.type === 'play' && Boolean(move.tile) && Boolean(move.position),

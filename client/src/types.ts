@@ -63,6 +63,7 @@ export interface GameState {
   gameOver: boolean;
   winnerId: string | null;
   consecutivePasses: number;
+  sequence: number;
 }
 
 export interface Move {

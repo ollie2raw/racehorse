@@ -199,6 +199,7 @@ function resolveBlockedHand(state: GameState): GameState {
     ...state,
     players: updatedPlayers,
     handOver: true,
+    sequence: state.sequence + 1,
   };
 
   const gameWinnerId = checkForGameWinner(newState);
@@ -237,6 +238,7 @@ function resolveGoOut(state: GameState, goOutPlayerId: string): GameState {
     ...state,
     players: updatedPlayers,
     handOver: true,
+    sequence: state.sequence + 1,
   };
 
   const gameWinnerId = checkForGameWinner(newState);
@@ -277,6 +279,7 @@ export function createInitialState(players: string[], config?: Partial<Config>):
     gameOver: false,
     winnerId: null,
     consecutivePasses: 0,
+    sequence: 0,
   };
 }
 
@@ -317,6 +320,7 @@ export function startNewHand(state: GameState): GameState {
     handOpen: false,
     handOver: false,
     consecutivePasses: 0,
+    sequence: state.sequence + 1,
   };
 }
 
@@ -471,6 +475,7 @@ export function drawOne(
           hand: newHand,
         },
       },
+      sequence: state.sequence + 1,
     },
     drew: drawnTile,
   };
@@ -523,6 +528,7 @@ export function applyMove(
         ...state,
         currentPlayerIndex: nextIndex,
         consecutivePasses: newConsecutivePasses,
+        sequence: state.sequence + 1,
       },
       forcedDraw: null,
     };
@@ -591,6 +597,7 @@ export function applyMove(
       [playerId]: newPlayerState,
     },
     consecutivePasses: 0,
+    sequence: state.sequence + 1,
   };
 
   // Check if player went out (hand is empty)
@@ -609,6 +616,7 @@ export function applyMove(
             },
           },
           boneyard: remainingBoneyard,
+          sequence: newState.sequence + 1,
         },
         forcedDraw: drawnTile,
       };
@@ -623,7 +631,7 @@ export function applyMove(
 
   // Normal: advance to next player
   const nextIndex = (state.currentPlayerIndex + 1) % state.playerIds.length;
-  return { state: { ...newState, currentPlayerIndex: nextIndex }, forcedDraw: null };
+  return { state: { ...newState, currentPlayerIndex: nextIndex, sequence: newState.sequence + 1 }, forcedDraw: null };
 }
 
 // ─── Exports for scoring module ────────────────────────────

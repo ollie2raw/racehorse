@@ -331,6 +331,7 @@ export default function BotMatchScreen({
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const opponentLabel = isGhostMode ? 'Ghost' : opponentName.trim() || 'Fritz';
+  const ghostSubLabel = isGhostMode && opponentName && !opponentName.toLowerCase().includes('your ghost') ? opponentName : null;
   const showDevCapture = Boolean(
     adminEmail &&
     typeof window !== 'undefined' &&
@@ -1580,6 +1581,19 @@ export default function BotMatchScreen({
       message: ghostResultMessage,
     });
   };
+
+  if (!match || !match.players || !match.players.you || !match.players.bot) {
+    return (
+      <div className="screen game-screen walnut-live theme-green bot-match-screen" style={{ display: 'grid', placeItems: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'white', padding: 40 }}>
+          <h3>Game State Error</h3>
+          <p>The match state is incomplete or malformed.</p>
+          <button className="btn" onClick={onBack}>Return to Home</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={rootRef}
@@ -1803,13 +1817,21 @@ export default function BotMatchScreen({
               showCrown: match.winnerId === 'you',
             },
             {
-              label: opponentLabel,
+              label: (
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
+                  {ghostSubLabel && (
+                    <span style={{ fontSize: '0.94rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
+                      @{ghostSubLabel.replace("'s Ghost", "").replace(" Ghost", "")}
+                    </span>
+                  )}
+                  <span style={{ fontSize: '0.78rem', opacity: 0.7, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{opponentLabel}</span>
+                </div>
+              ),
               value: isGhostMode ? `${match.players.bot.score} pts` : match.players.bot.score,
               winner: match.winnerId === 'bot',
               showCrown: match.winnerId === 'bot',
             },
-          ]}
-          primaryLabel={isGhostMode ? 'Play Again' : 'New Match'}
+          ]}          primaryLabel={isGhostMode ? 'Play Again' : 'New Match'}
           onPrimary={startFreshMatch}
           secondaryLabel="Home"
           onSecondary={onBack}
@@ -1952,10 +1974,15 @@ export default function BotMatchScreen({
               ref={opponentPillRef}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
-              style={{ width: 110, minWidth: 'unset' }}
+              style={{ width: ghostSubLabel ? 'auto' : 110, minWidth: ghostSubLabel ? 140 : 110, padding: '0 12px' }}
             >
-              <div className="wl-pill-top">
-                <span className="wl-player-label">{opponentLabel}</span>
+              <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5, justifyContent: 'center' }}>
+                {ghostSubLabel && (
+                  <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
+                    @{ghostSubLabel.replace("'s Ghost", "").replace(" Ghost", "")}
+                  </span>
+                )}
+                <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
               </div>
               <span className="wl-player-score">{match.players.bot.score}</span>
             </button>

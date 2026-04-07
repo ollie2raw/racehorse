@@ -641,7 +641,7 @@ function getPlayMoves(state: BotMatchState, player: BotPlayerId): Move[] {
 }
 
 export function getLegalMoves(state: BotMatchState, player: BotPlayerId): Move[] {
-  if (state.currentPlayer !== player || state.handOver || state.gameOver) return [];
+  if (!state.players[player] || state.currentPlayer !== player || state.handOver || state.gameOver) return [];
   const playMoves = getPlayMoves(state, player);
   if (playMoves.length === 0 && state.boneyard.length <= BONEYARD_LOCKED_COUNT) {
     return [{ type: 'pass' }];
@@ -654,6 +654,7 @@ export function previewPlayMove(
   player: BotPlayerId,
   move: Move,
 ): BotMovePreview | null {
+  if (!state.players[player]) return null;
   if (move.type !== 'play' || !move.tile || !move.position) return null;
   if (state.currentPlayer !== player) return null;
   const legal = getPlayMoves(state, player).some(

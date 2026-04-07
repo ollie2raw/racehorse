@@ -1401,12 +1401,18 @@ function broadcastStateUpdate(roomCode: string) {
       const canDraw = isPlayer ? getRoomCanDraw(roomCode, socketId) : false;
 
       const handCounts = Object.fromEntries(
-        room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
+        room.state.playerIds.map((pid) => {
+          const ps = room.state!.players[pid];
+          return [pid, ps?.hand?.length ?? 0];
+        }),
       );
 
       const maskedPlayers = Object.fromEntries(
         room.state.playerIds.map((pid) => {
           const playerState = room.state!.players[pid];
+          if (!playerState) {
+            return [pid, { id: pid, hand: [], score: 0 }];
+          }
           const canReveal = room.state!.handOver || room.state!.gameOver || pid === socketId;
           return [
             pid,
@@ -2042,6 +2048,9 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
           players: Object.fromEntries(
             room.state.playerIds.map((pid: string) => {
               const playerState = room.state!.players[pid];
+              if (!playerState) {
+                return [pid, { id: pid, hand: [], score: 0 }];
+              }
               const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id;
               return [
                 pid,
@@ -2054,8 +2063,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
           ),
           handCounts: Object.fromEntries(
             room.state.playerIds.map((pid: string) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
-          ),
-        };
+          ),        };
         socket.emit('state:update', {
           state: stateWithCounts,
           legalMoves: [],
@@ -2093,7 +2101,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     const roomCode = String(rawCode ?? '')
       .trim()
       .toUpperCase();
-    console.log(`[room:join] socket=${socket.id}, code=${roomCode}`);
+    console.log(`[room:join] socket=${socket.id}, code=${roomCode}, user=${username} (${userId})`);
     try {
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
@@ -2108,12 +2116,12 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
       if (existingRoom && userId) {
         const existingPlayer = roster.find((player) => player.userId === userId);
         if (existingPlayer) {
+          console.log(`[room:join] RECONNECT: migrating ${existingPlayer.id} -> ${socket.id} for userId=${userId}`);
           migrateRoomSeat(roomCode, existingPlayer.id, socket.id);
           roster = roster
             .map((player) =>
               player.id === existingPlayer.id ? { ...player, id: socket.id, username, userId } : player,
-            )
-            .filter((player) => player.id !== existingPlayer.id);
+            );
           roomPlayersByCode.set(roomCode, roster);
           socket.data.roomId = roomCode;
           room = existingRoom;
@@ -2169,6 +2177,9 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
             players: Object.fromEntries(
               room.state.playerIds.map((pid) => {
                 const playerState = room.state!.players[pid];
+                if (!playerState) {
+                  return [pid, { id: pid, hand: [], score: 0 }];
+                }
                 const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id;
                 return [
                   pid,

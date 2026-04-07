@@ -5,13 +5,12 @@ import { fetchGhostProfileSummary, fetchGhostProfileSummaryByUsername } from './
 import { fetchFriends, type FriendRecord } from '../friends/friendsApi';
 import './ghostMode.css';
 
-const UNLOCK_THRESHOLD = 5;
+const UNLOCK_THRESHOLD = 0;
 const TRAINED_THRESHOLD = 30;
 const FULL_LABEL_THRESHOLD = 15;
 const FEATURED_GHOST_USERNAME = 'oliver';
 
-function ghostTier(gamesPlayed: number): 'locked' | 'early' | 'learning' | 'trained' {
-  if (gamesPlayed < UNLOCK_THRESHOLD) return 'locked';
+function ghostTier(gamesPlayed: number): 'early' | 'learning' | 'trained' {
   if (gamesPlayed < FULL_LABEL_THRESHOLD) return 'early';
   if (gamesPlayed < TRAINED_THRESHOLD) return 'learning';
   return 'trained';
@@ -60,10 +59,10 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
   const [featuredUsername, setFeaturedUsername] = useState<string>(FEATURED_GHOST_USERNAME);
 
   const tier = ghostTier(fritzGamesPlayed);
-  const isLocked = tier === 'locked';
-  const progressPct = Math.min(100, (fritzGamesPlayed / UNLOCK_THRESHOLD) * 100);
+  const isLocked = false;
+  const progressPct = Math.min(100, (fritzGamesPlayed / 5) * 100);
   const isViewingOwnGhost = selectedUserId === userId;
-  const canPlay = !isLocked || !isViewingOwnGhost;
+  const canPlay = true;
 
   useEffect(() => {
     let active = true;
@@ -183,15 +182,12 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
               </div>
             </div>
             <div className="ghost-explainer-callout">
-              {isLocked && isViewingOwnGhost
-                ? `${gamesToUnlock} more Fritz ${gamesToUnlock === 1 ? 'game' : 'games'} to unlock your ghost`
-                : tier === 'trained'
+              {tier === 'trained'
                   ? `Your ghost is trained and ready`
                   : `${gamesToTrained} more Fritz ${gamesToTrained === 1 ? 'game' : 'games'} until your ghost is fully trained`}
             </div>
             <div className="ghost-tier-pills">
-              <span className={`ghost-tier-pill ${fritzGamesPlayed >= 0 ? 'active' : ''}`}>0 games — Random</span>
-              <span className={`ghost-tier-pill ${fritzGamesPlayed >= UNLOCK_THRESHOLD ? 'active' : ''}`}>5 games — Unlocks</span>
+              <span className={`ghost-tier-pill active`}>Unlocks at 0 games</span>
               <span className={`ghost-tier-pill ${fritzGamesPlayed >= FULL_LABEL_THRESHOLD ? 'active' : ''}`}>15 games — Learning</span>
               <span className={`ghost-tier-pill ${fritzGamesPlayed >= TRAINED_THRESHOLD ? 'active' : ''}`}>30 games — Trained ✓</span>
             </div>
@@ -199,20 +195,6 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
         </div>
 
         <div className="ghost-setup-middle-col">
-          {userId && isLocked && isViewingOwnGhost && (
-            <div className="ghost-locked-panel">
-              <p className="ghost-setup-eyebrow">Your Ghost</p>
-              <p className="ghost-locked-title">Your ghost is not ready yet.</p>
-              <p className="ghost-locked-sub">Play <strong>{gamesToUnlock}</strong> more Fritz {gamesToUnlock === 1 ? 'match' : 'matches'} to unlock it.</p>
-              <div className="ghost-progress-row">
-                <div className="ghost-progress-bar">
-                  <div className="ghost-progress-fill" style={{ width: `${progressPct}%` }} />
-                </div>
-                <span className="ghost-progress-label">{fritzGamesPlayed}/{UNLOCK_THRESHOLD} games</span>
-              </div>
-            </div>
-          )}
-
           {!userId && (
             <div className="ghost-setup-panel">
               <p className="ghost-setup-eyebrow">Sign in required</p>
@@ -323,12 +305,11 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
                   You {tier === 'trained' ? '✓' : tier === 'early' ? '⚡' : ''}
                 </button>
                 <button
-                  className="ghost-friend-btn ghost-friend-btn-featured ghost-friend-btn-coming-soon"
-                  disabled
-                  title="Coming soon"
+                  className={`ghost-friend-btn ghost-friend-btn-featured ${selectedUserId === featuredUserId ? 'active' : ''}`}
+                  onClick={() => featuredUserId && handleSelectFriend({ userId: featuredUserId, username: featuredUsername, status: 'online' })}
                 >
                   <span className="ghost-featured-mark" aria-hidden="true">★</span>
-                  <span>@{featuredUsername} — Coming Soon</span>
+                  <span>@{featuredUsername}</span>
                 </button>
                 {visibleFriends.map((f) => (
                   <button
@@ -346,22 +327,18 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
           <div className="mode-actions ghost-setup-actions">
             <button
               className="mode-option mode-option-primary mode-accent-ghost ghost-setup-start"
-              onClick={() => summary && canPlay && onStart(summary, selectedUsername, selectedUserId)}
-              disabled={!summary || (isLocked && isViewingOwnGhost)}
+              onClick={() => summary && onStart(summary, selectedUsername, selectedUserId)}
+              disabled={!summary}
             >
-              <span className="mode-option-title">
-                {isLocked && isViewingOwnGhost ? `🔒 Locked — ${fritzGamesPlayed}/${UNLOCK_THRESHOLD} games` : 'Play Ghost'}
-              </span>
+              <span className="mode-option-title">Play Ghost</span>
               <span className="mode-option-meta">
                 {!userId
                   ? 'Sign in to unlock this mode'
-                  : isLocked && isViewingOwnGhost
-                    ? 'Play Fritz to unlock your ghost'
-                    : loading
-                      ? 'Loading ghost profile…'
-                      : summary
-                        ? `Opponent: ${selectedUsername}`
-                        : 'Ghost profile unavailable'}
+                  : loading
+                    ? 'Loading ghost profile…'
+                    : summary
+                      ? `Opponent: ${selectedUsername}`
+                      : 'Ghost profile unavailable'}
               </span>
             </button>
             <button className="mode-option mode-option-secondary bot-setup-back" onClick={onBack}>
