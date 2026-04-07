@@ -306,7 +306,7 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
                 </button>
                 <button
                   className={`ghost-friend-btn ghost-friend-btn-featured ${selectedUserId === featuredUserId ? 'active' : ''}`}
-                  onClick={() => featuredUserId && handleSelectFriend({ userId: featuredUserId, username: featuredUsername, status: 'online' })}
+                  onClick={() => featuredUserId && handleSelectFriend({ id: 'featured', userId: featuredUserId, username: featuredUsername, online: true })}
                 >
                   <span className="ghost-featured-mark" aria-hidden="true">★</span>
                   <span>@{featuredUsername}</span>

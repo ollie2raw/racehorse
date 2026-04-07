@@ -102,9 +102,9 @@ export default function GameOverModal({
         )}
 
         <div style={{ display: 'grid', gap: 8 }}>
-          {scores.map((row) => (
+          {scores.map((row, idx) => (
             <div
-              key={row.label}
+              key={idx}
               style={{
                 display: 'flex',
                 alignItems: 'center',
