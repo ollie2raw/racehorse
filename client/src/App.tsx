@@ -4421,46 +4421,110 @@ export default function App() {
                   className={`boneyard-pill${isBoneyardLocked ? ' locked' : ''}`}
                   style={{
                     position: 'absolute',
-                    top: 10,
-                    right: 10,
+                    top: 12,
+                    right: 12,
                     zIndex: 8,
                     borderRadius: 999,
-                    border: '1px solid rgba(236,252,245,0.24)',
-                    background: 'rgba(255,255,255,0.06)',
+                    border: '1.5px solid rgba(236,252,245,0.28)',
+                    background: 'rgba(255,255,255,0.08)',
                     backdropFilter: 'blur(20px)',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-                    color: 'rgba(232,245,240,0.85)',
-                    padding: '5px 10px',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
+                    boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+                    color: 'rgba(232,245,240,0.98)',
+                    padding: '7px 14px',
+                    fontSize: '1rem',
+                    fontWeight: 800,
                     letterSpacing: '0.02em',
                     pointerEvents: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
                   }}
                 >
-                  <BoneyardStackIcon className="boneyard-icon" />
+                  <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
                   <span className="boneyard-count">{boneyardCount}</span>
                   {isBoneyardLocked && boneyardCount > 0 ? (
-                    <span className="boneyard-meta">locked</span>
+                    <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
                   ) : null}
                 </div>
-              )}
-              <div className="wl-controls-tray" style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 20, display: 'flex', gap: 2, alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '4px 6px', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+              )}              <div
+                className="wl-controls-tray"
+                style={{
+                  position: 'absolute',
+                  bottom: 12,
+                  right: 12,
+                  zIndex: 20,
+                  display: 'flex',
+                  gap: 4,
+                  alignItems: 'center',
+                  background: 'rgba(255,255,255,0.08)',
+                  borderRadius: 999,
+                  padding: '6px 10px',
+                  border: '1.5px solid rgba(255,255,255,0.12)',
+                  backdropFilter: 'blur(20px)',
+                  boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+                }}
+              >
                 <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
                 <button
                   onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
                   title="Toggle table color"
                   className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
+                  style={{ width: 22, height: 22 }}
                 >
-                  <span className="table-theme-dot" aria-hidden="true" />
+                  <span className="table-theme-dot" aria-hidden="true" style={{ width: 10, height: 10 }} />
                 </button>
-                <button className="btn text icon-btn volume-btn" onClick={() => setIsMuted((prev) => !prev)} title={isMuted ? 'Unmute' : 'Mute'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
-                  <VolumeIcon isMuted={isMuted} />
+                <button
+                  className="btn text icon-btn volume-btn"
+                  onClick={() => setIsMuted((prev) => !prev)}
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                  style={{
+                    padding: '6px 8px',
+                    color: 'rgba(232,245,240,0.9)',
+                    background: 'none',
+                    border: 'none',
+                  }}
+                >
+                  <VolumeIcon isMuted={isMuted} style={{ width: 20, height: 20 }} />
                 </button>
-                <button className="btn text icon-btn fullscreen-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.7)', background: 'none', border: 'none' }}>
-                  <FullscreenIcon isFullscreen={isFullscreen} />
+                <button
+                  className="btn text icon-btn fullscreen-btn"
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                  style={{
+                    padding: '6px 8px',
+                    color: 'rgba(232,245,240,0.9)',
+                    background: 'none',
+                    border: 'none',
+                  }}
+                >
+                  <FullscreenIcon isFullscreen={isFullscreen} style={{ width: 20, height: 20 }} />
                 </button>
-                <button onClick={() => setShowLeaveConfirm(true)} title="Leave game" style={{ padding: '4px 6px', color: 'rgba(200,220,215,0.55)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg>
+                <button
+                  onClick={() => setShowLeaveConfirm(true)}
+                  title="Leave game"
+                  style={{
+                    padding: '6px 8px',
+                    color: 'rgba(232,245,240,0.8)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
+                    <polyline points="9 21 9 12 15 12 15 21" />
+                  </svg>
                 </button>
               </div>
               <Board

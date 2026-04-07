@@ -11,8 +11,7 @@ export default function TileRack({
   isActive = false,
   variant = 'default',
 }: TileRackProps) {
-  const visibleCount = Math.min(count, 8);
-  const extraCount = Math.max(0, count - visibleCount);
+  const visibleCount = count;
   const tileW = 20;
   const tileH = 32;
   const gap = 4;
@@ -49,33 +48,6 @@ export default function TileRack({
       {Array.from({ length: visibleCount }).map((_, i) => (
         <div key={i} style={tileStyle} />
       ))}
-      {extraCount > 0 ? (
-        <div
-          style={{
-            minWidth: 30,
-            height: tileH,
-            borderRadius: 999,
-            padding: '0 8px',
-            display: 'grid',
-            placeItems: 'center',
-            background:
-              variant === 'ghost'
-                ? 'rgba(104, 84, 176, 0.22)'
-                : 'rgba(255,255,255,0.14)',
-            border:
-              variant === 'ghost'
-                ? '1px solid rgba(221, 212, 255, 0.34)'
-                : '1px solid rgba(255,255,255,0.28)',
-            color: 'rgba(255,255,255,0.95)',
-            fontSize: '0.92rem',
-            fontWeight: 800,
-            letterSpacing: '0.02em',
-            boxShadow: '0 3px 8px rgba(0,0,0,0.22)',
-          }}
-        >
-          +{extraCount}
-        </div>
-      ) : null}
     </div>
   );
 }

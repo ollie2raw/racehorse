@@ -751,17 +751,17 @@ export function Board({
         className="board-zoom-tray"
         style={{
           position: 'absolute',
-          bottom: 10,
-          left: 10,
+          bottom: 12,
+          left: 12,
           zIndex: 20,
           display: 'flex',
           alignItems: 'center',
-          background: 'rgba(255,255,255,0.06)',
+          background: 'rgba(255,255,255,0.08)',
           borderRadius: 999,
-          padding: '4px 6px',
-          border: '1px solid rgba(236,252,245,0.24)',
+          padding: '6px 10px',
+          border: '1.5px solid rgba(236,252,245,0.28)',
           backdropFilter: 'blur(20px)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
         }}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -786,11 +786,12 @@ export function Board({
             applyZoomStep(-0.12);
           }}
           style={{
-            padding: '4px 8px',
-            color: 'rgba(200,220,215,0.7)',
-            fontSize: '0.9rem',
+            padding: '6px 10px',
+            color: 'rgba(232,245,240,0.95)',
+            fontSize: '1.2rem',
+            fontWeight: 800,
             lineHeight: 1,
-            background: hoveredZoom === 'out' ? 'rgba(255,255,255,0.08)' : 'none',
+            background: hoveredZoom === 'out' ? 'rgba(255,255,255,0.1)' : 'none',
             border: 'none',
             cursor: 'pointer',
             display: 'flex',
@@ -803,10 +804,10 @@ export function Board({
         <div
           className="board-zoom-divider"
           style={{
-            width: 1,
-            height: 16,
-            margin: '0 4px',
-            background: 'rgba(236,252,245,0.24)',
+            width: 1.5,
+            height: 20,
+            margin: '0 6px',
+            background: 'rgba(236,252,245,0.28)',
           }}
         />
         <button
@@ -828,11 +829,12 @@ export function Board({
             applyZoomStep(0.12);
           }}
           style={{
-            padding: '4px 8px',
-            color: 'rgba(200,220,215,0.7)',
-            fontSize: '0.9rem',
+            padding: '6px 10px',
+            color: 'rgba(232,245,240,0.95)',
+            fontSize: '1.2rem',
+            fontWeight: 800,
             lineHeight: 1,
-            background: hoveredZoom === 'in' ? 'rgba(255,255,255,0.08)' : 'none',
+            background: hoveredZoom === 'in' ? 'rgba(255,255,255,0.1)' : 'none',
             border: 'none',
             cursor: 'pointer',
             display: 'flex',

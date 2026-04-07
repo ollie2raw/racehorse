@@ -293,7 +293,7 @@ export default function BotMatchScreen({
   const moveCounterRef = useRef(1);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
-  const [ghostAgreementVisible, setGhostAgreementVisible] = useState(false);
+  const [ghostAgreementType, setGhostAgreementType] = useState<'agrees' | 'heuristic' | null>(null);
   const [ghostBoardPulse, setGhostBoardPulse] = useState(false);
   const [ghostPlayedTile, setGhostPlayedTile] = useState<Tile | null>(null);
   const [ghostResult, setGhostResult] = useState<GhostCompletionResult | null>(null);
@@ -331,21 +331,19 @@ export default function BotMatchScreen({
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const opponentLabel = isGhostMode ? 'Ghost' : opponentName.trim() || 'Fritz';
-  const ghostSubLabel = isGhostMode && opponentName && !opponentName.toLowerCase().includes('your ghost') ? opponentName : null;
-  const showDevCapture = Boolean(
-    adminEmail &&
-    typeof window !== 'undefined' &&
-    window.localStorage.getItem('sb-fisfadjqllojdzibcdfx-auth-token') &&
-    (() => {
-      try {
-        const raw = window.localStorage.getItem('sb-fisfadjqllojdzibcdfx-auth-token');
-        const parsed = JSON.parse(raw ?? '{}');
-        return parsed?.user?.email?.toLowerCase() === adminEmail.toLowerCase();
-      } catch {
-        return false;
-      }
-    })(),
-  );
+  const ghostSubLabel = isGhostMode
+    ? (opponentName && opponentName.toLowerCase() !== 'your ghost' ? opponentName : (username || 'Your Ghost'))
+    : null;
+
+  const formatGhostName = (rawName: string) => {
+    const cleaned = rawName
+      .replace(/'s Ghost/gi, '')
+      .replace(/ Ghost/gi, '')
+      .replace(/^@/, '')
+      .trim();
+    const capitalized = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    return `@${capitalized}`;
+  };
 
   const clearPersistedLeagueMatch = useCallback(() => {
     if (!leagueResumeStorageKey || typeof window === 'undefined') return;
@@ -569,31 +567,6 @@ export default function BotMatchScreen({
     setAnalyzerOpen(true);
   };
 
-  const copyAsDailyPuzzleJson = async () => {
-    if (!match.board) {
-      pushToast('Open the hand first to capture a puzzle state');
-      return;
-    }
-
-    const payload = {
-      title: 'Captured Puzzle',
-      puzzle_date: getLocalDateKey(),
-      puzzle_type: 'one_turn_high_score',
-      max_moves: 1,
-      target_score: 1,
-      deal_size: match.dealSize,
-      starting_board: match.board,
-      starting_hand: match.players.you.hand,
-    };
-
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      pushToast('Copied puzzle JSON');
-    } catch {
-      pushToast('Copy failed');
-    }
-  };
-
   const startFreshMatch = () => {
     clearPersistedLeagueMatch();
     localPendingRegisteredRef.current = false;
@@ -603,7 +576,7 @@ export default function BotMatchScreen({
     setLastBotChoice(null);
     setHandReveal(null);
     setGhostPlayedTile(null);
-    setGhostAgreementVisible(false);
+    setGhostAgreementType(null);
     setGhostBoardPulse(false);
     setGhostResult(null);
     setGhostResultLoading(false);
@@ -1055,13 +1028,13 @@ export default function BotMatchScreen({
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
-    if (isGhostMode && selectedTile && ghostSuggestedPlayerMove?.source === 'composite') {
+    if (isGhostMode && selectedTile && ghostSuggestedPlayerMove) {
       const actualMove =
         move.tile && move.position ? { tile: move.tile, position: move.position } : null;
       const agrees = isSameResolvedMove(actualMove, ghostSuggestedPlayerMove);
       if (agrees) {
-        setGhostAgreementVisible(true);
-        window.setTimeout(() => setGhostAgreementVisible(false), 1300);
+        setGhostAgreementType(ghostSuggestedPlayerMove.source === 'composite' ? 'agrees' : 'heuristic');
+        window.setTimeout(() => setGhostAgreementType(null), 1300);
       } else {
         setGhostBoardPulse(true);
         window.setTimeout(() => setGhostBoardPulse(false), 520);
@@ -1821,7 +1794,7 @@ export default function BotMatchScreen({
                 <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
                   {ghostSubLabel && (
                     <span style={{ fontSize: '0.94rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
-                      @{ghostSubLabel.replace("'s Ghost", "").replace(" Ghost", "")}
+                      {formatGhostName(ghostSubLabel)}
                     </span>
                   )}
                   <span style={{ fontSize: '0.78rem', opacity: 0.7, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{opponentLabel}</span>
@@ -1830,8 +1803,7 @@ export default function BotMatchScreen({
               value: isGhostMode ? `${match.players.bot.score} pts` : match.players.bot.score,
               winner: match.winnerId === 'bot',
               showCrown: match.winnerId === 'bot',
-            },
-          ]}          primaryLabel={isGhostMode ? 'Play Again' : 'New Match'}
+            },          ]}          primaryLabel={isGhostMode ? 'Play Again' : 'New Match'}
           onPrimary={startFreshMatch}
           secondaryLabel="Home"
           onSecondary={onBack}
@@ -1979,7 +1951,7 @@ export default function BotMatchScreen({
               <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5, justifyContent: 'center' }}>
                 {ghostSubLabel && (
                   <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
-                    @{ghostSubLabel.replace("'s Ghost", "").replace(" Ghost", "")}
+                    {formatGhostName(ghostSubLabel)}
                   </span>
                 )}
                 <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
@@ -2042,16 +2014,6 @@ export default function BotMatchScreen({
             gap: 8,
           }}
         >
-          {showDevCapture && (
-            <button
-              className="btn text compact bot-chip-control bot-admin-chip"
-              onClick={copyAsDailyPuzzleJson}
-              title="Copy Puzzle JSON"
-            >
-              <span aria-hidden="true">📋</span>
-              <span className="bot-admin-chip-label">Copy Puzzle JSON</span>
-            </button>
-          )}
           <button
             type="button"
             className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
@@ -2110,31 +2072,36 @@ export default function BotMatchScreen({
               className="boneyard-pill"
               style={{
                 position: 'absolute',
-                top: 10,
-                right: 10,
+                top: 12,
+                right: 12,
                 zIndex: 8,
                 borderRadius: 999,
-                border: '1px solid rgba(236,252,245,0.24)',
-                background: 'rgba(255,255,255,0.06)',
+                border: '1.5px solid rgba(236,252,245,0.28)',
+                background: 'rgba(255,255,255,0.08)',
                 backdropFilter: 'blur(20px)',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-                color: 'rgba(232,245,240,0.85)',
-                padding: '5px 10px',
-                fontSize: '0.78rem',
-                fontWeight: 600,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+                color: 'rgba(232,245,240,0.98)',
+                padding: '7px 14px',
+                fontSize: '1rem',
+                fontWeight: 800,
                 letterSpacing: '0.02em',
                 pointerEvents: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
               }}
             >
-              <BoneyardStackIcon className="boneyard-icon" />
+              <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
               <span className="boneyard-count">{match.boneyard.length}</span>
               {match.boneyard.length > 0 && match.boneyard.length <= 2 ? (
-                <span className="boneyard-meta">locked</span>
+                <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
               ) : null}
             </div>
           )}
-          {isGhostMode && ghostAgreementVisible && (
-            <div className="ghost-agreement-indicator">✓ Ghost agrees</div>
+          {isGhostMode && ghostAgreementType && (
+            <div className={`ghost-agreement-indicator ${ghostAgreementType}`}>
+              {ghostAgreementType === 'agrees' ? '✓ Ghost agrees' : '✓ Ghost thinks so'}
+            </div>
           )}
           {isGhostMode && ghostPlayedTile && (
             <div className="ghost-played-overlay" aria-hidden="true">
@@ -2153,59 +2120,60 @@ export default function BotMatchScreen({
             className="wl-controls-tray"
             style={{
               position: 'absolute',
-              bottom: 10,
-              right: 10,
+              bottom: 12,
+              right: 12,
               zIndex: 20,
               display: 'flex',
-              gap: 2,
+              gap: 4,
               alignItems: 'center',
-              background: 'rgba(255,255,255,0.06)',
+              background: 'rgba(255,255,255,0.08)',
               borderRadius: 999,
-              padding: '4px 6px',
-              border: '1px solid rgba(255,255,255,0.08)',
+              padding: '6px 10px',
+              border: '1.5px solid rgba(255,255,255,0.12)',
               backdropFilter: 'blur(20px)',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
             }}
           >
             <button
               onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
               title="Toggle table color"
               className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
+              style={{ width: 22, height: 22 }}
             >
-              <span className="table-theme-dot" aria-hidden="true" />
+              <span className="table-theme-dot" aria-hidden="true" style={{ width: 10, height: 10 }} />
             </button>
             <button
               className="btn text icon-btn volume-btn"
               onClick={() => setIsMuted((prev) => !prev)}
               title={isMuted ? 'Unmute' : 'Mute'}
               style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.7)',
+                padding: '6px 8px',
+                color: 'rgba(232,245,240,0.9)',
                 background: 'none',
                 border: 'none',
               }}
             >
-              <VolumeIcon isMuted={isMuted} />
+              <VolumeIcon isMuted={isMuted} style={{ width: 20, height: 20 }} />
             </button>
             <button
               className="btn text icon-btn fullscreen-btn"
               onClick={toggleFullscreen}
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
               style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.7)',
+                padding: '6px 8px',
+                color: 'rgba(232,245,240,0.9)',
                 background: 'none',
                 border: 'none',
               }}
             >
-              <FullscreenIcon isFullscreen={isFullscreen} />
+              <FullscreenIcon isFullscreen={isFullscreen} style={{ width: 20, height: 20 }} />
             </button>
             <button
               onClick={() => setShowLeaveConfirm(true)}
               title="Leave game"
               style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.55)',
+                padding: '6px 8px',
+                color: 'rgba(232,245,240,0.8)',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
@@ -2214,12 +2182,12 @@ export default function BotMatchScreen({
               }}
             >
               <svg
-                width="16"
-                height="16"
+                width="20"
+                height="20"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.2"
+                strokeWidth="2.8"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
