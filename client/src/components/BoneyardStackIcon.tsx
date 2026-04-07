@@ -1,11 +1,15 @@
+import React from 'react';
+
 type BoneyardStackIconProps = {
   className?: string;
+  style?: React.CSSProperties;
 };
 
-export function BoneyardStackIcon({ className }: BoneyardStackIconProps) {
+export function BoneyardStackIcon({ className, style }: BoneyardStackIconProps) {
   return (
     <svg
       className={className}
+      style={style}
       viewBox="0 0 24 24"
       width="16"
       height="16"

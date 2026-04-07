@@ -107,9 +107,9 @@ function getGhostResultMessage(playerScore: number, ghostScore: number): string 
   return 'Your ghost remembers this.';
 }
 
-function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
+function FullscreenIcon({ isFullscreen, style }: { isFullscreen: boolean; style?: React.CSSProperties }) {
   return (
-    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <svg className="icon-svg" style={style} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       {isFullscreen ? (
         <>
           <path d="M4 9V4h5" />
@@ -129,9 +129,9 @@ function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
   );
 }
 
-function VolumeIcon({ isMuted }: { isMuted: boolean }) {
+function VolumeIcon({ isMuted, style }: { isMuted: boolean; style?: React.CSSProperties }) {
   return (
-    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <svg className="icon-svg" style={style} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path className="icon-body" d="M3 10v4h4l5 4V6L7 10H3z" />
       {!isMuted && (
         <>

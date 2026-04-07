@@ -192,9 +192,9 @@ function getOpenEndsSum(board: GameState['board']): number {
   return sum;
 }
 
-function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
+function FullscreenIcon({ isFullscreen, style }: { isFullscreen: boolean; style?: React.CSSProperties }) {
   return (
-    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <svg className="icon-svg" style={style} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       {isFullscreen ? (
         <>
           <path d="M4 9V4h5" />
@@ -214,9 +214,9 @@ function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
   );
 }
 
-function VolumeIcon({ isMuted }: { isMuted: boolean }) {
+function VolumeIcon({ isMuted, style }: { isMuted: boolean; style?: React.CSSProperties }) {
   return (
-    <svg className="icon-svg volume-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <svg className="icon-svg volume-svg" style={style} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M4 10h4l5-4v12l-5-4H4z" />
       {!isMuted && (
         <>
