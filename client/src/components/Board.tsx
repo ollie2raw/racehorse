@@ -1,7 +1,9 @@
 // client/src/components/Board.tsx
-import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { DominoTile } from './DominoTile';
 import type { Tile, BoardState, PlacementPosition, Move } from '../types';
+import { isDouble } from '../bot/botEngine';
+import { useRenderProfiler } from '../debug/renderProfiler';
 
 // ─── Layout Constants ────────────────────────────────────────
 
@@ -45,15 +47,9 @@ interface BoardLayout {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-function isDouble(tile: Tile): boolean {
-  return tile.high === tile.low;
-}
-
-function tileEquals(a: Tile, b: Tile): boolean {
-  return (
-    (a.high === b.high && a.low === b.low) ||
-    (a.high === b.low && a.low === b.high)
-  );
+function tileEquals(a: Tile | null | undefined, b: Tile | null | undefined): boolean {
+  if (!a || !b) return false;
+  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
 interface HubLookup {
@@ -435,20 +431,35 @@ interface BoardProps {
   legalMoves: Move[];
   selectedTile: Tile | null;
   lastPlayedTile?: Tile | null;
+  highlightedPosition?: PlacementPosition | null;
+  highlightedEnds?: number[] | null;
   onPositionClick: (position: PlacementPosition) => void;
   tileSize?: number;
   showOpenEndGlow?: boolean;
 }
 
-export function Board({
+function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return a == null && b == null;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function BoardComponent({
   board,
   legalMoves,
   selectedTile,
   lastPlayedTile = null,
+  highlightedPosition = null,
+  highlightedEnds = null,
   onPositionClick,
   tileSize = 72,
   showOpenEndGlow = false,
 }: BoardProps) {
+  useRenderProfiler('Board');
   const containerRef = useRef<HTMLDivElement>(null);
   const fitRetryRafRef = useRef<number | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -647,8 +658,8 @@ export function Board({
           transformOrigin: 'center center',
         }}
       >
-        {/* Render tiles */}
         {layout.tiles.map((lt) => {
+          if (!lt.tile) return null;
           const x = (lt.x - centerX) * unitToPixels;
           const y = (lt.y - centerY) * unitToPixels;
           const tileIsDouble = isDouble(lt.tile);
@@ -669,7 +680,10 @@ export function Board({
                 size={tileSize}
                 rotation={lt.rotation}
                 flipped={lt.flipped}
-                highlight={lastPlayedTile != null && tileEquals(lt.tile, lastPlayedTile)}
+                highlight={
+                  (lastPlayedTile != null && tileEquals(lt.tile, lastPlayedTile)) ||
+                  (highlightedEnds != null && (highlightedEnds.includes(lt.tile.low) || highlightedEnds.includes(lt.tile.high)))
+                }
                 disabled
                 className={`board-tile ${tileIsDouble ? 'hub-double' : ''}`}
               />
@@ -695,7 +709,7 @@ export function Board({
           return (
             <div
               key={zone.key}
-              className={`placement-zone active${showTargetDebug ? ' debug' : ''}`}
+              className={`placement-zone active${showTargetDebug ? ' debug' : ''}${highlightedPosition === zone.position ? ' highlighted' : ''}`}
               style={{
                 position: 'absolute',
                 left: `calc(50% + ${x}px)`,
@@ -848,5 +862,21 @@ export function Board({
     </div>
   );
 }
+
+function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
+  return (
+    prev.board === next.board &&
+    prev.legalMoves === next.legalMoves &&
+    tileEquals(prev.selectedTile, next.selectedTile) &&
+    tileEquals(prev.lastPlayedTile, next.lastPlayedTile) &&
+    prev.highlightedPosition === next.highlightedPosition &&
+    highlightedEndsEqual(prev.highlightedEnds, next.highlightedEnds) &&
+    prev.onPositionClick === next.onPositionClick &&
+    prev.tileSize === next.tileSize &&
+    prev.showOpenEndGlow === next.showOpenEndGlow
+  );
+}
+
+export const Board = memo(BoardComponent, areBoardPropsEqual);
 
 export default Board;

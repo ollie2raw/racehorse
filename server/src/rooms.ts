@@ -11,6 +11,14 @@ import {
 } from './game/engine';
 import { computePlayScore, simulatePlacement } from './game/scoring';
 import type { GhostMoveLogEntry } from './ghost/service';
+import {
+  appendRoomEvent,
+  createRoomEventState,
+  getRoomEventMeta,
+  getRoomEventSnapshot,
+  resetRoomEventLog,
+  type RoomMatchEvent,
+} from './roomEvents';
 
 export type RoomCode = string;
 
@@ -25,6 +33,10 @@ export type Room = {
   lastBroadcastScores: Record<string, number>;
   ghostMoveLogs: Record<string, GhostMoveLogEntry[]>;
   ghostTurnIndex: number;
+  matchId: string;
+  eventLogVersion: 1;
+  eventSequence: number;
+  events: RoomMatchEvent[];
 };
 
 const rooms = new Map<RoomCode, Room>();
@@ -113,7 +125,16 @@ export function createRoom(hostSocketId: string, config: Partial<Config> = {}): 
     lastBroadcastScores: {},
     ghostMoveLogs: {},
     ghostTurnIndex: 0,
+    ...createRoomEventState(),
   };
+  appendRoomEvent(room, {
+    type: 'room_created',
+    actorSocketId: hostSocketId,
+    payload: {
+      hostSocketId,
+      config,
+    },
+  });
 
   rooms.set(code, room);
   return room;
@@ -139,7 +160,15 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
     lastBroadcastScores: {},
     ghostMoveLogs: {},
     ghostTurnIndex: 0,
+    ...createRoomEventState(),
   };
+  appendRoomEvent(room, {
+    type: 'room_created',
+    payload: {
+      reserved: true,
+      config,
+    },
+  });
 
   rooms.set(normalizedCode, room);
   return room;
@@ -178,6 +207,37 @@ export function reconcileDrawSequenceFlag(code: string): boolean {
 
 export function deleteRoom(code: string): boolean {
   return rooms.delete(code);
+}
+
+function appendResolutionEvents(room: Room, previousState: GameState, actorSocketId: string): void {
+  if (!room.state) return;
+  if (!previousState.handOver && room.state.handOver) {
+    appendRoomEvent(room, {
+      type: 'hand_ended',
+      actorSocketId,
+      payload: {
+        handNumber: room.state.handNumber,
+        winnerId: room.state.winnerId,
+        gameOver: room.state.gameOver,
+        scores: Object.fromEntries(
+          room.state.playerIds.map((playerId) => [playerId, room.state?.players[playerId]?.score ?? 0]),
+        ),
+      },
+    });
+  }
+  if (!previousState.gameOver && room.state.gameOver) {
+    appendRoomEvent(room, {
+      type: 'match_ended',
+      actorSocketId,
+      payload: {
+        winnerId: room.state.winnerId,
+        handNumber: room.state.handNumber,
+        scores: Object.fromEntries(
+          room.state.playerIds.map((playerId) => [playerId, room.state?.players[playerId]?.score ?? 0]),
+        ),
+      },
+    });
+  }
 }
 
 export async function runDrawSequence(
@@ -249,6 +309,15 @@ export async function runDrawSequence(
         current = next;
         setState(withDrawSequenceFlag(current, true));
         current = getState();
+        appendRoomEvent(room, {
+          type: 'tile_drawn',
+          actorSocketId: playerId,
+          payload: {
+            tile: drew ? normalizeTileKey(drew) : null,
+            boneyardCount: current.boneyard.length,
+            drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+          },
+        });
 
         io.to(playerId).emit('game:draw_step', {
           playerId,
@@ -300,6 +369,23 @@ export async function startGame(code: string, io: Server): Promise<Room> {
   room.state = withDrawSequenceFlag(state1, false);
   room.ghostMoveLogs = Object.fromEntries(room.players.map((playerId) => [playerId, []]));
   room.ghostTurnIndex = 0;
+  if (room.events.some((event) => event.type === 'match_started')) {
+    resetRoomEventLog(room);
+  }
+  appendRoomEvent(room, {
+    type: 'match_started',
+    payload: {
+      players: [...room.players],
+      winningScore: room.state.config.winningScore,
+    },
+  });
+  appendRoomEvent(room, {
+    type: 'hand_started',
+    payload: {
+      handNumber: room.state.handNumber,
+      currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex],
+    },
+  });
   const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
   await runDrawSequence(
     room.code,
@@ -335,6 +421,13 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
   const state1 = startNewHand(room.state);
   room.state = withDrawSequenceFlag(state1, false);
   room.ghostTurnIndex = 0;
+  appendRoomEvent(room, {
+    type: 'hand_started',
+    payload: {
+      handNumber: room.state.handNumber,
+      currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex],
+    },
+  });
   const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
   await runDrawSequence(
     room.code,
@@ -365,6 +458,15 @@ export async function readyForNextHand(
   if (!room.players.includes(socketId)) throw new Error('Player not in room.');
 
   room.nextHandReady.add(socketId);
+  appendRoomEvent(room, {
+    type: 'hand_ready',
+    actorSocketId: socketId,
+    payload: {
+      readyCount: room.nextHandReady.size,
+      requiredCount: room.players.length,
+      handNumber: room.state.handNumber,
+    },
+  });
   if (room.nextHandReady.size >= room.players.length) {
     room.nextHandReady.clear();
     const startedRoom = await nextHand(code, io);
@@ -416,6 +518,13 @@ export async function act(
     }
 
     room.state = withDrawSequenceFlag(state, false);
+    appendRoomEvent(room, {
+      type: 'draw_requested',
+      actorSocketId: socketId,
+      payload: {
+        handNumber: state.handNumber,
+      },
+    });
     onStateReady(room.code);
     await runDrawSequence(
       room.code,
@@ -446,6 +555,7 @@ export async function act(
 
     const handBefore = state.players[socketId]?.hand ?? [];
     const scoreDelta = computePlayScore(simulatePlacement(state.board, move.tile, position), state.config);
+    const previousState = state;
     const { state: stateAfterMove, forcedDraw } = applyMove(state, socketId, move);
     appendGhostMove(room, socketId, {
       turn: currentGhostTurn(room),
@@ -460,6 +570,16 @@ export async function act(
     });
     room.ghostTurnIndex += 1;
     room.state = stateAfterMove;
+    appendRoomEvent(room, {
+      type: 'tile_played',
+      actorSocketId: socketId,
+      payload: {
+        tile: normalizeTileKey(move.tile),
+        position,
+        scoreDelta,
+        forcedDraw: Boolean(forcedDraw),
+      },
+    });
     if (forcedDraw) {
       onStateReady(room.code);
       await runDrawSequence(
@@ -473,6 +593,7 @@ export async function act(
         [forcedDraw],
       );
     }
+    appendResolutionEvents(room, previousState, socketId);
     return room;
   }
 
@@ -480,6 +601,7 @@ export async function act(
   // PASS
   // ─────────────────────────────
   if (type === 'PASS') {
+    const previousState = state;
     appendGhostMove(room, socketId, {
       turn: currentGhostTurn(room),
       hand_number: state.handNumber,
@@ -493,6 +615,14 @@ export async function act(
     });
     room.ghostTurnIndex += 1;
     room.state = applyMove(state, socketId, { type: 'pass' }).state;
+    appendRoomEvent(room, {
+      type: 'turn_passed',
+      actorSocketId: socketId,
+      payload: {
+        handNumber: state.handNumber,
+      },
+    });
+    appendResolutionEvents(room, previousState, socketId);
     return room;
   }
 
@@ -523,4 +653,12 @@ export function getRoomOpenEnds(code: string) {
   const room = getRoom(code);
   if (!room.state) return [];
   return getOpenEnds(room.state.board);
+}
+
+export function getRoomMatchEventMeta(code: string) {
+  return getRoomEventMeta(getRoom(code));
+}
+
+export function getRoomMatchEventSnapshot(code: string) {
+  return getRoomEventSnapshot(getRoom(code));
 }

@@ -1,37 +1,19 @@
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import React, { Suspense, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import type { User } from '@supabase/supabase-js';
-import confetti from 'canvas-confetti';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
-import { traceSocketEvent } from "./debug/socketTrace";
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import './App.css';
 import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from './components';
 import TileRack from './components/TileRack';
 import {
-  playBlockedSound,
   playDrawSound,
-  playHandLoseSound,
-  playHandWinSound,
   playMatchLoseSound,
   playMatchWinSound,
   playScoreSound,
   playTileSound,
 } from './utils/sound';
-import NoBrainerLabScreen from './practice/NoBrainerLabScreen';
-import BotMatchScreen from './bot/BotMatchScreen';
-import BotSetupScreen from './bot/BotSetupScreen';
-import GhostSetupScreen from './ghost/GhostSetupScreen';
-import DailyPuzzleScreen from './dailyPuzzle/DailyPuzzleScreen';
-import DailyPuzzleAdminScreen from './dailyPuzzle/DailyPuzzleAdminScreen';
-import LeagueScreen from './league/LeagueScreen';
-import RatingHistoryPage from './ranking/RatingHistoryPage';
 import GameOverModal from './components/GameOverModal';
-import GameReviewer from './analyzer/GameReviewer';
-import AuthModal from './auth/AuthModal';
-import UsernameModal from './auth/UsernameModal';
 import { isTemporaryUsername, useAuth } from './auth/useAuth';
-import StatsScreen from './stats/StatsScreen';
-import FriendsScreen from './friends/FriendsScreen';
 import LayoutScreen from './ui/LayoutScreen';
 import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from './analyzer/moveAnalyzer';
 import {
@@ -47,6 +29,10 @@ import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api'
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 import type { BotDealSize } from './bot/botEngine';
 import type { FritzTier } from './bot/fritzConfig';
+import { useRoomSocketSync } from './multiplayer/useRoomSocketSync';
+import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
+import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
+import { useRenderProfiler } from './debug/renderProfiler';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -67,12 +53,40 @@ function emitWithAck<TResp>(
 
 // ─── Utilities ───────────────────────────────────────────────
 type RoomPlayer = { id: string; username: string; userId: string | null };
+type RoomEventMeta = {
+  matchId?: string;
+  lastEventSequence?: number;
+  eventCount?: number;
+};
+type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 type TournamentPlayer = {
   socketId: string;
   username: string;
   userId?: string | null;
   isBot?: boolean;
 };
+
+const EMPTY_MOVES: Move[] = [];
+
+const NoBrainerLabScreen = React.lazy(() => import('./practice/NoBrainerLabScreen'));
+const BotMatchScreen = React.lazy(() => import('./bot/BotMatchScreen'));
+const BotSetupScreen = React.lazy(() => import('./bot/BotSetupScreen'));
+const GhostSetupScreen = React.lazy(() => import('./ghost/GhostSetupScreen'));
+const DailyPuzzleScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleScreen'));
+const DailyPuzzleAdminScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleAdminScreen'));
+const LeagueScreen = React.lazy(() => import('./league/LeagueScreen'));
+const RatingHistoryPage = React.lazy(() => import('./ranking/RatingHistoryPage'));
+const GameReviewer = React.lazy(() => import('./analyzer/GameReviewer'));
+const AuthModal = React.lazy(() => import('./auth/AuthModal'));
+const UsernameModal = React.lazy(() => import('./auth/UsernameModal'));
+const StatsScreen = React.lazy(() => import('./stats/StatsScreen'));
+const FriendsScreen = React.lazy(() => import('./friends/FriendsScreen'));
+const LearnHome = React.lazy(() =>
+  import('./learn').then((module) => ({ default: module.LearnHome })),
+);
+const LearnPlayer = React.lazy(() =>
+  import('./learn').then((module) => ({ default: module.LearnPlayer })),
+);
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
@@ -149,6 +163,35 @@ function getBoardTiles(board: GameState['board']): Tile[] {
   return tiles;
 }
 
+function ScreenLoader({ label = 'Loading…' }: { label?: string }) {
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        background: 'linear-gradient(180deg, #11231b 0%, #0c1511 100%)',
+        color: 'rgba(232,245,240,0.92)',
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          padding: '14px 18px',
+          borderRadius: 18,
+          border: '1px solid rgba(236,252,245,0.16)',
+          background: 'rgba(15,25,20,0.72)',
+          fontSize: '0.95rem',
+          fontWeight: 700,
+          letterSpacing: '0.02em',
+        }}
+      >
+        {label}
+      </div>
+    </div>
+  );
+}
+
 function tileKey(tile: Tile): string {
   const low = Math.min(tile.low, tile.high);
   const high = Math.max(tile.low, tile.high);
@@ -191,6 +234,8 @@ function getOpenEndsSum(board: GameState['board']): number {
   }
   return sum;
 }
+
+const LEARN_MODE_VISIBLE = false;
 
 function FullscreenIcon({ isFullscreen, style }: { isFullscreen: boolean; style?: React.CSSProperties }) {
   return (
@@ -242,7 +287,7 @@ interface HandViewProps {
   drawPulseIndex: number | null;
 }
 
-function HandView({
+const HandView = React.memo(function HandView({
   hand,
   selectedTile,
   onSelect,
@@ -252,6 +297,7 @@ function HandView({
   compactStacked,
   drawPulseIndex,
 }: HandViewProps) {
+  useRenderProfiler('HandView');
   const playableTiles = useMemo(() => {
     return legalMoves.filter((m) => m.type === 'play' && m.tile).map((m) => m.tile!);
   }, [legalMoves]);
@@ -290,7 +336,16 @@ function HandView({
   }
 
   return <div className="hand-container">{hand.map((tile, idx) => renderTile(tile, idx))}</div>;
-}
+}, (prev, next) => (
+  prev.hand === next.hand &&
+  prev.selectedTile === next.selectedTile &&
+  prev.onSelect === next.onSelect &&
+  prev.isMyTurn === next.isMyTurn &&
+  prev.legalMoves === next.legalMoves &&
+  prev.tileSize === next.tileSize &&
+  prev.compactStacked === next.compactStacked &&
+  prev.drawPulseIndex === next.drawPulseIndex
+));
 
 // ─── Game Over Overlay ───────────────────────────────────────
 
@@ -628,6 +683,7 @@ function WeeklyStatsScreen({
 // ─── Main App ────────────────────────────────────────────────
 
 export default function App() {
+  useRenderProfiler('App');
   const appRootRef = useRef<HTMLDivElement>(null);
   const trayCenterRef = useRef<HTMLDivElement>(null);
   const autoConnectAttemptedRef = useRef(false);
@@ -651,10 +707,12 @@ export default function App() {
     | 'ghost'
     | 'daily'
     | 'league'
+    | 'learn'
     | 'ratingHistory'
     | 'singlePlayerHub'
     | 'tournament'
   >('home');
+  const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('racehorse_muted') === '1';
@@ -683,6 +741,14 @@ export default function App() {
   const [multiplayerRatingBaseline, setMultiplayerRatingBaseline] = useState<number | null>(null);
   const [multiplayerRatingPending, setMultiplayerRatingPending] = useState(false);
   const multiplayerRatingRefreshKeyRef = useRef('');
+
+  useEffect(() => {
+    if (!LEARN_MODE_VISIBLE && appMode === 'learn') {
+      setSelectedLearnLessonId(null);
+      setAppMode('singlePlayerHub');
+    }
+  }, [appMode]);
+
   const sendRoomChat = (text: string) => {
     const t = String(text ?? '').trim();
     if (!t) return;
@@ -826,9 +892,15 @@ export default function App() {
   const previousMultiplayerGameOverRef = useRef(false);
   const maxSequenceRef = useRef<number>(-1);
   const [isRecoveringConnection, setIsRecoveringConnection] = useState(false);
+  const [roomRecoveryState, setRoomRecoveryState] = useState<RoomRecoveryState>('idle');
+  const [roomRecoveryMessage, setRoomRecoveryMessage] = useState('');
+  const roomMatchIdRef = useRef<string | null>(null);
+  const maxEventSequenceRef = useRef<number>(-1);
 
   useEffect(() => {
     maxSequenceRef.current = -1;
+    maxEventSequenceRef.current = -1;
+    roomMatchIdRef.current = null;
   }, [joinedRoom]);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
@@ -1106,6 +1178,68 @@ export default function App() {
     pending.forEach((resolve) => resolve(code));
   }, []);
 
+  const clearTransientRoomUi = useCallback(() => {
+    setSelectedTile(null);
+    setPendingUiAction(null);
+    setActionError('');
+    setOptimisticPlayedTile(null);
+    setOpponentDragging(false);
+    draggingStateRef.current = false;
+    if (drawSequenceTimeoutRef.current) {
+      clearTimeout(drawSequenceTimeoutRef.current);
+      drawSequenceTimeoutRef.current = null;
+    }
+    setDrawSequenceActiveBoth(false);
+    setDrawStepMyHand(null);
+    setDrawStepActorId(null);
+    setDrawStepOpponentHandCount(null);
+    setFlyingTiles([]);
+  }, [setDrawSequenceActiveBoth]);
+
+  const resetMultiplayerRoomState = useCallback(
+    (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
+      const { keepPlayers = false, clearRoomCode = true } = options;
+      setJoinedRoom(null);
+      if (clearRoomCode) setRoomCode('');
+      setState(null);
+      setLegalMoves([]);
+      setCanDraw(false);
+      setSelectedTile(null);
+      setHandReveal(null);
+      setRematchRequested(false);
+      setRematchReadyIds([]);
+      setScoreTrackOpen(false);
+      if (!keepPlayers) {
+        setPlayers([]);
+      }
+      clearTransientRoomUi();
+    },
+    [clearTransientRoomUi],
+  );
+
+  const resetRoomRecoveryState = useCallback(() => {
+    reconnectShouldJoinRef.current = false;
+    reconnectRoomCodeRef.current = null;
+    preventAutoRejoinRef.current = true;
+    setRoomRecoveryState('idle');
+    setRoomRecoveryMessage('');
+  }, []);
+
+  const applyRoomEventMeta = useCallback((meta?: RoomEventMeta | null) => {
+    if (!meta) return;
+    const incomingMatchId = typeof meta.matchId === 'string' ? meta.matchId : null;
+    if (incomingMatchId && roomMatchIdRef.current && roomMatchIdRef.current !== incomingMatchId) {
+      maxSequenceRef.current = -1;
+      maxEventSequenceRef.current = -1;
+    }
+    if (incomingMatchId) {
+      roomMatchIdRef.current = incomingMatchId;
+    }
+    if (typeof meta.lastEventSequence === 'number') {
+      maxEventSequenceRef.current = Math.max(maxEventSequenceRef.current, meta.lastEventSequence);
+    }
+  }, []);
+
   const emitCreateRoom = useCallback(
     async (targetSocket: Socket) => {
       setError('');
@@ -1131,6 +1265,10 @@ export default function App() {
         setJoinedRoom(resp.roomCode);
         setRoomCode(resp.roomCode);
         setPlayers(normalizeRoomPlayers(resp.players));
+        applyRoomEventMeta(resp.eventMeta);
+        clearTransientRoomUi();
+        setRoomRecoveryState('idle');
+        setRoomRecoveryMessage('');
         autoJoinAttemptedRef.current = false;
         preventAutoRejoinRef.current = false;
         resolvePendingCreate(resp.roomCode);
@@ -1140,147 +1278,61 @@ export default function App() {
         throw e;
       }
     },
-    [authProfile?.username, authUser?.id, resolvePendingCreate],
+    [authProfile?.username, authUser?.id, resolvePendingCreate, applyRoomEventMeta, clearTransientRoomUi],
   );
 
-  useEffect(() => {
-    if (!socket) return;
-    const onFriendInvited = (payload: {
-      fromUsername: string;
-      roomCode: string;
-      inviteUrl: string;
-    }) => {
-      console.log('[invite] received friend:invited', payload);
-      setFriendInvite(payload);
-    };
-    const onFriendInviteError = (payload: { ok?: boolean; error?: string }) => {
-      console.log('[invite] received friend:invite:error', payload);
-      showToast('Invite failed: room not found', 2000);
-    };
-    const onRoomUpdate = (payload: { players?: unknown }) => {
-      const nextPlayers = normalizeRoomPlayers(payload?.players);
-      if (import.meta.env.DEV) {
-        console.log('[room:update]', {
-          joinedRoom: joinedRoomRef.current,
-          players: nextPlayers.length,
-        });
-      }
-      // Keep players synced from server push; do not infer or set room code here.
-      setPlayers(nextPlayers);
-    };
-    const onStateUpdate = (payload: {
-      state?: GameState | null;
-      legalMoves?: Move[];
-      canDraw?: boolean;
-    }) => {
-      const nextState = payload?.state ?? null;
-      if (nextState) {
-        if (typeof nextState.sequence === 'number' && nextState.sequence < maxSequenceRef.current) {
-          if (import.meta.env.DEV) {
-            console.warn('[state:update] ignored stale sequence', {
-              incoming: nextState.sequence,
-              current: maxSequenceRef.current,
-            });
-          }
-          return;
-        }
-        maxSequenceRef.current = nextState.sequence ?? -1;
-      }
+  const applyJoinedRoomResponse = useCallback((resp: any) => {
+    applyRoomEventMeta(resp.eventMeta);
+    setJoinedRoom(resp.roomCode);
+    setRoomCode(resp.roomCode);
+    setState(resp.state ?? null);
+    setPlayers(normalizeRoomPlayers(resp.players));
+    clearTransientRoomUi();
+    setLegalMoves(Array.isArray(resp.legalMoves) ? resp.legalMoves : []);
+    setCanDraw(typeof resp.canDraw === 'boolean' ? resp.canDraw : false);
+    setRoomRecoveryState(resp.state ? 'idle' : 'resyncing');
+    setRoomRecoveryMessage(resp.state ? '' : 'Syncing room state…');
+  }, [applyRoomEventMeta, clearTransientRoomUi]);
 
-      if (import.meta.env.DEV) {
-        console.log('[state:update]', {
-          joinedRoom: joinedRoomRef.current,
-          hasState: Boolean(payload?.state),
-          sequence: nextState?.sequence,
-        });
-      }
-      setState(nextState);
-      setOptimisticPlayedTile((prev) => {
-        if (!prev) return null;
-        const nextHand = nextState?.players?.[youRef.current]?.hand ?? [];
-        // Keep optimistic hide until server state no longer contains the played tile.
-        return nextHand.some((t) => tileEquals(t, prev)) ? prev : null;
-      });
-      setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
-      setCanDraw(Boolean(payload?.canDraw));
-      // Draw preview state is only valid while local draw-sequence mode is active.
-      // Server state:update payload intentionally does not include __drawSequenceActive.
-      if (!drawSequenceActiveRef.current) {
-        if (drawSequenceTimeoutRef.current) {
-          clearTimeout(drawSequenceTimeoutRef.current);
-          drawSequenceTimeoutRef.current = null;
-        }
-        setDrawSequenceActiveBoth(false);
-        setDrawStepMyHand(null);
-        setDrawStepActorId(null);
-        setDrawStepOpponentHandCount(null);
-        setFlyingTiles([]);
-      }
-      setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
+  const roomSocketSyncParams = useMemo(
+    () => ({
+      socket,
+      showToast,
+      normalizeRoomPlayers,
+      applyRoomEventMeta,
+      setFriendInvite,
+      joinedRoomRef,
+      maxSequenceRef,
+      setPlayers,
+      setState,
+      setRoomRecoveryState,
+      setRoomRecoveryMessage,
+      setOptimisticPlayedTile,
+      setLegalMoves,
+      setCanDraw,
+      drawSequenceActiveRef,
+      drawSequenceTimeoutRef,
+      setDrawSequenceActiveBoth,
+      setDrawStepMyHand,
+      setDrawStepActorId,
+      setDrawStepOpponentHandCount,
+      setFlyingTiles,
+      setBoneyardDisplayCount,
+      setDrawPulseIndex,
+      boneyardRef,
+      handAreaRef,
+      opponentPillRef,
+      youRef,
+      stateRef,
+      flyingTileIdRef,
+      isMutedRef,
+      playDrawSound,
+      tileEquals,
+    }),
+    [socket, showToast, applyRoomEventMeta, setDrawSequenceActiveBoth],
+  );
 
-    };
-    const onDrawStep = (payload: {
-      playerId: string;
-      tile: Tile | null;
-      boneyardCount: number;
-      drawerHandCount: number;
-    }) => {
-      if (!payload) return;
-      playDrawSound(isMutedRef.current);
-      setDrawSequenceActiveBoth(true);
-      setDrawStepActorId(payload.playerId);
-      if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
-      drawSequenceTimeoutRef.current = setTimeout(() => {
-        setDrawSequenceActiveBoth(false);
-      }, 5000);
-      setBoneyardDisplayCount(payload.boneyardCount);
-      if (boneyardRef.current) {
-        const from = boneyardRef.current.getBoundingClientRect();
-        const isMe = payload.playerId === youRef.current;
-        const targetEl = isMe ? handAreaRef.current : opponentPillRef.current;
-        if (targetEl) {
-          const to = targetEl.getBoundingClientRect();
-          const id = ++flyingTileIdRef.current;
-          setFlyingTiles((prev) => [
-            ...prev,
-            {
-              x: from.left + from.width / 2,
-              y: from.top + from.height / 2,
-              toX: to.left + to.width / 2,
-              toY: to.top + to.height / 2,
-              id,
-            },
-          ]);
-          setTimeout(() => setFlyingTiles((prev) => prev.filter((t) => t.id !== id)), 1800);
-        }
-      }
-      const isMe = payload.playerId === youRef.current;
-      if (isMe && payload.tile) {
-        const drawnTile = payload.tile;
-        setDrawStepMyHand((prev) => {
-          const base = prev ?? (stateRef.current?.players?.[youRef.current]?.hand ?? []);
-          const next = [...base, drawnTile];
-          setDrawPulseIndex(next.length - 1);
-          setTimeout(() => setDrawPulseIndex(null), 400);
-          return next;
-        });
-      } else if (!isMe) {
-        setDrawStepOpponentHandCount(payload.drawerHandCount);
-      }
-    };
-    socket.on('friend:invited', onFriendInvited);
-    socket.on('friend:invite:error', onFriendInviteError);
-    socket.on('room:update', onRoomUpdate);
-    socket.on('state:update', onStateUpdate);
-    socket.on('game:draw_step', onDrawStep);
-    return () => {
-      socket.off('friend:invited', onFriendInvited);
-      socket.off('friend:invite:error', onFriendInviteError);
-      socket.off('room:update', onRoomUpdate);
-      socket.off('state:update', onStateUpdate);
-      socket.off('game:draw_step', onDrawStep);
-    };
-  }, [socket, showToast, setDrawSequenceActiveBoth]);
+  useRoomSocketSync(roomSocketSyncParams);
 
   useEffect(() => {
     if (!friendInvite) return;
@@ -1314,494 +1366,132 @@ export default function App() {
     }
   }, []);
 
-  // Connection
-  const connect = useCallback(() => {
-    if (isConnecting || socket?.connected) return;
-    intentionalDisconnectRef.current = false;
-    setError('');
-    setIsConnecting(true);
-    // Ensure we never keep a stale disconnected socket instance around.
-    if (socket && !socket.connected) {
-      socket.removeAllListeners();
-      socket.disconnect();
-    }
-    const s = io(serverUrl, {
-      transports: ['polling', 'websocket'],
-      upgrade: true,
-      reconnection: false,
-      reconnectionAttempts: 0,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 10000,
-      timeout: 20000,
-    });
-    s.onAny((event, ...args) => traceSocketEvent(String(event), args.length <= 1 ? args[0] : args));
-    const isDevSocketLogging = import.meta.env.DEV;
-    if (isDevSocketLogging) {
-      s.on('connect', () => console.log('[socket] connect', s.id));
-      s.on('disconnect', (r) => console.log('[socket] disconnect', r));
-      s.on('connect_error', (e) => console.log('[socket] connect_error', e?.message));
-    }
-
-    s.on('connect', async () => {
-      if (intentionalDisconnectRef.current) return;
-      clearReconnectAttemptTimer();
-      reconnectAttemptCountRef.current = 0;
-      setIsRecoveringConnection(false);
-      setIsConnected(true);
-      setYou(s.id ?? '');
-      setIsConnecting(false);
-      setServerWaking(false);
-      const userId = authUserRef.current?.id;
-      const username =
-        authProfileRef.current?.username ?? authUserRef.current?.email?.split('@')[0] ?? 'player';
-      if (userId) {
-        if (import.meta.env.DEV) {
-          console.log('[presence] socket connect: emitting identify', userId);
-        }
-        try {
-          await emitWithAck<any>(s, 'presence:identify', { userId, username });
-        } catch (e) {
-          if (import.meta.env.DEV) {
-            console.log('[presence] identify failed', e instanceof Error ? e.message : e);
-          }
-        }
-      }
-      if (pendingCreateOnConnectRef.current) {
-        pendingCreateOnConnectRef.current = false;
-        void emitCreateRoom(s).catch((e) => {
-          const message = e instanceof Error ? e.message : 'Action failed';
-          setError(message);
-          showToast(message, 2000);
-        });
-        return;
-      }
-
-      if (!preventAutoRejoinRef.current) {
-        const code = normalizeRoomCode(joinedRoomRef.current ?? roomCode);
-        if (code && !rejoinInFlightRef.current) {
-          rejoinInFlightRef.current = true;
-          try {
-            const resp = await emitWithAck<any>(
-              s,
-              'room:join',
-              code,
-              {
-                username: authProfileRef.current?.username ?? 'Guest',
-                userId: authUserRef.current?.id ?? null,
-              },
-            );
-            if (resp?.ok) {
-              setJoinedRoom(resp.roomCode);
-              setRoomCode(resp.roomCode);
-              setPlayers(normalizeRoomPlayers(resp.players));
-              if (resp.state) setState(resp.state);
-              setSelectedTile(null);
-              if (Array.isArray(resp.legalMoves)) setLegalMoves(resp.legalMoves);
-              if (typeof resp.canDraw === 'boolean') setCanDraw(resp.canDraw);
-              reconnectShouldJoinRef.current = false;
-              reconnectRoomCodeRef.current = resp.roomCode;
-              return;
-            }
-            if (import.meta.env.DEV) {
-              console.log('[rejoin] room:join not ok', { code, resp });
-            }
-          } catch (e) {
-            if (import.meta.env.DEV) {
-              console.log('[rejoin] room:join failed', e instanceof Error ? e.message : e);
-            }
-          } finally {
-            rejoinInFlightRef.current = false;
-          }
-        }
-      }
-
-      if (inviteJoinInFlightRef.current) return;
-      const reconnectCode = normalizeRoomCode(
-        reconnectRoomCodeRef.current ?? joinedRoomRef.current ?? '',
-      );
-      if (reconnectShouldJoinRef.current && reconnectCode && !preventAutoRejoinRef.current) {
-        try {
-          const resp = await emitWithAck<any>(
-            s,
-            'room:join',
-            reconnectCode,
-            {
-              username: authProfileRef.current?.username ?? 'Guest',
-              userId: authUserRef.current?.id ?? null,
-            },
-          );
-          if (!resp?.ok) {
-            if (typeof window !== 'undefined') {
-              window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
-            }
-            return;
-          }
-          setJoinedRoom(resp.roomCode);
-          setRoomCode(resp.roomCode);
-          if (resp.state) setState(resp.state);
-          setPlayers(normalizeRoomPlayers(resp.players));
-          setSelectedTile(null);
-          if (Array.isArray(resp.legalMoves)) setLegalMoves(resp.legalMoves);
-          if (typeof resp.canDraw === 'boolean') setCanDraw(resp.canDraw);
-          setAppMode('multiplayer');
-          reconnectShouldJoinRef.current = false;
-          reconnectRoomCodeRef.current = resp.roomCode;
-          showToast('Reconnected to room.', 1200);
-        } catch (e) {
-          showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-        }
-        return;
-      }
-      if (preventAutoRejoinRef.current || autoJoinAttemptedRef.current) return;
-      const savedCode = normalizeRoomCode(
-        (typeof window !== 'undefined' && window.localStorage.getItem(LAST_ROOM_STORAGE_KEY)) || '',
-      );
-      if (!savedCode || joinedRoomRef.current) return;
-      autoJoinAttemptedRef.current = true;
-      (async () => {
-        try {
-          const resp = await emitWithAck<any>(
-            s,
-            'room:join',
-            savedCode,
-            {
-              username: authProfile?.username ?? 'Guest',
-              userId: authUser?.id ?? null,
-            },
-          );
-          if (!resp?.ok) return;
-          setJoinedRoom(resp.roomCode);
-          setRoomCode(resp.roomCode);
-          setState(resp.state ?? null);
-          setPlayers(normalizeRoomPlayers(resp.players));
-          setSelectedTile(null);
-          setLegalMoves([]);
-          setCanDraw(false);
-          showToast('Rejoined room.', 1200);
-        } catch (e) {
-          showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-        }
-      })();
-    });
-
-    s.on('disconnect', (_reason) => {
-      const roomBeforeDisconnect = joinedRoomRef.current;
-      const stateBeforeDisconnect = stateRef.current;
-      const isRecoverableSession = !stateBeforeDisconnect || !stateBeforeDisconnect.gameOver;
-      const shouldAttemptReconnect =
-        Boolean(roomBeforeDisconnect) &&
-        isRecoverableSession &&
-        !preventAutoRejoinRef.current &&
-        !intentionalDisconnectRef.current;
-
-      if (
-        roomBeforeDisconnect &&
-        isRecoverableSession &&
-        !preventAutoRejoinRef.current &&
-        !intentionalDisconnectRef.current
-      ) {
-        reconnectRoomCodeRef.current = roomBeforeDisconnect;
-        reconnectShouldJoinRef.current = true;
-      }
-      setIsConnected(false);
-      setIsConnecting(false);
-      setError('');
-      setActionError('');
-      setRematchRequested(false);
-      setRematchReadyIds([]);
-      setOpponentDragging(false);
-      draggingStateRef.current = false;
-
-      if (shouldAttemptReconnect) {
-        setIsRecoveringConnection(true);
-        const nextAttempt = reconnectAttemptCountRef.current + 1;
-        reconnectAttemptCountRef.current = nextAttempt;
-        console.warn('[socket] disconnected mid-game, reconnect scheduled', {
-          attempt: nextAttempt,
-          maxAttempts: 8,
-          reason: _reason,
-          roomCode: roomBeforeDisconnect,
-        });
-        clearReconnectAttemptTimer();
-        reconnectAttemptTimerRef.current = setTimeout(() => {
-          connectRef.current?.();
-        }, 2000);
-        return;
-      }
-
-      setIsRecoveringConnection(false);
-      setJoinedRoom(null);
-      setState(null);
-      setLegalMoves([]);
-      setCanDraw(false);
-      setTournamentId(null);
-      setTournamentState(null);
-      setTournamentActiveRoom(null);
-    });
-
-    s.on('room:update', (data: { players: RoomPlayer[] }) => {
-      setPlayers(normalizeRoomPlayers(data?.players));
-    });
-    // TOURNAMENT_LISTENERS
-    s.on('tournament:lobby:update', (data: any) => {
-      const lobbyCode = typeof data?.lobbyCode === 'string' ? data.lobbyCode : null;
-
-      const players = Array.isArray(data?.players) ? data.players : null;
-      if (players) {
-        const inferredHostSocketId =
-          typeof data?.hostSocketId === 'string'
-            ? data.hostSocketId
-            : typeof players?.[0]?.socketId === 'string'
-              ? players[0].socketId
-              : null;
-
-        setTournamentState((prev: any) => ({
-          ...(prev ?? {}),
-          status: 'lobby',
-          lobbyCode: lobbyCode ?? (prev?.lobbyCode ?? null),
-          players,
-          hostSocketId: inferredHostSocketId ?? prev?.hostSocketId ?? null,
-        }));
-      }
-    });
-    s.on('tournament:state', (data: any) => {
-      setTournamentState(data);
-      if (typeof data?.id === 'string') setTournamentId(data.id);
-      setTournamentActiveRoom(typeof data?.activeRoomCode === 'string' ? data.activeRoomCode : null);
-    });
-    s.on('tournament:match:assigned', (data: any) => {
-      if (typeof data?.roomCode === 'string') setTournamentActiveRoom(data.roomCode);
-      // Auto-pull players into their match
-      if (data?.roomCode && (data?.a === s.id || data?.b === s.id)) {
-        const code = String(data.roomCode).trim().toUpperCase();
-        setJoinedRoom(code);
-        setRoomCode(code);
-        setAppMode('multiplayer');
-      }
-    });
-    // ROOM_REACTIONS_LISTENERS
-    s.on('room:chat', (msg: RoomChatEvent) => {
-      setRoomReactions((prev) => {
-        const next = prev.concat(msg);
-        return next.length > 50 ? next.slice(next.length - 50) : next;
-      });
-    });
-
-    s.on('room:emote', (evt: RoomEmoteEvent) => {
-      setRoomReactions((prev) => {
-        const next = prev.concat(evt);
-        return next.length > 50 ? next.slice(next.length - 50) : next;
-      });
-    });
-
-    s.on('hand:ended', (payload: HandEndedPayload) => {
-      const currentState = stateRef.current;
-      const myRemaining = currentState?.players[s.id ?? '']?.hand ?? [];
-      const yourRemainingTiles = payload.yourRemainingTiles ?? myRemaining;
-      const opponentRemainingTiles = payload.opponentRemainingTiles ?? [];
-      const blocked = yourRemainingTiles.length > 0 && opponentRemainingTiles.length > 0;
-      if (blocked) {
-        playBlockedSound(isMutedRef.current);
-      }
-      const stateNow = stateRef.current;
-      const target = stateNow?.config?.winningScore ?? 60;
-      const myId = s.id ?? '';
-      const oppId = stateNow?.playerIds.find((pid) => pid !== myId) ?? null;
-      const myAward = payload.pointsAwarded?.you ?? 0;
-      const oppAward = payload.pointsAwarded?.opponent ?? 0;
-      const myPostScore = (stateNow?.players?.[myId]?.score ?? 0) + myAward;
-      const oppPostScore = oppId ? (stateNow?.players?.[oppId]?.score ?? 0) + oppAward : oppAward;
-      const matchWillBeOver = myPostScore >= target || oppPostScore >= target;
-      if (!matchWillBeOver) {
-        const handWinnerId = payload.handWinnerId ?? payload.winnerId ?? null;
-        const iWonHand = Boolean(handWinnerId && handWinnerId === myId);
-        if (iWonHand) {
-          playHandWinSound(isMutedRef.current);
-        } else {
-          playHandLoseSound(isMutedRef.current);
-        }
-      }
-      handRevealShownRef.current = payload.handNumber;
-      window.setTimeout(() => {
-        setHandReveal({
-          ...payload,
-          yourRemainingTiles,
-        });
-      }, 1400);
-    });
-
-    s.on('game:rematch:status', (payload: any) => {
-      const readyPlayerIds = Array.isArray(payload?.readyPlayerIds)
-        ? payload.readyPlayerIds.filter((id: unknown): id is string => typeof id === 'string')
-        : [];
-      setRematchReadyIds(readyPlayerIds);
-      setRematchRequested(readyPlayerIds.includes(s.id ?? ''));
-    });
-
-    s.on('game:rematch:started', () => {
-      setRematchRequested(false);
-      setRematchReadyIds([]);
-      showToast('Rematch started.', 1200);
-    });
-
-    s.on('player:dragging', (payload: { playerId?: string; dragging?: boolean }) => {
-      if (!payload?.playerId || payload.playerId === s.id) return;
-      setOpponentDragging(Boolean(payload.dragging));
-    });
-
-    s.on('connect_error', () => {
-      setIsConnecting(false);
-      const shouldRetryReconnect =
-        reconnectShouldJoinRef.current &&
-        !intentionalDisconnectRef.current &&
-        !preventAutoRejoinRef.current;
-      if (shouldRetryReconnect) {
-        const nextAttempt = reconnectAttemptCountRef.current + 1;
-        reconnectAttemptCountRef.current = nextAttempt;
-        if (nextAttempt <= 8) {
-          setIsRecoveringConnection(true);
-          console.warn('[socket] reconnect attempt failed, retrying', {
-            attempt: nextAttempt,
-            maxAttempts: 8,
-            roomCode: reconnectRoomCodeRef.current,
-          });
-          clearReconnectAttemptTimer();
-          reconnectAttemptTimerRef.current = setTimeout(() => {
-            connectRef.current?.();
-          }, 2000);
-          return;
-        }
-        console.warn('[socket] reconnect attempt failed, entering slow retry mode', {
-          attempts: nextAttempt,
-          roomCode: reconnectRoomCodeRef.current,
-        });
-        setIsRecoveringConnection(true);
-        setError('Connection unstable. Trying to reconnect…');
-        clearReconnectAttemptTimer();
-        reconnectAttemptTimerRef.current = setTimeout(() => {
-          connectRef.current?.();
-        }, 5000);
-        return;
-      }
-      setServerWaking(true);
-      setError('');
-    });
-
-    setSocket(s);
-  }, [
-    isConnecting,
-    socket,
+  const { connect, retryRoomRecovery, disconnect } = useMultiplayerConnection({
+    emitWithAck,
+    normalizeRoomCode,
+    lastRoomStorageKey: LAST_ROOM_STORAGE_KEY,
     serverUrl,
+    socket,
+    isConnecting,
+    isConnected,
+    roomRecoveryState,
+    appMode,
+    authUserId: authUser?.id ?? null,
+    authEmail: authUser?.email ?? null,
+    authProfileUsername: authProfile?.username ?? null,
+    tournamentId,
+    tournamentStateStatus: tournamentState?.status ?? null,
+    roomCode,
+    connectRef,
+    socketRef,
+    authUserRef,
+    authProfileRef,
+    joinedRoomRef,
+    stateRef,
+    pendingCreateOnConnectRef,
+    reconnectRoomCodeRef,
+    reconnectShouldJoinRef,
+    preventAutoRejoinRef,
+    autoJoinAttemptedRef,
+    joinInFlightRef,
+    createInFlightRef,
+    inviteJoinInFlightRef,
+    rejoinInFlightRef,
+    intentionalDisconnectRef,
+    reconnectAttemptTimerRef,
+    reconnectAttemptCountRef,
+    autoConnectAttemptedRef,
+    draggingStateRef,
+    isMutedRef,
+    handRevealShownRef,
+    setSocket,
+    setIsConnected,
+    setIsConnecting,
+    setIsRecoveringConnection,
+    setRoomRecoveryState,
+    setRoomRecoveryMessage,
+    setYou,
+    setServerWaking,
+    setError,
+    setActionError,
+    setRematchRequested,
+    setRematchReadyIds,
+    setOpponentDragging,
+    setJoinedRoom,
+    setState,
+    setLegalMoves,
+    setCanDraw,
+    setTournamentId,
+    setTournamentState,
+    setTournamentActiveRoom,
+    setRoomCode,
+    setAppMode,
+    setRoomReactions,
+    setHandReveal,
+    setPlayers,
+    setSelectedTile,
+    setPendingUiAction,
     showToast,
-    authProfile?.username,
-    authUser?.id,
+    applyJoinedRoomResponse,
     emitCreateRoom,
     clearReconnectAttemptTimer,
-  ]);
+    clearTransientRoomUi,
+  });
 
-  const onCreatePrivateRoom = useCallback(async (): Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }> => {
-    setAppMode('home');
-    preventAutoRejoinRef.current = false;
-    autoJoinAttemptedRef.current = false;
-    const activeSocket = socketRef.current;
-    if (joinedRoomRef.current) {
-      setAppMode('multiplayer');
-      setRoomCode(joinedRoomRef.current);
-      resolvePendingCreate(joinedRoomRef.current);
-      const code = normalizeRoomCode(joinedRoomRef.current);
-      return {
-        ok: Boolean(code),
-        roomCode: code || null,
-        inviteUrl: code ? getInviteLink(code) : null,
-      };
-    }
-    if (activeSocket?.connected) {
-      try {
-        const resp = await emitCreateRoom(activeSocket);
-        const code = normalizeRoomCode(resp?.roomCode);
-        if (code) {
-          setJoinedRoom(code);
-          setRoomCode(code);
-          setPlayers(normalizeRoomPlayers(resp.players ?? []));
-          setAppMode('multiplayer');
-        }
-        return {
-          ok: Boolean(code),
-          roomCode: code || null,
-          inviteUrl: code ? getInviteLink(code) : null,
-        };
-      } catch (e) {
-        const message = e instanceof Error ? e.message : 'Action failed';
-        setError(message);
-        showToast(message, 2000);
-        return { ok: false, roomCode: null, inviteUrl: null };
-      }
-    }
-    pendingCreateOnConnectRef.current = true;
-    connectRef.current();
-    const roomCode = await new Promise<string | null>((resolve) => {
-      let done = false;
-      const timer = window.setTimeout(() => {
-        if (done) return;
-        done = true;
-        resolve(null);
-      }, 8000);
-      pendingCreateResolversRef.current.push((code) => {
-        if (done) return;
-        done = true;
-        window.clearTimeout(timer);
-        resolve(code);
-      });
-    });
-    const code = normalizeRoomCode(roomCode);
-    if (!code) return { ok: false, roomCode: null, inviteUrl: null };
-    return { ok: true, roomCode: code, inviteUrl: getInviteLink(code) };
-  }, [emitCreateRoom, getInviteLink, resolvePendingCreate, showToast]);
-
-  const copyInviteLink = useCallback(
-    async (): Promise<{ ok: boolean; roomCode: string | null; inviteUrl: string | null }> => {
-      let code = normalizeRoomCode(joinedRoomRef.current ?? roomCode);
-      if (!code) {
-        const created = await onCreatePrivateRoom();
-        code = normalizeRoomCode(created.roomCode ?? roomCode);
-      }
-      if (!code) {
-        showToast('Could not prepare an invite link.');
-        return { ok: false, roomCode: null, inviteUrl: null };
-      }
-      const link = getInviteLink(code);
-      if (!link) return { ok: false, roomCode: null, inviteUrl: null };
-      try {
-        await navigator.clipboard.writeText(link);
-        showToast('Invite link copied.');
-        return { ok: true, roomCode: code, inviteUrl: link };
-      } catch {
-        showToast('Could not copy invite link.');
-        return { ok: false, roomCode: code, inviteUrl: link };
-      }
-    },
-    [roomCode, getInviteLink, showToast, onCreatePrivateRoom],
-  );
-
+  const authUsernameRef = useRef(authProfile?.username ?? 'Guest');
+  const authUserIdRef = useRef<string | null>(authUser?.id ?? null);
   useEffect(() => {
-    connectRef.current = connect;
-  }, [connect]);
+    authUsernameRef.current = authProfile?.username ?? 'Guest';
+    authUserIdRef.current = authUser?.id ?? null;
+  }, [authProfile?.username, authUser?.id]);
 
-  useEffect(() => {
-    if (isConnected) return;
-    if (intentionalDisconnectRef.current) return;
-    if (!joinedRoomRef.current) return;
-    if (stateRef.current?.gameOver) return;
-
-    // Reconnect if we were in any active room and got accidentally dropped.
-    const timer = setTimeout(() => {
-      if (!intentionalDisconnectRef.current && joinedRoomRef.current) {
-        connectRef.current?.();
-      }
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [isConnected]);
+  const {
+    onCreatePrivateRoom,
+    copyInviteLink,
+    createRoom,
+    joinRoom,
+    openLeagueLiveRoom,
+    acceptFriendInvite,
+  } = useMultiplayerRoomActions({
+    socket,
+    socketRef,
+    connectRef,
+    joinedRoomRef,
+    pendingCreateOnConnectRef,
+    pendingCreateResolversRef,
+    autoJoinAttemptedRef,
+    preventAutoRejoinRef,
+    joinInFlightRef,
+    createInFlightRef,
+    inviteJoinInFlightRef,
+    reconnectRoomCodeRef,
+    reconnectShouldJoinRef,
+    roomCode,
+    friendInvite,
+    authUsername: authProfile?.username ?? 'Guest',
+    authUserId: authUser?.id ?? null,
+    authUsernameRef,
+    authUserIdRef,
+    normalizeRoomCode,
+    normalizeRoomPlayers,
+    emitWithAck,
+    emitCreateRoom,
+    getInviteLink,
+    resolvePendingCreate,
+    applyJoinedRoomResponse,
+    showToast,
+    setAppMode,
+    setRoomCode,
+    setPlayers,
+    setError,
+    setActionError,
+    setPendingUiAction,
+    setRoomRecoveryState,
+    setRoomRecoveryMessage,
+    setFriendsOpen,
+    setFriendInvite,
+    lastRoomStorageKey: LAST_ROOM_STORAGE_KEY,
+  });
 
   useEffect(() => {
     if (!weeklyStatsOpen) return;
@@ -1865,337 +1555,26 @@ export default function App() {
   }, [appMode]);
 
 
-  useEffect(() => {
-    if (appMode !== 'multiplayer' && appMode !== 'tournament') return;
-    if (autoConnectAttemptedRef.current) return;
-    if (!serverUrl) return;
-    // Entering an online mode is explicit intent to reconnect.
-    intentionalDisconnectRef.current = false;
-    autoConnectAttemptedRef.current = true;
-    connect();
-  }, [appMode, connect, serverUrl]);
-
-// TOURNAMENT_CONNECT_EFFECT
-  useEffect(() => {
-    // Ensure tournament mode has an active socket (create/join requires it)
-    if (appMode !== 'tournament') return;
-    if (socket) return;
-    intentionalDisconnectRef.current = false;
-    connect();
-  }, [appMode, socket, connect]);
-
-  useEffect(() => {
-    if (!authUser?.id) return;
-    if (!serverUrl || socket || isConnecting) return;
-    if (intentionalDisconnectRef.current) return;
-    connect();
-  }, [authUser?.id, serverUrl, socket, isConnecting, connect]);
-
-  const disconnect = useCallback((reason: string = 'user requested') => {
-    console.warn('[nav] redirect home', {
-      reason,
-      appMode,
-      joinedRoom: joinedRoomRef.current,
-      gameOver: stateRef.current?.gameOver ?? null,
-      handOver: stateRef.current?.handOver ?? null,
-    });
-    intentionalDisconnectRef.current = true;
-    reconnectRoomCodeRef.current = null;
-    reconnectShouldJoinRef.current = false;
-    clearReconnectAttemptTimer();
-    reconnectAttemptCountRef.current = 0;
-    setIsRecoveringConnection(false);
-    preventAutoRejoinRef.current = true;
-    autoJoinAttemptedRef.current = false;
-    setAppMode('home');
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
-    }
-    const s = socketRef.current;
-    if (s) {
-      s.removeAllListeners();
-      s.disconnect();
-      socketRef.current = null;
-    }
-    setSocket(null);
-    setJoinedRoom(null);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
-    }
-    setState(null);
-    setLegalMoves([]);
-    setCanDraw(false);
-    setError('');
-    setActionError('');
-    setYou('');
-    setSelectedTile(null);
-    setIsConnected(false);
-    setIsConnecting(false);
-    setPlayers([]);
-    setHandReveal(null);
-    setRematchRequested(false);
-    setRematchReadyIds([]);
-    setOpponentDragging(false);
-    draggingStateRef.current = false;
-    setPendingUiAction(null);
-    handRevealShownRef.current = null;
-    setAppMode('home');
-    autoConnectAttemptedRef.current = false;
-  }, [appMode, clearReconnectAttemptTimer]);
 
   const handlePostGame = useCallback(() => {
-    reconnectShouldJoinRef.current = false;
-    reconnectRoomCodeRef.current = null;
-    preventAutoRejoinRef.current = true;
+    resetRoomRecoveryState();
     // Tournament matches should return to tournament lobby, not disconnect to Home.
     const inTournament = Boolean(tournamentId) || tournamentState?.status === 'running';
     if (!inTournament) return disconnect('post-game to home');
-
-    setJoinedRoom(null);
-    setRoomCode('');
-    setState(null);
-    setLegalMoves([]);
-    setCanDraw(false);
-    setSelectedTile(null);
+    resetMultiplayerRoomState({ keepPlayers: true });
     setActionError('');
-    setHandReveal(null);
-    setRematchRequested(false);
-    setRematchReadyIds([]);
-    setOpponentDragging(false);
-    draggingStateRef.current = false;
     setAppMode('tournament');
-  }, [disconnect, tournamentId, tournamentState?.status]);
+  }, [disconnect, tournamentId, tournamentState?.status, resetMultiplayerRoomState, resetRoomRecoveryState]);
 
   const _backToTournamentHub = useCallback(() => {
-    reconnectShouldJoinRef.current = false;
-    reconnectRoomCodeRef.current = null;
-    preventAutoRejoinRef.current = true;
+    resetRoomRecoveryState();
     if (socket && joinedRoom) {
       socket.emit('room:leave', joinedRoom);
     }
-    setJoinedRoom(null);
-    setRoomCode('');
-    setState(null);
-    setLegalMoves([]);
-    setCanDraw(false);
-    setSelectedTile(null);
+    resetMultiplayerRoomState({ keepPlayers: true });
     setActionError('');
-    setHandReveal(null);
-    setRematchRequested(false);
-    setRematchReadyIds([]);
     setAppMode('tournament');
-  }, [socket, joinedRoom]);
-
-
-  // Room actions
-  const createRoom = useCallback(async () => {
-    setError('');
-    setActionError('');
-    if (!socket) return setError('Not connected to server.');
-    if (createInFlightRef.current) return;
-    createInFlightRef.current = true;
-    setPendingUiAction('create');
-    try {
-      await emitCreateRoom(socket);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-    } finally {
-      createInFlightRef.current = false;
-      setPendingUiAction((prev) => (prev === 'create' ? null : prev));
-    }
-  }, [socket, emitCreateRoom, showToast]);
-
-  const joinRoom = useCallback(async () => {
-    setError('');
-    setActionError('');
-    if (!socket) return setError('Not connected to server.');
-    if (joinInFlightRef.current) return;
-    joinInFlightRef.current = true;
-    setPendingUiAction('join');
-    try {
-      const resp = await emitWithAck<any>(
-        socket,
-        'room:join',
-        roomCode.trim().toUpperCase(),
-        {
-          username: authProfile?.username ?? 'Guest',
-          userId: authUser?.id ?? null,
-        },
-      );
-      if (!resp?.ok) {
-        setError(resp?.error ?? 'Unable to join room.');
-        return;
-      }
-      setError('');
-      setActionError('');
-      setJoinedRoom(resp.roomCode);
-      setState(resp.state ?? null);
-      setPlayers(normalizeRoomPlayers(resp.players));
-      setSelectedTile(null);
-      setLegalMoves([]);
-      setCanDraw(false);
-      autoJoinAttemptedRef.current = false;
-      preventAutoRejoinRef.current = false;
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-    } finally {
-      joinInFlightRef.current = false;
-      setPendingUiAction((prev) => (prev === 'join' ? null : prev));
-    }
-  }, [socket, roomCode, authProfile?.username, authUser?.id, showToast]);
-
-  const openLeagueLiveRoom = useCallback(
-    async (code: string) => {
-      const normalizedCode = normalizeRoomCode(code);
-      if (!normalizedCode) {
-        throw new Error('Live room code is invalid.');
-      }
-
-      setRoomCode(normalizedCode);
-      setAppMode('multiplayer');
-      setError('');
-      setActionError('');
-
-      const activeSocket = socketRef.current;
-      if (activeSocket?.connected) {
-        const resp = await emitWithAck<any>(
-          activeSocket,
-          'room:join',
-          normalizedCode,
-          {
-            username: authProfileRef.current?.username ?? 'Guest',
-            userId: authUserRef.current?.id ?? null,
-          },
-        );
-        if (!resp?.ok) {
-          throw new Error(resp?.error ?? 'Unable to join live room.');
-        }
-        setJoinedRoom(resp.roomCode);
-        setState(resp.state ?? null);
-        setPlayers(normalizeRoomPlayers(resp.players));
-        setSelectedTile(null);
-        setLegalMoves([]);
-        setCanDraw(false);
-        autoJoinAttemptedRef.current = false;
-        preventAutoRejoinRef.current = false;
-        return;
-      }
-
-      reconnectRoomCodeRef.current = normalizedCode;
-      reconnectShouldJoinRef.current = true;
-      preventAutoRejoinRef.current = false;
-      autoJoinAttemptedRef.current = false;
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(LAST_ROOM_STORAGE_KEY, normalizedCode);
-      }
-      connectRef.current();
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!socket || !socket.connected || joinedRoom || autoJoinAttemptedRef.current) return;
-    if (inviteJoinInFlightRef.current) return;
-    const linkedCode =
-      typeof window !== 'undefined'
-        ? normalizeRoomCode(new URLSearchParams(window.location.search).get('room'))
-        : '';
-    if (!linkedCode) return;
-    autoJoinAttemptedRef.current = true;
-    setRoomCode(linkedCode);
-    (async () => {
-      try {
-        const resp = await emitWithAck<any>(
-          socket,
-          'room:join',
-          linkedCode,
-          {
-            username: authProfile?.username ?? 'Guest',
-            userId: authUser?.id ?? null,
-          },
-        );
-        if (!resp?.ok) {
-          setError(resp?.error ?? 'Unable to join room from invite link.');
-          return;
-        }
-        setJoinedRoom(resp.roomCode);
-        setState(resp.state ?? null);
-        setPlayers(normalizeRoomPlayers(resp.players));
-        setSelectedTile(null);
-        setLegalMoves([]);
-        setCanDraw(false);
-      } catch (e) {
-        showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-      }
-    })();
-  }, [socket, joinedRoom, authProfile?.username, authUser?.id, showToast]);
-
-  const acceptFriendInvite = useCallback(async () => {
-    if (!socket || !friendInvite) return;
-    if (inviteJoinInFlightRef.current) return;
-    inviteJoinInFlightRef.current = true;
-
-    // If socket exists but isn't connected, wait for connection before joining
-    if (!socket.connected) {
-      try {
-        socket.connect();
-        await new Promise<void>((resolve, reject) => {
-          const timeout = window.setTimeout(() => reject(new Error('Connection timed out')), 15000);
-          socket.once('connect', () => {
-            window.clearTimeout(timeout);
-            resolve();
-          });
-          socket.once('connect_error', () => {
-            window.clearTimeout(timeout);
-            reject(new Error('Connection failed'));
-          });
-        });
-      } catch {
-        showToast('Could not connect to server. Try again.', 2000);
-        inviteJoinInFlightRef.current = false;
-        setPendingUiAction(null);
-        return;
-      }
-    }
-
-    preventAutoRejoinRef.current = true;
-    setPendingUiAction('join');
-    setError('');
-    setActionError('');
-
-    try {
-      const resp = await emitWithAck<any>(
-        socket,
-        'room:join',
-        normalizeRoomCode(friendInvite.roomCode),
-        {
-          username: authProfile?.username ?? 'Guest',
-          userId: authUser?.id ?? null,
-        },
-      );
-      if (!resp?.ok) {
-        throw new Error(resp?.error ?? 'Unable to join room from invite.');
-      }
-
-      setJoinedRoom(resp.roomCode);
-      setRoomCode(resp.roomCode);
-      setState(resp.state ?? null);
-      setPlayers(normalizeRoomPlayers(resp.players));
-      setSelectedTile(null);
-      setLegalMoves([]);
-      setCanDraw(false);
-      setAppMode('multiplayer');
-      setFriendsOpen(false);
-      autoJoinAttemptedRef.current = false;
-      setFriendInvite(null);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-    } finally {
-      inviteJoinInFlightRef.current = false;
-      preventAutoRejoinRef.current = false;
-      setPendingUiAction((prev) => (prev === 'join' ? null : prev));
-    }
-  }, [socket, friendInvite, authProfile?.username, authUser?.id, showToast]);
+  }, [socket, joinedRoom, resetMultiplayerRoomState, resetRoomRecoveryState]);
 
   const startGame = useCallback(async () => {
     setError('');
@@ -2468,6 +1847,7 @@ export default function App() {
   const hasSocialProofData =
     playersOnlineCount !== null && weeklyLeaderHandle !== null && weeklyRank !== null;
   const inGame = Boolean(isConnected && joinedRoom && state);
+  useRenderProfiler(inGame ? 'MultiplayerGameShell' : 'AppNonGame');
   const isSpectatingMatch = Boolean(tournamentId && joinedRoom && state && !state.playerIds.includes(you));
   const isTournamentMatch = Boolean(tournamentId || tournamentState?.status === 'running');
   const spectateRightPlayerId = isSpectatingMatch ? (state?.playerIds?.[1] ?? null) : null;
@@ -2518,6 +1898,22 @@ export default function App() {
             authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : null,
         }
       : null;
+  const boardLegalMoves = useMemo(
+    () => (isMyTurn ? legalMoves : EMPTY_MOVES),
+    [isMyTurn, legalMoves],
+  );
+  const boardSelectedTile = useMemo(
+    () => (isMyTurn ? selectedTile : null),
+    [isMyTurn, selectedTile],
+  );
+  const boardShowOpenEndGlow = useMemo(
+    () => Boolean(isMyTurn && opponentDragging),
+    [isMyTurn, opponentDragging],
+  );
+  const handSelectedTile = useMemo(
+    () => (isMyTurn ? selectedTile : null),
+    [isMyTurn, selectedTile],
+  );
 
   const handleTileTap = useCallback(
     (tile: Tile) => {
@@ -2866,38 +2262,42 @@ export default function App() {
     if (winnerSocketId === you) {
       const canvas = confettiCanvasRef.current;
       if (canvas) {
-        const myConfetti = confetti.create(canvas, { resize: true, useWorker: true });
-        const colors = ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#f59e0b'];
+        void import('canvas-confetti').then(({ default: confetti }) => {
+          const myConfetti = confetti.create(canvas, { resize: true, useWorker: true });
+          const colors = ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff', '#f59e0b'];
 
-        myConfetti({
-          particleCount: 120,
-          spread: 100,
-          origin: { x: 0.5, y: 0.4 },
-          colors,
-          scalar: 1.3,
+          myConfetti({
+            particleCount: 120,
+            spread: 100,
+            origin: { x: 0.5, y: 0.4 },
+            colors,
+            scalar: 1.3,
+          });
+          setTimeout(
+            () =>
+              myConfetti({
+                particleCount: 80,
+                spread: 120,
+                origin: { x: 0.2, y: 0.5 },
+                colors,
+                scalar: 1.1,
+              }),
+            200,
+          );
+          setTimeout(
+            () =>
+              myConfetti({
+                particleCount: 80,
+                spread: 120,
+                origin: { x: 0.8, y: 0.5 },
+                colors,
+                scalar: 1.1,
+              }),
+            400,
+          );
+        }).catch(() => {
+          // Confetti is celebratory only; skip if the chunk fails to load.
         });
-        setTimeout(
-          () =>
-            myConfetti({
-              particleCount: 80,
-              spread: 120,
-              origin: { x: 0.2, y: 0.5 },
-              colors,
-              scalar: 1.1,
-            }),
-          200,
-        );
-        setTimeout(
-          () =>
-            myConfetti({
-              particleCount: 80,
-              spread: 120,
-              origin: { x: 0.8, y: 0.5 },
-              colors,
-              scalar: 1.1,
-            }),
-          400,
-        );
       }
     }
     const loserSocketId = finalState.playerIds.find((pid) => pid !== winnerSocketId) ?? null;
@@ -2978,9 +2378,38 @@ export default function App() {
   if (appMode === 'noBrainer') {
     return (
       <div className={appRootClassName}>
-        <NoBrainerLabScreen
-          onBack={() => setAppMode('home')}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading No Brainer Lab…" />}>
+          <NoBrainerLabScreen
+            onBack={() => setAppMode('home')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'learn' && LEARN_MODE_VISIBLE) {
+    if (selectedLearnLessonId) {
+      return (
+        <div className={appRootClassName}>
+          <Suspense fallback={<ScreenLoader label="Loading Lesson…" />}>
+            <LearnPlayer
+              lessonId={selectedLearnLessonId}
+              onExit={() => {
+                setSelectedLearnLessonId(null);
+              }}
+            />
+          </Suspense>
+        </div>
+      );
+    }
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Learn Mode…" />}>
+          <LearnHome
+            onBack={() => setAppMode('home')}
+            onStartLesson={(id) => setSelectedLearnLessonId(id)}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -2988,14 +2417,16 @@ export default function App() {
   if (appMode === 'botSetup') {
     return (
       <div className={appRootClassName}>
-        <BotSetupScreen
-          dealSize={botDealSize}
-          fritzTier={botFritzTier}
-          onDealSizeChange={setBotDealSize}
-          onFritzTierChange={setBotFritzTier}
-          onStart={() => setAppMode('bot')}
-          onBack={() => setAppMode('home')}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading Fritz Setup…" />}>
+          <BotSetupScreen
+            dealSize={botDealSize}
+            fritzTier={botFritzTier}
+            onDealSizeChange={setBotDealSize}
+            onFritzTierChange={setBotFritzTier}
+            onStart={() => setAppMode('bot')}
+            onBack={() => setAppMode('home')}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -3003,16 +2434,18 @@ export default function App() {
   if (appMode === 'bot') {
     return (
       <div className={appRootClassName}>
-        <BotMatchScreen
-          onBack={() => setAppMode('home')}
-          dealSize={botDealSize}
-          fritzTier={botFritzTier}
-          userId={authUser?.id ?? null}
-          username={authProfile?.username ?? null}
-          currentGlickoRating={authProfile?.glicko_rating ?? null}
-          onProfileRefresh={refreshAuthProfile}
-          onProfilePatch={applyProfilePatch}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
+          <BotMatchScreen
+            onBack={() => setAppMode('home')}
+            dealSize={botDealSize}
+            fritzTier={botFritzTier}
+            userId={authUser?.id ?? null}
+            username={authProfile?.username ?? null}
+            currentGlickoRating={authProfile?.glicko_rating ?? null}
+            onProfileRefresh={refreshAuthProfile}
+            onProfilePatch={applyProfilePatch}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -3020,17 +2453,19 @@ export default function App() {
   if (appMode === 'ghostSetup') {
     return (
       <div className={appRootClassName}>
-        <GhostSetupScreen
-          userId={authUser?.id ?? null}
-          fritzGamesPlayed={authProfile?.ranked_games_played ?? 0}
-          onBack={() => setAppMode('home')}
-          onStart={(summary, opponentName, opponentUserId) => {
-            setGhostProfile(summary);
-            setGhostOpponentName(opponentName);
-            setGhostOpponentUserId(opponentUserId);
-            setAppMode('ghost');
-          }}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading Ghost Setup…" />}>
+          <GhostSetupScreen
+            userId={authUser?.id ?? null}
+            fritzGamesPlayed={authProfile?.ranked_games_played ?? 0}
+            onBack={() => setAppMode('home')}
+            onStart={(summary, opponentName, opponentUserId) => {
+              setGhostProfile(summary);
+              setGhostOpponentName(opponentName);
+              setGhostOpponentUserId(opponentUserId);
+              setAppMode('ghost');
+            }}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -3038,20 +2473,22 @@ export default function App() {
   if (appMode === 'ghost') {
     return (
       <div className={appRootClassName}>
-        <BotMatchScreen
-          onBack={() => setAppMode('home')}
-          dealSize={botDealSize}
-          mode="ghost"
-          userId={authUser?.id ?? null}
-          username={authProfile?.username ?? null}
-          opponentName={ghostOpponentName}
-          opponentUserId={ghostOpponentUserId}
-          currentGlickoRating={authProfile?.glicko_rating ?? null}
-          ghostProfile={ghostProfile}
-          onGhostProfileChange={setGhostProfile}
-          onProfileRefresh={refreshAuthProfile}
-          onProfilePatch={applyProfilePatch}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading Ghost Match…" />}>
+          <BotMatchScreen
+            onBack={() => setAppMode('home')}
+            dealSize={botDealSize}
+            mode="ghost"
+            userId={authUser?.id ?? null}
+            username={authProfile?.username ?? null}
+            opponentName={ghostOpponentName}
+            opponentUserId={ghostOpponentUserId}
+            currentGlickoRating={authProfile?.glicko_rating ?? null}
+            ghostProfile={ghostProfile}
+            onGhostProfileChange={setGhostProfile}
+            onProfileRefresh={refreshAuthProfile}
+            onProfilePatch={applyProfilePatch}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -3059,11 +2496,13 @@ export default function App() {
   if (appMode === 'daily') {
     return (
       <div className={appRootClassName}>
-        <DailyPuzzleScreen
-          user={authUser}
-          profile={authProfile}
-          onBack={() => setAppMode('home')}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle…" />}>
+          <DailyPuzzleScreen
+            user={authUser}
+            profile={authProfile}
+            onBack={() => setAppMode('home')}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -3071,12 +2510,14 @@ export default function App() {
   if (appMode === 'league') {
     return (
       <div className={appRootClassName}>
-        <LeagueScreen
-          user={authUser}
-          profile={authProfile}
-          onBack={() => setAppMode('home')}
-          onOpenLiveMatch={openLeagueLiveRoom}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading League…" />}>
+          <LeagueScreen
+            user={authUser}
+            profile={authProfile}
+            onBack={() => setAppMode('home')}
+            onOpenLiveMatch={openLeagueLiveRoom}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -3084,11 +2525,13 @@ export default function App() {
   if (appMode === 'ratingHistory') {
     return (
       <div className={appRootClassName}>
-        <RatingHistoryPage
-          userId={authUser?.id ?? null}
-          username={authProfile?.username ?? null}
-          onBack={() => setAppMode('home')}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading Rating History…" />}>
+          <RatingHistoryPage
+            userId={authUser?.id ?? null}
+            username={authProfile?.username ?? null}
+            onBack={() => setAppMode('home')}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -3115,6 +2558,19 @@ export default function App() {
               <section className="mode-hub-middle" aria-label="Single player modes">
                 <p className="mode-section-label mode-section-label-practice">Choose Mode</p>
                 <div className="mode-hub-middle-cards single-player-hub-cards">
+                {LEARN_MODE_VISIBLE ? (
+                  <button
+                    className="mode-option mode-option-primary mode-accent-bot"
+                    onClick={() => {
+                      setSelectedLearnLessonId(null);
+                      setAppMode('learn');
+                    }}
+                    style={{ gridColumn: 'span 2', marginBottom: '12px' }}
+                  >
+                    <span className="mode-option-title">Learn Academy</span>
+                    <span className="mode-option-meta">New to dominoes? Learn how to play and win.</span>
+                  </button>
+                ) : null}
                 <button
                   className="mode-option mode-option-secondary mode-accent-bot mode-card-bot"
                   onClick={() => setAppMode('botSetup')}
@@ -3820,75 +3276,68 @@ export default function App() {
           </div>
         </div>
         {welcomeModal}
-        <AuthModal
-          open={authModalOpen}
-          supabaseEnabled={supabaseEnabled}
-          supabaseConfigError={supabaseConfigError}
-          onClose={() => setAuthModalOpen(false)}
-          onSignIn={signIn}
-          onSignUp={signUp}
-          onResetPassword={resetPassword}
-        />
-        <UsernameModal
-          open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
-          currentUsername={authProfile?.username ?? null}
-          onSave={async (username) => {
-            const result = await updateUsername(username);
-            if (!result.error) {
-              window.localStorage.removeItem('username_onboarding_dismissed');
-              setOnboardingDismissed(false);
+        <Suspense fallback={null}>
+          <AuthModal
+            open={authModalOpen}
+            supabaseEnabled={supabaseEnabled}
+            supabaseConfigError={supabaseConfigError}
+            onClose={() => setAuthModalOpen(false)}
+            onSignIn={signIn}
+            onSignUp={signUp}
+            onResetPassword={resetPassword}
+          />
+          <UsernameModal
+            open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
+            currentUsername={authProfile?.username ?? null}
+            onSave={async (username) => {
+              const result = await updateUsername(username);
+              if (!result.error) {
+                window.localStorage.removeItem('username_onboarding_dismissed');
+                setOnboardingDismissed(false);
+                setUsernameModalOpen(false);
+              }
+              return result;
+            }}
+            onClose={() => {
+              window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
+              setOnboardingDismissed(true);
               setUsernameModalOpen(false);
-            }
-            return result;
-          }}
-          onClose={() => {
-            window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
-            setOnboardingDismissed(true);
-            setUsernameModalOpen(false);
-          }}
-          onSignOut={async () => {
-            reconnectShouldJoinRef.current = false;
-            reconnectRoomCodeRef.current = null;
-            preventAutoRejoinRef.current = true;
-            setSigningOut(true);
-            setAppMode('home');
-            setJoinedRoom(null);
-            setState(null);
-            setPlayers([]);
-            setLegalMoves([]);
-            setCanDraw(false);
-            setSelectedTile(null);
-            setHandReveal(null);
-            setScoreTrackOpen(false);
-            setError('');
-            setActionError('');
-            try {
-              void signOut().catch(() => {});
-            } catch {
-              // no-op
-            } finally {
-              setSigningOut(false);
-            }
-          }}
-          signingOut={signingOut}
-        />
-        <StatsScreen
-          open={statsOpen}
-          user={authUser}
-          profile={authProfile}
-          onClose={() => setStatsOpen(false)}
-        />
-        <FriendsScreen
-          open={friendsOpen}
-          user={authUser}
-          socket={socket}
-          joinedRoom={joinedRoom}
-          currentUsername={authProfile?.username ?? ''}
-          showToast={showToast}
-          onCopyInviteLink={copyInviteLink}
-          onCreatePrivateRoom={onCreatePrivateRoom}
-          onClose={() => setFriendsOpen(false)}
-        />
+            }}
+            onSignOut={async () => {
+              resetRoomRecoveryState();
+              setSigningOut(true);
+              setAppMode('home');
+              resetMultiplayerRoomState();
+              setError('');
+              setActionError('');
+              try {
+                void signOut().catch(() => {});
+              } catch {
+                // no-op
+              } finally {
+                setSigningOut(false);
+              }
+            }}
+            signingOut={signingOut}
+          />
+          <StatsScreen
+            open={statsOpen}
+            user={authUser}
+            profile={authProfile}
+            onClose={() => setStatsOpen(false)}
+          />
+          <FriendsScreen
+            open={friendsOpen}
+            user={authUser}
+            socket={socket}
+            joinedRoom={joinedRoom}
+            currentUsername={authProfile?.username ?? ''}
+            showToast={showToast}
+            onCopyInviteLink={copyInviteLink}
+            onCreatePrivateRoom={onCreatePrivateRoom}
+            onClose={() => setFriendsOpen(false)}
+          />
+        </Suspense>
         <WeeklyStatsScreen
           open={weeklyStatsOpen}
           onClose={() => setWeeklyStatsOpen(false)}
@@ -4051,6 +3500,26 @@ export default function App() {
                 <span className="mode-option-meta">Begin the live multiplayer hand</span>
               </button>
             )}
+            {roomRecoveryState !== 'idle' && (
+              <div className="mode-option mode-option-secondary" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">
+                  {roomRecoveryState === 'reconnecting'
+                    ? 'Reconnecting…'
+                    : roomRecoveryState === 'resyncing'
+                      ? 'Syncing room…'
+                      : 'Reconnect Failed'}
+                </span>
+                <span className="mode-option-meta">
+                  {roomRecoveryMessage || 'Restoring your room session.'}
+                </span>
+              </div>
+            )}
+            {roomRecoveryState === 'failed' && (
+              <button className="mode-option mode-option-primary mode-accent-multiplayer" onClick={retryRoomRecovery}>
+                <span className="mode-option-title">Retry Reconnect</span>
+                <span className="mode-option-meta">Attempt to restore this room session</span>
+              </button>
+            )}
             <button className="mode-option mode-option-secondary multiplayer-copy-cta" onClick={copyInviteLink}>
               <span className="mode-option-title">Copy Invite Link</span>
               <span className="mode-option-meta">Share one-tap room join with friends</span>
@@ -4066,7 +3535,7 @@ export default function App() {
       {/* Game Screen */}
       {(isConnected || isRecoveringConnection) && joinedRoom && state && (
         <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
-          {isRecoveringConnection && (
+          {roomRecoveryState !== 'idle' && (
             <div
               style={{
                 position: 'fixed',
@@ -4081,9 +3550,38 @@ export default function App() {
                 color: 'rgba(232,245,240,0.95)',
                 fontSize: '0.84rem',
                 fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
               }}
             >
-              Reconnecting…
+              <span>
+                {roomRecoveryState === 'reconnecting'
+                  ? 'Reconnecting…'
+                  : roomRecoveryState === 'resyncing'
+                    ? 'Syncing room…'
+                    : 'Reconnect failed'}
+              </span>
+              {roomRecoveryMessage && roomRecoveryState !== 'reconnecting' && (
+                <span style={{ fontWeight: 500, opacity: 0.9 }}>{roomRecoveryMessage}</span>
+              )}
+              {roomRecoveryState === 'failed' && (
+                <button
+                  onClick={retryRoomRecovery}
+                  style={{
+                    border: '1px solid rgba(236,252,245,0.24)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: 'inherit',
+                    borderRadius: 999,
+                    padding: '4px 10px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Retry
+                </button>
+              )}
             </div>
           )}
           <ScoreTrackOverlay
@@ -4528,13 +4026,13 @@ export default function App() {
                 </button>
               </div>
               <Board
-                board={state.board}
-                legalMoves={isMyTurn ? legalMoves : []}
-                selectedTile={isMyTurn ? selectedTile : null}
+                board={state?.board ?? null}
+                legalMoves={boardLegalMoves}
+                selectedTile={boardSelectedTile}
                 lastPlayedTile={lastPlayedTile}
                 onPositionClick={play}
                 tileSize={72}
-                showOpenEndGlow={isMyTurn && opponentDragging}
+                showOpenEndGlow={boardShowOpenEndGlow}
               />
               {flyingTiles.map((ft) => (
                 <div
@@ -4558,7 +4056,7 @@ export default function App() {
               <div className="tray-center" ref={trayCenterRef}>
                 <HandView
                   hand={myHand}
-                  selectedTile={isMyTurn ? selectedTile : null}
+                  selectedTile={handSelectedTile}
                   onSelect={handleTileTap}
                   isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
                   legalMoves={legalMoves}
@@ -4573,12 +4071,14 @@ export default function App() {
           </div>
         </div>
       )}
-      <GameReviewer
-        open={analyzerOpen}
-        onClose={() => setAnalyzerOpen(false)}
-        analysis={currentAnalysis}
-        title="Game Review"
-      />
+      <Suspense fallback={null}>
+        <GameReviewer
+          open={analyzerOpen}
+          onClose={() => setAnalyzerOpen(false)}
+          analysis={currentAnalysis}
+          title="Game Review"
+        />
+      </Suspense>
       {showLeaveConfirm && (
         <div
           role="dialog"

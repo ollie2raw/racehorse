@@ -71,7 +71,7 @@ function tileEquals(a: Tile, b: Tile): boolean {
   return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
-function isDouble(tile: Tile): boolean {
+export function isDouble(tile: Tile): boolean {
   return tile.high === tile.low;
 }
 
@@ -410,7 +410,7 @@ function placeTileOnBranch(
   };
 }
 
-function simulatePlacement(
+export function simulatePlacement(
   board: BoardState | null,
   tile: Tile,
   position: PlacementPosition,

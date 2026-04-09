@@ -5,7 +5,7 @@ import { fetchGhostProfileSummary, fetchGhostProfileSummaryByUsername } from './
 import { fetchFriends, type FriendRecord } from '../friends/friendsApi';
 import './ghostMode.css';
 
-const UNLOCK_THRESHOLD = 0;
+const UNLOCK_THRESHOLD = 5;
 const TRAINED_THRESHOLD = 30;
 const FULL_LABEL_THRESHOLD = 15;
 const FEATURED_GHOST_USERNAME = 'oliver';
@@ -59,10 +59,10 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
   const [featuredUsername, setFeaturedUsername] = useState<string>(FEATURED_GHOST_USERNAME);
 
   const tier = ghostTier(fritzGamesPlayed);
-  const isLocked = false;
-  const progressPct = Math.min(100, (fritzGamesPlayed / 5) * 100);
   const isViewingOwnGhost = selectedUserId === userId;
-  const canPlay = true;
+  const isLocked = isViewingOwnGhost && fritzGamesPlayed < UNLOCK_THRESHOLD;
+  const progressPct = Math.min(100, (fritzGamesPlayed / UNLOCK_THRESHOLD) * 100);
+  const canPlay = Boolean(summary) && !loading && !isLocked;
 
   useEffect(() => {
     let active = true;
@@ -182,7 +182,9 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
               </div>
             </div>
             <div className="ghost-explainer-callout">
-              {tier === 'trained'
+              {isLocked
+                  ? `${gamesToUnlock} more Fritz ${gamesToUnlock === 1 ? 'game' : 'games'} until your ghost unlocks`
+                  : tier === 'trained'
                   ? `Your ghost is trained and ready`
                   : `${gamesToTrained} more Fritz ${gamesToTrained === 1 ? 'game' : 'games'} until your ghost is fully trained`}
             </div>
@@ -221,7 +223,7 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
             <div className="ghost-setup-panel">
               {tier === 'early' && isViewingOwnGhost && (
                 <div className="ghost-tier-badge ghost-tier-badge--early">
-                  ⚡ Early Ghost — still learning ({fritzGamesPlayed}/{FULL_LABEL_THRESHOLD} games)
+                  ⚡ Early Ghost — still learning ({fritzGamesPlayed}/{UNLOCK_THRESHOLD} games to unlock)
                 </div>
               )}
               {tier === 'trained' && isViewingOwnGhost && (
@@ -328,12 +330,14 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
             <button
               className="mode-option mode-option-primary mode-accent-ghost ghost-setup-start"
               onClick={() => summary && onStart(summary, selectedUsername, selectedUserId)}
-              disabled={!summary}
+              disabled={!canPlay}
             >
               <span className="mode-option-title">Play Ghost</span>
               <span className="mode-option-meta">
                 {!userId
                   ? 'Sign in to unlock this mode'
+                  : isLocked
+                    ? `Unlocks after ${UNLOCK_THRESHOLD} Fritz games`
                   : loading
                     ? 'Loading ghost profile…'
                     : summary

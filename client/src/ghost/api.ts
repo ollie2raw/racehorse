@@ -163,9 +163,23 @@ export async function fetchGhostProfileSummaryByUsername(
   };
 }
 
+export async function startGhostMatchSession(params: {
+  userId: string;
+  localMatchId: string;
+  opponentUserId?: string | null;
+}): Promise<{ matchId: string }> {
+  const response = await requestJson<{ ok: true; matchId: string }>('/api/ghost/start', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return { matchId: response.matchId };
+}
+
 export async function completeGhostGame(params: {
+  matchId: string;
   userId: string;
   opponentUserId?: string | null;
+  localMatchId?: string | null;
   finalScore: number;
   opponentScore: number;
   moveLog: GhostMoveLogEntry[];

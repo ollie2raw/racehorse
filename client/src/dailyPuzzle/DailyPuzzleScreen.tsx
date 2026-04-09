@@ -199,11 +199,11 @@ function recordSolvedStreak(dateKey: string): number {
 
 function getDisplayStreak(todayDateKey: string): number {
   const streak = readStreak();
-  if (!streak.lastCompletedDate || streak.currentStreak <= 0) return 1;
+  if (!streak.lastCompletedDate || streak.currentStreak <= 0) return 0;
   const dayDiff = diffLocalCalendarDays(streak.lastCompletedDate, todayDateKey);
-  if (dayDiff === null) return Math.max(1, streak.currentStreak);
-  if (dayDiff <= 1) return Math.max(1, streak.currentStreak);
-  return 1;
+  if (dayDiff === null) return Math.max(0, streak.currentStreak);
+  if (dayDiff <= 1) return Math.max(0, streak.currentStreak);
+  return 0;
 }
 
 function getDisplayName(username: string | null | undefined): string {
@@ -283,7 +283,7 @@ export default function DailyPuzzleScreen({
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [handTileSize, setHandTileSize] = useState(56);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
-  const [streakDays, setStreakDays] = useState(1);
+  const [streakDays, setStreakDays] = useState(0);
   const [bestPossibleScore, setBestPossibleScore] = useState(0);
   const [runtimeState, setRuntimeState] = useState<BotMatchState | null>(null);
   const [runtimeInitError, setRuntimeInitError] = useState<string | null>(null);

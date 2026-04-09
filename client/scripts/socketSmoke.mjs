@@ -1,0 +1,522 @@
+import { io } from 'socket.io-client';
+
+const SERVER_URL = process.env.SMOKE_SERVER_URL || 'http://127.0.0.1:3001';
+const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
+const REPEAT_COUNT = Math.max(1, Number(process.env.SMOKE_REPEAT || 1));
+const SETTLE_MS = Math.max(50, Number(process.env.SMOKE_SETTLE_MS || 250));
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function onceWithTimeout(socket, event, predicate = () => true, timeoutMs = TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off(event, handler);
+      reject(new Error(`Timed out waiting for ${event}`));
+    }, timeoutMs);
+
+    const handler = (payload) => {
+      try {
+        if (!predicate(payload)) return;
+        clearTimeout(timer);
+        socket.off(event, handler);
+        resolve(payload);
+      } catch (error) {
+        clearTimeout(timer);
+        socket.off(event, handler);
+        reject(error);
+      }
+    };
+
+    socket.on(event, handler);
+  });
+}
+
+async function emitAck(socket, event, ...args) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${event} ack timeout`)), TIMEOUT_MS);
+    socket.emit(event, ...args, (resp) => {
+      clearTimeout(timer);
+      resolve(resp);
+    });
+  });
+}
+
+function createClient(label, userId, username) {
+  const socket = io(SERVER_URL, {
+    transports: ['websocket'],
+    timeout: TIMEOUT_MS,
+    reconnection: false,
+    autoConnect: false,
+  });
+
+  const state = {
+    label,
+    userId,
+    username,
+    roomUpdates: [],
+    stateUpdates: [],
+    spectateUpdates: [],
+    connectErrors: [],
+  };
+
+  socket.on('room:update', (payload) => state.roomUpdates.push(payload));
+  socket.on('state:update', (payload) => state.stateUpdates.push(payload));
+  socket.on('state:spectate', (payload) => state.spectateUpdates.push(payload));
+  socket.on('connect_error', (error) => state.connectErrors.push(error?.message || String(error)));
+
+  async function connectAndIdentify() {
+    if (!socket.connected) {
+      let connected = false;
+      let lastError = null;
+      for (let attempt = 0; attempt < 3 && !connected; attempt += 1) {
+        try {
+          const waitForConnect = onceWithTimeout(socket, 'connect', () => true, TIMEOUT_MS);
+          socket.connect();
+          await waitForConnect;
+          connected = true;
+        } catch (error) {
+          lastError = error;
+          socket.disconnect();
+          await delay(100 * (attempt + 1));
+        }
+      }
+      if (!connected) {
+        throw lastError instanceof Error ? lastError : new Error(`${label} failed to connect`);
+      }
+    }
+    const resp = await emitAck(socket, 'presence:identify', { userId, username });
+    assert(resp?.ok, `${label} failed presence:identify`);
+  }
+
+  function disconnect() {
+    if (socket.connected) {
+      socket.disconnect();
+    }
+  }
+
+  return { socket, state, connectAndIdentify, disconnect };
+}
+
+async function withClients(definitions, run) {
+  const clients = definitions.map((def) => createClient(def.label, def.userId, def.username));
+  try {
+    for (const client of clients) {
+      await client.connectAndIdentify();
+    }
+    const namedClients = Object.fromEntries(clients.map((client) => [client.state.label, client]));
+    return await run(namedClients);
+  } finally {
+    for (const client of clients) {
+      client.disconnect();
+    }
+    await delay(100);
+  }
+}
+
+function latestRoomUpdate(client) {
+  return client.state.roomUpdates[client.state.roomUpdates.length - 1] ?? null;
+}
+
+function latestRoomCount(client) {
+  const last = latestRoomUpdate(client);
+  return Array.isArray(last?.players) ? last.players.length : null;
+}
+
+function latestState(client, type = 'state:update') {
+  const list = type === 'state:spectate' ? client.state.spectateUpdates : client.state.stateUpdates;
+  return list[list.length - 1] ?? null;
+}
+
+async function waitForStateCount(client, minimumCount, type = 'state:update') {
+  if (type === 'state:update' && client.state.stateUpdates.length >= minimumCount) {
+    return latestState(client, type);
+  }
+  if (type === 'state:spectate' && client.state.spectateUpdates.length >= minimumCount) {
+    return latestState(client, type);
+  }
+  return onceWithTimeout(
+    client.socket,
+    type,
+    () =>
+      type === 'state:update'
+        ? client.state.stateUpdates.length >= minimumCount
+        : client.state.spectateUpdates.length >= minimumCount,
+  );
+}
+
+async function waitForRoomCount(client, expectedCount, timeoutMs = TIMEOUT_MS) {
+  if (latestRoomCount(client) === expectedCount) {
+    return latestRoomUpdate(client);
+  }
+  return onceWithTimeout(
+    client.socket,
+    'room:update',
+    (payload) => Array.isArray(payload?.players) && payload.players.length === expectedCount,
+    timeoutMs,
+  );
+}
+
+function getPlayableMove(client) {
+  const state = latestState(client);
+  const legalMoves = Array.isArray(state?.legalMoves) ? state.legalMoves : [];
+  return legalMoves.find((move) => move?.type === 'play' && move?.tile && move?.position) ?? null;
+}
+
+function getActivePlayer(clients) {
+  return clients.find((client) => getPlayableMove(client));
+}
+
+function getInactivePlayer(clients) {
+  return clients.find((client) => !getPlayableMove(client));
+}
+
+async function startTwoPlayerGame(alpha, bravo, roomCode) {
+  const alphaStateCountBeforeStart = alpha.state.stateUpdates.length;
+  const bravoStateCountBeforeStart = bravo.state.stateUpdates.length;
+  const startResp = await emitAck(alpha.socket, 'game:start', roomCode);
+  assert(startResp?.ok, `game:start failed: ${startResp?.error ?? 'unknown'}`);
+  const [alphaGameState, bravoGameState] = await Promise.all([
+    waitForStateCount(alpha, alphaStateCountBeforeStart + 1, 'state:update'),
+    waitForStateCount(bravo, bravoStateCountBeforeStart + 1, 'state:update'),
+  ]);
+  assert(alphaGameState?.state, 'alpha did not receive initial game state');
+  assert(bravoGameState?.state, 'bravo did not receive initial game state');
+}
+
+async function scenarioLifecycleReconnect() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'smoke-user-a', username: 'SmokeA' },
+      { label: 'bravo', userId: 'smoke-user-b', username: 'SmokeB' },
+      { label: 'spectator', userId: 'smoke-user-s', username: 'SmokeS' },
+    ],
+    async ({ alpha, bravo, spectator }) => {
+      const createResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+      });
+      assert(createResp?.ok, 'alpha failed to create room');
+      const roomCode = createResp.roomCode;
+      assert(roomCode, 'missing room code from create');
+
+      const bravoJoin = await emitAck(
+        bravo.socket,
+        'room:join',
+        roomCode,
+        { username: bravo.state.username, userId: bravo.state.userId },
+      );
+      assert(bravoJoin?.ok, 'bravo failed to join room');
+      await waitForRoomCount(alpha, 2);
+
+      const leaveResp = await emitAck(bravo.socket, 'room:leave', roomCode);
+      assert(leaveResp?.ok, 'bravo leave ack failed');
+      await waitForRoomCount(alpha, 1);
+
+      const bravoRejoin = await emitAck(
+        bravo.socket,
+        'room:join',
+        roomCode,
+        { username: bravo.state.username, userId: bravo.state.userId },
+      );
+      assert(bravoRejoin?.ok, 'bravo failed to rejoin after leave');
+      await waitForRoomCount(alpha, 2);
+
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      const spectateResp = await emitAck(
+        spectator.socket,
+        'room:spectate',
+        roomCode,
+        { username: spectator.state.username, userId: spectator.state.userId },
+      );
+      assert(spectateResp?.ok, 'spectator failed to spectate room');
+      const initialSpectatorState = latestState(spectator);
+      assert(initialSpectatorState?.state, 'spectator did not receive initial state snapshot');
+
+      const currentFor = getActivePlayer([alpha, bravo]);
+      assert(currentFor, 'could not identify active player');
+      const playMove = getPlayableMove(currentFor);
+      assert(playMove, 'no playable move found for active player');
+
+      const preSpectateCount = spectator.state.spectateUpdates.length;
+      const moveResp = await emitAck(currentFor.socket, 'game:action', roomCode, {
+        type: 'MOVE',
+        move: {
+          tile: playMove.tile,
+          position: playMove.position,
+        },
+      });
+      assert(moveResp?.ok, `game:action failed: ${moveResp?.error ?? 'unknown'}`);
+      await waitForStateCount(spectator, preSpectateCount + 1, 'state:spectate');
+
+      const bravoDisconnectedStateCount = bravo.state.stateUpdates.length;
+      bravo.disconnect();
+      await delay(250);
+
+      const bravoReconnect = createClient('bravoReconnect', 'smoke-user-b', 'SmokeB');
+      try {
+        await bravoReconnect.connectAndIdentify();
+        const rejoinResp = await emitAck(
+          bravoReconnect.socket,
+          'room:join',
+          roomCode,
+          { username: bravoReconnect.state.username, userId: bravoReconnect.state.userId },
+        );
+        assert(rejoinResp?.ok, `rejoin after disconnect failed: ${rejoinResp?.error ?? 'unknown'}`);
+        assert(rejoinResp.you === bravoReconnect.socket.id, 'rejoined socket id mismatch');
+        assert(
+          Array.isArray(rejoinResp.players) && rejoinResp.players.length === 2,
+          'room did not remain at 2 players after reconnect',
+        );
+        assert(Array.isArray(rejoinResp.legalMoves), 'rejoin response missing legalMoves');
+        assert(typeof rejoinResp.canDraw === 'boolean', 'rejoin response missing canDraw');
+
+        await waitForRoomCount(alpha, 2);
+        const latestAlphaRoster = latestRoomUpdate(alpha);
+        assert(
+          Array.isArray(latestAlphaRoster?.players) &&
+            latestAlphaRoster.players.some((player) => player.id === bravoReconnect.socket.id),
+          'alpha roster did not migrate to bravo reconnect socket',
+        );
+        assert(
+          alpha.state.stateUpdates.length > 0 && spectator.state.spectateUpdates.length > 0,
+          'expected ongoing state updates during lifecycle scenario',
+        );
+
+        return {
+          roomCode,
+          checks: {
+            createJoin: true,
+            leaveRejoin: true,
+            startGame: true,
+            spectateUpdates: spectator.state.spectateUpdates.length > 0,
+            reconnectMigration: true,
+            bravoStateUpdatesBeforeDisconnect: bravoDisconnectedStateCount,
+          },
+        };
+      } finally {
+        bravoReconnect.disconnect();
+      }
+    },
+  );
+}
+
+async function scenarioRoomSwitchCleanup() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'switch-user-a', username: 'SwitchA' },
+      { label: 'bravo', userId: 'switch-user-b', username: 'SwitchB' },
+    ],
+    async ({ alpha, bravo }) => {
+      const roomOneResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+      });
+      assert(roomOneResp?.ok, 'alpha failed to create room one');
+      const roomOne = roomOneResp.roomCode;
+      assert(roomOne, 'missing room one code');
+
+      const joinRoomOne = await emitAck(
+        bravo.socket,
+        'room:join',
+        roomOne,
+        { username: bravo.state.username, userId: bravo.state.userId },
+      );
+      assert(joinRoomOne?.ok, 'bravo failed to join room one');
+      await waitForRoomCount(alpha, 2);
+
+      const roomTwoResp = await emitAck(bravo.socket, 'room:create', {
+        username: bravo.state.username,
+        userId: bravo.state.userId,
+      });
+      assert(roomTwoResp?.ok, 'bravo failed to create room two');
+      const roomTwo = roomTwoResp.roomCode;
+      assert(roomTwo && roomTwo !== roomOne, 'room two code missing or duplicated');
+
+      await waitForRoomCount(alpha, 1);
+      const alphaRoster = latestRoomUpdate(alpha);
+      assert(
+        Array.isArray(alphaRoster?.players) &&
+          alphaRoster.players.every((player) => player.userId !== bravo.state.userId),
+        'room one still contains bravo after room switch',
+      );
+
+      const alphaCreateSecondRoom = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+      });
+      assert(alphaCreateSecondRoom?.ok, 'alpha failed to leave room one by creating room three');
+      const roomThree = alphaCreateSecondRoom.roomCode;
+      assert(roomThree && roomThree !== roomOne && roomThree !== roomTwo, 'room three code invalid');
+
+      const bravoJoinRoomThree = await emitAck(
+        bravo.socket,
+        'room:join',
+        roomThree,
+        { username: bravo.state.username, userId: bravo.state.userId },
+      );
+      assert(bravoJoinRoomThree?.ok, 'bravo failed to join alpha after room switch');
+      await waitForRoomCount(alpha, 2);
+
+      return {
+        roomOne,
+        roomTwo,
+        roomThree,
+        checks: {
+          roomSwitchRemovedGhostSeat: true,
+          createMovesSocketBetweenRooms: true,
+        },
+      };
+    },
+  );
+}
+
+async function scenarioSeatMigrationAndSpectatorRejection() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'migrate-user-a', username: 'MigrateA' },
+      { label: 'bravo', userId: 'migrate-user-b', username: 'MigrateB' },
+      { label: 'spectator', userId: 'migrate-user-s', username: 'MigrateS' },
+    ],
+    async ({ alpha, bravo, spectator }) => {
+      const createResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+      });
+      assert(createResp?.ok, 'alpha failed to create room');
+      const roomCode = createResp.roomCode;
+      assert(roomCode, 'missing room code');
+
+      const joinResp = await emitAck(
+        bravo.socket,
+        'room:join',
+        roomCode,
+        { username: bravo.state.username, userId: bravo.state.userId },
+      );
+      assert(joinResp?.ok, 'bravo failed to join');
+      await waitForRoomCount(alpha, 2);
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      const spectatorJoin = await emitAck(
+        spectator.socket,
+        'room:spectate',
+        roomCode,
+        { username: spectator.state.username, userId: spectator.state.userId },
+      );
+      assert(spectatorJoin?.ok, 'spectator failed to join as spectator');
+
+      const spectatorAction = await emitAck(spectator.socket, 'game:action', roomCode, {
+        type: 'MOVE',
+        move: { tile: { low: 0, high: 0 }, position: 'left' },
+      });
+      assert(
+        spectatorAction?.ok === false && /spectators cannot act/i.test(String(spectatorAction?.error ?? '')),
+        'spectator action was not rejected',
+      );
+
+      const bravoClone = createClient('bravoClone', 'migrate-user-b', 'MigrateB');
+      try {
+        await bravoClone.connectAndIdentify();
+        const migrateResp = await emitAck(
+          bravoClone.socket,
+          'room:join',
+          roomCode,
+          { username: bravoClone.state.username, userId: bravoClone.state.userId },
+        );
+        assert(migrateResp?.ok, `same-user seat migration failed: ${migrateResp?.error ?? 'unknown'}`);
+        assert(migrateResp.you === bravoClone.socket.id, 'migration did not bind new socket id');
+
+        await waitForRoomCount(alpha, 2);
+        const alphaRoster = latestRoomUpdate(alpha);
+        assert(
+          Array.isArray(alphaRoster?.players) &&
+            alphaRoster.players.some((player) => player.id === bravoClone.socket.id) &&
+            alphaRoster.players.every((player) => player.id !== bravo.socket.id),
+          'room roster did not replace old bravo socket id during migration',
+        );
+
+        const staleAction = await emitAck(bravo.socket, 'game:action', roomCode, {
+          type: 'MOVE',
+          move: { tile: { low: 0, high: 0 }, position: 'left' },
+        });
+        assert(
+          staleAction?.ok === false && /spectators cannot act/i.test(String(staleAction?.error ?? '')),
+          'stale migrated socket was still allowed to act',
+        );
+
+        const activeClient = getActivePlayer([alpha, bravoClone]);
+        const inactiveClient = getInactivePlayer([alpha, bravoClone]);
+        assert(activeClient && inactiveClient, 'could not identify active/inactive players after migration');
+        const inactiveMove = getPlayableMove(inactiveClient);
+        assert(!inactiveMove, 'inactive player unexpectedly had a playable move payload');
+
+        return {
+          roomCode,
+          checks: {
+            spectatorRejected: true,
+            seatMigrationReplacedOldSocket: true,
+            staleSocketRejected: true,
+          },
+        };
+      } finally {
+        bravoClone.disconnect();
+      }
+    },
+  );
+}
+
+const scenarios = [
+  { name: 'lifecycle-reconnect', run: scenarioLifecycleReconnect },
+  { name: 'room-switch-cleanup', run: scenarioRoomSwitchCleanup },
+  { name: 'seat-migration-and-spectator-rejection', run: scenarioSeatMigrationAndSpectatorRejection },
+];
+
+async function main() {
+  const results = [];
+  for (let iteration = 1; iteration <= REPEAT_COUNT; iteration += 1) {
+    for (const scenario of scenarios) {
+      const startedAt = Date.now();
+      let result;
+      try {
+        result = await scenario.run();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`[${scenario.name}][iteration ${iteration}] ${detail}`);
+      }
+      results.push({
+        iteration,
+        scenario: scenario.name,
+        durationMs: Date.now() - startedAt,
+        ...result,
+      });
+      await delay(SETTLE_MS);
+    }
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        serverUrl: SERVER_URL,
+        repeatCount: REPEAT_COUNT,
+        settleMs: SETTLE_MS,
+        scenarios: results,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+main().catch((error) => {
+  console.error('[socketSmoke] FAILED', error instanceof Error ? error.stack || error.message : error);
+  process.exit(1);
+});

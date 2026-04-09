@@ -27,7 +27,7 @@ export const FRITZ_TIERS = {
   elite: {
     id: FRITZ_ELITE_ID,
     label: 'Elite',
-    ratingLabel: '1600',
+    ratingLabel: '1800',
     description: 'Maximum strength. Unforgiving.',
     subdescription: 'The original Fritz.' as string | undefined,
     difficulty: 'hard' as const,
@@ -36,7 +36,7 @@ export const FRITZ_TIERS = {
   master: {
     id: FRITZ_MASTER_ID,
     label: 'Master',
-    ratingLabel: '2000',
+    ratingLabel: '2200',
     description: 'Sampled endgame search. No mercy.',
     subdescription: undefined as string | undefined,
     difficulty: 'master' as const,

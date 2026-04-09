@@ -371,6 +371,7 @@ function buildAnalysisState(board: BoardState | null, hand: Tile[]): GameState {
     gameOver: false,
     winnerId: null,
     consecutivePasses: 0,
+    sequence: 0,
   };
 }
 

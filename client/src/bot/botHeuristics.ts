@@ -1307,7 +1307,45 @@ function endgameDepth(totalTiles: number): number {
   return 6; // 7-8 tiles
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+export function evaluateMove(
+  inputState: BotVisibleState | BotMatchState,
+  move: Move,
+  difficulty: BotDifficulty = 'hard'
+): BotChoice | null {
+  const state = asVisibleState(inputState);
+  const p = previewPlayMove(state, state.currentPlayer, move);
+  if (!p || !move.tile) return null;
+
+  const pool = buildUnseenPool(state);
+  const missing = inferMissingPips(state);
+  const weights = opponentHoldWeights(pool, missing);
+
+  const strategic = evaluateStrategicMove(state, move, weights);
+  const mc = mcEvaluateMove(
+    move,
+    state,
+    pool,
+    weights,
+    difficulty === 'master' ? 20 : MC_SAMPLES,
+    difficulty,
+  );
+
+  return {
+    move,
+    score: strategic.score + mc * 0.35,
+    explanation: explainStrategicMove(move, strategic),
+    breakdown: {
+      immediate: p.immediateScore,
+      doubleBias: isDoubleTile(move.tile) ? 1 : 0,
+      mobility: strategic.playableNext,
+      denial: -opponentThreat(p.openEnds, p.openSum, weights),
+      unload: move.tile.low + move.tile.high,
+      replyRisk: opponentThreat(p.openEnds, p.openSum, weights),
+    },
+  };
+}
+
+// ─── Public API ───────────────────────────────────────────────
 
 export function chooseBotMove(
   inputState: BotVisibleState | BotMatchState,

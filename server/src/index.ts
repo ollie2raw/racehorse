@@ -1,6 +1,7 @@
 import express from 'express';
 import cors, { type CorsOptions } from 'cors';
 import http from 'http';
+import { createHash, randomUUID } from 'crypto';
 import { Server, Socket } from 'socket.io';
 import {
   completeGhostGame,
@@ -57,8 +58,11 @@ import {
   deleteRoom,
   getRoomLegalMoves,
   getRoomCanDraw,
+  getRoomMatchEventMeta,
+  getRoomMatchEventSnapshot,
   type Room,
 } from './rooms';
+import { appendRoomEvent, resetRoomEventLog } from './roomEvents';
 
 const allowedOriginPatterns = [
   /^http:\/\/localhost(?::\d+)?$/i,
@@ -282,35 +286,174 @@ app.get('/api/ghost/profile-by-username/:username', async (req, res) => {
 
 app.post('/api/ghost/complete', async (req, res) => {
   const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+  const matchId =
+    typeof req.body?.matchId === 'string' && req.body.matchId.trim() ? req.body.matchId.trim() : '';
   const opponentUserId =
     typeof req.body?.opponentUserId === 'string' && req.body.opponentUserId.trim()
       ? req.body.opponentUserId.trim()
       : null;
+  const localMatchId =
+    typeof req.body?.localMatchId === 'string' && req.body.localMatchId.trim()
+      ? req.body.localMatchId.trim()
+      : null;
   const finalScore = Number(req.body?.finalScore);
   const opponentScore = Number(req.body?.opponentScore);
   const moveLog = Array.isArray(req.body?.moveLog) ? req.body.moveLog : null;
+  const playerMoveLog = Array.isArray(req.body?.playerMoveLog) ? req.body.playerMoveLog : undefined;
 
   if (!userId) {
     res.status(400).json({ error: 'userId is required.' });
+    return;
+  }
+  if (!matchId) {
+    res.status(400).json({ error: 'matchId is required.' });
     return;
   }
   if (!Number.isFinite(finalScore) || !Number.isFinite(opponentScore)) {
     res.status(400).json({ error: 'finalScore and opponentScore are required.' });
     return;
   }
-  if (!moveLog) {
+  if (
+    !Number.isInteger(finalScore) ||
+    !Number.isInteger(opponentScore) ||
+    finalScore < 0 ||
+    opponentScore < 0 ||
+    finalScore > 200 ||
+    opponentScore > 200
+  ) {
+    res.status(400).json({ error: 'Scores must be integers between 0 and 200.' });
+    return;
+  }
+  if (!moveLog || !isSafeGhostMoveLog(moveLog)) {
     res.status(400).json({ error: 'moveLog is required.' });
     return;
   }
+  if (playerMoveLog && !isSafeGhostMoveLog(playerMoveLog)) {
+    res.status(400).json({ error: 'playerMoveLog is invalid.' });
+    return;
+  }
+  if (opponentUserId && opponentUserId === userId) {
+    res.status(400).json({ error: 'opponentUserId must refer to another player.' });
+    return;
+  }
+  if (localMatchId && localMatchId.length > 128) {
+    res.status(400).json({ error: 'localMatchId is invalid.' });
+    return;
+  }
+  const safeMoveLog = moveLog as import('./ghost/service').GhostMoveLogEntry[];
+  const safePlayerMoveLog = playerMoveLog as import('./ghost/service').GhostMoveLogEntry[] | undefined;
+  const isFritzMatch = Boolean(opponentUserId && isFritzId(opponentUserId));
+  const trainingMoveLog =
+    isFritzMatch && safePlayerMoveLog && safePlayerMoveLog.length > 0 ? safePlayerMoveLog : safeMoveLog;
+  const playerScoredPoints = trainingMoveLog.reduce(
+    (sum, entry) => sum + Math.max(0, Number(entry.score_delta ?? 0)),
+    0,
+  );
+  if (playerScoredPoints > finalScore) {
+    res.status(400).json({ error: 'player scoring log exceeds finalScore.' });
+    return;
+  }
+  if (isFritzMatch && (!safePlayerMoveLog || safePlayerMoveLog.length === 0)) {
+    res.status(400).json({ error: 'playerMoveLog is required for Fritz matches.' });
+    return;
+  }
+  if (!isFritzMatch) {
+    const opponentScoredPoints = safeMoveLog
+      .filter((entry) => entry.actor === 'ghost')
+      .reduce((sum, entry) => sum + Math.max(0, Number(entry.score_delta ?? 0)), 0);
+    if (opponentScoredPoints > opponentScore) {
+      res.status(400).json({ error: 'ghost scoring log exceeds opponentScore.' });
+      return;
+    }
+  }
 
   try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const verifiedMatch = await getVerifiedSinglePlayerMatch(matchId);
+    if (!verifiedMatch) {
+      res.status(404).json({ error: 'Verified match not found.' });
+      return;
+    }
+    if (verifiedMatch.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    if (verifiedMatch.localMatchId !== (localMatchId ?? verifiedMatch.localMatchId)) {
+      res.status(409).json({ error: 'localMatchId does not match verified session.' });
+      return;
+    }
+    if (verifiedMatch.opponentUserId !== opponentUserId) {
+      res.status(409).json({ error: 'opponentUserId does not match verified session.' });
+      return;
+    }
+    if (verifiedMatch.mode !== (isFritzMatch ? 'fritz' : 'ghost')) {
+      res.status(409).json({ error: 'verified session mode mismatch.' });
+      return;
+    }
+    const completionHash = buildGhostCompletionHash({
+      userId,
+      localMatchId,
+      matchId,
+      opponentUserId,
+      finalScore,
+      opponentScore,
+      moveLog: safeMoveLog,
+      playerMoveLog: safePlayerMoveLog,
+    });
+    if (verifiedMatch.status === 'completed') {
+      if (verifiedMatch.completionHash === completionHash && verifiedMatch.completionResult) {
+        res.json({ ok: true, result: verifiedMatch.completionResult, replayed: true });
+        return;
+      }
+      res.status(409).json({ error: 'Match result already finalized.' });
+      return;
+    }
+    if (verifiedMatch.status === 'abandoned') {
+      res.status(409).json({ error: 'Verified match was already abandoned.' });
+      return;
+    }
+    if (isFritzMatch && localMatchId) {
+      const roomCode = `local:${localMatchId}`;
+      const pendingRows = await supabaseFetch<any[]>(
+        `/rest/v1/bot_match_pending?select=id&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
+      );
+      if (!pendingRows?.[0]?.id) {
+        res.status(409).json({ error: 'No pending Fritz match found for this local match.' });
+        return;
+      }
+    }
+
     const result = await completeGhostGame({
       userId,
       opponentUserId,
       finalScore,
       opponentScore,
-      moveLog,
+      moveLog: safeMoveLog,
+      playerMoveLog: safePlayerMoveLog,
     });
+    verifiedMatch.status = 'completed';
+    verifiedMatch.completedAt = new Date().toISOString();
+    verifiedMatch.completionHash = completionHash;
+    verifiedMatch.completionResult = result;
+    await persistVerifiedSinglePlayerMatch(verifiedMatch);
+    if (isFritzMatch && localMatchId) {
+      const roomCode = `local:${localMatchId}`;
+      await supabaseFetch(
+        `/rest/v1/bot_match_pending?room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ resolved: true }),
+        },
+      );
+    }
     res.json({ ok: true, result });
   } catch (error) {
     res.status(500).json({
@@ -356,6 +499,13 @@ app.post('/league/generate-fixtures', async (req, res) => {
     const authenticatedUserId = await getAuthenticatedUserId(req);
     if (!authenticatedUserId) {
       res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const membershipRows = await supabaseFetch<any[]>(
+      `/rest/v1/league_members?select=id&league_id=eq.${leagueId}&player_user_id=eq.${encodeURIComponent(authenticatedUserId)}&limit=1`,
+    );
+    if (!membershipRows?.[0]?.id) {
+      res.status(403).json({ error: 'Forbidden' });
       return;
     }
     const schedule = await generateLeagueFixtures(leagueId);
@@ -769,6 +919,64 @@ const socketsByUserId = new Map<string, Set<string>>();
 const roomCleanupTimersByCode = new Map<string, ReturnType<typeof setTimeout>>();
 let finalizeTournamentMatchHook: ((room: any) => void) | null = null;
 
+type VerifiedSinglePlayerMatch = {
+  matchId: string;
+  userId: string;
+  localMatchId: string;
+  mode: 'ghost' | 'fritz';
+  opponentUserId: string | null;
+  fritzTier: string | null;
+  status: 'started' | 'completed' | 'abandoned';
+  startedAt: string;
+  completedAt: string | null;
+  completionHash: string | null;
+  completionResult: Awaited<ReturnType<typeof completeGhostGame>> | null;
+};
+
+type VerifiedSinglePlayerMatchRow = {
+  match_id: string;
+  user_id: string;
+  local_match_id: string;
+  mode: 'ghost' | 'fritz';
+  opponent_user_id: string | null;
+  fritz_tier: string | null;
+  status: 'started' | 'completed' | 'abandoned';
+  started_at: string;
+  completed_at: string | null;
+  completion_hash: string | null;
+  completion_result: Awaited<ReturnType<typeof completeGhostGame>> | null;
+};
+
+type PersistedRoomMatchLogStatus = 'completed' | 'abandoned';
+
+type PersistedRoomParticipant = {
+  id: string;
+  username: string;
+  userId: string | null;
+  seatIndex: number;
+};
+
+type PersistedRoomMatchLogRow = {
+  match_id: string;
+  room_code: string;
+  status: PersistedRoomMatchLogStatus;
+  event_log_version: number;
+  last_event_sequence: number;
+  event_count: number;
+  started_at: string | null;
+  archived_at: string;
+  participant_user_ids: string[];
+  participants: PersistedRoomParticipant[];
+  summary: Record<string, unknown> | null;
+  state_snapshot: Record<string, unknown> | null;
+  events: ReturnType<typeof getRoomMatchEventSnapshot>['events'];
+};
+
+const verifiedSinglePlayerMatches = new Map<string, VerifiedSinglePlayerMatch>();
+const verifiedSinglePlayerMatchesByLocalKey = new Map<string, string>();
+let persistentVerifiedMatchesAvailable: boolean | null = null;
+let persistentRoomMatchLogsAvailable: boolean | null = null;
+
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
   return raw || 'Guest';
@@ -778,6 +986,388 @@ function normalizeUserId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const raw = value.trim();
   return raw || null;
+}
+
+function isUuidLike(value: string | null | undefined): boolean {
+  return Boolean(
+    value &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
+  );
+}
+
+function isGhostTileKey(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-6]\|[0-6]$/.test(value);
+}
+
+function isGhostBranch(value: unknown): value is string | null {
+  return (
+    value == null ||
+    value === 'left' ||
+    value === 'right' ||
+    value === 'draw' ||
+    value === 'pass' ||
+    (typeof value === 'string' && /^branch-\d+-\d+$/.test(value))
+  );
+}
+
+function isSafeGhostMoveLog(raw: unknown): raw is Array<Record<string, unknown>> {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 500) return false;
+  let previousTurn = 0;
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') return false;
+    const record = entry as Record<string, unknown>;
+    const turn = Number(record.turn);
+    const handNumber = record.hand_number == null ? null : Number(record.hand_number);
+    const scoreDelta = Number(record.score_delta ?? 0);
+    const boardState = record.board_state;
+    const handBefore = record.hand_before;
+    const actor = record.actor;
+    const tilePlayed = record.tile_played;
+    const branch = record.branch;
+    const forcedDraw = Boolean(record.forced_draw);
+    if (!Number.isInteger(turn) || turn <= 0 || turn <= previousTurn) return false;
+    if (handNumber != null && (!Number.isInteger(handNumber) || handNumber <= 0 || handNumber > 50)) {
+      return false;
+    }
+    if (!Number.isFinite(scoreDelta) || scoreDelta < 0 || scoreDelta > 100) return false;
+    if (typeof boardState !== 'string' || boardState.trim().length === 0 || boardState.length > 20000) {
+      return false;
+    }
+    if (
+      !Array.isArray(handBefore) ||
+      handBefore.length > 28 ||
+      handBefore.some((item) => !isGhostTileKey(item))
+    ) {
+      return false;
+    }
+    if (actor != null && actor !== 'you' && actor !== 'ghost') return false;
+    if (!(tilePlayed == null || isGhostTileKey(tilePlayed))) return false;
+    if (!isGhostBranch(branch)) return false;
+    if (tilePlayed && !handBefore.includes(tilePlayed)) return false;
+    if ((branch === 'draw' || branch === 'pass') && tilePlayed != null) return false;
+    if ((branch === 'draw' || branch === 'pass') && scoreDelta !== 0) return false;
+    if (forcedDraw && tilePlayed == null) return false;
+    previousTurn = turn;
+  }
+  return true;
+}
+
+function makeVerifiedSinglePlayerKey(userId: string, localMatchId: string): string {
+  return `${userId}:${localMatchId}`;
+}
+
+function buildGhostCompletionHash(params: {
+  userId: string;
+  localMatchId: string | null;
+  matchId: string;
+  opponentUserId: string | null;
+  finalScore: number;
+  opponentScore: number;
+  moveLog: import('./ghost/service').GhostMoveLogEntry[];
+  playerMoveLog?: import('./ghost/service').GhostMoveLogEntry[];
+}): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        userId: params.userId,
+        localMatchId: params.localMatchId,
+        matchId: params.matchId,
+        opponentUserId: params.opponentUserId,
+        finalScore: params.finalScore,
+        opponentScore: params.opponentScore,
+        moveLog: params.moveLog,
+        playerMoveLog: params.playerMoveLog ?? null,
+      }),
+    )
+    .digest('hex');
+}
+
+function toVerifiedSinglePlayerMatch(row: VerifiedSinglePlayerMatchRow): VerifiedSinglePlayerMatch {
+  return {
+    matchId: row.match_id,
+    userId: row.user_id,
+    localMatchId: row.local_match_id,
+    mode: row.mode,
+    opponentUserId: row.opponent_user_id,
+    fritzTier: row.fritz_tier,
+    status: row.status,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    completionHash: row.completion_hash,
+    completionResult: row.completion_result,
+  };
+}
+
+function toVerifiedSinglePlayerMatchRow(
+  record: VerifiedSinglePlayerMatch,
+): VerifiedSinglePlayerMatchRow {
+  return {
+    match_id: record.matchId,
+    user_id: record.userId,
+    local_match_id: record.localMatchId,
+    mode: record.mode,
+    opponent_user_id: record.opponentUserId,
+    fritz_tier: record.fritzTier,
+    status: record.status,
+    started_at: record.startedAt,
+    completed_at: record.completedAt,
+    completion_hash: record.completionHash,
+    completion_result: record.completionResult,
+  };
+}
+
+function cacheVerifiedSinglePlayerMatch(record: VerifiedSinglePlayerMatch): VerifiedSinglePlayerMatch {
+  verifiedSinglePlayerMatches.set(record.matchId, record);
+  verifiedSinglePlayerMatchesByLocalKey.set(
+    makeVerifiedSinglePlayerKey(record.userId, record.localMatchId),
+    record.matchId,
+  );
+  return record;
+}
+
+function isMissingVerifiedMatchesTable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('verified_single_player_matches') && message.includes('does not exist');
+}
+
+async function queryVerifiedSinglePlayerMatchByLocalKey(
+  userId: string,
+  localMatchId: string,
+): Promise<VerifiedSinglePlayerMatch | null> {
+  const key = makeVerifiedSinglePlayerKey(userId, localMatchId);
+  const cachedId = verifiedSinglePlayerMatchesByLocalKey.get(key);
+  if (cachedId) {
+    const cached = verifiedSinglePlayerMatches.get(cachedId);
+    if (cached) return cached;
+  }
+  if (persistentVerifiedMatchesAvailable === false) return null;
+  try {
+    const rows = await supabaseFetch<VerifiedSinglePlayerMatchRow[]>(
+      `/rest/v1/verified_single_player_matches?select=match_id,user_id,local_match_id,mode,opponent_user_id,fritz_tier,status,started_at,completed_at,completion_hash,completion_result&user_id=eq.${encodeURIComponent(userId)}&local_match_id=eq.${encodeURIComponent(localMatchId)}&limit=1`,
+      { method: 'GET' },
+    );
+    persistentVerifiedMatchesAvailable = true;
+    const row = rows[0];
+    return row ? cacheVerifiedSinglePlayerMatch(toVerifiedSinglePlayerMatch(row)) : null;
+  } catch (error) {
+    if (isMissingVerifiedMatchesTable(error)) {
+      persistentVerifiedMatchesAvailable = false;
+      console.warn('[verified-matches] persistence table missing, using in-memory fallback');
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function queryVerifiedSinglePlayerMatchByMatchId(
+  matchId: string,
+): Promise<VerifiedSinglePlayerMatch | null> {
+  const cached = verifiedSinglePlayerMatches.get(matchId);
+  if (cached) return cached;
+  if (persistentVerifiedMatchesAvailable === false) return null;
+  try {
+    const rows = await supabaseFetch<VerifiedSinglePlayerMatchRow[]>(
+      `/rest/v1/verified_single_player_matches?select=match_id,user_id,local_match_id,mode,opponent_user_id,fritz_tier,status,started_at,completed_at,completion_hash,completion_result&match_id=eq.${encodeURIComponent(matchId)}&limit=1`,
+      { method: 'GET' },
+    );
+    persistentVerifiedMatchesAvailable = true;
+    const row = rows[0];
+    return row ? cacheVerifiedSinglePlayerMatch(toVerifiedSinglePlayerMatch(row)) : null;
+  } catch (error) {
+    if (isMissingVerifiedMatchesTable(error)) {
+      persistentVerifiedMatchesAvailable = false;
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function persistVerifiedSinglePlayerMatch(
+  record: VerifiedSinglePlayerMatch,
+): Promise<VerifiedSinglePlayerMatch> {
+  cacheVerifiedSinglePlayerMatch(record);
+  if (persistentVerifiedMatchesAvailable === false) return record;
+  try {
+    await supabaseFetch<VerifiedSinglePlayerMatchRow[]>(
+      `/rest/v1/verified_single_player_matches?on_conflict=match_id`,
+      {
+        method: 'POST',
+        headers: {
+          Prefer: 'return=representation,resolution=merge-duplicates',
+        },
+        body: JSON.stringify([toVerifiedSinglePlayerMatchRow(record)]),
+      },
+    );
+    persistentVerifiedMatchesAvailable = true;
+    return record;
+  } catch (error) {
+    if (isMissingVerifiedMatchesTable(error)) {
+      persistentVerifiedMatchesAvailable = false;
+      console.warn('[verified-matches] persistence table missing, using in-memory fallback');
+      return record;
+    }
+    throw error;
+  }
+}
+
+async function startVerifiedSinglePlayerMatch(params: {
+  userId: string;
+  localMatchId: string;
+  mode: 'ghost' | 'fritz';
+  opponentUserId: string | null;
+  fritzTier?: string | null;
+}): Promise<VerifiedSinglePlayerMatch> {
+  const existing = await queryVerifiedSinglePlayerMatchByLocalKey(params.userId, params.localMatchId);
+  if (existing) {
+    return existing;
+  }
+
+  const record: VerifiedSinglePlayerMatch = {
+    matchId: randomUUID(),
+    userId: params.userId,
+    localMatchId: params.localMatchId,
+    mode: params.mode,
+    opponentUserId: params.opponentUserId,
+    fritzTier: params.fritzTier ?? null,
+    status: 'started',
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    completionHash: null,
+    completionResult: null,
+  };
+  return persistVerifiedSinglePlayerMatch(record);
+}
+
+async function getVerifiedSinglePlayerMatch(matchId: string): Promise<VerifiedSinglePlayerMatch | null> {
+  return queryVerifiedSinglePlayerMatchByMatchId(matchId);
+}
+
+async function abandonVerifiedSinglePlayerMatch(userId: string, localMatchId: string): Promise<void> {
+  const record = await queryVerifiedSinglePlayerMatchByLocalKey(userId, localMatchId);
+  if (!record || record.status !== 'started') return;
+  record.status = 'abandoned';
+  await persistVerifiedSinglePlayerMatch(record);
+}
+
+function isMissingRoomMatchLogsTable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('room_match_logs') && message.includes('does not exist');
+}
+
+function buildPersistedRoomParticipants(roomCode: string, room: Room): PersistedRoomParticipant[] {
+  const roster = getRoomPlayersWithFallback(roomCode, room.players);
+  return roster.map((player, seatIndex) => ({
+    id: player.id,
+    username: player.username,
+    userId: player.userId,
+    seatIndex,
+  }));
+}
+
+function buildPersistedRoomSummary(
+  room: Room,
+  status: PersistedRoomMatchLogStatus,
+): Record<string, unknown> | null {
+  if (!room.state) {
+    return {
+      status,
+      gameStarted: false,
+      playerCount: room.players.length,
+      winningScore:
+        typeof (room.config as Record<string, unknown>)?.winningScore === 'number'
+          ? (room.config as Record<string, unknown>).winningScore
+          : null,
+    };
+  }
+
+  return {
+    status,
+    gameStarted: true,
+    gameOver: room.state.gameOver,
+    handOver: room.state.handOver,
+    handNumber: room.state.handNumber,
+    winnerId: room.state.winnerId ?? null,
+    currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex] ?? null,
+    winningScore: room.state.config.winningScore,
+    scores: Object.fromEntries(
+      room.state.playerIds.map((playerId) => [playerId, room.state?.players[playerId]?.score ?? 0]),
+    ),
+    handCounts: Object.fromEntries(
+      room.state.playerIds.map((playerId) => [playerId, room.state?.players[playerId]?.hand.length ?? 0]),
+    ),
+  };
+}
+
+function toPersistedRoomMatchLogRow(
+  room: Room,
+  status: PersistedRoomMatchLogStatus,
+): PersistedRoomMatchLogRow {
+  const snapshot = getRoomMatchEventSnapshot(room.code);
+  const participants = buildPersistedRoomParticipants(room.code, room);
+  const participantUserIds = participants
+    .map((participant) => participant.userId)
+    .filter((userId): userId is string => isUuidLike(userId));
+
+  return {
+    match_id: snapshot.matchId,
+    room_code: snapshot.roomCode,
+    status,
+    event_log_version: snapshot.version,
+    last_event_sequence: snapshot.lastEventSequence,
+    event_count: snapshot.eventCount,
+    started_at: snapshot.events[0]?.timestamp ?? null,
+    archived_at: new Date().toISOString(),
+    participant_user_ids: participantUserIds,
+    participants,
+    summary: buildPersistedRoomSummary(room, status),
+    state_snapshot: room.state ? (room.state as unknown as Record<string, unknown>) : null,
+    events: snapshot.events,
+  };
+}
+
+async function persistRoomMatchLog(room: Room, status: PersistedRoomMatchLogStatus): Promise<void> {
+  if (room.events.length === 0) return;
+  if (persistentRoomMatchLogsAvailable === false) return;
+
+  try {
+    await supabaseFetch<PersistedRoomMatchLogRow[]>(
+      '/rest/v1/room_match_logs?on_conflict=match_id',
+      {
+        method: 'POST',
+        headers: {
+          Prefer: 'return=minimal,resolution=merge-duplicates',
+        },
+        body: JSON.stringify([toPersistedRoomMatchLogRow(room, status)]),
+      },
+    );
+    persistentRoomMatchLogsAvailable = true;
+  } catch (error) {
+    if (isMissingRoomMatchLogsTable(error)) {
+      persistentRoomMatchLogsAvailable = false;
+      console.warn('[room-match-logs] persistence table missing, skipping archive');
+      return;
+    }
+    throw error;
+  }
+}
+
+async function queryPersistedRoomMatchLog(matchId: string): Promise<PersistedRoomMatchLogRow | null> {
+  if (persistentRoomMatchLogsAvailable === false) return null;
+
+  try {
+    const rows = await supabaseFetch<PersistedRoomMatchLogRow[]>(
+      `/rest/v1/room_match_logs?select=match_id,room_code,status,event_log_version,last_event_sequence,event_count,started_at,archived_at,participant_user_ids,participants,summary,state_snapshot,events&match_id=eq.${encodeURIComponent(matchId)}&limit=1`,
+      { method: 'GET' },
+    );
+    persistentRoomMatchLogsAvailable = true;
+    return rows[0] ?? null;
+  } catch (error) {
+    if (isMissingRoomMatchLogsTable(error)) {
+      persistentRoomMatchLogsAvailable = false;
+      return null;
+    }
+    throw error;
+  }
 }
 
 function getFritzTierForRoom(room: Room, botPlayerId: string | null): string {
@@ -886,6 +1476,13 @@ app.post('/api/bot-matches/local/start', async (req, res) => {
       return;
     }
     const roomCode = `local:${localMatchId}`;
+    const verifiedMatch = await startVerifiedSinglePlayerMatch({
+      userId,
+      localMatchId,
+      mode: 'fritz',
+      opponentUserId: getFritzIdentityForTier(fritzTier).fritzId,
+      fritzTier,
+    });
     const existing = await supabaseFetch<any[]>(
       `/rest/v1/bot_match_pending?select=id&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&limit=1`,
     );
@@ -901,10 +1498,45 @@ app.post('/api/bot-matches/local/start', async (req, res) => {
         }),
       });
     }
-    res.json({ ok: true, roomCode });
+    res.json({ ok: true, roomCode, matchId: verifiedMatch.matchId });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to start pending bot match.',
+    });
+  }
+});
+
+app.post('/api/ghost/start', async (req, res) => {
+  const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
+  const localMatchId = typeof req.body?.localMatchId === 'string' ? req.body.localMatchId.trim() : '';
+  const opponentUserId =
+    typeof req.body?.opponentUserId === 'string' && req.body.opponentUserId.trim()
+      ? req.body.opponentUserId.trim()
+      : null;
+  if (!userId || !localMatchId) {
+    res.status(400).json({ error: 'userId and localMatchId are required.' });
+    return;
+  }
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (authenticatedUserId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    const verifiedMatch = await startVerifiedSinglePlayerMatch({
+      userId,
+      localMatchId,
+      mode: 'ghost',
+      opponentUserId,
+    });
+    res.json({ ok: true, matchId: verifiedMatch.matchId });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to start verified ghost match.',
     });
   }
 });
@@ -958,6 +1590,7 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
+    await abandonVerifiedSinglePlayerMatch(userId, localMatchId);
     const roomCode = `local:${localMatchId}`;
     const pendingRows = await supabaseFetch<any[]>(
       `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
@@ -976,6 +1609,59 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to abandon bot match.',
+    });
+  }
+});
+
+app.get('/api/room-events/:matchId', async (req, res) => {
+  const matchId = typeof req.params.matchId === 'string' ? req.params.matchId.trim() : '';
+  if (!matchId) {
+    res.status(400).json({ error: 'matchId is required.' });
+    return;
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const log = await queryPersistedRoomMatchLog(matchId);
+    if (!log) {
+      if (persistentRoomMatchLogsAvailable === false) {
+        res.status(503).json({ error: 'Room event persistence is not configured.' });
+        return;
+      }
+      res.status(404).json({ error: 'Room event log not found.' });
+      return;
+    }
+
+    if (!log.participant_user_ids.includes(authenticatedUserId)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      log: {
+        matchId: log.match_id,
+        roomCode: log.room_code,
+        status: log.status,
+        eventLogVersion: log.event_log_version,
+        lastEventSequence: log.last_event_sequence,
+        eventCount: log.event_count,
+        startedAt: log.started_at,
+        archivedAt: log.archived_at,
+        participants: log.participants,
+        summary: log.summary,
+        stateSnapshot: log.state_snapshot,
+        events: log.events,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load room event log.',
     });
   }
 });
@@ -1017,7 +1703,7 @@ function cancelRoomCleanup(roomCode: string) {
 
 function scheduleRoomCleanup(roomCode: string) {
   if (!roomCode || roomCleanupTimersByCode.has(roomCode)) return;
-  const timer = setTimeout(() => {
+  const timer = setTimeout(async () => {
     roomCleanupTimersByCode.delete(roomCode);
     let room;
     try {
@@ -1028,6 +1714,11 @@ function scheduleRoomCleanup(roomCode: string) {
     }
     const activePlayers = room.players.filter((pid) => io.sockets.sockets.has(pid));
     if (activePlayers.length > 0) return;
+    try {
+      await persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
+    } catch (error) {
+      console.error('[room-match-logs] failed to archive room before cleanup:', error);
+    }
     deleteRoom(roomCode);
     clearRoomMetadata(roomCode);
   }, ROOM_CLEANUP_GRACE_MS);
@@ -1434,6 +2125,7 @@ function broadcastStateUpdate(roomCode: string) {
         },
         legalMoves,
         canDraw,
+        eventMeta: getRoomMatchEventMeta(room.code),
       });
 
       if (
@@ -1507,7 +2199,10 @@ function broadcastStateUpdate(roomCode: string) {
         room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
       ),
     };
-    io.to(room.code).emit('state:spectate', { state: stateForSpectators });
+    io.to(room.code).emit('state:spectate', {
+      state: stateForSpectators,
+      eventMeta: getRoomMatchEventMeta(room.code),
+    });
   }
 
   const roomAfter = (() => { try { return getRoom(roomCode); } catch { return null; } })();
@@ -1543,13 +2238,66 @@ function broadcastStateUpdate(roomCode: string) {
 }
 
 io.on('connection', (socket: Socket) => {
-/* ROOM_REACTIONS_CHAT_EMOTE */
+  /* ROOM_REACTIONS_CHAT_EMOTE */
+  const leaveTrackedRoom = (
+    roomCode: string | undefined,
+    options: { preserveSeat?: boolean } = {},
+  ) => {
+    if (!roomCode) return;
+    const code = roomCode.trim().toUpperCase();
+    if (!code) return;
+
+    const preserveSeat = Boolean(options.preserveSeat);
+    socket.leave(code);
+    if (socket.data.roomId === code) {
+      socket.data.roomId = undefined;
+    }
+
+    let room: Room | null = null;
+    try {
+      room = getRoom(code);
+    } catch {
+      clearRoomMetadata(code);
+      cancelRoomCleanup(code);
+      return;
+    }
+
+    const wasPlayer = room.players.includes(socket.id);
+    clearSocketRematchReady(code, socket.id);
+
+    if (!preserveSeat && wasPlayer) {
+      appendRoomEvent(room, {
+        type: 'player_left',
+        actorSocketId: socket.id,
+        actorUserId: normalizeUserId(socket.data?.userId),
+        payload: {
+          preserveSeat,
+        },
+      });
+      room.players = room.players.filter((pid) => pid !== socket.id);
+      const nextRoster = (roomPlayersByCode.get(code) ?? []).filter((player) => player.id !== socket.id);
+      if (nextRoster.length > 0) {
+        roomPlayersByCode.set(code, nextRoster);
+      } else {
+        roomPlayersByCode.delete(code);
+      }
+
+      const nextSeats = (reconnectSeatsByCode.get(code) ?? []).filter((seat) => seat.oldSocketId !== socket.id);
+      if (nextSeats.length > 0) {
+        reconnectSeatsByCode.set(code, nextSeats);
+      } else {
+        reconnectSeatsByCode.delete(code);
+      }
+
+      io.to(code).emit('room:update', { players: nextRoster });
+    }
+
+    evaluateRoomLifecycle(code);
+  };
+
   const leaveExistingSocketRooms = () => {
     const previousRooms = [...socket.rooms].filter((roomId) => roomId !== socket.id);
-    previousRooms.forEach((roomId) => {
-      socket.leave(roomId);
-      evaluateRoomLifecycle(roomId);
-    });
+    previousRooms.forEach((roomId) => leaveTrackedRoom(roomId));
     socket.data.roomId = undefined;
   };
 
@@ -2000,8 +2748,23 @@ io.on('connection', (socket: Socket) => {
       socket.data.userId = userId;
       const roomPlayers: RoomPlayer[] = [{ id: socket.id, username, userId }];
       roomPlayersByCode.set(room.code, roomPlayers);
+      appendRoomEvent(room, {
+        type: 'player_joined',
+        actorSocketId: socket.id,
+        actorUserId: userId,
+        payload: {
+          username,
+          via: 'room:create',
+        },
+      });
       console.log(`[room:create] created room=${room.code}, players=${room.players.length}`);
-      cb?.({ ok: true, roomCode: room.code, you: socket.id, players: roomPlayers });
+      cb?.({
+        ok: true,
+        roomCode: room.code,
+        you: socket.id,
+        players: roomPlayers,
+        eventMeta: getRoomMatchEventMeta(room.code),
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[room:create] ERROR: ${message}`);
@@ -2068,10 +2831,20 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
           state: stateWithCounts,
           legalMoves: [],
           canDraw: false,
+          eventMeta: getRoomMatchEventMeta(code),
         });
       }
 
-      cb?.({ ok: true, roomCode: code, players: roster });
+      appendRoomEvent(room, {
+        type: 'spectator_joined',
+        actorSocketId: socket.id,
+        actorUserId: userId,
+        payload: {
+          username,
+        },
+      });
+
+      cb?.({ ok: true, roomCode: code, players: roster, eventMeta: getRoomMatchEventMeta(code) });
     } catch (e) {
       cb?.({ ok: false, error: 'spectate_failed' });
     }
@@ -2126,6 +2899,15 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
           socket.data.roomId = roomCode;
           room = existingRoom;
           migratedByUserId = true;
+          appendRoomEvent(room, {
+            type: 'player_reconnected',
+            actorSocketId: socket.id,
+            actorUserId: userId,
+            payload: {
+              previousSocketId: existingPlayer.id,
+              username,
+            },
+          });
         }
       }
       if (!migratedByUserId) {
@@ -2167,6 +2949,15 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
         roster[existingIdx] = { id: socket.id, username, userId };
       } else {
         roster.push({ id: socket.id, username, userId });
+        appendRoomEvent(room, {
+          type: 'player_joined',
+          actorSocketId: socket.id,
+          actorUserId: userId,
+          payload: {
+            username,
+            via: migratedByUserId ? 'reconnect' : 'room:join',
+          },
+        });
       }
       roomPlayersByCode.set(room.code, roster);
       io.to(room.code).emit('room:update', { players: roster });
@@ -2205,6 +2996,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
         state: stateWithCounts,
         legalMoves: rejoinLegalMoves,
         canDraw: rejoinCanDraw,
+        eventMeta: getRoomMatchEventMeta(room.code),
       });
       // Broadcast updated state so the rejoined socket
       // receives legal moves immediately as a fallback.
@@ -2222,36 +3014,15 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
   });
 
-  socket.on('room:leave', (roomCode: unknown) => {
+  socket.on('room:leave', (roomCode: unknown, cb?: AckFn) => {
     const code = typeof roomCode === 'string' ? roomCode.trim().toUpperCase() : '';
-    if (!code) return;
-
-    // Leave the socket.io channel immediately
-    socket.leave(code);
-    socket.data.roomId = undefined;
-
-    // Remove from room players list
-    try {
-      const room = getRoom(code);
-      room.players = room.players.filter((pid) => pid !== socket.id);
-
-      // Remove from roomPlayersByCode metadata
-      const meta = roomPlayersByCode.get(code) ?? [];
-      roomPlayersByCode.set(code, meta.filter((p) => p.id !== socket.id));
-
-      // Clear any reconnect seat for this socket
-      const seats = reconnectSeatsByCode.get(code) ?? [];
-      reconnectSeatsByCode.set(code, seats.filter((s) => s.oldSocketId !== socket.id));
-
-      // Notify remaining players
-      const remainingMeta = roomPlayersByCode.get(code) ?? [];
-      io.to(code).emit('room:update', { players: remainingMeta });
-
-      // Evaluate cleanup
-      evaluateRoomLifecycle(code);
-    } catch {
-      // Room may already be gone — no-op
+    if (!code) {
+      cb?.({ ok: false, error: 'missing_code' });
+      return;
     }
+
+    leaveTrackedRoom(code);
+    cb?.({ ok: true, roomCode: code });
   });
 
   socket.on('game:start', async (code, cb) => {
@@ -2355,6 +3126,15 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
       }
 
       room.rematchReady.add(socket.id);
+      appendRoomEvent(room, {
+        type: 'rematch_requested',
+        actorSocketId: socket.id,
+        actorUserId: normalizeUserId(socket.data?.userId),
+        payload: {
+          readyCount: room.rematchReady.size,
+          requiredCount: room.players.length,
+        },
+      });
       emitRematchStatus(room.code);
 
       const bothReady =
@@ -2371,6 +3151,20 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
         maxLeadA: 0,
         maxLeadB: 0,
       };
+      try {
+        await persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
+      } catch (error) {
+        console.error('[room-match-logs] failed to archive room before rematch reset:', error);
+      }
+      resetRoomEventLog(room);
+      appendRoomEvent(room, {
+        type: 'rematch_started',
+        actorSocketId: socket.id,
+        actorUserId: normalizeUserId(socket.data?.userId),
+        payload: {
+          players: [...room.players],
+        },
+      });
       await startGame(room.code, io);
       broadcastStateUpdate(room.code);
       io.to(room.code).emit('game:rematch:started', { roomCode: room.code });
@@ -2417,13 +3211,13 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
         // room no longer exists
       }
     }
-    clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
-    evaluateRoomLifecycle(roomCode);
-    if (userId && roomCode && wasActiveRoomPlayer) {
+    leaveTrackedRoom(roomCode, { preserveSeat: wasActiveRoomPlayer });
+    if (isUuidLike(userId) && roomCode && wasActiveRoomPlayer) {
+      const verifiedUserId = userId as string;
       void (async () => {
         try {
           const pendingRows = await supabaseFetch<any[]>(
-            `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${roomCode}&user_id=eq.${userId}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
+            `/rest/v1/bot_match_pending?select=id,fritz_tier&room_code=eq.${roomCode}&user_id=eq.${verifiedUserId}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
           );
           const pending = pendingRows?.[0];
           if (!pending?.id) return;
@@ -2432,7 +3226,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
             method: 'PATCH',
             body: JSON.stringify({ resolved: true }),
           });
-          await recordPendingFritzDisconnectLoss(userId, pending.fritz_tier);
+          await recordPendingFritzDisconnectLoss(verifiedUserId, pending.fritz_tier);
         } catch (error) {
           console.error('[Fritz] disconnect loss handling failed:', error);
         }

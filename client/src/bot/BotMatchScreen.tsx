@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from '../components';
 import TileRack from '../components/TileRack';
@@ -38,6 +38,7 @@ import { FRITZ_TIERS, type FritzTier } from './fritzConfig';
 import { getLocalDateKey } from '../dailyPuzzle/date';
 import {
   completeGhostGame,
+  startGhostMatchSession,
   type GhostCompletionResult,
   type GhostMoveLogEntry,
   type GhostProfileSummary,
@@ -307,6 +308,7 @@ export default function BotMatchScreen({
         : null,
   );
   const [activeLocalMatchId, setActiveLocalMatchId] = useState<string>(createLocalMatchId);
+  const [verifiedMatchId, setVerifiedMatchId] = useState<string | null>(null);
   const dailyResultSyncKeyRef = useRef('');
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -370,6 +372,14 @@ export default function BotMatchScreen({
       if (!response.ok) {
         const text = await response.text().catch(() => '');
         throw new Error(text || `${path} failed with ${response.status}`);
+      }
+      if (response.status === 204) return null;
+      const text = await response.text().catch(() => '');
+      if (!text) return null;
+      try {
+        return JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        return null;
       }
     },
     [],
@@ -601,6 +611,7 @@ export default function BotMatchScreen({
           ? Number(ghostResult.glickoRating)
           : matchStartGlickoRating,
     );
+    setVerifiedMatchId(null);
     setActiveLocalMatchId(createLocalMatchId());
     setMatch(createBotMatch(winningScore, dealSize));
   };
@@ -675,12 +686,16 @@ export default function BotMatchScreen({
       }
       if (cancelled || localPendingRegisteredRef.current || match.gameOver) return;
       try {
-        await postLocalBotMatch('/api/bot-matches/local/start', {
+        const response = await postLocalBotMatch('/api/bot-matches/local/start', {
           userId,
           fritzTier,
           localMatchId: activeLocalMatchId,
         });
         localPendingRegisteredRef.current = true;
+        const matchId = typeof response?.matchId === 'string' ? response.matchId : null;
+        if (matchId) {
+          setVerifiedMatchId(matchId);
+        }
       } catch (err) {
         console.warn('[Fritz Pending] start failed', err);
       }
@@ -689,6 +704,36 @@ export default function BotMatchScreen({
       cancelled = true;
     };
   }, [activeLocalMatchId, fritzTier, isStandaloneFritzMatch, match.gameOver, postLocalBotMatch, userId]);
+
+  useEffect(() => {
+    if (!userId || !isGhostMode || isDailyPuzzleRun || isLeagueMatch) return;
+    if (match.gameOver || verifiedMatchId) return;
+    let cancelled = false;
+    void startGhostMatchSession({
+      userId,
+      localMatchId: activeLocalMatchId,
+      opponentUserId,
+    })
+      .then((response) => {
+        if (cancelled) return;
+        setVerifiedMatchId(response.matchId);
+      })
+      .catch((err) => {
+        console.warn('[Ghost Match] start failed', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeLocalMatchId,
+    isDailyPuzzleRun,
+    isGhostMode,
+    isLeagueMatch,
+    match.gameOver,
+    opponentUserId,
+    userId,
+    verifiedMatchId,
+  ]);
 
   useEffect(() => {
     if (!isStandaloneFritzMatch || !userId || !match.gameOver || localPendingResolvedRef.current === true) return;
@@ -774,7 +819,8 @@ export default function BotMatchScreen({
       setGhostResultError(null);
       return;
     }
-    const key = `${userId}:${match.handNumber}:${match.players.you.score}:${match.players.bot.score}`;
+    if (!verifiedMatchId) return;
+    const key = `${verifiedMatchId}:${userId}:${match.handNumber}:${match.players.you.score}:${match.players.bot.score}`;
     if (ghostCompleteKeyRef.current === key) return;
     ghostCompleteKeyRef.current = key;
     setGhostResultLoading(true);
@@ -790,8 +836,10 @@ export default function BotMatchScreen({
     });
 
     void completeGhostGame({
+      matchId: verifiedMatchId,
       userId,
       opponentUserId: effectiveOpponentUserId,
+      localMatchId: activeLocalMatchId,
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
       moveLog: ghostMoveLog,
@@ -839,6 +887,7 @@ export default function BotMatchScreen({
       })
       .catch((err) => {
         console.error('[Fritz Rating] failed:', err);
+        ghostCompleteKeyRef.current = '';
         setGhostResultLoading(false);
         setGhostResultError(err instanceof Error ? err.message : 'Rating update failed.');
         if (onProfileRefresh) {
@@ -862,6 +911,8 @@ export default function BotMatchScreen({
     onProfileRefresh,
     userId,
     fritzConfig.id,
+    activeLocalMatchId,
+    verifiedMatchId,
   ]);
 
   const userLegalMoves = useMemo(() => {
@@ -1948,7 +1999,7 @@ export default function BotMatchScreen({
               aria-label="Open score track"
               style={{ width: ghostSubLabel ? 'auto' : 110, minWidth: ghostSubLabel ? 140 : 110, padding: '0 12px' }}
             >
-              <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5, justifyContent: 'center' }}>
+              <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
                 {ghostSubLabel && (
                   <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
                     {formatGhostName(ghostSubLabel)}

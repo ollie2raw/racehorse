@@ -585,6 +585,7 @@ function createSearchState(board: BoardState, hand: Tile[]): GameState {
     gameOver: false,
     winnerId: null,
     consecutivePasses: 0,
+    sequence: 0,
   };
 }
 
@@ -663,6 +664,7 @@ function makeSimState(dateSeed: string, attempt: number): GameState {
     gameOver: false,
     winnerId: null,
     consecutivePasses: 0,
+    sequence: 0,
   };
 }
 

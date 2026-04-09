@@ -1,4 +1,5 @@
 // client/src/components/DominoTile.tsx
+import { memo } from 'react';
 import type { Tile } from '../types';
 
 // ─── Pip Layouts ─────────────────────────────────────────────
@@ -106,7 +107,25 @@ export interface DominoTileProps {
   style?: React.CSSProperties;
 }
 
-export function DominoTile({
+function tilesEqual(a: Tile, b: Tile): boolean {
+  return a.high === b.high && a.low === b.low;
+}
+
+function stylesEqual(a?: React.CSSProperties, b?: React.CSSProperties): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (a[key as keyof React.CSSProperties] !== b[key as keyof React.CSSProperties]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function DominoTileComponent({
   tile,
   size = 70,
   selected = false,
@@ -168,5 +187,22 @@ export function DominoTile({
     </button>
   );
 }
+
+function areDominoTilePropsEqual(prev: DominoTileProps, next: DominoTileProps): boolean {
+  return (
+    tilesEqual(prev.tile, next.tile) &&
+    prev.size === next.size &&
+    prev.selected === next.selected &&
+    prev.highlight === next.highlight &&
+    prev.onClick === next.onClick &&
+    prev.disabled === next.disabled &&
+    prev.className === next.className &&
+    prev.flipped === next.flipped &&
+    prev.rotation === next.rotation &&
+    stylesEqual(prev.style, next.style)
+  );
+}
+
+export const DominoTile = memo(DominoTileComponent, areDominoTilePropsEqual);
 
 export default DominoTile;

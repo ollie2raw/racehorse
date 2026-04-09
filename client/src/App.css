@@ -3587,6 +3587,24 @@ button:hover:not(:disabled) {
   animation: zone-glow 1.5s ease-in-out infinite;
 }
 
+.placement-zone.highlighted {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.25);
+  animation: best-move-pulse 0.8s ease-in-out infinite;
+  z-index: 10;
+}
+
+@keyframes best-move-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6);
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    box-shadow: 0 0 20px 8px rgba(245, 158, 11, 0.4);
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
 .placement-zone.open-end-glow {
   border-color: rgba(112, 244, 198, 0.2);
   background: rgba(70, 214, 171, 0.15);
