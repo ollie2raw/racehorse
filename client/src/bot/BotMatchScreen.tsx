@@ -1582,9 +1582,9 @@ export default function BotMatchScreen({
       : null;
   const hasFallbackFritzRatingUpdate =
     fritzFallbackGlickoDelta != null &&
-    fritzFallbackNewGlickoRating != null &&
-    fritzFallbackGlickoDelta !== 0;
-  const hasConfirmedFritzRatingUpdate = fritzGlickoDelta != null || hasFallbackFritzRatingUpdate;
+    fritzFallbackNewGlickoRating != null;
+  const hasConfirmedFritzRatingUpdate =
+    fritzGlickoDelta != null || hasFallbackFritzRatingUpdate || (!isGhostMode && ghostResult != null);
   const displayedFritzGlickoDelta =
     fritzGlickoDelta != null ? fritzGlickoDelta : hasFallbackFritzRatingUpdate ? fritzFallbackGlickoDelta : null;
   const displayedFritzNewGlickoRating =
@@ -1593,6 +1593,9 @@ export default function BotMatchScreen({
       : hasFallbackFritzRatingUpdate
         ? fritzFallbackNewGlickoRating
         : null;
+  const ghostRatingDeltaLabel = ghostResult
+    ? `${ghostResult.ratingDelta >= 0 ? '+' : ''}${ghostResult.ratingDelta}`
+    : null;
   const onShareGhostCard = async () => {
     const result = ghostResult;
     if (!result) return;
@@ -1889,7 +1892,9 @@ export default function BotMatchScreen({
                     ? `${fritzNewGlickoRating}`
                   : ghostResultError
                     ? ghostResultError
-                    : 'Updated'}
+                    : ghostResult
+                      ? 'Result saved'
+                      : 'Updated'}
               </strong>
             </div>
           )}
@@ -1923,7 +1928,9 @@ export default function BotMatchScreen({
                 {ghostResultLoading ? (
                   <span>Analyzing play style...</span>
                 ) : ghostResult ? (
-                  <span>Style profile updated</span>
+                  <span>Ghost Rating {ghostRatingDeltaLabel} • {Math.round(ghostResult.newRating)}</span>
+                ) : ghostResultError ? (
+                  <span>{ghostResultError}</span>
                 ) : (
                   <span>Analyzing play style...</span>
                 )}

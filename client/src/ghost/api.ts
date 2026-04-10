@@ -90,7 +90,7 @@ export type GhostCompletionResult = {
 export type GhostResolvedMove = {
   tile: Tile;
   position: PlacementPosition;
-  source: 'composite' | 'random-padding' | 'best-score';
+  source: 'composite' | 'random-padding' | 'style-weighted' | 'best-score';
 };
 
 export type GhostProfileSummaryByUsername = {

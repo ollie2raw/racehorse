@@ -5,10 +5,10 @@ import type { GhostCompositeState, GhostProfileSummary, GhostResolvedMove } from
 import { chooseBotMove } from '../bot/botHeuristics';
 
 const STYLE_PRIORS = {
-  drawPriority: 0.72,
-  pointSuppression: 0.65,
-  attackSetup: 0.7,
-  scoringBias: 0.35,
+  drawPriority: 0.35,
+  pointSuppression: 0.2,
+  attackSetup: 0.65,
+  scoringBias: 0.7,
   spinnerControl: 0.8,
 } as const;
 
@@ -251,10 +251,11 @@ function estimateFritzThreat(state: BotMatchState): number {
 
 function pickCompositeMove(
   state: BotMatchState,
+  player: BotPlayerId,
   playMoves: Array<Move & { type: 'play'; tile: Tile; position: PlacementPosition }>,
   profile: GhostProfileSummary | null,
 ): GhostResolvedMove | null {
-  const currentHand = state.players.you.hand;
+  const currentHand = state.players[player]?.hand ?? [];
   const fingerprint = boardFingerprint(state.board, currentHand);
   const byFingerprint = buildCompositeFingerprintMap(profile?.compositeLog?.states, currentHand);
   const candidates = byFingerprint.get(fingerprint) ?? [];
@@ -366,9 +367,10 @@ function pickStyleWeightedMove(
         botChoice.move.position &&
         sameMove(move, botChoice.move.tile, botChoice.move.position as PlacementPosition)
       ) {
-        total += 1.5;
+        total += 8;
       }
 
+      total += clamp(style.scoringBias, 0, 1) * preview.immediateScore * 4;
       total += clamp(style.drawPriority, 0, 1) * drawBonus;
       total += clamp(style.attackSetup, 0, 1) * setupDelta;
 
@@ -406,7 +408,7 @@ export function resolveGhostMove(params: {
   );
   if (playMoves.length === 0) return null;
 
-  const compositeMatch = pickCompositeMove(params.state, playMoves, params.profile);
+  const compositeMatch = pickCompositeMove(params.state, params.player, playMoves, params.profile);
   if (compositeMatch) return compositeMatch;
 
   if ((params.profile?.gamesPlayed ?? 0) === 0) {
