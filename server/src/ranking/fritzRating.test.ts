@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  computeGlicko2,
   DEFAULT_RD,
   DEFAULT_RATING,
   DEFAULT_VOL,
@@ -76,5 +77,28 @@ describe('Fritz rating processing', () => {
     );
     expect(rankedGamePatch).toBeTruthy();
     expect(JSON.parse(String(rankedGamePatch?.[1]?.body)).delta).toBeGreaterThan(0);
+  });
+
+  it('applies almost no penalty for an expected loss to a far stronger Fritz Master', () => {
+    const master = getFritzConfig(FRITZ_MASTER_ID);
+    const result = computeGlicko2(
+      {
+        rating: DEFAULT_RATING,
+        rd: DEFAULT_RD,
+        vol: DEFAULT_VOL,
+        gamesPlayed: 0,
+      },
+      [
+        {
+          opponent: { rating: master.rating, rd: master.rd },
+          result: { score: 8, opponentScore: 61 },
+        },
+      ],
+    );
+    const delta = result.newRating - DEFAULT_RATING;
+
+    expect(delta).toBeLessThan(0);
+    expect(delta).toBeGreaterThan(-1);
+    expect(Object.is(Math.round(delta), -0)).toBe(true);
   });
 });

@@ -116,12 +116,12 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(url, {
+      ...init,
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(init?.headers ?? {}),
       },
-      ...init,
     });
   } catch {
     throw new Error(`Ghost backend is unavailable. Start the server on ${DEFAULT_SERVER_ORIGIN}.`);
@@ -185,12 +185,15 @@ export async function completeGhostGame(params: {
   opponentScore: number;
   moveLog: GhostMoveLogEntry[];
   playerMoveLog?: GhostMoveLogEntry[];
+  accessToken?: string | null;
 }): Promise<GhostCompletionResult> {
+  const { accessToken, ...bodyParams } = params;
   const response = await requestJson<{ ok: true; result: GhostCompletionResult }>(
     '/api/ghost/complete',
     {
       method: 'POST',
-      body: JSON.stringify(params),
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      body: JSON.stringify(bodyParams),
     },
   );
   return response.result;

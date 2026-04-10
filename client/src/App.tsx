@@ -428,23 +428,9 @@ function GameOverOverlay({
       onClose={onExit}
     >
       {ratingSummary && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '10px 12px',
-            borderRadius: 12,
-            border: '1px solid rgba(96, 165, 250, 0.22)',
-            background: 'rgba(12, 20, 34, 0.5)',
-            color: 'rgba(232, 241, 246, 0.94)',
-          }}
-        >
-          <span style={{ fontSize: '0.82rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(191, 213, 223, 0.72)' }}>
-            Rating
-          </span>
-          <strong style={{ fontSize: '1rem', fontWeight: 800 }}>
+        <div className="game-over-result-stat">
+          <span>Rating</span>
+          <strong>
             {ratingSummary.pending
               ? 'Updating...'
               : ratingSummary.delta != null && ratingSummary.newRating != null

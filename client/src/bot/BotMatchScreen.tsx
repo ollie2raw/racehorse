@@ -108,6 +108,17 @@ function getGhostResultMessage(playerScore: number, ghostScore: number): string 
   return 'Your ghost remembers this.';
 }
 
+function roundedRatingDelta(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function formatRatingDelta(value: number): string {
+  if (value === 0) return 'No change';
+  return `${value > 0 ? '+' : ''}${value}`;
+}
+
 function FullscreenIcon({ isFullscreen, style }: { isFullscreen: boolean; style?: React.CSSProperties }) {
   return (
     <svg className="icon-svg" style={style} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -684,7 +695,7 @@ export default function BotMatchScreen({
           accessTokenRef.current = null;
         }
       }
-      if (cancelled || localPendingRegisteredRef.current || match.gameOver) return;
+      if (cancelled || localPendingRegisteredRef.current) return;
       try {
         const response = await postLocalBotMatch('/api/bot-matches/local/start', {
           userId,
@@ -698,6 +709,10 @@ export default function BotMatchScreen({
         }
       } catch (err) {
         console.warn('[Fritz Pending] start failed', err);
+        if (matchRef.current.gameOver) {
+          setGhostResultLoading(false);
+          setGhostResultError(err instanceof Error ? err.message : 'Rating session failed to start.');
+        }
       }
     })();
     return () => {
@@ -805,7 +820,13 @@ export default function BotMatchScreen({
       setGhostResultError(null);
       return;
     }
-    if (!verifiedMatchId) return;
+    if (!verifiedMatchId) {
+      if (isStandaloneFritzMatch) {
+        setGhostResultLoading(true);
+        setGhostResultError(null);
+      }
+      return;
+    }
     const key = `${verifiedMatchId}:${userId}:${match.handNumber}:${match.players.you.score}:${match.players.bot.score}`;
     if (ghostCompleteKeyRef.current === key) return;
     ghostCompleteKeyRef.current = key;
@@ -820,6 +841,7 @@ export default function BotMatchScreen({
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
     });
+    const fritzPlayerMoveLog = !isGhostMode ? moveEntriesToGhostMoveLog(moveLog) : undefined;
 
     void completeGhostGame({
       matchId: verifiedMatchId,
@@ -828,8 +850,9 @@ export default function BotMatchScreen({
       localMatchId: activeLocalMatchId,
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
-      moveLog: ghostMoveLog,
-      playerMoveLog: !isGhostMode ? moveEntriesToGhostMoveLog(moveLog) : undefined,
+      moveLog: !isGhostMode && fritzPlayerMoveLog ? fritzPlayerMoveLog : ghostMoveLog,
+      playerMoveLog: fritzPlayerMoveLog,
+      accessToken: accessTokenRef.current,
     })
       .then((result) => {
         console.log('[Fritz Rating] success:', result);
@@ -890,6 +913,7 @@ export default function BotMatchScreen({
     ghostMoveLog,
     ghostProfile,
     isGhostMode,
+    isStandaloneFritzMatch,
     match.gameOver,
     match.handNumber,
     match.players.bot.score,
@@ -1555,35 +1579,16 @@ export default function BotMatchScreen({
       : ghostResult.newRating - ghostResult.ratingDelta;
   const fritzGlickoDelta =
     !isGhostMode && ghostResult?.glickoDelta != null
-      ? Math.round(ghostResult.glickoDelta)
+      ? roundedRatingDelta(ghostResult.glickoDelta)
       : !isGhostMode && ghostResult?.glickoRating != null && matchStartGlickoRating != null
-        ? Math.round(ghostResult.glickoRating - matchStartGlickoRating)
+        ? roundedRatingDelta(ghostResult.glickoRating - matchStartGlickoRating)
       : null;
   const fritzNewGlickoRating =
     !isGhostMode && ghostResult?.glickoRating != null
       ? Math.round(ghostResult.glickoRating)
       : null;
-  const fritzFallbackGlickoDelta =
-    !isGhostMode && ghostResult == null && currentGlickoRating != null && matchStartGlickoRating != null
-      ? Math.round(Number(currentGlickoRating) - matchStartGlickoRating)
-      : null;
-  const fritzFallbackNewGlickoRating =
-    !isGhostMode && ghostResult == null && currentGlickoRating != null
-      ? Math.round(Number(currentGlickoRating))
-      : null;
-  const hasFallbackFritzRatingUpdate =
-    fritzFallbackGlickoDelta != null &&
-    fritzFallbackNewGlickoRating != null;
   const hasConfirmedFritzRatingUpdate =
-    fritzGlickoDelta != null || hasFallbackFritzRatingUpdate || (!isGhostMode && ghostResult != null);
-  const displayedFritzGlickoDelta =
-    fritzGlickoDelta != null ? fritzGlickoDelta : hasFallbackFritzRatingUpdate ? fritzFallbackGlickoDelta : null;
-  const displayedFritzNewGlickoRating =
-    fritzNewGlickoRating != null
-      ? fritzNewGlickoRating
-      : hasFallbackFritzRatingUpdate
-        ? fritzFallbackNewGlickoRating
-        : null;
+    fritzGlickoDelta != null || (!isGhostMode && ghostResult != null);
   const ghostRatingDeltaLabel = ghostResult
     ? `${ghostResult.ratingDelta >= 0 ? '+' : ''}${ghostResult.ratingDelta}`
     : null;
@@ -1612,6 +1617,13 @@ export default function BotMatchScreen({
     );
   }
 
+  const handRevealScoredTiles = handReveal
+    ? handReveal.winner === 'you'
+      ? handReveal.botRemainingTiles
+      : handReveal.yourRemainingTiles
+    : [];
+  const handRevealScoredPips = sumTilePips(handRevealScoredTiles);
+
   return (
     <div
       ref={rootRef}
@@ -1628,67 +1640,34 @@ export default function BotMatchScreen({
       />
       {toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1500,
-            display: 'grid',
-            placeItems: 'center',
-            background: 'rgba(6, 10, 18, 0.62)',
-            backdropFilter: 'blur(4px)',
-          }}
-        >
-          <div
-            style={{
-              background: 'rgba(10,18,15,0.95)',
-              border: '1px solid rgba(236,252,245,0.14)',
-              borderRadius: 20,
-              padding: 32,
-              width: 480,
-              maxWidth: '90vw',
-              boxShadow: '0 26px 70px rgba(0,0,0,0.48)',
-              color: 'rgba(232,245,240,0.95)',
-              display: 'grid',
-              gap: 18,
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, marginBottom: 6 }}>
-              Hand Over
-            </h3>
-            <p
-              style={{
-                margin: 0,
-                fontSize: '1rem',
-                color:
-                  handReveal.winner === 'you' ? '#2ecc8e' : 'rgba(232,245,240,0.6)',
-                marginBottom: 20,
-                fontWeight: 600,
-              }}
-            >
-              {handReveal.winner === 'you'
-                ? `🎉 You won this hand  +${handReveal.pointsAwarded} pts`
-                : `${opponentLabel} won this hand  +${handReveal.pointsAwarded} pts`}
-            </p>
+        <div className="game-over-overlay hand-over-upgraded-overlay">
+          <div className="game-over-card hand-over-upgraded-card">
+            <div className="game-over-header">
+              <div className="game-over-title-block">
+                <span className="game-over-kicker">Hand Complete</span>
+                <h3 className="victory-title">Hand Over</h3>
+              </div>
+              <div className={`hand-over-points-pill ${handReveal.winner === 'you' ? 'is-you' : 'is-opponent'}`}>
+                +{handReveal.pointsAwarded}
+              </div>
+            </div>
+
+            <div className={`hand-over-summary-card ${handReveal.winner === 'you' ? 'winner-you' : 'winner-opponent'}`}>
+              <span className="hand-over-summary-label">
+                {handReveal.winner === 'you' ? 'You won this hand' : `${opponentLabel} won this hand`}
+              </span>
+              <strong>+{handReveal.pointsAwarded} points awarded</strong>
+              <p>
+                {handRevealScoredPips} remaining pips rounded to {handReveal.pointsAwarded} point
+                {handReveal.pointsAwarded === 1 ? '' : 's'}.
+              </p>
+            </div>
 
             {handReveal.reason === 'blocked' ? (
-              <div style={{ display: 'grid', gap: 16 }}>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <div
-                    style={{
-                      fontSize: '0.95rem',
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      color: 'rgba(232,245,240,0.9)',
-                      fontWeight: 600,
-                      textAlign: 'center',
-                    }}
-                  >
-                    Your Remaining Tiles
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+              <div className="hand-over-reveal-grid">
+                <div className={`hand-over-reveal-panel ${handReveal.winner === 'you' ? 'is-winner' : ''}`}>
+                  <div className="hand-over-reveal-label">Your Remaining Tiles</div>
+                  <div className="hand-over-tile-row">
                     {handReveal.yourRemainingTiles.map((tile, idx) => (
                       <DominoTile
                         key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
@@ -1699,20 +1678,9 @@ export default function BotMatchScreen({
                     ))}
                   </div>
                 </div>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <div
-                    style={{
-                      fontSize: '0.95rem',
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      color: 'rgba(232,245,240,0.9)',
-                      fontWeight: 600,
-                      textAlign: 'center',
-                    }}
-                  >
-                    {opponentLabel} Remaining Tiles
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                <div className={`hand-over-reveal-panel ${handReveal.winner === 'bot' ? 'is-winner' : ''}`}>
+                  <div className="hand-over-reveal-label">{opponentLabel} Remaining Tiles</div>
+                  <div className="hand-over-tile-row">
                     {handReveal.botRemainingTiles.map((tile, idx) => (
                       <DominoTile
                         key={`bot-reveal-${idx}-${tile.low}-${tile.high}`}
@@ -1725,30 +1693,14 @@ export default function BotMatchScreen({
                 </div>
               </div>
             ) : handReveal.winner === 'you' ? (
-              <div style={{ display: 'grid', gap: 10 }}>
-                <div
-                  style={{
-                    color: 'rgba(151, 241, 205, 0.98)',
-                    fontWeight: 700,
-                    fontSize: '1rem',
-                    textAlign: 'center',
-                  }}
-                >
-                  🎉 You cleared your hand
-                </div>
-                <div
-                  style={{
-                    fontSize: '0.95rem',
-                    fontWeight: 600,
-                    color: 'rgba(232,245,240,0.9)',
-                    textAlign: 'center',
-                  }}
-                >
+              <div className="hand-over-reveal-panel is-winner">
+                <div className="hand-over-reveal-label">You cleared your hand</div>
+                <p className="hand-over-reveal-copy">
                   {opponentLabel} had {handReveal.botRemainingTiles.length} tile
-                  {handReveal.botRemainingTiles.length === 1 ? '' : 's'} remaining:
-                </div>
+                  {handReveal.botRemainingTiles.length === 1 ? '' : 's'} remaining
+                </p>
                 {handReveal.botRemainingTiles.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                  <div className="hand-over-tile-row">
                     {handReveal.botRemainingTiles.map((tile, idx) => (
                       <DominoTile
                         key={`bot-reveal-${idx}-${tile.low}-${tile.high}`}
@@ -1761,29 +1713,11 @@ export default function BotMatchScreen({
                 )}
               </div>
             ) : (
-              <div style={{ display: 'grid', gap: 10 }}>
-                <div
-                  style={{
-                    color: 'rgba(232,245,240,0.9)',
-                    fontWeight: 600,
-                    fontSize: '0.95rem',
-                    textAlign: 'center',
-                  }}
-                >
-                  {opponentLabel} cleared their hand
-                </div>
-                <div
-                  style={{
-                    color: 'rgba(232,245,240,0.9)',
-                    fontSize: '0.95rem',
-                    fontWeight: 600,
-                    textAlign: 'center',
-                  }}
-                >
-                  Your remaining tiles:
-                </div>
+              <div className="hand-over-reveal-panel is-winner">
+                <div className="hand-over-reveal-label">{opponentLabel} cleared their hand</div>
+                <p className="hand-over-reveal-copy">Your remaining tiles</p>
                 {handReveal.yourRemainingTiles.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                  <div className="hand-over-tile-row">
                     {handReveal.yourRemainingTiles.map((tile, idx) => (
                       <DominoTile
                         key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
@@ -1796,26 +1730,10 @@ export default function BotMatchScreen({
                 )}
               </div>
             )}
-            <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: 3,
-                background: 'rgba(46,204,142,0.25)',
-                borderRadius: '0 0 20px 20px',
-                overflow: 'hidden',
-              }}
-            >
+            <div className="hand-over-progress-track">
               <div
-                style={{
-                  height: '100%',
-                  width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%`,
-                  background: '#2ecc8e',
-                  borderRadius: '0 0 20px 20px',
-                  transition: 'width 5000ms linear',
-                }}
+                className="hand-over-progress-fill"
+                style={{ width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%` }}
               />
             </div>
           </div>
@@ -1858,34 +1776,20 @@ export default function BotMatchScreen({
         >
           {!isGhostMode &&
             (ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null) && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid rgba(96, 165, 250, 0.22)',
-                background: 'rgba(12, 20, 34, 0.5)',
-                color: 'rgba(232, 241, 246, 0.94)',
-              }}
-            >
-              <span style={{ fontSize: '0.82rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(191, 213, 223, 0.72)' }}>
-                Rating
-              </span>
-              <strong style={{ fontSize: '1rem', fontWeight: 800 }}>
+            <div className="game-over-result-stat">
+              <span>Rating</span>
+              <strong>
                 {ghostResultLoading
                   ? 'Updating...'
-                  : displayedFritzGlickoDelta != null && displayedFritzNewGlickoRating != null
-                    ? `${displayedFritzGlickoDelta >= 0 ? '+' : ''}${displayedFritzGlickoDelta}  •  ${displayedFritzNewGlickoRating}`
+                  : fritzGlickoDelta != null && fritzNewGlickoRating != null
+                    ? `${formatRatingDelta(fritzGlickoDelta)}  •  ${fritzNewGlickoRating}`
                   : fritzNewGlickoRating != null
                     ? `${fritzNewGlickoRating}`
                   : ghostResultError
                     ? ghostResultError
-                    : ghostResult
-                      ? 'Result saved'
-                      : 'Updated'}
+                  : ghostResult
+                      ? 'Saved, rating unavailable'
+                      : 'Rating unavailable'}
               </strong>
             </div>
           )}

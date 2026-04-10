@@ -1,3 +1,4 @@
+import './loadEnv';
 import express from 'express';
 import cors, { type CorsOptions } from 'cors';
 import http from 'http';
@@ -95,7 +96,7 @@ const corsOptions: CorsOptions = {
 
 const app = express();
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 async function getAuthenticatedUserId(req: express.Request): Promise<string | null> {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
@@ -103,6 +104,19 @@ async function getAuthenticatedUserId(req: express.Request): Promise<string | nu
   const token = match?.[1]?.trim();
   return getAuthenticatedUserIdFromToken(token ?? null);
 }
+
+app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'type' in error &&
+    (error as { type?: string }).type === 'entity.too.large'
+  ) {
+    res.status(413).json({ error: 'Match result payload is too large.' });
+    return;
+  }
+  next(error);
+});
 
 async function getAuthenticatedUserIdFromToken(token: string | null): Promise<string | null> {
   if (!token) return null;
@@ -324,7 +338,8 @@ app.post('/api/ghost/complete', async (req, res) => {
     res.status(400).json({ error: 'Scores must be integers between 0 and 200.' });
     return;
   }
-  if (!moveLog || !isSafeGhostMoveLog(moveLog)) {
+  const isFritzMatch = Boolean(opponentUserId && isFritzId(opponentUserId));
+  if (!isFritzMatch && (!moveLog || !isSafeGhostMoveLog(moveLog))) {
     res.status(400).json({ error: 'moveLog is required.' });
     return;
   }
@@ -342,7 +357,10 @@ app.post('/api/ghost/complete', async (req, res) => {
   }
   const safeMoveLog = moveLog as import('./ghost/service').GhostMoveLogEntry[];
   const safePlayerMoveLog = playerMoveLog as import('./ghost/service').GhostMoveLogEntry[] | undefined;
-  const isFritzMatch = Boolean(opponentUserId && isFritzId(opponentUserId));
+  if (isFritzMatch && (!safePlayerMoveLog || safePlayerMoveLog.length === 0)) {
+    res.status(400).json({ error: 'playerMoveLog is required for Fritz matches.' });
+    return;
+  }
   const trainingMoveLog =
     isFritzMatch && safePlayerMoveLog && safePlayerMoveLog.length > 0 ? safePlayerMoveLog : safeMoveLog;
   const playerScoredPoints = trainingMoveLog.reduce(
@@ -351,10 +369,6 @@ app.post('/api/ghost/complete', async (req, res) => {
   );
   if (playerScoredPoints > finalScore) {
     res.status(400).json({ error: 'player scoring log exceeds finalScore.' });
-    return;
-  }
-  if (isFritzMatch && (!safePlayerMoveLog || safePlayerMoveLog.length === 0)) {
-    res.status(400).json({ error: 'playerMoveLog is required for Fritz matches.' });
     return;
   }
   if (!isFritzMatch) {
@@ -1127,7 +1141,13 @@ function cacheVerifiedSinglePlayerMatch(record: VerifiedSinglePlayerMatch): Veri
 
 function isMissingVerifiedMatchesTable(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes('verified_single_player_matches') && message.includes('does not exist');
+  return (
+    message.includes('verified_single_player_matches') &&
+    (message.includes('does not exist') ||
+      message.includes('pgrst205') ||
+      message.includes('schema cache') ||
+      message.includes('could not find the table'))
+  );
 }
 
 async function queryVerifiedSinglePlayerMatchByLocalKey(
