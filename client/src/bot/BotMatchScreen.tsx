@@ -1565,8 +1565,10 @@ export default function BotMatchScreen({
       ? ghostProfile?.ghostRating ?? 800
       : ghostResult.newRating - ghostResult.ratingDelta;
   const fritzGlickoDelta =
-    !isGhostMode && ghostResult?.glickoRating != null && matchStartGlickoRating != null
-      ? Math.round(ghostResult.glickoRating - matchStartGlickoRating)
+    !isGhostMode && ghostResult?.glickoDelta != null
+      ? Math.round(ghostResult.glickoDelta)
+      : !isGhostMode && ghostResult?.glickoRating != null && matchStartGlickoRating != null
+        ? Math.round(ghostResult.glickoRating - matchStartGlickoRating)
       : null;
   const fritzNewGlickoRating =
     !isGhostMode && ghostResult?.glickoRating != null

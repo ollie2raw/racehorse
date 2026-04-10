@@ -80,6 +80,7 @@ export type GhostCompletionResult = {
   newRating: number;
   ratingDelta: number;
   glickoRating: number | null;
+  glickoDelta: number | null;
   playerScore: number;
   ghostScore: number;
   playerWon: boolean;

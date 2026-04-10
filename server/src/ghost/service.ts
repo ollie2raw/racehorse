@@ -748,6 +748,7 @@ export async function completeGhostGame(params: {
   newRating: number;
   ratingDelta: number;
   glickoRating: number | null;
+  glickoDelta: number | null;
   playerScore: number;
   ghostScore: number;
   playerWon: boolean;
@@ -805,6 +806,7 @@ export async function completeGhostGame(params: {
       : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 };
 
   let glickoRating: number | null = null;
+  let glickoDelta: number | null = null;
   if (isFritz) {
     const fritzId = params.opponentUserId ?? FRITZ_ELITE_ID;
     const fritzConfig = getFritzConfig(fritzId);
@@ -837,6 +839,7 @@ export async function completeGhostGame(params: {
 
     const ratingResult = await processRatingPeriod(params.userId);
     glickoRating = ratingResult.newRating;
+    glickoDelta = ratingResult.delta;
   }
 
   await upsertGhostProfile({
@@ -852,6 +855,7 @@ export async function completeGhostGame(params: {
     newRating: rating.newRating,
     ratingDelta: rating.delta,
     glickoRating,
+    glickoDelta,
     playerScore: Math.round(params.finalScore),
     ghostScore: Math.round(params.opponentScore),
     playerWon: params.finalScore > params.opponentScore,

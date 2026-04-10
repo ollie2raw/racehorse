@@ -14,11 +14,11 @@ export const FRITZ_ROOKIE_RATING = 600;
 export const FRITZ_ROOKIE_RD = 50;
 export const FRITZ_STANDARD_RATING = 1000;
 export const FRITZ_STANDARD_RD = 50;
-export const FRITZ_RATING = 1600;
+export const FRITZ_RATING = 1800;
 export const FRITZ_RD = 50;
-export const FRITZ_MASTER_RATING = 1950;
+export const FRITZ_MASTER_RATING = 2200;
 export const FRITZ_MASTER_RD = 50;
-export const FRITZ_GRANDMASTER_RATING = 2100;
+export const FRITZ_GRANDMASTER_RATING = 2400;
 export const FRITZ_GRANDMASTER_RD = 45;
 
 export interface GlickoPlayer {
