@@ -423,7 +423,7 @@ app.post('/api/ghost/complete', async (req, res) => {
     if (isFritzMatch && localMatchId) {
       const roomCode = `local:${localMatchId}`;
       const pendingRows = await supabaseFetch<any[]>(
-        `/rest/v1/bot_match_pending?select=id&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&order=started_at.asc,id.asc&limit=1`,
+        `/rest/v1/bot_match_pending?select=id,resolved&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&order=started_at.desc,id.desc&limit=1`,
       );
       if (!pendingRows?.[0]?.id) {
         res.status(409).json({ error: 'No pending Fritz match found for this local match.' });
@@ -447,7 +447,7 @@ app.post('/api/ghost/complete', async (req, res) => {
     if (isFritzMatch && localMatchId) {
       const roomCode = `local:${localMatchId}`;
       await supabaseFetch(
-        `/rest/v1/bot_match_pending?room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false`,
+        `/rest/v1/bot_match_pending?room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}`,
         {
           method: 'PATCH',
           body: JSON.stringify({ resolved: true }),

@@ -355,7 +355,7 @@ export default function BotMatchScreen({
 
   const postLocalBotMatch = useCallback(
     async (
-      path: '/api/bot-matches/local/start' | '/api/bot-matches/local/resolve' | '/api/bot-matches/local/abandon',
+      path: '/api/bot-matches/local/start' | '/api/bot-matches/local/abandon',
       body: Record<string, unknown>,
       options?: { keepalive?: boolean },
     ) => {
@@ -736,20 +736,6 @@ export default function BotMatchScreen({
   ]);
 
   useEffect(() => {
-    if (!isStandaloneFritzMatch || !userId || !match.gameOver || localPendingResolvedRef.current === true) return;
-    void postLocalBotMatch('/api/bot-matches/local/resolve', {
-      userId,
-      localMatchId: activeLocalMatchId,
-    })
-      .then(() => {
-        localPendingResolvedRef.current = true;
-      })
-      .catch((err) => {
-        console.warn('[Fritz Pending] resolve failed', err);
-      });
-  }, [activeLocalMatchId, isStandaloneFritzMatch, match.gameOver, postLocalBotMatch, userId]);
-
-  useEffect(() => {
     if (!isStandaloneFritzMatch || match.gameOver) return;
     const handlePageHide = () => {
       void abandonStandaloneFritzMatch(true);
@@ -849,6 +835,9 @@ export default function BotMatchScreen({
         console.log('[Fritz Rating] success:', result);
         setGhostResult(result);
         setGhostResultLoading(false);
+        if (!isGhostMode) {
+          localPendingResolvedRef.current = true;
+        }
         if (result.glickoRating != null && onProfilePatch) {
           onProfilePatch({ glicko_rating: Number(result.glickoRating) });
         }

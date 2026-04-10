@@ -1,0 +1,80 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  DEFAULT_RD,
+  DEFAULT_RATING,
+  DEFAULT_VOL,
+  FRITZ_MASTER_ID,
+  getFritzConfig,
+} from './glicko2';
+import { processRatingPeriod } from './periodService';
+import { supabaseFetch } from '../supabaseUtils';
+
+vi.mock('../supabaseUtils', () => ({
+  supabaseFetch: vi.fn(),
+}));
+
+const mockedSupabaseFetch = vi.mocked(supabaseFetch);
+
+describe('Fritz rating processing', () => {
+  it('keeps the server Master rating aligned with the visible 2200 tier', () => {
+    expect(getFritzConfig(FRITZ_MASTER_ID)).toMatchObject({
+      rating: 2200,
+      rd: 50,
+      difficulty: 'master',
+    });
+  });
+
+  it('returns a positive non-zero Glicko delta for a win over Fritz Master', async () => {
+    mockedSupabaseFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === '/rest/v1/profiles?id=eq.player-1') {
+        return [
+          {
+            id: 'player-1',
+            username: 'tester',
+            glicko_rating: DEFAULT_RATING,
+            glicko_rd: DEFAULT_RD,
+            glicko_vol: DEFAULT_VOL,
+            glicko_last_period: null,
+            ranked_games_played: 0,
+            peak_rating: DEFAULT_RATING,
+            provisional: true,
+          },
+        ];
+      }
+
+      if (path === '/rest/v1/ranked_games?player_id=eq.player-1&rating_after=is.null&order=played_at.asc,id.asc') {
+        return [
+          {
+            id: 'game-1',
+            player_id: 'player-1',
+            opponent_id: FRITZ_MASTER_ID,
+            player_score: 61,
+            opponent_score: 42,
+            played_at: '2026-04-09T12:00:00.000Z',
+            rating_after: null,
+            delta: null,
+          },
+        ];
+      }
+
+      if (init?.method === 'PATCH' || init?.method === 'POST') {
+        return [];
+      }
+
+      throw new Error(`Unexpected Supabase call in Fritz rating test: ${path}`);
+    });
+
+    const result = await processRatingPeriod('player-1');
+
+    expect(result.gamesInPeriod).toBe(1);
+    expect(result.delta).toBeGreaterThan(0);
+    expect(Math.round(result.delta)).toBeGreaterThan(0);
+    expect(result.newRating).toBeGreaterThan(DEFAULT_RATING);
+
+    const rankedGamePatch = mockedSupabaseFetch.mock.calls.find(
+      ([path, init]) => path === '/rest/v1/ranked_games?id=eq.game-1' && init?.method === 'PATCH',
+    );
+    expect(rankedGamePatch).toBeTruthy();
+    expect(JSON.parse(String(rankedGamePatch?.[1]?.body)).delta).toBeGreaterThan(0);
+  });
+});
