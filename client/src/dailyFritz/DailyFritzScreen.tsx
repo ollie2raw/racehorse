@@ -62,6 +62,11 @@ function tierClassName(tier: string): string {
   }
 }
 
+function tierDisplayLabel(tier: string): string {
+  if (tier === 'elite') return 'Elite (1800)';
+  return titleCaseTier(tier);
+}
+
 export default function DailyFritzScreen({
   user,
   profile,
@@ -194,22 +199,10 @@ export default function DailyFritzScreen({
 
   return (
     <LayoutScreen
-      className="daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz"
+      className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz"
       badge="Daily Fritz"
       title="Today's Challenge"
-      subtitle={
-        <>
-          <span>Same deal for everyone. One run only.</span>
-          {today && (
-            <span className="daily-fritz-meta-row">
-              <span className="daily-fritz-date-pill">{formatDateLabel(today.run_date)}</span>
-              <span className="daily-fritz-streak-badge">
-                🔥 {today.streak} day{today.streak === 1 ? '' : 's'} streak
-              </span>
-            </span>
-          )}
-        </>
-      }
+      subtitle="Same deal for everyone. One run only."
       contentClassName="multiplayer-menu-card screen-shell daily-fritz-content"
     >
       <div className="mode-entry-panel daily-fritz-panel-shell">
@@ -223,20 +216,31 @@ export default function DailyFritzScreen({
             <>
               <div className="daily-fritz-summary-grid">
                 <div className="daily-fritz-summary-card">
-                  <span>Date</span>
-                  <strong>{formatDateLabel(today.run_date)}</strong>
+                  <div className="daily-fritz-stat-layout">
+                    <span>Date</span>
+                    <strong>{formatDateLabel(today.run_date)}</strong>
+                  </div>
                 </div>
                 <div className={`daily-fritz-summary-card daily-fritz-tier-card ${tierClassName(today.fritz_tier)}`}>
-                  <span>Tier</span>
-                  <strong>{titleCaseTier(today.fritz_tier)}</strong>
+                  <div className="daily-fritz-stat-layout">
+                    <span>Tier</span>
+                    <strong>{tierDisplayLabel(today.fritz_tier)}</strong>
+                  </div>
                 </div>
                 <div className="daily-fritz-summary-card">
-                  <span>Mode</span>
-                  <strong>{today.deal_size}-tile • First to {today.winning_score}</strong>
+                  <div className="daily-fritz-stat-layout">
+                    <span>Mode</span>
+                    <strong>{today.deal_size}-tile</strong>
+                  </div>
                 </div>
                 <div className="daily-fritz-summary-card">
-                  <span>Streak</span>
-                  <strong>{today.streak} day{today.streak === 1 ? '' : 's'}</strong>
+                  <div className="daily-fritz-stat-layout">
+                    <span>Streak</span>
+                    <strong className="daily-fritz-streak-value">
+                      {today.streak} day{today.streak === 1 ? '' : 's'}
+                      {today.streak >= 2 && <span className="daily-fritz-streak-icon" aria-hidden="true">🔥</span>}
+                    </strong>
+                  </div>
                 </div>
               </div>
 
@@ -250,29 +254,37 @@ export default function DailyFritzScreen({
 
               {today.attempt_status === 'completed' && (
                 <div className="daily-fritz-status-card is-complete">
-                  <div className="daily-fritz-result-topline">
-                    <span className="daily-fritz-status-label">Result</span>
-                    <span className={`daily-fritz-result-pill ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>
-                      {Boolean(today.result?.won) ? 'Win' : 'Loss'}
-                    </span>
-                  </div>
                   <div className="daily-fritz-result-grid">
-                    <div>
-                      <span>Score</span>
-                      <strong>
-                        {Number(today.result?.final_score ?? 0)}-{Number(today.result?.opponent_score ?? 0)}
-                      </strong>
+                    <div className="daily-fritz-summary-card daily-fritz-result-card daily-fritz-result-outcome-card">
+                      <div className="daily-fritz-stat-layout">
+                        <span>Result</span>
+                        <span className={`daily-fritz-result-pill ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>
+                          {Boolean(today.result?.won) ? 'Win' : 'Loss'}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span>Point Diff</span>
-                      <strong>
-                        {Number(today.result?.point_diff ?? 0) >= 0 ? '+' : ''}
-                        {Number(today.result?.point_diff ?? 0)}
-                      </strong>
+                    <div className="daily-fritz-summary-card daily-fritz-result-card">
+                      <div className="daily-fritz-stat-layout">
+                        <span>Score</span>
+                        <strong>
+                          {Number(today.result?.final_score ?? 0)}-{Number(today.result?.opponent_score ?? 0)}
+                        </strong>
+                      </div>
                     </div>
-                    <div>
-                      <span>Rank</span>
-                      <strong>{today.rank ? `#${today.rank}` : '—'}</strong>
+                    <div className="daily-fritz-summary-card daily-fritz-result-card">
+                      <div className="daily-fritz-stat-layout">
+                        <span>Point Diff</span>
+                        <strong>
+                          {Number(today.result?.point_diff ?? 0) >= 0 ? '+' : ''}
+                          {Number(today.result?.point_diff ?? 0)}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="daily-fritz-summary-card daily-fritz-result-card">
+                      <div className="daily-fritz-stat-layout">
+                        <span>Rank</span>
+                        <strong>{today.rank ? `#${today.rank}` : '—'}</strong>
+                      </div>
                     </div>
                   </div>
                 </div>

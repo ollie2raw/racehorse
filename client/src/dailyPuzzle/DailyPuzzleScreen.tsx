@@ -1037,21 +1037,9 @@ export default function DailyPuzzleScreen({
           badge="Daily Puzzle"
           title={isArchiveMode ? 'Puzzle Archive' : stableDailyTitle}
           subtitle={
-            <>
-              <span>
-                {isArchiveMode
-                  ? 'Play any past puzzle just for fun.'
-                  : 'Score as many points as you can in one turn.'}
-              </span>
-              <span className="daily-entry-meta-row">
-                <span className="daily-entry-date-pill">{formattedDisplayDate}</span>
-                {!isArchiveMode && (
-                  <span className="daily-entry-streak-badge">
-                    🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
-                  </span>
-                )}
-              </span>
-            </>
+            isArchiveMode
+              ? 'Play any past puzzle just for fun.'
+              : 'Score as many points as you can in one turn.'
           }
           contentClassName="multiplayer-menu-card screen-shell daily-entry-shell"
         >
@@ -1088,7 +1076,10 @@ export default function DailyPuzzleScreen({
                 </div>
                 <div className="daily-entry-summary-card">
                   <span>Streak</span>
-                  <strong>{isArchiveMode ? 'Off' : `${streakDays} day${streakDays === 1 ? '' : 's'}`}</strong>
+                  <strong className="daily-entry-streak-value">
+                    {isArchiveMode ? 'Off' : `${streakDays} day${streakDays === 1 ? '' : 's'}`}
+                    {!isArchiveMode && streakDays >= 2 && <span className="daily-entry-streak-icon" aria-hidden="true">🔥</span>}
+                  </strong>
                 </div>
               </div>
 

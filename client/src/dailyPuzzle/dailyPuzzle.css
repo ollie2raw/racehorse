@@ -705,11 +705,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: calc(100vh - 180px);
+  min-height: calc(100vh - 204px);
 }
 
 .daily-entry-shell {
-  min-height: calc(100vh - 180px);
+  min-height: calc(100vh - 204px);
 }
 
 .daily-entry-actions {
@@ -724,7 +724,7 @@
 .daily-entry-panel {
   width: 100%;
   margin-top: 0;
-  min-height: calc(100vh - 260px);
+  min-height: calc(100vh - 292px);
   padding: 18px;
   gap: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -868,34 +868,6 @@
   color: rgba(255, 255, 255, 0.72);
 }
 
-.daily-entry-meta-row {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 2px;
-}
-
-.daily-entry-date-pill,
-.daily-entry-streak-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 38px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 16, 29, 0.68);
-  color: rgba(232, 240, 237, 0.92);
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-
-.daily-entry-streak-badge {
-  border-color: rgba(240, 192, 64, 0.25);
-  background: linear-gradient(180deg, rgba(74, 58, 12, 0.56), rgba(33, 26, 8, 0.42));
-  color: #f3e1b0;
-}
-
 .daily-entry-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -940,6 +912,19 @@
   font-size: clamp(1.2rem, 1.5vw, 1.52rem);
   font-weight: 850;
   line-height: 1.08;
+}
+
+.daily-entry-streak-value {
+  display: inline-flex !important;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.daily-entry-streak-icon {
+  flex: 0 0 auto;
+  font-size: 0.78em;
+  line-height: 1;
 }
 
 .daily-entry-summary-button {
