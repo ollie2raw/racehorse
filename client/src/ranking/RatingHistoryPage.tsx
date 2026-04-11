@@ -144,7 +144,6 @@ export default function RatingHistoryPage({
   return (
     <LayoutScreen
       className="screen lobby-screen mode-home-screen mode-subpage-screen rating-history-screen"
-      badge="Ranking"
       title="Rating History"
       subtitle={`Glicko-2 progression for ${heading}`}
       contentClassName="screen-shell rating-history-content"

@@ -24,6 +24,7 @@ interface DailyFritzScreenProps {
   onGhostProfileChange: (profile: GhostProfileSummary | null) => void;
   onProfileRefresh?: () => Promise<void> | void;
   onProfilePatch?: (patch: Partial<UserProfile>) => void;
+  onOpenAuth: () => void;
   onBack: () => void;
 }
 
@@ -74,6 +75,7 @@ export default function DailyFritzScreen({
   onGhostProfileChange,
   onProfileRefresh,
   onProfilePatch,
+  onOpenAuth,
   onBack,
 }: DailyFritzScreenProps) {
   const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
@@ -170,6 +172,13 @@ export default function DailyFritzScreen({
   }, [today]);
 
   const currentUsername = profile?.username?.trim() ?? null;
+  const showAuthPrompt =
+    !loading &&
+    Boolean(
+      error &&
+        (error.toLowerCase() === 'unauthorized' ||
+          error.toLowerCase().includes('unauthorized')),
+    );
 
   if (activeRun) {
     return (
@@ -200,7 +209,6 @@ export default function DailyFritzScreen({
   return (
     <LayoutScreen
       className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz"
-      badge="Daily Fritz"
       title="Today's Challenge"
       subtitle="Same deal for everyone. One run only."
       contentClassName="multiplayer-menu-card screen-shell daily-fritz-content"
@@ -210,6 +218,14 @@ export default function DailyFritzScreen({
 
           {loading ? (
             <div className="daily-fritz-empty">Loading today’s run…</div>
+          ) : showAuthPrompt ? (
+            <div className="daily-fritz-empty">
+              <p>Sign in to play Daily Fritz.</p>
+              <button className="mode-option mode-option-primary daily-fritz-action daily-fritz-primary-action" onClick={onOpenAuth}>
+                <span className="mode-option-title">Sign In</span>
+                <span className="mode-option-meta">Open account access</span>
+              </button>
+            </div>
           ) : error ? (
             <div className="daily-fritz-empty">{error}</div>
           ) : today ? (

@@ -957,7 +957,6 @@ export default function DailyPuzzleScreen({
     return (
       <LayoutScreen
         className="screen lobby-screen mode-home-screen"
-        badge="Daily Puzzle"
         title={stableDailyTitle}
         subtitle="Loading today's curated puzzle..."
         contentClassName="screen-shell"
@@ -969,7 +968,6 @@ export default function DailyPuzzleScreen({
     return (
       <LayoutScreen
         className="screen lobby-screen mode-home-screen"
-        badge="Daily Puzzle"
         title={stableDailyTitle}
         subtitle={isArchiveMode ? 'Unable to load archived puzzle.' : "Unable to load today's puzzle."}
         contentClassName="screen-shell"
@@ -988,7 +986,6 @@ export default function DailyPuzzleScreen({
     return (
       <LayoutScreen
         className="screen lobby-screen mode-home-screen"
-        badge="Daily Puzzle"
         title={stableDailyTitle}
         subtitle={isArchiveMode ? 'No puzzle exists for that date.' : "Today's puzzle is not posted yet."}
         contentClassName="screen-shell"
@@ -1034,7 +1031,6 @@ export default function DailyPuzzleScreen({
       <>
         <LayoutScreen
           className="screen mode-subpage-screen mode-accent-daily daily-entry-screen"
-          badge="Daily Puzzle"
           title={isArchiveMode ? 'Puzzle Archive' : stableDailyTitle}
           subtitle={
             isArchiveMode
@@ -1288,7 +1284,6 @@ export default function DailyPuzzleScreen({
     return (
       <LayoutScreen
         className="screen lobby-screen mode-home-screen"
-        badge="Daily Puzzle"
         title={stableDailyTitle}
         subtitle="Preparing puzzle board..."
         contentClassName="screen-shell"

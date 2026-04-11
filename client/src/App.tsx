@@ -2506,6 +2506,7 @@ export default function App() {
             onGhostProfileChange={setGhostProfile}
             onProfileRefresh={refreshAuthProfile}
             onProfilePatch={applyProfilePatch}
+            onOpenAuth={() => setAuthModalOpen(true)}
             onBack={() => setAppMode('home')}
           />
         </Suspense>
@@ -2547,14 +2548,6 @@ export default function App() {
       <div className={appRootClassName}>
         <LayoutScreen
           className="screen lobby-screen mode-home-screen mode-subpage-screen"
-          badge={
-            <span className="subpage-brand-lockup" aria-label="Racehorse">
-              <span className="subpage-brand-iconbox" aria-hidden="true">
-                <BoneyardStackIcon className="subpage-brand-icon" />
-              </span>
-              <span className="subpage-brand-wordmark">RACEHORSE</span>
-            </span>
-          }
           title="Single Player Modes"
           subtitle="Choose a mode to play solo or against a bot."
           contentClassName="screen-shell"
@@ -2787,7 +2780,6 @@ export default function App() {
     return (
       <LayoutScreen
         className={`screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-tournament tournament-screen ${tournamentState?.status === 'running' ? 'tournament-screen-running' : ''}`}
-        badge="Compete"
         title={tournamentId ? 'Tournament Hub' : 'Create or Join a Lobby'}
         subtitle={
           tournamentId
@@ -3382,7 +3374,6 @@ export default function App() {
       {!isConnected && !isRecoveringConnection && (
         <LayoutScreen
           className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-disconnected"
-          badge="Play Online"
           title="Multiplayer Online"
           subtitle="Connect to create a room or join a friend using a room code."
           contentClassName="multiplayer-menu-card screen-shell"
@@ -3430,7 +3421,6 @@ export default function App() {
       {isConnected && !joinedRoom && (
         <LayoutScreen
           className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-lobby"
-          badge="Play Online"
           title="Join or Create a Room"
           subtitle="Create a new room or enter a code to join your friend instantly."
           contentClassName="multiplayer-menu-card screen-shell"
@@ -3474,7 +3464,6 @@ export default function App() {
       {isConnected && joinedRoom && !state && (
         <LayoutScreen
           className="screen room-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-room"
-          badge="Play Online"
           title={<span>Room: <span className="multiplayer-room-code">{joinedRoom}</span></span>}
           subtitle="Waiting for all players to join before starting the hand."
           contentClassName="multiplayer-menu-card screen-shell"

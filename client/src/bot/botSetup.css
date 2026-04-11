@@ -4,7 +4,7 @@
   width: 100%;
   position: relative;
   overflow: hidden;
-  padding-inline: 24px !important;
+  padding: 0 24px 24px !important;
 }
 
 .bot-setup-content {
@@ -32,6 +32,14 @@
   width: 100%;
   max-width: none !important;
   margin: 0 !important;
+}
+
+.bot-setup-screen .layout-screen-inner {
+  margin-top: clamp(16px, 2.4vh, 24px) !important;
+}
+
+.bot-setup-screen .layout-screen-header {
+  gap: 4px;
 }
 
 .bot-setup-screen .layout-screen-badge {

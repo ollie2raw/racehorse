@@ -205,7 +205,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     return (
       <LayoutScreen
         className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-learn learn-player-screen"
-        badge="Learn"
         title="Lesson not found"
         subtitle="This lesson is unavailable right now."
         contentClassName="screen-shell"
@@ -657,7 +656,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
   return (
     <LayoutScreen
       className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-learn learn-player-screen"
-      badge="Learn"
       title={lesson.title}
       subtitle={lesson.description}
       contentClassName="screen-shell"

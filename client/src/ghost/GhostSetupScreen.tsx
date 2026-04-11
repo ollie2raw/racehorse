@@ -165,7 +165,6 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
     return (
       <LayoutScreen
         className="screen mode-subpage-screen mode-accent-ghost mode-auth-gate-screen"
-        badge="Compete"
         title="Sign In Required"
         subtitle="Ghost Mode is tied to your account and training progress."
         contentClassName="mode-auth-gate-content"
@@ -178,7 +177,6 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
   return (
     <LayoutScreen
       className="ghost-setup-screen mode-subpage-screen mode-accent-ghost"
-      badge="Compete"
       title="Ghost Mode"
       subtitle="Play against a version of yourself — or a friend — trained on real Fritz matches."
       contentClassName="screen-shell ghost-setup-content"

@@ -45,7 +45,6 @@ export default function LearnHome({ onBack, onStartLesson }: LearnHomeProps) {
   return (
     <LayoutScreen
       className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-learn learn-home-screen"
-      badge="Learn"
       title="Learn Racehorse"
       subtitle="Master the fundamentals step-by-step."
       contentClassName="screen-shell"
