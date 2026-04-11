@@ -1,6 +1,6 @@
 import type { EngineBestMove, MoveEntry, TileTuple } from './moveLogger';
 import { sameTileTuple } from './moveLogger';
-import { chooseBotMove, toBotVisibleState } from '../bot/botHeuristics';
+import { chooseBotMove, evaluateMove, toBotVisibleState } from '../bot/botHeuristics';
 import { createBotMatch, previewPlayMove, getLegalMoves } from '../bot/botEngine';
 import type { BotMatchState } from '../bot/botEngine';
 
@@ -70,10 +70,7 @@ function uniqueTiles(tiles: TileTuple[]): TileTuple[] {
 // evaluation function — chooseBotMove's internal scoring via previewPlayMove.
 // We never mix moveLogger's simple heuristic scores with the bot engine scores.
 
-function buildEvalState(
-  entry: MoveEntry,
-  perspective: 'bot' | 'you',
-): BotMatchState | null {
+function buildEvalState(entry: MoveEntry): BotMatchState | null {
   if (!entry.boardRenderState) return null;
   try {
     const template = createBotMatch(60, 7);
@@ -81,7 +78,7 @@ function buildEvalState(
     return {
       ...template,
       board: entry.boardRenderState as unknown as typeof template.board,
-      currentPlayer: perspective,
+      currentPlayer: 'bot',
       handOpen: entry.boardRenderState.mainLine.length > 0 || true,
       handOver: false,
       gameOver: false,
@@ -92,12 +89,12 @@ function buildEvalState(
       players: {
         you: {
           ...template.players.you,
-          hand: perspective === 'you' ? [] : hand,
+          hand: [],
           score: 0,
         },
         bot: {
           ...template.players.bot,
-          hand: perspective === 'bot' ? hand : [],
+          hand,
           score: 0,
         },
       },
@@ -107,61 +104,110 @@ function buildEvalState(
   }
 }
 
-/**
- * Compute the engine score for a specific tile+position using the SAME
- * previewPlayMove path the bot uses internally.
- *
- * Returns null if the move is illegal or can't be previewed.
- */
-function engineScoreForMove(
-  evalState: BotMatchState,
-  tile: TileTuple,
-  position: string | undefined,
-  perspective: 'bot' | 'you',
-): { score: number; breakdown: EngineBestMove['breakdown'] } | null {
-  // Find the matching legal move to get the correct position
-  const legalMoves = getLegalMoves(evalState, perspective);
-  const tileObj = { low: tile[0], high: tile[1] };
+function sameMoveByTileAndPosition(
+  candidate: { tile?: TileTuple; position?: string },
+  target: { tile?: TileTuple; position?: string },
+): boolean {
+  return sameTileTuple(candidate.tile, target.tile) && String(candidate.position ?? '') === String(target.position ?? '');
+}
 
-  // Try to find exact position match first, then fall back to any legal position for this tile
-  const matchingMoves = legalMoves.filter(
-    (m) => m.type === 'play' && m.tile &&
-      m.tile.low === tileObj.low && m.tile.high === tileObj.high,
-  );
+function compareTileTupleNumeric(a?: TileTuple, b?: TileTuple): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  if (a[1] !== b[1]) return a[1] - b[1];
+  if (a[0] !== b[0]) return a[0] - b[0];
+  return 0;
+}
 
-  if (matchingMoves.length === 0) return null;
+function compareRecordedMoves(
+  a: { tile?: TileTuple; position?: string },
+  b: { tile?: TileTuple; position?: string },
+): number {
+  const tileCompare = compareTileTupleNumeric(a.tile, b.tile);
+  if (tileCompare !== 0) return tileCompare;
+  return String(a.position ?? '').localeCompare(String(b.position ?? ''));
+}
 
-  // Prefer the position we recorded; otherwise take the highest-scoring legal placement
-  const targetMove = position
-    ? matchingMoves.find((m) => m.type === 'play' && m.position === position) ?? matchingMoves[0]
-    : matchingMoves[0];
+function getMasterMoveScores(entry: MoveEntry): {
+  bestMove: EngineBestMove | null;
+  bestScore: number | null;
+  bestBreakdown: EngineBestMove['breakdown'] | null;
+  playedScore: number | null;
+  playedBreakdown: EngineBestMove['breakdown'] | null;
+  exactMatch: boolean;
+} {
+  const evalState = buildEvalState(entry);
+  if (!evalState) {
+    return {
+      bestMove: null,
+      bestScore: null,
+      bestBreakdown: null,
+      playedScore: null,
+      playedBreakdown: null,
+      exactMatch: false,
+    };
+  }
 
-  const preview = previewPlayMove(evalState, perspective, targetMove);
-  if (!preview) return null;
+  const masterBest = chooseBotMove(toBotVisibleState(evalState), 'master');
+  const bestMove = masterBest?.move?.tile
+    ? {
+        tile: [masterBest.move.tile.low, masterBest.move.tile.high] as TileTuple,
+        position: masterBest.move.position,
+        score: masterBest.score,
+        breakdown: masterBest.breakdown,
+      }
+    : null;
 
-  const immediate = preview.immediateScore;
-  const isDouble = tile[0] === tile[1];
-  const mobility = preview.nextHand.filter((t) =>
-    preview.openEnds.some((e) => e === t.low || e === t.high),
-  ).length;
-  const unload = tile[0] + tile[1];
-  const denial = -preview.openEnds.reduce((sum, end) => {
-    return sum + (end >= 0 && end <= 6 ? 7 : 0);
-  }, 0);
+  const legalMoves = getLegalMoves(evalState, 'bot')
+    .filter((move) => move.type === 'play' && move.tile)
+    .map((move) => ({
+      move,
+      scored: evaluateMove(toBotVisibleState(evalState), move, 'master'),
+    }))
+    .filter((item) => item.scored && item.move.tile)
+    .sort((a, b) => {
+      const scoreDiff = (b.scored?.score ?? -Infinity) - (a.scored?.score ?? -Infinity);
+      if (scoreDiff !== 0) return scoreDiff;
+      return compareRecordedMoves(
+        { tile: [a.move.tile!.low, a.move.tile!.high], position: a.move.position },
+        { tile: [b.move.tile!.low, b.move.tile!.high], position: b.move.position },
+      );
+    });
 
-  // Use the same scoring formula as chooseBotMove standard mode for comparability
-  const score = immediate * 100 + unload * 0.8 + mobility * 8 + denial * 0.3 + (isDouble ? 2 : 0);
+  const playedCandidate = entry.tile
+    ? legalMoves.find(({ move }) =>
+        sameMoveByTileAndPosition(
+          { tile: [move.tile!.low, move.tile!.high], position: move.position },
+          { tile: entry.tile, position: undefined },
+        ),
+      ) ??
+      legalMoves.find(({ move }) => sameTileTuple([move.tile!.low, move.tile!.high], entry.tile))
+    : null;
+
+  const bestCandidate = bestMove
+    ? legalMoves.find(({ move }) =>
+        sameMoveByTileAndPosition(
+          { tile: [move.tile!.low, move.tile!.high], position: move.position },
+          { tile: bestMove.tile, position: bestMove.position },
+        ),
+      ) ?? legalMoves[0]
+    : legalMoves[0];
 
   return {
-    score,
-    breakdown: {
-      immediate,
-      doubleBias: isDouble ? 1 : 0,
-      mobility,
-      denial,
-      unload,
-      replyRisk: 0,
-    },
+    bestMove,
+    bestScore: bestCandidate?.scored?.score ?? bestMove?.score ?? null,
+    bestBreakdown: bestCandidate?.scored?.breakdown ?? bestMove?.breakdown ?? null,
+    playedScore: playedCandidate?.scored?.score ?? null,
+    playedBreakdown: playedCandidate?.scored?.breakdown ?? null,
+    exactMatch: Boolean(
+      entry.tile &&
+      bestMove &&
+      sameMoveByTileAndPosition(
+        { tile: entry.tile, position: undefined },
+        { tile: bestMove.tile, position: bestMove.position },
+      ),
+    ) || Boolean(entry.tile && bestMove && sameTileTuple(entry.tile, bestMove.tile)),
   };
 }
 
@@ -238,7 +284,8 @@ function classifyMove(entry: MoveEntry): {
   playedBreakdown: EngineBestMove['breakdown'] | null;
 } {
   const validTiles = uniqueTiles(entry.validMoves);
-  const bestMove = entry.engineBestMove;
+  const masterEval = getMasterMoveScores(entry);
+  const bestMove = masterEval.bestMove;
   const bestTile = bestMove?.tile;
 
   if (entry.action === 'pass' && validTiles.length > 0) {
@@ -268,63 +315,23 @@ function classifyMove(entry: MoveEntry): {
   }
 
   // ── Score both moves on the SAME scale using the engine ──────────────────────
-  const evalState = buildEvalState(entry, 'bot');
+  const bestScore = masterEval.bestScore;
+  const bestBreakdown = masterEval.bestBreakdown;
+  const playedScore = masterEval.playedScore;
+  const playedBreakdown = masterEval.playedBreakdown;
 
-  let bestScore = entry.engineBestMove.score;
-  let bestBreakdown: EngineBestMove['breakdown'] | null = entry.engineBestMove.breakdown ?? null;
-  let playedScore: number | null = null;
-  let playedBreakdown: EngineBestMove['breakdown'] | null = null;
-
-  if (evalState) {
-    // Re-score the best move through the engine to get a consistent scale
-    const bestEval = engineScoreForMove(evalState, bestTile, bestMove?.position, 'bot');
-    if (bestEval) {
-      bestScore = bestEval.score;
-      bestBreakdown = bestEval.breakdown;
-    }
-
-    // Score the played move through the same engine
-    const playedEval = engineScoreForMove(evalState, entry.tile, entry.boardState?.find(
-      (s) => s.tile[0] === entry.tile![0] && s.tile[1] === entry.tile![1]
-    )?.position, 'bot');
-    if (playedEval) {
-      playedScore = playedEval.score;
-      playedBreakdown = playedEval.breakdown;
-    }
+  if (bestScore == null || playedScore == null) {
+    return {
+      score: 72,
+      rating: 'Good',
+      bestTile,
+      bestPosition: bestMove?.position,
+      explanation: 'Analyzer could not reconstruct a full Master Fritz comparison for this move.',
+      playedBreakdown,
+    };
   }
 
-  // Fallback: if we couldn't score the played move, use best score as baseline
-  if (playedScore === null) {
-    playedScore = bestScore * 0.7; // conservative assumption
-  }
-
-  // ── Check if played tile is a double (turn continues) ────────────────────────
-  // A double that continues the turn should not be penalised for the immediate
-  // move alone — we look at whether it was part of a deliberate chain.
-  const playedIsDouble = entry.tile[0] === entry.tile[1];
-  const bestIsDouble = bestTile[0] === bestTile[1];
-
-  // If player played a double and best move was not a double, the double grants
-  // an extra turn — add a turn-continuation bonus to played score.
-  // We approximate this as worth ~0.5 extra mobility points on the same scale.
-  let adjustedPlayedScore = playedScore;
-  if (playedIsDouble && !bestIsDouble) {
-    adjustedPlayedScore += 40; // ~0.5 mobility units on our 100-pt scale
-  }
-  // Conversely if best move is a double and played isn't, best gets the bonus
-  let adjustedBestScore = bestScore;
-  if (bestIsDouble && !playedIsDouble) {
-    adjustedBestScore += 40;
-  }
-
-  const diff = adjustedBestScore - adjustedPlayedScore;
-
-  // Normalize against best score magnitude so thresholds are scale-independent
-  const magnitude = Math.max(Math.abs(adjustedBestScore), 20);
-  const normalizedDiff = diff / magnitude;
-
-  if (normalizedDiff <= 0.0) {
-    // Played move was equal or better than engine's choice
+  if (masterEval.exactMatch) {
     return {
       score: 99,
       rating: 'Brilliant',
@@ -334,9 +341,14 @@ function classifyMove(entry: MoveEntry): {
       playedBreakdown,
     };
   }
-  if (normalizedDiff <= 0.08) {
+
+  const diff = bestScore - playedScore;
+  const magnitude = Math.max(Math.abs(bestScore), 20);
+  const normalizedDiff = diff / magnitude;
+
+  if (normalizedDiff <= 0.03) {
     return {
-      score: 88,
+      score: 92,
       rating: 'Great',
       bestTile,
       bestPosition: bestMove?.position,
@@ -344,9 +356,9 @@ function classifyMove(entry: MoveEntry): {
       playedBreakdown,
     };
   }
-  if (normalizedDiff <= 0.20) {
+  if (normalizedDiff <= 0.12) {
     return {
-      score: 74,
+      score: 80,
       rating: 'Good',
       bestTile,
       bestPosition: bestMove?.position,
@@ -354,9 +366,9 @@ function classifyMove(entry: MoveEntry): {
       playedBreakdown,
     };
   }
-  if (normalizedDiff <= 0.36) {
+  if (normalizedDiff <= 0.28) {
     return {
-      score: 58,
+      score: 60,
       rating: 'Inaccuracy',
       bestTile,
       bestPosition: bestMove?.position,
@@ -364,7 +376,7 @@ function classifyMove(entry: MoveEntry): {
       playedBreakdown,
     };
   }
-  if (normalizedDiff <= 0.55) {
+  if (normalizedDiff <= 0.48) {
     return {
       score: 38,
       rating: 'Mistake',
@@ -395,14 +407,13 @@ function gradeFromAccuracy(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
 export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
   return entries.map((entry) => {
     if (entry.player !== 'you') return entry;
-    if (entry.engineBestMove !== null) return entry;
     if (!entry.boardRenderState) return entry;
 
     try {
-      const evalState = buildEvalState(entry, 'bot');
+      const evalState = buildEvalState(entry);
       if (!evalState) return entry;
 
-      const choice = chooseBotMove(toBotVisibleState(evalState), 'hard');
+      const choice = chooseBotMove(toBotVisibleState(evalState), 'master');
       if (!choice || !choice.move.tile) return entry;
       return {
         ...entry,
@@ -529,7 +540,7 @@ export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): G
     };
   });
 
-  const analyzedMoves = sequenceAdjustRatings(rawAnalyzedMoves, processedEntries);
+  const analyzedMoves = rawAnalyzedMoves;
 
   const timeline = processedEntries.map((entry, moveIndex) => {
     if (entry.player === 'you') {

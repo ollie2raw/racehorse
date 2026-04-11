@@ -13,6 +13,8 @@ export interface UserProfile {
 
 interface AuthResult {
   error: string | null;
+  message?: string | null;
+  pendingVerification?: boolean;
 }
 
 const TEMP_USERNAME_PREFIX = 'user_';
@@ -40,29 +42,64 @@ export function isTemporaryUsername(username: string | null | undefined): boolea
   return username.startsWith(TEMP_USERNAME_PREFIX);
 }
 
-async function ensureProfile(userId: string): Promise<void> {
+function normalizeDesiredUsername(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase() ?? '';
+  if (normalized.length < 3) return null;
+  if (!/^[a-z0-9_]+$/.test(normalized)) return null;
+  return normalized;
+}
+
+function isUniqueUsernameError(error: unknown): boolean {
+  const message = error instanceof Error
+    ? error.message.toLowerCase()
+    : typeof error === 'object' && error && 'message' in error
+      ? String((error as { message?: unknown }).message ?? '').toLowerCase()
+      : String(error).toLowerCase();
+  return message.includes('duplicate key') || message.includes('unique');
+}
+
+function getPreferredUsername(user: User): string | null {
+  const meta = user.user_metadata as Record<string, unknown> | null | undefined;
+  const direct = typeof meta?.username === 'string' ? meta.username : null;
+  const preferred = typeof meta?.preferred_username === 'string' ? meta.preferred_username : null;
+  return normalizeDesiredUsername(preferred ?? direct ?? null);
+}
+
+async function ensureProfile(user: User): Promise<void> {
   if (!supabase) return;
+  const client = supabase;
+  const userId = user.id;
   const tempUsername = `${TEMP_USERNAME_PREFIX}${userId.replace(/-/g, '').slice(0, 8)}`;
+  const preferredUsername = getPreferredUsername(user);
+  const primaryUsername = preferredUsername ?? tempUsername;
   try {
     const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
       setTimeout(() => resolve({ timedOut: true }), PROFILE_REQUEST_TIMEOUT_MS);
     });
-    const upsertPromise = supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: userId,
-          username: tempUsername,
-          glicko_rating: DEFAULT_GLICKO_RATING,
-          glicko_rd: DEFAULT_GLICKO_RD,
-          glicko_vol: DEFAULT_GLICKO_VOL,
-          provisional: true,
-          peak_rating: DEFAULT_GLICKO_RATING,
-          ranked_games_played: 0,
-        },
-        { onConflict: 'id', ignoreDuplicates: true },
-      )
-      .then(({ error }) => ({ timedOut: false as const, error }));
+    const upsertProfile = async (username: string) =>
+      client
+        .from('profiles')
+        .upsert(
+          {
+            id: userId,
+            username,
+            glicko_rating: DEFAULT_GLICKO_RATING,
+            glicko_rd: DEFAULT_GLICKO_RD,
+            glicko_vol: DEFAULT_GLICKO_VOL,
+            provisional: true,
+            peak_rating: DEFAULT_GLICKO_RATING,
+            ranked_games_played: 0,
+          },
+          { onConflict: 'id', ignoreDuplicates: true },
+        );
+
+    const upsertPromise = (async () => {
+      let result = await upsertProfile(primaryUsername);
+      if (result.error && preferredUsername && preferredUsername !== tempUsername && isUniqueUsernameError(result.error)) {
+        result = await upsertProfile(tempUsername);
+      }
+      return { timedOut: false as const, error: result.error };
+    })();
 
     const result = await Promise.race([upsertPromise, timeoutPromise]);
     if ('timedOut' in result && result.timedOut) {
@@ -261,7 +298,7 @@ export function useAuth() {
 
   const hydrateProfile = useCallback(
     async (sessionUser: User): Promise<void> => {
-      await ensureProfile(sessionUser.id);
+      await ensureProfile(sessionUser);
       await refreshProfile(sessionUser);
     },
     [refreshProfile],
@@ -379,8 +416,25 @@ export function useAuth() {
     async (email: string, password: string, username?: string): Promise<AuthResult> => {
       if (!supabase) return { error: getSupabaseConfigError() };
       const client = supabase;
+      const normalizedUsername = normalizeDesiredUsername(username ?? null);
+      if (!normalizedUsername) {
+        return { error: 'Username must be at least 3 characters and use lowercase letters, numbers, and underscores only.' };
+      }
       const runSignUp = async () =>
-        withTimeout(client.auth.signUp({ email, password }), AUTH_REQUEST_TIMEOUT_MS);
+        withTimeout(
+          client.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+              data: {
+                preferred_username: normalizedUsername,
+                username: normalizedUsername,
+              },
+            },
+          }),
+          AUTH_REQUEST_TIMEOUT_MS,
+        );
       try {
         let result: Awaited<ReturnType<typeof runSignUp>>;
         try {
@@ -394,34 +448,17 @@ export function useAuth() {
         if (error) return { error: error.message };
 
         if (data.user) {
-          if (username) {
-            const normalized = username.trim().toLowerCase();
-            if (normalized.length >= 3 && /^[a-z0-9_]+$/.test(normalized)) {
-              try {
-                await supabase
-                  .from('profiles')
-                  .upsert(
-                    {
-                      id: data.user.id,
-                      username: normalized,
-                      glicko_rating: DEFAULT_GLICKO_RATING,
-                      glicko_rd: DEFAULT_GLICKO_RD,
-                      glicko_vol: DEFAULT_GLICKO_VOL,
-                      provisional: true,
-                      peak_rating: DEFAULT_GLICKO_RATING,
-                      ranked_games_played: 0,
-                    },
-                    { onConflict: 'id', ignoreDuplicates: true },
-                  );
-              } catch {
-                // ignore profile write failures during sign up
-              }
-            }
-          }
           void hydrateProfile(data.user);
+          if (!data.session) {
+            return {
+              error: null,
+              pendingVerification: true,
+              message: 'Account created. Check your email and verify your address to finish signing in.',
+            };
+          }
         }
 
-        return { error: null };
+        return { error: null, message: 'Account created.' };
       } catch (err) {
         if (isTimeoutError(err)) {
           try {

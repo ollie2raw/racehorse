@@ -131,6 +131,8 @@ app.use((error: unknown, _req: express.Request, res: express.Response, next: exp
 
 async function getAuthenticatedUserIdFromToken(token: string | null): Promise<string | null> {
   if (!token) return null;
+  const cached = authenticatedUserIdCache.get(token);
+  if (cached && cached.expiresAt > Date.now()) return cached.userId;
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
@@ -144,10 +146,15 @@ async function getAuthenticatedUserIdFromToken(token: string | null): Promise<st
       Authorization: `Bearer ${token}`,
     },
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    authenticatedUserIdCache.set(token, { userId: null, expiresAt: Date.now() + 10_000 });
+    return null;
+  }
 
   const user = (await response.json()) as { id?: unknown };
-  return typeof user.id === 'string' ? user.id : null;
+  const userId = typeof user.id === 'string' ? user.id : null;
+  authenticatedUserIdCache.set(token, { userId, expiresAt: Date.now() + AUTHENTICATED_USER_ID_TTL_MS });
+  return userId;
 }
 
 app.get('/health', (_, res) => {
@@ -1017,6 +1024,14 @@ type DailyFritzRunRecord = {
   metadata: Record<string, unknown> | null;
 };
 
+type DailyFritzRunSummary = {
+  runDate: string;
+  fritzTier: DailyFritzTier;
+  dealSize: 7 | 14;
+  winningScore: number;
+  status: DailyFritzRunStatus;
+};
+
 type DailyFritzAttemptRecord = {
   id: string;
   runDate: string;
@@ -1065,6 +1080,9 @@ const verifiedSinglePlayerMatches = new Map<string, VerifiedSinglePlayerMatch>()
 const verifiedSinglePlayerMatchesByLocalKey = new Map<string, string>();
 let persistentVerifiedMatchesAvailable: boolean | null = null;
 let persistentRoomMatchLogsAvailable: boolean | null = null;
+const authenticatedUserIdCache = new Map<string, { userId: string | null; expiresAt: number }>();
+const AUTHENTICATED_USER_ID_TTL_MS = 60_000;
+const dailyFritzRunCache = new Map<string, DailyFritzRunRecord>();
 
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -1500,11 +1518,49 @@ function isMissingDailyFritzTable(error: unknown): boolean {
 }
 
 async function getDailyFritzRun(runDate: string): Promise<DailyFritzRunRecord | null> {
+  const cached = dailyFritzRunCache.get(runDate);
+  if (cached) return cached;
   const rows = await supabaseFetch<DailyFritzRunRow[]>(
     `/rest/v1/daily_fritz_runs?select=run_date,seed,fritz_tier,deal_size,winning_score,status,hand_deals,generated_at,invalidated_at,metadata&run_date=eq.${encodeURIComponent(runDate)}&limit=1`,
     { method: 'GET' },
   );
-  return rows[0] ? toDailyFritzRunRecord(rows[0]) : null;
+  const record = rows[0] ? toDailyFritzRunRecord(rows[0]) : null;
+  if (record) dailyFritzRunCache.set(runDate, record);
+  return record;
+}
+
+async function getDailyFritzRunSummary(runDate: string): Promise<DailyFritzRunSummary | null> {
+  const cached = dailyFritzRunCache.get(runDate);
+  if (cached) {
+    return {
+      runDate: cached.runDate,
+      fritzTier: cached.fritzTier,
+      dealSize: cached.dealSize,
+      winningScore: cached.winningScore,
+      status: cached.status,
+    };
+  }
+  const rows = await supabaseFetch<Array<{
+    run_date: string;
+    fritz_tier: DailyFritzTier;
+    deal_size: number;
+    winning_score: number;
+    status: DailyFritzRunStatus;
+  }>>(
+    `/rest/v1/daily_fritz_runs?select=run_date,fritz_tier,deal_size,winning_score,status&run_date=eq.${encodeURIComponent(runDate)}&limit=1`,
+    { method: 'GET' },
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const dealSize = row.deal_size === 7 || row.deal_size === 14 ? row.deal_size : null;
+  if (!dealSize) return null;
+  return {
+    runDate: row.run_date,
+    fritzTier: row.fritz_tier,
+    dealSize,
+    winningScore: row.winning_score,
+    status: row.status,
+  };
 }
 
 async function upsertDailyFritzRun(record: DailyFritzRunRecord): Promise<DailyFritzRunRecord> {
@@ -1520,6 +1576,7 @@ async function upsertDailyFritzRun(record: DailyFritzRunRecord): Promise<DailyFr
   );
   const saved = rows[0] ? toDailyFritzRunRecord(rows[0]) : null;
   if (!saved) throw new Error('Failed to persist daily Fritz run.');
+  dailyFritzRunCache.set(saved.runDate, saved);
   return saved;
 }
 
@@ -2062,7 +2119,19 @@ app.get('/api/daily-fritz/today', async (req, res) => {
     }
 
     const runDate = getPacificDateKey();
-    const run = await ensureDailyFritzRunForDate(runDate);
+    let run = await getDailyFritzRunSummary(runDate);
+    if (!run) {
+      const generated = await ensureDailyFritzRunForDate(runDate);
+      run = generated
+        ? {
+            runDate: generated.runDate,
+            fritzTier: generated.fritzTier,
+            dealSize: generated.dealSize,
+            winningScore: generated.winningScore,
+            status: generated.status,
+          }
+        : null;
+    }
     if (!run) {
       res.status(500).json({ error: 'Daily Fritz storage is not available.' });
       return;
@@ -2074,10 +2143,11 @@ app.get('/api/daily-fritz/today', async (req, res) => {
 
     const attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
     const streak = await getDailyFritzStreak(authenticatedUserId, runDate);
-    const leaderboard = await buildDailyFritzLeaderboard(runDate);
-    const ownRank = attempt?.status === 'completed'
-      ? leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null
-      : null;
+    let ownRank: number | null = null;
+    if (attempt?.status === 'completed') {
+      const leaderboard = await buildDailyFritzLeaderboard(runDate);
+      ownRank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
+    }
 
     res.json({
       ok: true,
@@ -2089,7 +2159,7 @@ app.get('/api/daily-fritz/today', async (req, res) => {
       streak,
       result: attempt?.status === 'completed' ? attempt.result : null,
       rank: ownRank,
-      leaderboard_preview: leaderboard.slice(0, 10).map(({ userId: _userId, ...entry }) => entry),
+      leaderboard_preview: [],
     });
   } catch (error) {
     res.status(500).json({
@@ -2126,24 +2196,27 @@ app.post('/api/daily-fritz/start', async (req, res) => {
       attempt = await createDailyFritzAttempt(runDate, authenticatedUserId);
     }
 
-    const localMatchId = `daily-fritz:${runDate}:${attempt.id}`;
-    const verifiedMatch = await startVerifiedSinglePlayerMatch({
-      userId: authenticatedUserId,
-      localMatchId,
-      mode: 'fritz',
-      opponentUserId: getFritzIdentityForTier(run.fritzTier).fritzId,
-      fritzTier: run.fritzTier,
-    });
-
-    attempt.verifiedMatchId = verifiedMatch.matchId;
-    attempt.status = 'started';
-    attempt = await upsertDailyFritzAttempt(attempt);
+    let verifiedMatchId = attempt.verifiedMatchId;
+    if (!verifiedMatchId) {
+      const localMatchId = `daily-fritz:${runDate}:${attempt.id}`;
+      const verifiedMatch = await startVerifiedSinglePlayerMatch({
+        userId: authenticatedUserId,
+        localMatchId,
+        mode: 'fritz',
+        opponentUserId: getFritzIdentityForTier(run.fritzTier).fritzId,
+        fritzTier: run.fritzTier,
+      });
+      verifiedMatchId = verifiedMatch.matchId;
+      attempt.verifiedMatchId = verifiedMatch.matchId;
+      attempt.status = 'started';
+      attempt = await upsertDailyFritzAttempt(attempt);
+    }
 
     const handDeal = run.handDeals[attempt.currentHandIndex] ?? run.handDeals[0];
     res.json({
       ok: true,
       attempt_id: attempt.id,
-      verified_match_id: verifiedMatch.matchId,
+      verified_match_id: verifiedMatchId,
       run_date: run.runDate,
       current_hand_index: attempt.currentHandIndex,
       fritz_tier: run.fritzTier,

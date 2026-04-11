@@ -15,6 +15,8 @@ import {
 } from './api';
 import './dailyFritz.css';
 
+const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
+
 interface DailyFritzScreenProps {
   user: User | null;
   profile: UserProfile | null;
@@ -78,18 +80,40 @@ export default function DailyFritzScreen({
   const [leaderboard, setLeaderboard] = useState<DailyFritzLeaderboardRow[]>([]);
   const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(null);
 
+  const cacheKey = useMemo(
+    () => (user?.id ? `${DAILY_FRITZ_TODAY_CACHE_PREFIX}${user.id}` : null),
+    [user?.id],
+  );
+
+  useEffect(() => {
+    if (!cacheKey || typeof window === 'undefined') return;
+    try {
+      const raw = window.sessionStorage.getItem(cacheKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as DailyFritzTodayResponse | null;
+      if (!parsed?.run_date) return;
+      setToday(parsed);
+      setLoading(false);
+    } catch {
+      // no-op
+    }
+  }, [cacheKey]);
+
   const loadToday = useCallback(async () => {
-    setLoading(true);
+    setLoading((prev) => !today && prev !== false ? true : !today);
     setError(null);
     try {
       const response = await getTodayDailyFritz();
       setToday(response);
+      if (cacheKey && typeof window !== 'undefined') {
+        window.sessionStorage.setItem(cacheKey, JSON.stringify(response));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load Daily Fritz.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cacheKey, today]);
 
   useEffect(() => {
     if (!user) {

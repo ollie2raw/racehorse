@@ -188,6 +188,12 @@
   color: rgba(255, 160, 160, 0.9);
 }
 
+.auth-inline-success {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: rgba(150, 238, 201, 0.92);
+}
+
 @media (max-width: 768px) {
   .auth-modal-card {
     width: calc(100vw - 32px);

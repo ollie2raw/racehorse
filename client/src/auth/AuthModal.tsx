@@ -8,8 +8,12 @@ interface AuthModalProps {
   supabaseEnabled: boolean;
   supabaseConfigError: string | null;
   onClose: () => void;
-  onSignIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  onSignUp: (email: string, password: string, username?: string) => Promise<{ error: string | null }>;
+  onSignIn: (email: string, password: string) => Promise<{ error: string | null; message?: string | null }>;
+  onSignUp: (
+    email: string,
+    password: string,
+    username?: string,
+  ) => Promise<{ error: string | null; message?: string | null; pendingVerification?: boolean }>;
   onResetPassword: (email: string) => Promise<{ error: string | null }>;
 }
 
@@ -28,11 +32,13 @@ export default function AuthModal({
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
 
   const resetFormState = () => {
     setSubmitting(false);
     setError(null);
+    setNotice(null);
     setResetSent(false);
   };
 
@@ -67,6 +73,7 @@ export default function AuthModal({
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
+    setNotice(null);
 
     try {
       const result =
@@ -77,6 +84,16 @@ export default function AuthModal({
       if (result.error) {
         setError(result.error);
         return;
+      }
+
+      if ('pendingVerification' in result && result.pendingVerification) {
+        setNotice(result.message ?? 'Check your email to verify your account.');
+        setMode('signin');
+        return;
+      }
+
+      if (result.message) {
+        setNotice(result.message);
       }
 
       handleClose();
@@ -170,6 +187,7 @@ export default function AuthModal({
         </div>
 
         {error && <p className="auth-inline-error">{error}</p>}
+        {notice && !error && <p className="auth-inline-success">{notice}</p>}
 
         <button
           className="auth-modal-submit"

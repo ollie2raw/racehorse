@@ -2,14 +2,18 @@ import { supabase } from '../lib/supabase';
 import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
 
+const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
+const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
+
 function resolveServerBaseUrl(): string {
-  const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim() ?? '';
+  const configured = DEFAULT_SERVER_URL.trim();
   if (configured) return configured.replace(/\/$/, '');
   if (typeof window !== 'undefined') {
     const { hostname, port } = window.location;
     if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
+    return '';
   }
-  return 'http://localhost:3001';
+  return DEFAULT_SERVER_ORIGIN;
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -37,7 +41,21 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   const text = await response.text().catch(() => '');
-  const parsed = text ? JSON.parse(text) : null;
+  let parsed: any = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      if (!response.ok) {
+        throw new Error(
+          text.startsWith('<!DOCTYPE') || text.startsWith('<html')
+            ? `Daily Fritz backend returned HTML for ${path}. Check production API routing / VITE_SERVER_URL.`
+            : `${path} failed with ${response.status}`,
+        );
+      }
+      throw new Error(`Invalid JSON response from ${path}`);
+    }
+  }
   if (!response.ok) {
     throw new Error(parsed?.error ?? `${path} failed with ${response.status}`);
   }
@@ -202,4 +220,3 @@ export async function abandonDailyFritz(attemptId: string): Promise<void> {
     body: JSON.stringify({ attempt_id: attemptId }),
   });
 }
-
