@@ -94,17 +94,14 @@ export default function GameOverModal({
           {extraActionLabel && onExtraAction && (
             <button className="mode-option game-over-action-card game-over-action-card-secondary" onClick={onExtraAction}>
               <span className="mode-option-title">{extraActionLabel}</span>
-              <span className="mode-option-meta">Review the key turns</span>
             </button>
           )}
           <button className="mode-option mode-option-primary game-over-action-card game-over-action-card-primary" onClick={onPrimary}>
             <span className="mode-option-title">{primaryLabel}</span>
-            <span className="mode-option-meta">Run it back right away</span>
           </button>
           {secondaryLabel && onSecondary && (
             <button className="mode-option game-over-action-card game-over-action-card-muted" onClick={onSecondary}>
               <span className="mode-option-title">{secondaryLabel}</span>
-              <span className="mode-option-meta">Return to the menu</span>
             </button>
           )}
         </div>

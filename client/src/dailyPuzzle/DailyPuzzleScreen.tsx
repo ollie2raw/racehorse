@@ -279,6 +279,7 @@ export default function DailyPuzzleScreen({
   const [_bestMoves, setBestMoves] = useState<number | null>(null);
   const [showLobby, setShowLobby] = useState(true);
   const [dailyLeaderboardOpen, setDailyLeaderboardOpen] = useState(false);
+  const [archivePickerOpen, setArchivePickerOpen] = useState(false);
   const [leaderboard, setLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [handTileSize, setHandTileSize] = useState(56);
@@ -332,6 +333,7 @@ export default function DailyPuzzleScreen({
   }, []);
   const handleBackHome = useCallback(() => {
     setDailyLeaderboardOpen(false);
+    setArchivePickerOpen(false);
     setShowLobby(true);
     onBack();
   }, [onBack]);
@@ -1033,67 +1035,70 @@ export default function DailyPuzzleScreen({
         <LayoutScreen
           className="screen mode-subpage-screen mode-accent-daily daily-entry-screen"
           badge="Daily Puzzle"
-          title={
-            isArchiveMode ? (
-              'Puzzle Archive'
-            ) : (
-              <span className="daily-entry-header-stack">
-                <span className="daily-entry-header-title">{stableDailyTitle}</span>
-                <span className="daily-entry-header-subtitle">Score as many points as you can in one turn.</span>
-                <span className="daily-entry-meta-row">
-                  <span className="lobby-server mode-subtitle daily-entry-date">{formattedDisplayDate}</span>
-                  {!isArchiveMode && (
-                    <span className="daily-entry-streak-badge">
-                      🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
-                    </span>
-                  )}
-                </span>
+          title={isArchiveMode ? 'Puzzle Archive' : stableDailyTitle}
+          subtitle={
+            <>
+              <span>
+                {isArchiveMode
+                  ? 'Play any past puzzle just for fun.'
+                  : 'Score as many points as you can in one turn.'}
               </span>
-            )
+              <span className="daily-entry-meta-row">
+                <span className="daily-entry-date-pill">{formattedDisplayDate}</span>
+                {!isArchiveMode && (
+                  <span className="daily-entry-streak-badge">
+                    🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
+                  </span>
+                )}
+              </span>
+            </>
           }
-          subtitle={isArchiveMode ? 'Play any past daily puzzle just for fun. No leaderboard or streaks.' : undefined}
-          contentClassName="multiplayer-menu-card daily-entry-shell"
+          contentClassName="multiplayer-menu-card screen-shell daily-entry-shell"
         >
             <div className="mode-entry-panel daily-entry-panel">
-              <div className="daily-archive-controls">
-                <label className="daily-archive-label" htmlFor="daily-archive-date">Play by date</label>
-                <input
-                  id="daily-archive-date"
-                  className="daily-archive-input"
-                  type="date"
-                  value={archiveDateInput}
-                  max={localDateKey}
-                  onChange={(e) => setArchiveDateInput(e.target.value || localDateKey)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      applyArchiveDate();
-                    }
-                  }}
-                />
-                <div className="daily-archive-actions">
-                  <button
-                    type="button"
-                    className="daily-archive-button"
-                    disabled={!archiveInputHasCompleteDate}
-                    onClick={applyArchiveDate}
-                  >
-                    Load Date
-                  </button>
-                  <button
-                    type="button"
-                    className="daily-archive-button daily-archive-button-secondary"
-                    onClick={() => {
-                      setArchiveDateInput(localDateKey);
-                      setSelectedDateSeed(localDateKey);
-                      setLoadError(null);
-                      setDailyLeaderboardOpen(false);
-                    }}
-                  >
-                    Today
-                  </button>
+              <div className="daily-entry-summary-grid">
+                <button
+                  type="button"
+                  className="daily-entry-summary-card daily-entry-summary-button"
+                  onClick={() => setArchivePickerOpen(true)}
+                >
+                  <span>Date</span>
+                  <div className="daily-entry-summary-button-row">
+                    <strong>{formattedDisplayDate}</strong>
+                    <span
+                      className="daily-entry-calendar-button"
+                      aria-hidden="true"
+                      title={isArchiveMode ? 'Archive selected' : 'Open calendar'}
+                    >
+                      <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                        <path d="M7 2v3M17 2v3M3.5 9.5h17" />
+                        <rect x="3.5" y="4.5" width="17" height="16" rx="3" />
+                        <path d="M8 13h3M13 13h3M8 17h3M13 17h3" />
+                      </svg>
+                    </span>
+                  </div>
+                </button>
+                <div className="daily-entry-summary-card">
+                  <span>Mode</span>
+                  <strong>{isArchiveMode ? 'Archive' : 'Daily'}</strong>
+                </div>
+                <div className="daily-entry-summary-card">
+                  <span>Format</span>
+                  <strong>One-turn high score</strong>
+                </div>
+                <div className="daily-entry-summary-card">
+                  <span>Streak</span>
+                  <strong>{isArchiveMode ? 'Off' : `${streakDays} day${streakDays === 1 ? '' : 's'}`}</strong>
                 </div>
               </div>
+
+              {isArchiveMode && (
+                <div className="daily-entry-status-card">
+                  <span className="daily-entry-status-label">Archive</span>
+                  <strong>Play any past puzzle.</strong>
+                  <p>Archive runs do not affect streaks or the daily leaderboard.</p>
+                </div>
+              )}
               <div className="mode-actions daily-entry-actions">
                 <button
                   className="mode-option mode-option-primary mode-accent-daily daily-start-hero"
@@ -1116,12 +1121,14 @@ export default function DailyPuzzleScreen({
                 >
                   <span className="mode-option-title">
                     {archiveTargetIsToday
-                      ? '▶ Start Daily Puzzle'
-                      : '▶ Play Archived Puzzle'}
+                      ? 'Start Daily Puzzle'
+                      : 'Play Archived Puzzle'}
                   </span>
                   {selectedLobbyPuzzle && (
                     <span className="mode-option-meta">
-                      Find the best scoring move from today&apos;s puzzle board.
+                      {archiveTargetIsToday
+                        ? 'Play today’s one-turn puzzle'
+                        : 'Load and play this archived puzzle'}
                     </span>
                   )}
                 </button>
@@ -1130,7 +1137,7 @@ export default function DailyPuzzleScreen({
                     className="mode-option mode-option-secondary daily-leaderboard-cta"
                     onClick={() => setDailyLeaderboardOpen(true)}
                   >
-                    <span className="mode-option-title">🏆 Leaderboard</span>
+                    <span className="mode-option-title">Leaderboard</span>
                     <span className="mode-option-meta">See today&apos;s top scores</span>
                   </button>
                 )}
@@ -1150,6 +1157,73 @@ export default function DailyPuzzleScreen({
               {runtimeInitError ? <p className="auth-inline-error">{runtimeInitError}</p> : null}
             </div>
         </LayoutScreen>
+        {archivePickerOpen && (
+          <div
+            className="daily-puzzle-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Select puzzle date"
+            onClick={() => setArchivePickerOpen(false)}
+          >
+            <div className="daily-puzzle-modal daily-archive-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="daily-leaderboard-modal-head">
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <h3>Select Puzzle Date</h3>
+                  <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
+                    Choose any past date to play an archived puzzle.
+                  </p>
+                </div>
+                <button className="mode-inline-btn" onClick={() => setArchivePickerOpen(false)}>
+                  Close
+                </button>
+              </div>
+              <div className="daily-archive-controls daily-archive-controls-modal">
+                <label className="daily-archive-label" htmlFor="daily-archive-date">Puzzle date</label>
+                <input
+                  id="daily-archive-date"
+                  className="daily-archive-input"
+                  type="date"
+                  value={archiveDateInput}
+                  max={localDateKey}
+                  onChange={(e) => setArchiveDateInput(e.target.value || localDateKey)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      applyArchiveDate();
+                      setArchivePickerOpen(false);
+                    }
+                  }}
+                />
+                <div className="daily-archive-actions">
+                  <button
+                    type="button"
+                    className="daily-archive-button"
+                    disabled={!archiveInputHasCompleteDate}
+                    onClick={() => {
+                      applyArchiveDate();
+                      setArchivePickerOpen(false);
+                    }}
+                  >
+                    Load Date
+                  </button>
+                  <button
+                    type="button"
+                    className="daily-archive-button daily-archive-button-secondary"
+                    onClick={() => {
+                      setArchiveDateInput(localDateKey);
+                      setSelectedDateSeed(localDateKey);
+                      setLoadError(null);
+                      setDailyLeaderboardOpen(false);
+                      setArchivePickerOpen(false);
+                    }}
+                  >
+                    Today
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {dailyLeaderboardOpen && (
           <div
             className="daily-puzzle-overlay"

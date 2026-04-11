@@ -1,0 +1,317 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+import type { UserProfile } from '../auth/useAuth';
+import type { GhostProfileSummary } from '../ghost/api';
+import BotMatchScreen from '../bot/BotMatchScreen';
+import LayoutScreen from '../ui/LayoutScreen';
+import DailyFritzLeaderboard from './DailyFritzLeaderboard';
+import {
+  fetchDailyFritzLeaderboard,
+  getTodayDailyFritz,
+  startDailyFritz,
+  type DailyFritzLeaderboardRow,
+  type DailyFritzStartResponse,
+  type DailyFritzTodayResponse,
+} from './api';
+import './dailyFritz.css';
+
+interface DailyFritzScreenProps {
+  user: User | null;
+  profile: UserProfile | null;
+  ghostProfile: GhostProfileSummary | null;
+  onGhostProfileChange: (profile: GhostProfileSummary | null) => void;
+  onProfileRefresh?: () => Promise<void> | void;
+  onProfilePatch?: (patch: Partial<UserProfile>) => void;
+  onBack: () => void;
+}
+
+function formatDateLabel(dateText: string): string {
+  const parsed = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateText;
+  return parsed.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function resultSummary(result: Record<string, unknown> | null): string {
+  if (!result) return 'Not played yet.';
+  const finalScore = Number(result.final_score ?? 0);
+  const opponentScore = Number(result.opponent_score ?? 0);
+  const won = Boolean(result.won);
+  return `${won ? 'Won' : 'Lost'} ${finalScore}-${opponentScore}`;
+}
+
+function titleCaseTier(tier: string): string {
+  return tier.charAt(0).toUpperCase() + tier.slice(1);
+}
+
+function tierClassName(tier: string): string {
+  switch (tier) {
+    case 'rookie':
+      return 'is-rookie';
+    case 'standard':
+      return 'is-standard';
+    case 'master':
+      return 'is-master';
+    default:
+      return 'is-elite';
+  }
+}
+
+export default function DailyFritzScreen({
+  user,
+  profile,
+  ghostProfile,
+  onGhostProfileChange,
+  onProfileRefresh,
+  onProfilePatch,
+  onBack,
+}: DailyFritzScreenProps) {
+  const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [leaderboard, setLeaderboard] = useState<DailyFritzLeaderboardRow[]>([]);
+  const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(null);
+
+  const loadToday = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await getTodayDailyFritz();
+      setToday(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load Daily Fritz.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setToday(null);
+      setLoading(false);
+      setError('Sign in to play Daily Fritz.');
+      return;
+    }
+    void loadToday();
+  }, [loadToday, user]);
+
+  const openLeaderboard = useCallback(async () => {
+    if (!today?.run_date) return;
+    setLeaderboardOpen(true);
+    setLeaderboardLoading(true);
+    setLeaderboardError(null);
+    try {
+      const rows = await fetchDailyFritzLeaderboard(today.run_date);
+      setLeaderboard(rows);
+    } catch (err) {
+      setLeaderboardError(err instanceof Error ? err.message : 'Failed to load leaderboard.');
+      setLeaderboard([]);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, [today?.run_date]);
+
+  const beginRun = useCallback(async () => {
+    setError(null);
+    try {
+      const started = await startDailyFritz();
+      setActiveRun(started);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start Daily Fritz.');
+    }
+  }, []);
+
+  const finishEmbeddedRun = useCallback(async () => {
+    setActiveRun(null);
+    await loadToday();
+  }, [loadToday]);
+
+  const primaryLabel = useMemo(() => {
+    if (!today) return 'Start Today’s Run';
+    if (today.attempt_status === 'started') return 'Resume';
+    if (today.attempt_status === 'completed') return 'Completed';
+    if (today.attempt_status === 'abandoned') return 'Attempt Spent';
+    return 'Start Today’s Run';
+  }, [today]);
+
+  const currentUsername = profile?.username?.trim() ?? null;
+
+  if (activeRun) {
+    return (
+      <BotMatchScreen
+        onBack={() => {
+          setActiveRun(null);
+          void loadToday();
+        }}
+        mode="daily-fritz"
+        userId={user?.id ?? null}
+        username={profile?.username ?? null}
+        dealSize={activeRun.deal_size}
+        fritzTier={activeRun.fritz_tier}
+        winningScore={activeRun.winning_score}
+        currentGlickoRating={profile?.glicko_rating ?? null}
+        ghostProfile={ghostProfile}
+        onGhostProfileChange={onGhostProfileChange}
+        onProfileRefresh={onProfileRefresh}
+        onProfilePatch={onProfilePatch}
+        dailyFritzPackage={activeRun}
+        onDailyFritzComplete={() => {
+          void finishEmbeddedRun();
+        }}
+      />
+    );
+  }
+
+  return (
+    <LayoutScreen
+      className="daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz"
+      badge="Daily Fritz"
+      title="Today's Challenge"
+      subtitle={
+        <>
+          <span>Same deal for everyone. One run only.</span>
+          {today && (
+            <span className="daily-fritz-meta-row">
+              <span className="daily-fritz-date-pill">{formatDateLabel(today.run_date)}</span>
+              <span className="daily-fritz-streak-badge">
+                🔥 {today.streak} day{today.streak === 1 ? '' : 's'} streak
+              </span>
+            </span>
+          )}
+        </>
+      }
+      contentClassName="multiplayer-menu-card screen-shell daily-fritz-content"
+    >
+      <div className="mode-entry-panel daily-fritz-panel-shell">
+        <div className="daily-fritz-card">
+
+          {loading ? (
+            <div className="daily-fritz-empty">Loading today’s run…</div>
+          ) : error ? (
+            <div className="daily-fritz-empty">{error}</div>
+          ) : today ? (
+            <>
+              <div className="daily-fritz-summary-grid">
+                <div className="daily-fritz-summary-card">
+                  <span>Date</span>
+                  <strong>{formatDateLabel(today.run_date)}</strong>
+                </div>
+                <div className={`daily-fritz-summary-card daily-fritz-tier-card ${tierClassName(today.fritz_tier)}`}>
+                  <span>Tier</span>
+                  <strong>{titleCaseTier(today.fritz_tier)}</strong>
+                </div>
+                <div className="daily-fritz-summary-card">
+                  <span>Mode</span>
+                  <strong>{today.deal_size}-tile • First to {today.winning_score}</strong>
+                </div>
+                <div className="daily-fritz-summary-card">
+                  <span>Streak</span>
+                  <strong>{today.streak} day{today.streak === 1 ? '' : 's'}</strong>
+                </div>
+              </div>
+
+              {today.attempt_status === 'started' && (
+                <div className="daily-fritz-status-card is-active">
+                  <span className="daily-fritz-status-label">In Progress</span>
+                  <strong>Resume your run.</strong>
+                  <p>Your spot is saved.</p>
+                </div>
+              )}
+
+              {today.attempt_status === 'completed' && (
+                <div className="daily-fritz-status-card is-complete">
+                  <div className="daily-fritz-result-topline">
+                    <span className="daily-fritz-status-label">Result</span>
+                    <span className={`daily-fritz-result-pill ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>
+                      {Boolean(today.result?.won) ? 'Win' : 'Loss'}
+                    </span>
+                  </div>
+                  <div className="daily-fritz-result-grid">
+                    <div>
+                      <span>Score</span>
+                      <strong>
+                        {Number(today.result?.final_score ?? 0)}-{Number(today.result?.opponent_score ?? 0)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Point Diff</span>
+                      <strong>
+                        {Number(today.result?.point_diff ?? 0) >= 0 ? '+' : ''}
+                        {Number(today.result?.point_diff ?? 0)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Rank</span>
+                      <strong>{today.rank ? `#${today.rank}` : '—'}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {today.attempt_status === 'abandoned' && (
+                <div className="daily-fritz-status-card is-muted">
+                  <span className="daily-fritz-status-label">Spent</span>
+                  <strong>Today's run is spent.</strong>
+                  <p>Come back tomorrow for a new one.</p>
+                </div>
+              )}
+
+              <div className="daily-fritz-actions">
+                {today.attempt_status !== 'completed' && today.attempt_status !== 'abandoned' && (
+                  <button className="mode-option mode-option-primary daily-fritz-action daily-fritz-primary-action" onClick={() => void beginRun()}>
+                    <span className="mode-option-title">
+                      {today.attempt_status === 'started' ? 'Resume Match' : 'Start Daily Fritz Match'}
+                    </span>
+                    <span className="mode-option-meta">
+                      {today.attempt_status === 'started'
+                        ? 'Pick up where you left off'
+                        : 'Play today’s fixed Fritz match'}
+                    </span>
+                  </button>
+                )}
+
+                <button className="mode-option mode-option-secondary daily-fritz-action" onClick={() => void openLeaderboard()}>
+                  <span className="mode-option-title">Leaderboard</span>
+                  <span className="mode-option-meta">See today’s standings</span>
+                </button>
+
+                <button className="mode-option daily-fritz-action daily-fritz-home-action" onClick={onBack}>
+                  <span className="mode-option-title">Back To Home</span>
+                  <span className="mode-option-meta">Return to the menu</span>
+                </button>
+              </div>
+
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {leaderboardOpen && (
+        <div className="daily-fritz-overlay" role="dialog" aria-modal="true" onClick={() => setLeaderboardOpen(false)}>
+          <div className="daily-fritz-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="daily-fritz-modal-head">
+              <div>
+                <span className="lobby-kicker daily-fritz-kicker">Daily Fritz</span>
+                <h3>Leaderboard</h3>
+                {today && <p>{formatDateLabel(today.run_date)} • Same deals for every player</p>}
+              </div>
+              <button className="mode-inline-btn" onClick={() => setLeaderboardOpen(false)}>Close</button>
+            </div>
+            <DailyFritzLeaderboard
+              rows={leaderboard}
+              loading={leaderboardLoading}
+              error={leaderboardError}
+              currentUsername={currentUsername}
+            />
+          </div>
+        </div>
+      )}
+    </LayoutScreen>
+  );
+}

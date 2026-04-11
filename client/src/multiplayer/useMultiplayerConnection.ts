@@ -43,6 +43,7 @@ type UseMultiplayerConnectionParams = {
     | 'ghostSetup'
     | 'ghost'
     | 'daily'
+    | 'dailyFritz'
     | 'league'
     | 'learn'
     | 'ratingHistory'

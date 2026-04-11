@@ -640,14 +640,25 @@
 .daily-puzzle-entry-screen {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   min-height: 100vh;
   padding: 0 12px 24px;
 }
 
 .daily-entry-screen.layout-screen {
+  min-height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
   padding-inline: 24px !important;
+}
+
+.daily-entry-screen .screen-shell {
+  width: 100%;
+  max-width: none;
+  overflow: visible;
+  height: auto;
+  min-height: 0;
+  margin: 0;
 }
 
 .daily-entry-screen .layout-screen-inner,
@@ -661,132 +672,51 @@
 }
 
 .daily-entry-screen .layout-screen-inner {
-  margin-top: clamp(18px, 3.2vh, 34px);
-}
-
-.daily-entry-screen .layout-screen-inner {
+  margin-top: clamp(16px, 2.4vh, 24px) !important;
   gap: 8px;
 }
 
 .daily-entry-screen .layout-screen-header {
-  gap: 4px;
-}
-
-.daily-entry-screen .layout-screen-header:has(.layout-screen-subtitle) {
-  gap: 0 !important;
+  gap: 8px;
 }
 
 .daily-entry-screen .layout-screen-badge {
-  margin-bottom: 14px !important;
   color: #f0c040 !important;
 }
 
 .daily-entry-screen .layout-screen-title {
-  margin-top: -30px !important;
-  margin-bottom: 14px !important;
+  line-height: 0.98;
 }
 
 .daily-entry-screen .layout-screen-subtitle {
-  margin-top: 0 !important;
-}
-
-.daily-entry-screen .layout-screen-content {
-  gap: 0;
-}
-
-.daily-entry-shell {
-  min-height: calc(100vh - 260px);
-}
-
-.daily-entry-header-stack {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  font-size: 1.24rem;
+  font-weight: 500;
+  line-height: 1.52;
 }
 
-.daily-entry-header-title {
-  display: block;
-}
-
-.daily-entry-header-subtitle {
-  display: block;
-  max-width: 760px;
-  font-size: clamp(1.5rem, 2.05vw, 1.9rem) !important;
-  font-weight: 500 !important;
-  line-height: 1.55 !important;
-  color: rgba(223, 236, 244, 0.84) !important;
-  letter-spacing: 0 !important;
-  word-spacing: 0 !important;
-  white-space: normal;
-  font-family: Inter, -apple-system, sans-serif !important;
-  text-transform: none !important;
-}
-
-.daily-entry-glow {
-  pointer-events: none;
-}
-
-.daily-entry-emoji {
-  font-size: 3rem;
-  line-height: 1;
-  margin-bottom: 16px;
-  text-align: center;
-}
-
-.daily-puzzle-entry-card .lobby-kicker {
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.72rem;
-  color: rgba(86, 225, 189, 0.92);
-  margin: 0 0 8px;
-}
-
-.daily-puzzle-entry-card h2 {
+.daily-entry-screen .layout-screen-content {
+  width: 100%;
+  max-width: none;
   margin: 0;
-  font-size: 2.2rem;
-  font-weight: 800;
-}
-
-.daily-puzzle-entry-card .mode-subtitle {
-  margin-top: 12px;
-  font-size: 1rem;
-  line-height: 1.45;
-  color: rgba(226, 240, 248, 0.9);
-}
-
-.daily-puzzle-entry-card .mode-subtitle {
-  max-width: 680px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.daily-entry-stats-row {
-  margin: 14px auto 6px;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px 12px;
-  color: rgba(219, 236, 245, 0.7);
-  font-size: 0.84rem;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  min-height: calc(100vh - 180px);
 }
 
-.daily-entry-stats-row span {
-  white-space: nowrap;
-}
-
-.daily-entry-stats-row span + span::before {
-  content: '•';
-  margin-right: 12px;
-  color: rgba(206, 225, 234, 0.5);
+.daily-entry-shell {
+  min-height: calc(100vh - 180px);
 }
 
 .daily-entry-actions {
   width: 100%;
   max-width: none !important;
   margin: 0;
-  gap: 14px;
+  gap: 12px;
   justify-self: stretch;
   align-self: stretch;
 }
@@ -794,9 +724,17 @@
 .daily-entry-panel {
   width: 100%;
   margin-top: 0;
-  min-height: calc(100vh - 280px);
-  padding: 24px;
-  gap: 18px;
+  min-height: calc(100vh - 260px);
+  padding: 18px;
+  gap: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(240, 192, 64, 0.14) 0%, transparent 34%),
+    linear-gradient(180deg, rgba(27, 36, 58, 0.84), rgba(11, 17, 30, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 48px rgba(1, 6, 16, 0.28);
 }
 
 .daily-puzzle-type-grid {
@@ -826,7 +764,6 @@
 .daily-archive-controls {
   display: grid;
   gap: 12px;
-  margin-bottom: 18px;
 }
 
 .daily-archive-label {
@@ -935,46 +872,198 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin: 10px 0 0;
-  font-size: 0.95rem !important;
-  line-height: 1.2 !important;
-  letter-spacing: 0 !important;
-  word-spacing: 0 !important;
-  font-family: Inter, -apple-system, sans-serif !important;
-  font-weight: 600 !important;
+  gap: 10px;
+  margin-top: 2px;
 }
 
-.daily-entry-date {
-  margin: 0;
-  letter-spacing: 0 !important;
-  word-spacing: 0 !important;
-  white-space: nowrap;
-  font: inherit;
-}
-
+.daily-entry-date-pill,
 .daily-entry-streak-badge {
   display: inline-flex;
   align-items: center;
-  border-radius: 100px;
-  padding: 6px 14px;
-  font-size: 0.96rem;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 16, 29, 0.68);
+  color: rgba(232, 240, 237, 0.92);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.daily-entry-streak-badge {
+  border-color: rgba(240, 192, 64, 0.25);
+  background: linear-gradient(180deg, rgba(74, 58, 12, 0.56), rgba(33, 26, 8, 0.42));
+  color: #f3e1b0;
+}
+
+.daily-entry-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.daily-entry-summary-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 90px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(17, 27, 43, 0.82), rgba(10, 17, 28, 0.9));
+  padding: 20px 22px 22px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 28px rgba(4, 10, 19, 0.22);
+}
+
+.daily-entry-summary-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(240, 192, 64, 0.92), rgba(240, 192, 64, 0.18));
+  opacity: 0.72;
+}
+
+.daily-entry-summary-card span {
+  display: block;
+  color: rgba(198, 220, 214, 0.64);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.daily-entry-summary-card strong {
+  display: block;
+  margin-top: 10px;
+  color: rgba(248, 250, 249, 0.98);
+  font-size: clamp(1.2rem, 1.5vw, 1.52rem);
+  font-weight: 850;
+  line-height: 1.08;
+}
+
+.daily-entry-summary-button {
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    filter 0.16s ease;
+}
+
+.daily-entry-summary-button-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.daily-entry-summary-button-row strong {
+  margin-top: 0;
+}
+
+.daily-entry-calendar-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  line-height: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(240, 192, 64, 0.22);
+  background: rgba(240, 192, 64, 0.08);
+  color: rgba(244, 226, 171, 0.95);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.daily-entry-calendar-button svg {
+  position: absolute;
+  inset: 0;
+  width: 19px;
+  height: 19px;
+  display: block;
+  margin: auto;
+  transform: translateY(2px);
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.daily-entry-summary-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(240, 192, 64, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px rgba(240, 192, 64, 0.12),
+    0 16px 30px rgba(4, 10, 19, 0.24);
+  filter: brightness(1.03);
+}
+
+.daily-entry-summary-button:hover .daily-entry-calendar-button {
+  border-color: rgba(240, 192, 64, 0.34);
   background: rgba(240, 192, 64, 0.12);
-  border: 1px solid rgba(240, 192, 64, 0.25);
-  color: #f0c040;
-  letter-spacing: 0 !important;
-  word-spacing: 0 !important;
-  white-space: nowrap;
-  font-family: Inter, -apple-system, sans-serif !important;
-  font-weight: 600 !important;
+}
+
+.daily-entry-status-card {
+  border-radius: 24px;
+  border: 1px solid rgba(240, 192, 64, 0.24);
+  padding: 16px 18px;
+  background:
+    radial-gradient(circle at top right, rgba(240, 192, 64, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(17, 29, 41, 0.92), rgba(10, 16, 26, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 16px 28px rgba(2, 8, 16, 0.2);
+}
+
+.daily-entry-status-label {
+  display: block;
+  color: rgba(205, 223, 217, 0.62);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.daily-entry-status-card strong {
+  display: block;
+  margin-top: 8px;
+  color: rgba(248, 250, 249, 0.98);
+  font-size: clamp(1.5rem, 2vw, 2rem);
+  font-weight: 850;
+  line-height: 1.08;
+}
+
+.daily-entry-status-card p {
+  margin: 6px 0 0;
+  color: rgba(221, 232, 228, 0.82);
+  font-size: 1.02rem;
+  line-height: 1.45;
+}
+
+.daily-archive-modal {
+  width: min(560px, calc(100vw - 24px));
+}
+
+.daily-archive-controls-modal {
+  margin-top: 8px;
 }
 
 .daily-start-hero {
   width: 100%;
   min-height: 112px;
-  padding: 26px 24px !important;
+  padding: 24px !important;
   border-color: rgba(240, 192, 64, 0.5) !important;
-  background: rgba(240, 192, 64, 0.1) !important;
+  background: linear-gradient(180deg, rgba(88, 68, 12, 0.52), rgba(45, 34, 8, 0.72)) !important;
+  box-shadow:
+    0 0 0 1px rgba(240, 192, 64, 0.18),
+    0 18px 36px rgba(30, 22, 4, 0.32) !important;
 }
 
 .daily-start-hero .mode-option-title {
@@ -991,8 +1080,8 @@
 
 .daily-leaderboard-cta {
   width: 100%;
-  border-color: rgba(240, 192, 64, 0.2) !important;
-  background: rgba(240, 192, 64, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(10, 16, 28, 0.42) !important;
   opacity: 1 !important;
 }
 
@@ -1003,22 +1092,24 @@
   padding: 24px !important;
 }
 
-.daily-entry-panel .mode-option-primary {
-  box-shadow: 0 0 20px rgba(129, 140, 248, 0.08);
-}
-
 .daily-entry-panel .mode-option:not(.mode-option-primary) {
   border-color: rgba(255, 255, 255, 0.1);
   background: rgba(10, 16, 28, 0.42);
 }
 
-/* Keep the Daily entry heading stable even while deferred puzzle computations run. */
-.mode-home-screen.mode-subpage-screen.daily-entry-screen .layout-screen-title {
-  opacity: 1 !important;
-  filter: none !important;
-  color: rgba(243, 250, 247, 0.97) !important;
-  animation: none !important;
-  transition: none !important;
+.daily-entry-actions .mode-option-title {
+  font-size: clamp(2.12rem, 2.9vw, 2.78rem) !important;
+  font-weight: 850 !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.01em !important;
+  margin: 0 !important;
+}
+
+.daily-entry-actions .mode-option-meta {
+  margin-top: 4px !important;
+  font-size: 1.24rem !important;
+  font-weight: 500 !important;
+  line-height: 1.52 !important;
 }
 
 .daily-entry-back-link {
@@ -1028,6 +1119,10 @@
 }
 
 @media (max-width: 640px) {
+  .daily-entry-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
   .daily-puzzle-type-grid {
     grid-template-columns: 1fr;
   }
@@ -1043,6 +1138,14 @@
   .daily-archive-button {
     flex: 1 1 140px;
     justify-content: center;
+  }
+
+  .daily-entry-actions {
+    gap: 8px;
+  }
+
+  .daily-entry-actions .mode-option {
+    min-height: 44px;
   }
 }
 

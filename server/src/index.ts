@@ -34,6 +34,17 @@ import {
 import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 import { supabaseFetch } from './supabaseUtils';
 import {
+  buildDailyFritzCompletionHash,
+  generateDailyFritzRun,
+  getDailyFritzSeed,
+  sortDailyFritzLeaderboard,
+  type DailyFritzAttemptStatus,
+  type DailyFritzHandDeal,
+  type DailyFritzLeaderboardEntry,
+  type DailyFritzRunStatus,
+  type DailyFritzTier,
+} from './dailyFritz';
+import {
   DEFAULT_RATING,
   DEFAULT_RD,
   FRITZ_ELITE_ID,
@@ -944,7 +955,7 @@ type VerifiedSinglePlayerMatch = {
   startedAt: string;
   completedAt: string | null;
   completionHash: string | null;
-  completionResult: Awaited<ReturnType<typeof completeGhostGame>> | null;
+  completionResult: Record<string, unknown> | null;
 };
 
 type VerifiedSinglePlayerMatchRow = {
@@ -958,7 +969,71 @@ type VerifiedSinglePlayerMatchRow = {
   started_at: string;
   completed_at: string | null;
   completion_hash: string | null;
-  completion_result: Awaited<ReturnType<typeof completeGhostGame>> | null;
+  completion_result: Record<string, unknown> | null;
+};
+
+type DailyFritzRunRow = {
+  run_date: string;
+  seed: string;
+  fritz_tier: DailyFritzTier;
+  deal_size: number;
+  winning_score: number;
+  status: DailyFritzRunStatus;
+  hand_deals: DailyFritzHandDeal[];
+  generated_at: string;
+  invalidated_at: string | null;
+  metadata: Record<string, unknown> | null;
+};
+
+type DailyFritzAttemptRow = {
+  id: string;
+  run_date: string;
+  user_id: string;
+  status: DailyFritzAttemptStatus;
+  current_hand_index: number;
+  started_at: string;
+  completed_at: string | null;
+  verified_match_id: string | null;
+  completion_hash: string | null;
+  result: Record<string, unknown> | null;
+  final_score: number | null;
+  opponent_score: number | null;
+  point_diff: number | null;
+  won: boolean | null;
+  moves_used: number | null;
+  hands_played: number | null;
+};
+
+type DailyFritzRunRecord = {
+  runDate: string;
+  seed: string;
+  fritzTier: DailyFritzTier;
+  dealSize: 7 | 14;
+  winningScore: number;
+  status: DailyFritzRunStatus;
+  handDeals: DailyFritzHandDeal[];
+  generatedAt: string;
+  invalidatedAt: string | null;
+  metadata: Record<string, unknown> | null;
+};
+
+type DailyFritzAttemptRecord = {
+  id: string;
+  runDate: string;
+  userId: string;
+  status: DailyFritzAttemptStatus;
+  currentHandIndex: number;
+  startedAt: string;
+  completedAt: string | null;
+  verifiedMatchId: string | null;
+  completionHash: string | null;
+  result: Record<string, unknown> | null;
+  finalScore: number | null;
+  opponentScore: number | null;
+  pointDiff: number | null;
+  won: boolean | null;
+  movesUsed: number | null;
+  handsPlayed: number | null;
 };
 
 type PersistedRoomMatchLogStatus = 'completed' | 'abandoned';
@@ -1267,6 +1342,351 @@ async function abandonVerifiedSinglePlayerMatch(userId: string, localMatchId: st
   if (!record || record.status !== 'started') return;
   record.status = 'abandoned';
   await persistVerifiedSinglePlayerMatch(record);
+}
+
+function getPacificDateKey(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function normalizeDailyFritzTier(value: unknown): DailyFritzTier | null {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (raw === 'rookie' || raw === 'standard' || raw === 'elite' || raw === 'master') {
+    return raw;
+  }
+  return null;
+}
+
+function normalizeDailyFritzStatus(value: unknown): DailyFritzRunStatus | null {
+  return value === 'live' || value === 'archived' || value === 'invalidated' ? value : null;
+}
+
+function isTile(value: unknown): value is { low: number; high: number } {
+  if (!value || typeof value !== 'object') return false;
+  const rec = value as Record<string, unknown>;
+  return Number.isInteger(rec.low) && Number.isInteger(rec.high);
+}
+
+function normalizeTile(value: unknown): { low: number; high: number } | null {
+  if (Array.isArray(value) && value.length === 2) {
+    const low = Number(value[0]);
+    const high = Number(value[1]);
+    if (!Number.isInteger(low) || !Number.isInteger(high)) return null;
+    return { low: Math.min(low, high), high: Math.max(low, high) };
+  }
+  if (!isTile(value)) return null;
+  return {
+    low: Math.min(value.low, value.high),
+    high: Math.max(value.low, value.high),
+  };
+}
+
+function normalizeTileArray(value: unknown): { low: number; high: number }[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((tile) => normalizeTile(tile))
+    .filter((tile): tile is { low: number; high: number } => Boolean(tile));
+}
+
+function normalizeDailyFritzHandDeal(value: unknown): DailyFritzHandDeal | null {
+  if (!value || typeof value !== 'object') return null;
+  const rec = value as Record<string, unknown>;
+  const playerTiles = normalizeTileArray(rec.player_tiles);
+  const fritzTiles = normalizeTileArray(rec.fritz_tiles);
+  const boneyard = normalizeTileArray(rec.boneyard);
+  const locked = normalizeTileArray(rec.locked);
+  if (playerTiles.length === 0 || fritzTiles.length === 0) return null;
+  return {
+    player_tiles: playerTiles,
+    fritz_tiles: fritzTiles,
+    boneyard,
+    locked,
+  };
+}
+
+function toDailyFritzRunRecord(row: DailyFritzRunRow): DailyFritzRunRecord | null {
+  const fritzTier = normalizeDailyFritzTier(row.fritz_tier);
+  const status = normalizeDailyFritzStatus(row.status);
+  const dealSize = Number(row.deal_size) === 14 ? 14 : Number(row.deal_size) === 7 ? 7 : null;
+  const handDealsRaw = Array.isArray(row.hand_deals) ? row.hand_deals : [];
+  const handDeals = handDealsRaw
+    .map((deal) => normalizeDailyFritzHandDeal(deal))
+    .filter((deal): deal is DailyFritzHandDeal => Boolean(deal));
+  if (!fritzTier || !status || !dealSize || handDeals.length !== 12) return null;
+  return {
+    runDate: row.run_date,
+    seed: row.seed,
+    fritzTier,
+    dealSize,
+    winningScore: Number(row.winning_score) || 60,
+    status,
+    handDeals,
+    generatedAt: row.generated_at,
+    invalidatedAt: row.invalidated_at,
+    metadata: row.metadata ?? null,
+  };
+}
+
+function toDailyFritzRunRow(record: DailyFritzRunRecord): DailyFritzRunRow {
+  return {
+    run_date: record.runDate,
+    seed: record.seed,
+    fritz_tier: record.fritzTier,
+    deal_size: record.dealSize,
+    winning_score: record.winningScore,
+    status: record.status,
+    hand_deals: record.handDeals,
+    generated_at: record.generatedAt,
+    invalidated_at: record.invalidatedAt,
+    metadata: record.metadata,
+  };
+}
+
+function toDailyFritzAttemptRecord(row: DailyFritzAttemptRow): DailyFritzAttemptRecord {
+  return {
+    id: row.id,
+    runDate: row.run_date,
+    userId: row.user_id,
+    status: row.status,
+    currentHandIndex: Number(row.current_hand_index) || 0,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    verifiedMatchId: row.verified_match_id,
+    completionHash: row.completion_hash,
+    result: row.result ?? null,
+    finalScore: row.final_score == null ? null : Number(row.final_score),
+    opponentScore: row.opponent_score == null ? null : Number(row.opponent_score),
+    pointDiff: row.point_diff == null ? null : Number(row.point_diff),
+    won: typeof row.won === 'boolean' ? row.won : null,
+    movesUsed: row.moves_used == null ? null : Number(row.moves_used),
+    handsPlayed: row.hands_played == null ? null : Number(row.hands_played),
+  };
+}
+
+function toDailyFritzAttemptRow(record: DailyFritzAttemptRecord): DailyFritzAttemptRow {
+  return {
+    id: record.id,
+    run_date: record.runDate,
+    user_id: record.userId,
+    status: record.status,
+    current_hand_index: record.currentHandIndex,
+    started_at: record.startedAt,
+    completed_at: record.completedAt,
+    verified_match_id: record.verifiedMatchId,
+    completion_hash: record.completionHash,
+    result: record.result,
+    final_score: record.finalScore,
+    opponent_score: record.opponentScore,
+    point_diff: record.pointDiff,
+    won: record.won,
+    moves_used: record.movesUsed,
+    hands_played: record.handsPlayed,
+  };
+}
+
+function isMissingDailyFritzTable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes('daily_fritz_') &&
+    (message.includes('does not exist') ||
+      message.includes('pgrst205') ||
+      message.includes('schema cache') ||
+      message.includes('could not find the table'))
+  );
+}
+
+async function getDailyFritzRun(runDate: string): Promise<DailyFritzRunRecord | null> {
+  const rows = await supabaseFetch<DailyFritzRunRow[]>(
+    `/rest/v1/daily_fritz_runs?select=run_date,seed,fritz_tier,deal_size,winning_score,status,hand_deals,generated_at,invalidated_at,metadata&run_date=eq.${encodeURIComponent(runDate)}&limit=1`,
+    { method: 'GET' },
+  );
+  return rows[0] ? toDailyFritzRunRecord(rows[0]) : null;
+}
+
+async function upsertDailyFritzRun(record: DailyFritzRunRecord): Promise<DailyFritzRunRecord> {
+  const rows = await supabaseFetch<DailyFritzRunRow[]>(
+    '/rest/v1/daily_fritz_runs?on_conflict=run_date',
+    {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation,resolution=merge-duplicates',
+      },
+      body: JSON.stringify([toDailyFritzRunRow(record)]),
+    },
+  );
+  const saved = rows[0] ? toDailyFritzRunRecord(rows[0]) : null;
+  if (!saved) throw new Error('Failed to persist daily Fritz run.');
+  return saved;
+}
+
+async function ensureDailyFritzRunForDate(
+  runDate: string,
+  options?: { fritzTier?: DailyFritzTier; dealSize?: 7 | 14; winningScore?: number },
+): Promise<DailyFritzRunRecord | null> {
+  try {
+    const existing = await getDailyFritzRun(runDate);
+    if (existing) return existing;
+    const generated = generateDailyFritzRun(
+      runDate,
+      options?.fritzTier ?? 'elite',
+      options?.dealSize ?? 7,
+      options?.winningScore ?? 60,
+    );
+    return upsertDailyFritzRun({
+      runDate: generated.runDate,
+      seed: generated.seed,
+      fritzTier: generated.fritzTier,
+      dealSize: generated.dealSize,
+      winningScore: generated.winningScore,
+      status: generated.status,
+      handDeals: generated.handDeals,
+      generatedAt: generated.generatedAt,
+      invalidatedAt: generated.invalidatedAt,
+      metadata: generated.metadata,
+    });
+  } catch (error) {
+    if (isMissingDailyFritzTable(error)) {
+      console.warn('[daily-fritz] table missing; apply supabase/daily_fritz.sql');
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function getDailyFritzAttempt(runDate: string, userId: string): Promise<DailyFritzAttemptRecord | null> {
+  const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
+    `/rest/v1/daily_fritz_attempts?select=id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played&run_date=eq.${encodeURIComponent(runDate)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: 'GET' },
+  );
+  return rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
+}
+
+async function upsertDailyFritzAttempt(record: DailyFritzAttemptRecord): Promise<DailyFritzAttemptRecord> {
+  const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
+    '/rest/v1/daily_fritz_attempts?on_conflict=id',
+    {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation,resolution=merge-duplicates',
+      },
+      body: JSON.stringify([toDailyFritzAttemptRow(record)]),
+    },
+  );
+  const saved = rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
+  if (!saved) throw new Error('Failed to persist daily Fritz attempt.');
+  return saved;
+}
+
+async function createDailyFritzAttempt(runDate: string, userId: string): Promise<DailyFritzAttemptRecord> {
+  const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
+    '/rest/v1/daily_fritz_attempts',
+    {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify([{
+        run_date: runDate,
+        user_id: userId,
+        status: 'started',
+        current_hand_index: 0,
+      }]),
+    },
+  );
+  const saved = rows[0] ? toDailyFritzAttemptRecord(rows[0]) : null;
+  if (!saved) throw new Error('Failed to create daily Fritz attempt.');
+  return saved;
+}
+
+async function listDailyFritzAttemptsForDate(runDate: string): Promise<DailyFritzAttemptRecord[]> {
+  const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
+    `/rest/v1/daily_fritz_attempts?select=id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played&run_date=eq.${encodeURIComponent(runDate)}&status=eq.completed&order=completed_at.asc,id.asc`,
+    { method: 'GET' },
+  );
+  return rows.map(toDailyFritzAttemptRecord);
+}
+
+async function fetchProfileNames(userIds: string[]): Promise<Map<string, string>> {
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  const out = new Map<string, string>();
+  if (uniqueIds.length === 0) return out;
+  const idClause = uniqueIds.map((id) => `"${id}"`).join(',');
+  const rows = await supabaseFetch<Array<{ id: string; username: string | null }>>(
+    `/rest/v1/profiles?select=id,username&id=in.(${encodeURIComponent(idClause)})`,
+    { method: 'GET' },
+  );
+  for (const row of rows) {
+    const username = typeof row.username === 'string' && row.username.trim()
+      ? row.username.trim()
+      : `user_${row.id.slice(0, 8)}`;
+    out.set(row.id, username);
+  }
+  return out;
+}
+
+async function buildDailyFritzLeaderboard(
+  runDate: string,
+): Promise<Array<DailyFritzLeaderboardEntry & { rank: number; userId: string }>> {
+  const attempts = await listDailyFritzAttemptsForDate(runDate);
+  const names = await fetchProfileNames(attempts.map((attempt) => attempt.userId));
+  const sorted = sortDailyFritzLeaderboard(
+    attempts
+      .filter(
+        (attempt): attempt is DailyFritzAttemptRecord & {
+          won: boolean;
+          finalScore: number;
+          opponentScore: number;
+          pointDiff: number;
+          movesUsed: number;
+          completedAt: string;
+        } =>
+          typeof attempt.won === 'boolean' &&
+          typeof attempt.finalScore === 'number' &&
+          typeof attempt.opponentScore === 'number' &&
+          typeof attempt.pointDiff === 'number' &&
+          typeof attempt.movesUsed === 'number' &&
+          typeof attempt.completedAt === 'string',
+      )
+      .map((attempt) => ({
+        userId: attempt.userId,
+        username: names.get(attempt.userId) ?? `user_${attempt.userId.slice(0, 8)}`,
+        won: attempt.won,
+        finalScore: attempt.finalScore,
+        opponentScore: attempt.opponentScore,
+        pointDiff: attempt.pointDiff,
+        movesUsed: attempt.movesUsed,
+        completedAt: attempt.completedAt,
+      })),
+  );
+  return sorted.map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
+async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
+  const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(
+    `/rest/v1/daily_fritz_attempts?select=run_date,status&user_id=eq.${encodeURIComponent(userId)}&status=in.(started,completed,abandoned)&order=run_date.desc&limit=365`,
+    { method: 'GET' },
+  );
+  const dates = Array.from(
+    new Set(
+      rows
+        .map((row) => row.run_date)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0),
+    ),
+  ).sort((a, b) => b.localeCompare(a));
+  if (!dates.includes(todayRunDate)) return 0;
+  let streak = 0;
+  let cursor = new Date(`${todayRunDate}T00:00:00-08:00`);
+  while (true) {
+    const key = getPacificDateKey(cursor);
+    if (!dates.includes(key)) break;
+    streak += 1;
+    cursor = new Date(cursor.getTime() - 86400000);
+  }
+  return streak;
 }
 
 function isMissingRoomMatchLogsTable(error: unknown): boolean {
@@ -1629,6 +2049,464 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to abandon bot match.',
+    });
+  }
+});
+
+app.get('/api/daily-fritz/today', async (req, res) => {
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const runDate = getPacificDateKey();
+    const run = await ensureDailyFritzRunForDate(runDate);
+    if (!run) {
+      res.status(500).json({ error: 'Daily Fritz storage is not available.' });
+      return;
+    }
+    if (run.status === 'invalidated') {
+      res.status(409).json({ error: 'Today’s Daily Fritz run was invalidated.', runDate, status: run.status });
+      return;
+    }
+
+    const attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
+    const streak = await getDailyFritzStreak(authenticatedUserId, runDate);
+    const leaderboard = await buildDailyFritzLeaderboard(runDate);
+    const ownRank = attempt?.status === 'completed'
+      ? leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null
+      : null;
+
+    res.json({
+      ok: true,
+      run_date: run.runDate,
+      fritz_tier: run.fritzTier,
+      deal_size: run.dealSize,
+      winning_score: run.winningScore,
+      attempt_status: attempt?.status ?? 'none',
+      streak,
+      result: attempt?.status === 'completed' ? attempt.result : null,
+      rank: ownRank,
+      leaderboard_preview: leaderboard.slice(0, 10).map(({ userId: _userId, ...entry }) => entry),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load today’s Daily Fritz run.',
+    });
+  }
+});
+
+app.post('/api/daily-fritz/start', async (req, res) => {
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const runDate = getPacificDateKey();
+    const run = await ensureDailyFritzRunForDate(runDate);
+    if (!run) {
+      res.status(500).json({ error: 'Daily Fritz storage is not available.' });
+      return;
+    }
+    if (run.status === 'invalidated') {
+      res.status(409).json({ error: 'Today’s Daily Fritz run was invalidated.', runDate });
+      return;
+    }
+
+    let attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
+    if (attempt?.status === 'completed' || attempt?.status === 'abandoned') {
+      res.status(409).json({ error: 'Today’s Daily Fritz attempt is already locked.', status: attempt.status });
+      return;
+    }
+    if (!attempt) {
+      attempt = await createDailyFritzAttempt(runDate, authenticatedUserId);
+    }
+
+    const localMatchId = `daily-fritz:${runDate}:${attempt.id}`;
+    const verifiedMatch = await startVerifiedSinglePlayerMatch({
+      userId: authenticatedUserId,
+      localMatchId,
+      mode: 'fritz',
+      opponentUserId: getFritzIdentityForTier(run.fritzTier).fritzId,
+      fritzTier: run.fritzTier,
+    });
+
+    attempt.verifiedMatchId = verifiedMatch.matchId;
+    attempt.status = 'started';
+    attempt = await upsertDailyFritzAttempt(attempt);
+
+    const handDeal = run.handDeals[attempt.currentHandIndex] ?? run.handDeals[0];
+    res.json({
+      ok: true,
+      attempt_id: attempt.id,
+      verified_match_id: verifiedMatch.matchId,
+      run_date: run.runDate,
+      current_hand_index: attempt.currentHandIndex,
+      fritz_tier: run.fritzTier,
+      deal_size: run.dealSize,
+      winning_score: run.winningScore,
+      first_hand: handDeal,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to start Daily Fritz.',
+    });
+  }
+});
+
+app.post('/api/daily-fritz/next-hand', async (req, res) => {
+  const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
+  const verifiedMatchId =
+    typeof req.body?.verified_match_id === 'string' ? req.body.verified_match_id.trim() : '';
+  if (!attemptId || !verifiedMatchId) {
+    res.status(400).json({ error: 'attempt_id and verified_match_id are required.' });
+    return;
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const runDate = getPacificDateKey();
+    const run = await getDailyFritzRun(runDate);
+    if (!run) {
+      res.status(404).json({ error: 'Daily Fritz run not found.' });
+      return;
+    }
+    const attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
+    if (!attempt || attempt.id !== attemptId) {
+      res.status(404).json({ error: 'Daily Fritz attempt not found.' });
+      return;
+    }
+    if (attempt.status !== 'started') {
+      res.status(409).json({ error: 'Daily Fritz attempt is not active.' });
+      return;
+    }
+    if (attempt.verifiedMatchId !== verifiedMatchId) {
+      res.status(403).json({ error: 'Verified match does not match this attempt.' });
+      return;
+    }
+    if (attempt.currentHandIndex >= 11) {
+      res.status(409).json({ error: 'No hands remain in today’s Daily Fritz run.' });
+      return;
+    }
+
+    attempt.currentHandIndex += 1;
+    const saved = await upsertDailyFritzAttempt(attempt);
+    res.json({
+      ok: true,
+      current_hand_index: saved.currentHandIndex,
+      hand: run.handDeals[saved.currentHandIndex],
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to advance Daily Fritz hand.',
+    });
+  }
+});
+
+app.post('/api/daily-fritz/complete', async (req, res) => {
+  const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
+  const verifiedMatchId =
+    typeof req.body?.verified_match_id === 'string' ? req.body.verified_match_id.trim() : '';
+  const completionHash =
+    typeof req.body?.completion_hash === 'string' ? req.body.completion_hash.trim() : '';
+  const finalScore = Number(req.body?.final_score);
+  const opponentScore = Number(req.body?.opponent_score);
+  const won = Boolean(req.body?.won);
+  const movesUsed = Number(req.body?.moves_used);
+  const handsPlayed = Number(req.body?.hands_played);
+  const moveLog = req.body?.move_log ?? null;
+
+  if (!attemptId || !verifiedMatchId || !completionHash) {
+    res.status(400).json({ error: 'attempt_id, verified_match_id, and completion_hash are required.' });
+    return;
+  }
+  if (
+    !Number.isFinite(finalScore) ||
+    !Number.isFinite(opponentScore) ||
+    !Number.isFinite(movesUsed) ||
+    !Number.isFinite(handsPlayed)
+  ) {
+    res.status(400).json({ error: 'final_score, opponent_score, moves_used, and hands_played are required.' });
+    return;
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const runDate = getPacificDateKey();
+    const run = await getDailyFritzRun(runDate);
+    if (!run) {
+      res.status(404).json({ error: 'Daily Fritz run not found.' });
+      return;
+    }
+    const attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
+    if (!attempt || attempt.id !== attemptId) {
+      res.status(404).json({ error: 'Daily Fritz attempt not found.' });
+      return;
+    }
+    if (attempt.verifiedMatchId !== verifiedMatchId) {
+      res.status(403).json({ error: 'Verified match does not match this attempt.' });
+      return;
+    }
+    const expectedHash = buildDailyFritzCompletionHash({
+      runDate,
+      attemptId,
+      verifiedMatchId,
+      currentHandIndex: attempt.currentHandIndex,
+      finalScore,
+      opponentScore,
+      won,
+      movesUsed,
+      handsPlayed,
+      moveLog,
+    });
+    if (completionHash !== expectedHash) {
+      res.status(400).json({ error: 'Completion hash mismatch.' });
+      return;
+    }
+
+    if (attempt.status === 'completed') {
+      if (attempt.completionHash === completionHash) {
+        const leaderboard = await buildDailyFritzLeaderboard(runDate);
+        const rank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
+        res.json({
+          ok: true,
+          replayed: true,
+          rank,
+          leaderboard_preview: leaderboard.slice(0, 10).map(({ userId: _userId, ...entry }) => entry),
+        });
+        return;
+      }
+      res.status(409).json({ error: 'Daily Fritz attempt already completed.' });
+      return;
+    }
+    if (attempt.status !== 'started') {
+      res.status(409).json({ error: 'Daily Fritz attempt is not active.' });
+      return;
+    }
+
+    const pointDiff = finalScore - opponentScore;
+    attempt.status = 'completed';
+    attempt.completedAt = new Date().toISOString();
+    attempt.completionHash = completionHash;
+    attempt.finalScore = Math.round(finalScore);
+    attempt.opponentScore = Math.round(opponentScore);
+    attempt.pointDiff = Math.round(pointDiff);
+    attempt.won = won;
+    attempt.movesUsed = Math.round(movesUsed);
+    attempt.handsPlayed = Math.round(handsPlayed);
+    attempt.result = {
+      run_date: runDate,
+      final_score: attempt.finalScore,
+      opponent_score: attempt.opponentScore,
+      point_diff: attempt.pointDiff,
+      won,
+      moves_used: attempt.movesUsed,
+      hands_played: attempt.handsPlayed,
+    };
+    await upsertDailyFritzAttempt(attempt);
+
+    const verifiedMatch = await getVerifiedSinglePlayerMatch(verifiedMatchId);
+    if (verifiedMatch && verifiedMatch.userId === authenticatedUserId) {
+      verifiedMatch.status = 'completed';
+      verifiedMatch.completedAt = attempt.completedAt;
+      verifiedMatch.completionHash = completionHash;
+      verifiedMatch.completionResult = attempt.result;
+      await persistVerifiedSinglePlayerMatch(verifiedMatch);
+    }
+
+    const leaderboard = await buildDailyFritzLeaderboard(runDate);
+    const rank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
+    res.json({
+      ok: true,
+      rank,
+      leaderboard_preview: leaderboard.slice(0, 10).map(({ userId: _userId, ...entry }) => entry),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to complete Daily Fritz attempt.',
+    });
+  }
+});
+
+app.post('/api/daily-fritz/abandon', async (req, res) => {
+  const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
+  if (!attemptId) {
+    res.status(400).json({ error: 'attempt_id is required.' });
+    return;
+  }
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const runDate = getPacificDateKey();
+    const attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
+    if (!attempt || attempt.id !== attemptId) {
+      res.status(404).json({ error: 'Daily Fritz attempt not found.' });
+      return;
+    }
+    if (attempt.status === 'completed' || attempt.status === 'abandoned') {
+      res.status(409).json({ error: 'Daily Fritz attempt is already locked.', status: attempt.status });
+      return;
+    }
+    attempt.status = 'abandoned';
+    attempt.completedAt = new Date().toISOString();
+    await upsertDailyFritzAttempt(attempt);
+    if (attempt.verifiedMatchId) {
+      const verifiedMatch = await getVerifiedSinglePlayerMatch(attempt.verifiedMatchId);
+      if (verifiedMatch && verifiedMatch.userId === authenticatedUserId) {
+        verifiedMatch.status = 'abandoned';
+        verifiedMatch.completedAt = attempt.completedAt;
+        await persistVerifiedSinglePlayerMatch(verifiedMatch);
+      }
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to abandon Daily Fritz attempt.',
+    });
+  }
+});
+
+app.get('/api/daily-fritz/leaderboard/:date', async (req, res) => {
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const runDate = typeof req.params.date === 'string' ? req.params.date.trim() : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate)) {
+      res.status(400).json({ error: 'Valid date is required.' });
+      return;
+    }
+    const leaderboard = await buildDailyFritzLeaderboard(runDate);
+    res.json({
+      ok: true,
+      run_date: runDate,
+      leaderboard: leaderboard.map(({ userId, ...entry }) => ({
+        ...entry,
+        is_current_user: userId === authenticatedUserId,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load Daily Fritz leaderboard.',
+    });
+  }
+});
+
+app.post('/api/daily-fritz/generate', async (req, res) => {
+  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  const runDate = typeof req.body?.run_date === 'string' ? req.body.run_date.trim() : '';
+  const fritzTier = normalizeDailyFritzTier(req.body?.fritz_tier);
+  const dealSize = Number(req.body?.deal_size) === 14 ? 14 : Number(req.body?.deal_size) === 7 ? 7 : null;
+  const winningScore = Number(req.body?.winning_score);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate) || !fritzTier || !dealSize || !Number.isFinite(winningScore)) {
+    res.status(400).json({ error: 'run_date, fritz_tier, deal_size, and winning_score are required.' });
+    return;
+  }
+  try {
+    const generated = generateDailyFritzRun(runDate, fritzTier, dealSize, Math.round(winningScore));
+    const saved = await upsertDailyFritzRun({
+      runDate: generated.runDate,
+      seed: generated.seed,
+      fritzTier: generated.fritzTier,
+      dealSize: generated.dealSize,
+      winningScore: generated.winningScore,
+      status: generated.status,
+      handDeals: generated.handDeals,
+      generatedAt: generated.generatedAt,
+      invalidatedAt: generated.invalidatedAt,
+      metadata: generated.metadata,
+    });
+    res.json({ ok: true, run_date: saved.runDate, seed: getDailyFritzSeed(saved.runDate) });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate Daily Fritz run.',
+    });
+  }
+});
+
+app.post('/api/daily-fritz/invalidate', async (req, res) => {
+  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  const runDate = typeof req.body?.run_date === 'string' ? req.body.run_date.trim() : '';
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate)) {
+    res.status(400).json({ error: 'run_date is required.' });
+    return;
+  }
+  try {
+    const run = await getDailyFritzRun(runDate);
+    if (!run) {
+      res.status(404).json({ error: 'Daily Fritz run not found.' });
+      return;
+    }
+    run.status = 'invalidated';
+    run.invalidatedAt = new Date().toISOString();
+    run.metadata = { ...(run.metadata ?? {}), invalidation_reason: reason || null };
+    await upsertDailyFritzRun(run);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to invalidate Daily Fritz run.',
+    });
+  }
+});
+
+app.post('/api/daily-fritz/reset-attempt', async (req, res) => {
+  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  const runDate = typeof req.body?.run_date === 'string' ? req.body.run_date.trim() : '';
+  const userId = typeof req.body?.user_id === 'string' ? req.body.user_id.trim() : '';
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate) || !userId) {
+    res.status(400).json({ error: 'run_date and user_id are required.' });
+    return;
+  }
+  try {
+    const attempt = await getDailyFritzAttempt(runDate, userId);
+    if (!attempt) {
+      res.status(404).json({ error: 'Daily Fritz attempt not found.' });
+      return;
+    }
+    await supabaseFetch(`/rest/v1/daily_fritz_attempts?id=eq.${encodeURIComponent(attempt.id)}`, {
+      method: 'DELETE',
+    });
+    if (attempt.verifiedMatchId) {
+      const verifiedMatch = await getVerifiedSinglePlayerMatch(attempt.verifiedMatchId);
+      if (verifiedMatch) {
+        verifiedMatch.status = 'abandoned';
+        verifiedMatch.completedAt = new Date().toISOString();
+        verifiedMatch.completionResult = reason ? { reset_reason: reason } : null;
+        await persistVerifiedSinglePlayerMatch(verifiedMatch);
+      }
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to reset Daily Fritz attempt.',
     });
   }
 });
@@ -3257,6 +4135,10 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
 });
 
 const PORT = 3001;
+
+void ensureDailyFritzRunForDate(getPacificDateKey()).catch((error) => {
+  console.warn('[daily-fritz] startup generation failed:', error);
+});
 
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);

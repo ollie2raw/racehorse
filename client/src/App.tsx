@@ -73,6 +73,7 @@ const BotMatchScreen = React.lazy(() => import('./bot/BotMatchScreen'));
 const BotSetupScreen = React.lazy(() => import('./bot/BotSetupScreen'));
 const GhostSetupScreen = React.lazy(() => import('./ghost/GhostSetupScreen'));
 const DailyPuzzleScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleScreen'));
+const DailyFritzScreen = React.lazy(() => import('./dailyFritz/DailyFritzScreen'));
 const DailyPuzzleAdminScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleAdminScreen'));
 const LeagueScreen = React.lazy(() => import('./league/LeagueScreen'));
 const RatingHistoryPage = React.lazy(() => import('./ranking/RatingHistoryPage'));
@@ -692,6 +693,7 @@ export default function App() {
     | 'ghostSetup'
     | 'ghost'
     | 'daily'
+    | 'dailyFritz'
     | 'league'
     | 'learn'
     | 'ratingHistory'
@@ -2493,6 +2495,24 @@ export default function App() {
     );
   }
 
+  if (appMode === 'dailyFritz') {
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Daily Fritz…" />}>
+          <DailyFritzScreen
+            user={authUser}
+            profile={authProfile}
+            ghostProfile={ghostProfile}
+            onGhostProfileChange={setGhostProfile}
+            onProfileRefresh={refreshAuthProfile}
+            onProfilePatch={applyProfilePatch}
+            onBack={() => setAppMode('home')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   if (appMode === 'league') {
     return (
       <div className={appRootClassName}>
@@ -3242,11 +3262,13 @@ export default function App() {
                         </button>
 
                         <button
-                          className="mode-option mode-option-secondary mode-accent-track mode-card-track"
-                          onClick={() => setWeeklyStatsOpen(true)}
+                          className="mode-option mode-option-secondary mode-accent-daily-fritz mode-card-daily-fritz"
+                          onClick={() => setAppMode('dailyFritz')}
                         >
-                          <span className="mode-option-title">Weekly Stats</span>
-                          <span className="mode-option-meta">See weekly highlights, awards, and leaderboard snapshots</span>
+                          <span className="mode-option-title">Daily Fritz Match</span>
+                          <span className="mode-option-meta">
+                            One fixed live Fritz match per day. Same deals for everyone.
+                          </span>
                         </button>
                       </div>
                     </section>

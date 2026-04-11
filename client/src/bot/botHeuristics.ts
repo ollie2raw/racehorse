@@ -101,6 +101,69 @@ function tileKey(t: { low: number; high: number }): string {
   return `${t.low}|${t.high}`;
 }
 
+function boardStateKey(state: BotEvalState): string {
+  const board = state.board;
+  if (!board) return 'no-board';
+  const main = board.mainLine
+    .map((placement) => `${tileKey(placement.tile)}@${placement.orientation}`)
+    .join(',');
+  const hubs = (board.hubDoubles ?? [])
+    .map((hub, hubIdx) =>
+      `${hub.hubId ?? hubIdx}:${(hub.branches ?? [])
+        .map((branch, branchIdx) =>
+          !branch
+            ? `${branchIdx}:x`
+            : `${branchIdx}:${branch.tiles.map((placement) => `${tileKey(placement.tile)}@${placement.orientation}`).join('.')}`,
+        )
+        .join('|')}`,
+    )
+    .join(';');
+  return `${main}#${hubs}#${board.leftEnd}:${board.rightEnd}`;
+}
+
+function compareTilesNumeric(a: Tile | null | undefined, b: Tile | null | undefined): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  if (a.high !== b.high) return a.high - b.high;
+  if (a.low !== b.low) return a.low - b.low;
+  return 0;
+}
+
+function compareMoveStable(a: Move, b: Move): number {
+  const tileCompare = compareTilesNumeric(a.tile ?? null, b.tile ?? null);
+  if (tileCompare !== 0) return tileCompare;
+  return String(a.position ?? '').localeCompare(String(b.position ?? ''));
+}
+
+function stateSeedKey(state: BotEvalState, label: string): string {
+  return [
+    label,
+    state.currentPlayer,
+    state.players.bot.hand.map(tileKey).sort().join(','),
+    getOpponentTileCount(state),
+    state.boneyard.map(tileKey).join(','),
+    boardStateKey(state),
+  ].join('|');
+}
+
+function hashStringToUint32(seed: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createStatePrng(state: BotEvalState, label: string): () => number {
+  let current = hashStringToUint32(stateSeedKey(state, label)) || 0x9e3779b9;
+  return () => {
+    current = (Math.imul(current, 1664525) + 1013904223) >>> 0;
+    return current / 0x100000000;
+  };
+}
+
 function pipSum(hand: Tile[]): number {
   return hand.reduce((s, t) => s + t.low + t.high, 0);
 }
@@ -166,6 +229,7 @@ function sampleOpponentHands(
   weights: Map<string, number>,
   handSize: number,
   n: number,
+  rand: () => number,
 ): Tile[][] {
   const hands: Tile[][] = [];
 
@@ -178,12 +242,12 @@ function sampleOpponentHands(
       const totalW = w.reduce((sum, wi, idx) => (available[idx] ? sum + wi : sum), 0);
       if (totalW <= 0) break;
 
-      let rand = Math.random() * totalW;
+      let roll = rand() * totalW;
       let chosen = -1;
       for (let j = 0; j < available.length; j++) {
         if (!available[j]) continue;
-        rand -= w[j];
-        if (rand <= 0) { chosen = j; break; }
+        roll -= w[j];
+        if (roll <= 0) { chosen = j; break; }
       }
       if (chosen === -1) chosen = available.findIndex((t) => t != null);
       if (chosen === -1) break;
@@ -542,7 +606,11 @@ function searchChainTree(
           return { m, p, val };
         })
         .filter(Boolean)
-        .sort((a, b) => b!.val - a!.val)
+        .sort((a, b) => {
+          const scoreDiff = b!.val - a!.val;
+          if (scoreDiff !== 0) return scoreDiff;
+          return compareMoveStable(a!.m, b!.m);
+        })
         .slice(0, width) as Array<{ m: Move; p: NonNullable<ReturnType<typeof previewPlayMove>>; val: number }>;
 
       for (const { m, p } of scored) {
@@ -1164,7 +1232,9 @@ function minimaxFull(
   const orderedMoves = [...moves].sort((a, b) => {
     const pa = previewPlayMove(state, player, a);
     const pb = previewPlayMove(state, player, b);
-    return (pb?.immediateScore ?? 0) - (pa?.immediateScore ?? 0);
+    const scoreDiff = (pb?.immediateScore ?? 0) - (pa?.immediateScore ?? 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    return compareMoveStable(a, b);
   });
 
   if (isBot) {
@@ -1250,7 +1320,13 @@ function mcEvaluateMove(
     youProximity >= 0.5  ? 1.2 : 1.0;
 
   const youHandSize = getOpponentTileCount(state);
-  const sampledHands = sampleOpponentHands(pool, holdWeights, youHandSize, mcSamples);
+  const sampledHands = sampleOpponentHands(
+    pool,
+    holdWeights,
+    youHandSize,
+    mcSamples,
+    createStatePrng(state, `mc:${tileKey(move.tile ?? { low: 0, high: 0 })}:${move.position}`),
+  );
 
   let totalThreat = 0;
   let totalThreatBefore = 0;
@@ -1287,14 +1363,6 @@ function weightedSelect<T extends { score: number }>(scored: T[]): T {
   const top = scored.slice(0, Math.min(3, scored.length));
   const best = top[0].score;
   if (best >= 500_000 || (top.length > 1 && best - top[1].score > 200)) return top[0];
-
-  const weights = [0.65, 0.25, 0.10].slice(0, top.length);
-  let cumulative = 0;
-  const rand = Math.random() * weights.reduce((s, w) => s + w, 0);
-  for (let i = 0; i < top.length; i++) {
-    cumulative += weights[i];
-    if (rand <= cumulative) return top[i];
-  }
   return top[0];
 }
 
@@ -1386,7 +1454,11 @@ export function chooseBotMove(
           },
         };
       })
-      .sort((a, b) => b.score - a.score)[0];
+      .sort((a, b) => {
+        const scoreDiff = b.score - a.score;
+        if (scoreDiff !== 0) return scoreDiff;
+        return compareMoveStable(a.move, b.move);
+      })[0];
     return done(best, label)
   }
 
@@ -1397,7 +1469,9 @@ export function chooseBotMove(
       .sort((a, b) => {
         const sa = a.p!.immediateScore * 10 + (a.m.tile?.low ?? 0) + (a.m.tile?.high ?? 0);
         const sb = b.p!.immediateScore * 10 + (b.m.tile?.low ?? 0) + (b.m.tile?.high ?? 0);
-        return sb - sa;
+        const scoreDiff = sb - sa;
+        if (scoreDiff !== 0) return scoreDiff;
+        return compareMoveStable(a.m, b.m);
       })[0];
     if (!best) return null;
     return done({
@@ -1444,7 +1518,11 @@ export function chooseBotMove(
       })
       .filter(Boolean) as Array<{ move: Move; score: number; breakdown: BotChoice['breakdown'] }>;
 
-    scored.sort((a, b) => b.score - a.score);
+    scored.sort((a, b) => {
+      const scoreDiff = b.score - a.score;
+      if (scoreDiff !== 0) return scoreDiff;
+      return compareMoveStable(a.move, b.move);
+    });
     if (!scored[0]) return null;
     return done({ move: scored[0].move, score: scored[0].score, breakdown: scored[0].breakdown }, 'standard')
   }
@@ -1459,11 +1537,17 @@ export function chooseBotMove(
   if (difficulty === 'master' && totalTiles <= masterEndgameThreshold) {
     const SAMPLE_COUNT = 16;
     const depth = endgameDepth(totalTiles);
-    const deadlineMs = performance.now() + 200;
+    const deadlineMs = Number.POSITIVE_INFINITY;
     const moveVotes = new Map<Move, number>();
     const moveScoreTotals = new Map<Move, number>();
 
-    const sampledHands = sampleOpponentHands(pool, weights, getOpponentTileCount(state), SAMPLE_COUNT);
+    const sampledHands = sampleOpponentHands(
+      pool,
+      weights,
+      getOpponentTileCount(state),
+      SAMPLE_COUNT,
+      createStatePrng(state, 'master-endgame'),
+    );
 
     for (const sampledHand of sampledHands) {
       if (performance.now() > deadlineMs) break;
@@ -1506,7 +1590,9 @@ export function chooseBotMove(
         .sort((a, b) => {
           const voteDiff = b[1] - a[1];
           if (voteDiff !== 0) return voteDiff;
-          return (moveScoreTotals.get(b[0]) ?? -Infinity) - (moveScoreTotals.get(a[0]) ?? -Infinity);
+          const scoreDiff = (moveScoreTotals.get(b[0]) ?? -Infinity) - (moveScoreTotals.get(a[0]) ?? -Infinity);
+          if (scoreDiff !== 0) return scoreDiff;
+          return compareMoveStable(a[0], b[0]);
         })[0]?.[0] ?? candidates[0];
     const bestPreview = previewPlayMove(state, 'bot', bestMove);
     if (!bestPreview) return greedyFallback('master-endgame-fallback');
@@ -1560,10 +1646,14 @@ export function chooseBotMove(
         },
       } satisfies HardScoredCandidate;
     })
-    .sort((a, b) => b.strategicScore - a.strategicScore);
+    .sort((a, b) => {
+      const scoreDiff = b.strategicScore - a.strategicScore;
+      if (scoreDiff !== 0) return scoreDiff;
+      return compareMoveStable(a.move, b.move);
+    });
 
   if (totalTiles <= 16 && prelim.length > 1) {
-    const exactDeadlineMs = performance.now() + 80;
+    const exactDeadlineMs = Number.POSITIVE_INFINITY;
     const topN = Math.min(4, prelim.length);
     for (let i = 0; i < topN; i++) {
       if (performance.now() > exactDeadlineMs) break;
@@ -1574,7 +1664,11 @@ export function chooseBotMove(
         (exact.chainLength > 1 ? exact.chainLength * 8 : 0);
       prelim[i].score = prelim[i].strategicScore + prelim[i].mcScore * 0.35;
     }
-    prelim.sort((a, b) => b.strategicScore - a.strategicScore);
+    prelim.sort((a, b) => {
+      const scoreDiff = b.strategicScore - a.strategicScore;
+      if (scoreDiff !== 0) return scoreDiff;
+      return compareMoveStable(a.move, b.move);
+    });
   }
 
   if ((ENABLE_TWO_PLY_WORST_CASE || difficulty === 'master') && prelim.length > 1) {
@@ -1584,7 +1678,11 @@ export function chooseBotMove(
       const worst = twoPlyWorstCaseValue(state, c.move, weights);
       c.score = worst + c.strategicScore * 0.25 + c.mcScore * 0.1;
     }
-    top.sort((a, b) => b.score - a.score);
+    top.sort((a, b) => {
+      const scoreDiff = b.score - a.score;
+      if (scoreDiff !== 0) return scoreDiff;
+      return compareMoveStable(a.move, b.move);
+    });
     const chosen = (difficulty === 'master' || totalTiles <= 12) ? top[0] : weightedSelect(top);
     return done(
       {
@@ -1597,7 +1695,11 @@ export function chooseBotMove(
     );
   }
 
-  prelim.sort((a, b) => b.score - a.score);
+  prelim.sort((a, b) => {
+    const scoreDiff = b.score - a.score;
+    if (scoreDiff !== 0) return scoreDiff;
+    return compareMoveStable(a.move, b.move);
+  });
   const chosen = (difficulty === 'master' || totalTiles <= 12) ? prelim[0] : weightedSelect(prelim);
   return done(
     {

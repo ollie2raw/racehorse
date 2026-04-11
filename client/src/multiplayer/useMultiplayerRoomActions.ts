@@ -57,6 +57,7 @@ type UseMultiplayerRoomActionsParams = {
       | 'ghostSetup'
       | 'ghost'
       | 'daily'
+      | 'dailyFritz'
       | 'league'
       | 'learn'
       | 'ratingHistory'

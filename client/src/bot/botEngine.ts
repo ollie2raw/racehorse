@@ -41,6 +41,13 @@ export interface BotMatchState {
   opponentMissingEvidence?: Array<{ pip: number; handNumber: number; turnIndex: number }>;
 }
 
+export interface BotHandDeal {
+  player_tiles: Tile[];
+  fritz_tiles: Tile[];
+  boneyard: Tile[];
+  locked: Tile[];
+}
+
 export interface BotActionResult {
   state: BotMatchState;
   scored?: { player: BotPlayerId; points: number };
@@ -159,8 +166,55 @@ function createDealtHand(
   };
 }
 
+function cloneTile(tile: Tile): Tile {
+  return { low: tile.low, high: tile.high };
+}
+
+export function createFixedBotHand(
+  scores: Record<BotPlayerId, number>,
+  handNumber: number,
+  winningScore: number,
+  dealSize: BotDealSize,
+  handDeal: BotHandDeal,
+): BotMatchState {
+  const currentPlayer: BotPlayerId = handNumber % 2 === 1 ? 'you' : 'bot';
+  return {
+    players: {
+      you: { hand: handDeal.player_tiles.map(cloneTile), score: scores.you },
+      bot: { hand: handDeal.fritz_tiles.map(cloneTile), score: scores.bot },
+    },
+    board: null,
+    boneyard: handDeal.boneyard.map(cloneTile),
+    deadTiles: handDeal.locked.map(cloneTile),
+    handOpen: false,
+    currentPlayer,
+    consecutivePasses: 0,
+    handNumber,
+    turnIndex: 0,
+    handOver: false,
+    gameOver: false,
+    winnerId: null,
+    winningScore,
+    lastHandWinner: null,
+    lastHandReason: null,
+    dealSize,
+    opponentPassedOnEnds: [],
+    opponentDrawCount: 0,
+    opponentKnownMissing: [],
+    opponentMissingEvidence: [],
+  };
+}
+
 export function createBotMatch(winningScore = 60, dealSize: BotDealSize = 7): BotMatchState {
   return createDealtHand({ you: 0, bot: 0 }, 1, winningScore, dealSize);
+}
+
+export function createFixedBotMatch(
+  handDeal: BotHandDeal,
+  winningScore = 60,
+  dealSize: BotDealSize = 7,
+): BotMatchState {
+  return createFixedBotHand({ you: 0, bot: 0 }, 1, winningScore, dealSize, handDeal);
 }
 
 export function startNextBotHand(state: BotMatchState): BotMatchState {
@@ -169,6 +223,16 @@ export function startNextBotHand(state: BotMatchState): BotMatchState {
     state.handNumber + 1,
     state.winningScore,
     state.dealSize,
+  );
+}
+
+export function startNextFixedBotHand(state: BotMatchState, handDeal: BotHandDeal): BotMatchState {
+  return createFixedBotHand(
+    { you: state.players.you.score, bot: state.players.bot.score },
+    state.handNumber + 1,
+    state.winningScore,
+    state.dealSize,
+    handDeal,
   );
 }
 
