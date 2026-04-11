@@ -878,6 +878,9 @@
   position: relative;
   overflow: hidden;
   min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(17, 27, 43, 0.82), rgba(10, 17, 28, 0.9));
@@ -892,26 +895,41 @@
   position: absolute;
   inset: auto 0 0;
   height: 3px;
-  background: linear-gradient(90deg, rgba(240, 192, 64, 0.92), rgba(240, 192, 64, 0.18));
+  background: linear-gradient(90deg, rgba(218, 181, 80, 0.88), rgba(218, 181, 80, 0.18));
   opacity: 0.72;
 }
 
-.daily-entry-summary-card span {
+.daily-entry-summary-card .daily-fritz-stat-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+}
+
+.daily-entry-summary-card span:not(.daily-entry-calendar-button):not(.daily-entry-streak-icon) {
   display: block;
-  color: rgba(198, 220, 214, 0.64);
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  color: rgba(198, 220, 214, 0.72);
+  font-size: clamp(1.34rem, 1.72vw, 1.68rem);
+  font-weight: 850;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  text-align: left;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
 }
 
 .daily-entry-summary-card strong {
-  display: block;
-  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: rgba(248, 250, 249, 0.98);
-  font-size: clamp(1.2rem, 1.5vw, 1.52rem);
+  font-size: clamp(1.34rem, 1.72vw, 1.68rem);
   font-weight: 850;
-  line-height: 1.08;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
 }
 
 .daily-entry-streak-value {
@@ -930,23 +948,12 @@
 .daily-entry-summary-button {
   cursor: pointer;
   text-align: left;
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    filter 0.16s ease;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-.daily-entry-summary-button-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.daily-entry-summary-button-row strong {
-  margin-top: 0;
+.daily-entry-summary-button:hover {
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .daily-entry-calendar-button {

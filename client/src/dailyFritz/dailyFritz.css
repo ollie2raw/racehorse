@@ -25,11 +25,11 @@
 }
 
 .daily-fritz-screen .layout-screen-inner {
-  margin-top: clamp(16px, 2.4vh, 24px) !important;
+  margin-top: clamp(32px, 5vh, 64px) !important;
 }
 
 .daily-fritz-screen .layout-screen-header {
-  gap: 8px;
+  gap: 12px;
 }
 
 .daily-fritz-screen .layout-screen-title {

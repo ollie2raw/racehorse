@@ -1406,6 +1406,10 @@ button:hover:not(:disabled) {
   color: #f59e0b;
 }
 
+.screen.mode-accent-daily-fritz.mode-subpage-screen .layout-screen-badge {
+  color: #22d3ee;
+}
+
 .screen.mode-accent-daily.mode-subpage-screen .mode-option {
   --menu-section-color: #f59e0b;
   border: 1px solid rgba(245, 158, 11, 0.18);

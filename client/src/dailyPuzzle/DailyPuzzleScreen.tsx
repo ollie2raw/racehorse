@@ -1050,8 +1050,8 @@ export default function DailyPuzzleScreen({
                   className="daily-entry-summary-card daily-entry-summary-button"
                   onClick={() => setArchivePickerOpen(true)}
                 >
-                  <span>Date</span>
-                  <div className="daily-entry-summary-button-row">
+                  <div className="daily-fritz-stat-layout">
+                    <span>Date</span>
                     <strong>{formattedDisplayDate}</strong>
                     <span
                       className="daily-entry-calendar-button"
@@ -1067,19 +1067,25 @@ export default function DailyPuzzleScreen({
                   </div>
                 </button>
                 <div className="daily-entry-summary-card">
-                  <span>Mode</span>
-                  <strong>{isArchiveMode ? 'Archive' : 'Daily'}</strong>
+                  <div className="daily-fritz-stat-layout">
+                    <span>Mode</span>
+                    <strong>{isArchiveMode ? 'Archive' : 'Daily'}</strong>
+                  </div>
                 </div>
                 <div className="daily-entry-summary-card">
-                  <span>Format</span>
-                  <strong>One-turn high score</strong>
+                  <div className="daily-fritz-stat-layout">
+                    <span>Format</span>
+                    <strong>One-turn high score</strong>
+                  </div>
                 </div>
                 <div className="daily-entry-summary-card">
-                  <span>Streak</span>
-                  <strong className="daily-entry-streak-value">
-                    {isArchiveMode ? 'Off' : `${streakDays} day${streakDays === 1 ? '' : 's'}`}
-                    {!isArchiveMode && streakDays >= 2 && <span className="daily-entry-streak-icon" aria-hidden="true">🔥</span>}
-                  </strong>
+                  <div className="daily-fritz-stat-layout">
+                    <span>Streak</span>
+                    <strong className="daily-entry-streak-value">
+                      {isArchiveMode ? 'Off' : `${streakDays} day${streakDays === 1 ? '' : 's'}`}
+                      {!isArchiveMode && streakDays >= 2 && <span className="daily-entry-streak-icon" aria-hidden="true">🔥</span>}
+                    </strong>
+                  </div>
                 </div>
               </div>
 
