@@ -26,7 +26,7 @@ export default function AuthModal({
   onSignUp,
   onResetPassword,
 }: AuthModalProps) {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup' | 'verify'>('signin');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,6 +66,7 @@ export default function AuthModal({
 
   const handleClose = () => {
     resetFormState();
+    setMode('signin');
     onClose();
   };
 
@@ -87,8 +88,11 @@ export default function AuthModal({
       }
 
       if ('pendingVerification' in result && result.pendingVerification) {
-        setNotice(result.message ?? 'Check your email to verify your account.');
-        setMode('signin');
+        setNotice(
+          result.message ??
+            `Check your email — we sent a confirmation link to ${email.trim()}. Click it to activate your account.`,
+        );
+        setMode('verify');
         return;
       }
 
@@ -115,99 +119,155 @@ export default function AuthModal({
         </div>
 
         <h3 className="auth-modal-title">{mode === 'signin' ? 'Sign in' : 'Create account'}</h3>
-        <p className="auth-modal-subtitle">Track your profile, stats, and leaderboard position.</p>
+        <p className="auth-modal-subtitle">
+          {mode === 'verify'
+            ? 'Finish account setup from your inbox.'
+            : 'Track your profile, stats, and leaderboard position.'}
+        </p>
 
         {!supabaseEnabled && (
           <p className="auth-inline-error">{supabaseConfigError ?? 'Supabase not configured.'}</p>
         )}
 
-        <div className="auth-modal-fields">
-          {mode === 'signup' && (
+        {mode === 'verify' ? (
+          <div className="auth-modal-verify">
+            <p className="auth-modal-verify-message">
+              {notice ??
+                `Check your email — we sent a confirmation link to ${email.trim()}. Click it to activate your account.`}
+            </p>
+            <button
+              className="auth-modal-submit"
+              onClick={async () => {
+                if (submitting) return;
+                setSubmitting(true);
+                setError(null);
+                setNotice(null);
+                try {
+                  const result = await onSignUp(email.trim(), password, username.trim() || undefined);
+                  if (result.error) {
+                    setError(result.error);
+                    return;
+                  }
+                  setNotice(
+                    result.message ??
+                      `Check your email — we sent a confirmation link to ${email.trim()}. Click it to activate your account.`,
+                  );
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Unable to resend confirmation email.');
+                } finally {
+                  setSubmitting(false);
+                }
+              }}
+              disabled={submitting || !supabaseEnabled}
+            >
+              {submitting ? 'Please wait...' : 'Resend Email'}
+            </button>
+
+            <button
+              type="button"
+              className="auth-modal-toggle auth-modal-back-link"
+              onClick={() => {
+                setMode('signin');
+                setError(null);
+                setNotice(null);
+              }}
+            >
+              Back to sign in
+            </button>
+          </div>
+        ) : (
+          <div className="auth-modal-fields">
+            {mode === 'signup' && (
+              <label className="auth-modal-field">
+                <span className="auth-modal-field-label">Username</span>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="your_username"
+                  autoComplete="username"
+                  className="auth-modal-input"
+                />
+              </label>
+            )}
+
             <label className="auth-modal-field">
-              <span className="auth-modal-field-label">Username</span>
+              <span className="auth-modal-field-label">Email</span>
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="your_username"
-                autoComplete="username"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
                 className="auth-modal-input"
               />
             </label>
-          )}
 
-          <label className="auth-modal-field">
-            <span className="auth-modal-field-label">Email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            autoComplete="email"
-            className="auth-modal-input"
-          />
-          </label>
-
-          <label className="auth-modal-field">
-            <span className="auth-modal-field-label">Password</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Minimum 6 characters"
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            className="auth-modal-input"
-          />
-          </label>
-          {mode === 'signin' && (
-            <button
-              type="button"
-              className="auth-modal-forgot"
-              disabled={submitting || resetSent}
-              onClick={async () => {
-                if (!email.trim()) {
-                  setError('Enter your email above first.');
-                  return;
-                }
-                setSubmitting(true);
-                setError(null);
-                const result = await onResetPassword(email.trim());
-                setSubmitting(false);
-                if (result.error) {
-                  setError(result.error);
-                } else {
-                  setResetSent(true);
+            <label className="auth-modal-field">
+              <span className="auth-modal-field-label">Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimum 6 characters"
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                className="auth-modal-input"
+              />
+            </label>
+            {mode === 'signin' && (
+              <button
+                type="button"
+                className="auth-modal-forgot"
+                disabled={submitting || resetSent}
+                onClick={async () => {
+                  if (!email.trim()) {
+                    setError('Enter your email above first.');
+                    return;
+                  }
+                  setSubmitting(true);
                   setError(null);
-                }
-              }}
-            >
-              {resetSent ? '✓ Reset email sent' : 'Forgot password?'}
-            </button>
-          )}
-        </div>
+                  const result = await onResetPassword(email.trim());
+                  setSubmitting(false);
+                  if (result.error) {
+                    setError(result.error);
+                  } else {
+                    setResetSent(true);
+                    setError(null);
+                  }
+                }}
+              >
+                {resetSent ? '✓ Reset email sent' : 'Forgot password?'}
+              </button>
+            )}
+          </div>
+        )}
 
         {error && <p className="auth-inline-error">{error}</p>}
-        {notice && !error && <p className="auth-inline-success">{notice}</p>}
+        {notice && !error && mode !== 'verify' && <p className="auth-inline-success">{notice}</p>}
 
-        <button
-          className="auth-modal-submit"
-          onClick={submit}
-          disabled={!canSubmit}
-        >
-          {submitting ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
-        </button>
+        {mode !== 'verify' && (
+          <>
+            <button
+              className="auth-modal-submit"
+              onClick={submit}
+              disabled={!canSubmit}
+            >
+              {submitting ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
+            </button>
 
-        <button type="button" className="auth-modal-toggle" onClick={() => setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))}>
-          {mode === 'signin' ? (
-            <>
-              Need an account? <span>Create one</span>
-            </>
-          ) : (
-            <>
-              Already have an account? <span>Sign in</span>
-            </>
-          )}
-        </button>
+            <button type="button" className="auth-modal-toggle" onClick={() => setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))}>
+              {mode === 'signin' ? (
+                <>
+                  Need an account? <span>Create one</span>
+                </>
+              ) : (
+                <>
+                  Already have an account? <span>Sign in</span>
+                </>
+              )}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
