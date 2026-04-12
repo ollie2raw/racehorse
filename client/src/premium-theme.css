@@ -8,6 +8,7 @@
   --accent-purple: #a855f7;
   --accent-red: #ef4444;
   --accent-amber: #f59e0b;
+  --accent-green: #34d399;
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -234,10 +235,14 @@ body, #root {
 }
 .mode-card-daily .mode-option-title::before { content: "📅"; font-size: 1.2rem; margin-right: 8px; }
 
-.mode-card-track { 
+.mode-card-track {
   --accent-color: var(--accent-teal);
 }
 .mode-card-track .mode-option-title::before { content: "📊"; font-size: 1.2rem; margin-right: 8px; }
+
+.mode-card-learn {
+  --accent-color: var(--accent-green);
+}
 
 .mode-option-title {
   font-size: 1.45rem !important;

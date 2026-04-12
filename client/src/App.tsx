@@ -236,7 +236,7 @@ function getOpenEndsSum(board: GameState['board']): number {
   return sum;
 }
 
-const LEARN_MODE_VISIBLE = false;
+const LEARN_MODE_VISIBLE = true;
 
 function FullscreenIcon({ isFullscreen, style }: { isFullscreen: boolean; style?: React.CSSProperties }) {
   return (
@@ -3208,9 +3208,9 @@ export default function App() {
                     </button>
                   </section>
 
-                  <section className="mode-hub-primary mode-hub-section-multiplayer">
+                  <div className="home-main-grid">
                     <button
-                      className="mode-option mode-option-primary mode-option-hero mode-accent-multiplayer mode-card-play-online"
+                      className="mode-option mode-accent-multiplayer mode-card-play-online"
                       onClick={() => setAppMode('multiplayer')}
                     >
                       <div className="mode-card-play-online-head">
@@ -3219,51 +3219,53 @@ export default function App() {
                       </div>
                       <span className="mode-option-meta">Create a private room and play head to head in real time</span>
                     </button>
-                  </section>
 
-                  <div className="mode-hub-grid">
-                    <section className="mode-hub-middle" aria-label="Practice and compete modes">
-                      <div className="mode-hub-middle-cards">
-                        <button
-                          className="mode-option mode-option-primary mode-accent-bot mode-card-single-player"
-                          onClick={() => setAppMode('singlePlayerHub')}
-                        >
-                          <span className="mode-option-title">Single Player Modes</span>
-                          <span className="mode-option-meta">Play vs Fritz, Ghost Mode, Your League, & No Brainer Lab</span>
-                        </button>
+                    <button
+                      className="mode-option mode-accent-daily-fritz mode-card-daily-fritz"
+                      onClick={() => setAppMode('dailyFritz')}
+                    >
+                      <span className="mode-option-title">Daily Fritz Match</span>
+                      <span className="mode-option-meta">
+                        One fixed live Fritz match per day. Same deals for everyone.
+                      </span>
+                    </button>
 
-                        <button
-                          className="mode-option mode-accent-tournament mode-card-compete"
-                          onClick={() => {
-                            setError('');
-                            setAppMode('tournament');
-                          }}
-                        >
-                          <span className="mode-option-title">Tournament Mode</span>
-                          <span className="mode-option-meta">Round robin (4+ players), matches to 30, play everyone once</span>
-                        </button>
+                    <button
+                      className="mode-option mode-accent-daily mode-card-daily"
+                      onClick={() => setAppMode('daily')}
+                    >
+                      <span className="mode-option-title">Daily Puzzle</span>
+                      <span className="mode-option-meta">
+                        Solve today's featured scenario and compare leaderboard results
+                      </span>
+                    </button>
 
-                        <button
-                          className="mode-option mode-option-secondary mode-accent-daily mode-card-daily"
-                          onClick={() => setAppMode('daily')}
-                        >
-                          <span className="mode-option-title">Daily Puzzle</span>
-                          <span className="mode-option-meta">
-                            Solve today’s featured scenario and compare leaderboard results
-                          </span>
-                        </button>
+                    <button
+                      className="mode-option mode-accent-bot mode-card-single-player"
+                      onClick={() => setAppMode('singlePlayerHub')}
+                    >
+                      <span className="mode-option-title">Single Player Modes</span>
+                      <span className="mode-option-meta">Play vs Fritz, Ghost Mode, Your League, & No Brainer Lab</span>
+                    </button>
 
-                        <button
-                          className="mode-option mode-option-secondary mode-accent-daily-fritz mode-card-daily-fritz"
-                          onClick={() => setAppMode('dailyFritz')}
-                        >
-                          <span className="mode-option-title">Daily Fritz Match</span>
-                          <span className="mode-option-meta">
-                            One fixed live Fritz match per day. Same deals for everyone.
-                          </span>
-                        </button>
-                      </div>
-                    </section>
+                    <button
+                      className="mode-option mode-accent-tournament mode-card-compete"
+                      onClick={() => {
+                        setError('');
+                        setAppMode('tournament');
+                      }}
+                    >
+                      <span className="mode-option-title">Tournament Mode</span>
+                      <span className="mode-option-meta">Round robin (4+ players), matches to 30, play everyone once</span>
+                    </button>
+
+                    <button
+                      className="mode-option mode-accent-learn mode-card-learn"
+                      onClick={() => setAppMode('learn')}
+                    >
+                      <span className="mode-option-title">Learn Academy</span>
+                      <span className="mode-option-meta">New to dominoes? Learn how to play and win.</span>
+                    </button>
                   </div>
               </div>
             </div>

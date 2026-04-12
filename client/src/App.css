@@ -950,7 +950,8 @@ button:hover:not(:disabled) {
 .mode-home-screen .mode-card-compete .mode-option-title,
 .mode-home-screen .mode-card-daily .mode-option-title,
 .mode-home-screen .mode-card-daily-fritz .mode-option-title,
-.mode-home-screen .mode-card-track .mode-option-title {
+.mode-home-screen .mode-card-track .mode-option-title,
+.mode-home-screen .mode-card-learn .mode-option-title {
   font-size: clamp(2.12rem, 3.35vw, 3.1rem) !important;
   font-weight: 850 !important;
   letter-spacing: -0.02em;
@@ -963,7 +964,8 @@ button:hover:not(:disabled) {
 .mode-home-screen .mode-card-compete .mode-option-meta,
 .mode-home-screen .mode-card-daily .mode-option-meta,
 .mode-home-screen .mode-card-daily-fritz .mode-option-meta,
-.mode-home-screen .mode-card-track .mode-option-meta {
+.mode-home-screen .mode-card-track .mode-option-meta,
+.mode-home-screen .mode-card-learn .mode-option-meta {
   font-size: 1.56rem !important;
   line-height: 1.32;
 }
@@ -1201,6 +1203,10 @@ button:hover:not(:disabled) {
   --menu-section-color: #22d3ee;
 }
 
+.mode-card-learn {
+  --menu-section-color: #34d399;
+}
+
 .mode-card-league {
   --menu-section-color: #22c55e;
 }
@@ -1238,6 +1244,22 @@ button:hover:not(:disabled) {
   overflow: hidden;
   border-left: 5px solid #22d3ee !important;
   border-left-color: #22d3ee !important;
+}
+
+.mode-home-screen .mode-option.mode-card-learn {
+  overflow: hidden;
+  border-left: 5px solid #34d399 !important;
+  border-left-color: #34d399 !important;
+}
+
+.mode-home-screen .mode-option.mode-card-learn:hover {
+  border-color: rgba(52, 211, 153, 0.4) !important;
+  border-left-color: #34d399 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 1px rgba(52, 211, 153, 0.14),
+    0 0 24px rgba(52, 211, 153, 0.16),
+    0 16px 30px rgba(7, 22, 18, 0.3) !important;
 }
 
 .mode-home-screen .mode-option.mode-card-league {
@@ -1621,6 +1643,12 @@ button:hover:not(:disabled) {
   --mode-hover-border: rgba(177, 196, 255, 0.35);
 }
 
+.mode-accent-learn {
+  --mode-accent: rgba(52, 211, 153, 0.62);
+  --mode-section-tone: rgba(167, 243, 208, 0.78);
+  --mode-hover-border: rgba(110, 231, 183, 0.38);
+}
+
 @keyframes modeFadeUp {
   from {
     opacity: 0;
@@ -1996,6 +2024,10 @@ button:hover:not(:disabled) {
   max-width: none;
   margin: 0 auto;
   gap: 8px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .home-lobby-shell {
@@ -2048,7 +2080,10 @@ button:hover:not(:disabled) {
 }
 
 .home-main-column {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   gap: 0;
   padding-top: 0;
   max-width: none;
@@ -2060,7 +2095,10 @@ button:hover:not(:disabled) {
   width: 100% !important;
   gap: 10px;
   margin: 0 auto 0;
-  min-height: calc(100vh - 52px);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .home-restored-cards .mode-hub-grid {
@@ -2220,6 +2258,15 @@ button:hover:not(:disabled) {
   gap: 10px;
 }
 
+.home-main-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
 .home-lobby-main {
   display: grid;
   gap: 16px;
@@ -2234,7 +2281,8 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-option.mode-card-single-player,
 .home-restored-cards .mode-option.mode-card-compete,
 .home-restored-cards .mode-option.mode-card-daily,
-.home-restored-cards .mode-option.mode-card-track {
+.home-restored-cards .mode-option.mode-card-track,
+.home-restored-cards .mode-option.mode-card-learn {
   min-height: clamp(176px, 24vh, 232px);
   padding-top: 16px;
   padding-bottom: 16px;
@@ -2245,7 +2293,8 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-card-compete .mode-option-title,
 .home-restored-cards .mode-card-daily .mode-option-title,
 .home-restored-cards .mode-card-daily-fritz .mode-option-title,
-.home-restored-cards .mode-card-track .mode-option-title {
+.home-restored-cards .mode-card-track .mode-option-title,
+.home-restored-cards .mode-card-learn .mode-option-title {
   font-size: clamp(2.08rem, 3.2vw, 3.08rem) !important;
   color: rgba(255, 255, 255, 0.97);
 }
@@ -2262,7 +2311,8 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-card-compete .mode-option-meta,
 .home-restored-cards .mode-card-daily .mode-option-meta,
 .home-restored-cards .mode-card-daily-fritz .mode-option-meta,
-.home-restored-cards .mode-card-track .mode-option-meta {
+.home-restored-cards .mode-card-track .mode-option-meta,
+.home-restored-cards .mode-card-learn .mode-option-meta {
   font-size: 18px !important;
   line-height: 1.34;
   color: rgba(255, 255, 255, 0.75);
