@@ -7,9 +7,10 @@ import './learn.css';
 interface LearnHomeProps {
   onBack: () => void;
   onStartLesson: (lessonId: string) => void;
+  onStartGuidedGame?: () => void;
 }
 
-export default function LearnHome({ onBack, onStartLesson }: LearnHomeProps) {
+export default function LearnHome({ onBack, onStartLesson, onStartGuidedGame }: LearnHomeProps) {
   const [progress, setProgress] = useState(() => loadProgress());
 
   useEffect(() => {
@@ -57,6 +58,20 @@ export default function LearnHome({ onBack, onStartLesson }: LearnHomeProps) {
             </button>
           </div>
         </div>
+
+        {onStartGuidedGame && (
+          <div className="learn-guided-promo">
+            <div className="learn-guided-promo-body">
+              <span className="learn-guided-promo-title">Guided Game</span>
+              <span className="learn-guided-promo-desc">
+                Play vs Rookie Fritz with Master Fritz coaching every turn.
+              </span>
+            </div>
+            <button className="mode-inline-btn learn-guided-btn" onClick={onStartGuidedGame}>
+              Start Guided Game
+            </button>
+          </div>
+        )}
 
         <div className="mode-actions learn-home-levels">
           {moduleCards.map((level) => (

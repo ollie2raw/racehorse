@@ -206,6 +206,44 @@
   color: rgba(249, 224, 163, 0.92);
 }
 
+.learn-guided-promo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(52, 211, 153, 0.07);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.learn-guided-promo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.learn-guided-promo-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #34d399;
+}
+
+.learn-guided-promo-desc {
+  font-size: 0.82rem;
+  color: rgba(232, 245, 240, 0.72);
+  line-height: 1.35;
+}
+
+.learn-guided-btn {
+  white-space: nowrap;
+  border-color: rgba(52, 211, 153, 0.4);
+  color: #34d399;
+  flex-shrink: 0;
+}
+
 @media (max-width: 768px) {
   .learn-home-header {
     padding: 0 0 16px 0;

@@ -716,6 +716,7 @@ export default function App() {
     return stored === '14' ? 14 : 7;
   });
   const [botFritzTier, setBotFritzTier] = useState<FritzTier>('elite');
+  const [isGuidedMode, setIsGuidedMode] = useState(false);
   const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
   const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
   const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
@@ -2396,6 +2397,12 @@ export default function App() {
           <LearnHome
             onBack={() => setAppMode('home')}
             onStartLesson={(id) => setSelectedLearnLessonId(id)}
+            onStartGuidedGame={() => {
+              setIsGuidedMode(true);
+              setBotFritzTier('rookie');
+              setBotDealSize(7);
+              setAppMode('bot');
+            }}
           />
         </Suspense>
       </div>
@@ -2424,9 +2431,10 @@ export default function App() {
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
           <BotMatchScreen
-            onBack={() => setAppMode('home')}
+            onBack={() => { setIsGuidedMode(false); setAppMode('home'); }}
             dealSize={botDealSize}
             fritzTier={botFritzTier}
+            isGuidedMode={isGuidedMode}
             userId={authUser?.id ?? null}
             username={authProfile?.username ?? null}
             currentGlickoRating={authProfile?.glicko_rating ?? null}

@@ -100,6 +100,7 @@ interface BotMatchScreenProps {
   }) => void) | null;
   dailyFritzPackage?: DailyFritzStartResponse | null;
   onDailyFritzComplete?: (() => void) | null;
+  isGuidedMode?: boolean;
 }
 
 interface BotHandReveal {
@@ -243,6 +244,7 @@ export default function BotMatchScreen({
   onMatchComplete = null,
   dailyFritzPackage = null,
   onDailyFritzComplete = null,
+  isGuidedMode = false,
 }: BotMatchScreenProps) {
   const LEAGUE_MATCH_META_KEY = 'racehorse:league-match-meta';
   const leagueResumeStorageKey = resumeKey ? `racehorse:league-match:${resumeKey}` : null;
@@ -1097,6 +1099,55 @@ export default function BotMatchScreen({
     return match.currentPlayer === 'you' ? getLegalMoves(match, 'you') : [];
   }, [match]);
   const userPlayMoves = useMemo(() => asPlayMoves(userLegalMoves), [userLegalMoves]);
+
+  // Guided mode: ask Master Fritz what move he would play in the human's position
+  const coachTip = useMemo((): BotChoice | null => {
+    if (!isGuidedMode || match.currentPlayer !== 'you' || match.handOver || match.gameOver) return null;
+    if (userPlayMoves.length === 0) return null;
+    // Mirror state: put 'you' tiles into the 'bot' slot so chooseBotMove evaluates them
+    const mirroredState: BotMatchState = {
+      ...match,
+      currentPlayer: 'bot',
+      opponentPassedOnEnds: [],
+      opponentDrawCount: 0,
+      opponentKnownMissing: [],
+      players: {
+        you: match.players.bot,
+        bot: match.players.you,
+      },
+    };
+    return chooseBotMove(toBotVisibleState(mirroredState), 'master');
+  }, [isGuidedMode, match, userPlayMoves]);
+
+  const coachTipText = useMemo(() => {
+    if (!coachTip?.move.tile) return '';
+    const tile = coachTip.move.tile as Tile;
+    const pts = coachTip.breakdown.immediate;
+    const pos = coachTip.move.position;
+    const endLabel = pos === 'left' ? 'left end' : pos === 'right' ? 'right end' : 'board';
+    const tileStr = `[${tile.low}|${tile.high}]`;
+    if (pts > 0) {
+      return `${tileStr} scores ${pts} pts — play it on the ${endLabel}`;
+    }
+    return `No scoring move — ${tileStr} on the ${endLabel} is safest`;
+  }, [coachTip]);
+
+  // Per-tile max points for green/gold highlighting
+  const guidedScoringTiles = useMemo((): Map<string, number> => {
+    if (!isGuidedMode || match.currentPlayer !== 'you') return new Map();
+    const map = new Map<string, number>();
+    for (const move of userPlayMoves) {
+      if (!move.tile) continue;
+      const result = applyPlayMove(match, 'you', move);
+      const pts = result.scored?.points ?? 0;
+      if (pts > 0) {
+        const key = `${move.tile.low}-${move.tile.high}`;
+        map.set(key, Math.max(map.get(key) ?? 0, pts));
+      }
+    }
+    return map;
+  }, [isGuidedMode, match, userPlayMoves]);
+
   const ghostSuggestedPlayerMove = useMemo(
     () =>
       isGhostMode
@@ -1302,6 +1353,37 @@ export default function BotMatchScreen({
       player: 'you',
       action: 'place',
       tile: toTileTuple(selectedTile),
+      boardEnds,
+      handBefore,
+      validMoves,
+      pipDelta: beforePips - afterPips,
+      pointsScored: result.scored?.points ?? 0,
+      boardState: snapshotBoardState(match.board),
+      boardRenderState: cloneBoardState(match.board),
+      handSnapshot: handBefore,
+      engineBestMove: getFritzBestMove(match),
+    });
+  };
+
+  const playBestMove = () => {
+    if (!coachTip?.move.tile) return;
+    if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+    const move = coachTip.move;
+    const boardEndsRaw = getDisplayOpenEnds(match);
+    const boardEnds: [number, number] = [boardEndsRaw[0] ?? -1, boardEndsRaw[1] ?? -1];
+    const handBefore = match.players.you.hand.map(toTileTuple);
+    const validMoves = userPlayMoves.filter((m) => m.tile).map((m) => toTileTuple(m.tile as Tile));
+    const beforePips = sumTilePips(match.players.you.hand);
+    const result = applyPlayMove(match, 'you', move);
+    const afterPips = sumTilePips(result.state.players.you.hand);
+    setMovesUsed((prev) => prev + 1);
+    applyAndNotify(result);
+    flashLastPlayed(move.tile ?? null);
+    setSelectedTile(null);
+    appendMove({
+      player: 'you',
+      action: 'place',
+      tile: toTileTuple(move.tile as Tile),
       boardEnds,
       handBefore,
       validMoves,
@@ -2315,6 +2397,18 @@ export default function BotMatchScreen({
               <DominoTile tile={ghostPlayedTile} size={52} className="ghost-played-tile" />
             </div>
           )}
+          {isGuidedMode && coachTip && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
+            <div className="coach-tip-card">
+              <div className="coach-tip-header">
+                <span className="coach-tip-icon">🎓</span>
+                <span className="coach-tip-label">Master Fritz</span>
+              </div>
+              <p className="coach-tip-text">{coachTipText}</p>
+              <button className="coach-tip-play-btn" onClick={playBestMove}>
+                Play Best Move
+              </button>
+            </div>
+          )}
           <Board
             board={match.board}
             legalMoves={userPlayMoves}
@@ -2422,22 +2516,35 @@ export default function BotMatchScreen({
                     const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
                     const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
                     const absoluteIdx = match.players.you.hand.findIndex((handTile) => tileEquals(handTile, tile));
+                    const tileKey = `${tile.low}-${tile.high}`;
+                    const guidedPts = isGuidedMode ? (guidedScoringTiles.get(tileKey) ?? 0) : 0;
+                    const guidedClass = isGuidedMode && playable
+                      ? guidedPts > 0 ? 'guided-scoring' : 'guided-legal'
+                      : '';
+                    const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
                     return (
-                      <DominoTile
+                      <div
                         key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
-                        tile={tile}
-                        size={handTileSize}
-                        rotation={0}
-                        className={drawPulseIndex === absoluteIdx ? 'new-draw' : ''}
-                        selected={selected}
-                        highlight={playable}
-                        disabled={!handActive || botTurn || drawSequenceActive}
-                        onClick={() => {
-                          if (!handActive || botTurn) return;
-                          if (!playable) return;
-                          setSelectedTile(tile);
-                        }}
-                      />
+                        className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}`}
+                      >
+                        {isGuidedMode && playable && guidedPts > 0 && (
+                          <span className="guided-score-badge">+{guidedPts}</span>
+                        )}
+                        <DominoTile
+                          tile={tile}
+                          size={handTileSize}
+                          rotation={0}
+                          className={[baseClass, guidedClass].filter(Boolean).join(' ')}
+                          selected={selected}
+                          highlight={playable}
+                          disabled={!handActive || botTurn || drawSequenceActive}
+                          onClick={() => {
+                            if (!handActive || botTurn) return;
+                            if (!playable) return;
+                            setSelectedTile(tile);
+                          }}
+                        />
+                      </div>
                     );
                   })}
                 </div>
