@@ -1,146 +1,85 @@
-import { useEffect, useMemo, useState } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
-import { learnLessons, learnModules, level1Lessons } from './data';
-import { loadProgress } from './progress/storage';
 import './learn.css';
 
 interface LearnHomeProps {
   onBack: () => void;
-  onStartLesson: (lessonId: string) => void;
   onStartGuidedGame?: () => void;
 }
 
-export default function LearnHome({ onBack, onStartLesson, onStartGuidedGame }: LearnHomeProps) {
-  const [progress, setProgress] = useState(() => loadProgress());
+const HOW_TO_PLAY_STEPS = [
+  {
+    num: '1',
+    title: 'Start a Guided Game',
+    desc: 'Tap the button to begin',
+  },
+  {
+    num: '2',
+    title: 'Follow the coach',
+    desc: 'Master Fritz explains every move',
+  },
+  {
+    num: '3',
+    title: 'Learn as you play',
+    desc: 'See your recap after each hand',
+  },
+];
 
-  useEffect(() => {
-    setProgress(loadProgress());
-  }, []);
+const KEY_RULES = [
+  'Match an open end to play a tile — or draw from the boneyard',
+  'Score or play a double to keep your turn going',
+];
 
-  const level1LessonIds = useMemo(() => level1Lessons.map((lesson) => lesson.id), []);
-  const completedLevel1Count = useMemo(
-    () => level1LessonIds.filter((id) => progress.completedLessonIds.includes(id)).length,
-    [level1LessonIds, progress.completedLessonIds],
-  );
-  const level1ProgressPct = level1LessonIds.length > 0
-    ? Math.round((completedLevel1Count / level1LessonIds.length) * 100)
-    : 0;
-  const level2Unlocked = level1ProgressPct === 100;
-  const canResume =
-    typeof progress.lastLessonId === 'string' &&
-    learnLessons.some((lesson) => lesson.id === progress.lastLessonId);
-  const moduleCards = useMemo(
-    () =>
-      learnModules.map((module) => {
-        if (module.id === 'level-1') {
-          return { ...module, progressPct: level1ProgressPct, unlocked: true };
-        }
-        if (module.id === 'level-2') {
-          return { ...module, progressPct: 0, unlocked: level2Unlocked };
-        }
-        return { ...module, progressPct: 0 };
-      }),
-    [level1ProgressPct, level2Unlocked],
-  );
-
+export default function LearnHome({ onBack, onStartGuidedGame }: LearnHomeProps) {
   return (
     <LayoutScreen
-      className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-learn learn-home-screen"
+      className="ghost-setup-screen mode-subpage-screen mode-accent-ghost"
       title="Learn Racehorse"
-      subtitle="Master the fundamentals step-by-step."
-      contentClassName="screen-shell"
+      subtitle="Play a real game. Get coached every turn."
+      contentClassName="screen-shell ghost-setup-content"
     >
-      <div className="learn-home-wrap">
-        <div className="learn-home-header">
+      <div className="ghost-setup-grid learn-columns">
+        <div className="ghost-setup-left-col learn-col">
           <div className="learn-home-top">
             <button className="mode-inline-btn" onClick={onBack}>
               ← Back
             </button>
           </div>
+          <h3 className="learn-col-heading">HOW TO PLAY</h3>
+          <div className="learn-steps">
+            {HOW_TO_PLAY_STEPS.map((step) => (
+              <div key={step.num} className="learn-step-card">
+                <span className="learn-step-num">{step.num}</span>
+                <div className="learn-step-body">
+                  <span className="learn-step-title">{step.title}</span>
+                  <span className="learn-step-desc">{step.desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {onStartGuidedGame && (
-          <div className="learn-guided-promo">
-            <div className="learn-guided-promo-body">
-              <span className="learn-guided-promo-title">Guided Game</span>
-              <span className="learn-guided-promo-desc">
-                Play vs Rookie Fritz with Master Fritz coaching every turn.
-              </span>
-            </div>
-            <button className="mode-inline-btn learn-guided-btn" onClick={onStartGuidedGame}>
+        <div className="ghost-setup-middle-col learn-col">
+          <h3 className="learn-col-heading">HOW SCORING WORKS</h3>
+          <p className="learn-score-note">
+            Add up all open ends on the board. If the total is a multiple of 5, divide by 5
+            {' '}— that's your score. Open ends sum to 10? You score 2 points. Sum to 15?
+            {' '}You score 3 points. First player to 60 wins.
+          </p>
+
+          <h3 className="learn-col-heading learn-col-heading-spaced">KEY RULES</h3>
+          {KEY_RULES.map((rule) => (
+            <p key={rule} className="learn-rule-row">{rule}</p>
+          ))}
+        </div>
+
+        <div className="ghost-setup-right-col learn-col learn-col-cta">
+          <h3 className="learn-col-heading">GUIDED GAME</h3>
+          {onStartGuidedGame ? (
+            <button className="learn-start-guided-btn" onClick={onStartGuidedGame}>
               Start Guided Game
             </button>
-          </div>
-        )}
-
-        <div className="mode-actions learn-home-levels">
-          {moduleCards.map((level) => (
-            <section
-              key={level.id}
-              className={`mode-option learn-level-card ${level.unlocked ? 'is-unlocked' : 'is-locked'}`}
-              aria-label={level.title}
-            >
-              <div className="learn-level-head">
-                <span className="mode-option-title">{level.title}</span>
-                <span className={`learn-level-state ${level.unlocked ? 'unlocked' : 'locked'}`}>
-                  {level.unlocked ? 'Unlocked' : 'Locked'}
-                </span>
-              </div>
-
-              <span className="mode-option-meta">{level.description}</span>
-
-              {level.id === 'level-1' ? (
-                <ul className="learn-lessons-list" aria-label="Level 1 lessons">
-                  {level1Lessons.map((lesson) => (
-                    <li key={lesson.id} className="learn-lessons-item">
-                      <button
-                        type="button"
-                        className="learn-lessons-link"
-                        onClick={() => onStartLesson(lesson.id)}
-                      >
-                        <span className="learn-lessons-main">
-                          <span className="learn-lessons-title">{lesson.title}</span>
-                          {progress.completedLessonIds.includes(lesson.id) ? (
-                            <span className="learn-lesson-complete">Completed</span>
-                          ) : null}
-                        </span>
-                        <span className="learn-lessons-duration">~{lesson.estMinutes} min</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              <div className="learn-progress-row" aria-label={`${level.progressPct}% complete`}>
-                <div className="learn-progress-track">
-                  <div className="learn-progress-fill" style={{ width: `${level.progressPct}%` }} />
-                </div>
-                <span className="learn-progress-text">{level.progressPct}%</span>
-              </div>
-
-              <div className="learn-level-actions">
-                {level.id === 'level-1' && canResume ? (
-                  <button
-                    className="mode-inline-btn learn-resume-btn"
-                    onClick={() => onStartLesson(progress.lastLessonId!)}
-                  >
-                    Resume
-                  </button>
-                ) : null}
-                <button
-                  className="mode-inline-btn"
-                  disabled={!level.unlocked || level.id !== 'level-1'}
-                  onClick={() => {
-                    if (level.id === 'level-1' && level1Lessons[0]) {
-                      onStartLesson(level1Lessons[0].id);
-                    }
-                  }}
-                >
-                  {level.unlocked ? 'Start' : 'Locked'}
-                </button>
-              </div>
-            </section>
-          ))}
+          ) : null}
+          <p className="learn-cta-sub">vs Rookie Fritz · Master Fritz coaches every turn</p>
         </div>
       </div>
     </LayoutScreen>

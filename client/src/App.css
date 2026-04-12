@@ -1192,7 +1192,7 @@ button:hover:not(:disabled) {
 }
 
 .mode-card-compete {
-  --menu-section-color: #f87171;
+  --menu-section-color: #f97316;
 }
 
 .mode-card-daily {
@@ -1200,7 +1200,7 @@ button:hover:not(:disabled) {
 }
 
 .mode-card-daily-fritz {
-  --menu-section-color: #22d3ee;
+  --menu-section-color: #ef4444;
 }
 
 .mode-card-learn {
@@ -2272,20 +2272,51 @@ button:hover:not(:disabled) {
   gap: 16px;
 }
 
-.home-restored-cards .mode-option.mode-card-play-online {
-  min-height: clamp(112px, 15vh, 146px);
-  padding-top: 14px;
-  padding-bottom: 14px;
-}
-
+.home-restored-cards .mode-option.mode-card-play-online,
 .home-restored-cards .mode-option.mode-card-single-player,
 .home-restored-cards .mode-option.mode-card-compete,
 .home-restored-cards .mode-option.mode-card-daily,
+.home-restored-cards .mode-option.mode-card-daily-fritz,
 .home-restored-cards .mode-option.mode-card-track,
 .home-restored-cards .mode-option.mode-card-learn {
   min-height: clamp(176px, 24vh, 232px);
   padding-top: 16px;
   padding-bottom: 16px;
+}
+
+.home-restored-cards .mode-option.mode-card-play-online,
+.home-restored-cards .mode-option.mode-card-single-player,
+.home-restored-cards .mode-option.mode-card-compete,
+.home-restored-cards .mode-option.mode-card-daily,
+.home-restored-cards .mode-option.mode-card-daily-fritz,
+.home-restored-cards .mode-option.mode-card-learn {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-left: 5px solid var(--menu-section-color) !important;
+  background: rgba(13, 18, 31, 0.5) !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.home-restored-cards .mode-option.mode-card-play-online::before,
+.home-restored-cards .mode-option.mode-card-single-player::before,
+.home-restored-cards .mode-option.mode-card-compete::before,
+.home-restored-cards .mode-option.mode-card-daily::before,
+.home-restored-cards .mode-option.mode-card-daily-fritz::before,
+.home-restored-cards .mode-option.mode-card-learn::before,
+.home-restored-cards .mode-option.mode-card-play-online::after {
+  display: none !important;
+}
+
+.home-restored-cards .mode-option.mode-card-play-online:hover,
+.home-restored-cards .mode-option.mode-card-single-player:hover,
+.home-restored-cards .mode-option.mode-card-compete:hover,
+.home-restored-cards .mode-option.mode-card-daily:hover,
+.home-restored-cards .mode-option.mode-card-daily-fritz:hover,
+.home-restored-cards .mode-option.mode-card-learn:hover {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  border-left-color: var(--menu-section-color) !important;
+  box-shadow: none !important;
+  filter: brightness(1.03);
 }
 
 .home-restored-cards .mode-card-play-online .mode-option-title,

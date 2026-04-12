@@ -2396,7 +2396,6 @@ export default function App() {
         <Suspense fallback={<ScreenLoader label="Loading Learn Mode…" />}>
           <LearnHome
             onBack={() => setAppMode('home')}
-            onStartLesson={(id) => setSelectedLearnLessonId(id)}
             onStartGuidedGame={() => {
               setIsGuidedMode(true);
               setBotFritzTier('rookie');
@@ -2565,19 +2564,6 @@ export default function App() {
               <section className="mode-hub-middle" aria-label="Single player modes">
                 <p className="mode-section-label mode-section-label-practice">Choose Mode</p>
                 <div className="mode-hub-middle-cards single-player-hub-cards">
-                {LEARN_MODE_VISIBLE ? (
-                  <button
-                    className="mode-option mode-option-primary mode-accent-bot"
-                    onClick={() => {
-                      setSelectedLearnLessonId(null);
-                      setAppMode('learn');
-                    }}
-                    style={{ gridColumn: 'span 2', marginBottom: '12px' }}
-                  >
-                    <span className="mode-option-title">Learn Academy</span>
-                    <span className="mode-option-meta">New to dominoes? Learn how to play and win.</span>
-                  </button>
-                ) : null}
                 <button
                   className="mode-option mode-option-secondary mode-accent-bot mode-card-bot"
                   onClick={() => setAppMode('botSetup')}
@@ -3221,10 +3207,7 @@ export default function App() {
                       className="mode-option mode-accent-multiplayer mode-card-play-online"
                       onClick={() => setAppMode('multiplayer')}
                     >
-                      <div className="mode-card-play-online-head">
-                        <span className="mode-option-title">Multiplayer Online</span>
-                        <span className="mode-live-badge">Live</span>
-                      </div>
+                      <span className="mode-option-title">Multiplayer Online</span>
                       <span className="mode-option-meta">Create a private room and play head to head in real time</span>
                     </button>
 

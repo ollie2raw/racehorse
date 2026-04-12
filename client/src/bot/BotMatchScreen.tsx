@@ -27,7 +27,9 @@ import {
   getMatchableOpenEnds,
   getDisplayOpenEnds,
   getLegalMoves,
+  isDouble,
   passTurn,
+  previewPlayMove,
   startNextBotHand,
   startNextFixedBotHand,
   type BotActionResult,
@@ -198,6 +200,27 @@ function findMoveForSelection(moves: Move[], tile: Tile, position: Move['positio
 
 function asPlayMoves(moves: Move[]): Move[] {
   return moves.filter((m) => m.type === 'play');
+}
+
+function formatPlacementTarget(position: string | undefined): string {
+  if (!position) return 'the board';
+  if (position === 'left') return 'the left end';
+  if (position === 'right') return 'the right end';
+  const branchMatch = position.match(/^branch-(\d+)-/);
+  if (branchMatch) return `the double-${branchMatch[1]} branch`;
+  return 'the board';
+}
+
+interface GuidedCoachTip {
+  tile: Tile;
+  bestMove: Move;
+  pts: number;
+  openSum: number;
+  isOnlyPlay: boolean;
+  isControlChoice: boolean;
+  placementCount: number;
+  isOpeningMove: boolean;
+  isOpeningDouble: boolean;
 }
 
 function toastFromResult(result: BotActionResult, opponentLabel: string): string {
@@ -1100,11 +1123,84 @@ export default function BotMatchScreen({
   }, [match]);
   const userPlayMoves = useMemo(() => asPlayMoves(userLegalMoves), [userLegalMoves]);
 
-  // Guided mode: ask Master Fritz what move he would play in the human's position
-  const coachTip = useMemo((): BotChoice | null => {
+  // Guided mode: evaluate all play moves using previewPlayMove (unified scoring source),
+  // then recommend the best placement with opening-move awareness.
+  const guidedCoachTip = useMemo((): GuidedCoachTip | null => {
     if (!isGuidedMode || match.currentPlayer !== 'you' || match.handOver || match.gameOver) return null;
     if (userPlayMoves.length === 0) return null;
-    // Mirror state: put 'you' tiles into the 'bot' slot so chooseBotMove evaluates them
+
+    // Evaluate ALL play moves via previewPlayMove — single source of truth for scoring
+    const allEvaluated = userPlayMoves
+      .filter((m) => m.tile)
+      .map((move) => {
+        const preview = previewPlayMove(match, 'you', move);
+        return {
+          move,
+          tile: move.tile as Tile,
+          pts: preview?.immediateScore ?? 0,
+          openSum: preview?.openSum ?? 0,
+        };
+      });
+
+    if (allEvaluated.length === 0) return null;
+
+    const isOpeningMove = (match.board?.mainLine.length ?? 0) === 0;
+
+    if (isOpeningMove) {
+      // On opening, scoring moves take priority over pure doubles
+      const scoring = allEvaluated.filter((e) => e.pts > 0);
+      scoring.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : a.openSum - b.openSum);
+      if (scoring.length > 0) {
+        const best = scoring[0]!;
+        return {
+          tile: best.tile,
+          bestMove: best.move,
+          pts: best.pts,
+          openSum: best.openSum,
+          isOnlyPlay: allEvaluated.length === 1,
+          isControlChoice: false,
+          placementCount: scoring.length,
+          isOpeningMove: true,
+          isOpeningDouble: false,
+        };
+      }
+      // No scoring — only doubles available
+      const doubles = allEvaluated.filter((e) => isDouble(e.tile));
+      doubles.sort((a, b) => b.tile.high - a.tile.high);
+      if (doubles.length > 0) {
+        const best = doubles[0]!;
+        return {
+          tile: best.tile,
+          bestMove: best.move,
+          pts: 0,
+          openSum: best.openSum,
+          isOnlyPlay: allEvaluated.length === 1,
+          isControlChoice: false,
+          placementCount: doubles.length,
+          isOpeningMove: true,
+          isOpeningDouble: true,
+        };
+      }
+      return null;
+    }
+
+    // Only-move: no AI needed
+    if (allEvaluated.length === 1) {
+      const e = allEvaluated[0]!;
+      return {
+        tile: e.tile,
+        bestMove: e.move,
+        pts: e.pts,
+        openSum: e.openSum,
+        isOnlyPlay: true,
+        isControlChoice: false,
+        placementCount: 1,
+        isOpeningMove: false,
+        isOpeningDouble: false,
+      };
+    }
+
+    // Multi-play: get AI tile recommendation, then pick best placement for it
     const mirroredState: BotMatchState = {
       ...match,
       currentPlayer: 'bot',
@@ -1116,30 +1212,89 @@ export default function BotMatchScreen({
         bot: match.players.you,
       },
     };
-    return chooseBotMove(toBotVisibleState(mirroredState), 'master');
+    const botChoice = chooseBotMove(toBotVisibleState(mirroredState), 'master');
+    if (!botChoice?.move.tile) return null;
+
+    const recommendedTile = botChoice.move.tile as Tile;
+    let tileEvals = allEvaluated.filter((e) => tileEquals(e.tile, recommendedTile));
+    if (tileEvals.length === 0) return null;
+
+    tileEvals.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : a.openSum - b.openSum);
+    const best = tileEvals[0]!;
+
+    // Assertion: if AI recommends a non-scoring tile but a scoring tile exists, override
+    if (best.pts === 0) {
+      const scoringEvals = allEvaluated.filter((e) => e.pts > 0);
+      if (scoringEvals.length > 0) {
+        scoringEvals.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : a.openSum - b.openSum);
+        const override = scoringEvals[0]!;
+        const overridePlacements = allEvaluated.filter((e) => tileEquals(e.tile, override.tile));
+        overridePlacements.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : a.openSum - b.openSum);
+        const bestOverride = overridePlacements[0]!;
+        return {
+          tile: bestOverride.tile,
+          bestMove: bestOverride.move,
+          pts: bestOverride.pts,
+          openSum: bestOverride.openSum,
+          isOnlyPlay: false,
+          isControlChoice: false,
+          placementCount: overridePlacements.length,
+          isOpeningMove: false,
+          isOpeningDouble: false,
+        };
+      }
+    }
+
+    const isControlChoice =
+      tileEvals.length > 1 &&
+      best.pts === 0 &&
+      tileEvals.some((e) => e.openSum !== best.openSum);
+
+    return {
+      tile: recommendedTile,
+      bestMove: best.move,
+      pts: best.pts,
+      openSum: best.openSum,
+      isOnlyPlay: false,
+      isControlChoice,
+      placementCount: tileEvals.length,
+      isOpeningMove: false,
+      isOpeningDouble: false,
+    };
   }, [isGuidedMode, match, userPlayMoves]);
 
   const coachTipText = useMemo(() => {
-    if (!coachTip?.move.tile) return '';
-    const tile = coachTip.move.tile as Tile;
-    const pts = coachTip.breakdown.immediate;
-    const pos = coachTip.move.position;
-    const endLabel = pos === 'left' ? 'left end' : pos === 'right' ? 'right end' : 'board';
+    if (!guidedCoachTip) return '';
+    const { tile, bestMove, pts, isOnlyPlay, isControlChoice, isOpeningMove, isOpeningDouble } = guidedCoachTip;
     const tileStr = `[${tile.low}|${tile.high}]`;
-    if (pts > 0) {
-      return `${tileStr} scores ${pts} pts — play it on the ${endLabel}`;
-    }
-    return `No scoring move — ${tileStr} on the ${endLabel} is safest`;
-  }, [coachTip]);
+    const target = formatPlacementTarget(bestMove.position);
 
-  // Per-tile max points for green/gold highlighting
+    if (isOpeningMove) {
+      if (isOpeningDouble) {
+        return `${tileStr} is your opening double — play it to start the chain`;
+      }
+      return `${tileStr} scores ${pts} pts — required opening move, play it on ${target}`;
+    }
+    if (isOnlyPlay) {
+      return `Only one tile fits right now — ${tileStr} on ${target}`;
+    }
+    if (pts > 0) {
+      return `${tileStr} on ${target} scores ${pts} pts`;
+    }
+    if (isControlChoice) {
+      return `${tileStr} on ${target} — keeps more open ends controlled`;
+    }
+    return `No scoring move — ${tileStr} on ${target} is safest`;
+  }, [guidedCoachTip]);
+
+  // Per-tile max points for green/gold highlighting — uses same previewPlayMove as coach tip
   const guidedScoringTiles = useMemo((): Map<string, number> => {
     if (!isGuidedMode || match.currentPlayer !== 'you') return new Map();
     const map = new Map<string, number>();
     for (const move of userPlayMoves) {
       if (!move.tile) continue;
-      const result = applyPlayMove(match, 'you', move);
-      const pts = result.scored?.points ?? 0;
+      const preview = previewPlayMove(match, 'you', move);
+      const pts = preview?.immediateScore ?? 0;
       if (pts > 0) {
         const key = `${move.tile.low}-${move.tile.high}`;
         map.set(key, Math.max(map.get(key) ?? 0, pts));
@@ -1366,9 +1521,9 @@ export default function BotMatchScreen({
   };
 
   const playBestMove = () => {
-    if (!coachTip?.move.tile) return;
+    if (!guidedCoachTip?.bestMove.tile) return;
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
-    const move = coachTip.move;
+    const move = guidedCoachTip.bestMove;
     const boardEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [boardEndsRaw[0] ?? -1, boardEndsRaw[1] ?? -1];
     const handBefore = match.players.you.hand.map(toTileTuple);
@@ -1406,19 +1561,19 @@ export default function BotMatchScreen({
 
     const timer = setTimeout(() => {
       void (async () => {
-        let working = match;
-        let result: BotActionResult | null = null;
-        let chosen: BotChoice | null = null;
-        let ghostChosen: GhostResolvedMove | null = null;
-        const beforeEndsRaw = getDisplayOpenEnds(match);
-        const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
-        const ghostBoardStateKey = serializeGhostBoardState(match.board);
-        const ghostHandBefore = match.players.bot.hand.map(toTileKey);
+        try {
+          let working = match;
+          let result: BotActionResult | null = null;
+          let chosen: BotChoice | null = null;
+          let ghostChosen: GhostResolvedMove | null = null;
+          const beforeEndsRaw = getDisplayOpenEnds(match);
+          const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
+          const ghostBoardStateKey = serializeGhostBoardState(match.board);
+          const ghostHandBefore = match.players.bot.hand.map(toTileKey);
 
-        const botPlayable = asPlayMoves(getLegalMoves(working, 'bot'));
-        if (botPlayable.length === 0) {
-          setDrawSequenceActiveBoth(true);
-          try {
+          const botPlayable = asPlayMoves(getLegalMoves(working, 'bot'));
+          if (botPlayable.length === 0) {
+            setDrawSequenceActiveBoth(true);
             const drawPass = await runDrawSequenceLocal(working, 'bot');
             if (cancelled) return;
             working = drawPass.state;
@@ -1504,79 +1659,79 @@ export default function BotMatchScreen({
                   : chosen?.move ?? afterDraw[0],
               );
             }
-          } finally {
-            setDrawSequenceActiveBoth(false);
-          }
-        } else {
-          if (isGhostMode) {
-            ghostChosen = resolveGhostMove({
-              state: working,
-              player: 'bot',
-              legalMoves: botPlayable,
-              profile: ghostProfile,
-            });
           } else {
-            chosen = chooseBotMove(toBotVisibleState(working), fritzConfig.difficulty);
+            if (isGhostMode) {
+              ghostChosen = resolveGhostMove({
+                state: working,
+                player: 'bot',
+                legalMoves: botPlayable,
+                profile: ghostProfile,
+              });
+            } else {
+              chosen = chooseBotMove(toBotVisibleState(working), fritzConfig.difficulty);
+            }
+            playedTileForHighlight = ghostChosen?.tile ?? chosen?.move?.tile ?? botPlayable[0]?.tile ?? null;
+            queueSound(() => playTileSound('deal', isMuted), 0);
+            result = applyPlayMove(
+              working,
+              'bot',
+              ghostChosen
+                ? { type: 'play', tile: ghostChosen.tile, position: ghostChosen.position }
+                : chosen?.move ?? botPlayable[0],
+            );
           }
-          playedTileForHighlight = ghostChosen?.tile ?? chosen?.move?.tile ?? botPlayable[0]?.tile ?? null;
-          queueSound(() => playTileSound('deal', isMuted), 0);
-          result = applyPlayMove(
-            working,
-            'bot',
-            ghostChosen
-              ? { type: 'play', tile: ghostChosen.tile, position: ghostChosen.position }
-              : chosen?.move ?? botPlayable[0],
-          );
-        }
 
-        if (cancelled || actionResolved) return;
-        if (chosen) setLastBotChoice(chosen);
-        if (isGhostMode) {
-          setLastBotChoice(null);
-          setGhostPlayedTile(ghostChosen?.tile ?? null);
-        }
-        if (result) {
-          actionResolved = true;
-          botChainPauseRef.current =
-            result.state.currentPlayer === 'bot' && !result.state.handOver && !result.state.gameOver;
-          setSelectedTile(null);
-          if (isGhostMode && ghostChosen) {
-            appendGhostMove({
-              turn: (working.turnIndex ?? 0) + 1,
-              hand_number: working.handNumber,
-              actor: 'ghost',
-              board_state: ghostBoardStateKey,
-              tile_played: toTileKey(ghostChosen.tile),
-              branch: ghostChosen.position,
-              hand_before: ghostHandBefore,
-              score_delta: result.scored?.points ?? 0,
-              forced_draw: Boolean(result.drew?.player === 'bot'),
-            });
+          if (cancelled || actionResolved) return;
+          if (chosen) setLastBotChoice(chosen);
+          if (isGhostMode) {
+            setLastBotChoice(null);
+            setGhostPlayedTile(ghostChosen?.tile ?? null);
           }
-          if (chosen?.move?.tile || ghostChosen?.tile) {
-            appendMove({
-              player: 'opponent',
-              action: 'place',
-              tile: toTileTuple((ghostChosen?.tile ?? chosen?.move?.tile) as Tile),
-              boardEnds,
-              handBefore: [],
-              validMoves: [],
-              pipDelta: 0,
-              pointsScored: 0,
-              boardState: snapshotBoardState(match.board),
-              boardRenderState: cloneBoardState(match.board),
-              handSnapshot: match.players.you.hand.map(toTileTuple),
-              engineBestMove: ghostChosen
-                ? {
-                    tile: toTileTuple(ghostChosen.tile),
-                    position: ghostChosen.position,
-                    score: 0,
-                  }
-                : toEngineBestFromChoice(chosen),
-            });
+          if (result) {
+            actionResolved = true;
+            botChainPauseRef.current =
+              result.state.currentPlayer === 'bot' && !result.state.handOver && !result.state.gameOver;
+            setSelectedTile(null);
+            if (isGhostMode && ghostChosen) {
+              appendGhostMove({
+                turn: (working.turnIndex ?? 0) + 1,
+                hand_number: working.handNumber,
+                actor: 'ghost',
+                board_state: ghostBoardStateKey,
+                tile_played: toTileKey(ghostChosen.tile),
+                branch: ghostChosen.position,
+                hand_before: ghostHandBefore,
+                score_delta: result.scored?.points ?? 0,
+                forced_draw: Boolean(result.drew?.player === 'bot'),
+              });
+            }
+            if (chosen?.move?.tile || ghostChosen?.tile) {
+              appendMove({
+                player: 'opponent',
+                action: 'place',
+                tile: toTileTuple((ghostChosen?.tile ?? chosen?.move?.tile) as Tile),
+                boardEnds,
+                handBefore: [],
+                validMoves: [],
+                pipDelta: 0,
+                pointsScored: 0,
+                boardState: snapshotBoardState(match.board),
+                boardRenderState: cloneBoardState(match.board),
+                handSnapshot: match.players.you.hand.map(toTileTuple),
+                engineBestMove: ghostChosen
+                  ? {
+                      tile: toTileTuple(ghostChosen.tile),
+                      position: ghostChosen.position,
+                      score: 0,
+                    }
+                  : toEngineBestFromChoice(chosen),
+              });
+            }
+            applyAndNotify(result);
+            flashLastPlayed(playedTileForHighlight);
           }
-          applyAndNotify(result);
-          flashLastPlayed(playedTileForHighlight);
+        } finally {
+          setDrawSequenceActiveBoth(false);
         }
       })();
     }, thinkDelayMs);
@@ -1635,6 +1790,7 @@ export default function BotMatchScreen({
     isGhostMode,
     runDrawSequenceLocal,
     setDrawSequenceActiveBoth,
+    drawSequenceActive,
     isMuted,
     toEngineBestFromChoice,
   ]);
@@ -1692,6 +1848,8 @@ export default function BotMatchScreen({
       return;
     }
     setHandRevealProgress(1);
+    // In guided mode, user taps "Next Hand →" manually — no auto-advance
+    if (isGuidedMode) return;
     const rafId = requestAnimationFrame(() => setHandRevealProgress(0));
     const timer = setTimeout(() => {
       advanceHand();
@@ -1700,7 +1858,18 @@ export default function BotMatchScreen({
       cancelAnimationFrame(rafId);
       clearTimeout(timer);
     };
-  }, [handReveal, match.gameOver, advanceHand]);
+  }, [handReveal, match.gameOver, advanceHand, isGuidedMode]);
+
+  useEffect(() => {
+    if (!match.handOver || match.gameOver || handReveal || handRevealTimerRef.current) return;
+    // Safety fallback: if a hand ended without the reveal modal flow starting, advance anyway.
+    const timer = window.setTimeout(() => {
+      if (matchRef.current.handOver && !matchRef.current.gameOver && !handRevealTimerRef.current) {
+        advanceHand();
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [match.handOver, match.gameOver, handReveal, advanceHand]);
 
   useEffect(() => {
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
@@ -2025,12 +2194,18 @@ export default function BotMatchScreen({
                 )}
               </div>
             )}
-            <div className="hand-over-progress-track">
-              <div
-                className="hand-over-progress-fill"
-                style={{ width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%` }}
-              />
-            </div>
+            {isGuidedMode ? (
+              <button className="mode-inline-btn guided-next-hand-btn" onClick={advanceHand}>
+                Next Hand →
+              </button>
+            ) : (
+              <div className="hand-over-progress-track">
+                <div
+                  className="hand-over-progress-fill"
+                  style={{ width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2071,8 +2246,8 @@ export default function BotMatchScreen({
           onPrimary={startFreshMatch}
           secondaryLabel="Home"
           onSecondary={onBack}
-          extraActionLabel="Analyze Game"
-          onExtraAction={openAnalyzer}
+          extraActionLabel={isGuidedMode ? undefined : "Analyze Game"}
+          onExtraAction={isGuidedMode ? undefined : openAnalyzer}
           onClose={onBack}
         >
           {!isGhostMode &&
@@ -2397,16 +2572,18 @@ export default function BotMatchScreen({
               <DominoTile tile={ghostPlayedTile} size={52} className="ghost-played-tile" />
             </div>
           )}
-          {isGuidedMode && coachTip && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
+          {isGuidedMode && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && coachTipText && (
             <div className="coach-tip-card">
               <div className="coach-tip-header">
                 <span className="coach-tip-icon">🎓</span>
                 <span className="coach-tip-label">Master Fritz</span>
               </div>
               <p className="coach-tip-text">{coachTipText}</p>
-              <button className="coach-tip-play-btn" onClick={playBestMove}>
-                Play Best Move
-              </button>
+              {!guidedCoachTip?.isOnlyPlay && guidedCoachTip && (
+                <button className="coach-tip-play-btn" onClick={playBestMove}>
+                  Play Best Move
+                </button>
+              )}
             </div>
           )}
           <Board
