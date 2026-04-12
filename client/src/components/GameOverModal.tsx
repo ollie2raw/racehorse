@@ -38,6 +38,7 @@ export default function GameOverModal({
   onClose,
   children,
 }: GameOverModalProps) {
+  const actionCount = Number(Boolean(extraActionLabel && onExtraAction)) + 1 + Number(Boolean(secondaryLabel && onSecondary));
   useEffect(() => {
     if (!open || !onClose) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -90,7 +91,7 @@ export default function GameOverModal({
 
         {children}
 
-        <div className="game-over-actions">
+        <div className={`game-over-actions game-over-actions-${actionCount}`}>
           {extraActionLabel && onExtraAction && (
             <button className="mode-option game-over-action-card game-over-action-card-secondary" onClick={onExtraAction}>
               <span className="mode-option-title">{extraActionLabel}</span>

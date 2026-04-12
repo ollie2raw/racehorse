@@ -632,11 +632,11 @@ export default function BotMatchScreen({
     );
   }, []);
 
-  const appendMove = (entry: Omit<MoveEntry, 'moveNumber'>) => {
+  const appendMove = useCallback((entry: Omit<MoveEntry, 'moveNumber'>) => {
     const moveNumber =
       entry.player === 'you' ? moveCounterRef.current++ : moveCounterRef.current;
     setMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
-  };
+  }, []);
 
   const appendGhostMove = useCallback((entry: GhostMoveLogEntry) => {
     setGhostMoveLog((prev) => [...prev, entry]);
@@ -1552,7 +1552,9 @@ export default function BotMatchScreen({
   };
 
   useEffect(() => {
+    console.log('[BOT-EFFECT] fired', { currentPlayer: match.currentPlayer, handOver: match.handOver, gameOver: match.gameOver, drawSequenceActive: drawSequenceActiveRef.current, cancelled: false });
     if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
+    console.log('[BOT-EFFECT] passed guard, scheduling turn');
     let cancelled = false;
     let actionResolved = false;
     let playedTileForHighlight: Tile | null = null;
@@ -1561,6 +1563,7 @@ export default function BotMatchScreen({
 
     const timer = setTimeout(() => {
       void (async () => {
+        console.log('[BOT-TURN] timer fired', { cancelled, currentPlayer: match.currentPlayer });
         try {
           let working = match;
           let result: BotActionResult | null = null;
@@ -1778,7 +1781,10 @@ export default function BotMatchScreen({
     }, 3000);
 
     return () => {
-      cancelled = true;
+      console.log('[BOT-EFFECT] cleanup called', { drawSequenceActive: drawSequenceActiveRef.current });
+      if (!drawSequenceActiveRef.current) {
+        cancelled = true;
+      }
       clearTimeout(timer);
       clearTimeout(maxThinkingTimer);
     };
@@ -1790,7 +1796,6 @@ export default function BotMatchScreen({
     isGhostMode,
     runDrawSequenceLocal,
     setDrawSequenceActiveBoth,
-    drawSequenceActive,
     isMuted,
     toEngineBestFromChoice,
   ]);
@@ -2250,7 +2255,8 @@ export default function BotMatchScreen({
           onExtraAction={isGuidedMode ? undefined : openAnalyzer}
           onClose={onBack}
         >
-          {!isGhostMode &&
+          {!isGuidedMode &&
+            !isGhostMode &&
             !isDailyFritzMode &&
             (ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null) && (
             <div className="game-over-result-stat">

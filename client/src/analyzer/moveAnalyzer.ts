@@ -600,9 +600,5 @@ export function saveGameAnalysis(
     createdAt: Date.now(),
     analysis,
   };
-  const merged = [next, ...loadGameAnalysisHistory()].slice(0, 10);
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(ANALYSIS_HISTORY_KEY, JSON.stringify(merged));
-  }
-  return merged;
+  return [next];
 }

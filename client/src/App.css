@@ -4627,6 +4627,10 @@ button:hover:not(:disabled) {
   margin-top: 18px;
 }
 
+.game-over-actions.game-over-actions-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .game-over-action-card {
   --menu-section-color: rgba(80, 220, 170, 0.9);
   min-height: 68px;
