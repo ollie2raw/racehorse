@@ -1201,6 +1201,7 @@ button:hover:not(:disabled) {
 
 .mode-card-daily-fritz {
   --menu-section-color: #ef4444;
+  --accent-color: #ef4444;
 }
 
 .mode-card-learn {
@@ -1215,108 +1216,15 @@ button:hover:not(:disabled) {
   --menu-section-color: #a855f7;
 }
 
-.mode-option.mode-card-daily {
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  background: rgba(13, 18, 31, 0.5) !important;
-}
-
-.mode-option.mode-card-daily-fritz {
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  background: rgba(13, 18, 31, 0.5) !important;
-}
-
-.mode-option.mode-card-league {
-  border-color: rgba(34, 197, 94, 0.3) !important;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.09) 0%, rgba(34, 197, 94, 0.03) 45%, transparent 72%) !important;
-}
-
-.mode-option.mode-card-ghost {
-  border-color: rgba(168, 85, 247, 0.3) !important;
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(168, 85, 247, 0.03) 45%, transparent 72%) !important;
-}
-
 .mode-home-screen .mode-option.mode-card-daily {
   overflow: hidden;
   border-left-color: #eab308 !important;
-}
-
-.mode-home-screen .mode-option.mode-card-daily-fritz {
-  overflow: hidden;
-  border-left: 5px solid #22d3ee !important;
-  border-left-color: #22d3ee !important;
 }
 
 .mode-home-screen .mode-option.mode-card-learn {
   overflow: hidden;
   border-left: 5px solid #34d399 !important;
   border-left-color: #34d399 !important;
-}
-
-.mode-home-screen .mode-option.mode-card-learn:hover {
-  border-color: rgba(52, 211, 153, 0.4) !important;
-  border-left-color: #34d399 !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 1px rgba(52, 211, 153, 0.14),
-    0 0 24px rgba(52, 211, 153, 0.16),
-    0 16px 30px rgba(7, 22, 18, 0.3) !important;
-}
-
-.mode-home-screen .mode-option.mode-card-league {
-  overflow: hidden;
-}
-
-.mode-home-screen .mode-option.mode-card-ghost {
-  overflow: hidden;
-}
-
-.mode-home-screen .mode-option.mode-card-daily .mode-option-title::before {
-  display: none;
-  background: #eab308;
-}
-
-.mode-home-screen .mode-option.mode-card-league .mode-option-title::before {
-  display: none;
-}
-
-.mode-home-screen .mode-option.mode-card-ghost .mode-option-title::before {
-  display: none;
-}
-
-.mode-home-screen .mode-option.mode-card-daily:hover {
-  border-color: rgba(234, 179, 8, 0.38) !important;
-  border-left-color: #eab308 !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 1px rgba(234, 179, 8, 0.14),
-    0 0 24px rgba(234, 179, 8, 0.18),
-    0 16px 30px rgba(28, 20, 8, 0.28) !important;
-}
-
-.mode-home-screen .mode-option.mode-card-daily-fritz:hover {
-  border-color: rgba(34, 211, 238, 0.4) !important;
-  border-left-color: #22d3ee !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 1px rgba(34, 211, 238, 0.14),
-    0 0 24px rgba(34, 211, 238, 0.16),
-    0 16px 30px rgba(7, 22, 28, 0.3) !important;
-}
-
-.mode-home-screen .mode-option.mode-card-league:hover {
-  border-color: rgba(34, 197, 94, 0.38) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 1px rgba(34, 197, 94, 0.12),
-    0 16px 30px rgba(8, 22, 12, 0.28);
-}
-
-.mode-home-screen .mode-option.mode-card-ghost:hover {
-  border-color: rgba(168, 85, 247, 0.38) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0 0 1px rgba(168, 85, 247, 0.14),
-    0 16px 30px rgba(22, 10, 28, 0.34);
 }
 
 .single-player-hub-cards .mode-option.mode-card-bot {
@@ -1474,27 +1382,6 @@ button:hover:not(:disabled) {
   opacity: 0.85;
 }
 
-.mode-home-screen .mode-option.mode-card-daily::after {
-  display: none;
-}
-
-.mode-home-screen .mode-option.mode-card-play-online {
-  overflow: hidden;
-}
-
-.mode-home-screen .mode-option.mode-card-play-online::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 40%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.05), transparent);
-  animation: dailyShimmer 4s ease-in-out infinite;
-  animation-delay: 2s;
-  pointer-events: none;
-}
-
 .mode-daily-crown {
   font-size: 11px;
   margin-right: 4px;
@@ -1620,9 +1507,10 @@ button:hover:not(:disabled) {
 }
 
 .mode-accent-daily-fritz {
-  --mode-accent: rgba(245, 158, 11, 0.7);
-  --mode-section-tone: rgba(248, 214, 142, 0.8);
-  --mode-hover-border: rgba(247, 187, 78, 0.4);
+  --accent-color: #ef4444;
+  --mode-accent: rgba(239, 68, 68, 0.68);
+  --mode-section-tone: rgba(255, 180, 180, 0.78);
+  --mode-hover-border: rgba(239, 68, 68, 0.38);
 }
 
 .mode-accent-league {
@@ -2216,32 +2104,6 @@ button:hover:not(:disabled) {
   white-space: nowrap;
 }
 
-.home-restored-cards .mode-card-play-online {
-  position: relative;
-  overflow: hidden;
-  border-color: rgba(96, 165, 250, 0.54) !important;
-  background:
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.16), transparent 32%),
-    linear-gradient(170deg, rgba(25, 47, 62, 0.88) 0%, rgba(10, 19, 33, 0.9) 100%) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 0 0 1px rgba(56, 189, 248, 0.04),
-    0 18px 30px rgba(4, 14, 24, 0.34),
-    0 0 24px rgba(56, 189, 248, 0.12) !important;
-}
-
-.home-restored-cards .mode-card-play-online::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 24px;
-  right: 24px;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.95), transparent);
-  opacity: 0.95;
-  pointer-events: none;
-}
-
 .home-restored-cards .mode-hub-primary {
   gap: 4px;
 }
@@ -2293,7 +2155,6 @@ button:hover:not(:disabled) {
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-left: 5px solid var(--menu-section-color) !important;
   background: rgba(13, 18, 31, 0.5) !important;
-  box-shadow: none !important;
   overflow: hidden;
 }
 
@@ -2302,8 +2163,7 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-option.mode-card-compete::before,
 .home-restored-cards .mode-option.mode-card-daily::before,
 .home-restored-cards .mode-option.mode-card-daily-fritz::before,
-.home-restored-cards .mode-option.mode-card-learn::before,
-.home-restored-cards .mode-option.mode-card-play-online::after {
+.home-restored-cards .mode-option.mode-card-learn::before {
   display: none !important;
 }
 
@@ -2315,7 +2175,6 @@ button:hover:not(:disabled) {
 .home-restored-cards .mode-option.mode-card-learn:hover {
   border-color: rgba(255, 255, 255, 0.12) !important;
   border-left-color: var(--menu-section-color) !important;
-  box-shadow: none !important;
   filter: brightness(1.03);
 }
 
