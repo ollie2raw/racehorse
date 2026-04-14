@@ -940,7 +940,7 @@ export default function BotMatchScreen({
         }
       }
       if (cancelled || localPendingRegisteredRef.current) return;
-      if (isGuidedMode) return;
+      if (isGuidedMode || isAuthoringMode) return;
       try {
         const response = await postLocalBotMatch('/api/bot-matches/local/start', {
           userId,
@@ -1071,7 +1071,7 @@ export default function BotMatchScreen({
     setGhostResultError(null);
 
     void (async () => {
-      if (isGuidedMode) {
+      if (isGuidedMode || isAuthoringMode) {
         setGhostResultLoading(false);
         return;
       }
@@ -1163,7 +1163,7 @@ export default function BotMatchScreen({
     });
     const fritzPlayerMoveLog = !isGhostMode ? moveEntriesToGhostMoveLog(moveLog) : undefined;
 
-    if (isGuidedMode) {
+    if (isGuidedMode || isAuthoringMode) {
       setGhostResultLoading(false);
       return;
     }
@@ -2214,7 +2214,7 @@ export default function BotMatchScreen({
 
     let active = true;
     const syncLeaderboard = async () => {
-      if (isGuidedMode) return;
+      if (isGuidedMode || isAuthoringMode) return;
       setDailyLeaderboardLoading(true);
       setDailyLeaderboardError(null);
       try {
