@@ -264,7 +264,13 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             username: current.authProfileUsername ?? 'Guest',
             userId: current.authUserId ?? null,
           });
-          if (!resp?.ok) return;
+          if (!resp?.ok) {
+            if (typeof window !== 'undefined') {
+              window.localStorage.removeItem(current.lastRoomStorageKey);
+            }
+            current.showToast('Saved room is no longer available.', 2000);
+            return;
+          }
           current.applyJoinedRoomResponse(resp);
           current.showToast('Rejoined room.', 1200);
         } catch (error) {

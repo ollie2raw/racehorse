@@ -717,6 +717,7 @@ export default function App() {
   });
   const [botFritzTier, setBotFritzTier] = useState<FritzTier>('elite');
   const [isGuidedMode, setIsGuidedMode] = useState(false);
+  const [isAuthoringMode, setIsAuthoringMode] = useState(false);
   const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
   const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
   const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
@@ -1279,8 +1280,8 @@ export default function App() {
     clearTransientRoomUi();
     setLegalMoves(Array.isArray(resp.legalMoves) ? resp.legalMoves : []);
     setCanDraw(typeof resp.canDraw === 'boolean' ? resp.canDraw : false);
-    setRoomRecoveryState(resp.state ? 'idle' : 'resyncing');
-    setRoomRecoveryMessage(resp.state ? '' : 'Syncing room state…');
+    setRoomRecoveryState('idle');
+    setRoomRecoveryMessage('');
   }, [applyRoomEventMeta, clearTransientRoomUi]);
 
   const roomSocketSyncParams = useMemo(
@@ -2068,10 +2069,6 @@ export default function App() {
     );
   }, [handReveal, state, you]);
 
-  useEffect(() => {
-    if (!handReveal) return;
-    console.log('handReveal:', handReveal);
-  }, [handReveal]);
 
   const continueAfterHandReveal = useCallback(() => {
     if (socket && joinedRoom) {
@@ -2424,9 +2421,16 @@ export default function App() {
         <Suspense fallback={<ScreenLoader label="Loading Learn Mode…" />}>
           <LearnHome
             onBack={() => setAppMode('home')}
+            isAdmin={isAdmin}
             onStartGuidedGame={() => {
               setIsGuidedMode(true);
               setBotFritzTier('rookie');
+              setBotDealSize(7);
+              setAppMode('bot');
+            }}
+            onStartGuidedAuthoring={() => {
+              setIsAuthoringMode(true);
+              setBotFritzTier('elite');
               setBotDealSize(7);
               setAppMode('bot');
             }}
@@ -2458,10 +2462,11 @@ export default function App() {
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
           <BotMatchScreen
-            onBack={() => { setIsGuidedMode(false); setAppMode('home'); }}
+            onBack={() => { setIsGuidedMode(false); setIsAuthoringMode(false); setAppMode('home'); }}
             dealSize={botDealSize}
             fritzTier={botFritzTier}
             isGuidedMode={isGuidedMode}
+            isAuthoringMode={isAuthoringMode}
             userId={authUser?.id ?? null}
             username={authProfile?.username ?? null}
             currentGlickoRating={authProfile?.glicko_rating ?? null}

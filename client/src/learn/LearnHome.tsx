@@ -4,6 +4,9 @@ import './learn.css';
 interface LearnHomeProps {
   onBack: () => void;
   onStartGuidedGame?: () => void;
+  /** Admin-only: start the guided authoring flow */
+  onStartGuidedAuthoring?: () => void;
+  isAdmin?: boolean;
 }
 
 const HOW_TO_PLAY_STEPS = [
@@ -29,7 +32,7 @@ const KEY_RULES = [
   'Score or play a double to keep your turn going',
 ];
 
-export default function LearnHome({ onBack, onStartGuidedGame }: LearnHomeProps) {
+export default function LearnHome({ onBack, onStartGuidedGame, onStartGuidedAuthoring, isAdmin }: LearnHomeProps) {
   return (
     <LayoutScreen
       className="ghost-setup-screen mode-subpage-screen mode-accent-ghost"
@@ -80,6 +83,24 @@ export default function LearnHome({ onBack, onStartGuidedGame }: LearnHomeProps)
             </button>
           ) : null}
           <p className="learn-cta-sub">vs Rookie Fritz · Master Fritz coaches every turn</p>
+
+          {isAdmin && onStartGuidedAuthoring ? (
+            <div style={{ marginTop: 28 }}>
+              <h3 className="learn-col-heading" style={{ marginBottom: 8 }}>ADMIN</h3>
+              <button
+                className="learn-start-guided-btn"
+                onClick={onStartGuidedAuthoring}
+                style={{
+                  background: 'rgba(255,200,60,0.13)',
+                  border: '1.5px solid rgba(255,200,60,0.32)',
+                  color: 'rgba(255,220,100,0.92)',
+                }}
+              >
+                ✏️ Guided Authoring
+              </button>
+              <p className="learn-cta-sub">vs Elite Fritz · attach coaching notes to each turn</p>
+            </div>
+          ) : null}
         </div>
       </div>
     </LayoutScreen>

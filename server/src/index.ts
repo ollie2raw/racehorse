@@ -470,6 +470,7 @@ app.post('/api/ghost/complete', async (req, res) => {
       opponentScore,
       moveLog: safeMoveLog,
       playerMoveLog: safePlayerMoveLog,
+      matchId,
     });
     verifiedMatch.status = 'completed';
     verifiedMatch.completedAt = new Date().toISOString();

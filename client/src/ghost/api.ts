@@ -1,7 +1,21 @@
 import type { PlacementPosition, Tile } from '../types';
+import { supabase } from '../lib/supabase';
 
 const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
 const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  if (!supabase) return headers;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token ?? null;
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } catch {
+    // no-op — fall through without auth header
+  }
+  return headers;
+}
 
 export type GhostMoveLogEntry = {
   turn: number;
@@ -120,6 +134,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        ...(await authHeaders()),
         ...(init?.headers ?? {}),
       },
     });

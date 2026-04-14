@@ -1624,6 +1624,9 @@ export function chooseBotMove(
   const missing = inferMissingPips(state);
   const weights = opponentHoldWeights(pool, missing);
   const totalTiles = totalTilesForLog;
+  // Seeded per-state PRNG for tier selection — deterministic for a given position
+  // so Fritz doesn't oscillate unpredictably when the same board recurs.
+  const tierRand = createStatePrng(state, 'tier-select');
 
   const masterEndgameThreshold = 12;
   if (difficulty === 'master' && totalTiles <= masterEndgameThreshold) {
@@ -1775,7 +1778,9 @@ export function chooseBotMove(
       if (scoreDiff !== 0) return scoreDiff;
       return compareMoveStable(a.move, b.move);
     });
-    const chosen = (difficulty === 'master' || totalTiles <= 12) ? top[0] : weightedSelect(top);
+    // Master: TIER_SELECT.master has poolSize 1 and pBest 1.0 → always top[0].
+    // Elite:  poolSize 3, pBest 0.97 → ~3% non-best. pRandom = 0 so null never returned.
+    const chosen = applyTierSelect(top, tierRand, TIER_SELECT[difficulty]) ?? top[0];
     return done(
       {
         move: chosen.move,
@@ -1792,7 +1797,7 @@ export function chooseBotMove(
     if (scoreDiff !== 0) return scoreDiff;
     return compareMoveStable(a.move, b.move);
   });
-  const chosen = (difficulty === 'master' || totalTiles <= 12) ? prelim[0] : weightedSelect(prelim);
+  const chosen = applyTierSelect(prelim, tierRand, TIER_SELECT[difficulty]) ?? prelim[0];
   return done(
     {
       move: chosen.move,

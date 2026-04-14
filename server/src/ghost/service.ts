@@ -12,6 +12,10 @@ type GhostGameRow = {
   final_score: number;
   opponent_score: number;
   move_log: unknown;
+  match_id: string | null;
+  // xmax is a Postgres system column returned when explicitly selected.
+  // '0' = freshly inserted row; non-zero = row was updated (conflict resolution).
+  xmax?: string;
 };
 
 type GhostProfileRow = {
@@ -744,6 +748,7 @@ export async function completeGhostGame(params: {
   moveLog: GhostMoveLogEntry[];
   playerMoveLog?: GhostMoveLogEntry[];
   opponentUserId?: string | null;
+  matchId?: string | null;
 }): Promise<{
   newRating: number;
   ratingDelta: number;
@@ -771,17 +776,32 @@ export async function completeGhostGame(params: {
       : params.moveLog,
   );
 
-  await supabaseFetch<GhostGameRow[]>(`/rest/v1/ghost_games`, {
+  // Insert (or idempotent upsert) the ghost_games row.
+  // When matchId is available, request xmax in the response: Postgres sets
+  // xmax='0' on a freshly inserted row and non-zero on a conflict-updated row.
+  // Reading xmax from the upsert result is atomic — no pre-check race window.
+  const ghostGamesPath = params.matchId
+    ? `/rest/v1/ghost_games?on_conflict=match_id&select=id,xmax`
+    : `/rest/v1/ghost_games`;
+  const ghostGamesInsertHeaders: Record<string, string> = params.matchId
+    ? { Prefer: 'return=representation,resolution=merge-duplicates' }
+    : {};
+  const upsertedRows = await supabaseFetch<GhostGameRow[]>(ghostGamesPath, {
     method: 'POST',
+    headers: ghostGamesInsertHeaders,
     body: JSON.stringify([
       {
         user_id: params.userId,
         final_score: Math.round(params.finalScore),
         opponent_score: Math.round(params.opponentScore),
         move_log: trainingMoveLog,
+        ...(params.matchId ? { match_id: params.matchId } : {}),
       },
     ]),
   });
+  // True only when the row was genuinely new. Any concurrent or sequential retry
+  // that hits the same match_id will get xmax != '0' and must not increment.
+  const isNewGame = params.matchId ? upsertedRows[0]?.xmax === '0' : true;
 
   const recentGames = await fetchRecentGhostGames(params.userId, 20);
   const styleGames = await fetchRecentGhostGames(params.userId, 50);
@@ -848,7 +868,7 @@ export async function completeGhostGame(params: {
     last_updated: new Date().toISOString(),
     composite_log: compositeLog,
     style_profile: styleProfile,
-    games_played: Number(profile.games_played ?? 0) + 1,
+    games_played: isNewGame ? Number(profile.games_played ?? 0) + 1 : Number(profile.games_played ?? 0),
   });
 
   return {

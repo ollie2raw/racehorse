@@ -82,6 +82,16 @@ import { useLearningCoach } from '../learning/useLearningCoach';
 import CoachPanel from '../learning/CoachPanel';
 import LearningHandRecap from '../learning/LearningHandRecap';
 import '../learning/coach.css';
+import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
+import {
+  AUTHORING_GAME_ID,
+  AUTHORING_LESSON_ID,
+  generateAuthoringHandDeal,
+  loadAuthoringSession,
+  saveAuthoringSession,
+  type AuthoredStep,
+  type AuthoringSession,
+} from '../learn/guidedAuthoring';
 
 interface BotMatchScreenProps {
   onBack: () => void;
@@ -108,6 +118,8 @@ interface BotMatchScreenProps {
   dailyFritzPackage?: DailyFritzStartResponse | null;
   onDailyFritzComplete?: (() => void) | null;
   isGuidedMode?: boolean;
+  /** Admin-only: replace CoachPanel with an editable textarea on each player turn */
+  isAuthoringMode?: boolean;
 }
 
 interface BotHandReveal {
@@ -273,6 +285,7 @@ export default function BotMatchScreen({
   dailyFritzPackage = null,
   onDailyFritzComplete = null,
   isGuidedMode = false,
+  isAuthoringMode = false,
 }: BotMatchScreenProps) {
   const LEAGUE_MATCH_META_KEY = 'racehorse:league-match-meta';
   const leagueResumeStorageKey = resumeKey ? `racehorse:league-match:${resumeKey}` : null;
@@ -341,14 +354,27 @@ export default function BotMatchScreen({
   const handAreaRef = useRef<HTMLDivElement>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
-  const [match, setMatch] = useState<BotMatchState>(
-    () =>
+  const [match, setMatch] = useState<BotMatchState>(() => {
+    if (isAuthoringMode) {
+      // Try to resume from a saved authoring session
+      const saved = loadAuthoringSession();
+      if (saved?.matchSnapshot) {
+        try {
+          return JSON.parse(saved.matchSnapshot) as BotMatchState;
+        } catch {
+          // fall through to fresh start
+        }
+      }
+      return createFixedBotMatch(generateAuthoringHandDeal(0), 60, 7);
+    }
+    return (
       initialPersistedDailyFritzMatch?.match ??
       initialPersistedLeagueMatch?.match ??
       (mode === 'daily-fritz' && dailyFritzPackage
         ? createFixedBotMatch(dailyFritzPackage.first_hand, winningScore, dealSize)
-        : createBotMatch(winningScore, dealSize)),
-  );
+        : createBotMatch(winningScore, dealSize))
+    );
+  });
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [toast, setToast] = useState('');
@@ -437,6 +463,20 @@ export default function BotMatchScreen({
   const localPendingRegisteredRef = useRef(false);
   const localPendingResolvedRef = useRef(false);
   const accessTokenRef = useRef<string | null>(null);
+
+  // ── Guided Authoring state (admin-only, no server calls) ─────────────────
+  const [authoringSteps, setAuthoringSteps] = useState<AuthoredStep[]>(() => {
+    if (!isAuthoringMode) return [];
+    return loadAuthoringSession()?.steps ?? [];
+  });
+  const [authoringNoteText, setAuthoringNoteText] = useState('');
+  /** Snapshot of board + hand captured at the START of each player turn */
+  const authoringPreMoveRef = useRef<{
+    boardState: string;
+    playerHand: string[];
+    handNumber: number;
+  } | null>(null);
+
   const isGhostMode = mode === 'ghost';
   const isDailyFritzMode = mode === 'daily-fritz';
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
@@ -544,6 +584,33 @@ export default function BotMatchScreen({
   useEffect(() => {
     matchRef.current = match;
   }, [match]);
+
+  // ── Authoring: capture pre-move snapshot when player's turn starts ────────
+  useEffect(() => {
+    if (!isAuthoringMode || match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+    authoringPreMoveRef.current = {
+      boardState: serializeGhostBoardState(match.board),
+      playerHand: match.players.you.hand.map(toTileKey),
+      handNumber: match.handNumber,
+    };
+    // Load any existing note for this step index (handles reload mid-session)
+    const stepIdx = authoringSteps.length;
+    const existing = authoringSteps.find((s) => s.stepIndex === stepIdx);
+    setAuthoringNoteText(existing?.coachingText ?? '');
+  }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Authoring: persist session to localStorage on every steps change ──────
+  useEffect(() => {
+    if (!isAuthoringMode) return;
+    const session: AuthoringSession = {
+      lessonId: AUTHORING_LESSON_ID,
+      fixedGameId: AUTHORING_GAME_ID,
+      steps: authoringSteps,
+      currentStepIndex: authoringSteps.length,
+      matchSnapshot: JSON.stringify(matchRef.current),
+    };
+    saveAuthoringSession(session);
+  }, [isAuthoringMode, authoringSteps]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const lastUserMoveNumber = moveLog.reduce(
@@ -1013,7 +1080,7 @@ export default function BotMatchScreen({
           runDate: dailyFritzPackage.run_date,
           attemptId: dailyFritzPackage.attempt_id,
           verifiedMatchId: dailyFritzPackage.verified_match_id,
-          currentHandIndex: Math.max(0, match.handNumber - 1),
+          currentHandIndex: dailyFritzPackage.current_hand_index,
           finalScore: match.players.you.score,
           opponentScore: match.players.bot.score,
           won: match.winnerId === 'you',
@@ -1075,6 +1142,8 @@ export default function BotMatchScreen({
       if (isStandaloneFritzMatch) {
         setGhostResultLoading(true);
         setGhostResultError(null);
+      } else if (isGhostMode) {
+        setGhostResultError('Could not start rating session.');
       }
       return;
     }
@@ -1528,6 +1597,65 @@ export default function BotMatchScreen({
     [triggerDrawStepAnimation, isMuted],
   );
 
+  /**
+   * Authoring: record the current player turn as an authored step.
+   * Called whenever the player completes an action (play, draw-to-pass, pass).
+   * @param chosenMove  Tile key ("2|4"), "draw", or "pass"
+   */
+  const recordAuthoringStep = useCallback(
+    (chosenMove: string | null) => {
+      if (!isAuthoringMode) return;
+      const pre = authoringPreMoveRef.current;
+      const stepIdx = authoringSteps.length;
+      const newStep: AuthoredStep = {
+        stepIndex: stepIdx,
+        handNumber: pre?.handNumber ?? match.handNumber,
+        boardState: pre?.boardState ?? serializeGhostBoardState(match.board),
+        playerHand: pre?.playerHand ?? match.players.you.hand.map(toTileKey),
+        chosenMove,
+        coachingText: authoringNoteText,
+      };
+      setAuthoringSteps((prev) => {
+        // Replace if same stepIndex already exists (e.g. note-only save followed by play)
+        const existingIdx = prev.findIndex((s) => s.stepIndex === stepIdx);
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = newStep;
+          return next;
+        }
+        return [...prev, newStep];
+      });
+    },
+    [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  /**
+   * Authoring: save the current textarea note without recording a chosen move.
+   * Creates a draft step or updates an existing one.
+   */
+  const saveAuthoringNoteOnly = useCallback(() => {
+    if (!isAuthoringMode) return;
+    const pre = authoringPreMoveRef.current;
+    const stepIdx = authoringSteps.length;
+    const draftStep: AuthoredStep = {
+      stepIndex: stepIdx,
+      handNumber: pre?.handNumber ?? match.handNumber,
+      boardState: pre?.boardState ?? serializeGhostBoardState(match.board),
+      playerHand: pre?.playerHand ?? match.players.you.hand.map(toTileKey),
+      chosenMove: null,
+      coachingText: authoringNoteText,
+    };
+    setAuthoringSteps((prev) => {
+      const existingIdx = prev.findIndex((s) => s.stepIndex === stepIdx);
+      if (existingIdx >= 0) {
+        const next = [...prev];
+        next[existingIdx] = draftStep;
+        return next;
+      }
+      return [...prev, draftStep];
+    });
+  }, [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const onPositionClick = (position: any) => {
     if (match.currentPlayer !== 'you' || !selectedTile || match.handOver || match.gameOver) return;
     const move = findMoveForSelection(userPlayMoves, selectedTile, position);
@@ -1545,6 +1673,9 @@ export default function BotMatchScreen({
     const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
     coach.recordPlayerMove(match, move);
+    if (isAuthoringMode && move.tile) {
+      recordAuthoringStep(toTileKey(move.tile));
+    }
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
@@ -1600,6 +1731,9 @@ export default function BotMatchScreen({
     const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
     coach.recordPlayerMove(match, move);
+    if (isAuthoringMode && move.tile) {
+      recordAuthoringStep(toTileKey(move.tile));
+    }
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
@@ -1925,17 +2059,22 @@ export default function BotMatchScreen({
       return;
     }
     setHandReveal(null);
-    setMatch((prev) =>
-      prev.handOver && !prev.gameOver
-        ? {
-            ...startNextBotHand(prev),
-            opponentPassedOnEnds: [],
-            opponentDrawCount: 0,
-            opponentKnownMissing: [],
-          }
-        : prev,
-    );
-  }, [dailyFritzPackage, isDailyFritzMode, match.players.bot.score, match.players.you.score]);
+    setMatch((prev) => {
+      if (!prev.handOver || prev.gameOver) return prev;
+      // Authoring mode: each hand is seeded deterministically.
+      // prev.handNumber is the hand just completed (1-indexed), so the next
+      // hand's 0-indexed slot is prev.handNumber (e.g. hand 1 done → deal for slot 1).
+      const nextState = isAuthoringMode
+        ? startNextFixedBotHand(prev, generateAuthoringHandDeal(prev.handNumber))
+        : startNextBotHand(prev);
+      return {
+        ...nextState,
+        opponentPassedOnEnds: [],
+        opponentDrawCount: 0,
+        opponentKnownMissing: [],
+      };
+    });
+  }, [dailyFritzPackage, isDailyFritzMode, isAuthoringMode, match.players.bot.score, match.players.you.score]);
 
   useEffect(() => {
     if (!handReveal || match.gameOver) {
@@ -2026,6 +2165,9 @@ export default function BotMatchScreen({
           });
         }
         if (result.passed) {
+          if (isAuthoringMode) {
+            recordAuthoringStep('pass');
+          }
           if (isGhostMode) {
             appendGhostMove({
               turn: (match.turnIndex ?? 0) + 1,
@@ -2061,7 +2203,7 @@ export default function BotMatchScreen({
     return () => {
       cancelled = true;
     };
-  }, [match, userPlayMoves.length, appendGhostMove, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, isGhostMode, isMuted, getFritzBestMove]);
+  }, [match, userPlayMoves.length, appendGhostMove, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, isGhostMode, isAuthoringMode, recordAuthoringStep, isMuted, getFritzBestMove]);
 
   useEffect(() => {
     if (!isDailyPuzzleRun || !dailyPuzzleDate || !match.gameOver) return;
@@ -2690,7 +2832,15 @@ export default function BotMatchScreen({
               <DominoTile tile={ghostPlayedTile} size={52} className="ghost-played-tile" />
             </div>
           )}
-          {isGuidedMode && (
+          {isAuthoringMode && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
+            <AuthoringCoachPanel
+              stepIndex={authoringSteps.length}
+              noteText={authoringNoteText}
+              onNoteChange={setAuthoringNoteText}
+              onSaveNote={saveAuthoringNoteOnly}
+            />
+          )}
+          {isGuidedMode && !isAuthoringMode && (
             <CoachPanel
               preMoveRec={coach.preMoveRec}
               preMoveEval={coach.preMoveEval}

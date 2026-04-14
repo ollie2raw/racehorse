@@ -20,6 +20,23 @@ create table if not exists public.ghost_profiles (
 
 alter table public.ghost_profiles add column if not exists style_profile jsonb null;
 
+-- Idempotency key: one ghost_games row per verified match session.
+-- Allows safe retry when a network timeout causes the client to re-submit
+-- after the server already processed the insert.
+alter table public.ghost_games add column if not exists match_id uuid null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ghost_games_match_id_unique'
+      and conrelid = 'public.ghost_games'::regclass
+  ) then
+    alter table public.ghost_games
+      add constraint ghost_games_match_id_unique unique (match_id);
+  end if;
+end $$;
+
 alter table public.ghost_games enable row level security;
 alter table public.ghost_profiles enable row level security;
 
