@@ -873,6 +873,7 @@ export default function BotMatchScreen({
         }
       }
       if (cancelled || localPendingRegisteredRef.current) return;
+      if (isGuidedMode) return;
       try {
         const response = await postLocalBotMatch('/api/bot-matches/local/start', {
           userId,
@@ -1003,6 +1004,10 @@ export default function BotMatchScreen({
     setGhostResultError(null);
 
     void (async () => {
+      if (isGuidedMode) {
+        setGhostResultLoading(false);
+        return;
+      }
       try {
         const completionHash = await buildDailyFritzCompletionHash({
           runDate: dailyFritzPackage.run_date,
@@ -1088,6 +1093,11 @@ export default function BotMatchScreen({
       opponentScore: match.players.bot.score,
     });
     const fritzPlayerMoveLog = !isGhostMode ? moveEntriesToGhostMoveLog(moveLog) : undefined;
+
+    if (isGuidedMode) {
+      setGhostResultLoading(false);
+      return;
+    }
 
     void completeGhostGame({
       matchId: verifiedMatchId,
@@ -2062,6 +2072,7 @@ export default function BotMatchScreen({
 
     let active = true;
     const syncLeaderboard = async () => {
+      if (isGuidedMode) return;
       setDailyLeaderboardLoading(true);
       setDailyLeaderboardError(null);
       try {
