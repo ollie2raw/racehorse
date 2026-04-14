@@ -2075,10 +2075,38 @@ export default function App() {
 
   const continueAfterHandReveal = useCallback(() => {
     if (socket && joinedRoom) {
-      socket.emit('hand:ready', joinedRoom, () => {});
+      emitWithAck(socket, 'hand:ready', joinedRoom).catch((error) => {
+        if (import.meta.env.DEV) {
+          console.warn('[hand:ready] failed:', error instanceof Error ? error.message : error);
+        }
+      });
     }
     setHandReveal(null);
   }, [socket, joinedRoom]);
+
+  // Recover lost hand:ready on reconnect — if the server says the hand is over but
+  // we're not in a reveal window, the hand:ready was lost during disconnect. Re-emit it.
+  const handReadyRecoveryRef = useRef(false);
+  useEffect(() => {
+    const needsReady =
+      Boolean(state?.handOver) && !state?.gameOver && !handReveal && Boolean(joinedRoom) && socket?.connected;
+    if (!needsReady) {
+      handReadyRecoveryRef.current = false;
+      return;
+    }
+    if (handReadyRecoveryRef.current) return;
+    handReadyRecoveryRef.current = true;
+    if (import.meta.env.DEV) {
+      console.log('[hand:ready] recovering lost hand:ready signal after reconnect');
+    }
+    emitWithAck(socket!, 'hand:ready', joinedRoom!).catch((error) => {
+      handReadyRecoveryRef.current = false;
+      showToast('Could not signal hand ready. Reconnecting…', 2500);
+      if (import.meta.env.DEV) {
+        console.warn('[hand:ready] recovery failed:', error instanceof Error ? error.message : error);
+      }
+    });
+  }, [state?.handOver, state?.gameOver, handReveal, joinedRoom, socket]);
 
   useEffect(() => {
     if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);

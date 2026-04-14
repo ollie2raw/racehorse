@@ -52,6 +52,39 @@ const ENABLE_TWO_PLY_WORST_CASE = false;
 const FAIR_BOT_MODE = true;
 let fairOpponentAccessWarned = false;
 
+// ─── Tier selection config ────────────────────────────────────────────────────
+
+interface TierSelectCfg {
+  /** Sorted candidates to consider (pool). */
+  poolSize: number;
+  /** Probability of picking the top-ranked candidate (after the random-legal check). */
+  pBest: number;
+  /**
+   * Probability of skipping the scored pool entirely and picking a truly random legal
+   * move. Non-zero only for Rookie — keeps the random branch rare (3–5%) so mistakes
+   * feel like lapses, not bugs.
+   */
+  pRandom: number;
+  /**
+   * Exponential rank-decay for weighted sampling among non-best pool candidates.
+   * weight[i] = rankDecay^i — rank-based so probabilities are stable regardless of
+   * raw score magnitudes.
+   */
+  rankDecay: number;
+}
+
+//  Effective non-best selection rate = pRandom + (1 − pRandom) × (1 − pBest)
+//  casual:   0.04 + 0.96 × 0.31 ≈ 34%   (30–35% target ✓, ~4% truly random ✓)
+//  standard: 0.00 + 1.00 × 0.14 ≈ 14%   (12–15% target ✓)
+//  hard:     0.00 + 1.00 × 0.03 ≈  3%   (3% target ✓)
+//  master:   0%                           (deterministic ✓)
+const TIER_SELECT: Record<BotDifficulty, TierSelectCfg> = {
+  casual:   { poolSize: 5, pBest: 0.69, pRandom: 0.04, rankDecay: 0.60 },
+  standard: { poolSize: 4, pBest: 0.86, pRandom: 0.00, rankDecay: 0.55 },
+  hard:     { poolSize: 3, pBest: 0.97, pRandom: 0.00, rankDecay: 0.50 },
+  master:   { poolSize: 1, pBest: 1.00, pRandom: 0.00, rankDecay: 1.00 },
+};
+
 function makeDevOpponentHandTrap(): Tile[] {
   return new Proxy([] as Tile[], {
     get(_target, prop) {
@@ -1356,14 +1389,46 @@ function mcEvaluateMove(
   );
 }
 
-// ─── Weighted random selection ────────────────────────────────────────────────
+// ─── Tier-based move selection ────────────────────────────────────────────────
 
-function weightedSelect<T extends { score: number }>(scored: T[]): T {
-  if (scored.length === 1) return scored[0];
-  const top = scored.slice(0, Math.min(3, scored.length));
-  const best = top[0].score;
-  if (best >= 500_000 || (top.length > 1 && best - top[1].score > 200)) return top[0];
-  return top[0];
+/**
+ * Rank-based exponential weighted sampling over a sorted candidate pool.
+ * weight[i] = rankDecay^i, so the top candidate always has weight 1.0 and each
+ * subsequent rank decays by the factor. Using rank rather than raw score gives
+ * predictable selection probabilities regardless of score magnitude.
+ */
+function weightedSelectFromPool<T>(pool: T[], rand: () => number, rankDecay: number): T {
+  if (pool.length <= 1) return pool[0];
+  const weights = pool.map((_, i) => Math.pow(rankDecay, i));
+  const totalW = weights.reduce((s, w) => s + w, 0);
+  let roll = rand() * totalW;
+  for (let i = 0; i < pool.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return pool[i];
+  }
+  return pool[pool.length - 1];
+}
+
+/**
+ * Applies tier-specific selection to a sorted (best-first) candidate list.
+ * Returns the selected item, or null if the caller should substitute a truly
+ * random legal move (only possible when cfg.pRandom > 0, i.e. Rookie).
+ *
+ * Selection flow:
+ *   1. pRandom roll  → null  (caller picks any legal move uniformly)
+ *   2. pBest roll    → pool[0] (best move)
+ *   3. otherwise     → rank-decayed sample from pool[1..poolSize-1]
+ */
+function applyTierSelect<T extends { score: number }>(
+  sorted: T[],
+  rand: () => number,
+  cfg: TierSelectCfg,
+): T | null {
+  if (cfg.pRandom > 0 && rand() < cfg.pRandom) return null;
+  const pool = sorted.slice(0, Math.min(cfg.poolSize, sorted.length));
+  if (pool.length <= 1) return pool[0];
+  if (rand() < cfg.pBest) return pool[0];
+  return weightedSelectFromPool(pool.slice(1), rand, cfg.rankDecay);
 }
 
 // ─── Endgame depth scaling ────────────────────────────────────────────────────
@@ -1463,32 +1528,55 @@ export function chooseBotMove(
   }
 
   if (difficulty === 'casual') {
-    const best = candidates
-      .map((m) => ({ m, p: previewPlayMove(state, 'bot', m) }))
-      .filter(({ p }) => p != null)
+    // Rookie scores on immediate points + pip unload only (overvalues simple playability,
+    // undervalues control and chaining — intentional style bias).
+    const tierRand = createStatePrng(state, 'tier-select');
+    const cfg = TIER_SELECT.casual;
+
+    const scored = candidates
+      .map((m) => {
+        const p = previewPlayMove(state, 'bot', m);
+        if (!p) return null;
+        return {
+          m,
+          p,
+          score: p.immediateScore * 10 + (m.tile?.low ?? 0) + (m.tile?.high ?? 0),
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null)
       .sort((a, b) => {
-        const sa = a.p!.immediateScore * 10 + (a.m.tile?.low ?? 0) + (a.m.tile?.high ?? 0);
-        const sb = b.p!.immediateScore * 10 + (b.m.tile?.low ?? 0) + (b.m.tile?.high ?? 0);
-        const scoreDiff = sb - sa;
+        const scoreDiff = b.score - a.score;
         if (scoreDiff !== 0) return scoreDiff;
         return compareMoveStable(a.m, b.m);
-      })[0];
-    if (!best) return null;
+      });
+
+    if (scored.length === 0) return null;
+
+    // applyTierSelect returns null when the pRandom branch fires; in that case
+    // pick uniformly from all legal play moves (any legal move is plausible).
+    const tierResult = applyTierSelect(scored, tierRand, cfg);
+    const chosen = tierResult ?? scored[Math.floor(tierRand() * scored.length)];
+
     return done({
-      move: best.m,
-      score: best.p!.immediateScore,
-      explanation: `Played ${best.m.tile?.low}-${best.m.tile?.high} for immediate value.`,
+      move: chosen.m,
+      score: chosen.p.immediateScore,
+      explanation: `Played ${chosen.m.tile?.low}-${chosen.m.tile?.high} for immediate value.`,
       breakdown: {
-        immediate: best.p!.immediateScore,
-        doubleBias: best.m.tile && isDoubleTile(best.m.tile) ? 1 : 0,
+        immediate: chosen.p.immediateScore,
+        doubleBias: chosen.m.tile && isDoubleTile(chosen.m.tile) ? 1 : 0,
         mobility: 0, denial: 0,
-        unload: (best.m.tile?.low ?? 0) + (best.m.tile?.high ?? 0),
+        unload: (chosen.m.tile?.low ?? 0) + (chosen.m.tile?.high ?? 0),
         replyRisk: 0,
       },
     }, 'casual')
   }
 
   if (difficulty === 'standard') {
+    // Standard slightly overvalues immediate score relative to board control — the
+    // immediateScore weight (60) dominates, but threat/mobility/self-opportunity are
+    // considered. Intentional style bias vs Elite's full multi-factor eval.
+    const tierRand = createStatePrng(state, 'tier-select');
+    const cfg = TIER_SELECT.standard;
     const pool = buildUnseenPool(state);
     const missing = inferMissingPips(state);
     const weights = opponentHoldWeights(pool, new Set(missing));
@@ -1524,7 +1612,11 @@ export function chooseBotMove(
       return compareMoveStable(a.move, b.move);
     });
     if (!scored[0]) return null;
-    return done({ move: scored[0].move, score: scored[0].score, breakdown: scored[0].breakdown }, 'standard')
+
+    // applyTierSelect never returns null for standard (pRandom = 0), so the ?? fallback
+    // is purely for type safety.
+    const chosen = applyTierSelect(scored, tierRand, cfg) ?? scored[0];
+    return done({ move: chosen.move, score: chosen.score, breakdown: chosen.breakdown }, 'standard')
   }
 
   // ── Hard / Master ─────────────────────────────────────────────────────────

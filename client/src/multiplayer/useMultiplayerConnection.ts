@@ -204,10 +204,14 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             if (import.meta.env.DEV) {
               console.log('[rejoin] room:join not ok', { code, resp });
             }
+            current.setRoomRecoveryState('failed');
+            current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
           } catch (error) {
             if (import.meta.env.DEV) {
               console.log('[rejoin] room:join failed', error instanceof Error ? error.message : error);
             }
+            current.setRoomRecoveryState('failed');
+            current.setRoomRecoveryMessage('Could not reach room. Return to home.');
           } finally {
             current.rejoinInFlightRef.current = false;
           }
@@ -228,6 +232,8 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             if (typeof window !== 'undefined') {
               window.localStorage.removeItem(current.lastRoomStorageKey);
             }
+            current.setRoomRecoveryState('failed');
+            current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
             return;
           }
           current.applyJoinedRoomResponse(resp);
