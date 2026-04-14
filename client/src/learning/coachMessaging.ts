@@ -337,7 +337,7 @@ function buildBodyShort(
   tone: CoachTone,
   chosenMove: LearningMoveAnalysis | undefined,
   bestMove: LearningMoveAnalysis,
-  neitherScores: boolean,
+  _neitherScores: boolean,
 ): string {
   const { playerLevel, confidence, isAmbiguousPosition } = ctx;
 

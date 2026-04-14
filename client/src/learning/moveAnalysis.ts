@@ -399,6 +399,19 @@ function buildPassMoveAnalysis(level: PlayerLevel): LearningMoveAnalysis {
     riskFlags:        [],
     explanationShort: passExplanation,
     explanationLong:  undefined,
+    resultingOpenEnds: [],
+    isEquivalentToBest: true,
+    debugSignals: {
+      turnContinues:                false,
+      remainingPlayableCount:       0,
+      playerNextTurnScoringCount:   0,
+      playerConstraintLevel:        'blocked',
+      playerEndCoverage:            0,
+      opponentResponseCount:        0,
+      opponentScoringResponseCount: 0,
+      opponentConstraintLevel:      'free',
+      opponentForcedDefensiveCount: 0,
+    },
   };
 }
 
@@ -790,7 +803,7 @@ export function buildMoveEvaluationResult(
  */
 export function createMockEvaluationResult(
   scenario: 'missed_score' | 'safe_choice' | 'blunder' | 'best_move',
-  playerLevel: PlayerLevel = 'beginner',
+  _playerLevel: PlayerLevel = 'beginner',
 ): MoveEvaluationResult {
   const thresholds = DEFAULT_THRESHOLD_CONFIG;
 

@@ -1,7 +1,7 @@
-import type { BoardState, Tile } from './src/types.ts';
-import type { BotMatchState } from './src/bot/botEngine.ts';
-import { buildMoveEvaluationResult } from './src/learning/moveAnalysis.ts';
-import { DEFAULT_THRESHOLD_CONFIG } from './src/learning/types.ts';
+import type { BoardState, Tile } from './types.ts';
+import type { BotMatchState } from './bot/botEngine.ts';
+import { buildMoveEvaluationResult } from './learning/moveAnalysis.ts';
+import { DEFAULT_THRESHOLD_CONFIG } from './learning/types.ts';
 
 function mkBoard(left: number, right: number): BoardState {
   return { mainLine: [{ tile: { low: Math.min(left,right), high: Math.max(left,right) }, orientation: 'horizontal-normal' }], leftEnd: left, rightEnd: right, leftEndIsDouble: left===right, rightEndIsDouble: left===right, hubDoubles: [] };
