@@ -74,9 +74,14 @@ import {
   completeDailyFritz,
   nextDailyFritzHand,
   type DailyFritzLeaderboardRow,
+  type DailyFritzNextHandResponse,
   type DailyFritzStartResponse,
 } from '../dailyFritz/api';
 import './botMatch.css';
+import { useLearningCoach } from '../learning/useLearningCoach';
+import CoachPanel from '../learning/CoachPanel';
+import LearningHandRecap from '../learning/LearningHandRecap';
+import '../learning/coach.css';
 
 interface BotMatchScreenProps {
   onBack: () => void;
@@ -419,6 +424,13 @@ export default function BotMatchScreen({
   const matchCompleteKeyRef = useRef('');
   const ghostCompleteKeyRef = useRef('');
   const dailyFritzCompleteKeyRef = useRef('');
+  const dailyFritzStorageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dailyFritzStoragePendingRef = useRef<{ key: string; payload: object } | null>(null);
+  const dailyFritzNextHandRef = useRef<{
+    promise: Promise<DailyFritzNextHandResponse>;
+    result: DailyFritzNextHandResponse | null;
+    error: unknown;
+  } | null>(null);
   const botChainPauseRef = useRef(false);
   const matchRef = useRef(match);
   const prevTurnRef = useRef<BotPlayerId>(match.currentPlayer);
@@ -433,6 +445,14 @@ export default function BotMatchScreen({
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
+
+  // ── Learning coach (guided mode only) ────────────────────────────────────
+  const coach = useLearningCoach({
+    isGuidedMode,
+    match,
+    playerLevel: 'beginner',
+    gameMode: 'guided',
+  });
   const opponentLabel = isGhostMode ? 'Ghost' : opponentName.trim() || 'Fritz';
   const ghostSubLabel = isGhostMode
     ? (opponentName && opponentName.toLowerCase() !== 'your ghost' ? opponentName : (username || 'Your Ghost'))
@@ -789,19 +809,56 @@ export default function BotMatchScreen({
   useEffect(() => {
     if (!isDailyFritzMode || !dailyFritzStorageKey || typeof window === 'undefined') return;
     if (match.gameOver) {
+      if (dailyFritzStorageTimerRef.current) {
+        clearTimeout(dailyFritzStorageTimerRef.current);
+        dailyFritzStorageTimerRef.current = null;
+      }
+      dailyFritzStoragePendingRef.current = null;
       window.sessionStorage.removeItem(dailyFritzStorageKey);
       return;
     }
-    window.sessionStorage.setItem(
-      dailyFritzStorageKey,
-      JSON.stringify({
-        attemptId: dailyFritzPackage?.attempt_id ?? null,
-        match,
-        movesUsed,
-        moveLog,
-      }),
-    );
+    if (dailyFritzStorageTimerRef.current) clearTimeout(dailyFritzStorageTimerRef.current);
+    // Capture snapshot now (references to immutable state objects) but defer
+    // JSON.stringify — the expensive part — by 1 s so rapid tile plays don't
+    // serialize on every move.
+    const snapshot = {
+      attemptId: dailyFritzPackage?.attempt_id ?? null,
+      match,
+      movesUsed,
+      moveLog,
+    };
+    // Always keep the pending ref current so the pagehide flush can write the
+    // latest state even if the debounce timer hasn't fired yet.
+    dailyFritzStoragePendingRef.current = { key: dailyFritzStorageKey, payload: snapshot };
+    dailyFritzStorageTimerRef.current = setTimeout(() => {
+      window.sessionStorage.setItem(dailyFritzStorageKey, JSON.stringify(snapshot));
+      dailyFritzStoragePendingRef.current = null;
+      dailyFritzStorageTimerRef.current = null;
+    }, 1000);
+    return () => {
+      if (dailyFritzStorageTimerRef.current) {
+        clearTimeout(dailyFritzStorageTimerRef.current);
+        dailyFritzStorageTimerRef.current = null;
+      }
+    };
   }, [dailyFritzPackage?.attempt_id, dailyFritzStorageKey, isDailyFritzMode, match, moveLog, movesUsed]);
+
+  // Flush any pending debounced Daily Fritz state write on page unload so the
+  // player resumes from the latest move rather than up to 1 s behind.
+  useEffect(() => {
+    if (!isDailyFritzMode) return;
+    const flush = () => {
+      const pending = dailyFritzStoragePendingRef.current;
+      if (!pending) return;
+      try {
+        window.sessionStorage.setItem(pending.key, JSON.stringify(pending.payload));
+      } catch {
+        // sessionStorage may be unavailable during unload — fail silently
+      }
+    };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [isDailyFritzMode]);
 
   useEffect(() => {
     if (!isStandaloneFritzMatch || !userId) return;
@@ -1263,30 +1320,6 @@ export default function BotMatchScreen({
     };
   }, [isGuidedMode, match, userPlayMoves]);
 
-  const coachTipText = useMemo(() => {
-    if (!guidedCoachTip) return '';
-    const { tile, bestMove, pts, isOnlyPlay, isControlChoice, isOpeningMove, isOpeningDouble } = guidedCoachTip;
-    const tileStr = `[${tile.low}|${tile.high}]`;
-    const target = formatPlacementTarget(bestMove.position);
-
-    if (isOpeningMove) {
-      if (isOpeningDouble) {
-        return `${tileStr} is your opening double — play it to start the chain`;
-      }
-      return `${tileStr} scores ${pts} pts — required opening move, play it on ${target}`;
-    }
-    if (isOnlyPlay) {
-      return `Only one tile fits right now — ${tileStr} on ${target}`;
-    }
-    if (pts > 0) {
-      return `${tileStr} on ${target} scores ${pts} pts`;
-    }
-    if (isControlChoice) {
-      return `${tileStr} on ${target} — keeps more open ends controlled`;
-    }
-    return `No scoring move — ${tileStr} on ${target} is safest`;
-  }, [guidedCoachTip]);
-
   // Per-tile max points for green/gold highlighting — uses same previewPlayMove as coach tip
   const guidedScoringTiles = useMemo((): Map<string, number> => {
     if (!isGuidedMode || match.currentPlayer !== 'you') return new Map();
@@ -1357,6 +1390,29 @@ export default function BotMatchScreen({
       };
     });
     if (result.handEnded) {
+      // Kick off the next-hand fetch immediately so it's ready by the time the
+      // 5-second reveal window closes.  Store both the promise and its settled
+      // result so advanceHand can transition instantly if already resolved.
+      if (isDailyFritzMode && dailyFritzPackage && !adjustedState.gameOver) {
+        const cache: {
+          promise: Promise<DailyFritzNextHandResponse>;
+          result: DailyFritzNextHandResponse | null;
+          error: unknown;
+        } = {
+          promise: nextDailyFritzHand({
+            attemptId: dailyFritzPackage.attempt_id,
+            verifiedMatchId: dailyFritzPackage.verified_match_id,
+            completedHandScores: {
+              you: adjustedState.players.you.score,
+              fritz: adjustedState.players.bot.score,
+            },
+          }),
+          result: null,
+          error: null,
+        };
+        cache.promise.then((r) => { cache.result = r; }).catch((e) => { cache.error = e; });
+        dailyFritzNextHandRef.current = cache;
+      }
       flashLastPlayed(null);
       const handEndedData = result.handEnded;
       const yourRemainingTiles = adjustedState.players.you.hand;
@@ -1478,6 +1534,7 @@ export default function BotMatchScreen({
     const result = applyPlayMove(match, 'you', move);
     const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
+    coach.recordPlayerMove(match, move);
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
@@ -1532,6 +1589,7 @@ export default function BotMatchScreen({
     const result = applyPlayMove(match, 'you', move);
     const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
+    coach.recordPlayerMove(match, move);
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
@@ -1805,33 +1863,55 @@ export default function BotMatchScreen({
     flashLastPlayed(null);
     setLastBotChoice(null);
     if (isDailyFritzMode && dailyFritzPackage) {
-      setGhostResultLoading(true);
-      void nextDailyFritzHand({
-        attemptId: dailyFritzPackage.attempt_id,
-        verifiedMatchId: dailyFritzPackage.verified_match_id,
-        completedHandScores: {
-          you: match.players.you.score,
-          fritz: match.players.bot.score,
-        },
-      })
-        .then((response) => {
-          setHandReveal(null);
-          setMatch((prev) =>
-            prev.handOver && !prev.gameOver
-              ? {
-                  ...startNextFixedBotHand(prev, response.hand),
-                  opponentPassedOnEnds: [],
-                  opponentDrawCount: 0,
-                  opponentKnownMissing: [],
-                }
-              : prev,
-          );
-          setGhostResultLoading(false);
-        })
-        .catch((err) => {
-          setGhostResultLoading(false);
-          setGhostResultError(err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.');
-        });
+      const cache = dailyFritzNextHandRef.current;
+      dailyFritzNextHandRef.current = null;
+
+      if (cache?.result) {
+        // Prefetch already settled — instant hand transition, no spinner.
+        setHandReveal(null);
+        setMatch((prev) =>
+          prev.handOver && !prev.gameOver
+            ? {
+                ...startNextFixedBotHand(prev, cache.result!.hand),
+                opponentPassedOnEnds: [],
+                opponentDrawCount: 0,
+                opponentKnownMissing: [],
+              }
+            : prev,
+        );
+      } else {
+        // Still in-flight (edge case) or no prefetch — show spinner and await.
+        setGhostResultLoading(true);
+        const handPromise =
+          cache?.promise ??
+          nextDailyFritzHand({
+            attemptId: dailyFritzPackage.attempt_id,
+            verifiedMatchId: dailyFritzPackage.verified_match_id,
+            completedHandScores: {
+              you: match.players.you.score,
+              fritz: match.players.bot.score,
+            },
+          });
+        void handPromise
+          .then((response) => {
+            setHandReveal(null);
+            setMatch((prev) =>
+              prev.handOver && !prev.gameOver
+                ? {
+                    ...startNextFixedBotHand(prev, response.hand),
+                    opponentPassedOnEnds: [],
+                    opponentDrawCount: 0,
+                    opponentKnownMissing: [],
+                  }
+                : prev,
+            );
+            setGhostResultLoading(false);
+          })
+          .catch((err) => {
+            setGhostResultLoading(false);
+            setGhostResultError(err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.');
+          });
+      }
       return;
     }
     setHandReveal(null);
@@ -1864,6 +1944,24 @@ export default function BotMatchScreen({
       clearTimeout(timer);
     };
   }, [handReveal, match.gameOver, advanceHand, isGuidedMode]);
+
+  // Build learning summary when hand reveal appears (guided mode only)
+  useEffect(() => {
+    if (!isGuidedMode || !handReveal || match.gameOver) return;
+    coach.buildSummary(
+      handReveal.pointsAwarded,
+      match.players.you.score,
+      handReveal.winner === 'you',
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handReveal]);
+
+  // Reset per-hand learning state when a new hand begins (guided mode only)
+  useEffect(() => {
+    if (!isGuidedMode) return;
+    coach.resetHand();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match.handNumber]);
 
   useEffect(() => {
     if (!match.handOver || match.gameOver || handReveal || handRevealTimerRef.current) return;
@@ -2198,6 +2296,9 @@ export default function BotMatchScreen({
                   </div>
                 )}
               </div>
+            )}
+            {isGuidedMode && coach.handSummary && (
+              <LearningHandRecap summary={coach.handSummary} />
             )}
             {isGuidedMode ? (
               <button className="mode-inline-btn guided-next-hand-btn" onClick={advanceHand}>
@@ -2578,19 +2679,19 @@ export default function BotMatchScreen({
               <DominoTile tile={ghostPlayedTile} size={52} className="ghost-played-tile" />
             </div>
           )}
-          {isGuidedMode && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && coachTipText && (
-            <div className="coach-tip-card">
-              <div className="coach-tip-header">
-                <span className="coach-tip-icon">🎓</span>
-                <span className="coach-tip-label">Master Fritz</span>
-              </div>
-              <p className="coach-tip-text">{coachTipText}</p>
-              {!guidedCoachTip?.isOnlyPlay && guidedCoachTip && (
-                <button className="coach-tip-play-btn" onClick={playBestMove}>
-                  Play Best Move
-                </button>
-              )}
-            </div>
+          {isGuidedMode && (
+            <CoachPanel
+              preMoveRec={coach.preMoveRec}
+              preMoveEval={coach.preMoveEval}
+              postMoveFeedback={coach.postMoveFeedback}
+              postMoveEval={coach.postMoveEval}
+              onPlayBest={playBestMove}
+              onDismissFeedback={coach.dismissFeedback}
+              isOnlyPlay={guidedCoachTip?.isOnlyPlay ?? false}
+              currentPlayer={match.currentPlayer === 'you' ? 'you' : 'bot'}
+              turnIndex={match.turnIndex ?? 0}
+              debugMode={showDebug}
+            />
           )}
           <Board
             board={match.board}

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test:bot": "ts-node --esm src/bot/botHeuristics.behaviorTests.ts",
+    "debug:learn": "ts-node --esm src/learning/debugHarness.ts",
     "test:smoke:sockets": "node scripts/socketSmoke.mjs",
     "test:smoke:sockets:stress": "SMOKE_REPEAT=10 node scripts/socketSmoke.mjs",
     "ci:bot": "npm run test:bot && npm run build",
