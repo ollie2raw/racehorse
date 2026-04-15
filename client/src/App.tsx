@@ -33,6 +33,11 @@ import { useRoomSocketSync } from './multiplayer/useRoomSocketSync';
 import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
 import { useRenderProfiler } from './debug/renderProfiler';
+import {
+  loadAuthoringSession,
+  saveFrozenLesson,
+  loadFrozenLesson,
+} from './learn/guidedAuthoring';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -2424,7 +2429,9 @@ export default function App() {
             isAdmin={isAdmin}
             onStartGuidedGame={() => {
               setIsGuidedMode(true);
-              setBotFritzTier('rookie');
+              // Use elite Fritz if a frozen lesson exists (authored vs Elite Fritz)
+              const frozen = loadFrozenLesson();
+              setBotFritzTier(frozen ? 'elite' : 'rookie');
               setBotDealSize(7);
               setAppMode('bot');
             }}
@@ -2433,6 +2440,12 @@ export default function App() {
               setBotFritzTier('elite');
               setBotDealSize(7);
               setAppMode('bot');
+            }}
+            onFreezeLesson={() => {
+              const session = loadAuthoringSession();
+              if (session) {
+                saveFrozenLesson(session);
+              }
             }}
           />
         </Suspense>

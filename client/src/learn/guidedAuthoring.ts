@@ -20,6 +20,7 @@ import type { BotHandDeal } from '../bot/botEngine';
 export const AUTHORING_LESSON_ID = 'lesson-001';
 export const AUTHORING_GAME_ID = 'game-fixed-elite-001';
 export const AUTHORING_STORAGE_KEY = 'racehorse:guided-authoring:v1';
+export const FROZEN_LESSON_KEY = 'racehorse:guided-lesson:v1';
 
 /** Root seed shared by all hands in this lesson. Change to version a new game. */
 const AUTHORING_ROOT_SEED = 'guided-authoring-lesson-001';
@@ -108,10 +109,19 @@ export interface AuthoredStep {
   boardState: string;
   /** Player's hand BEFORE the move, as tile keys ("2|4") */
   playerHand: string[];
-  /** Tile played ("2|4"), "draw", or "pass"; null if step is note-only draft */
+  /**
+   * Tile played ("2|4" or "2|4:left" / "2|4:right" with position),
+   * "draw", "pass", or null if step is note-only draft.
+   */
   chosenMove: string | null;
   /** The coaching note the author wrote for this turn */
   coachingText: string;
+  /**
+   * JSON-stringified BotMatchState BEFORE the player's move.
+   * Stored so playback can reconstruct exact board state if needed.
+   * Optional — absent in sessions authored before this field was added.
+   */
+  matchStateJson?: string | null;
 }
 
 /**
@@ -160,4 +170,175 @@ export function clearAuthoringSession(): void {
   try {
     window.localStorage.removeItem(AUTHORING_STORAGE_KEY);
   } catch {}
+}
+
+// ─── Frozen Lesson (player-facing) ──────────────────────────────────────────
+
+/**
+ * A frozen lesson is an authored session that has been promoted for player
+ * playback. It is structurally identical to AuthoringSession but stored under
+ * a separate key so authoring never overwrites the live lesson.
+ */
+export type FrozenLesson = AuthoringSession;
+
+export function loadFrozenLesson(): FrozenLesson | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(FROZEN_LESSON_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as FrozenLesson;
+    if (!parsed.lessonId || !parsed.fixedGameId || !Array.isArray(parsed.steps)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveFrozenLesson(lesson: FrozenLesson): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(FROZEN_LESSON_KEY, JSON.stringify(lesson));
+  } catch {}
+}
+
+export function clearFrozenLesson(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(FROZEN_LESSON_KEY);
+  } catch {}
+}
+
+// ─── Admin debug ─────────────────────────────────────────────────────────────
+
+export interface LessonStepDebug {
+  stepIndex: number;
+  playerHand: string[];
+  chosenMove: string | null;
+  coachingTextPreview: string;
+  boardStatePreview: string;
+}
+
+export interface LessonDebugSummary {
+  storageKey: string;
+  present: boolean;
+  lessonId?: string;
+  fixedGameId?: string;
+  stepCount: number;
+  firstSteps: LessonStepDebug[];
+  /** Summary of the first step's matchStateJson (player hand, bot hand, board empty, scores) */
+  matchStateSummary?: {
+    playerHand: string[];
+    botHand: string[];
+    boardEmpty: boolean;
+    handNumber: number;
+    playerScore: number;
+    botScore: number;
+  } | null;
+}
+
+function debugSteps(steps: AuthoredStep[]): LessonStepDebug[] {
+  return steps.slice(0, 3).map((s) => ({
+    stepIndex: s.stepIndex,
+    playerHand: s.playerHand,
+    chosenMove: s.chosenMove,
+    coachingTextPreview: s.coachingText.slice(0, 120),
+    boardStatePreview: s.boardState.slice(0, 60),
+  }));
+}
+
+function parseMatchSummary(session: AuthoringSession): LessonDebugSummary['matchStateSummary'] {
+  // Try the first step's matchStateJson first, then the session's matchSnapshot
+  const firstStepJson = session.steps[0]?.matchStateJson;
+  const raw = firstStepJson ?? session.matchSnapshot;
+  if (!raw) return null;
+  try {
+    const m = JSON.parse(raw) as {
+      players?: {
+        you?: { hand?: Array<{ low: number; high: number }>; score?: number };
+        bot?: { hand?: Array<{ low: number; high: number }>; score?: number };
+      };
+      board?: { chain?: unknown[] };
+      handNumber?: number;
+    };
+    const toKeys = (hand: Array<{ low: number; high: number }> | undefined) =>
+      (hand ?? []).map((t) => `${t.low}|${t.high}`);
+    return {
+      playerHand: toKeys(m.players?.you?.hand),
+      botHand: toKeys(m.players?.bot?.hand),
+      boardEmpty: !m.board?.chain || (m.board.chain as unknown[]).length === 0,
+      handNumber: m.handNumber ?? 1,
+      playerScore: m.players?.you?.score ?? 0,
+      botScore: m.players?.bot?.score ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function readLessonDebug(): {
+  authoring: LessonDebugSummary;
+  frozen: LessonDebugSummary;
+} {
+  const authoringRaw = typeof window !== 'undefined'
+    ? window.localStorage.getItem(AUTHORING_STORAGE_KEY)
+    : null;
+  const frozenRaw = typeof window !== 'undefined'
+    ? window.localStorage.getItem(FROZEN_LESSON_KEY)
+    : null;
+
+  const parseSession = (raw: string | null): AuthoringSession | null => {
+    if (!raw) return null;
+    try {
+      const p = JSON.parse(raw) as AuthoringSession;
+      return p.lessonId && Array.isArray(p.steps) ? p : null;
+    } catch { return null; }
+  };
+
+  const authoring = parseSession(authoringRaw);
+  const frozen = parseSession(frozenRaw);
+
+  return {
+    authoring: {
+      storageKey: AUTHORING_STORAGE_KEY,
+      present: !!authoring,
+      lessonId: authoring?.lessonId,
+      fixedGameId: authoring?.fixedGameId,
+      stepCount: authoring?.steps.length ?? 0,
+      firstSteps: authoring ? debugSteps(authoring.steps) : [],
+      matchStateSummary: authoring ? parseMatchSummary(authoring) : null,
+    },
+    frozen: {
+      storageKey: FROZEN_LESSON_KEY,
+      present: !!frozen,
+      lessonId: frozen?.lessonId,
+      fixedGameId: frozen?.fixedGameId,
+      stepCount: frozen?.steps.length ?? 0,
+      firstSteps: frozen ? debugSteps(frozen.steps) : [],
+      matchStateSummary: frozen ? parseMatchSummary(frozen) : null,
+    },
+  };
+}
+
+/**
+ * Compact the frozen lesson in-place:
+ *   1. Remove all draft steps (chosenMove === null) — these are stale Note-Only saves
+ *      that were never superseded by a real tile-play because the stepIdx shifted.
+ *   2. Re-index the remaining steps so stepIndex === position in the cleaned array.
+ *   3. Persist the repaired lesson back to localStorage.
+ *
+ * Returns the number of draft steps that were removed, or null if no lesson exists.
+ */
+export function compactFrozenLesson(): number | null {
+  if (typeof window === 'undefined') return null;
+  const lesson = loadFrozenLesson();
+  if (!lesson) return null;
+
+  const before = lesson.steps.length;
+  const cleaned = lesson.steps
+    .filter((s) => s.chosenMove !== null)
+    .map((s, i) => ({ ...s, stepIndex: i }));
+  const removed = before - cleaned.length;
+
+  saveFrozenLesson({ ...lesson, steps: cleaned, currentStepIndex: cleaned.length });
+  return removed;
 }

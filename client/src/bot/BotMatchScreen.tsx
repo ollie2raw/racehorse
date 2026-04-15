@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import confetti from 'canvas-confetti';
 import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from '../components';
 import TileRack from '../components/TileRack';
-import type { Move, Tile } from '../types';
+import type { BoardState, BranchArm, HubDouble, Move, PlacedTile, PlacementPosition, Tile } from '../types';
 import {
   fetchDailyPuzzleLeaderboard,
   upsertDailyPuzzleBestScore,
@@ -27,6 +27,7 @@ import {
   getMatchableOpenEnds,
   getDisplayOpenEnds,
   getLegalMoves,
+  getPlacementTargetsForTile,
   isDouble,
   passTurn,
   previewPlayMove,
@@ -51,6 +52,7 @@ import {
 } from '../ghost/api';
 import {
   isSameResolvedMove,
+  parseTileKey,
   resolveGhostMove,
   serializeGhostBoardState,
   toTileKey,
@@ -73,6 +75,7 @@ import {
   buildDailyFritzCompletionHash,
   completeDailyFritz,
   nextDailyFritzHand,
+  DailyFritzEndOfRunError,
   type DailyFritzLeaderboardRow,
   type DailyFritzNextHandResponse,
   type DailyFritzStartResponse,
@@ -83,14 +86,17 @@ import CoachPanel from '../learning/CoachPanel';
 import LearningHandRecap from '../learning/LearningHandRecap';
 import '../learning/coach.css';
 import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
+import LessonCoachPanel from '../learn/LessonCoachPanel';
 import {
   AUTHORING_GAME_ID,
   AUTHORING_LESSON_ID,
   generateAuthoringHandDeal,
   loadAuthoringSession,
   saveAuthoringSession,
+  loadFrozenLesson,
   type AuthoredStep,
   type AuthoringSession,
+  type FrozenLesson,
 } from '../learn/guidedAuthoring';
 
 interface BotMatchScreenProps {
@@ -264,6 +270,88 @@ function moveEntriesToGhostMoveLog(entries: MoveEntry[]): GhostMoveLogEntry[] {
     }));
 }
 
+/**
+ * Deserialize a serialized boardState string back to a renderable BoardState.
+ * Returns null for an empty / missing board (same sentinel as BotMatchState.board).
+ */
+/**
+ * Deserialize a board state string produced by serializeGhostBoardState().
+ *
+ * serializeGhostBoardState() does NOT produce a raw BoardState JSON — it uses a
+ * compressed wire format where:
+ *   - hubDoubles is stored under the key "hubs"
+ *   - PlacedTile.tile is stored as [low, high] number arrays, not {low, high} objects
+ *
+ * A raw JSON.parse cast therefore produces a structurally incorrect BoardState:
+ *   board.hubDoubles === undefined  → crashes getOpenEnds (board.hubDoubles.length)
+ *   board.mainLine[n].tile         → is an array, not a Tile object
+ *
+ * This function performs the structural remapping so the returned BoardState
+ * is fully compatible with botEngine / getLegalMoves / getOpenEnds.
+ */
+function parseGuidedBoardState(boardState: string): BoardState | null {
+  if (!boardState || boardState === 'board:empty') return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = JSON.parse(boardState) as any;
+
+    // Remap mainLine: tile arrays [low, high] → { low, high }
+    const mainLine: PlacedTile[] = (raw.mainLine ?? []).map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (placed: any): PlacedTile => ({
+        orientation: placed.orientation,
+        tile: Array.isArray(placed.tile)
+          ? { low: placed.tile[0] as number, high: placed.tile[1] as number }
+          : (placed.tile as Tile),
+      }),
+    );
+
+    // Remap hubs → hubDoubles; remap branch tiles the same way
+    const hubDoubles: HubDouble[] = (raw.hubs ?? raw.hubDoubles ?? []).map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (hub: any): HubDouble => ({
+        hubId:           hub.hubId,
+        laneType:        hub.laneType,
+        laneRef:         hub.laneRef,
+        branchDepth:     hub.branchDepth,
+        tileIndex:       hub.tileIndex,
+        mainlineIndex:   hub.mainlineIndex,
+        hubValue:        hub.hubValue,
+        leftSideFilled:  Boolean(hub.leftSideFilled),
+        rightSideFilled: Boolean(hub.rightSideFilled),
+        isCrossed:       Boolean(hub.isCrossed),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        branches: (hub.branches ?? []).map((branch: any): BranchArm | null =>
+          branch
+            ? {
+                openEnd:         branch.openEnd,
+                openEndIsDouble: Boolean(branch.openEndIsDouble),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                tiles: (branch.tiles ?? []).map((placed: any): PlacedTile => ({
+                  orientation: placed.orientation,
+                  tile: Array.isArray(placed.tile)
+                    ? { low: placed.tile[0] as number, high: placed.tile[1] as number }
+                    : (placed.tile as Tile),
+                })),
+              }
+            : null,
+        ) as BranchArm[],
+      }),
+    );
+
+    return {
+      mainLine,
+      leftEnd:          raw.leftEnd,
+      rightEnd:         raw.rightEnd,
+      leftEndIsDouble:  Boolean(raw.leftEndIsDouble),
+      rightEndIsDouble: Boolean(raw.rightEndIsDouble),
+      hubDoubles,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function BotMatchScreen({
   onBack,
   dealSize,
@@ -354,6 +442,54 @@ export default function BotMatchScreen({
   const handAreaRef = useRef<HTMLDivElement>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
+  const [frozenLesson] = useState<FrozenLesson | null>(() => {
+    if (!isGuidedMode) return null;
+    // Primary: explicitly frozen lesson
+    const frozen = loadFrozenLesson();
+    if (frozen) {
+      // ── [guided-debug] log step0 hand and attempt matchStateJson parse ──────
+      console.log('[guided-debug] frozen step0 hand =', frozen.steps[0]?.playerHand ?? []);
+      const firstReal = frozen.steps.find((s) => s.chosenMove !== null);
+      if (firstReal?.matchStateJson) {
+        try {
+          const ms = JSON.parse(firstReal.matchStateJson) as BotMatchState;
+          console.log(
+            '[guided-debug] parsed matchStateJson hand =',
+            ms.players.you.hand.map((t) => `${t.low}|${t.high}`),
+          );
+        } catch {
+          console.warn('[guided-debug] matchStateJson present but failed to parse');
+        }
+      } else {
+        console.warn(
+          '[guided-debug] matchStateJson absent or null on firstRealStep',
+          '— seeded PRNG fallback will run',
+          'firstRealStep.stepIndex:', firstReal?.stepIndex,
+        );
+      }
+      return frozen;
+    }
+    // Fallback: use the live authoring session as the lesson if it exists and
+    // has actual authored steps with moves. This lets the admin verify the
+    // correct game in guided mode before ever clicking "Freeze as Lesson".
+    const authoring = loadAuthoringSession();
+    if (authoring && authoring.steps.some((s) => s.chosenMove !== null)) {
+      console.log('[guided-debug] frozen step0 hand = (authoring fallback)', authoring.steps[0]?.playerHand ?? []);
+      return authoring;
+    }
+    return null;
+  });
+
+  /**
+   * Which source was used to init the guided match — written during the match
+   * useState lazy init so it's available by first render without a re-render.
+   * 'snapshot'       = boardState + playerHand from authored step 0 (preferred).
+   * 'matchStateJson' = full BotMatchState from authored step (legacy path).
+   * 'seeded-deal'    = PRNG fallback; may be WRONG if authoring used different seed.
+   * 'random'         = no frozen lesson; full random match.
+   */
+  const guidedInitSourceRef = useRef<'snapshot' | 'matchStateJson' | 'seeded-deal' | 'random' | null>(null);
+
   const [match, setMatch] = useState<BotMatchState>(() => {
     if (isAuthoringMode) {
       // Try to resume from a saved authoring session
@@ -367,6 +503,65 @@ export default function BotMatchScreen({
       }
       return createFixedBotMatch(generateAuthoringHandDeal(0), 60, 7);
     }
+
+    if (isGuidedMode && frozenLesson) {
+      const firstReal = frozenLesson.steps.find((s) => s.chosenMove !== null);
+
+      // ── PRIMARY: snapshot-driven init from authored boardState + playerHand ──
+      // These fields are ALWAYS written by recordAuthoringStep regardless of
+      // whether matchStateJson was captured.  boardState = board before player's
+      // first turn; playerHand = player's hand before player's first turn.
+      if (firstReal?.boardState && firstReal.playerHand.length > 0) {
+        const board = parseGuidedBoardState(firstReal.boardState);
+        const playerTiles = firstReal.playerHand
+          .map((k) => parseTileKey(k))
+          .filter((t): t is Tile => t !== null);
+        // Use seeded deal to supply bot hand + boneyard; they won't be used in
+        // snapshot mode since bot turns are skipped entirely.
+        const handIdx = Math.max(0, (firstReal.handNumber ?? 1) - 1);
+        const seededDeal = generateAuthoringHandDeal(handIdx);
+        const baseMatch = createFixedBotMatch(seededDeal, 60, 7);
+        guidedInitSourceRef.current = 'snapshot';
+        console.log('[guided-debug] restored snapshot hand =', playerTiles.map((t) => `${t.low}|${t.high}`));
+        console.log('[guided-init] source=snapshot boardState+playerHand from step', firstReal.stepIndex);
+        return {
+          ...baseMatch,
+          board,
+          players: {
+            ...baseMatch.players,
+            you: { ...baseMatch.players.you, hand: playerTiles },
+          },
+          handNumber: firstReal.handNumber ?? 1,
+          currentPlayer: 'you',
+          handOver: false,
+          gameOver: false,
+        };
+      }
+
+      // ── SECONDARY: matchStateJson (legacy, for sessions that recorded it) ───
+      if (firstReal?.matchStateJson) {
+        try {
+          const restored = JSON.parse(firstReal.matchStateJson) as BotMatchState;
+          guidedInitSourceRef.current = 'matchStateJson';
+          console.log('[guided-debug] restored snapshot hand =', restored.players.you.hand.map((t) => `${t.low}|${t.high}`));
+          console.log('[guided-init] source=matchStateJson step', firstReal.stepIndex);
+          return restored;
+        } catch {
+          console.warn('[guided-init] matchStateJson parse failed — falling back to seeded deal');
+        }
+      }
+
+      // ── FALLBACK: seeded PRNG deal (last resort) ─────────────────────────────
+      guidedInitSourceRef.current = 'seeded-deal';
+      console.warn('[guided-init] source=seeded-deal — no boardState/matchStateJson found; hand may be wrong');
+      return createFixedBotMatch(generateAuthoringHandDeal(0), 60, 7);
+    }
+
+    if (isGuidedMode && !frozenLesson) {
+      guidedInitSourceRef.current = 'random';
+      console.log('[guided-init] source=random (no frozen lesson found)');
+    }
+
     return (
       initialPersistedDailyFritzMatch?.match ??
       initialPersistedLeagueMatch?.match ??
@@ -450,6 +645,12 @@ export default function BotMatchScreen({
   const matchCompleteKeyRef = useRef('');
   const ghostCompleteKeyRef = useRef('');
   const dailyFritzCompleteKeyRef = useRef('');
+  const dailyFritzSubmitSucceededRef = useRef(false);
+  // One-way guard: set to true when advanceHand starts, reset on success or fatal error.
+  // Prevents overlapping hand-transition calls (e.g. from watchdog + 5s timer firing together).
+  const handTransitionInFlightRef = useRef(false);
+  // Last-label ref for the Daily Fritz debug overlay — updated on every major transition.
+  const lastDailyFlowLabelRef = useRef('init');
   const dailyFritzStorageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dailyFritzStoragePendingRef = useRef<{ key: string; payload: object } | null>(null);
   const dailyFritzNextHandRef = useRef<{
@@ -464,27 +665,56 @@ export default function BotMatchScreen({
   const localPendingResolvedRef = useRef(false);
   const accessTokenRef = useRef<string | null>(null);
 
+  // ── Guided Lesson state (player-facing, reads frozenLesson) ──────────────
+  /** Tracks how many player turns have been completed in the lesson */
+  const [lessonStepIndex, setLessonStepIndex] = useState(0);
+
   // ── Guided Authoring state (admin-only, no server calls) ─────────────────
   const [authoringSteps, setAuthoringSteps] = useState<AuthoredStep[]>(() => {
     if (!isAuthoringMode) return [];
     return loadAuthoringSession()?.steps ?? [];
   });
   const [authoringNoteText, setAuthoringNoteText] = useState('');
-  /** Snapshot of board + hand captured at the START of each player turn */
+  /**
+   * Snapshot captured at the START of each player turn.
+   * stepIdx is locked here so Save-Note presses (which lengthen authoringSteps)
+   * cannot shift the stepIndex used when the tile is eventually played.
+   */
   const authoringPreMoveRef = useRef<{
     boardState: string;
     playerHand: string[];
     handNumber: number;
+    matchStateJson: string;
+    /** Step index frozen at turn-start — do NOT recompute from authoringSteps.length */
+    stepIdx: number;
   } | null>(null);
 
   const isGhostMode = mode === 'ghost';
   const isDailyFritzMode = mode === 'daily-fritz';
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const isLeagueMatch = Boolean(onMatchComplete && resumeKey);
-  const isStandaloneFritzMatch = Boolean(userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode && !onMatchComplete);
+  const isStandaloneFritzMatch = Boolean(
+    userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode && !onMatchComplete
+    && !isGuidedMode && !isAuthoringMode
+  );
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
+
+  /**
+   * Snapshot-driven guided playback is active when:
+   *   • we are in guided mode with a frozen lesson, AND
+   *   • the match was initialised from authored boardState + playerHand (source=snapshot)
+   *
+   * In this mode:
+   *   • The bot never runs its AI — instead, after the player plays, the match
+   *     state is overwritten with the NEXT authored step's boardState + playerHand.
+   *   • The player always sees the exact tiles and board from the authored lesson.
+   *   • draw / pass sequences are suppressed because authored steps should always
+   *     have at least one legal tile play available.
+   */
+  const isGuidedSnapshotMode =
+    isGuidedMode && frozenLesson !== null && guidedInitSourceRef.current === 'snapshot';
 
   // ── Learning coach (guided mode only) ────────────────────────────────────
   const coach = useLearningCoach({
@@ -588,13 +818,18 @@ export default function BotMatchScreen({
   // ── Authoring: capture pre-move snapshot when player's turn starts ────────
   useEffect(() => {
     if (!isAuthoringMode || match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+    // IMPORTANT: compute stepIdx HERE (at turn-start) and lock it into the ref.
+    // Both recordAuthoringStep and saveAuthoringNoteOnly must use pre.stepIdx,
+    // NOT authoringSteps.length at call-time — which shifts after every Save-Note press.
+    const stepIdx = authoringSteps.length;
     authoringPreMoveRef.current = {
       boardState: serializeGhostBoardState(match.board),
       playerHand: match.players.you.hand.map(toTileKey),
       handNumber: match.handNumber,
+      matchStateJson: JSON.stringify(match),
+      stepIdx,
     };
     // Load any existing note for this step index (handles reload mid-session)
-    const stepIdx = authoringSteps.length;
     const existing = authoringSteps.find((s) => s.stepIndex === stepIdx);
     setAuthoringNoteText(existing?.coachingText ?? '');
   }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -611,6 +846,85 @@ export default function BotMatchScreen({
     };
     saveAuthoringSession(session);
   }, [isAuthoringMode, authoringSteps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── [guided-debug] Log final rendered match hand after first mount ──────────
+  // This fires once after React commits the initial state to the DOM.
+  // Compare with [guided-debug] frozen step0 hand to detect mismatch.
+  useEffect(() => {
+    if (!isGuidedMode) return;
+    console.log(
+      '[guided-debug] final rendered match hand =',
+      match.players.you.hand.map((t) => `${t.low}|${t.high}`),
+    );
+    console.log(
+      '[guided-debug] init source =', guidedInitSourceRef.current,
+      '| currentPlayer =', match.currentPlayer,
+    );
+    if (frozenLesson) {
+      const frozenStep0 = frozenLesson.steps[0]?.playerHand ?? [];
+      const renderedKeys = match.players.you.hand.map((t) => `${t.low}|${t.high}`).slice().sort().join(',');
+      const frozenKeys = frozenStep0.slice().sort().join(',');
+      if (renderedKeys !== frozenKeys) {
+        console.error(
+          '[guided-debug] ✗ HAND MISMATCH — rendered hand does NOT match frozen step0 hand.',
+          'rendered:', match.players.you.hand.map((t) => `${t.low}|${t.high}`),
+          'frozen step0:', frozenStep0,
+          'source:', guidedInitSourceRef.current,
+        );
+      } else {
+        console.log('[guided-debug] ✓ hands match — rendered hand matches frozen step0 hand');
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Snapshot mode: advance to next authored step instead of running the bot ─
+  // Fires synchronously when the match transitions to bot's turn in snapshot mode.
+  // Overwrites board + player hand with the next authored step's stored snapshots,
+  // then immediately hands control back to the player.  Bot AI never runs.
+  useEffect(() => {
+    if (!isGuidedSnapshotMode || !frozenLesson) return;
+    if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver) return;
+
+    // Real steps only (chosenMove !== null); after compactFrozenLesson these ARE
+    // all the steps, but filter defensively in case compact hasn't been run yet.
+    const realSteps = frozenLesson.steps.filter((s) => s.chosenMove !== null);
+    const nextStep = realSteps[lessonStepIndex]; // lessonStepIndex was already incremented after player's move
+
+    if (!nextStep) {
+      // No more authored steps — lesson is complete.
+      // Leave the match state as the live engine produced it; don't call bot.
+      return;
+    }
+
+    const board = parseGuidedBoardState(nextStep.boardState);
+    const playerTiles = nextStep.playerHand
+      .map((k) => parseTileKey(k))
+      .filter((t): t is Tile => t !== null);
+
+    console.log(
+      '[guided-snapshot] advance to step', nextStep.stepIndex,
+      'hand:', playerTiles.map((t) => `${t.low}|${t.high}`),
+    );
+    console.log('[guided-snapshot] board shape after advance =', {
+      mainLineLen: board?.mainLine?.length ?? '(null board)',
+      hubDoublesLen: board?.hubDoubles?.length ?? '(null board)',
+      leftEnd: board?.leftEnd,
+      rightEnd: board?.rightEnd,
+    });
+
+    setMatch((prev) => ({
+      ...prev,
+      board,
+      players: {
+        ...prev.players,
+        you: { ...prev.players.you, hand: playerTiles },
+        // Bot hand left as-is — it won't be used since bot never plays in snapshot mode
+      },
+      handNumber: nextStep.handNumber ?? prev.handNumber,
+      currentPlayer: 'you',
+      handOver: false,
+    }));
+  }, [isGuidedSnapshotMode, frozenLesson, match.currentPlayer, match.handOver, match.gameOver, lessonStepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const lastUserMoveNumber = moveLog.reduce(
@@ -638,6 +952,62 @@ export default function BotMatchScreen({
       if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
     };
   }, []);
+
+  // ── Daily Fritz lifecycle logging ──────────────────────────────────────────
+  useEffect(() => {
+    if (!isDailyFritzMode) return;
+    lastDailyFlowLabelRef.current = 'match-init';
+    console.log('[daily-flow] match init', {
+      handNumber: match.handNumber,
+      currentPlayer: match.currentPlayer,
+      attemptId: dailyFritzPackage?.attempt_id ?? null,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isDailyFritzMode) return;
+    lastDailyFlowLabelRef.current = 'hand-init';
+    console.log('[daily-flow] hand init', {
+      handNumber: match.handNumber,
+      yourScore: match.players.you.score,
+      botScore: match.players.bot.score,
+      currentPlayer: match.currentPlayer,
+      prefetchReady: dailyFritzNextHandRef.current?.result != null,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match.handNumber]);
+
+  useEffect(() => {
+    if (!isDailyFritzMode) return;
+    if (match.handOver || match.gameOver) return;
+    if (match.currentPlayer === 'you') {
+      lastDailyFlowLabelRef.current = 'player-turn';
+      console.log('[daily-flow] player turn start', {
+        handNumber: match.handNumber,
+        yourScore: match.players.you.score,
+        botScore: match.players.bot.score,
+      });
+    } else {
+      lastDailyFlowLabelRef.current = 'bot-turn';
+      console.log('[daily-flow] bot turn start', {
+        handNumber: match.handNumber,
+        yourScore: match.players.you.score,
+        botScore: match.players.bot.score,
+      });
+    }
+  }, [match.currentPlayer, match.handOver, match.gameOver, match.handNumber]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!isDailyFritzMode || !match.gameOver) return;
+    lastDailyFlowLabelRef.current = 'match-complete';
+    console.log('[daily-flow] match complete', {
+      handNumber: match.handNumber,
+      yourScore: match.players.you.score,
+      botScore: match.players.bot.score,
+      winnerId: match.winnerId,
+    });
+  }, [match.gameOver]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -1052,12 +1422,27 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     if (!isDailyFritzMode || !dailyFritzPackage || !userId) return;
+
     if (!match.gameOver) {
-      dailyFritzCompleteKeyRef.current = '';
-      setGhostResultLoading(false);
-      setGhostResultError(null);
+      console.log('[daily-complete] modal state = not-game-over');
+      // Only reset guards when game is genuinely not over (e.g. mid-game).
+      // Never reset if we already succeeded — completion is one-way.
+      if (!dailyFritzSubmitSucceededRef.current) {
+        dailyFritzCompleteKeyRef.current = '';
+        setGhostResultLoading(false);
+        setGhostResultError(null);
+      }
       return;
     }
+
+    // Permanent guard: once submission succeeded, never submit again.
+    if (dailyFritzSubmitSucceededRef.current) {
+      console.log('[daily-complete] modal state = already-succeeded (permanent guard)');
+      return;
+    }
+
+    console.log('[daily-complete] game over reached');
+
     const completionKey = [
       dailyFritzPackage.attempt_id,
       match.handNumber,
@@ -1065,10 +1450,22 @@ export default function BotMatchScreen({
       match.players.bot.score,
       movesUsed,
     ].join(':');
-    if (dailyFritzCompleteKeyRef.current === completionKey) return;
+
+    // Per-run dedup guard: same key means we already kicked off this exact submission.
+    if (dailyFritzCompleteKeyRef.current === completionKey) {
+      console.log('[daily-complete] modal state = dedup-skipped key=' + completionKey);
+      return;
+    }
     dailyFritzCompleteKeyRef.current = completionKey;
+
+    console.log('[daily-complete] submit start key=' + completionKey);
+    console.log('[daily-flow] submit start', { key: completionKey, handNumber: match.handNumber, yourScore: match.players.you.score, botScore: match.players.bot.score });
     setGhostResultLoading(true);
     setGhostResultError(null);
+
+    // Capture the moveLog value synchronously at submission time so that
+    // async dep changes to moveLog cannot affect this in-flight request.
+    const capturedMoveLog = moveLog;
 
     void (async () => {
       if (isGuidedMode || isAuthoringMode) {
@@ -1086,7 +1483,7 @@ export default function BotMatchScreen({
           won: match.winnerId === 'you',
           movesUsed,
           handsPlayed: match.handNumber,
-          moveLog,
+          moveLog: capturedMoveLog,
         });
         const response = await completeDailyFritz({
           attemptId: dailyFritzPackage.attempt_id,
@@ -1097,15 +1494,28 @@ export default function BotMatchScreen({
           won: match.winnerId === 'you',
           movesUsed,
           handsPlayed: match.handNumber,
-          moveLog,
+          moveLog: capturedMoveLog,
         });
+        // Mark permanent success BEFORE any setState so that no re-run can
+        // start a second submission even if React re-runs this effect.
+        dailyFritzSubmitSucceededRef.current = true;
+        console.log('[daily-complete] submit success');
+        console.log('[daily-flow] submit success', { key: completionKey, rank: response.rank ?? null });
         setDailyFritzLeaderboard(response.leaderboard_preview);
         setDailyFritzRank(response.rank ?? null);
         setGhostResultLoading(false);
+        console.log('[daily-complete] modal state = complete');
       } catch (err) {
-        dailyFritzCompleteKeyRef.current = '';
+        // Do NOT reset dailyFritzCompleteKeyRef here. Resetting it was the
+        // root cause of the infinite retry loop: error → key reset → dep
+        // change (moveLog) → re-run → another submit → same error → loop.
+        // Instead, leave the key set so no further submission attempt fires.
+        const errMsg = err instanceof Error ? err.message : 'Daily Fritz submission failed.';
+        console.log('[daily-complete] submit error', errMsg);
+        console.log('[daily-flow] submit error', { key: completionKey, error: errMsg });
         setGhostResultLoading(false);
-        setGhostResultError(err instanceof Error ? err.message : 'Daily Fritz submission failed.');
+        setGhostResultError(errMsg);
+        console.log('[daily-complete] modal state = error');
       }
     })();
   }, [
@@ -1116,9 +1526,12 @@ export default function BotMatchScreen({
     match.players.bot.score,
     match.players.you.score,
     match.winnerId,
-    moveLog,
+    // moveLog intentionally excluded: it changes asynchronously after game
+    // over (late appendMove calls) and would cause spurious re-runs of this
+    // effect. We capture moveLog synchronously at submission time instead.
     movesUsed,
-    onDailyFritzComplete,
+    // onDailyFritzComplete intentionally excluded: it is not used in this
+    // effect body and was causing spurious re-runs on parent re-renders.
     userId,
   ]);
 
@@ -1255,14 +1668,83 @@ export default function BotMatchScreen({
   ]);
 
   const userLegalMoves = useMemo(() => {
-    return match.currentPlayer === 'you' ? getLegalMoves(match, 'you') : [];
-  }, [match]);
+    // ── Guided snapshot mode: derive selectable moves from the authored step ONLY ──
+    // The live engine must not run here — the snapshot board is placed from stored
+    // authored data and its open ends may not match the live game that produced the
+    // original authored session, producing nonsensical highlights for unrelated tiles.
+    if (isGuidedSnapshotMode && frozenLesson) {
+      const realSteps = frozenLesson.steps.filter((s) => s.chosenMove !== null);
+      const step = realSteps[lessonStepIndex] ?? null;
+      const stepChosenMove = step?.chosenMove ?? null;
+
+      console.log('[guided-playback] current step chosenMove =', stepChosenMove);
+
+      if (!stepChosenMove || stepChosenMove === 'draw' || stepChosenMove === 'pass') {
+        console.log('[guided-playback] live legal moves skipped = true (no play-type chosenMove)');
+        console.log('[guided-playback] rendered selectable tiles =', []);
+        return [];
+      }
+
+      const colonIdx = stepChosenMove.indexOf(':');
+      const tileKeyRaw = colonIdx >= 0 ? stepChosenMove.slice(0, colonIdx) : stepChosenMove;
+      const positionRaw =
+        colonIdx >= 0 ? (stepChosenMove.slice(colonIdx + 1) as PlacementPosition) : null;
+      const parsedTile = parseTileKey(tileKeyRaw);
+
+      if (!parsedTile) {
+        console.log('[guided-playback] live legal moves skipped = true (tile key parse failed)');
+        console.log('[guided-playback] rendered selectable tiles =', []);
+        return [];
+      }
+
+      // If the authored move records an explicit position ("3|5:right"), restrict
+      // highlighting to exactly that side.  If no position was recorded, enumerate
+      // all positions where the tile is legally placeable on the snapshot board so
+      // the player can still click to confirm the play.
+      let positions: PlacementPosition[];
+      if (positionRaw) {
+        positions = [positionRaw];
+      } else {
+        try {
+          positions = getPlacementTargetsForTile(match.board, parsedTile);
+        } catch {
+          positions = ['left'];
+        }
+        if (positions.length === 0) positions = ['left'];
+      }
+
+      const authoredMoves: Move[] = positions.map((pos) => ({
+        type: 'play' as const,
+        tile: parsedTile,
+        position: pos,
+      }));
+
+      console.log('[guided-playback] live legal moves skipped = true');
+      console.log('[guided-playback] rendered selectable tiles =', [tileKeyRaw]);
+      return authoredMoves;
+    }
+
+    // ── Normal mode: live engine ──
+    if (match.currentPlayer !== 'you') return [];
+    console.log('[guided-playback] live legal moves skipped = false');
+    try {
+      return getLegalMoves(match, 'you');
+    } catch (e) {
+      // Safety guard: a malformed board must never crash the render.
+      console.error('[guided-snapshot] getLegalMoves threw — board may be malformed:', e, 'board:', match.board);
+      return [];
+    }
+  }, [match, isGuidedSnapshotMode, frozenLesson, lessonStepIndex]);
   const userPlayMoves = useMemo(() => asPlayMoves(userLegalMoves), [userLegalMoves]);
 
   // Guided mode: evaluate all play moves using previewPlayMove (unified scoring source),
   // then recommend the best placement with opening-move awareness.
   const guidedCoachTip = useMemo((): GuidedCoachTip | null => {
     if (!isGuidedMode || match.currentPlayer !== 'you' || match.handOver || match.gameOver) return null;
+    // In snapshot mode the LessonCoachPanel drives best-move via authored chosenMove.
+    // Suppress all live AI tip computation — it would recommend the engine's choice,
+    // not the authored lesson move.
+    if (isGuidedSnapshotMode) return null;
     if (userPlayMoves.length === 0) return null;
 
     // Evaluate ALL play moves via previewPlayMove — single source of truth for scoring
@@ -1402,6 +1884,10 @@ export default function BotMatchScreen({
   // Per-tile max points for green/gold highlighting — uses same previewPlayMove as coach tip
   const guidedScoringTiles = useMemo((): Map<string, number> => {
     if (!isGuidedMode || match.currentPlayer !== 'you') return new Map();
+    // In snapshot mode, scoring badges come from live engine previews against the snapshot
+    // board — those points are meaningless in the context of the authored lesson.  Hide all
+    // score badges; only the authored tile highlight matters.
+    if (isGuidedSnapshotMode) return new Map();
     const map = new Map<string, number>();
     for (const move of userPlayMoves) {
       if (!move.tile) continue;
@@ -1414,6 +1900,34 @@ export default function BotMatchScreen({
     }
     return map;
   }, [isGuidedMode, match, userPlayMoves]);
+
+  /**
+   * The authored step that matches the current board position.
+   *
+   * PRIMARY lookup: boardState match (preferred over stepIndex matching) so that
+   * stale draft steps in the frozen lesson — which share a boardState with the
+   * real authored step but have chosenMove===null — are skipped automatically.
+   * FALLBACK: stepIndex match, then any step.
+   *
+   * This makes LessonCoachPanel correct even if the frozen lesson was authored
+   * before the stepIdx-locking fix and contains null-chosenMove drafts.
+   */
+  const currentLessonStep = useMemo(() => {
+    if (!isGuidedMode || !frozenLesson || match.currentPlayer !== 'you' || match.handOver || match.gameOver) {
+      return null;
+    }
+    const currentBoardKey = serializeGhostBoardState(match.board);
+    // Prefer a real step (chosenMove !== null) whose boardState matches
+    const realByBoard = frozenLesson.steps.find(
+      (s) => s.boardState === currentBoardKey && s.chosenMove !== null,
+    );
+    if (realByBoard) return realByBoard;
+    // Fall back to stepIndex match (post-compact, these should be aligned)
+    const byIndex = frozenLesson.steps.find((s) => s.stepIndex === lessonStepIndex);
+    if (byIndex) return byIndex;
+    // Last resort: any board-state match (including null-chosenMove drafts)
+    return frozenLesson.steps.find((s) => s.boardState === currentBoardKey) ?? null;
+  }, [isGuidedMode, frozenLesson, match.currentPlayer, match.board, match.handOver, match.gameOver, lessonStepIndex]);
 
   const ghostSuggestedPlayerMove = useMemo(
     () =>
@@ -1469,6 +1983,24 @@ export default function BotMatchScreen({
       };
     });
     if (result.handEnded) {
+      if (isDailyFritzMode) {
+        lastDailyFlowLabelRef.current = 'hand-complete';
+        console.log('[daily-flow] hand complete detected', {
+          handNumber: adjustedState.handNumber,
+          winner: result.handEnded.winner,
+          reason: result.handEnded.reason,
+          pointsAwarded: result.handEnded.pointsAwarded,
+          yourScore: adjustedState.players.you.score,
+          botScore: adjustedState.players.bot.score,
+          isGameOver: adjustedState.gameOver,
+        });
+        console.log('[daily-flow] hand scoring applied', {
+          pointsAwarded: result.handEnded.pointsAwarded,
+          winner: result.handEnded.winner,
+          yourScore: adjustedState.players.you.score,
+          botScore: adjustedState.players.bot.score,
+        });
+      }
       // Kick off the next-hand fetch immediately so it's ready by the time the
       // 5-second reveal window closes.  Store both the promise and its settled
       // result so advanceHand can transition instantly if already resolved.
@@ -1498,6 +2030,14 @@ export default function BotMatchScreen({
       const botRemainingTiles = adjustedState.players.bot.hand;
       if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
       handRevealTimerRef.current = window.setTimeout(() => {
+        if (isDailyFritzMode) {
+          lastDailyFlowLabelRef.current = 'reveal-start';
+          console.log('[daily-flow] reveal start', {
+            handNumber: adjustedState.handNumber,
+            handTransitionInFlight: handTransitionInFlightRef.current,
+            prefetchReady: dailyFritzNextHandRef.current?.result != null,
+          });
+        }
         setHandReveal({
           winner: handEndedData.winner,
           reason: handEndedData.reason,
@@ -1600,13 +2140,15 @@ export default function BotMatchScreen({
   /**
    * Authoring: record the current player turn as an authored step.
    * Called whenever the player completes an action (play, draw-to-pass, pass).
-   * @param chosenMove  Tile key ("2|4"), "draw", or "pass"
+   * @param chosenMove  Tile key ("2|4" or "2|4:left"), "draw", or "pass"
    */
   const recordAuthoringStep = useCallback(
     (chosenMove: string | null) => {
       if (!isAuthoringMode) return;
       const pre = authoringPreMoveRef.current;
-      const stepIdx = authoringSteps.length;
+      // Use the stepIdx locked at turn-start, not authoringSteps.length which shifts
+      // each time Save-Note is pressed during this turn.
+      const stepIdx = pre?.stepIdx ?? authoringSteps.length;
       const newStep: AuthoredStep = {
         stepIndex: stepIdx,
         handNumber: pre?.handNumber ?? match.handNumber,
@@ -1614,6 +2156,7 @@ export default function BotMatchScreen({
         playerHand: pre?.playerHand ?? match.players.you.hand.map(toTileKey),
         chosenMove,
         coachingText: authoringNoteText,
+        matchStateJson: pre?.matchStateJson ?? null,
       };
       setAuthoringSteps((prev) => {
         // Replace if same stepIndex already exists (e.g. note-only save followed by play)
@@ -1636,7 +2179,8 @@ export default function BotMatchScreen({
   const saveAuthoringNoteOnly = useCallback(() => {
     if (!isAuthoringMode) return;
     const pre = authoringPreMoveRef.current;
-    const stepIdx = authoringSteps.length;
+    // Use the stepIdx locked at turn-start, not authoringSteps.length.
+    const stepIdx = pre?.stepIdx ?? authoringSteps.length;
     const draftStep: AuthoredStep = {
       stepIndex: stepIdx,
       handNumber: pre?.handNumber ?? match.handNumber,
@@ -1674,7 +2218,11 @@ export default function BotMatchScreen({
     setMovesUsed((prev) => prev + 1);
     coach.recordPlayerMove(match, move);
     if (isAuthoringMode && move.tile) {
-      recordAuthoringStep(toTileKey(move.tile));
+      const posStr = typeof position === 'string' && position ? `:${position}` : '';
+      recordAuthoringStep(`${toTileKey(move.tile)}${posStr}`);
+    }
+    if (isGuidedMode && frozenLesson) {
+      setLessonStepIndex((prev) => prev + 1);
     }
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
@@ -1732,8 +2280,70 @@ export default function BotMatchScreen({
     setMovesUsed((prev) => prev + 1);
     coach.recordPlayerMove(match, move);
     if (isAuthoringMode && move.tile) {
-      recordAuthoringStep(toTileKey(move.tile));
+      const posStr = typeof move.position === 'string' && move.position ? `:${move.position}` : '';
+      recordAuthoringStep(`${toTileKey(move.tile)}${posStr}`);
     }
+    applyAndNotify(result);
+    flashLastPlayed(move.tile ?? null);
+    setSelectedTile(null);
+    appendMove({
+      player: 'you',
+      action: 'place',
+      tile: toTileTuple(move.tile as Tile),
+      boardEnds,
+      handBefore,
+      validMoves,
+      pipDelta: beforePips - afterPips,
+      pointsScored: result.scored?.points ?? 0,
+      boardState: snapshotBoardState(match.board),
+      boardRenderState: cloneBoardState(match.board),
+      handSnapshot: handBefore,
+      engineBestMove: getFritzBestMove(match),
+    });
+  };
+
+  /**
+   * Guided Lesson: auto-play the authored best move for the current step.
+   * Only callable when isGuidedMode && frozenLesson is active.
+   */
+  const playLessonBestMove = () => {
+    if (!isGuidedMode || !frozenLesson) return;
+    if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+
+    // Use the board-state-matched step (skips stale drafts automatically)
+    const step = currentLessonStep;
+    if (!step?.chosenMove || step.chosenMove === 'draw' || step.chosenMove === 'pass') return;
+
+    // Parse "2|4" or "2|4:left" — split on ':' to extract tile key and position
+    const colonIdx = step.chosenMove.indexOf(':');
+    const tileKeyRaw = colonIdx >= 0 ? step.chosenMove.slice(0, colonIdx) : step.chosenMove;
+    const positionRaw = colonIdx >= 0 ? step.chosenMove.slice(colonIdx + 1) : null;
+
+    const parsedTile = parseTileKey(tileKeyRaw);
+    if (!parsedTile) return;
+
+    // Find a matching move in userPlayMoves — prefer position match, fall back to first tile match
+    let move: Move | null = null;
+    if (positionRaw) {
+      move = userPlayMoves.find(
+        (m) => m.tile && tileEquals(m.tile, parsedTile) && m.position === positionRaw,
+      ) ?? null;
+    }
+    if (!move) {
+      move = userPlayMoves.find((m) => m.tile && tileEquals(m.tile, parsedTile)) ?? null;
+    }
+    if (!move?.tile) return;
+
+    const boardEndsRaw = getDisplayOpenEnds(match);
+    const boardEnds: [number, number] = [boardEndsRaw[0] ?? -1, boardEndsRaw[1] ?? -1];
+    const handBefore = match.players.you.hand.map(toTileTuple);
+    const validMoves = userPlayMoves.filter((m) => m.tile).map((m) => toTileTuple(m.tile as Tile));
+    const beforePips = sumTilePips(match.players.you.hand);
+    const result = applyPlayMove(match, 'you', move);
+    const afterPips = sumTilePips(result.state.players.you.hand);
+    setMovesUsed((prev) => prev + 1);
+    coach.recordPlayerMove(match, move);
+    setLessonStepIndex((prev) => prev + 1);
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
@@ -1756,6 +2366,9 @@ export default function BotMatchScreen({
   useEffect(() => {
     console.log('[BOT-EFFECT] fired', { currentPlayer: match.currentPlayer, handOver: match.handOver, gameOver: match.gameOver, drawSequenceActive: drawSequenceActiveRef.current, cancelled: false });
     if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
+    // In snapshot mode the bot never runs — the snapshot-advance effect above
+    // immediately replaces bot-turn state with the next authored step.
+    if (isGuidedSnapshotMode) return;
     console.log('[BOT-EFFECT] passed guard, scheduling turn');
     let cancelled = false;
     let actionResolved = false;
@@ -1932,6 +2545,15 @@ export default function BotMatchScreen({
                   : toEngineBestFromChoice(chosen),
               });
             }
+            if (isDailyFritzMode) {
+              console.log('[daily-flow] bot move applied', {
+                handNumber: result.state.handNumber,
+                handOver: result.state.handOver,
+                gameOver: result.state.gameOver,
+                nextPlayer: result.state.currentPlayer,
+                scored: result.scored?.points ?? 0,
+              });
+            }
             applyAndNotify(result);
             flashLastPlayed(playedTileForHighlight);
           }
@@ -2003,15 +2625,64 @@ export default function BotMatchScreen({
   ]);
 
   const advanceHand = useCallback(() => {
+    // ── One-way guard ────────────────────────────────────────────────────────
+    // Prevents duplicate overlapping transitions (e.g. 5s timer + watchdog firing
+    // together, or rapid double-call from effect re-runs).
+    if (handTransitionInFlightRef.current) {
+      console.log('[daily-flow] advanceHand skipped — transition already in flight');
+      return;
+    }
+
+    if (isDailyFritzMode) {
+      lastDailyFlowLabelRef.current = 'reveal-end';
+      console.log('[daily-flow] reveal end', {
+        handNumber: matchRef.current.handNumber,
+        prefetchReady: dailyFritzNextHandRef.current?.result != null,
+        handTransitionInFlight: handTransitionInFlightRef.current,
+      });
+    }
+
     setSelectedTile(null);
     flashLastPlayed(null);
     setLastBotChoice(null);
+
     if (isDailyFritzMode && dailyFritzPackage) {
+      handTransitionInFlightRef.current = true;
       const cache = dailyFritzNextHandRef.current;
       dailyFritzNextHandRef.current = null;
 
+      // ── End-of-run helper ────────────────────────────────────────────────
+      // Called whenever nextDailyFritzHand rejects with DailyFritzEndOfRunError.
+      // Transitions the match to gameOver so the completion effect fires.
+      const handleEndOfRun = (reason: string) => {
+        console.log('[daily-flow] end-of-run detected from server', { reason, handNumber: matchRef.current.handNumber });
+        console.log('[daily-flow] next hand terminal 409 -> match complete', { handNumber: matchRef.current.handNumber });
+        lastDailyFlowLabelRef.current = 'match-complete';
+        handTransitionInFlightRef.current = false;
+        setGhostResultError(null);
+        setHandReveal(null);
+        // Force gameOver so the completion effect picks it up and submits.
+        // Winner is whoever has more points; ties go to the player.
+        setMatch((prev) => {
+          const yourScore = prev.players.you.score;
+          const botScore  = prev.players.bot.score;
+          const winnerId  = yourScore >= botScore ? 'you' : 'bot';
+          return { ...prev, handOver: false, gameOver: true, winnerId };
+        });
+      };
+
+      // ── Early exit: prefetch already resolved with end-of-run error ──────
+      if (cache?.error instanceof DailyFritzEndOfRunError) {
+        handleEndOfRun(cache.error.message);
+        return;
+      }
+
       if (cache?.result) {
-        // Prefetch already settled — instant hand transition, no spinner.
+        // Prefetch already settled — instant hand transition, no network wait needed.
+        lastDailyFlowLabelRef.current = 'next-hand-start';
+        console.log('[daily-flow] next hand start (prefetch hit)', {
+          nextHandNumber: matchRef.current.handNumber + 1,
+        });
         setHandReveal(null);
         setMatch((prev) =>
           prev.handOver && !prev.gameOver
@@ -2023,9 +2694,15 @@ export default function BotMatchScreen({
               }
             : prev,
         );
+        // Reset guard synchronously — the setMatch updater is the actual one-way
+        // guard against double-advancing (prev.handOver check inside it).
+        handTransitionInFlightRef.current = false;
       } else {
-        // Still in-flight (edge case) or no prefetch — show spinner and await.
-        setGhostResultLoading(true);
+        // Prefetch still in-flight or not started — await the promise.
+        // IMPORTANT: do NOT call setGhostResultLoading(true) here. The Daily Fritz
+        // completion effect calls setGhostResultLoading(false) on every render where
+        // !match.gameOver, immediately overriding the true we set here and producing
+        // a spurious "Submitting..." flash in the completion overlay.
         const handPromise =
           cache?.promise ??
           nextDailyFritzHand({
@@ -2036,8 +2713,15 @@ export default function BotMatchScreen({
               fritz: match.players.bot.score,
             },
           });
+        console.log('[daily-flow] next hand start (awaiting fetch)', {
+          hadCachedPromise: cache?.promise != null,
+        });
         void handPromise
           .then((response) => {
+            lastDailyFlowLabelRef.current = 'next-hand-start';
+            console.log('[daily-flow] next hand start (fetch resolved)', {
+              nextHandNumber: matchRef.current.handNumber + 1,
+            });
             setHandReveal(null);
             setMatch((prev) =>
               prev.handOver && !prev.gameOver
@@ -2049,22 +2733,39 @@ export default function BotMatchScreen({
                   }
                 : prev,
             );
-            setGhostResultLoading(false);
+            handTransitionInFlightRef.current = false;
           })
           .catch((err) => {
-            setGhostResultLoading(false);
-            setGhostResultError(err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.');
+            // Terminal end-of-run: server says no hands remain — not a retryable error.
+            if (err instanceof DailyFritzEndOfRunError) {
+              handleEndOfRun(err.message);
+              return;
+            }
+            // Retryable network/server error — reset guard and surface to UI.
+            // The watchdog will retry after 10 s if still stuck.
+            const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
+            handTransitionInFlightRef.current = false;
+            console.log('[daily-flow] next hand fetch error — guard reset, watchdog will retry', {
+              error: errMsg,
+              handNumber: matchRef.current.handNumber,
+            });
+            setGhostResultError(errMsg);
+            // handReveal intentionally NOT cleared here — keep the reveal visible
+            // so the player sees the score while the watchdog queues a retry.
           });
       }
       return;
     }
+
+    // ── Non-Daily-Fritz modes (authoring, guided, league) ─────────────────────
     setHandReveal(null);
     setMatch((prev) => {
       if (!prev.handOver || prev.gameOver) return prev;
-      // Authoring mode: each hand is seeded deterministically.
+      // Authoring and guided lesson modes: each hand is seeded deterministically.
       // prev.handNumber is the hand just completed (1-indexed), so the next
       // hand's 0-indexed slot is prev.handNumber (e.g. hand 1 done → deal for slot 1).
-      const nextState = isAuthoringMode
+      const useSeededDeal = isAuthoringMode || (isGuidedMode && frozenLesson !== null);
+      const nextState = useSeededDeal
         ? startNextFixedBotHand(prev, generateAuthoringHandDeal(prev.handNumber))
         : startNextBotHand(prev);
       return {
@@ -2084,6 +2785,13 @@ export default function BotMatchScreen({
     setHandRevealProgress(1);
     // In guided mode, user taps "Next Hand →" manually — no auto-advance
     if (isGuidedMode) return;
+    if (isDailyFritzMode) {
+      console.log('[daily-flow] reveal countdown started (5s)', {
+        handNumber: match.handNumber,
+        handTransitionInFlight: handTransitionInFlightRef.current,
+        prefetchReady: dailyFritzNextHandRef.current?.result != null,
+      });
+    }
     const rafId = requestAnimationFrame(() => setHandRevealProgress(0));
     const timer = setTimeout(() => {
       advanceHand();
@@ -2092,7 +2800,7 @@ export default function BotMatchScreen({
       cancelAnimationFrame(rafId);
       clearTimeout(timer);
     };
-  }, [handReveal, match.gameOver, advanceHand, isGuidedMode]);
+  }, [handReveal, match.gameOver, advanceHand, isGuidedMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build learning summary when hand reveal appears (guided mode only)
   useEffect(() => {
@@ -2114,6 +2822,9 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     if (!match.handOver || match.gameOver || handReveal || handRevealTimerRef.current) return;
+    // In snapshot mode, hand transitions are handled by the snapshot-advance effect
+    // (it immediately sets handOver: false on the next step).
+    if (isGuidedSnapshotMode) return;
     // Safety fallback: if a hand ended without the reveal modal flow starting, advance anyway.
     const timer = window.setTimeout(() => {
       if (matchRef.current.handOver && !matchRef.current.gameOver && !handRevealTimerRef.current) {
@@ -2121,11 +2832,40 @@ export default function BotMatchScreen({
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [match.handOver, match.gameOver, handReveal, advanceHand]);
+  }, [match.handOver, match.gameOver, handReveal, advanceHand, isGuidedSnapshotMode]);
+
+  // ── Daily Fritz watchdog ──────────────────────────────────────────────────
+  // If the game gets stuck in hand-over (no reveal shown, no transition fired),
+  // this watchdog resets the in-flight guard after 10 s and forces advanceHand.
+  // Covers: network error in advanceHand catch, timer never firing, race conditions.
+  useEffect(() => {
+    if (!isDailyFritzMode) return;
+    if (!match.handOver || match.gameOver) return;
+    if (handReveal !== null) return; // reveal is visible — 5s timer will handle it
+
+    const watchdogMs = 10_000;
+    const id = window.setTimeout(() => {
+      // Still stuck after 10s — attempt recovery
+      if (!match.handOver || match.gameOver || handReveal !== null) return;
+      console.log('[daily-flow] watchdog fired — resetting guard and calling advanceHand', {
+        handNumber: match.handNumber,
+        handTransitionInFlight: handTransitionInFlightRef.current,
+        lastLabel: lastDailyFlowLabelRef.current,
+      });
+      handTransitionInFlightRef.current = false;
+      advanceHand();
+    }, watchdogMs);
+
+    return () => window.clearTimeout(id);
+  }, [isDailyFritzMode, match.handOver, match.gameOver, handReveal, advanceHand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
     if (userPlayMoves.length > 0) return;
+    // In snapshot mode each authored step always has at least one legal tile play.
+    // Drawing/passing from a live boneyard that doesn't match the authored game
+    // would diverge the lesson — suppress it entirely.
+    if (isGuidedSnapshotMode) return;
     let cancelled = false;
     const beforeEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
@@ -2133,6 +2873,76 @@ export default function BotMatchScreen({
     void (async () => {
       setDrawSequenceActiveBoth(true);
       try {
+        // ── Daily Fritz: locked-boneyard / no-move fast path ──────────────────
+        // When the boneyard is locked AND both players have no legal play moves,
+        // the hand is definitively blocked right now. Resolve immediately instead
+        // of waiting for a second pass, which can leave the UI frozen on "YOUR MOVE".
+        const boneyardLocked = match.boneyard.length <= match.deadTiles.length;
+        const botAlsoStuck =
+          boneyardLocked &&
+          asPlayMoves(getLegalMoves({ ...match, currentPlayer: 'bot' }, 'bot')).length === 0;
+        if (isDailyFritzMode && boneyardLocked && botAlsoStuck) {
+          console.log('[daily-flow] locked boneyard no-move detected', {
+            handNumber: match.handNumber,
+            yourScore: match.players.you.score,
+            botScore: match.players.bot.score,
+            boneyardLength: match.boneyard.length,
+            consecutivePasses: match.consecutivePasses,
+          });
+          // Ensure consecutivePasses is at least 1 so the player's pass increments
+          // it to 2 (≥ playerCount) and triggers blocked-hand resolution in passTurn.
+          const resolveBase =
+            match.consecutivePasses >= 1
+              ? match
+              : { ...match, consecutivePasses: 1 };
+          const fastResult = passTurn(resolveBase, 'you');
+          if (cancelled) return;
+          console.log('[daily-flow] blocked hand resolved', {
+            handEnded: Boolean(fastResult.handEnded),
+            yourScore: fastResult.state.players.you.score,
+            botScore: fastResult.state.players.bot.score,
+            gameOver: fastResult.state.gameOver,
+          });
+          if (fastResult.state.gameOver) {
+            console.log('[daily-flow] winning score already reached -> match complete', {
+              handNumber: fastResult.state.handNumber,
+              winnerId: fastResult.state.winnerId,
+              yourScore: fastResult.state.players.you.score,
+              botScore: fastResult.state.players.bot.score,
+            });
+          }
+          if (fastResult.passed) {
+            if (isGhostMode) {
+              appendGhostMove({
+                turn: (match.turnIndex ?? 0) + 1,
+                hand_number: match.handNumber,
+                actor: 'you',
+                board_state: serializeGhostBoardState(match.board),
+                tile_played: null,
+                branch: 'pass',
+                hand_before: handBefore.map(([low, high]) => `${low}|${high}`),
+                score_delta: 0,
+                forced_draw: false,
+              });
+            }
+            appendMove({
+              player: 'you',
+              action: 'pass',
+              boardEnds,
+              handBefore,
+              validMoves: [],
+              pipDelta: 0,
+              pointsScored: 0,
+              boardState: snapshotBoardState(match.board),
+              boardRenderState: cloneBoardState(match.board),
+              handSnapshot: handBefore,
+              engineBestMove: getFritzBestMove(match),
+            });
+          }
+          applyAndNotify(fastResult);
+          return;
+        }
+        // ── Normal draw-or-pass flow ───────────────────────────────────────────
         const result = await runDrawSequenceLocal(match, 'you');
         if (cancelled) return;
         setSelectedTile(null);
@@ -2167,6 +2977,9 @@ export default function BotMatchScreen({
         if (result.passed) {
           if (isAuthoringMode) {
             recordAuthoringStep('pass');
+          }
+          if (isGuidedMode && frozenLesson) {
+            setLessonStepIndex((prev) => prev + 1);
           }
           if (isGhostMode) {
             appendGhostMove({
@@ -2840,7 +3653,21 @@ export default function BotMatchScreen({
               onSaveNote={saveAuthoringNoteOnly}
             />
           )}
-          {isGuidedMode && !isAuthoringMode && (
+          {isGuidedMode && !isAuthoringMode && frozenLesson && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
+            <LessonCoachPanel
+              stepIndex={lessonStepIndex}
+              totalSteps={frozenLesson.steps.filter((s) => s.chosenMove && s.chosenMove !== 'draw' && s.chosenMove !== 'pass').length}
+              coachingText={currentLessonStep?.coachingText ?? ''}
+              onBestMove={playLessonBestMove}
+              canBestMove={
+                !!(currentLessonStep?.chosenMove) &&
+                currentLessonStep.chosenMove !== 'draw' &&
+                currentLessonStep.chosenMove !== 'pass' &&
+                userPlayMoves.length > 0
+              }
+            />
+          )}
+          {isGuidedMode && !isAuthoringMode && !frozenLesson && (
             <CoachPanel
               preMoveRec={coach.preMoveRec}
               preMoveEval={coach.preMoveEval}
@@ -2853,6 +3680,137 @@ export default function BotMatchScreen({
               turnIndex={match.turnIndex ?? 0}
               debugMode={showDebug}
             />
+          )}
+          {/* ── Admin debug overlay: visible in guided mode when BOT_DEBUG=1 ─── */}
+          {isGuidedMode && showDebug && frozenLesson && (() => {
+            const renderedHand = match.players.you.hand.map((t) => `${t.low}|${t.high}`);
+            const frozenStep0Hand = frozenLesson.steps[0]?.playerHand ?? [];
+            const handsMatch =
+              renderedHand.slice().sort().join(',') === frozenStep0Hand.slice().sort().join(',');
+            const isMismatch = guidedInitSourceRef.current === 'seeded-deal' && !handsMatch;
+            return (
+              <div style={{
+                position: 'fixed',
+                top: 8,
+                left: 8,
+                right: 8,
+                zIndex: 9999,
+                background: isMismatch ? 'rgba(180,30,20,0.92)' : 'rgba(0,0,0,0.82)',
+                border: isMismatch
+                  ? '2px solid rgba(255,80,60,0.9)'
+                  : '1px solid rgba(100,220,160,0.4)',
+                borderRadius: 8,
+                padding: '8px 12px',
+                fontFamily: 'monospace',
+                fontSize: '0.68rem',
+                color: 'rgba(220,240,230,0.92)',
+                lineHeight: 1.7,
+                pointerEvents: 'none',
+              }}>
+                {isMismatch && (
+                  <div style={{ color: 'rgba(255,120,100,1)', fontWeight: 700, marginBottom: 4, fontSize: '0.75rem' }}>
+                    ⚠ GUIDED HAND MISMATCH — matchStateJson absent, seeded PRNG gave WRONG GAME
+                  </div>
+                )}
+                <div>
+                  <span style={{ color: 'rgba(180,200,190,0.6)' }}>source: </span>
+                  <span style={{ color: isMismatch ? 'rgba(255,160,100,1)' : 'rgba(100,240,160,0.9)', fontWeight: 600 }}>
+                    {guidedInitSourceRef.current ?? '—'}
+                  </span>
+                </div>
+                <div>
+                  <span style={{ color: 'rgba(180,200,190,0.6)' }}>rendered: </span>
+                  {renderedHand.join(' · ') || '—'}
+                </div>
+                <div>
+                  <span style={{ color: 'rgba(180,200,190,0.6)' }}>frozen s0: </span>
+                  {frozenStep0Hand.join(' · ') || '—'}
+                </div>
+                <div style={{ marginTop: 2, fontWeight: 700, color: handsMatch ? 'rgba(100,240,160,0.95)' : 'rgba(255,100,80,1)' }}>
+                  {handsMatch ? '✓ hands match' : '✗ HANDS DIFFER'}
+                </div>
+              </div>
+            );
+          })()}
+          {/* ── Daily Fritz debug overlay: visible when BOT_DEBUG=1 ─── */}
+          {isDailyFritzMode && showDebug && (
+            <div style={{
+              position: 'fixed',
+              top: 8,
+              left: 8,
+              right: 8,
+              zIndex: 9999,
+              background: 'rgba(10,20,40,0.88)',
+              border: '1px solid rgba(80,160,255,0.4)',
+              borderRadius: 8,
+              padding: '8px 12px',
+              fontFamily: 'monospace',
+              fontSize: '0.68rem',
+              color: 'rgba(200,220,255,0.92)',
+              lineHeight: 1.8,
+              pointerEvents: 'none',
+            }}>
+              <div style={{ fontWeight: 700, fontSize: '0.72rem', color: 'rgba(100,180,255,1)', marginBottom: 2 }}>
+                ⚙ Daily Fritz Debug
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>phase: </span>
+                <span style={{ fontWeight: 600, color: 'rgba(100,240,200,0.95)' }}>{lastDailyFlowLabelRef.current}</span>
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>hand: </span>{match.handNumber}
+                {'  '}
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>player: </span>
+                <span style={{ color: match.currentPlayer === 'you' ? 'rgba(100,255,160,0.9)' : 'rgba(255,180,80,0.9)' }}>
+                  {match.currentPlayer}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>score: </span>
+                you {match.players.you.score} · bot {match.players.bot.score}
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>handOver: </span>
+                <span style={{ color: match.handOver ? 'rgba(255,200,80,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                  {String(match.handOver)}
+                </span>
+                {'  '}
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>gameOver: </span>
+                <span style={{ color: match.gameOver ? 'rgba(255,100,80,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                  {String(match.gameOver)}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>revealTimer: </span>
+                <span style={{ color: handRevealTimerRef.current !== null ? 'rgba(255,220,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                  {handRevealTimerRef.current !== null ? '⏱ running' : 'idle'}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>handReveal: </span>
+                <span style={{ color: handReveal !== null ? 'rgba(255,220,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                  {handReveal !== null ? '✓ visible' : 'null'}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>nextHandReady: </span>
+                <span style={{ color: dailyFritzNextHandRef.current?.result != null ? 'rgba(100,255,160,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                  {dailyFritzNextHandRef.current?.result != null ? '✓ prefetched' : dailyFritzNextHandRef.current?.promise != null ? '⏳ in-flight' : 'none'}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>transitionInFlight: </span>
+                <span style={{ color: handTransitionInFlightRef.current ? 'rgba(255,180,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                  {String(handTransitionInFlightRef.current)}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'rgba(140,170,210,0.7)' }}>submitSucceeded: </span>
+                <span style={{ color: dailyFritzSubmitSucceededRef.current ? 'rgba(100,255,160,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                  {String(dailyFritzSubmitSucceededRef.current)}
+                </span>
+              </div>
+            </div>
           )}
           <Board
             board={match.board}

@@ -136,19 +136,62 @@ export async function fetchDailyFritzLeaderboard(date: string): Promise<DailyFri
   return response.leaderboard;
 }
 
+/**
+ * Thrown when the server signals there are no more hands left in this Daily
+ * Fritz run (HTTP 409 "No hands remain…").  This is a terminal, non-retryable
+ * condition — the client must transition to match-complete, not show an error.
+ */
+export class DailyFritzEndOfRunError extends Error {
+  readonly statusCode = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = 'DailyFritzEndOfRunError';
+  }
+}
+
 export async function nextDailyFritzHand(input: {
   attemptId: string;
   verifiedMatchId: string;
   completedHandScores: { you: number; fritz: number };
 }): Promise<DailyFritzNextHandResponse> {
-  return requestJson<DailyFritzNextHandResponse>('/api/daily-fritz/next-hand', {
-    method: 'POST',
-    body: JSON.stringify({
-      attempt_id: input.attemptId,
-      verified_match_id: input.verifiedMatchId,
-      completed_hand_scores: input.completedHandScores,
-    }),
-  });
+  // Use a manual fetch so we can inspect the status code before throwing.
+  // requestJson treats all non-2xx responses identically; we need to
+  // distinguish the terminal 409 "no hands remain" from retryable errors.
+  const headers = await authHeaders();
+  const response = await fetch(
+    `${resolveServerBaseUrl()}/api/daily-fritz/next-hand`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      body: JSON.stringify({
+        attempt_id: input.attemptId,
+        verified_match_id: input.verifiedMatchId,
+        completed_hand_scores: input.completedHandScores,
+      }),
+    },
+  );
+
+  const text = await response.text().catch(() => '');
+  let parsed: any = null;
+  if (text) {
+    try { parsed = JSON.parse(text); } catch { /* fall through */ }
+  }
+
+  // 409 = server's signal that the run is complete — not a retryable error.
+  if (response.status === 409) {
+    throw new DailyFritzEndOfRunError(
+      parsed?.error ?? 'No hands remain in this Daily Fritz run.',
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      parsed?.error ?? `/api/daily-fritz/next-hand failed with ${response.status}`,
+    );
+  }
+
+  return parsed as DailyFritzNextHandResponse;
 }
 
 async function sha256Hex(input: string): Promise<string> {

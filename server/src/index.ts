@@ -36,6 +36,7 @@ import { supabaseFetch } from './supabaseUtils';
 import {
   buildDailyFritzCompletionHash,
   generateDailyFritzRun,
+  generateSingleDailyFritzHand,
   getDailyFritzSeed,
   sortDailyFritzLeaderboard,
   type DailyFritzAttemptStatus,
@@ -2266,17 +2267,19 @@ app.post('/api/daily-fritz/next-hand', async (req, res) => {
       res.status(403).json({ error: 'Verified match does not match this attempt.' });
       return;
     }
-    if (attempt.currentHandIndex >= 11) {
-      res.status(409).json({ error: 'No hands remain in today’s Daily Fritz run.' });
-      return;
-    }
-
+    // Do NOT cap by hand count — Daily Fritz plays to the winning score (e.g.
+    // 60 points), not a fixed number of hands.  The pre-stored handDeals array
+    // covers the common case; any hand beyond it is generated on-demand from
+    // the same deterministic seed so all players still get identical tiles.
     attempt.currentHandIndex += 1;
     const saved = await upsertDailyFritzAttempt(attempt);
+    const hand =
+      run.handDeals[saved.currentHandIndex] ??
+      generateSingleDailyFritzHand(run.seed, saved.currentHandIndex, run.dealSize as 7 | 14);
     res.json({
       ok: true,
       current_hand_index: saved.currentHandIndex,
-      hand: run.handDeals[saved.currentHandIndex],
+      hand,
     });
   } catch (error) {
     res.status(500).json({

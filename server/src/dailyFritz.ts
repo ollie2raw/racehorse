@@ -81,6 +81,27 @@ export function getDailyFritzSeed(runDate: string): string {
   return `daily-fritz-${runDate}`;
 }
 
+/**
+ * Generate a single hand for a given seed + hand index.
+ * Uses the same deterministic formula as generateDailyFritzRun so that any
+ * hand at any index can be reproduced on-demand without a pre-stored list.
+ * All players requesting hand N on a given day get identical tiles.
+ */
+export function generateSingleDailyFritzHand(
+  seed: string,
+  handIndex: number,
+  dealSize: 7 | 14,
+): DailyFritzHandDeal {
+  const prng = createSeededPrng(`${seed}:hand:${handIndex}`);
+  const shuffled = shuffleWithPrng(buildDoubleSixSet(), prng).map(cloneTile);
+  const playerTiles = shuffled.slice(0, dealSize);
+  const fritzTiles  = shuffled.slice(dealSize, dealSize * 2);
+  const remaining   = shuffled.slice(dealSize * 2);
+  const locked      = remaining.slice(Math.max(0, remaining.length - 2)).map(cloneTile);
+  const boneyard    = remaining.map(cloneTile);
+  return { player_tiles: playerTiles, fritz_tiles: fritzTiles, boneyard, locked };
+}
+
 export function generateDailyFritzRun(
   runDate: string,
   fritzTier: DailyFritzTier,
