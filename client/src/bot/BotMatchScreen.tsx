@@ -24,6 +24,7 @@ import {
   createBotMatch,
   createFixedBotMatch,
   drawOne,
+  endpointMatchFromOrientation,
   getMatchableOpenEnds,
   getDisplayOpenEnds,
   getLegalMoves,
@@ -31,11 +32,13 @@ import {
   isDouble,
   passTurn,
   previewPlayMove,
+  recomputeBoardEnds,
   startNextBotHand,
   startNextFixedBotHand,
   type BotActionResult,
   type BotDealSize,
   type BotHandDeal,
+  type BotHandEndReason,
   type BotMatchState,
   type BotPlayerId,
 } from './botEngine';
@@ -94,10 +97,32 @@ import {
   loadAuthoringSession,
   saveAuthoringSession,
   loadFrozenLesson,
+  loadOriginalGuidedTranscript,
+  loadOriginalGuidedTranscriptDraft,
+  saveOriginalGuidedTranscript,
+  saveOriginalGuidedTranscriptDraft,
+  clearOriginalGuidedTranscriptDraft,
   type AuthoredStep,
   type AuthoringSession,
   type FrozenLesson,
+  type GuidedReplyEvent,
+  type GuidedTranscript,
+  type GuidedTranscriptDraft,
+  type GuidedTranscriptMove,
+  type GuidedTurn,
 } from '../learn/guidedAuthoring';
+import {
+  createV2Event,
+  loadV2AuthoringSession,
+  loadV2FrozenLesson,
+  nextPlayerEvent,
+  parseLessonV2BoardState,
+  saveV2AuthoringSession,
+  type LessonV2,
+  type LessonV2AuthoringSession,
+  type LessonV2Event,
+  type LessonV2HandStart,
+} from '../learn/lessonV2';
 
 interface BotMatchScreenProps {
   onBack: () => void;
@@ -126,6 +151,10 @@ interface BotMatchScreenProps {
   isGuidedMode?: boolean;
   /** Admin-only: replace CoachPanel with an editable textarea on each player turn */
   isAuthoringMode?: boolean;
+  /** Admin-only V2: record every action as a LessonV2Event flat timeline */
+  isAuthoringV2Mode?: boolean;
+  /** Player-facing V2: playback a frozen LessonV2 lesson */
+  isGuidedV2Mode?: boolean;
 }
 
 interface BotHandReveal {
@@ -136,6 +165,27 @@ interface BotHandReveal {
   calcText: string;
   yourRemainingTiles: Tile[];
   botRemainingTiles: Tile[];
+}
+
+function traceDailyFritzEvent(
+  tag: string,
+  payload: Record<string, unknown>,
+): void {
+  if (typeof window === 'undefined') return;
+  const timestamp =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? Number(performance.now().toFixed(2))
+      : Date.now();
+  const entry = { tag, timestamp, ...payload };
+  const win = window as typeof window & {
+    __dailyFritzInteractionTrace?: Array<Record<string, unknown>>;
+  };
+  const bucket = (win.__dailyFritzInteractionTrace ??= []);
+  bucket.push(entry);
+  if (bucket.length > 400) {
+    bucket.splice(0, bucket.length - 400);
+  }
+  console.log(tag, entry);
 }
 
 function getGhostResultMessage(playerScore: number, ghostScore: number): string {
@@ -339,14 +389,52 @@ function parseGuidedBoardState(boardState: string): BoardState | null {
       }),
     );
 
-    return {
+    // Run recomputeBoardEnds first so it fills in leftEndIsDouble, rightEndIsDouble,
+    // hub isCrossed, and branch openEnd correctly from tile geometry.
+    // Then override leftEnd/rightEnd with the authoritative serialized values —
+    // endpointMatchFromOrientation (used inside recomputeBoardEnds) can return the
+    // wrong exposed pip when tile.low coincidentally matches a pip in the adjacent
+    // tile, causing legality mismatches and broken board-state round-trips.
+    const base: BoardState = {
       mainLine,
-      leftEnd:          raw.leftEnd,
-      rightEnd:         raw.rightEnd,
-      leftEndIsDouble:  Boolean(raw.leftEndIsDouble),
-      rightEndIsDouble: Boolean(raw.rightEndIsDouble),
+      leftEnd: -1,
+      rightEnd: -1,
+      leftEndIsDouble: false,
+      rightEndIsDouble: false,
       hubDoubles,
     };
+    const recomputed = recomputeBoardEnds(base);
+    return {
+      ...recomputed,
+      leftEnd: typeof raw.leftEnd === 'number' ? raw.leftEnd : recomputed.leftEnd,
+      rightEnd: typeof raw.rightEnd === 'number' ? raw.rightEnd : recomputed.rightEnd,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getGuidedV1AuthoredStepByIndex(
+  lesson: FrozenLesson,
+  stepIndex: number,
+): AuthoredStep | null {
+  if (stepIndex < 0) return null;
+  return lesson.steps.find((step) => step.chosenMove !== null && step.stepIndex === stepIndex) ?? null;
+}
+
+function restoreGuidedV1StepMatchState(step: AuthoredStep | null): BotMatchState | null {
+  if (!step?.matchStateJson) return null;
+  try {
+    return JSON.parse(step.matchStateJson) as BotMatchState;
+  } catch {
+    return null;
+  }
+}
+
+function parseGuidedTranscriptState(stateJson: string): BotMatchState | null {
+  if (!stateJson) return null;
+  try {
+    return JSON.parse(stateJson) as BotMatchState;
   } catch {
     return null;
   }
@@ -372,13 +460,22 @@ export default function BotMatchScreen({
   onMatchComplete = null,
   dailyFritzPackage = null,
   onDailyFritzComplete = null,
-  isGuidedMode = false,
-  isAuthoringMode = false,
+  isGuidedMode: isGuidedModeProp = false,
+  isAuthoringMode: isAuthoringModeProp = false,
+  isAuthoringV2Mode: isAuthoringV2ModeProp = false,
+  isGuidedV2Mode: isGuidedV2ModeProp = false,
 }: BotMatchScreenProps) {
   const LEAGUE_MATCH_META_KEY = 'racehorse:league-match-meta';
   const leagueResumeStorageKey = resumeKey ? `racehorse:league-match:${resumeKey}` : null;
   const dailyFritzStorageKey =
     mode === 'daily-fritz' && dailyFritzPackage ? `racehorse:daily-fritz:${dailyFritzPackage.attempt_id}` : null;
+
+  const isGuidedMode = isGuidedModeProp && mode === 'bot';
+  const isAuthoringMode = isAuthoringModeProp && mode === 'bot';
+  const isAuthoringV2Mode = isAuthoringV2ModeProp && mode === 'bot';
+  const isGuidedV2Mode = isGuidedV2ModeProp && mode === 'bot';
+  const isLearnAcademyMode = isGuidedMode || isAuthoringMode || isAuthoringV2Mode || isGuidedV2Mode;
+
   const resolveServerBaseUrl = () => {
     const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim() ?? '';
     if (configured) return configured.replace(/\/$/, '');
@@ -437,6 +534,9 @@ export default function BotMatchScreen({
   };
   const initialPersistedDailyFritzMatch = loadPersistedDailyFritzMatch();
   const DRAW_STEP_MS = 700;
+
+  console.log('[mode-debug]', { mode, isGuidedModeProp, isGuidedMode, isLearnAcademyMode });
+
   const fritzConfig = FRITZ_TIERS[fritzTier];
   const rootRef = useRef<HTMLDivElement>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
@@ -479,6 +579,10 @@ export default function BotMatchScreen({
     }
     return null;
   });
+  const [guidedTranscript] = useState<GuidedTranscript | null>(() => {
+    if (!isGuidedMode || isAuthoringMode || isGuidedV2Mode) return null;
+    return loadOriginalGuidedTranscript();
+  });
 
   /**
    * Which source was used to init the guided match — written during the match
@@ -488,7 +592,7 @@ export default function BotMatchScreen({
    * 'seeded-deal'    = PRNG fallback; may be WRONG if authoring used different seed.
    * 'random'         = no frozen lesson; full random match.
    */
-  const guidedInitSourceRef = useRef<'snapshot' | 'matchStateJson' | 'seeded-deal' | 'random' | null>(null);
+  const guidedInitSourceRef = useRef<'full-matchStateJson' | 'reduced-snapshot' | 'seeded-deal' | 'random' | null>(null);
 
   const [match, setMatch] = useState<BotMatchState>(() => {
     if (isAuthoringMode) {
@@ -504,29 +608,57 @@ export default function BotMatchScreen({
       return createFixedBotMatch(generateAuthoringHandDeal(0), 60, 7);
     }
 
+    // ── V2 Guided: restore from authored hand-start snapshot ────────────────
+    if (isGuidedV2Mode) {
+      const v2Lesson = loadV2FrozenLesson();
+      if (v2Lesson && v2Lesson.handStarts.length > 0) {
+        try {
+          return JSON.parse(v2Lesson.handStarts[0].matchStateJson) as BotMatchState;
+        } catch {
+          // fall through to random
+        }
+      }
+    }
+
+    if (isGuidedMode && guidedTranscript) {
+      const restored = parseGuidedTranscriptState(guidedTranscript.initialState);
+      if (restored) {
+        guidedInitSourceRef.current = 'full-matchStateJson';
+        return restored;
+      }
+    }
+
     if (isGuidedMode && frozenLesson) {
       const firstReal = frozenLesson.steps.find((s) => s.chosenMove !== null);
 
-      // ── PRIMARY: snapshot-driven init from authored boardState + playerHand ──
-      // These fields are ALWAYS written by recordAuthoringStep regardless of
-      // whether matchStateJson was captured.  boardState = board before player's
-      // first turn; playerHand = player's hand before player's first turn.
+      if (firstReal?.matchStateJson) {
+        try {
+          const restored = JSON.parse(firstReal.matchStateJson) as BotMatchState;
+          guidedInitSourceRef.current = 'full-matchStateJson';
+          console.log('[guided-debug] restored snapshot hand =', restored.players.you.hand.map((t) => `${t.low}|${t.high}`));
+          console.log('[guided-init] source = full-matchStateJson', { stepIndex: firstReal.stepIndex });
+          return restored;
+        } catch {
+          console.warn('[guided-skip] reason = invalid-matchStateJson', { stepIndex: firstReal.stepIndex });
+        }
+      }
+
+      // ── SECONDARY: reduced snapshot-driven init from authored boardState + playerHand ──
       if (firstReal?.boardState && firstReal.playerHand.length > 0) {
         const board = parseGuidedBoardState(firstReal.boardState);
         const playerTiles = firstReal.playerHand
           .map((k) => parseTileKey(k))
           .filter((t): t is Tile => t !== null);
-        // Use seeded deal to supply bot hand + boneyard; they won't be used in
-        // snapshot mode since bot turns are skipped entirely.
         const handIdx = Math.max(0, (firstReal.handNumber ?? 1) - 1);
         const seededDeal = generateAuthoringHandDeal(handIdx);
         const baseMatch = createFixedBotMatch(seededDeal, 60, 7);
-        guidedInitSourceRef.current = 'snapshot';
+        guidedInitSourceRef.current = 'reduced-snapshot';
         console.log('[guided-debug] restored snapshot hand =', playerTiles.map((t) => `${t.low}|${t.high}`));
-        console.log('[guided-init] source=snapshot boardState+playerHand from step', firstReal.stepIndex);
+        console.log('[guided-init] source = reduced-snapshot', { stepIndex: firstReal.stepIndex });
         return {
           ...baseMatch,
           board,
+          handOpen: Boolean(board && board.mainLine && board.mainLine.length > 0),
           players: {
             ...baseMatch.players,
             you: { ...baseMatch.players.you, hand: playerTiles },
@@ -538,19 +670,6 @@ export default function BotMatchScreen({
         };
       }
 
-      // ── SECONDARY: matchStateJson (legacy, for sessions that recorded it) ───
-      if (firstReal?.matchStateJson) {
-        try {
-          const restored = JSON.parse(firstReal.matchStateJson) as BotMatchState;
-          guidedInitSourceRef.current = 'matchStateJson';
-          console.log('[guided-debug] restored snapshot hand =', restored.players.you.hand.map((t) => `${t.low}|${t.high}`));
-          console.log('[guided-init] source=matchStateJson step', firstReal.stepIndex);
-          return restored;
-        } catch {
-          console.warn('[guided-init] matchStateJson parse failed — falling back to seeded deal');
-        }
-      }
-
       // ── FALLBACK: seeded PRNG deal (last resort) ─────────────────────────────
       guidedInitSourceRef.current = 'seeded-deal';
       console.warn('[guided-init] source=seeded-deal — no boardState/matchStateJson found; hand may be wrong');
@@ -560,6 +679,7 @@ export default function BotMatchScreen({
     if (isGuidedMode && !frozenLesson) {
       guidedInitSourceRef.current = 'random';
       console.log('[guided-init] source=random (no frozen lesson found)');
+      console.log('[guided-flow] initial coached board hydrated = false');
     }
 
     return (
@@ -664,10 +784,21 @@ export default function BotMatchScreen({
   const localPendingRegisteredRef = useRef(false);
   const localPendingResolvedRef = useRef(false);
   const accessTokenRef = useRef<string | null>(null);
+  const fritzSessionReplyRef = useRef<Required<AuthoredStep>['fritzReplyEvents']>([]);
+  const isTransitioningRef = useRef(false);
+  const [dailyFritzHandIndex, setDailyFritzHandIndex] = useState(
+    () => dailyFritzPackage?.current_hand_index ?? 0,
+  );
 
   // ── Guided Lesson state (player-facing, reads frozenLesson) ──────────────
   /** Tracks how many player turns have been completed in the lesson */
   const [lessonStepIndex, setLessonStepIndex] = useState(0);
+  const [guidedReplyIndex, setGuidedReplyIndex] = useState(-1);
+  const [isOffAuthoredLine, setIsOffAuthoredLine] = useState(false);
+  const [guidedV1Replay, setGuidedV1Replay] = useState<{ stepIndex: number; replyIndex: number } | null>(null);
+
+  console.log('[BOTMATCH VERSION]', 'v1-click-debug-001');
+  console.log('[mode-debug]', { mode, isGuidedMode, isLearnAcademyMode, lessonStepIndex });
 
   // ── Guided Authoring state (admin-only, no server calls) ─────────────────
   const [authoringSteps, setAuthoringSteps] = useState<AuthoredStep[]>(() => {
@@ -689,32 +820,88 @@ export default function BotMatchScreen({
     stepIdx: number;
   } | null>(null);
 
+  // ── V2 Authoring state (flat event timeline recorder) ───────────────────
+  const [authoringV2Events, setAuthoringV2Events] = useState<LessonV2Event[]>(() => {
+    if (!isAuthoringV2Mode) return [];
+    return loadV2AuthoringSession()?.events ?? [];
+  });
+  const [authoringV2HandStarts, setAuthoringV2HandStarts] = useState<LessonV2HandStart[]>(() => {
+    if (!isAuthoringV2Mode) return [];
+    return loadV2AuthoringSession()?.handStarts ?? [];
+  });
+  /**
+   * Next event index to assign.  We keep this in a ref so capture callbacks
+   * don't need it as a stale dependency (state reads are always current).
+   * Initialised from saved session length so we don't reuse indices on reload.
+   */
+  const authoringV2NextEventIndexRef = useRef<number>(
+    isAuthoringV2Mode ? (loadV2AuthoringSession()?.events.length ?? 0) : 0,
+  );
+  /**
+   * Stable creation timestamp for the V2 authoring session.
+   * Preserved from the saved session on resume so repeated saves don't
+   * overwrite the original createdAt with the current time.
+   */
+  const authoringV2CreatedAtRef = useRef<string>(
+    isAuthoringV2Mode
+      ? (loadV2AuthoringSession()?.createdAt ?? new Date().toISOString())
+      : '',
+  );
+  /**
+   * Mirror of authoringV2Events kept in a ref so the bot-effect capture
+   * callback can always read the current length without a stale closure.
+   */
+  const authoringV2EventsRef = useRef<LessonV2Event[]>([]);
+
+  // ── V2 Guided Lesson state (player-facing, reads frozenV2Lesson) ─────────
+  const [frozenV2Lesson] = useState<LessonV2 | null>(() =>
+    isGuidedV2Mode ? loadV2FrozenLesson() : null,
+  );
+  const [guidedV2EventIndex, setGuidedV2EventIndex] = useState(0);
+  const [isGuidedV2OffLine, setIsGuidedV2OffLine] = useState(false);
+  /**
+   * Guards the Fritz V2 timer against double-apply.
+   * Each event index may be applied at most once regardless of effect re-fires.
+   */
+  const fritzV2LastAppliedIndexRef = useRef<number>(-1);
+
   const isGhostMode = mode === 'ghost';
   const isDailyFritzMode = mode === 'daily-fritz';
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const isLeagueMatch = Boolean(onMatchComplete && resumeKey);
   const isStandaloneFritzMatch = Boolean(
     userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode && !onMatchComplete
-    && !isGuidedMode && !isAuthoringMode
+    && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
+
+  if (isDailyFritzMode && typeof window !== 'undefined') {
+    const win = window as typeof window & {
+      __dailyFritzProfile?: {
+        botMatchScreenRenderCount?: number;
+      };
+    };
+    const profile = (win.__dailyFritzProfile ??= {});
+    profile.botMatchScreenRenderCount = (profile.botMatchScreenRenderCount ?? 0) + 1;
+  }
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
 
   /**
-   * Snapshot-driven guided playback is active when:
+   * V1 guided on-line playback is active when:
    *   • we are in guided mode with a frozen lesson, AND
-   *   • the match was initialised from authored boardState + playerHand (source=snapshot)
+   *   • the player has not gone off-authored-line
    *
    * In this mode:
-   *   • The bot never runs its AI — instead, after the player plays, the match
-   *     state is overwritten with the NEXT authored step's boardState + playerHand.
-   *   • The player always sees the exact tiles and board from the authored lesson.
-   *   • draw / pass sequences are suppressed because authored steps should always
-   *     have at least one legal tile play available.
+   *   • The bot never runs live AI.
+   *   • The player move is validated against authored chosenMove before mutation.
+   *   • Fritz replies replay strictly from saved fritzReplyEvents.
    */
-  const isGuidedSnapshotMode =
-    isGuidedMode && frozenLesson !== null && guidedInitSourceRef.current === 'snapshot';
+  const isGuidedTranscriptMode =
+    isGuidedMode && !isAuthoringMode && !isGuidedV2Mode && guidedTranscript !== null;
+  const isGuidedV1MinimalMode =
+    isGuidedMode && !isAuthoringMode && !isGuidedV2Mode && frozenLesson !== null && !isGuidedTranscriptMode;
+  const isGuidedV1OnlineMode = false;
 
   // ── Learning coach (guided mode only) ────────────────────────────────────
   const coach = useLearningCoach({
@@ -812,6 +999,111 @@ export default function BotMatchScreen({
   }, [isMuted]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !isAuthoringMode) return;
+
+    type GuidedTranscriptAuthoringApi = {
+      startFromCurrentMatch: (lessonId?: string) => GuidedTranscriptDraft;
+      beginTurn: (input: { expectedPlayerMove: GuidedTranscriptMove; coachingText: string }) => GuidedTranscriptDraft | null;
+      capturePlayerStateAfter: () => GuidedTranscriptDraft | null;
+      recordFritzReply: (input: Omit<GuidedReplyEvent, 'runningPlayerScore' | 'runningFritzScore' | 'stateAfter'>) => GuidedTranscriptDraft | null;
+      finishTurn: () => GuidedTranscriptDraft | null;
+      exportDraft: () => GuidedTranscript | null;
+      publishDraft: () => GuidedTranscript | null;
+      clearDraft: () => void;
+    };
+
+    const win = window as typeof window & {
+      __guidedTranscriptAuthoring?: GuidedTranscriptAuthoringApi;
+    };
+
+    const getDraft = (): GuidedTranscriptDraft | null => loadOriginalGuidedTranscriptDraft();
+    const saveDraft = (draft: GuidedTranscriptDraft): GuidedTranscriptDraft => {
+      saveOriginalGuidedTranscriptDraft(draft);
+      return draft;
+    };
+
+    win.__guidedTranscriptAuthoring = {
+      startFromCurrentMatch: (lessonId = 'original-coached') => {
+        const draft: GuidedTranscriptDraft = {
+          transcript: {
+            lessonId,
+            version: 'v1-explicit',
+            initialState: JSON.stringify(matchRef.current),
+            turns: [],
+          },
+          activeStepIndex: null,
+        };
+        return saveDraft(draft);
+      },
+      beginTurn: ({ expectedPlayerMove, coachingText }) => {
+        const draft = getDraft();
+        if (!draft) return null;
+        const nextStepIndex = draft.transcript.turns.length;
+        const turn: GuidedTurn = {
+          stepIndex: nextStepIndex,
+          handNumber: matchRef.current.handNumber,
+          coachingText,
+          stateBefore: JSON.stringify(matchRef.current),
+          expectedPlayerMove,
+          playerStateAfter: '',
+          fritzReplies: [],
+        };
+        draft.transcript.turns = [...draft.transcript.turns, turn];
+        draft.activeStepIndex = nextStepIndex;
+        return saveDraft(draft);
+      },
+      capturePlayerStateAfter: () => {
+        const draft = getDraft();
+        if (!draft || draft.activeStepIndex == null) return null;
+        draft.transcript.turns = draft.transcript.turns.map((turn) =>
+          turn.stepIndex === draft.activeStepIndex
+            ? { ...turn, playerStateAfter: JSON.stringify(matchRef.current) }
+            : turn,
+        );
+        return saveDraft(draft);
+      },
+      recordFritzReply: (input) => {
+        const draft = getDraft();
+        if (!draft || draft.activeStepIndex == null) return null;
+        const reply: GuidedReplyEvent = {
+          ...input,
+          runningPlayerScore: matchRef.current.players.you.score,
+          runningFritzScore: matchRef.current.players.bot.score,
+          stateAfter: JSON.stringify(matchRef.current),
+        };
+        draft.transcript.turns = draft.transcript.turns.map((turn) =>
+          turn.stepIndex === draft.activeStepIndex
+            ? { ...turn, fritzReplies: [...turn.fritzReplies, reply] }
+            : turn,
+        );
+        return saveDraft(draft);
+      },
+      finishTurn: () => {
+        const draft = getDraft();
+        if (!draft) return null;
+        draft.activeStepIndex = null;
+        return saveDraft(draft);
+      },
+      exportDraft: () => getDraft()?.transcript ?? null,
+      publishDraft: () => {
+        const draft = getDraft();
+        if (!draft) return null;
+        saveOriginalGuidedTranscript(draft.transcript);
+        return draft.transcript;
+      },
+      clearDraft: () => {
+        clearOriginalGuidedTranscriptDraft();
+      },
+    };
+
+    console.log('[guided-transcript-authoring] ready on window.__guidedTranscriptAuthoring');
+
+    return () => {
+      delete win.__guidedTranscriptAuthoring;
+    };
+  }, [isAuthoringMode]);
+
+  useEffect(() => {
     matchRef.current = match;
   }, [match]);
 
@@ -832,9 +1124,49 @@ export default function BotMatchScreen({
     // Load any existing note for this step index (handles reload mid-session)
     const existing = authoringSteps.find((s) => s.stepIndex === stepIdx);
     setAuthoringNoteText(existing?.coachingText ?? '');
+    // NOTE: Do NOT clear fritzSessionReplyRef here. The ref holds Fritz's reply
+    // events from the bot turn that just finished, and those events need to be
+    // flushed into the PREVIOUS authored step by the flush effect below.
   }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Authoring: persist session to localStorage on every steps change ──────
+  // ── Authoring: flush captured Fritz reply events into the previous step ──
+  // When player's turn resumes after Fritz played, the fritzSessionReplyRef
+  // holds the complete sequence of Fritz's reply events. Those events belong
+  // to the most recently recorded authored step (the step whose move Fritz
+  // was responding to). We attach them here and then clear the ref so the
+  // next Fritz chain starts fresh.
+  useEffect(() => {
+    if (!isAuthoringMode) return;
+    if (match.currentPlayer !== 'you') return;
+    if (fritzSessionReplyRef.current.length === 0) return;
+    const events = [...fritzSessionReplyRef.current];
+    fritzSessionReplyRef.current = [];
+    setAuthoringSteps((prev) => {
+      if (prev.length === 0) return prev;
+      // Find the most recent real (non-draft) step and attach the events there.
+      let targetIdx = -1;
+      for (let i = prev.length - 1; i >= 0; i -= 1) {
+        if (prev[i]!.chosenMove !== null) {
+          targetIdx = i;
+          break;
+        }
+      }
+      if (targetIdx === -1) return prev;
+      const target = prev[targetIdx]!;
+      const updated: AuthoredStep = { ...target, fritzReplyEvents: events };
+      const next = [...prev];
+      next[targetIdx] = updated;
+      console.log('[guided-capture] flush', {
+        flushedToStepIndex: target.stepIndex,
+        count: events.length,
+        stepHasEventsAfterFlush:
+          Array.isArray(updated.fritzReplyEvents) && updated.fritzReplyEvents.length > 0,
+      });
+      return next;
+    });
+  }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Authoring V1: persist session to localStorage on every steps change ─────
   useEffect(() => {
     if (!isAuthoringMode) return;
     const session: AuthoringSession = {
@@ -846,6 +1178,44 @@ export default function BotMatchScreen({
     };
     saveAuthoringSession(session);
   }, [isAuthoringMode, authoringSteps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Authoring V2: keep events ref in sync ────────────────────────────────
+  useEffect(() => {
+    authoringV2EventsRef.current = authoringV2Events;
+  }, [authoringV2Events]);
+
+  // ── Authoring V2: persist session to localStorage on every events change ──
+  useEffect(() => {
+    if (!isAuthoringV2Mode) return;
+    const session: LessonV2AuthoringSession = {
+      lessonId: AUTHORING_LESSON_ID,
+      gameId: AUTHORING_GAME_ID,
+      // Preserve the original createdAt; only update updatedAt on each save
+      createdAt: authoringV2CreatedAtRef.current,
+      updatedAt: new Date().toISOString(),
+      handStarts: authoringV2HandStarts,
+      events: authoringV2Events,
+      lastEventIndex: authoringV2Events.length - 1,
+    };
+    saveV2AuthoringSession(session);
+  }, [isAuthoringV2Mode, authoringV2Events, authoringV2HandStarts]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Authoring V2: capture LessonV2HandStart when a new hand begins ───────
+  // Fires when match.handNumber changes and the hand is live (not over).
+  // Uses match directly since matchRef is updated in a separate effect.
+  useEffect(() => {
+    if (!isAuthoringV2Mode || match.handOver || match.gameOver) return;
+    setAuthoringV2HandStarts((prev) => {
+      if (prev.some((h) => h.handNumber === match.handNumber)) return prev;
+      const handStart: LessonV2HandStart = {
+        handNumber: match.handNumber,
+        matchStateJson: JSON.stringify(match),
+        firstEventIndex: authoringV2EventsRef.current.length,
+      };
+      console.log('[v2-capture] hand start', { handNumber: match.handNumber, firstEventIndex: handStart.firstEventIndex });
+      return [...prev, handStart];
+    });
+  }, [isAuthoringV2Mode, match.handNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── [guided-debug] Log final rendered match hand after first mount ──────────
   // This fires once after React commits the initial state to the DOM.
@@ -877,54 +1247,235 @@ export default function BotMatchScreen({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Snapshot mode: advance to next authored step instead of running the bot ─
-  // Fires synchronously when the match transitions to bot's turn in snapshot mode.
-  // Overwrites board + player hand with the next authored step's stored snapshots,
-  // then immediately hands control back to the player.  Bot AI never runs.
   useEffect(() => {
-    if (!isGuidedSnapshotMode || !frozenLesson) return;
-    if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver) return;
-
-    // Real steps only (chosenMove !== null); after compactFrozenLesson these ARE
-    // all the steps, but filter defensively in case compact hasn't been run yet.
-    const realSteps = frozenLesson.steps.filter((s) => s.chosenMove !== null);
-    const nextStep = realSteps[lessonStepIndex]; // lessonStepIndex was already incremented after player's move
-
-    if (!nextStep) {
-      // No more authored steps — lesson is complete.
-      // Leave the match state as the live engine produced it; don't call bot.
+    if (!frozenLesson) {
+      console.log('[guided-replay-blocked] reason = no-frozenLesson');
+      return;
+    }
+    if (!isGuidedV1OnlineMode) {
+      console.log('[guided-replay-blocked] reason = guided-v1-online-disabled', {
+        isOffAuthoredLine,
+        currentPlayer: match.currentPlayer,
+        handOver: match.handOver,
+        gameOver: match.gameOver,
+        lessonStepIndex,
+      });
+      return;
+    }
+    if (match.handOver) {
+      console.log('[guided-replay-blocked] reason = hand-over');
+      return;
+    }
+    if (match.gameOver) {
+      console.log('[guided-replay-blocked] reason = game-over');
+      return;
+    }
+    if (match.currentPlayer !== 'bot') {
+      console.log('[guided-replay-blocked] reason = current-player-not-bot', {
+        currentPlayer: match.currentPlayer,
+        lessonStepIndex,
+      });
       return;
     }
 
-    const board = parseGuidedBoardState(nextStep.boardState);
-    const playerTiles = nextStep.playerHand
-      .map((k) => parseTileKey(k))
-      .filter((t): t is Tile => t !== null);
+    const prevStepIdx = lessonStepIndex - 1;
+    const prevStep = getGuidedV1AuthoredStepByIndex(frozenLesson, prevStepIdx);
+    const replyEvents = prevStep?.fritzReplyEvents ?? null;
 
-    console.log(
-      '[guided-snapshot] advance to step', nextStep.stepIndex,
-      'hand:', playerTiles.map((t) => `${t.low}|${t.high}`),
-    );
-    console.log('[guided-snapshot] board shape after advance =', {
-      mainLineLen: board?.mainLine?.length ?? '(null board)',
-      hubDoublesLen: board?.hubDoubles?.length ?? '(null board)',
-      leftEnd: board?.leftEnd,
-      rightEnd: board?.rightEnd,
+    console.log('[guided-replay-start]', {
+      lessonStepIndex,
+      prevStepIdx,
+      currentPlayer: match.currentPlayer,
+      guidedReplyIndex,
+      isTransitioning: isTransitioningRef.current,
+      hasPrevStep: Boolean(prevStep),
+      fritzReplyEventsCount: replyEvents?.length ?? 0,
+      isOffAuthoredLine,
     });
 
-    setMatch((prev) => ({
-      ...prev,
-      board,
-      players: {
-        ...prev.players,
-        you: { ...prev.players.you, hand: playerTiles },
-        // Bot hand left as-is — it won't be used since bot never plays in snapshot mode
-      },
-      handNumber: nextStep.handNumber ?? prev.handNumber,
-      currentPlayer: 'you',
-      handOver: false,
-    }));
-  }, [isGuidedSnapshotMode, frozenLesson, match.currentPlayer, match.handOver, match.gameOver, lessonStepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (guidedReplyIndex !== -1) {
+      console.log('[guided-replay-blocked] reason = replay-already-in-progress');
+      return;
+    }
+    if (!isTransitioningRef.current) {
+      console.log('[guided-replay-blocked] reason = transition-latch-false');
+      return;
+    }
+
+    if (!prevStep) {
+      console.log('[guided-replay-blocked] reason = waiting-for-lessonStepIndex-commit');
+      return;
+    }
+
+    if (!replyEvents || replyEvents.length === 0) {
+      console.log('[guided-replay-blocked] reason = missing-fritzReplyEvents');
+      return;
+    }
+
+    isTransitioningRef.current = false;
+    setGuidedReplyIndex(0);
+  }, [isGuidedV1OnlineMode, frozenLesson, match.currentPlayer, match.handOver, match.gameOver, lessonStepIndex, guidedReplyIndex, isOffAuthoredLine]);
+
+  // ── V2 Guided Playback: auto-apply Fritz events ───────────────────────────
+  // Fires whenever the cursor lands on a fritz-actor event.  Applies the
+  // authoritative state from the event and advances the cursor.  Stops as
+  // soon as the cursor points at a player event (actor === 'player').
+  //
+  // This effect is safe from infinite loops:
+  //   • It only fires when event.actor === 'fritz'
+  //   • After advancing the cursor, the next render evaluates the new event
+  //   • If that event is a player event, the early-return fires and the loop stops
+  useEffect(() => {
+    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return;
+    if (match.handOver || match.gameOver) return;
+
+    const event = frozenV2Lesson.events[guidedV2EventIndex];
+    if (!event || event.actor !== 'fritz') return;
+
+    const timer = setTimeout(() => {
+      // ── Double-apply guard ──────────────────────────────────────────────────
+      // Effect dep changes (e.g. isMuted) can cause a re-fire before cursor
+      // increments.  The ref ensures each event index is applied exactly once.
+      if (fritzV2LastAppliedIndexRef.current === guidedV2EventIndex) return;
+      fritzV2LastAppliedIndexRef.current = guidedV2EventIndex;
+
+      // Apply authoritative board/hand/score state from the event
+      const board = parseLessonV2BoardState(event.boardAfter);
+      const playerHand = event.playerHandAfter
+        .map((k) => parseTileKey(k))
+        .filter((t): t is Tile => t !== null);
+      const fritzHand = event.fritzHandAfter
+        .map((k) => parseTileKey(k))
+        .filter((t): t is Tile => t !== null);
+
+      // Determine who plays next after this event
+      const nextPlayer: BotPlayerId = event.handOver || event.gameOver
+        ? 'you'
+        : event.turnContinues
+          ? 'bot'
+          : 'you';
+
+      setMatch((prev) => ({
+        ...prev,
+        board,
+        handOpen: Boolean(board && board.mainLine && board.mainLine.length > 0),
+        players: {
+          you: { ...prev.players.you, hand: playerHand, score: event.playerScoreAfter },
+          bot: { ...prev.players.bot, hand: fritzHand, score: event.fritzScoreAfter },
+        },
+        currentPlayer: nextPlayer,
+        handOver: event.handOver,
+        gameOver: event.gameOver,
+        handNumber: event.handNumber,
+      }));
+
+      // Play sounds for Fritz action
+      if (event.pointsScored > 0) queueSound(() => playScoreSound(event.pointsScored, isMuted), 80);
+      if (event.action === 'play') queueSound(() => playTileSound('standard', isMuted), 0);
+      if (event.action === 'draw') queueSound(() => playDrawSound(isMuted), 0);
+      if (event.handOver) {
+        const won = event.handEnded?.winner === 'fritz';
+        queueSound(() => won ? playHandWinSound(isMuted) : playHandLoseSound(isMuted), 400);
+      }
+
+      setGuidedV2EventIndex((i) => i + 1);
+
+      // ── Trigger hand-reveal modal when Fritz ends the hand ──────────────────
+      if (event.handOver && event.handEnded) {
+        if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+        handRevealTimerRef.current = window.setTimeout(() => {
+          setHandReveal({
+            winner: event.handEnded!.winner === 'player' ? 'you'
+              : event.handEnded!.winner === 'fritz' ? 'bot'
+              : null,
+            reason: event.handEnded!.reason,
+            pointsAwarded: event.handEnded!.pointsAwarded,
+            loserPips: event.handEnded!.loserPips,
+            calcText: event.handEnded!.calcText,
+            yourRemainingTiles: playerHand,
+            botRemainingTiles: fritzHand,
+          });
+          handRevealTimerRef.current = null;
+        }, 600);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, match.handOver, match.gameOver, isMuted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── V2 Guided: auto-apply forced player draw/pass events ─────────────────
+  // When the authored sequence requires the player to draw or pass (no legal
+  // play exists) this effect auto-applies the authoritative state so the game
+  // advances without requiring any extra UI input from the player.
+  // The auto-draw effect in the draw-sequence section is suppressed in V2
+  // on-line mode to prevent it from drawing from the wrong (random) boneyard.
+  useEffect(() => {
+    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return;
+    if (match.handOver || match.gameOver) return;
+
+    const event = frozenV2Lesson.events[guidedV2EventIndex];
+    if (!event || event.actor !== 'player') return;
+    if (event.action !== 'draw' && event.action !== 'pass') return;
+
+    // Short delay so the player sees their hand before the auto-advance
+    const timer = setTimeout(() => {
+      const board = parseLessonV2BoardState(event.boardAfter);
+      const playerHand = event.playerHandAfter
+        .map((k) => parseTileKey(k))
+        .filter((t): t is Tile => t !== null);
+      const fritzHand = event.fritzHandAfter
+        .map((k) => parseTileKey(k))
+        .filter((t): t is Tile => t !== null);
+
+      const nextPlayer: BotPlayerId = event.handOver || event.gameOver
+        ? 'you'
+        : event.turnContinues
+          ? 'you'
+          : 'bot';
+
+      setMatch((prev) => ({
+        ...prev,
+        board,
+        handOpen: Boolean(board && board.mainLine && board.mainLine.length > 0),
+        players: {
+          you: { ...prev.players.you, hand: playerHand, score: event.playerScoreAfter },
+          bot: { ...prev.players.bot, hand: fritzHand, score: event.fritzScoreAfter },
+        },
+        currentPlayer: nextPlayer,
+        handOver: event.handOver,
+        gameOver: event.gameOver,
+        handNumber: event.handNumber,
+      }));
+
+      if (event.action === 'draw') {
+        queueSound(() => playDrawSound(isMuted), 0);
+        showBoardToast('You drew a tile', 'bot');
+      }
+
+      setGuidedV2EventIndex((i) => i + 1);
+
+      // Trigger hand-reveal when player action ends the hand
+      if (event.handOver && event.handEnded) {
+        if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+        handRevealTimerRef.current = window.setTimeout(() => {
+          setHandReveal({
+            winner: event.handEnded!.winner === 'player' ? 'you'
+              : event.handEnded!.winner === 'fritz' ? 'bot'
+              : null,
+            reason: event.handEnded!.reason,
+            pointsAwarded: event.handEnded!.pointsAwarded,
+            loserPips: event.handEnded!.loserPips,
+            calcText: event.handEnded!.calcText,
+            yourRemainingTiles: playerHand,
+            botRemainingTiles: fritzHand,
+          });
+          handRevealTimerRef.current = null;
+        }, 600);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, match.handOver, match.gameOver, isMuted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const lastUserMoveNumber = moveLog.reduce(
@@ -1028,14 +1579,14 @@ export default function BotMatchScreen({
     }
   };
 
-  const pushToast = (msg: string, ms = 1400) => {
+  const pushToast = useCallback((msg: string, ms = 1400) => {
     if (!msg) return;
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(msg);
     toastTimerRef.current = setTimeout(() => setToast(''), ms);
-  };
+  }, []);
 
-  const showBoardToast = (message: string, tone: 'you' | 'bot') => {
+  const showBoardToast = useCallback((message: string, tone: 'you' | 'bot') => {
     if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
     if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
     setScoreToast({
@@ -1047,13 +1598,13 @@ export default function BotMatchScreen({
       setScoreToast((prev) => (prev ? { ...prev, visible: false } : prev));
     }, 1700);
     scoreToastClearTimerRef.current = setTimeout(() => setScoreToast(null), 2000);
-  };
+  }, []);
 
-  const showScoreToast = (player: 'you' | 'bot', points: number) => {
+  const showScoreToast = useCallback((player: 'you' | 'bot', points: number) => {
     showBoardToast(`${player === 'you' ? 'You' : opponentLabel} scored +${points}`, player);
-  };
+  }, [opponentLabel, showBoardToast]);
 
-  function flashLastPlayed(tile: Tile | null) {
+  const flashLastPlayed = useCallback((tile: Tile | null) => {
     if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
     setLastPlayedTile(tile);
     if (tile) {
@@ -1062,7 +1613,7 @@ export default function BotMatchScreen({
         lastPlayedTileTimerRef.current = null;
       }, 2400);
     }
-  }
+  }, []);
 
   const renderScoreToastMessage = useCallback((message: string) => {
     const pointsMatch = message.match(/\+\d+/);
@@ -1242,6 +1793,27 @@ export default function BotMatchScreen({
     resumeKey,
     winningScore,
   ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const win = window as typeof window & {
+      __dailyFritzProfileActive?: boolean;
+      __dailyFritzProfile?: Record<string, unknown>;
+      __dailyFritzInteractionTrace?: Array<Record<string, unknown>>;
+    };
+    if (isDailyFritzMode) {
+      win.__dailyFritzProfileActive = true;
+      win.__dailyFritzProfile ??= {};
+      win.__dailyFritzInteractionTrace ??= [];
+    } else {
+      win.__dailyFritzProfileActive = false;
+    }
+    return () => {
+      if (win.__dailyFritzProfileActive) {
+        win.__dailyFritzProfileActive = false;
+      }
+    };
+  }, [isDailyFritzMode]);
 
   useEffect(() => {
     if (!isDailyFritzMode || !dailyFritzStorageKey || typeof window === 'undefined') return;
@@ -1465,7 +2037,8 @@ export default function BotMatchScreen({
 
     // Capture the moveLog value synchronously at submission time so that
     // async dep changes to moveLog cannot affect this in-flight request.
-    const capturedMoveLog = moveLog;
+    // We parse and stringify to ensure a canonical representation (no undefineds, etc).
+    const capturedMoveLog = JSON.parse(JSON.stringify(moveLog));
 
     void (async () => {
       if (isGuidedMode || isAuthoringMode) {
@@ -1477,7 +2050,7 @@ export default function BotMatchScreen({
           runDate: dailyFritzPackage.run_date,
           attemptId: dailyFritzPackage.attempt_id,
           verifiedMatchId: dailyFritzPackage.verified_match_id,
-          currentHandIndex: dailyFritzPackage.current_hand_index,
+          currentHandIndex: dailyFritzHandIndex,
           finalScore: match.players.you.score,
           opponentScore: match.players.bot.score,
           won: match.winnerId === 'you',
@@ -1485,6 +2058,7 @@ export default function BotMatchScreen({
           handsPlayed: match.handNumber,
           moveLog: capturedMoveLog,
         });
+
         const response = await completeDailyFritz({
           attemptId: dailyFritzPackage.attempt_id,
           verifiedMatchId: dailyFritzPackage.verified_match_id,
@@ -1668,74 +2242,38 @@ export default function BotMatchScreen({
   ]);
 
   const userLegalMoves = useMemo(() => {
-    // ── Guided snapshot mode: derive selectable moves from the authored step ONLY ──
-    // The live engine must not run here — the snapshot board is placed from stored
-    // authored data and its open ends may not match the live game that produced the
-    // original authored session, producing nonsensical highlights for unrelated tiles.
-    if (isGuidedSnapshotMode && frozenLesson) {
-      const realSteps = frozenLesson.steps.filter((s) => s.chosenMove !== null);
-      const step = realSteps[lessonStepIndex] ?? null;
-      const stepChosenMove = step?.chosenMove ?? null;
+    if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return [];
 
-      console.log('[guided-playback] current step chosenMove =', stepChosenMove);
-
-      if (!stepChosenMove || stepChosenMove === 'draw' || stepChosenMove === 'pass') {
-        console.log('[guided-playback] live legal moves skipped = true (no play-type chosenMove)');
-        console.log('[guided-playback] rendered selectable tiles =', []);
-        return [];
-      }
-
-      const colonIdx = stepChosenMove.indexOf(':');
-      const tileKeyRaw = colonIdx >= 0 ? stepChosenMove.slice(0, colonIdx) : stepChosenMove;
-      const positionRaw =
-        colonIdx >= 0 ? (stepChosenMove.slice(colonIdx + 1) as PlacementPosition) : null;
-      const parsedTile = parseTileKey(tileKeyRaw);
-
-      if (!parsedTile) {
-        console.log('[guided-playback] live legal moves skipped = true (tile key parse failed)');
-        console.log('[guided-playback] rendered selectable tiles =', []);
-        return [];
-      }
-
-      // If the authored move records an explicit position ("3|5:right"), restrict
-      // highlighting to exactly that side.  If no position was recorded, enumerate
-      // all positions where the tile is legally placeable on the snapshot board so
-      // the player can still click to confirm the play.
-      let positions: PlacementPosition[];
-      if (positionRaw) {
-        positions = [positionRaw];
-      } else {
-        try {
-          positions = getPlacementTargetsForTile(match.board, parsedTile);
-        } catch {
-          positions = ['left'];
-        }
-        if (positions.length === 0) positions = ['left'];
-      }
-
-      const authoredMoves: Move[] = positions.map((pos) => ({
-        type: 'play' as const,
-        tile: parsedTile,
-        position: pos,
-      }));
-
-      console.log('[guided-playback] live legal moves skipped = true');
-      console.log('[guided-playback] rendered selectable tiles =', [tileKeyRaw]);
-      return authoredMoves;
-    }
-
-    // ── Normal mode: live engine ──
-    if (match.currentPlayer !== 'you') return [];
-    console.log('[guided-playback] live legal moves skipped = false');
     try {
-      return getLegalMoves(match, 'you');
+      const moves = getLegalMoves(match, 'you');
+      if (isGuidedV1OnlineMode) {
+        console.log('[guided-legal] boardSource === legalitySource = true', {
+          stepIndex: lessonStepIndex,
+          boardState: serializeGhostBoardState(match.board),
+        });
+      }
+      if (isDailyFritzMode) {
+        traceDailyFritzEvent('[state] legalMoves computed', {
+          count: moves.length,
+          handOver: match.handOver,
+          gameOver: match.gameOver,
+          currentPlayer: match.currentPlayer,
+        });
+      }
+      return moves;
     } catch (e) {
-      // Safety guard: a malformed board must never crash the render.
-      console.error('[guided-snapshot] getLegalMoves threw — board may be malformed:', e, 'board:', match.board);
+      console.error('[guided-snapshot] getLegalMoves threw:', e);
       return [];
     }
-  }, [match, isGuidedSnapshotMode, frozenLesson, lessonStepIndex]);
+  }, [isDailyFritzMode, isGuidedV1OnlineMode, lessonStepIndex, match]);
   const userPlayMoves = useMemo(() => asPlayMoves(userLegalMoves), [userLegalMoves]);
+
+  useEffect(() => {
+    if (!isDailyFritzMode) return;
+    traceDailyFritzEvent('[state] selectedTile set', {
+      tile: selectedTile ? toTileKey(selectedTile) : null,
+    });
+  }, [isDailyFritzMode, selectedTile]);
 
   // Guided mode: evaluate all play moves using previewPlayMove (unified scoring source),
   // then recommend the best placement with opening-move awareness.
@@ -1744,7 +2282,7 @@ export default function BotMatchScreen({
     // In snapshot mode the LessonCoachPanel drives best-move via authored chosenMove.
     // Suppress all live AI tip computation — it would recommend the engine's choice,
     // not the authored lesson move.
-    if (isGuidedSnapshotMode) return null;
+    if (isGuidedV1OnlineMode) return null;
     if (userPlayMoves.length === 0) return null;
 
     // Evaluate ALL play moves via previewPlayMove — single source of truth for scoring
@@ -1884,10 +2422,6 @@ export default function BotMatchScreen({
   // Per-tile max points for green/gold highlighting — uses same previewPlayMove as coach tip
   const guidedScoringTiles = useMemo((): Map<string, number> => {
     if (!isGuidedMode || match.currentPlayer !== 'you') return new Map();
-    // In snapshot mode, scoring badges come from live engine previews against the snapshot
-    // board — those points are meaningless in the context of the authored lesson.  Hide all
-    // score badges; only the authored tile highlight matters.
-    if (isGuidedSnapshotMode) return new Map();
     const map = new Map<string, number>();
     for (const move of userPlayMoves) {
       if (!move.tile) continue;
@@ -1912,22 +2446,28 @@ export default function BotMatchScreen({
    * This makes LessonCoachPanel correct even if the frozen lesson was authored
    * before the stepIdx-locking fix and contains null-chosenMove drafts.
    */
+  const currentTranscriptTurn = useMemo((): GuidedTurn | null => {
+    if (!isGuidedTranscriptMode || !guidedTranscript || match.handOver || match.gameOver) return null;
+    return guidedTranscript.turns.find((turn) => turn.stepIndex === lessonStepIndex) ?? null;
+  }, [guidedTranscript, isGuidedTranscriptMode, lessonStepIndex, match.gameOver, match.handOver]);
+
   const currentLessonStep = useMemo(() => {
-    if (!isGuidedMode || !frozenLesson || match.currentPlayer !== 'you' || match.handOver || match.gameOver) {
+    if (!isGuidedMode || !frozenLesson || match.handOver || match.gameOver) {
       return null;
     }
-    const currentBoardKey = serializeGhostBoardState(match.board);
-    // Prefer a real step (chosenMove !== null) whose boardState matches
-    const realByBoard = frozenLesson.steps.find(
-      (s) => s.boardState === currentBoardKey && s.chosenMove !== null,
-    );
-    if (realByBoard) return realByBoard;
-    // Fall back to stepIndex match (post-compact, these should be aligned)
-    const byIndex = frozenLesson.steps.find((s) => s.stepIndex === lessonStepIndex);
-    if (byIndex) return byIndex;
-    // Last resort: any board-state match (including null-chosenMove drafts)
-    return frozenLesson.steps.find((s) => s.boardState === currentBoardKey) ?? null;
-  }, [isGuidedMode, frozenLesson, match.currentPlayer, match.board, match.handOver, match.gameOver, lessonStepIndex]);
+    return getGuidedV1AuthoredStepByIndex(frozenLesson, lessonStepIndex);
+  }, [isGuidedMode, frozenLesson, match.handOver, match.gameOver, lessonStepIndex]);
+
+  /**
+   * Coaching text for the V2 guided lesson.
+   * Looks ahead from the current cursor to the next player-actor event and
+   * returns its coachingText.  Recomputes whenever the cursor advances so the
+   * coach always shows guidance for the UPCOMING player move.
+   */
+  const currentV2CoachingText = useMemo(() => {
+    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return '';
+    return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex)?.coachingText ?? '';
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
 
   const ghostSuggestedPlayerMove = useMemo(
     () =>
@@ -1942,7 +2482,139 @@ export default function BotMatchScreen({
     [ghostProfile, isGhostMode, match, userPlayMoves],
   );
 
-  const applyAndNotify = (result: BotActionResult) => {
+  const beginGuidedV1Replay = useCallback((step: AuthoredStep, playedTile: Tile | null) => {
+    const replyEvents = step.fritzReplyEvents ?? [];
+    if (replyEvents.length === 0) {
+      pushToast('This lesson step is missing Fritz reply events.');
+      setIsOffAuthoredLine(true);
+      return;
+    }
+    setSelectedTile(null);
+    flashLastPlayed(playedTile);
+    setGuidedV1Replay({ stepIndex: step.stepIndex, replyIndex: 0 });
+    setMatch((prev) => ({
+      ...prev,
+      currentPlayer: 'bot',
+    }));
+  }, [flashLastPlayed, pushToast]);
+
+  const acceptGuidedTranscriptTurn = useCallback((turn: GuidedTurn, playedTile: Tile | null) => {
+    const playerState = parseGuidedTranscriptState(turn.playerStateAfter);
+    if (!playerState) {
+      pushToast('This transcript turn is missing a valid player state.');
+      setIsOffAuthoredLine(true);
+      return;
+    }
+    setSelectedTile(null);
+    flashLastPlayed(playedTile);
+    setMatch(playerState);
+    if (turn.fritzReplies.length > 0) {
+      setGuidedV1Replay({ stepIndex: turn.stepIndex, replyIndex: 0 });
+      return;
+    }
+    setLessonStepIndex((prev) => prev + 1);
+  }, [flashLastPlayed, pushToast]);
+
+  const notifyBotActionResult = useCallback((result: BotActionResult) => {
+    if (result.handEnded) {
+      if (isDailyFritzMode) {
+        lastDailyFlowLabelRef.current = 'hand-complete';
+        console.log('[daily-flow] hand complete detected', {
+          handNumber: result.state.handNumber,
+          winner: result.handEnded.winner,
+          reason: result.handEnded.reason,
+          pointsAwarded: result.handEnded.pointsAwarded,
+          yourScore: result.state.players.you.score,
+          botScore: result.state.players.bot.score,
+          isGameOver: result.state.gameOver,
+        });
+        console.log('[daily-flow] hand scoring applied', {
+          pointsAwarded: result.handEnded.pointsAwarded,
+          winner: result.handEnded.winner,
+          yourScore: result.state.players.you.score,
+          botScore: result.state.players.bot.score,
+        });
+      }
+      // Kick off the next-hand fetch immediately so it's ready by the time the
+      // 5-second reveal window closes.  Store both the promise and its settled
+      // result so advanceHand can transition instantly if already resolved.
+      if (isDailyFritzMode && dailyFritzPackage && !result.state.gameOver) {
+        const cache: {
+          promise: Promise<DailyFritzNextHandResponse>;
+          result: DailyFritzNextHandResponse | null;
+          error: unknown;
+        } = {
+          promise: nextDailyFritzHand({
+            attemptId: dailyFritzPackage.attempt_id,
+            verifiedMatchId: dailyFritzPackage.verified_match_id,
+            completedHandScores: {
+              you: result.state.players.you.score,
+              fritz: result.state.players.bot.score,
+            },
+          }),
+          result: null,
+          error: null,
+        };
+        cache.promise.then((r) => { cache.result = r; }).catch((e) => { cache.error = e; });
+        dailyFritzNextHandRef.current = cache;
+      }
+      flashLastPlayed(null);
+      const handEndedData = result.handEnded;
+      const yourRemainingTiles = result.state.players.you.hand;
+      const botRemainingTiles = result.state.players.bot.hand;
+      if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+      handRevealTimerRef.current = window.setTimeout(() => {
+        if (isDailyFritzMode) {
+          lastDailyFlowLabelRef.current = 'reveal-start';
+          console.log('[daily-flow] reveal start', {
+            handNumber: result.state.handNumber,
+            handTransitionInFlight: handTransitionInFlightRef.current,
+            prefetchReady: dailyFritzNextHandRef.current?.result != null,
+          });
+        }
+        setHandReveal({
+          winner: handEndedData.winner,
+          reason: handEndedData.reason,
+          pointsAwarded: handEndedData.pointsAwarded,
+          loserPips: handEndedData.loserPips,
+          calcText: handEndedData.calcText,
+          yourRemainingTiles,
+          botRemainingTiles,
+        });
+        handRevealTimerRef.current = null;
+      }, 1400);
+      if (result.handEnded.reason === 'blocked') {
+        queueSound(() => playBlockedSound(isMuted), 0);
+      }
+      if (!result.state.gameOver) {
+        if (result.handEnded.winner === 'you') {
+          queueSound(() => playHandWinSound(isMuted), 320);
+        } else {
+          queueSound(() => playHandLoseSound(isMuted), 320);
+        }
+      }
+    }
+    if (result.scored) {
+      const points = result.scored.points;
+      showScoreToast(result.scored.player, points);
+      queueSound(() => playScoreSound(points, isMuted), 80);
+    }
+    if (result.drew && result.drew.player === 'you') {
+      showBoardToast('You drew a tile', 'bot');
+    }
+    const msg = toastFromResult(result, opponentLabel);
+    if (msg) pushToast(msg);
+  }, [
+    dailyFritzPackage,
+    isDailyFritzMode,
+    isMuted,
+    opponentLabel,
+    pushToast,
+    showBoardToast,
+    showScoreToast,
+  ]);
+
+  const applyAndNotify = useCallback((result: BotActionResult) => {
     const adjustedState =
       isDailyFritzMode &&
       result.handEnded &&
@@ -1961,6 +2633,7 @@ export default function BotMatchScreen({
             ) as BotPlayerId | null,
           }
         : result.state;
+
     setMatch((prev) => {
       const trackedDraw = result.drew?.player === 'you' ? 1 : 0;
       const trackedPass = result.passed?.player === 'you' ? 1 : 0;
@@ -1982,95 +2655,8 @@ export default function BotMatchScreen({
         opponentKnownMissing: prev.opponentKnownMissing ?? adjustedState.opponentKnownMissing ?? [],
       };
     });
-    if (result.handEnded) {
-      if (isDailyFritzMode) {
-        lastDailyFlowLabelRef.current = 'hand-complete';
-        console.log('[daily-flow] hand complete detected', {
-          handNumber: adjustedState.handNumber,
-          winner: result.handEnded.winner,
-          reason: result.handEnded.reason,
-          pointsAwarded: result.handEnded.pointsAwarded,
-          yourScore: adjustedState.players.you.score,
-          botScore: adjustedState.players.bot.score,
-          isGameOver: adjustedState.gameOver,
-        });
-        console.log('[daily-flow] hand scoring applied', {
-          pointsAwarded: result.handEnded.pointsAwarded,
-          winner: result.handEnded.winner,
-          yourScore: adjustedState.players.you.score,
-          botScore: adjustedState.players.bot.score,
-        });
-      }
-      // Kick off the next-hand fetch immediately so it's ready by the time the
-      // 5-second reveal window closes.  Store both the promise and its settled
-      // result so advanceHand can transition instantly if already resolved.
-      if (isDailyFritzMode && dailyFritzPackage && !adjustedState.gameOver) {
-        const cache: {
-          promise: Promise<DailyFritzNextHandResponse>;
-          result: DailyFritzNextHandResponse | null;
-          error: unknown;
-        } = {
-          promise: nextDailyFritzHand({
-            attemptId: dailyFritzPackage.attempt_id,
-            verifiedMatchId: dailyFritzPackage.verified_match_id,
-            completedHandScores: {
-              you: adjustedState.players.you.score,
-              fritz: adjustedState.players.bot.score,
-            },
-          }),
-          result: null,
-          error: null,
-        };
-        cache.promise.then((r) => { cache.result = r; }).catch((e) => { cache.error = e; });
-        dailyFritzNextHandRef.current = cache;
-      }
-      flashLastPlayed(null);
-      const handEndedData = result.handEnded;
-      const yourRemainingTiles = adjustedState.players.you.hand;
-      const botRemainingTiles = adjustedState.players.bot.hand;
-      if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
-      handRevealTimerRef.current = window.setTimeout(() => {
-        if (isDailyFritzMode) {
-          lastDailyFlowLabelRef.current = 'reveal-start';
-          console.log('[daily-flow] reveal start', {
-            handNumber: adjustedState.handNumber,
-            handTransitionInFlight: handTransitionInFlightRef.current,
-            prefetchReady: dailyFritzNextHandRef.current?.result != null,
-          });
-        }
-        setHandReveal({
-          winner: handEndedData.winner,
-          reason: handEndedData.reason,
-          pointsAwarded: handEndedData.pointsAwarded,
-          loserPips: handEndedData.loserPips,
-          calcText: handEndedData.calcText,
-          yourRemainingTiles,
-          botRemainingTiles,
-        });
-        handRevealTimerRef.current = null;
-      }, 1400);
-      if (result.handEnded.reason === 'blocked') {
-        queueSound(() => playBlockedSound(isMuted), 0);
-      }
-      if (!adjustedState.gameOver) {
-        if (result.handEnded.winner === 'you') {
-          queueSound(() => playHandWinSound(isMuted), 320);
-        } else {
-          queueSound(() => playHandLoseSound(isMuted), 320);
-        }
-      }
-    }
-    if (result.scored) {
-      const points = result.scored.points;
-      showScoreToast(result.scored.player, points);
-      queueSound(() => playScoreSound(points, isMuted), 80);
-    }
-    if (result.drew && result.drew.player === 'you') {
-      showBoardToast('You drew a tile', 'bot');
-    }
-    const msg = toastFromResult(result, opponentLabel);
-    if (msg) pushToast(msg);
-  };
+    notifyBotActionResult({ ...result, state: adjustedState });
+  }, [isDailyFritzMode, notifyBotActionResult]);
 
   const setDrawSequenceActiveBoth = useCallback((val: boolean) => {
     drawSequenceActiveRef.current = val;
@@ -2149,6 +2735,10 @@ export default function BotMatchScreen({
       // Use the stepIdx locked at turn-start, not authoringSteps.length which shifts
       // each time Save-Note is pressed during this turn.
       const stepIdx = pre?.stepIdx ?? authoringSteps.length;
+      // The new step is created with EMPTY fritzReplyEvents. Fritz's reply to
+      // THIS move is captured during the following bot turn into
+      // fritzSessionReplyRef and flushed into this step by the flush effect
+      // when the player's next turn begins.
       const newStep: AuthoredStep = {
         stepIndex: stepIdx,
         handNumber: pre?.handNumber ?? match.handNumber,
@@ -2156,17 +2746,53 @@ export default function BotMatchScreen({
         playerHand: pre?.playerHand ?? match.players.you.hand.map(toTileKey),
         chosenMove,
         coachingText: authoringNoteText,
+        fritzReplyEvents: [],
         matchStateJson: pre?.matchStateJson ?? null,
       };
+      console.log('[guided-capture] authored step created', {
+        stepIndex: stepIdx,
+        chosenMove,
+        handNumber: newStep.handNumber,
+      });
+      // Pending events from the previous Fritz chain (if any) should flush to
+      // the PREVIOUS step, not this new one. Drain the ref here and attach to
+      // the most recent real step before inserting the new one.
+      const pendingEvents =
+        fritzSessionReplyRef.current.length > 0 ? [...fritzSessionReplyRef.current] : null;
+      fritzSessionReplyRef.current = [];
       setAuthoringSteps((prev) => {
+        let base = prev;
+        if (pendingEvents) {
+          let targetIdx = -1;
+          for (let i = base.length - 1; i >= 0; i -= 1) {
+            if (base[i]!.chosenMove !== null) {
+              targetIdx = i;
+              break;
+            }
+          }
+          if (targetIdx !== -1) {
+            const target = base[targetIdx]!;
+            const updated: AuthoredStep = { ...target, fritzReplyEvents: pendingEvents };
+            base = [...base];
+            base[targetIdx] = updated;
+            console.log('[guided-capture] pre-flush fritz reply events', {
+              stepIndex: target.stepIndex,
+              eventCount: pendingEvents.length,
+            });
+          }
+        }
         // Replace if same stepIndex already exists (e.g. note-only save followed by play)
-        const existingIdx = prev.findIndex((s) => s.stepIndex === stepIdx);
+        const existingIdx = base.findIndex((s) => s.stepIndex === stepIdx);
         if (existingIdx >= 0) {
-          const next = [...prev];
-          next[existingIdx] = newStep;
+          const next = [...base];
+          next[existingIdx] = {
+            ...next[existingIdx],
+            ...newStep,
+            fritzReplyEvents: next[existingIdx]?.fritzReplyEvents ?? newStep.fritzReplyEvents,
+          };
           return next;
         }
-        return [...prev, newStep];
+        return [...base, newStep];
       });
     },
     [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand], // eslint-disable-line react-hooks/exhaustive-deps
@@ -2200,10 +2826,153 @@ export default function BotMatchScreen({
     });
   }, [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onPositionClick = (position: any) => {
-    if (match.currentPlayer !== 'you' || !selectedTile || match.handOver || match.gameOver) return;
+  const onPositionClick = useCallback((position: PlacementPosition) => {
+    console.log('[guided-path-root]', {
+      position,
+      selectedTile: selectedTile ? toTileKey(selectedTile) : null,
+      currentPlayer: match.currentPlayer,
+      handOver: match.handOver,
+      gameOver: match.gameOver,
+    });
+    console.log('[guided-click-enter]', {
+      selectedTile: selectedTile ? toTileKey(selectedTile) : null,
+      position,
+      currentPlayer: match.currentPlayer,
+      handOver: match.handOver,
+      gameOver: match.gameOver,
+      isGuidedV1OnlineMode,
+      isOffAuthoredLine,
+    });
+    if (isDailyFritzMode) {
+      traceDailyFritzEvent('[input] placement click', {
+        position,
+        selectedTile: selectedTile ? toTileKey(selectedTile) : null,
+        currentPlayer: match.currentPlayer,
+        handOver: match.handOver,
+        gameOver: match.gameOver,
+      });
+    }
+    if (match.currentPlayer !== 'you') {
+      console.log('[guided-click-blocked] reason = current-player-not-you');
+      return;
+    }
+    if (!selectedTile) {
+      console.log('[guided-click-blocked] reason = no-selected-tile');
+      return;
+    }
+    if (match.handOver) {
+      console.log('[guided-click-blocked] reason = hand-over');
+      return;
+    }
+    if (match.gameOver) {
+      console.log('[guided-click-blocked] reason = game-over');
+      return;
+    }
     const move = findMoveForSelection(userPlayMoves, selectedTile, position);
-    if (!move) return;
+    const expectedMoveForLog = currentLessonStep?.chosenMove ?? null;
+    const clickedMoveForLog = move?.tile
+      ? `${toTileKey(move.tile)}${move.position ? `:${move.position}` : ''}`
+      : null;
+    console.log('[guided-click-move]', {
+      foundMove: Boolean(move),
+      clickedMove: clickedMoveForLog,
+      expectedMove: expectedMoveForLog,
+    });
+    if (!move) {
+      console.log('[guided-click-blocked] reason = no-matching-move');
+      return;
+    }
+    if (isGuidedTranscriptMode && guidedTranscript) {
+      const turn = currentTranscriptTurn;
+      const clickedMove = move.tile
+        ? `${toTileKey(move.tile)}${move.position ? `:${move.position}` : ''}`
+        : null;
+      const expected = turn?.expectedPlayerMove ?? null;
+      const expectedMove = expected
+        ? expected.type === 'play'
+          ? `${expected.tile ?? ''}${expected.position ? `:${expected.position}` : ''}`
+          : expected.type
+        : null;
+      if (!turn || !expected || expected.type !== 'play') {
+        pushToast('This transcript turn does not accept a tile placement.');
+        setIsOffAuthoredLine(true);
+        return;
+      }
+      if (clickedMove !== expectedMove) {
+        setIsOffAuthoredLine(true);
+        pushToast('Off lesson line. Guided playback stopped.');
+        return;
+      }
+      acceptGuidedTranscriptTurn(turn, move.tile ?? null);
+      return;
+    }
+    if (isGuidedV1MinimalMode && frozenLesson) {
+      const step = currentLessonStep;
+      const expectedMove = step?.chosenMove ?? null;
+      const clickedMove = move.tile
+        ? `${toTileKey(move.tile)}${move.position ? `:${move.position}` : ''}`
+        : null;
+      if (!step || !expectedMove || expectedMove === 'draw' || expectedMove === 'pass') {
+        pushToast('This lesson step does not have an authored tile play.');
+        setIsOffAuthoredLine(true);
+        return;
+      }
+      if (clickedMove !== expectedMove) {
+        setIsOffAuthoredLine(true);
+        pushToast('Off lesson line. Guided playback stopped.');
+        return;
+      }
+      beginGuidedV1Replay(step, move.tile ?? null);
+      return;
+    }
+    if (frozenLesson && !isGuidedV1OnlineMode) {
+      console.log('[guided-click-blocked] reason = guided-v1-online-disabled', {
+        isOffAuthoredLine,
+        lessonStepIndex,
+        currentPlayer: match.currentPlayer,
+      });
+    }
+    if (isGuidedV1OnlineMode && frozenLesson) {
+      const expectedMove = currentLessonStep?.chosenMove ?? null;
+      const clickedMove = move.tile
+        ? `${toTileKey(move.tile)}${move.position ? `:${move.position}` : ''}`
+        : null;
+      const accepted = Boolean(
+        expectedMove &&
+          expectedMove !== 'draw' &&
+          expectedMove !== 'pass' &&
+          clickedMove === expectedMove,
+      );
+      console.log('[guided-player]', {
+        expectedMove,
+        clickedMove,
+        accepted,
+        lessonStepIndexBefore: lessonStepIndex,
+        lessonStepIndexAfterSet: accepted ? lessonStepIndex + 1 : lessonStepIndex,
+        isTransitioning: isTransitioningRef.current,
+      });
+      if (!accepted) {
+        console.log('[guided-click-blocked] reason = move-mismatch');
+        console.log(`[guided-fallback] entered live fallback for hand = ${match.handNumber}`);
+        setIsOffAuthoredLine(true);
+        pushToast("You went off the authored line, so this hand will continue live from here.");
+        return;
+      }
+      isTransitioningRef.current = true;
+      console.log('[guided-click-advance]', {
+        lessonStepIndexBefore: lessonStepIndex,
+        lessonStepIndexAfter: lessonStepIndex + 1,
+      });
+      setLessonStepIndex((prev) => prev + 1);
+      console.log('[guided-player]', {
+        expectedMove,
+        clickedMove,
+        accepted: true,
+        lessonStepIndexBefore: lessonStepIndex,
+        lessonStepIndexAfterSet: lessonStepIndex + 1,
+        isTransitioning: isTransitioningRef.current,
+      });
+    }
     const boardEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [boardEndsRaw[0] ?? -1, boardEndsRaw[1] ?? -1];
     const handBefore = match.players.you.hand.map(toTileTuple);
@@ -2214,17 +2983,112 @@ export default function BotMatchScreen({
     const beforePips = sumTilePips(match.players.you.hand);
     const boardStateKey = serializeGhostBoardState(match.board);
     const result = applyPlayMove(match, 'you', move);
+    if (isDailyFritzMode) {
+      traceDailyFritzEvent('[state] move applied', {
+        tile: move.tile ? toTileKey(move.tile) : null,
+        position: move.position ?? null,
+      });
+    }
     const afterPips = sumTilePips(result.state.players.you.hand);
     setMovesUsed((prev) => prev + 1);
     coach.recordPlayerMove(match, move);
+
     if (isAuthoringMode && move.tile) {
       const posStr = typeof position === 'string' && position ? `:${position}` : '';
       recordAuthoringStep(`${toTileKey(move.tile)}${posStr}`);
     }
-    if (isGuidedMode && frozenLesson) {
-      setLessonStepIndex((prev) => prev + 1);
+
+    // ── V2 authoring: capture player play event ───────────────────────────
+    if (isAuthoringV2Mode) {
+      const eventIndex = authoringV2NextEventIndexRef.current++;
+      const v2event = createV2Event({
+        result,
+        handNumber: match.handNumber,
+        actor: 'player',
+        action: 'play',
+        tile: move.tile ?? undefined,
+        position: typeof position === 'string' ? position : undefined,
+        eventIndex,
+      });
+      setAuthoringV2Events((prev) => [...prev, v2event]);
+      console.log('[v2-capture] player play', { eventIndex, tile: v2event.tile, position: v2event.position });
     }
+
+    // ── V2 guided playback: verify move against expected event ───────────
+    if (isGuidedV2Mode && frozenV2Lesson && !isGuidedV2OffLine) {
+      const expected = frozenV2Lesson.events[guidedV2EventIndex];
+      const playedKey = move.tile ? toTileKey(move.tile) : null;
+      const expectedKey = expected?.tile ?? null;
+      const expectedPos = expected?.position ?? null;
+      const tileMatch = playedKey && expectedKey && playedKey === expectedKey;
+      const posMatch = !expectedPos || (typeof position === 'string' && position === expectedPos);
+      if (tileMatch && posMatch && expected) {
+        // Apply authoritative state from the event instead of raw engine output
+        const board = parseLessonV2BoardState(expected.boardAfter);
+        const playerHand = expected.playerHandAfter
+          .map((k) => parseTileKey(k))
+          .filter((t): t is Tile => t !== null);
+        const fritzHand = expected.fritzHandAfter
+          .map((k) => parseTileKey(k))
+          .filter((t): t is Tile => t !== null);
+        const nextPlayer: BotPlayerId = expected.handOver || expected.gameOver
+          ? 'you'
+          : expected.turnContinues
+            ? 'you'    // player gets another turn (e.g. drew and can play)
+            : 'bot';
+        setMatch((prev) => ({
+          ...prev,
+          board,
+          handOpen: Boolean(board && board.mainLine && board.mainLine.length > 0),
+          players: {
+            you: { ...prev.players.you, hand: playerHand, score: expected.playerScoreAfter },
+            bot: { ...prev.players.bot, hand: fritzHand, score: expected.fritzScoreAfter },
+          },
+          currentPlayer: nextPlayer,
+          handOver: expected.handOver,
+          gameOver: expected.gameOver,
+        }));
+        if (expected.pointsScored > 0) queueSound(() => playScoreSound(expected.pointsScored, isMuted), 80);
+        queueSound(() => playTileSound('standard', isMuted), 0);
+        setGuidedV2EventIndex((i) => i + 1);
+        flashLastPlayed(move.tile ?? null);
+        setSelectedTile(null);
+
+        // ── Hand-reveal when player play ends the hand ────────────────────────
+        if (expected.handOver && expected.handEnded) {
+          if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+          handRevealTimerRef.current = window.setTimeout(() => {
+            setHandReveal({
+              winner: expected.handEnded!.winner === 'player' ? 'you'
+                : expected.handEnded!.winner === 'fritz' ? 'bot'
+                : null,
+              reason: expected.handEnded!.reason,
+              pointsAwarded: expected.handEnded!.pointsAwarded,
+              loserPips: expected.handEnded!.loserPips,
+              calcText: expected.handEnded!.calcText,
+              yourRemainingTiles: playerHand,
+              botRemainingTiles: fritzHand,
+            });
+            handRevealTimerRef.current = null;
+          }, 1400);
+        }
+
+        return;   // skip applyAndNotify — state was already set above
+      } else {
+        setIsGuidedV2OffLine(true);
+        pushToast('You went off the lesson. Continuing live from here.');
+      }
+    }
+
+    console.log('[guided-move] applying result to match state');
+    console.log('[guided-move] result.state player hand =', result.state.players.you.hand.map(toTileKey));
+    console.log('[guided-move] result.state board mainLine length =', result.state.board?.mainLine.length);
+
     applyAndNotify(result);
+    console.log('[guided-click-applied]', {
+      currentPlayerAfter: result.state.currentPlayer,
+      lessonStepIndexCurrent: lessonStepIndex,
+    });
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
     if (isGhostMode && selectedTile && ghostSuggestedPlayerMove) {
@@ -2264,7 +3128,36 @@ export default function BotMatchScreen({
       handSnapshot: handBefore,
       engineBestMove: getFritzBestMove(match),
     });
-  };
+  }, [
+    match,
+    selectedTile,
+    userPlayMoves,
+    coach,
+    isAuthoringMode,
+    isAuthoringV2Mode,
+    isGuidedV2Mode,
+    frozenV2Lesson,
+    isGuidedV2OffLine,
+    guidedV2EventIndex,
+    isGuidedV1OnlineMode,
+    isMuted,
+    isGuidedMode,
+    frozenLesson,
+    isOffAuthoredLine,
+    currentLessonStep,
+    lessonStepIndex,
+    isGhostMode,
+    ghostSuggestedPlayerMove,
+    recordAuthoringStep,
+    createV2Event,
+    getFritzBestMove,
+    appendGhostMove,
+    appendMove,
+    applyAndNotify,
+    flashLastPlayed,
+    pushToast,
+    isDailyFritzMode,
+  ]);
 
   const playBestMove = () => {
     if (!guidedCoachTip?.bestMove.tile) return;
@@ -2307,8 +3200,31 @@ export default function BotMatchScreen({
    * Only callable when isGuidedMode && frozenLesson is active.
    */
   const playLessonBestMove = () => {
-    if (!isGuidedMode || !frozenLesson) return;
+    if (!isGuidedTranscriptMode && !isGuidedV1MinimalMode && !isGuidedV1OnlineMode) return;
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+
+    if (isGuidedTranscriptMode) {
+      const turn = currentTranscriptTurn;
+      if (!turn || turn.expectedPlayerMove.type !== 'play') return;
+      const tileKeyRaw = turn.expectedPlayerMove.tile ?? '';
+      const positionRaw = turn.expectedPlayerMove.position ?? null;
+      const parsedTile = parseTileKey(tileKeyRaw);
+      if (!parsedTile) return;
+      let move: Move | null = null;
+      if (positionRaw) {
+        move = userPlayMoves.find(
+          (m) => m.tile && tileEquals(m.tile, parsedTile) && m.position === positionRaw,
+        ) ?? null;
+      }
+      if (!move) {
+        move = userPlayMoves.find((m) => m.tile && tileEquals(m.tile, parsedTile)) ?? null;
+      }
+      if (!move?.tile) return;
+      acceptGuidedTranscriptTurn(turn, move.tile ?? null);
+      return;
+    }
+
+    if (!frozenLesson) return;
 
     // Use the board-state-matched step (skips stale drafts automatically)
     const step = currentLessonStep;
@@ -2333,6 +3249,13 @@ export default function BotMatchScreen({
       move = userPlayMoves.find((m) => m.tile && tileEquals(m.tile, parsedTile)) ?? null;
     }
     if (!move?.tile) return;
+    const clickedMove = `${toTileKey(move.tile)}${move.position ? `:${move.position}` : ''}`;
+    console.log('[guided-player] expectedMove =', step.chosenMove, 'clickedMove =', clickedMove, 'accepted =', true);
+
+    if (isGuidedV1MinimalMode) {
+      beginGuidedV1Replay(step, move.tile ?? null);
+      return;
+    }
 
     const boardEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [boardEndsRaw[0] ?? -1, boardEndsRaw[1] ?? -1];
@@ -2344,6 +3267,7 @@ export default function BotMatchScreen({
     setMovesUsed((prev) => prev + 1);
     coach.recordPlayerMove(match, move);
     setLessonStepIndex((prev) => prev + 1);
+    isTransitioningRef.current = true;
     applyAndNotify(result);
     flashLastPlayed(move.tile ?? null);
     setSelectedTile(null);
@@ -2364,11 +3288,93 @@ export default function BotMatchScreen({
   };
 
   useEffect(() => {
+    if (!isGuidedTranscriptMode || isOffAuthoredLine || !guidedTranscript || !guidedV1Replay) return;
+
+    const turn = guidedTranscript.turns.find((item) => item.stepIndex === guidedV1Replay.stepIndex) ?? null;
+    const replyEvents = turn?.fritzReplies ?? [];
+    if (replyEvents.length === 0) {
+      pushToast('This transcript turn is missing Fritz reply events.');
+      setGuidedV1Replay(null);
+      setIsOffAuthoredLine(true);
+      return;
+    }
+    if (guidedV1Replay.replyIndex >= replyEvents.length) {
+      setGuidedV1Replay(null);
+      setLessonStepIndex((prev) => prev + 1);
+      return;
+    }
+
+    const event = replyEvents[guidedV1Replay.replyIndex]!;
+    const delay = event.type === 'play' ? (event.pointsScored > 0 ? 1600 : 1200) : 800;
+
+    const timer = window.setTimeout(() => {
+      const nextState = parseGuidedTranscriptState(event.stateAfter);
+      if (!nextState) {
+        pushToast('This transcript reply is missing a valid state.');
+        setGuidedV1Replay(null);
+        setIsOffAuthoredLine(true);
+        return;
+      }
+
+      const actionResult: BotActionResult = {
+        state: nextState,
+        scored: event.pointsScored > 0 ? { player: 'bot', points: event.pointsScored } : undefined,
+        drew: event.type === 'draw' && event.tile ? { player: 'bot', tile: parseTileKey(event.tile)! } : undefined,
+        passed: event.type === 'pass' ? { player: 'bot' } : undefined,
+        handEnded: event.handEnded ? {
+          winner: event.handEnded.winner as BotPlayerId | null,
+          reason: event.handEnded.reason as BotHandEndReason,
+          pointsAwarded: event.handEnded.pointsAwarded,
+          loserPips: event.handEnded.loserPips,
+          calcText: event.handEnded.calcText,
+        } : undefined,
+      };
+
+      setMatch(nextState);
+      notifyBotActionResult(actionResult);
+
+      if (event.type === 'play' && event.tile) {
+        const playedTile = parseTileKey(event.tile);
+        if (playedTile) {
+          flashLastPlayed(playedTile);
+          queueSound(() => playTileSound('deal', isMuted), 0);
+        }
+      } else if (event.type === 'draw') {
+        triggerDrawStepAnimation('bot', nextState);
+        queueSound(() => playDrawSound(isMuted), 0);
+      }
+
+      setGuidedV1Replay((prev) =>
+        prev && prev.stepIndex === guidedV1Replay.stepIndex
+          ? { ...prev, replyIndex: prev.replyIndex + 1 }
+          : prev,
+      );
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    guidedTranscript,
+    guidedV1Replay,
+    isGuidedTranscriptMode,
+    isMuted,
+    isOffAuthoredLine,
+    notifyBotActionResult,
+    pushToast,
+    flashLastPlayed,
+    triggerDrawStepAnimation,
+  ]);
+
+  useEffect(() => {
     console.log('[BOT-EFFECT] fired', { currentPlayer: match.currentPlayer, handOver: match.handOver, gameOver: match.gameOver, drawSequenceActive: drawSequenceActiveRef.current, cancelled: false });
     if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
+    if (isGuidedTranscriptMode) return;
+    if (isGuidedV1MinimalMode) return;
     // In snapshot mode the bot never runs — the snapshot-advance effect above
     // immediately replaces bot-turn state with the next authored step.
-    if (isGuidedSnapshotMode) return;
+    if (isGuidedV1OnlineMode) return;
+    // In V2 guided on-line mode the Fritz auto-apply effect owns all bot turns.
+    // Letting the live AI also run would produce dual state mutations.
+    if (isGuidedV2Mode && !isGuidedV2OffLine) return;
     console.log('[BOT-EFFECT] passed guard, scheduling turn');
     let cancelled = false;
     let actionResolved = false;
@@ -2554,6 +3560,73 @@ export default function BotMatchScreen({
                 scored: result.scored?.points ?? 0,
               });
             }
+
+            if (isAuthoringMode && result) {
+              const captureAction: 'play' | 'draw' | 'pass' = result.drew
+                ? 'draw'
+                : result.passed
+                  ? 'pass'
+                  : 'play';
+              fritzSessionReplyRef.current.push({
+                type: captureAction,
+                tile: playedTileForHighlight ? toTileKey(playedTileForHighlight) : undefined,
+                position: ghostChosen?.position ?? (chosen?.move?.type === 'play' ? chosen.move.position : undefined),
+                scoreDelta: result.scored?.points ?? 0,
+                pointsScored: result.scored?.points ?? 0,
+                runningScore: result.state.players.bot.score,
+                turnContinues: result.state.currentPlayer === 'bot',
+                handOver: result.state.handOver,
+                gameOver: result.state.gameOver,
+                boardAfter: serializeGhostBoardState(result.state.board),
+                botHandAfter: result.state.players.bot.hand.map(toTileKey),
+                playerHandAfter: result.state.players.you.hand.map(toTileKey),
+                handEnded: result.handEnded ? {
+                  winner: result.handEnded.winner,
+                  reason: result.handEnded.reason,
+                  pointsAwarded: result.handEnded.pointsAwarded,
+                  loserPips: result.handEnded.loserPips,
+                  calcText: result.handEnded.calcText,
+                } : undefined,
+              });
+              // Target step is the most recent real (chosenMove!==null) step —
+              // Fritz's reply belongs to the player move that triggered it.
+              let targetStepIdx = -1;
+              for (let i = authoringSteps.length - 1; i >= 0; i -= 1) {
+                if (authoringSteps[i]!.chosenMove !== null) {
+                  targetStepIdx = authoringSteps[i]!.stepIndex;
+                  break;
+                }
+              }
+              console.log('[guided-capture] push', {
+                stepIndexTarget: targetStepIdx,
+                currentPlayer: result.state.currentPlayer,
+                action: captureAction,
+                tile: playedTileForHighlight ? toTileKey(playedTileForHighlight) : undefined,
+                pendingCount: fritzSessionReplyRef.current.length,
+              });
+            }
+
+            // ── V2 authoring: capture Fritz action event ─────────────────
+            if (isAuthoringV2Mode && result) {
+              const captureAction: 'play' | 'draw' | 'pass' = result.drew
+                ? 'draw'
+                : result.passed
+                  ? 'pass'
+                  : 'play';
+              const eventIndex = authoringV2NextEventIndexRef.current++;
+              const v2event = createV2Event({
+                result,
+                handNumber: matchRef.current.handNumber,
+                actor: 'fritz',
+                action: captureAction,
+                tile: playedTileForHighlight ?? undefined,
+                position: ghostChosen?.position ?? (chosen?.move?.type === 'play' ? chosen.move.position : undefined),
+                eventIndex,
+              });
+              setAuthoringV2Events((prev) => [...prev, v2event]);
+              console.log('[v2-capture] fritz', { eventIndex, action: captureAction, tile: v2event.tile });
+            }
+
             applyAndNotify(result);
             flashLastPlayed(playedTileForHighlight);
           }
@@ -2618,11 +3691,123 @@ export default function BotMatchScreen({
     appendGhostMove,
     ghostProfile,
     isGhostMode,
+    isGuidedTranscriptMode,
     runDrawSequenceLocal,
     setDrawSequenceActiveBoth,
     isMuted,
     toEngineBestFromChoice,
   ]);
+
+  // ── Sequential Bot Reply Replay ───────────────────────────────────────────
+  useEffect(() => {
+    if (!isGuidedV1OnlineMode || !frozenLesson || guidedReplyIndex === -1) return;
+
+    const prevStepIdx = lessonStepIndex - 1;
+    const prevStep = getGuidedV1AuthoredStepByIndex(frozenLesson, prevStepIdx);
+    const replyEvents = prevStep?.fritzReplyEvents;
+
+    if (!replyEvents || guidedReplyIndex >= replyEvents.length) {
+      console.log('[guided-playback] replay complete', { stepIndex: prevStepIdx });
+      setGuidedReplyIndex(-1);
+      return;
+    }
+
+    const event = replyEvents[guidedReplyIndex];
+    // Natural thinking delay between Fritz moves
+    const delay = event.type === 'play' ? (event.pointsScored > 0 ? 1600 : 1200) : 800;
+
+    console.log('[guided-playback] replay event', {
+      stepIndex: prevStepIdx,
+      replyIndex: guidedReplyIndex,
+      action: event.type,
+      runningBotScore: event.runningScore,
+    });
+    console.log(`[guided-flow] replaying reply event index = ${guidedReplyIndex}`);
+    console.log(`[guided-replay] event index = ${guidedReplyIndex}`);
+    console.log(`[guided-replay] event type = ${event.type}`);
+
+    const timer = setTimeout(() => {
+      console.log(`[guided-replay] replay event started`, { type: event.type, index: guidedReplyIndex });
+
+      // Apply the event to match state
+      let matchResultState: BotMatchState | null = null;
+      let actionResult: BotActionResult | null = null;
+
+      setMatch((prev) => {
+        let next = { ...prev };
+
+        const hasStoredState = !!(event.boardAfter && event.botHandAfter && event.playerHandAfter);
+        if (!hasStoredState) {
+          console.warn('[guided-skip] reason = missing-fritzReplyState', {
+            stepIndex: prevStepIdx,
+            replyIndex: guidedReplyIndex,
+          });
+          matchResultState = prev;
+          return prev;
+        }
+
+        const board = parseGuidedBoardState(event.boardAfter!);
+        const botTiles = event.botHandAfter!
+          .map((k) => parseTileKey(k))
+          .filter((t): t is Tile => t !== null);
+        const playerTiles = event.playerHandAfter!
+          .map((k) => parseTileKey(k))
+          .filter((t): t is Tile => t !== null);
+
+        next = {
+          ...prev,
+          board,
+          players: {
+            ...prev.players,
+            bot: { ...prev.players.bot, hand: botTiles, score: event.runningScore },
+            you: { ...prev.players.you, hand: playerTiles },
+          },
+          handOver: event.handOver,
+          gameOver: event.gameOver,
+          currentPlayer: event.turnContinues ? 'bot' : 'you',
+        };
+
+        actionResult = {
+          state: next,
+          scored: event.pointsScored > 0 ? { player: 'bot', points: event.pointsScored } : undefined,
+          drew: event.type === 'draw' && event.tile ? { player: 'bot', tile: parseTileKey(event.tile)! } : undefined,
+          passed: event.type === 'pass' ? { player: 'bot' } : undefined,
+          handEnded: event.handEnded ? {
+            winner: event.handEnded.winner as BotPlayerId | null,
+            reason: event.handEnded.reason as BotHandEndReason,
+            pointsAwarded: event.handEnded.pointsAwarded,
+            loserPips: event.handEnded.loserPips,
+            calcText: event.handEnded.calcText,
+          } : undefined,
+        };
+
+        matchResultState = next;
+        return next;
+      });
+
+      // Side effects via shared pipeline
+      if (actionResult) {
+        notifyBotActionResult(actionResult);
+        
+        // Manual triggers for visual polish not covered by notifyBotActionResult
+        if (event.type === 'play' && event.tile) {
+          const playedTile = parseTileKey(event.tile);
+          if (playedTile) {
+            flashLastPlayed(playedTile);
+            queueSound(() => playTileSound('deal', isMuted), 0);
+          }
+        } else if (event.type === 'draw' && matchResultState) {
+          triggerDrawStepAnimation('bot', matchResultState);
+          queueSound(() => playDrawSound(isMuted), 0);
+        }
+      }
+
+      console.log(`[guided-replay] replay event applied`, { type: event.type, index: guidedReplyIndex });
+      setGuidedReplyIndex((prevIndex) => prevIndex + 1);
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [isGuidedV1OnlineMode, frozenLesson, guidedReplyIndex, lessonStepIndex, isMuted, triggerDrawStepAnimation]);
 
   const advanceHand = useCallback(() => {
     // ── One-way guard ────────────────────────────────────────────────────────
@@ -2683,6 +3868,7 @@ export default function BotMatchScreen({
         console.log('[daily-flow] next hand start (prefetch hit)', {
           nextHandNumber: matchRef.current.handNumber + 1,
         });
+        setDailyFritzHandIndex(cache.result.current_hand_index);
         setHandReveal(null);
         setMatch((prev) =>
           prev.handOver && !prev.gameOver
@@ -2722,6 +3908,7 @@ export default function BotMatchScreen({
             console.log('[daily-flow] next hand start (fetch resolved)', {
               nextHandNumber: matchRef.current.handNumber + 1,
             });
+            setDailyFritzHandIndex(response.current_hand_index);
             setHandReveal(null);
             setMatch((prev) =>
               prev.handOver && !prev.gameOver
@@ -2759,6 +3946,42 @@ export default function BotMatchScreen({
 
     // ── Non-Daily-Fritz modes (authoring, guided, league) ─────────────────────
     setHandReveal(null);
+
+    if (isGuidedV1MinimalMode && frozenLesson) {
+      const nextStep = getGuidedV1AuthoredStepByIndex(frozenLesson, lessonStepIndex);
+      const restored = restoreGuidedV1StepMatchState(nextStep);
+      if (restored) {
+        setMatch(restored);
+      }
+      return;
+    }
+
+    // ── V2 Guided: restore next hand from authored snapshot ──────────────────
+    // Always uses the frozen hand start even when off-line, so the next hand
+    // begins cleanly on the authored line.  Resets the cursor and off-line flag.
+    if (isGuidedV2Mode && frozenV2Lesson) {
+      const nextHandNumber = matchRef.current.handNumber + 1;
+      const handStart = frozenV2Lesson.handStarts.find((h) => h.handNumber === nextHandNumber);
+      if (handStart) {
+        try {
+          const restored = JSON.parse(handStart.matchStateJson) as BotMatchState;
+          setGuidedV2EventIndex(handStart.firstEventIndex);
+          setIsGuidedV2OffLine(false);
+          fritzV2LastAppliedIndexRef.current = -1; // reset double-apply guard for new hand
+          setMatch(() => ({
+            ...restored,
+            opponentPassedOnEnds: [],
+            opponentDrawCount: 0,
+            opponentKnownMissing: [],
+          }));
+          return;
+        } catch {
+          // Snapshot corrupt — fall through to seeded deal
+        }
+      }
+      // No authored hand start for next hand — lesson is over; let random play continue
+    }
+
     setMatch((prev) => {
       if (!prev.handOver || prev.gameOver) return prev;
       // Authoring and guided lesson modes: each hand is seeded deterministically.
@@ -2775,7 +3998,7 @@ export default function BotMatchScreen({
         opponentKnownMissing: [],
       };
     });
-  }, [dailyFritzPackage, isDailyFritzMode, isAuthoringMode, match.players.bot.score, match.players.you.score]);
+  }, [dailyFritzPackage, isDailyFritzMode, isAuthoringMode, isGuidedV1MinimalMode, frozenLesson, lessonStepIndex, isGuidedV2Mode, frozenV2Lesson, match.players.bot.score, match.players.you.score]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!handReveal || match.gameOver) {
@@ -2783,8 +4006,8 @@ export default function BotMatchScreen({
       return;
     }
     setHandRevealProgress(1);
-    // In guided mode, user taps "Next Hand →" manually — no auto-advance
-    if (isGuidedMode) return;
+    // In guided / V2 guided modes the player taps "Next Hand →" manually
+    if (isGuidedMode || isGuidedV2Mode) return;
     if (isDailyFritzMode) {
       console.log('[daily-flow] reveal countdown started (5s)', {
         handNumber: match.handNumber,
@@ -2817,14 +4040,31 @@ export default function BotMatchScreen({
   useEffect(() => {
     if (!isGuidedMode) return;
     coach.resetHand();
+    if (isGuidedV1MinimalMode) return;
+
+    if (frozenLesson && isOffAuthoredLine) {
+      console.log(`[guided-fallback] hand ended in fallback = ${match.handNumber - 1}`);
+      console.log(`[guided-fallback] resetting fallback on new hand start = ${match.handNumber}`);
+      setIsOffAuthoredLine(false);
+
+      // Resync lessonStepIndex to the first step of the new hand
+      const realSteps = frozenLesson.steps.filter((s) => s.chosenMove !== null);
+      const firstStepIdx = realSteps.findIndex((s) => s.handNumber === match.handNumber);
+      if (firstStepIdx >= 0) {
+        console.log(`[guided-fallback] resumed coached mode at step = ${firstStepIdx}`);
+        setLessonStepIndex(firstStepIdx);
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [match.handNumber]);
+  }, [match.handNumber, isGuidedMode, frozenLesson, isGuidedV1MinimalMode]);
 
   useEffect(() => {
     if (!match.handOver || match.gameOver || handReveal || handRevealTimerRef.current) return;
-    // In snapshot mode, hand transitions are handled by the snapshot-advance effect
-    // (it immediately sets handOver: false on the next step).
-    if (isGuidedSnapshotMode) return;
+    if (isGuidedV1MinimalMode) return;
+    // In V1 guided on-line mode, the authored lesson owns progression.
+    if (isGuidedV1OnlineMode) return;
+    // In V2 on-line mode the hand reveal is shown and player taps "Next Hand →"
+    if (isGuidedV2Mode && !isGuidedV2OffLine) return;
     // Safety fallback: if a hand ended without the reveal modal flow starting, advance anyway.
     const timer = window.setTimeout(() => {
       if (matchRef.current.handOver && !matchRef.current.gameOver && !handRevealTimerRef.current) {
@@ -2832,7 +4072,7 @@ export default function BotMatchScreen({
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [match.handOver, match.gameOver, handReveal, advanceHand, isGuidedSnapshotMode]);
+  }, [match.handOver, match.gameOver, handReveal, advanceHand, isGuidedV1MinimalMode, isGuidedV1OnlineMode]);
 
   // ── Daily Fritz watchdog ──────────────────────────────────────────────────
   // If the game gets stuck in hand-over (no reveal shown, no transition fired),
@@ -2861,11 +4101,49 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
+    if (isGuidedTranscriptMode) {
+      const turn = currentTranscriptTurn;
+      if (!turn) return;
+      if (turn.expectedPlayerMove.type === 'play') {
+        if (userPlayMoves.length === 0) {
+          pushToast('This transcript turn has no legal authored tile play.');
+          setIsOffAuthoredLine(true);
+        }
+        return;
+      }
+      acceptGuidedTranscriptTurn(turn, null);
+      return;
+    }
+    if (isGuidedV1MinimalMode) {
+      if (userPlayMoves.length === 0) {
+        pushToast('This guided lesson has no authored tile play for the current turn.');
+        setIsOffAuthoredLine(true);
+      }
+      return;
+    }
     if (userPlayMoves.length > 0) return;
     // In snapshot mode each authored step always has at least one legal tile play.
     // Drawing/passing from a live boneyard that doesn't match the authored game
     // would diverge the lesson — suppress it entirely.
-    if (isGuidedSnapshotMode) return;
+    if (isGuidedV1OnlineMode) {
+      const expectedMove = currentLessonStep?.chosenMove ?? null;
+      if (expectedMove === 'draw' || expectedMove === 'pass') {
+        console.warn('[guided-skip] reason = authored-draw-pass-step', {
+          stepIndex: lessonStepIndex,
+          expectedMove,
+        });
+      } else {
+        console.warn('[guided-skip] reason = missing-authored-playable-move', {
+          stepIndex: lessonStepIndex,
+          expectedMove,
+        });
+      }
+      return;
+    }
+    // In V2 on-line mode the player-draw-event auto-apply effect handles all
+    // draw/pass sequences via the authored timeline.  The live boneyard must not
+    // be touched while on-line.
+    if (isGuidedV2Mode && !isGuidedV2OffLine) return;
     let cancelled = false;
     const beforeEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
@@ -2974,11 +4252,38 @@ export default function BotMatchScreen({
             engineBestMove: getFritzBestMove(match),
           });
         }
+        // ── V2 authoring: capture draw event ────────────────────────────
+        if (isAuthoringV2Mode && result.drew) {
+          const eventIndex = authoringV2NextEventIndexRef.current++;
+          const v2event = createV2Event({
+            result,
+            handNumber: match.handNumber,
+            actor: 'player',
+            action: 'draw',
+            eventIndex,
+          });
+          setAuthoringV2Events((prev) => [...prev, v2event]);
+          console.log('[v2-capture] player draw', { eventIndex });
+        }
         if (result.passed) {
           if (isAuthoringMode) {
             recordAuthoringStep('pass');
           }
+          // ── V2 authoring: capture pass event ──────────────────────────
+          if (isAuthoringV2Mode) {
+            const eventIndex = authoringV2NextEventIndexRef.current++;
+            const v2event = createV2Event({
+              result,
+              handNumber: match.handNumber,
+              actor: 'player',
+              action: 'pass',
+              eventIndex,
+            });
+            setAuthoringV2Events((prev) => [...prev, v2event]);
+            console.log('[v2-capture] player pass', { eventIndex });
+          }
           if (isGuidedMode && frozenLesson) {
+            isTransitioningRef.current = true;
             setLessonStepIndex((prev) => prev + 1);
           }
           if (isGhostMode) {
@@ -3016,7 +4321,7 @@ export default function BotMatchScreen({
     return () => {
       cancelled = true;
     };
-  }, [match, userPlayMoves.length, appendGhostMove, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, isGhostMode, isAuthoringMode, recordAuthoringStep, isMuted, getFritzBestMove]);
+  }, [match, userPlayMoves.length, appendGhostMove, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, isGhostMode, isAuthoringMode, recordAuthoringStep, isMuted, getFritzBestMove, isGuidedTranscriptMode, currentTranscriptTurn, acceptGuidedTranscriptTurn, isGuidedV1MinimalMode, isGuidedV1OnlineMode, currentLessonStep, lessonStepIndex, pushToast]);
 
   useEffect(() => {
     if (!isDailyPuzzleRun || !dailyPuzzleDate || !match.gameOver) return;
@@ -3101,8 +4406,76 @@ export default function BotMatchScreen({
       ? `${opponentLabel} thinking`
       : 'Your move';
 
+  if (isGuidedMode && !isAuthoringMode) {
+    console.log('[guided-move] rendered match player hand =', match.players.you.hand.map(toTileKey));
+    console.log('[guided-move] rendered match board mainLine length =', match.board?.mainLine.length);
+    console.log('[guided-move] lessonStepIndex =', lessonStepIndex);
+  }
+
   const openEnds = getDisplayOpenEnds(match);
   const openEndsSum = match.board ? computeOpenEndsSum(match.board) : 0;
+
+  if (isGuidedMode && !isAuthoringMode) {
+    // ── BUG B INSTRUMENTATION ────────────────────────────────────────────
+    // The tile-row highlight and userPlayMoves BOTH source from match.board.
+    // The visible open ends (what's rendered in the main-line and hub branches)
+    // must match the ends the legality computation uses. Log both, then log
+    // getPlacementTargetsForTile for each tile in hand so we can see exactly
+    // which tiles think they can be placed and on which end.
+    if (match.board) {
+      const rawRenderedEnds = [
+        { side: 'left',  val: match.board.leftEnd,  isDouble: match.board.leftEndIsDouble },
+        { side: 'right', val: match.board.rightEnd, isDouble: match.board.rightEndIsDouble },
+        ...match.board.hubDoubles.flatMap((h, hi) =>
+          h.isCrossed
+            ? (h.branches ?? []).map((b, bi) =>
+                b ? { side: `hub${hi}-arm${bi}`, val: b.openEnd, isDouble: b.openEndIsDouble } : null,
+              )
+            : [],
+        ).filter(Boolean),
+      ];
+      console.log('[guided-legal] visible rendered open ends =', rawRenderedEnds);
+
+      const legalityEnds = getMatchableOpenEnds(match.board).map((e) => ({
+        position: e.position,
+        val: e.matchValue,
+      }));
+      console.log('[guided-legal] legality source open ends =', legalityEnds);
+
+      // Per-tile placement targets (what the legality layer thinks each tile can do)
+      const perTileTargets = match.players.you.hand.map((tile) => ({
+        tile: toTileKey(tile),
+        targets: getPlacementTargetsForTile(match.board, tile),
+      }));
+      console.log('[guided-legal] placement targets for each tile in hand =', perTileTargets);
+
+      // Mismatch detection: any legality end that isn't present among visible ends
+      const visibleSet = new Set(rawRenderedEnds.map((e: any) => `${e.val}`));
+      const legalityExtras = legalityEnds.filter((e) => !visibleSet.has(`${e.val}`));
+      const mismatchReason =
+        legalityExtras.length > 0
+          ? `legality has values not visible: ${legalityExtras.map((e) => `${e.position}=${e.val}`).join(', ')}`
+          : 'none';
+      console.log('[guided-legal] mismatch reason =', mismatchReason);
+      console.log('[GUIDED-CURRENT-SCREEN]', {
+        lessonStepIndex,
+        renderedHand: match.players.you.hand.map(toTileKey),
+        renderedMainLineLen: match.board?.mainLine?.length ?? 0,
+        renderedLeftEnd: match.board?.leftEnd,
+        renderedRightEnd: match.board?.rightEnd,
+        handOpen: match.handOpen,
+        userLegalMoves: userLegalMoves.map((m) => ({
+          type: m.type,
+          tile: m.tile ? toTileKey(m.tile) : null,
+          position: m.position ?? null,
+        })),
+        legalMoves: userPlayMoves.map((m) => ({
+          tile: m.tile ? toTileKey(m.tile) : null,
+          position: m.position ?? null,
+        })),
+      });
+    }
+  }
   const ghostAverageLabel =
     ghostProfile?.avgScore == null ? '—' : `${ghostProfile.avgScore} pts`;
   const ghostResultMessage = getGhostResultMessage(match.players.you.score, match.players.bot.score);
@@ -3156,6 +4529,8 @@ export default function BotMatchScreen({
       : handReveal.yourRemainingTiles
     : [];
   const handRevealScoredPips = sumTilePips(handRevealScoredTiles);
+
+  const isFullscreenReady = true;
 
   return (
     <div
@@ -3653,20 +5028,51 @@ export default function BotMatchScreen({
               onSaveNote={saveAuthoringNoteOnly}
             />
           )}
-          {isGuidedMode && !isAuthoringMode && frozenLesson && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
+          {isGuidedTranscriptMode && guidedTranscript && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
+            <LessonCoachPanel
+              stepIndex={lessonStepIndex}
+              totalSteps={guidedTranscript.turns.length}
+              coachingText={currentTranscriptTurn?.coachingText ?? ''}
+              onBestMove={playLessonBestMove}
+              canBestMove={
+                !isOffAuthoredLine &&
+                currentTranscriptTurn?.expectedPlayerMove.type === 'play' &&
+                userPlayMoves.length > 0
+              }
+              isOffAuthoredLine={isOffAuthoredLine}
+            />
+          )}
+          {isGuidedMode && !isAuthoringMode && !isGuidedTranscriptMode && frozenLesson && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
             <LessonCoachPanel
               stepIndex={lessonStepIndex}
               totalSteps={frozenLesson.steps.filter((s) => s.chosenMove && s.chosenMove !== 'draw' && s.chosenMove !== 'pass').length}
               coachingText={currentLessonStep?.coachingText ?? ''}
               onBestMove={playLessonBestMove}
               canBestMove={
+                !isOffAuthoredLine &&
                 !!(currentLessonStep?.chosenMove) &&
                 currentLessonStep.chosenMove !== 'draw' &&
                 currentLessonStep.chosenMove !== 'pass' &&
                 userPlayMoves.length > 0
               }
+              isOffAuthoredLine={isOffAuthoredLine}
             />
           )}
+          {/* ── V2 Guided: cursor-based coaching panel ────────────────────── */}
+          {isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
+            <LessonCoachPanel
+              stepIndex={frozenV2Lesson.events
+                .slice(0, guidedV2EventIndex)
+                .filter((e) => e.actor === 'player' && e.action === 'play').length}
+              totalSteps={frozenV2Lesson.events
+                .filter((e) => e.actor === 'player' && e.action === 'play').length}
+              coachingText={currentV2CoachingText}
+              onBestMove={() => {}}
+              canBestMove={false}
+              isOffAuthoredLine={false}
+            />
+          )}
+
           {isGuidedMode && !isAuthoringMode && !frozenLesson && (
             <CoachPanel
               preMoveRec={coach.preMoveRec}
@@ -3816,9 +5222,13 @@ export default function BotMatchScreen({
             board={match.board}
             legalMoves={userPlayMoves}
             selectedTile={selectedTile}
+            handNumber={match.handNumber}
+            handOver={match.handOver}
+            gameOver={match.gameOver}
             lastPlayedTile={lastPlayedTile}
             onPositionClick={onPositionClick}
             tileSize={72}
+            profileDailyFritz={isDailyFritzMode}
           />
           <div
             className="wl-controls-tray"
@@ -3942,6 +5352,15 @@ export default function BotMatchScreen({
                           highlight={playable}
                           disabled={!handActive || botTurn || drawSequenceActive}
                           onClick={() => {
+                            if (isDailyFritzMode) {
+                              traceDailyFritzEvent('[input] tile click', {
+                                tile: toTileKey(tile),
+                                playable,
+                                handActive,
+                                botTurn,
+                                drawSequenceActive,
+                              });
+                            }
                             if (!handActive || botTurn) return;
                             if (!playable) return;
                             setSelectedTile(tile);

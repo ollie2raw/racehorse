@@ -9,6 +9,13 @@ import {
   type AuthoringSession,
   type FrozenLesson,
 } from './guidedAuthoring';
+import {
+  freezeV2Lesson,
+  loadV2AuthoringSession,
+  loadV2FrozenLesson,
+  type LessonV2AuthoringSession,
+  type LessonV2,
+} from './lessonV2';
 import LessonDebugPanel from './LessonDebugPanel';
 
 interface LearnHomeProps {
@@ -22,6 +29,10 @@ interface LearnHomeProps {
    */
   onFreezeLesson?: () => void;
   isAdmin?: boolean;
+  /** Player-facing: start a V2 event-timeline lesson */
+  onStartGuidedV2Game?: () => void;
+  /** Admin-only: start V2 authoring (records flat event timeline) */
+  onStartAuthoringV2?: () => void;
 }
 
 const HOW_TO_PLAY_STEPS = [
@@ -47,16 +58,29 @@ const KEY_RULES = [
   'Score or play a double to keep your turn going',
 ];
 
-export default function LearnHome({ onBack, onStartGuidedGame, onStartGuidedAuthoring, onFreezeLesson, isAdmin }: LearnHomeProps) {
+export default function LearnHome({
+  onBack,
+  onStartGuidedGame,
+  onStartGuidedAuthoring,
+  onFreezeLesson,
+  isAdmin,
+  onStartGuidedV2Game,
+  onStartAuthoringV2,
+}: LearnHomeProps) {
   const [authoringSession, setAuthoringSession] = useState<AuthoringSession | null>(null);
   const [frozenLesson, setFrozenLesson] = useState<FrozenLesson | null>(null);
   const [freezeFlash, setFreezeFlash] = useState(false);
   const [compactFlash, setCompactFlash] = useState<string | null>(null);
+  const [v2AuthoringSession, setV2AuthoringSession] = useState<LessonV2AuthoringSession | null>(null);
+  const [v2FrozenLesson, setV2FrozenLesson] = useState<LessonV2 | null>(null);
+  const [v2FreezeFlash, setV2FreezeFlash] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
     setAuthoringSession(loadAuthoringSession());
     setFrozenLesson(loadFrozenLesson());
+    setV2AuthoringSession(loadV2AuthoringSession());
+    setV2FrozenLesson(loadV2FrozenLesson());
   }, [isAdmin]);
 
   const handleFreeze = () => {
@@ -92,6 +116,16 @@ export default function LearnHome({ onBack, onStartGuidedGame, onStartGuidedAuth
     saveFrozenLesson(session);
     setAuthoringSession(session);
     setFrozenLesson(loadFrozenLesson());
+  };
+
+  /** Promote V2 authoring session → frozen V2 lesson. */
+  const handleFreezeV2 = () => {
+    const session = loadV2AuthoringSession();
+    if (!session) return;
+    const frozen = freezeV2Lesson(session);
+    setV2FrozenLesson(frozen);
+    setV2FreezeFlash(true);
+    setTimeout(() => setV2FreezeFlash(false), 2000);
   };
 
   return (
@@ -144,6 +178,19 @@ export default function LearnHome({ onBack, onStartGuidedGame, onStartGuidedAuth
             </button>
           ) : null}
           <p className="learn-cta-sub">vs Rookie Fritz · Master Fritz coaches every turn</p>
+
+          {onStartGuidedV2Game ? (
+            <>
+              <button
+                className="learn-start-guided-btn"
+                onClick={onStartGuidedV2Game}
+                style={{ marginTop: 10 }}
+              >
+                ▶ Play V2 Lesson
+              </button>
+              <p className="learn-cta-sub">New event-based lesson · no board jumps</p>
+            </>
+          ) : null}
 
           {isAdmin ? (
             <div style={{ marginTop: 28 }}>
@@ -234,6 +281,84 @@ export default function LearnHome({ onBack, onStartGuidedGame, onStartGuidedAuth
               <p className="learn-cta-sub">
                 Strips stale draft steps · fixes step→note mapping
               </p>
+
+              {/* ── V2 Event Timeline ───────────────────────────────── */}
+              <div style={{
+                marginTop: 20,
+                paddingTop: 14,
+                borderTop: '1px solid rgba(255,255,255,0.1)',
+              }}>
+                <div style={{ fontSize: '0.72rem', color: 'rgba(200,230,210,0.55)', marginBottom: 8, letterSpacing: '0.06em' }}>
+                  V2 EVENT TIMELINE
+                </div>
+
+                {onStartAuthoringV2 && (
+                  <button
+                    className="learn-start-guided-btn"
+                    onClick={onStartAuthoringV2}
+                    style={{
+                      background: 'rgba(255,200,60,0.13)',
+                      border: '1.5px solid rgba(255,200,60,0.32)',
+                      color: 'rgba(255,220,100,0.92)',
+                      marginBottom: 4,
+                    }}
+                  >
+                    ✏️ Author V2 Lesson
+                  </button>
+                )}
+
+                {/* V2 event / hand counts */}
+                <div style={{ fontSize: '0.72rem', color: 'rgba(200,230,210,0.6)', lineHeight: 1.6, marginBottom: 8 }}>
+                  <div>
+                    V2 events authored:{' '}
+                    <strong style={{ color: 'rgba(255,220,100,0.9)' }}>
+                      {v2AuthoringSession ? v2AuthoringSession.events.length : '—'}
+                    </strong>
+                  </div>
+                  <div>
+                    V2 frozen events:{' '}
+                    <strong style={{ color: v2FrozenLesson ? 'rgba(100,240,160,0.9)' : 'rgba(255,120,80,0.8)' }}>
+                      {v2FrozenLesson ? v2FrozenLesson.events.length : 'none'}
+                    </strong>
+                  </div>
+                </div>
+
+                <button
+                  className="learn-start-guided-btn"
+                  onClick={handleFreezeV2}
+                  style={{
+                    background: v2FreezeFlash
+                      ? 'rgba(60,220,120,0.22)'
+                      : 'rgba(60,180,120,0.14)',
+                    border: v2FreezeFlash
+                      ? '1.5px solid rgba(60,220,120,0.5)'
+                      : '1.5px solid rgba(60,180,120,0.32)',
+                    color: v2FreezeFlash
+                      ? 'rgba(100,255,160,0.95)'
+                      : 'rgba(120,230,170,0.88)',
+                    marginBottom: 4,
+                  }}
+                >
+                  {v2FreezeFlash ? '✓ V2 Frozen!' : '❄️ Freeze V2 Lesson'}
+                </button>
+                <p className="learn-cta-sub" style={{ marginBottom: 8 }}>
+                  Promotes V2 authored events → live V2 lesson
+                </p>
+
+                {onStartGuidedV2Game && v2FrozenLesson && (
+                  <button
+                    className="learn-start-guided-btn"
+                    onClick={onStartGuidedV2Game}
+                    style={{
+                      background: 'rgba(60,180,255,0.13)',
+                      border: '1.5px solid rgba(60,180,255,0.32)',
+                      color: 'rgba(120,210,255,0.9)',
+                    }}
+                  >
+                    ▶ Play V2 Lesson
+                  </button>
+                )}
+              </div>
 
               {/* Full inspector: shows both storage objects + promote button */}
               <LessonDebugPanel onPromote={handlePromote} />

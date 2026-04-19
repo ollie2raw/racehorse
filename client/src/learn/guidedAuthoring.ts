@@ -21,6 +21,8 @@ export const AUTHORING_LESSON_ID = 'lesson-001';
 export const AUTHORING_GAME_ID = 'game-fixed-elite-001';
 export const AUTHORING_STORAGE_KEY = 'racehorse:guided-authoring:v1';
 export const FROZEN_LESSON_KEY = 'racehorse:guided-lesson:v1';
+export const ORIGINAL_COACHED_TRANSCRIPT_KEY = 'racehorse:guided-transcript:original:v1';
+export const ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY = 'racehorse:guided-transcript:original:draft:v1';
 
 /** Root seed shared by all hands in this lesson. Change to version a new game. */
 const AUTHORING_ROOT_SEED = 'guided-authoring-lesson-001';
@@ -117,6 +119,38 @@ export interface AuthoredStep {
   /** The coaching note the author wrote for this turn */
   coachingText: string;
   /**
+   * Fritz's exact response sequence following this player move.
+   * Captured during authoring so playback can replay Fritz smoothly.
+   */
+  fritzReplyEvents?: {
+    type: 'play' | 'draw' | 'pass';
+    tile?: string; // "2|4"
+    position?: string; // "left", "right"
+    scoreDelta: number;
+    pointsScored: number;
+    runningScore: number;
+    turnContinues: boolean;
+    handOver: boolean;
+    gameOver: boolean;
+    /**
+     * Authoritative post-event state snapshots.
+     * During playback, these are applied directly to bypass engine recomputation.
+     */
+    boardAfter?: string; // Serialized BoardState
+    botHandAfter?: string[]; // Tile keys ["2|4", ...]
+    playerHandAfter?: string[]; // Tile keys ["2|4", ...]
+    /**
+     * If this event ended the hand, authoritative details for the reveal modal.
+     */
+    handEnded?: {
+      winner: 'you' | 'bot' | null;
+      reason: 'domino' | 'blocked';
+      pointsAwarded: number;
+      loserPips: number;
+      calcText: string;
+    };
+  }[];
+  /**
    * JSON-stringified BotMatchState BEFORE the player's move.
    * Stored so playback can reconstruct exact board state if needed.
    * Optional — absent in sessions authored before this field was added.
@@ -181,6 +215,51 @@ export function clearAuthoringSession(): void {
  */
 export type FrozenLesson = AuthoringSession;
 
+export interface GuidedTranscriptMove {
+  type: 'play' | 'draw' | 'pass';
+  tile?: string;
+  position?: string;
+}
+
+export interface GuidedReplyEvent {
+  type: 'play' | 'draw' | 'pass';
+  tile?: string;
+  position?: string;
+  pointsScored: number;
+  runningPlayerScore: number;
+  runningFritzScore: number;
+  stateAfter: string;
+  handEnded?: {
+    winner: 'you' | 'bot' | null;
+    reason: 'domino' | 'blocked';
+    pointsAwarded: number;
+    loserPips: number;
+    calcText: string;
+  };
+}
+
+export interface GuidedTurn {
+  stepIndex: number;
+  handNumber: number;
+  coachingText: string;
+  stateBefore: string;
+  expectedPlayerMove: GuidedTranscriptMove;
+  playerStateAfter: string;
+  fritzReplies: GuidedReplyEvent[];
+}
+
+export interface GuidedTranscript {
+  lessonId: string;
+  version: 'v1-explicit';
+  initialState: string;
+  turns: GuidedTurn[];
+}
+
+export interface GuidedTranscriptDraft {
+  transcript: GuidedTranscript;
+  activeStepIndex: number | null;
+}
+
 export function loadFrozenLesson(): FrozenLesson | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -192,6 +271,76 @@ export function loadFrozenLesson(): FrozenLesson | null {
   } catch {
     return null;
   }
+}
+
+export function loadOriginalGuidedTranscript(): GuidedTranscript | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(ORIGINAL_COACHED_TRANSCRIPT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as GuidedTranscript;
+    if (
+      !parsed ||
+      parsed.version !== 'v1-explicit' ||
+      typeof parsed.lessonId !== 'string' ||
+      typeof parsed.initialState !== 'string' ||
+      !Array.isArray(parsed.turns)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveOriginalGuidedTranscript(transcript: GuidedTranscript): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(ORIGINAL_COACHED_TRANSCRIPT_KEY, JSON.stringify(transcript));
+  } catch {}
+}
+
+export function clearOriginalGuidedTranscript(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(ORIGINAL_COACHED_TRANSCRIPT_KEY);
+  } catch {}
+}
+
+export function loadOriginalGuidedTranscriptDraft(): GuidedTranscriptDraft | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as GuidedTranscriptDraft;
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !parsed.transcript ||
+      parsed.transcript.version !== 'v1-explicit' ||
+      !Array.isArray(parsed.transcript.turns)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function saveOriginalGuidedTranscriptDraft(draft: GuidedTranscriptDraft): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY, JSON.stringify(draft));
+  } catch {}
+}
+
+export function clearOriginalGuidedTranscriptDraft(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY);
+  } catch {}
 }
 
 export function saveFrozenLesson(lesson: FrozenLesson): void {

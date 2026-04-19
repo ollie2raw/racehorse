@@ -5,6 +5,71 @@ import type { Tile, BoardState, PlacementPosition, Move } from '../types';
 import { isDouble } from '../bot/botEngine';
 import { useRenderProfiler } from '../debug/renderProfiler';
 
+type DailyFritzMetric = {
+  count: number;
+  totalMs: number;
+  maxMs: number;
+};
+
+function traceDailyFritzBoardEvent(
+  tag: string,
+  payload: Record<string, unknown>,
+): void {
+  if (typeof window === 'undefined') return;
+  const timestamp =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? Number(performance.now().toFixed(2))
+      : Date.now();
+  const entry = { tag, timestamp, ...payload };
+  const win = window as typeof window & {
+    __dailyFritzInteractionTrace?: Array<Record<string, unknown>>;
+  };
+  const bucket = (win.__dailyFritzInteractionTrace ??= []);
+  bucket.push(entry);
+  if (bucket.length > 400) {
+    bucket.splice(0, bucket.length - 400);
+  }
+  console.log(tag, entry);
+}
+
+function traceCameraDebug(
+  tag: string,
+  payload: Record<string, unknown>,
+): void {
+  if (typeof window === 'undefined') return;
+  const timestamp =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? Number(performance.now().toFixed(2))
+      : Date.now();
+  console.log(tag, { ...payload, timestamp });
+}
+
+function recordDailyFritzBoardMetric(
+  name: 'boardRenderCount' | 'computeLayout',
+  value: number,
+): void {
+  if (typeof window === 'undefined') return;
+  const win = window as typeof window & {
+    __dailyFritzProfileActive?: boolean;
+    __dailyFritzProfile?: {
+      boardRenderCount?: number;
+      metrics?: Record<string, DailyFritzMetric>;
+    };
+  };
+  if (!win.__dailyFritzProfileActive) return;
+  const profile = (win.__dailyFritzProfile ??= {});
+  if (name === 'boardRenderCount') {
+    profile.boardRenderCount = (profile.boardRenderCount ?? 0) + value;
+    return;
+  }
+  const metrics = (profile.metrics ??= {});
+  const current = metrics[name] ?? { count: 0, totalMs: 0, maxMs: 0 };
+  current.count += 1;
+  current.totalMs += value;
+  current.maxMs = Math.max(current.maxMs, value);
+  metrics[name] = current;
+}
+
 // ─── Layout Constants ────────────────────────────────────────
 
 // Tile dimensions in layout units (1 unit = 1 pip half)
@@ -430,12 +495,16 @@ interface BoardProps {
   board: BoardState | null;
   legalMoves: Move[];
   selectedTile: Tile | null;
+  handNumber?: number;
+  handOver?: boolean;
+  gameOver?: boolean;
   lastPlayedTile?: Tile | null;
   highlightedPosition?: PlacementPosition | null;
   highlightedEnds?: number[] | null;
   onPositionClick: (position: PlacementPosition) => void;
   tileSize?: number;
   showOpenEndGlow?: boolean;
+  profileDailyFritz?: boolean;
 }
 
 function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean {
@@ -452,16 +521,26 @@ function BoardComponent({
   board,
   legalMoves,
   selectedTile,
+  handNumber = 0,
+  handOver = false,
+  gameOver = false,
   lastPlayedTile = null,
   highlightedPosition = null,
   highlightedEnds = null,
   onPositionClick,
   tileSize = 72,
   showOpenEndGlow = false,
+  profileDailyFritz = false,
 }: BoardProps) {
   useRenderProfiler('Board');
+  if (profileDailyFritz) {
+    recordDailyFritzBoardMetric('boardRenderCount', 1);
+  }
   const containerRef = useRef<HTMLDivElement>(null);
   const fitRetryRafRef = useRef<number | null>(null);
+  const manualCameraRef = useRef(false);
+  const manualCameraUntilRef = useRef(0);
+  const lastResetSignatureRef = useRef('');
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
@@ -469,6 +548,65 @@ function BoardComponent({
   const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
   const showTargetDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
+
+  const boardTileCount = board
+    ? board.mainLine.length +
+      board.hubDoubles.reduce(
+        (sum, hub) => sum + hub.branches.reduce((branchSum, branch) => branchSum + branch.tiles.length, 0),
+        0,
+      )
+    : 0;
+
+  const isResettingBoard = handOver || !board || board.mainLine.length === 0;
+
+  const openEndPositions = useMemo(() => {
+    if (!board || isResettingBoard) return [] as PlacementPosition[];
+    const positions: PlacementPosition[] = ['left', 'right'];
+    for (const hub of board.hubDoubles ?? []) {
+      if (typeof hub.hubId !== 'number' || !hub.isCrossed) continue;
+      const hubId = hub.hubId;
+      positions.push(`branch-${hubId}-0`, `branch-${hubId}-1`);
+    }
+    return positions;
+  }, [board, isResettingBoard]);
+
+  const logLayoutDebug = useCallback(
+    (validPositionsCount: number, selectedTileKey: string | null, layout: BoardLayout) => {
+      if (typeof window === 'undefined') return;
+      const timestamp =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? Number(performance.now().toFixed(2))
+          : Date.now();
+      const entry = {
+        tag: '[layout-debug]',
+        timestamp,
+        handNumber,
+        handOver,
+        gameOver,
+        boardTileCount,
+        openEndPositions,
+        validPositionsCount,
+        selectedTile: selectedTileKey,
+        computedBounds: {
+          minX: Number(layout.minX.toFixed(2)),
+          maxX: Number(layout.maxX.toFixed(2)),
+          minY: Number(layout.minY.toFixed(2)),
+          maxY: Number(layout.maxY.toFixed(2)),
+        },
+        zoomScale: Number(camera.scale.toFixed(3)),
+      };
+      const win = window as typeof window & {
+        __dailyFritzLayoutDebug?: Array<Record<string, unknown>>;
+      };
+      const bucket = (win.__dailyFritzLayoutDebug ??= []);
+      bucket.push(entry);
+      if (bucket.length > 300) {
+        bucket.splice(0, bucket.length - 300);
+      }
+      console.log('[layout-debug]', entry);
+    },
+    [boardTileCount, camera.scale, gameOver, handNumber, handOver, openEndPositions],
+  );
 
   // Get valid positions for the selected tile
   const validPositions = useMemo((): PlacementPosition[] => {
@@ -479,36 +617,95 @@ function BoardComponent({
       .filter(Boolean);
   }, [selectedTile, legalMoves]);
 
-  // Compute layout
+  // Keep the camera/layout stable when the player selects a tile.
   const layout = useMemo(() => {
-    return computeLayout(board, validPositions);
-  }, [board, validPositions]);
-
-  const openEndPositions = useMemo(() => {
-    if (!board) return [] as PlacementPosition[];
-    const positions: PlacementPosition[] = ['left', 'right'];
-    for (const hub of board.hubDoubles ?? []) {
-      if (typeof hub.hubId !== 'number') continue;
-      const hubId = hub.hubId;
-      positions.push(`branch-${hubId}-0`, `branch-${hubId}-1`);
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    traceCameraDebug('[camera-debug] computeLayout input', {
+      boardTileCount,
+      openEndPositions,
+      validPositions,
+      selectedTile: selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null,
+    });
+    const nextLayout = computeLayout(isResettingBoard ? null : board, openEndPositions);
+    traceCameraDebug('[camera-debug] computeLayout output', {
+      minX: Number(nextLayout.minX.toFixed(2)),
+      maxX: Number(nextLayout.maxX.toFixed(2)),
+      minY: Number(nextLayout.minY.toFixed(2)),
+      maxY: Number(nextLayout.maxY.toFixed(2)),
+      scale: Number(camera.scale.toFixed(3)),
+    });
+    if (profileDailyFritz) {
+      const end = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      recordDailyFritzBoardMetric('computeLayout', end - start);
+      logLayoutDebug(validPositions.length, selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null, nextLayout);
     }
-    return positions;
-  }, [board]);
+    return nextLayout;
+  }, [board, openEndPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions.length, isResettingBoard]);
+  const placementZones = useMemo(() => {
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const zones = computeLayout(board, validPositions).zones;
+    if (profileDailyFritz) {
+      const end = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      recordDailyFritzBoardMetric('computeLayout', end - start);
+      traceDailyFritzBoardEvent('[render] placementZones', {
+        count: zones.length,
+        selectedTile: selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null,
+      });
+    }
+    return zones;
+  }, [board, validPositions, profileDailyFritz, selectedTile]);
+
+  useEffect(() => {
+    if (!profileDailyFritz) return;
+    traceDailyFritzBoardEvent('[render] Board props', {
+      selectedTile: selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null,
+      legalMovesCount: legalMoves.length,
+    });
+  }, [profileDailyFritz, selectedTile, legalMoves.length]);
 
   const glowLayout = useMemo(() => {
     if (!showOpenEndGlow) return null;
-    return computeLayout(board, openEndPositions);
-  }, [showOpenEndGlow, board, openEndPositions]);
+    return computeLayout(isResettingBoard ? null : board, openEndPositions);
+  }, [showOpenEndGlow, board, openEndPositions, isResettingBoard]);
+
+  const resetSignature = useMemo(
+    () => `${handNumber}:${handOver}:${gameOver}:${isResettingBoard}`,
+    [gameOver, handNumber, handOver, isResettingBoard],
+  );
+
+  useEffect(() => {
+    if (lastResetSignatureRef.current === resetSignature) return;
+    lastResetSignatureRef.current = resetSignature;
+    manualCameraRef.current = false;
+    traceCameraDebug('[camera-debug] setCamera', {
+      reason: 'board-reset',
+      x: 0,
+      y: 0,
+      scale: 1,
+    });
+    setCamera({ x: 0, y: 0, scale: 1 });
+  }, [resetSignature]);
 
   // Convert layout units to pixels
   const unitToPixels = tileSize;
   // Calculate board center offset
   const centerX = (layout.minX + layout.maxX) / 2;
   const centerY = (layout.minY + layout.maxY) / 2;
+  const markManualCamera = useCallback(() => {
+    const now = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+    manualCameraRef.current = true;
+    manualCameraUntilRef.current = now + 1500;
+  }, []);
 
-  function fitCameraToContainer(width?: number, height?: number) {
+  function fitCameraToContainer(reason: string, width?: number, height?: number, force = false) {
     const container = containerRef.current;
     if (!container) return;
+    if (manualCameraRef.current && !force) {
+      const now =
+        typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+      if (now < manualCameraUntilRef.current) return;
+      manualCameraRef.current = false;
+    }
 
     const rect = container.getBoundingClientRect();
     const containerWidth = width ?? rect.width;
@@ -518,7 +715,7 @@ function BoardComponent({
       if (typeof window !== 'undefined' && fitRetryRafRef.current === null) {
         fitRetryRafRef.current = window.requestAnimationFrame(() => {
           fitRetryRafRef.current = null;
-          fitCameraToContainer();
+          fitCameraToContainer('retry');
         });
       }
       return;
@@ -535,6 +732,12 @@ function BoardComponent({
     const scaleY = (containerHeight * targetFill) / layoutHeight;
     const fitScale = Math.min(1.45, Math.max(0.22, Math.min(scaleX, scaleY)));
 
+    traceCameraDebug('[camera-debug] setCamera', {
+      reason,
+      x: 0,
+      y: 0,
+      scale: Number(fitScale.toFixed(3)),
+    });
     setCamera({ x: 0, y: 0, scale: fitScale });
   }
 
@@ -550,7 +753,7 @@ function BoardComponent({
           ? prev
           : { width: rect.width, height: rect.height },
       );
-      fitCameraToContainer(rect.width, rect.height);
+      fitCameraToContainer('effect-runFit', rect.width, rect.height);
     };
     runFit();
     const raf1 = window.requestAnimationFrame(runFit);
@@ -565,7 +768,7 @@ function BoardComponent({
 
     const observer = new ResizeObserver(() => {
       runFit();
-      fitCameraToContainer();
+      fitCameraToContainer('resize-observer');
     });
     observer.observe(container);
 
@@ -584,16 +787,30 @@ function BoardComponent({
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    markManualCamera();
     setCamera((cam) => ({
       ...cam,
-      scale: Math.min(1.8, Math.max(0.22, cam.scale * delta)),
+      scale: (() => {
+        const nextScale = Math.min(1.8, Math.max(0.22, cam.scale * delta));
+        traceCameraDebug('[camera-debug] setCamera', {
+          reason: 'wheel',
+          x: Number(cam.x.toFixed(2)),
+          y: Number(cam.y.toFixed(2)),
+          scale: Number(nextScale.toFixed(3)),
+        });
+        return nextScale;
+      })(),
     }));
-  }, []);
+  }, [markManualCamera]);
 
   // Pan handlers
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
+      if ((e.target as HTMLElement)?.closest('.placement-zone')) {
+        return;
+      }
+      markManualCamera();
       setIsDragging(true);
       dragStart.current = {
         x: e.clientX,
@@ -602,7 +819,7 @@ function BoardComponent({
         camY: camera.y,
       };
     },
-    [camera.x, camera.y],
+    [camera.x, camera.y, markManualCamera],
   );
 
   const handleMouseMove = useCallback(
@@ -612,7 +829,17 @@ function BoardComponent({
       const dy = e.clientY - dragStart.current.y;
       setCamera((cam) => ({
         ...cam,
-        x: dragStart.current.camX + dx,
+        x: (() => {
+          const nextX = dragStart.current.camX + dx;
+          const nextY = dragStart.current.camY + dy;
+          traceCameraDebug('[camera-debug] setCamera', {
+            reason: 'drag',
+            x: Number(nextX.toFixed(2)),
+            y: Number(nextY.toFixed(2)),
+            scale: Number(cam.scale.toFixed(3)),
+          });
+          return nextX;
+        })(),
         y: dragStart.current.camY + dy,
       }));
     },
@@ -625,15 +852,26 @@ function BoardComponent({
 
   // Double-click to reset
   const handleDoubleClick = useCallback(() => {
-    fitCameraToContainer();
+    manualCameraRef.current = false;
+    fitCameraToContainer('double-click-reset', undefined, undefined, true);
   }, [layout, unitToPixels]);
 
   const applyZoomStep = useCallback((delta: number) => {
+    markManualCamera();
     setCamera((cam) => ({
       ...cam,
-      scale: Math.min(1.8, Math.max(0.22, cam.scale + delta)),
+      scale: (() => {
+        const nextScale = Math.min(1.8, Math.max(0.22, cam.scale + delta));
+        traceCameraDebug('[camera-debug] setCamera', {
+          reason: 'manual-zoom',
+          x: Number(cam.x.toFixed(2)),
+          y: Number(cam.y.toFixed(2)),
+          scale: Number(nextScale.toFixed(3)),
+        });
+        return nextScale;
+      })(),
     }));
-  }, []);
+  }, [markManualCamera]);
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
@@ -692,7 +930,7 @@ function BoardComponent({
         })}
 
         {/* Render placement zones */}
-        {layout.zones.map((zone) => {
+        {placementZones.map((zone) => {
           const outwardPx = tileSize * 0.16;
           const x = (zone.x - centerX) * unitToPixels + zone.dirX * outwardPx;
           const y = (zone.y - centerY) * unitToPixels + zone.dirY * outwardPx;
@@ -718,8 +956,39 @@ function BoardComponent({
                 height,
                 transform: 'translate(-50%, -50%)',
               }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
+                const target = e.target instanceof HTMLElement ? e.target : null;
+                const currentTarget = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
+                console.log('[board-zone-click]', {
+                  position: zone.position,
+                  selectedTile: selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null,
+                  hasOnPositionClick: typeof onPositionClick === 'function',
+                  pointerTargetInfo: {
+                    targetTag: target?.tagName ?? null,
+                    targetClass: target?.className ?? null,
+                    currentTargetTag: currentTarget?.tagName ?? null,
+                    currentTargetClass: currentTarget?.className ?? null,
+                    targetPointerEvents:
+                      target && typeof window !== 'undefined' ? window.getComputedStyle(target).pointerEvents : null,
+                    currentTargetPointerEvents:
+                      currentTarget && typeof window !== 'undefined'
+                        ? window.getComputedStyle(currentTarget).pointerEvents
+                        : null,
+                  },
+                });
+                if (profileDailyFritz) {
+                  traceDailyFritzBoardEvent('[input] placement click', {
+                    position: zone.position,
+                  });
+                }
+                if (typeof onPositionClick !== 'function') {
+                  console.log('[board-zone-blocked] reason = missing-onPositionClick');
+                  return;
+                }
+                console.log('[board-zone-forward]', { position: zone.position });
                 onPositionClick(zone.position);
               }}
               data-lane={zone.lane}
@@ -797,6 +1066,11 @@ function BoardComponent({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            traceCameraDebug('[camera-debug] manual zoom click', {
+              direction: 'out',
+              beforeScale: Number(camera.scale.toFixed(3)),
+              afterScale: Number(Math.min(1.8, Math.max(0.22, camera.scale - 0.12)).toFixed(3)),
+            });
             applyZoomStep(-0.12);
           }}
           style={{
@@ -840,6 +1114,11 @@ function BoardComponent({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            traceCameraDebug('[camera-debug] manual zoom click', {
+              direction: 'in',
+              beforeScale: Number(camera.scale.toFixed(3)),
+              afterScale: Number(Math.min(1.8, Math.max(0.22, camera.scale + 0.12)).toFixed(3)),
+            });
             applyZoomStep(0.12);
           }}
           style={{
@@ -873,7 +1152,8 @@ function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
     highlightedEndsEqual(prev.highlightedEnds, next.highlightedEnds) &&
     prev.onPositionClick === next.onPositionClick &&
     prev.tileSize === next.tileSize &&
-    prev.showOpenEndGlow === next.showOpenEndGlow
+    prev.showOpenEndGlow === next.showOpenEndGlow &&
+    prev.profileDailyFritz === next.profileDailyFritz
   );
 }
 

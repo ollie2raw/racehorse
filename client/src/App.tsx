@@ -723,6 +723,8 @@ export default function App() {
   const [botFritzTier, setBotFritzTier] = useState<FritzTier>('elite');
   const [isGuidedMode, setIsGuidedMode] = useState(false);
   const [isAuthoringMode, setIsAuthoringMode] = useState(false);
+  const [isAuthoringV2Mode, setIsAuthoringV2Mode] = useState(false);
+  const [isGuidedV2Mode, setIsGuidedV2Mode] = useState(false);
   const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
   const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
   const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
@@ -2447,6 +2449,18 @@ export default function App() {
                 saveFrozenLesson(session);
               }
             }}
+            onStartGuidedV2Game={() => {
+              setIsGuidedV2Mode(true);
+              setBotFritzTier('elite');
+              setBotDealSize(7);
+              setAppMode('bot');
+            }}
+            onStartAuthoringV2={() => {
+              setIsAuthoringV2Mode(true);
+              setBotFritzTier('elite');
+              setBotDealSize(7);
+              setAppMode('bot');
+            }}
           />
         </Suspense>
       </div>
@@ -2475,11 +2489,19 @@ export default function App() {
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
           <BotMatchScreen
-            onBack={() => { setIsGuidedMode(false); setIsAuthoringMode(false); setAppMode('home'); }}
+            onBack={() => {
+              setIsGuidedMode(false);
+              setIsAuthoringMode(false);
+              setIsAuthoringV2Mode(false);
+              setIsGuidedV2Mode(false);
+              setAppMode('home');
+            }}
             dealSize={botDealSize}
             fritzTier={botFritzTier}
             isGuidedMode={isGuidedMode}
             isAuthoringMode={isAuthoringMode}
+            isAuthoringV2Mode={isAuthoringV2Mode}
+            isGuidedV2Mode={isGuidedV2Mode}
             userId={authUser?.id ?? null}
             username={authProfile?.username ?? null}
             currentGlickoRating={authProfile?.glicko_rating ?? null}

@@ -17,6 +17,7 @@ function resolveServerBaseUrl(): string {
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -28,19 +29,38 @@ async function authHeaders(): Promise<Record<string, string>> {
   } catch {
     // no-op
   }
+  const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  console.log('[daily-fritz-client] authHeaders', {
+    ms: Number((endedAt - startedAt).toFixed(1)),
+    hasSupabase: Boolean(supabase),
+    hasAuthorization: Boolean(headers.Authorization),
+  });
   return headers;
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const headers = {
+    ...(await authHeaders()),
+    ...(init?.headers ?? {}),
+  };
+  const fetchStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const response = await fetch(`${resolveServerBaseUrl()}${path}`, {
     credentials: 'include',
     ...init,
-    headers: {
-      ...(await authHeaders()),
-      ...(init?.headers ?? {}),
-    },
+    headers,
   });
+  const fetchEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const text = await response.text().catch(() => '');
+  const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  console.log('[daily-fritz-client] requestJson', {
+    path,
+    status: response.status,
+    authMs: Number((fetchStartedAt - startedAt).toFixed(1)),
+    fetchMs: Number((fetchEndedAt - fetchStartedAt).toFixed(1)),
+    parseMs: Number((endedAt - fetchEndedAt).toFixed(1)),
+    totalMs: Number((endedAt - startedAt).toFixed(1)),
+  });
   let parsed: any = null;
   if (text) {
     try {

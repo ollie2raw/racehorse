@@ -17,6 +17,8 @@ interface LessonCoachPanelProps {
   onBestMove: () => void;
   /** Whether auto-play is available (false when no authored move exists or board is over) */
   canBestMove: boolean;
+  /** Whether the player has deviated from the authored line */
+  isOffAuthoredLine?: boolean;
 }
 
 export default function LessonCoachPanel({
@@ -25,13 +27,14 @@ export default function LessonCoachPanel({
   coachingText,
   onBestMove,
   canBestMove,
+  isOffAuthoredLine = false,
 }: LessonCoachPanelProps) {
   return (
     <div className="coach-panel" style={{ minHeight: 120 }}>
       <div className="coach-panel-header">
         <span className="coach-icon" aria-hidden="true">🎓</span>
         <span className="coach-label">Master Fritz</span>
-        {totalSteps > 0 && (
+        {!isOffAuthoredLine && totalSteps > 0 && (
           <span
             style={{
               marginLeft: 'auto',
@@ -46,7 +49,31 @@ export default function LessonCoachPanel({
         )}
       </div>
 
-      {coachingText ? (
+      {isOffAuthoredLine ? (
+        <div style={{ margin: '4px 0 8px' }}>
+          <p
+            style={{
+              margin: 0,
+              fontSize: '0.82rem',
+              color: 'rgba(255,200,100,0.95)',
+              fontWeight: 600,
+              lineHeight: 1.4,
+            }}
+          >
+            Offline fallback active
+          </p>
+          <p
+            style={{
+              margin: '4px 0 0',
+              fontSize: '0.76rem',
+              color: 'rgba(255,255,255,0.65)',
+              lineHeight: 1.4,
+            }}
+          >
+            You went off the authored line, so this hand will continue live from here.
+          </p>
+        </div>
+      ) : coachingText ? (
         <p
           style={{
             margin: 0,

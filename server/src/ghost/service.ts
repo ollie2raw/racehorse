@@ -667,6 +667,10 @@ function computeAverageScore(games: GhostGameRow[]): number | null {
   return Math.round((total / games.length) * 10) / 10;
 }
 
+function isGhostRatingEligible(finalScore: number | null | undefined, opponentScore: number | null | undefined): boolean {
+  return Math.max(Number(finalScore ?? 0), Number(opponentScore ?? 0)) >= 10;
+}
+
 function computeRatingChange(
   playerRating: number,
   opponentRating: number,
@@ -807,23 +811,26 @@ export async function completeGhostGame(params: {
   const styleGames = await fetchRecentGhostGames(params.userId, 50);
   const compositeLog = buildCompositeLog(recentGames, styleGames);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
+  const isRatingEligible = isGhostRatingEligible(params.finalScore, params.opponentScore);
 
-  const rating = isFritz
-    ? computeFritzRatingChange(
-        Number(profile.ghost_rating ?? 800),
-        params.finalScore,
-        params.opponentScore,
-        Number(profile.games_played ?? 0),
-      )
-    : params.opponentUserId
-      ? computeRatingChange(
+  const rating = isRatingEligible
+    ? isFritz
+      ? computeFritzRatingChange(
           Number(profile.ghost_rating ?? 800),
-          Number(opponentProfile?.ghost_rating ?? 1000),
           params.finalScore,
           params.opponentScore,
           Number(profile.games_played ?? 0),
         )
-      : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 };
+      : params.opponentUserId
+        ? computeRatingChange(
+            Number(profile.ghost_rating ?? 800),
+            Number(opponentProfile?.ghost_rating ?? 1000),
+            params.finalScore,
+            params.opponentScore,
+            Number(profile.games_played ?? 0),
+          )
+        : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 }
+    : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 };
 
   let glickoRating: number | null = null;
   let glickoDelta: number | null = null;
@@ -839,27 +846,32 @@ export async function completeGhostGame(params: {
       throw new Error('Ranking profile not found for Fritz match.');
     }
 
-    const now = new Date().toISOString();
-    await supabaseFetch(`/rest/v1/ranked_games`, {
-      method: 'POST',
-      body: JSON.stringify([
-        {
-          player_id: params.userId,
-          opponent_id: fritzId,
-          player_score: Math.round(params.finalScore),
-          opponent_score: Math.round(params.opponentScore),
-          game_type: 'fritz',
-          played_at: now,
-          rating_before: rankingProfile.glicko_rating,
-          rd_before: rankingProfile.glicko_rd,
-          rating_after: null,
-        },
-      ]),
-    });
+    if (isRatingEligible) {
+      const now = new Date().toISOString();
+      await supabaseFetch(`/rest/v1/ranked_games`, {
+        method: 'POST',
+        body: JSON.stringify([
+          {
+            player_id: params.userId,
+            opponent_id: fritzId,
+            player_score: Math.round(params.finalScore),
+            opponent_score: Math.round(params.opponentScore),
+            game_type: 'fritz',
+            played_at: now,
+            rating_before: rankingProfile.glicko_rating,
+            rd_before: rankingProfile.glicko_rd,
+            rating_after: null,
+          },
+        ]),
+      });
 
-    const ratingResult = await processRatingPeriod(params.userId);
-    glickoRating = ratingResult.newRating;
-    glickoDelta = ratingResult.delta;
+      const ratingResult = await processRatingPeriod(params.userId);
+      glickoRating = ratingResult.newRating;
+      glickoDelta = ratingResult.delta;
+    } else {
+      glickoRating = rankingProfile.glicko_rating;
+      glickoDelta = 0;
+    }
   }
 
   await upsertGhostProfile({
@@ -868,7 +880,8 @@ export async function completeGhostGame(params: {
     last_updated: new Date().toISOString(),
     composite_log: compositeLog,
     style_profile: styleProfile,
-    games_played: isNewGame ? Number(profile.games_played ?? 0) + 1 : Number(profile.games_played ?? 0),
+    games_played:
+      isNewGame && isRatingEligible ? Number(profile.games_played ?? 0) + 1 : Number(profile.games_played ?? 0),
   });
 
   return {

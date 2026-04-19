@@ -173,6 +173,10 @@ type PuzzleScoreRow = {
   updated_at?: string | null;
 };
 
+function isGhostRatingEligible(finalScore: number | null | undefined, opponentScore: number | null | undefined): boolean {
+  return Math.max(Number(finalScore ?? 0), Number(opponentScore ?? 0)) >= 10;
+}
+
 function getWeekStart(now = new Date()): Date {
   const day = now.getDay();
   const diffToMonday = (day + 6) % 7;
@@ -311,6 +315,7 @@ function deriveGhostSummary(
     const finalScore = Number(row.final_score ?? 0);
     const opponentScore = Number(row.opponent_score ?? 0);
     const margin = finalScore - opponentScore;
+    const ratingEligible = isGhostRatingEligible(finalScore, opponentScore);
     if (margin > 0) {
       wins += 1;
       bestWinMargin = bestWinMargin == null ? margin : Math.max(bestWinMargin, margin);
@@ -324,8 +329,8 @@ function deriveGhostSummary(
         bestWinMarginThisWeek =
           bestWinMarginThisWeek == null ? margin : Math.max(bestWinMarginThisWeek, margin);
       }
-      if (margin > 0) ratingChangeThisWeek += 16;
-      if (margin < 0) ratingChangeThisWeek -= 16;
+      if (ratingEligible && margin > 0) ratingChangeThisWeek += 16;
+      if (ratingEligible && margin < 0) ratingChangeThisWeek -= 16;
     }
   }
 
@@ -684,8 +689,9 @@ export async function fetchUserStatsByUserId(
         const finalScore = Number(row.final_score ?? 0);
         const opponentScore = Number(row.opponent_score ?? 0);
         const margin = finalScore - opponentScore;
-        if (margin > 0) winsThisWeek += 1;
-        if (margin < 0) lossesThisWeek += 1;
+        const ratingEligible = isGhostRatingEligible(finalScore, opponentScore);
+        if (ratingEligible && margin > 0) winsThisWeek += 1;
+        if (ratingEligible && margin < 0) lossesThisWeek += 1;
         if (margin > 0) {
           ghostBestWinMarginThisWeek =
             ghostBestWinMarginThisWeek == null

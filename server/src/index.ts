@@ -2113,17 +2113,32 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
 });
 
 app.get('/api/daily-fritz/today', async (req, res) => {
+  const requestStartedAt = Date.now();
+  const mark = (label: string, startedAt: number) => {
+    const now = Date.now();
+    console.log('[daily-fritz-server] today', {
+      label,
+      ms: now - startedAt,
+      totalMs: now - requestStartedAt,
+    });
+  };
   try {
+    const authStartedAt = Date.now();
     const authenticatedUserId = await getAuthenticatedUserId(req);
+    mark('auth', authStartedAt);
     if (!authenticatedUserId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
     const runDate = getPacificDateKey();
+    const runSummaryStartedAt = Date.now();
     let run = await getDailyFritzRunSummary(runDate);
+    mark('getDailyFritzRunSummary', runSummaryStartedAt);
     if (!run) {
+      const ensureStartedAt = Date.now();
       const generated = await ensureDailyFritzRunForDate(runDate);
+      mark('ensureDailyFritzRunForDate', ensureStartedAt);
       run = generated
         ? {
             runDate: generated.runDate,
@@ -2143,14 +2158,26 @@ app.get('/api/daily-fritz/today', async (req, res) => {
       return;
     }
 
-    const attempt = await getDailyFritzAttempt(runDate, authenticatedUserId);
-    const streak = await getDailyFritzStreak(authenticatedUserId, runDate);
+    const userStateStartedAt = Date.now();
+    const [attempt, streak] = await Promise.all([
+      getDailyFritzAttempt(runDate, authenticatedUserId),
+      getDailyFritzStreak(authenticatedUserId, runDate),
+    ]);
+    mark('getDailyFritzAttempt+getDailyFritzStreak', userStateStartedAt);
     let ownRank: number | null = null;
     if (attempt?.status === 'completed') {
+      const leaderboardStartedAt = Date.now();
       const leaderboard = await buildDailyFritzLeaderboard(runDate);
+      mark('buildDailyFritzLeaderboard', leaderboardStartedAt);
       ownRank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
     }
 
+    console.log('[daily-fritz-server] today', {
+      label: 'response',
+      totalMs: Date.now() - requestStartedAt,
+      attemptStatus: attempt?.status ?? 'none',
+      runDate,
+    });
     res.json({
       ok: true,
       run_date: run.runDate,

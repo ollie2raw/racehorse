@@ -72,6 +72,30 @@ export interface BotMovePreview {
   openSum: number;
 }
 
+type DailyFritzMetric = {
+  count: number;
+  totalMs: number;
+  maxMs: number;
+};
+
+function recordDailyFritzMetric(name: 'getLegalMoves', durationMs: number): void {
+  if (typeof window === 'undefined') return;
+  const win = window as typeof window & {
+    __dailyFritzProfileActive?: boolean;
+    __dailyFritzProfile?: {
+      metrics?: Record<string, DailyFritzMetric>;
+    };
+  };
+  if (!win.__dailyFritzProfileActive) return;
+  const profile = (win.__dailyFritzProfile ??= {});
+  const metrics = (profile.metrics ??= {});
+  const current = metrics[name] ?? { count: 0, totalMs: 0, maxMs: 0 };
+  current.count += 1;
+  current.totalMs += durationMs;
+  current.maxMs = Math.max(current.maxMs, durationMs);
+  metrics[name] = current;
+}
+
 const BONEYARD_LOCKED_COUNT = 2;
 
 function tileEquals(a: Tile, b: Tile): boolean {
@@ -474,11 +498,45 @@ function placeTileOnBranch(
   };
 }
 
+export function recomputeBoardEnds(board: BoardState): BoardState {
+  const mainLine = board.mainLine;
+  return {
+    ...board,
+    leftEnd: endpointMatchFromOrientation(board, 'left'),
+    rightEnd: endpointMatchFromOrientation(board, 'right'),
+    leftEndIsDouble: board.mainLine[0] ? isDouble(board.mainLine[0].tile) : false,
+    rightEndIsDouble: board.mainLine[board.mainLine.length - 1]
+      ? isDouble(board.mainLine[board.mainLine.length - 1].tile)
+      : false,
+    hubDoubles: board.hubDoubles.map((hub) => {
+      let isCrossed = hub.isCrossed;
+      if (hub.laneType === 'mainline') {
+        const idx = hub.mainlineIndex ?? hub.tileIndex;
+        isCrossed = idx > 0 && idx < mainLine.length - 1;
+      }
+      return {
+        ...hub,
+        isCrossed,
+        branches: hub.branches.map((branch) => {
+          if (!branch) return branch;
+          return {
+            ...branch,
+            openEnd: branchEndMatch(hub.hubValue, branch),
+            openEndIsDouble:
+              branch.tiles.length > 0 ? isDouble(branch.tiles[branch.tiles.length - 1].tile) : false,
+          };
+        }),
+      };
+    }),
+  };
+}
+
 export function simulatePlacement(
   board: BoardState | null,
   tile: Tile,
   position: PlacementPosition,
 ): BoardState {
+  let next: BoardState;
   if (board === null) {
     const placedTile: PlacedTile = {
       tile,
@@ -494,7 +552,7 @@ export function simulatePlacement(
     };
     if (isDouble(tile)) {
       const hubId = nextHubId(nextBoard);
-      return {
+      next = {
         ...nextBoard,
         hubDoubles: [
           {
@@ -511,29 +569,53 @@ export function simulatePlacement(
           },
         ],
       };
+    } else {
+      next = nextBoard;
     }
-    return nextBoard;
+  } else {
+    const branchPos = parseBranchPosition(position);
+    if (branchPos) {
+      next = placeTileOnBranch(board, tile, branchPos.hubIndex, branchPos.armIndex);
+    } else {
+      next = placeTileOnMainLine(board, tile, position as 'left' | 'right');
+    }
   }
-
-  const branchPos = parseBranchPosition(position);
-  if (branchPos) {
-    return placeTileOnBranch(board, tile, branchPos.hubIndex, branchPos.armIndex);
-  }
-  return placeTileOnMainLine(board, tile, position as 'left' | 'right');
+  return recomputeBoardEnds(next);
 }
 
-function endpointMatchFromOrientation(board: BoardState, side: 'left' | 'right'): number {
-  const placed = side === 'left' ? board.mainLine[0] : board.mainLine[board.mainLine.length - 1];
-  if (!placed) return side === 'left' ? board.leftEnd : board.rightEnd;
+export function endpointMatchFromOrientation(board: BoardState, side: 'left' | 'right'): number {
+  const mainLine = board.mainLine;
+  if (!mainLine || mainLine.length === 0) return side === 'left' ? board.leftEnd : board.rightEnd;
+
+  const placed = side === 'left' ? mainLine[0] : mainLine[mainLine.length - 1];
   const tile = placed.tile;
   if (isDouble(tile)) return tile.high;
-  if (placed.orientation === 'horizontal-normal') {
-    return side === 'left' ? tile.low : tile.high;
+
+  if (side === 'left') {
+    // Use the stored orientation to determine which pip faces outward.
+    // Previously this used value-matching against the adjacent tile, which
+    // produced the wrong pip when tile.low happened to equal a neighbour pip
+    // for an unrelated reason.  Orientation is the authoritative source.
+    return placed.orientation === 'horizontal-normal' ? tile.low : tile.high;
+  } else {
+    return placed.orientation === 'horizontal-normal' ? tile.high : tile.low;
   }
-  if (placed.orientation === 'horizontal-flipped') {
-    return side === 'left' ? tile.high : tile.low;
-  }
-  return side === 'left' ? board.leftEnd : board.rightEnd;
+}
+
+function branchEndMatch(hubValue: number, branch: BranchArm): number {
+  if (branch.tiles.length === 0) return hubValue;
+  const lastPlaced = branch.tiles[branch.tiles.length - 1];
+  const tile = lastPlaced.tile;
+  if (isDouble(tile)) return tile.low;
+
+  // The pip that DOES NOT match the predecessor
+  const penult =
+    branch.tiles.length > 1
+      ? branch.tiles[branch.tiles.length - 2].tile
+      : { low: hubValue, high: hubValue }; // Hub acts as predecessor for first tile
+
+  const lowMatches = tile.low === penult.low || tile.low === penult.high;
+  return lowMatches ? tile.high : tile.low;
 }
 
 function getOpenEnds(
@@ -550,12 +632,26 @@ function getOpenEnds(
   for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
     const hub = board.hubDoubles[hubIdx];
     const hubId = hubIdAt(hub, hubIdx);
-    if (!hub.isCrossed) continue;
+
+    // Authoritative crossed check: a mainline double is crossed if it has
+    // neighbors on both sides in the mainline.
+    let isCrossed = hub.isCrossed;
+    if (hub.laneType === 'mainline') {
+      const idx = hub.mainlineIndex ?? hub.tileIndex;
+      isCrossed = idx > 0 && idx < board.mainLine.length - 1;
+    }
+
+    if (!isCrossed) continue;
+
+    // Always expose both arms (index 0 and 1) for every crossed double.
     for (let armIdx = 0; armIdx < 2; armIdx++) {
       const branch = hub.branches[armIdx];
+      // If branch doesn't exist yet, it's an empty arm with the hub's value.
+      const matchValue = branch ? branchEndMatch(hub.hubValue, branch) : hub.hubValue;
+
       ends.push({
         position: `branch-${hubId}-${armIdx}`,
-        matchValue: branch ? branch.openEnd : hub.hubValue,
+        matchValue,
       });
     }
   }
@@ -705,12 +801,22 @@ function getPlayMoves(state: BotMatchState, player: BotPlayerId): Move[] {
 }
 
 export function getLegalMoves(state: BotMatchState, player: BotPlayerId): Move[] {
+  const start =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
   if (!state.players[player] || state.currentPlayer !== player || state.handOver || state.gameOver) return [];
   const playMoves = getPlayMoves(state, player);
-  if (playMoves.length === 0 && state.boneyard.length <= BONEYARD_LOCKED_COUNT) {
-    return [{ type: 'pass' }];
-  }
-  return playMoves;
+  const result: Move[] =
+    playMoves.length === 0 && state.boneyard.length <= BONEYARD_LOCKED_COUNT
+      ? [{ type: 'pass' }]
+      : playMoves;
+  const end =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+  recordDailyFritzMetric('getLegalMoves', end - start);
+  return result;
 }
 
 export function previewPlayMove(

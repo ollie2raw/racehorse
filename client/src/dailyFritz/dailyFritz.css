@@ -309,10 +309,21 @@
 }
 
 .daily-fritz-action {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   min-height: 112px;
   justify-content: center;
   text-align: left;
+}
+
+.daily-fritz-action::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.88), rgba(34, 211, 238, 0.18));
+  opacity: 0.72;
 }
 
 .daily-fritz-actions .mode-option {
@@ -343,9 +354,26 @@
 }
 
 .daily-fritz-home-action {
-  background: rgba(7, 12, 21, 0.36) !important;
+  background: linear-gradient(180deg, rgba(17, 27, 43, 0.82), rgba(10, 17, 28, 0.9)) !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
-  opacity: 0.88;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 28px rgba(4, 10, 19, 0.22) !important;
+}
+
+.daily-fritz-actions .mode-option-secondary {
+  background: linear-gradient(180deg, rgba(17, 27, 43, 0.82), rgba(10, 17, 28, 0.9)) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 28px rgba(4, 10, 19, 0.22) !important;
+}
+
+.daily-fritz-actions .mode-option:hover {
+  border-color: rgba(34, 211, 238, 0.52) !important;
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.2),
+    0 18px 36px rgba(6, 26, 31, 0.28) !important;
 }
 
 .daily-fritz-preview {

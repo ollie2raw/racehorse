@@ -68,6 +68,59 @@ function tierDisplayLabel(tier: string): string {
   return titleCaseTier(tier);
 }
 
+function createMockDailyFritzRun(): DailyFritzStartResponse {
+  return {
+    ok: true,
+    attempt_id: 'dev-attempt',
+    verified_match_id: 'dev-match',
+    run_date: '2026-04-17',
+    current_hand_index: 0,
+    fritz_tier: 'standard',
+    deal_size: 7,
+    winning_score: 60,
+    first_hand: {
+      player_tiles: [
+        { low: 6, high: 6 },
+        { low: 4, high: 6 },
+        { low: 1, high: 4 },
+        { low: 0, high: 5 },
+        { low: 2, high: 3 },
+        { low: 1, high: 1 },
+        { low: 0, high: 0 },
+      ],
+      fritz_tiles: [
+        { low: 5, high: 5 },
+        { low: 3, high: 5 },
+        { low: 2, high: 5 },
+        { low: 4, high: 4 },
+        { low: 0, high: 4 },
+        { low: 2, high: 2 },
+        { low: 3, high: 6 },
+      ],
+      boneyard: [
+        { low: 1, high: 6 },
+        { low: 0, high: 6 },
+        { low: 2, high: 6 },
+        { low: 3, high: 3 },
+        { low: 0, high: 3 },
+        { low: 1, high: 5 },
+        { low: 4, high: 5 },
+        { low: 1, high: 2 },
+        { low: 2, high: 4 },
+        { low: 3, high: 4 },
+        { low: 1, high: 3 },
+        { low: 0, high: 1 },
+        { low: 5, high: 6 },
+        { low: 0, high: 2 },
+      ],
+      locked: [
+        { low: 2, high: 2 },
+        { low: 3, high: 3 },
+      ],
+    },
+  };
+}
+
 export default function DailyFritzScreen({
   user,
   profile,
@@ -78,6 +131,10 @@ export default function DailyFritzScreen({
   onOpenAuth,
   onBack,
 }: DailyFritzScreenProps) {
+  const mockDailyFritzEnabled =
+    import.meta.env.DEV &&
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('DEV_MOCK_DAILY_FRITZ') === '1';
   const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +142,9 @@ export default function DailyFritzScreen({
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<DailyFritzLeaderboardRow[]>([]);
-  const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(null);
+  const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(() =>
+    mockDailyFritzEnabled ? createMockDailyFritzRun() : null,
+  );
 
   const cacheKey = useMemo(
     () => (user?.id ? `${DAILY_FRITZ_TODAY_CACHE_PREFIX}${user.id}` : null),
@@ -107,6 +166,7 @@ export default function DailyFritzScreen({
   }, [cacheKey]);
 
   const loadToday = useCallback(async () => {
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     setLoading((prev) => !today && prev !== false ? true : !today);
     setError(null);
     try {
@@ -118,9 +178,15 @@ export default function DailyFritzScreen({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load Daily Fritz.');
     } finally {
+      const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      console.log('[daily-fritz-client] loadToday', {
+        hadCachedToday: Boolean(today),
+        userId: user?.id ?? null,
+        totalMs: Number((endedAt - startedAt).toFixed(1)),
+      });
       setLoading(false);
     }
-  }, [cacheKey, today]);
+  }, [cacheKey, today, user?.id]);
 
   useEffect(() => {
     if (!user) {
