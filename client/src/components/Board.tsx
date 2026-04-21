@@ -569,6 +569,10 @@ function BoardComponent({
     }
     return positions;
   }, [board, isResettingBoard]);
+  const cameraFitPositions = useMemo(
+    () => (selectedTile != null || showOpenEndGlow ? openEndPositions : []),
+    [openEndPositions, selectedTile, showOpenEndGlow],
+  );
 
   const logLayoutDebug = useCallback(
     (validPositionsCount: number, selectedTileKey: string | null, layout: BoardLayout) => {
@@ -622,11 +626,11 @@ function BoardComponent({
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
     traceCameraDebug('[camera-debug] computeLayout input', {
       boardTileCount,
-      openEndPositions,
+      openEndPositions: cameraFitPositions,
       validPositions,
       selectedTile: selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null,
     });
-    const nextLayout = computeLayout(isResettingBoard ? null : board, openEndPositions);
+    const nextLayout = computeLayout(isResettingBoard ? null : board, cameraFitPositions);
     traceCameraDebug('[camera-debug] computeLayout output', {
       minX: Number(nextLayout.minX.toFixed(2)),
       maxX: Number(nextLayout.maxX.toFixed(2)),
@@ -640,7 +644,7 @@ function BoardComponent({
       logLayoutDebug(validPositions.length, selectedTile ? `${selectedTile.low}|${selectedTile.high}` : null, nextLayout);
     }
     return nextLayout;
-  }, [board, openEndPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions.length, isResettingBoard]);
+  }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions.length, isResettingBoard]);
   const placementZones = useMemo(() => {
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const zones = computeLayout(board, validPositions).zones;

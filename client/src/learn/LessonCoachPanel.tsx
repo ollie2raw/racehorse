@@ -21,6 +21,33 @@ interface LessonCoachPanelProps {
   isOffAuthoredLine?: boolean;
 }
 
+function splitCoachingCopy(text: string): { title: string; body: string } {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return { title: '', body: '' };
+  const firstSentenceMatch = normalized.match(/^(.+?[.!?])(\s+|$)(.*)$/);
+  if (!firstSentenceMatch) {
+    return { title: normalized, body: '' };
+  }
+  const title = firstSentenceMatch[1].trim();
+  const body = firstSentenceMatch[3].trim();
+  return { title, body };
+}
+
+function deriveCoachChips(text: string): string[] {
+  const normalized = text.toLowerCase();
+  const chips: string[] = [];
+  const scoreMatch = normalized.match(/score(?:s|ing)?\s+(\d+)/);
+  if (scoreMatch) chips.push(`Scores ${scoreMatch[1]}`);
+  if (normalized.includes('keep my turn') || normalized.includes('keep our turn') || normalized.includes('turn continues')) {
+    chips.push('Keeps turn');
+  }
+  if (normalized.includes('draw')) chips.push('Sets up draw');
+  if (normalized.includes('go out')) chips.push('Threatens go out');
+  if (normalized.includes('double')) chips.push('Double pressure');
+  if (normalized.includes('tight') || normalized.includes('limit')) chips.push('Board control');
+  return Array.from(new Set(chips)).slice(0, 4);
+}
+
 export default function LessonCoachPanel({
   stepIndex,
   totalSteps,
@@ -29,98 +56,50 @@ export default function LessonCoachPanel({
   canBestMove,
   isOffAuthoredLine = false,
 }: LessonCoachPanelProps) {
+  const { title, body } = splitCoachingCopy(coachingText);
+  const chips = deriveCoachChips(coachingText);
   return (
-    <div className="coach-panel" style={{ minHeight: 120 }}>
-      <div className="coach-panel-header">
-        <span className="coach-icon" aria-hidden="true">🎓</span>
-        <span className="coach-label">Master Fritz</span>
-        {!isOffAuthoredLine && totalSteps > 0 && (
-          <span
-            style={{
-              marginLeft: 'auto',
-              fontSize: '0.72rem',
-              fontVariantNumeric: 'tabular-nums',
-              color: 'rgba(200,230,210,0.55)',
-              letterSpacing: '0.04em',
-            }}
-          >
-            Turn {stepIndex + 1}{totalSteps > 0 ? ` / ${totalSteps}` : ''}
-          </span>
-        )}
+    <div className="coach-panel lesson-coach-panel">
+      <div className="coach-panel-header lesson-coach-panel-header">
+        <div className="lesson-coach-meta">
+          <span className="coach-label lesson-coach-label">Coach Oliver</span>
+          {!isOffAuthoredLine && totalSteps > 0 && (
+            <span className="lesson-coach-turn-chip">
+              Turn {stepIndex + 1}{totalSteps > 0 ? ` / ${totalSteps}` : ''}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={onBestMove}
+          disabled={!canBestMove}
+          className="lesson-coach-bestmove-btn"
+        >
+          Show Best Move →
+        </button>
       </div>
 
       {isOffAuthoredLine ? (
-        <div style={{ margin: '4px 0 8px' }}>
-          <p
-            style={{
-              margin: 0,
-              fontSize: '0.82rem',
-              color: 'rgba(255,200,100,0.95)',
-              fontWeight: 600,
-              lineHeight: 1.4,
-            }}
-          >
-            Offline fallback active
-          </p>
-          <p
-            style={{
-              margin: '4px 0 0',
-              fontSize: '0.76rem',
-              color: 'rgba(255,255,255,0.65)',
-              lineHeight: 1.4,
-            }}
-          >
+        <div className="lesson-coach-copy-wrap">
+          <p className="lesson-coach-offline-title">Offline fallback active</p>
+          <p className="lesson-coach-offline-copy">
             You went off the authored line, so this hand will continue live from here.
           </p>
         </div>
       ) : coachingText ? (
-        <p
-          style={{
-            margin: 0,
-            fontSize: '0.82rem',
-            color: 'rgba(232,245,240,0.9)',
-            lineHeight: 1.55,
-          }}
-        >
-          {coachingText}
-        </p>
+        <div className="lesson-coach-copy-wrap">
+          <p className="lesson-coach-title">{title || coachingText}</p>
+          {body ? <p className="lesson-coach-copy">{body}</p> : null}
+          {chips.length > 0 ? (
+            <div className="lesson-coach-chips">
+              {chips.map((chip) => (
+                <span key={chip} className="lesson-coach-chip">{chip}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
       ) : (
-        <p
-          style={{
-            margin: 0,
-            fontSize: '0.78rem',
-            color: 'rgba(180,200,190,0.42)',
-            fontStyle: 'italic',
-          }}
-        >
-          No coaching note for this turn.
-        </p>
+        <p className="lesson-coach-empty">No coaching note for this turn.</p>
       )}
-
-      <button
-        onClick={onBestMove}
-        disabled={!canBestMove}
-        style={{
-          marginTop: 10,
-          width: '100%',
-          padding: '7px 0',
-          borderRadius: 8,
-          border: 'none',
-          background: canBestMove
-            ? 'rgba(80,200,160,0.22)'
-            : 'rgba(80,120,100,0.12)',
-          color: canBestMove
-            ? 'rgba(140,240,200,0.95)'
-            : 'rgba(140,180,160,0.35)',
-          fontSize: '0.82rem',
-          fontWeight: 600,
-          cursor: canBestMove ? 'pointer' : 'not-allowed',
-          letterSpacing: '0.03em',
-          transition: 'background 0.15s, color 0.15s',
-        }}
-      >
-        Best Move →
-      </button>
     </div>
   );
 }

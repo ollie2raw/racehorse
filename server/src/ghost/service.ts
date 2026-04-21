@@ -216,6 +216,49 @@ async function upsertGhostProfile(row: {
   return profile;
 }
 
+async function insertGhostGameRow(params: {
+  userId: string;
+  finalScore: number;
+  opponentScore: number;
+  trainingMoveLog: GhostMoveLogEntry[];
+  matchId?: string | null;
+}): Promise<{ isNewGame: boolean }> {
+  const baseRow = {
+    user_id: params.userId,
+    final_score: Math.round(params.finalScore),
+    opponent_score: Math.round(params.opponentScore),
+    move_log: params.trainingMoveLog,
+  };
+
+  if (params.matchId) {
+    try {
+      const upsertedRows = await supabaseFetch<GhostGameRow[]>(
+        `/rest/v1/ghost_games?on_conflict=match_id&select=id,xmax`,
+        {
+          method: 'POST',
+          headers: { Prefer: 'return=representation,resolution=merge-duplicates' },
+          body: JSON.stringify([{ ...baseRow, match_id: params.matchId }]),
+        },
+      );
+      return { isNewGame: upsertedRows[0]?.xmax === '0' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const missingMatchIdColumn =
+        message.includes('PGRST204') ||
+        message.includes("match_id") ||
+        message.includes('schema cache');
+      if (!missingMatchIdColumn) throw error;
+      console.warn('[ghost] ghost_games missing match_id column; falling back to plain insert');
+    }
+  }
+
+  await supabaseFetch(`/rest/v1/ghost_games`, {
+    method: 'POST',
+    body: JSON.stringify([baseRow]),
+  });
+  return { isNewGame: true };
+}
+
 async function ensureGhostProfile(userId: string): Promise<GhostProfileRow> {
   const existing = await fetchGhostProfile(userId);
   if (existing) return existing;
@@ -780,32 +823,13 @@ export async function completeGhostGame(params: {
       : params.moveLog,
   );
 
-  // Insert (or idempotent upsert) the ghost_games row.
-  // When matchId is available, request xmax in the response: Postgres sets
-  // xmax='0' on a freshly inserted row and non-zero on a conflict-updated row.
-  // Reading xmax from the upsert result is atomic — no pre-check race window.
-  const ghostGamesPath = params.matchId
-    ? `/rest/v1/ghost_games?on_conflict=match_id&select=id,xmax`
-    : `/rest/v1/ghost_games`;
-  const ghostGamesInsertHeaders: Record<string, string> = params.matchId
-    ? { Prefer: 'return=representation,resolution=merge-duplicates' }
-    : {};
-  const upsertedRows = await supabaseFetch<GhostGameRow[]>(ghostGamesPath, {
-    method: 'POST',
-    headers: ghostGamesInsertHeaders,
-    body: JSON.stringify([
-      {
-        user_id: params.userId,
-        final_score: Math.round(params.finalScore),
-        opponent_score: Math.round(params.opponentScore),
-        move_log: trainingMoveLog,
-        ...(params.matchId ? { match_id: params.matchId } : {}),
-      },
-    ]),
+  const { isNewGame } = await insertGhostGameRow({
+    userId: params.userId,
+    finalScore: params.finalScore,
+    opponentScore: params.opponentScore,
+    trainingMoveLog,
+    matchId: params.matchId,
   });
-  // True only when the row was genuinely new. Any concurrent or sequential retry
-  // that hits the same match_id will get xmax != '0' and must not increment.
-  const isNewGame = params.matchId ? upsertedRows[0]?.xmax === '0' : true;
 
   const recentGames = await fetchRecentGhostGames(params.userId, 20);
   const styleGames = await fetchRecentGhostGames(params.userId, 50);

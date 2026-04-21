@@ -2540,7 +2540,10 @@ export default function BotMatchScreen({
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
     });
-    const fritzPlayerMoveLog = !isGhostMode ? moveEntriesToGhostMoveLog(moveLog) : undefined;
+    const genericGhostCompatibleMoveLog = moveEntriesToGhostMoveLog(moveLog);
+    const fritzPlayerMoveLog = !isGhostMode ? genericGhostCompatibleMoveLog : undefined;
+    const effectiveGhostMoveLog =
+      ghostMoveLog.length > 0 ? ghostMoveLog : genericGhostCompatibleMoveLog;
 
     if (isGuidedMode || isAuthoringMode) {
       setGhostResultLoading(false);
@@ -2554,7 +2557,7 @@ export default function BotMatchScreen({
       localMatchId: activeLocalMatchId,
       finalScore: match.players.you.score,
       opponentScore: match.players.bot.score,
-      moveLog: !isGhostMode && fritzPlayerMoveLog ? fritzPlayerMoveLog : ghostMoveLog,
+      moveLog: isGhostMode ? effectiveGhostMoveLog : fritzPlayerMoveLog ?? effectiveGhostMoveLog,
       playerMoveLog: fritzPlayerMoveLog,
       accessToken: accessTokenRef.current,
     })
@@ -5947,53 +5950,6 @@ export default function BotMatchScreen({
               onSaveNote={saveAuthoringNoteOnly}
             />
           )}
-          {isGuidedTranscriptMode && guidedTranscript && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
-            <LessonCoachPanel
-              stepIndex={lessonStepIndex}
-              totalSteps={guidedTranscript.turns.length}
-              coachingText={currentTranscriptTurn?.coachingText ?? ''}
-              onBestMove={playLessonBestMove}
-              canBestMove={
-                !isOffAuthoredLine &&
-                currentTranscriptTurn?.expectedPlayerMove.type === 'play' &&
-                userPlayMoves.length > 0
-              }
-              isOffAuthoredLine={isOffAuthoredLine}
-            />
-          )}
-          {wantsOriginalGuidedRecordMode && guidedTranscript && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
-            <LessonCoachPanel
-              stepIndex={guidedTranscript.turns.findIndex((turn) => turn.stepIndex === lessonStepIndex)}
-              totalSteps={guidedTranscript.turns.length}
-              coachingText={currentTranscriptTurn?.coachingText ?? ''}
-              onBestMove={() => {}}
-              canBestMove={false}
-              isOffAuthoredLine={false}
-            />
-          )}
-          {/* ── V2 Guided: cursor-based coaching panel ────────────────────── */}
-          {isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
-            <LessonCoachPanel
-              stepIndex={frozenV2Lesson.events
-                .slice(0, guidedV2EventIndex)
-                .filter((e) => e.actor === 'player' && e.action === 'play').length}
-              totalSteps={frozenV2Lesson.events
-                .filter((e) => e.actor === 'player' && e.action === 'play').length}
-              coachingText={currentV2CoachingText}
-              onBestMove={playLessonBestMove}
-              canBestMove={Boolean(
-                currentExpectedV2PlayerEvent &&
-                currentExpectedV2PlayerEvent.actor === 'player' &&
-                currentExpectedV2PlayerEvent.action === 'play' &&
-                currentExpectedV2PlayerEvent.tile &&
-                userPlayMoves.some(
-                  (m) => m.tile && toTileKey(m.tile) === currentExpectedV2PlayerEvent.tile,
-                )
-              )}
-              isOffAuthoredLine={false}
-            />
-          )}
-
           {isGuidedMode && !isAuthoringMode && !frozenLesson && (
             <CoachPanel
               preMoveRec={coach.preMoveRec}
@@ -6233,6 +6189,59 @@ export default function BotMatchScreen({
           </div>
         </div>
       </div>
+
+      {(isGuidedTranscriptMode || wantsOriginalGuidedRecordMode || isGuidedV2Mode) &&
+        match.currentPlayer === 'you' &&
+        !match.handOver &&
+        !match.gameOver && (
+          <div className="lesson-coach-slot">
+            {isGuidedTranscriptMode && guidedTranscript && (
+              <LessonCoachPanel
+                stepIndex={lessonStepIndex}
+                totalSteps={guidedTranscript.turns.length}
+                coachingText={currentTranscriptTurn?.coachingText ?? ''}
+                onBestMove={playLessonBestMove}
+                canBestMove={
+                  !isOffAuthoredLine &&
+                  currentTranscriptTurn?.expectedPlayerMove.type === 'play' &&
+                  userPlayMoves.length > 0
+                }
+                isOffAuthoredLine={isOffAuthoredLine}
+              />
+            )}
+            {wantsOriginalGuidedRecordMode && guidedTranscript && (
+              <LessonCoachPanel
+                stepIndex={guidedTranscript.turns.findIndex((turn) => turn.stepIndex === lessonStepIndex)}
+                totalSteps={guidedTranscript.turns.length}
+                coachingText={currentTranscriptTurn?.coachingText ?? ''}
+                onBestMove={() => {}}
+                canBestMove={false}
+                isOffAuthoredLine={false}
+              />
+            )}
+            {isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson && (
+              <LessonCoachPanel
+                stepIndex={frozenV2Lesson.events
+                  .slice(0, guidedV2EventIndex)
+                  .filter((e) => e.actor === 'player' && e.action === 'play').length}
+                totalSteps={frozenV2Lesson.events
+                  .filter((e) => e.actor === 'player' && e.action === 'play').length}
+                coachingText={currentV2CoachingText}
+                onBestMove={playLessonBestMove}
+                canBestMove={Boolean(
+                  currentExpectedV2PlayerEvent &&
+                  currentExpectedV2PlayerEvent.actor === 'player' &&
+                  currentExpectedV2PlayerEvent.action === 'play' &&
+                  currentExpectedV2PlayerEvent.tile &&
+                  userPlayMoves.some(
+                    (m) => m.tile && toTileKey(m.tile) === currentExpectedV2PlayerEvent.tile,
+                  )
+                )}
+                isOffAuthoredLine={false}
+              />
+            )}
+          </div>
+        )}
 
       <div className="hand-area wl-hand-area" data-ui="tray">
         <div className="tray-rail">
