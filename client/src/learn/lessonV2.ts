@@ -428,6 +428,7 @@ function normalizeLessonEvents(events: LessonV2Event[]): LessonV2Event[] {
     if (next.actor !== 'player' || next.action !== 'play') continue;
 
     const currentHandAfter = [...current.playerHandAfter];
+    if (next.tile && currentHandAfter.includes(next.tile)) continue;
     const nextHandBefore = inferPlayerHandBeforePlay(next);
     const drawnTiles = findDrawnTiles(currentHandAfter, nextHandBefore);
     if (drawnTiles.length === 0) continue;

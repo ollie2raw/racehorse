@@ -2855,6 +2855,11 @@ export default function BotMatchScreen({
     return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex)?.coachingText ?? '';
   }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
 
+  const currentExpectedV2PlayerEvent = useMemo(() => {
+    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return null;
+    return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex);
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
+
   const authoringV2PlayerMoveIndex = useMemo(
     () => authoringV2Events.filter((event) => event.actor === 'player' && event.action === 'play').length,
     [authoringV2Events],
@@ -3723,8 +3728,79 @@ export default function BotMatchScreen({
    * Only callable when isGuidedMode && frozenLesson is active.
    */
   const playLessonBestMove = () => {
-    if (!isGuidedTranscriptMode && !isGuidedV1MinimalMode && !isGuidedV1OnlineMode) return;
+    if (!isGuidedTranscriptMode && !isGuidedV1MinimalMode && !isGuidedV1OnlineMode && !isGuidedV2Mode) return;
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+
+    if (isGuidedV2Mode && frozenV2Lesson && !isGuidedV2OffLine) {
+      const expected = currentExpectedV2PlayerEvent;
+      if (!expected || expected.actor !== 'player' || expected.action !== 'play' || !expected.tile) return;
+      const parsedTile = parseTileKey(expected.tile);
+      if (!parsedTile) return;
+      let move: Move | null = null;
+      if (expected.position) {
+        move = userPlayMoves.find(
+          (m) => m.tile && tileEquals(m.tile, parsedTile) && m.position === expected.position,
+        ) ?? null;
+      }
+      if (!move) {
+        move = userPlayMoves.find((m) => m.tile && tileEquals(m.tile, parsedTile)) ?? null;
+      }
+      if (!move?.tile) return;
+
+      const board = parseLessonV2BoardState(expected.boardAfter);
+      const playerHand = expected.playerHandAfter
+        .map((k) => parseTileKey(k))
+        .filter((t): t is Tile => t !== null);
+      const fritzHand = expected.fritzHandAfter
+        .map((k) => parseTileKey(k))
+        .filter((t): t is Tile => t !== null);
+      const nextPlayer: BotPlayerId = expected.handOver || expected.gameOver
+        ? 'you'
+        : expected.turnContinues
+          ? 'you'
+          : 'bot';
+
+      setMatch((prev) => ({
+        ...prev,
+        board,
+        handOpen: Boolean(board && board.mainLine && board.mainLine.length > 0),
+        boneyard: syncGuidedBoneyardCount(prev.boneyard, expected.boneyardCountAfter),
+        players: {
+          you: { ...prev.players.you, hand: playerHand, score: expected.playerScoreAfter },
+          bot: { ...prev.players.bot, hand: fritzHand, score: expected.fritzScoreAfter },
+        },
+        currentPlayer: nextPlayer,
+        handOver: expected.handOver,
+        gameOver: expected.gameOver,
+        winnerId: expected.gameOver
+          ? guidedWinnerIdFromScores(expected.playerScoreAfter, expected.fritzScoreAfter)
+          : prev.winnerId,
+      }));
+      if (expected.pointsScored > 0) queueSound(() => playScoreSound(expected.pointsScored, isMuted), 80);
+      queueSound(() => playTileSound('standard', isMuted), 0);
+      setGuidedV2EventIndex((i) => i + 1);
+      flashLastPlayed(move.tile ?? null);
+      setSelectedTile(null);
+
+      if (expected.handOver && expected.handEnded) {
+        if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+        handRevealTimerRef.current = window.setTimeout(() => {
+          setHandReveal({
+            winner: expected.handEnded!.winner === 'player' ? 'you'
+              : expected.handEnded!.winner === 'fritz' ? 'bot'
+              : null,
+            reason: expected.handEnded!.reason,
+            pointsAwarded: expected.handEnded!.pointsAwarded,
+            loserPips: expected.handEnded!.loserPips,
+            calcText: expected.handEnded!.calcText,
+            yourRemainingTiles: playerHand,
+            botRemainingTiles: fritzHand,
+          });
+          handRevealTimerRef.current = null;
+        }, 1400);
+      }
+      return;
+    }
 
     if (isGuidedTranscriptMode) {
       const turn = currentTranscriptTurn;
@@ -5834,8 +5910,16 @@ export default function BotMatchScreen({
               totalSteps={frozenV2Lesson.events
                 .filter((e) => e.actor === 'player' && e.action === 'play').length}
               coachingText={currentV2CoachingText}
-              onBestMove={() => {}}
-              canBestMove={false}
+              onBestMove={playLessonBestMove}
+              canBestMove={Boolean(
+                currentExpectedV2PlayerEvent &&
+                currentExpectedV2PlayerEvent.actor === 'player' &&
+                currentExpectedV2PlayerEvent.action === 'play' &&
+                currentExpectedV2PlayerEvent.tile &&
+                userPlayMoves.some(
+                  (m) => m.tile && toTileKey(m.tile) === currentExpectedV2PlayerEvent.tile,
+                )
+              )}
               isOffAuthoredLine={false}
             />
           )}
