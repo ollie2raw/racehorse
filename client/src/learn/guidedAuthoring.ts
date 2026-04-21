@@ -260,6 +260,125 @@ export interface GuidedTranscriptDraft {
   activeStepIndex: number | null;
 }
 
+export interface FrozenLessonAuditStep {
+  stepIndex: number;
+  handNumber: number;
+  chosenMove: string | null;
+  coachingText: string;
+  playerHandCount: number;
+  playerHand: string[];
+  hasBoardState: boolean;
+  hasMatchStateJson: boolean;
+  replyEventsCount: number;
+  usableReplyStateCount: number;
+  replyTypes: Array<'play' | 'draw' | 'pass'>;
+  hasAnyReplyBoardAfter: boolean;
+  hasAnyReplyBotHandAfter: boolean;
+  hasAnyReplyPlayerHandAfter: boolean;
+}
+
+export interface FrozenLessonAudit {
+  lessonId: string;
+  fixedGameId: string;
+  stepCount: number;
+  authoredStepCount: number;
+  matchSnapshotPresent: boolean;
+  firstAuthoredStepIndex: number | null;
+  firstFullMatchStateStepIndex: number | null;
+  steps: FrozenLessonAuditStep[];
+}
+
+export interface FrozenLessonBoardDiff {
+  fromStepIndex: number;
+  toStepIndex: number;
+  handNumber: number;
+  fromChosenMove: string | null;
+  toChosenMove: string | null;
+  fromPlayerHand: string[];
+  toPlayerHand: string[];
+  addedTiles: string[];
+  removedTiles: string[];
+  fromBoardTileCount: number;
+  toBoardTileCount: number;
+  coachingText: string;
+}
+
+function parseChosenMoveToTranscriptMove(chosenMove: string | null): GuidedTranscriptMove | null {
+  if (!chosenMove) return null;
+  if (chosenMove === 'draw' || chosenMove === 'pass') {
+    return { type: chosenMove };
+  }
+  const colonIdx = chosenMove.indexOf(':');
+  const tile = colonIdx >= 0 ? chosenMove.slice(0, colonIdx) : chosenMove;
+  const position = colonIdx >= 0 ? chosenMove.slice(colonIdx + 1) : undefined;
+  return {
+    type: 'play',
+    tile,
+    position: position || undefined,
+  };
+}
+
+function extractTileKeysFromSerializedBoard(boardState: string): string[] {
+  if (!boardState || boardState === 'board:empty') return [];
+  try {
+    const raw = JSON.parse(boardState) as {
+      mainLine?: Array<{ tile?: [number, number] | { low: number; high: number } }>;
+      hubs?: Array<{
+        branches?: Array<null | {
+          tiles?: Array<{ tile?: [number, number] | { low: number; high: number } }>;
+        }>;
+      }>;
+      hubDoubles?: Array<{
+        branches?: Array<null | {
+          tiles?: Array<{ tile?: [number, number] | { low: number; high: number } }>;
+        }>;
+      }>;
+    };
+    const keys: string[] = [];
+    const pushTile = (tile: [number, number] | { low: number; high: number } | undefined) => {
+      if (!tile) return;
+      if (Array.isArray(tile)) {
+        keys.push(`${tile[0]}|${tile[1]}`);
+        return;
+      }
+      keys.push(`${tile.low}|${tile.high}`);
+    };
+    for (const placed of raw.mainLine ?? []) {
+      pushTile(placed.tile);
+    }
+    for (const hub of raw.hubs ?? raw.hubDoubles ?? []) {
+      for (const branch of hub.branches ?? []) {
+        if (!branch) continue;
+        for (const placed of branch.tiles ?? []) {
+          pushTile(placed.tile);
+        }
+      }
+    }
+    return keys;
+  } catch {
+    return [];
+  }
+}
+
+function multisetDiff(next: string[], prev: string[]): { added: string[]; removed: string[] } {
+  const prevCounts = new Map<string, number>();
+  const nextCounts = new Map<string, number>();
+  for (const key of prev) prevCounts.set(key, (prevCounts.get(key) ?? 0) + 1);
+  for (const key of next) nextCounts.set(key, (nextCounts.get(key) ?? 0) + 1);
+  const keys = new Set([...prevCounts.keys(), ...nextCounts.keys()]);
+  const added: string[] = [];
+  const removed: string[] = [];
+  for (const key of keys) {
+    const delta = (nextCounts.get(key) ?? 0) - (prevCounts.get(key) ?? 0);
+    if (delta > 0) {
+      for (let i = 0; i < delta; i += 1) added.push(key);
+    } else if (delta < 0) {
+      for (let i = 0; i < Math.abs(delta); i += 1) removed.push(key);
+    }
+  }
+  return { added, removed };
+}
+
 export function loadFrozenLesson(): FrozenLesson | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -341,6 +460,134 @@ export function clearOriginalGuidedTranscriptDraft(): void {
   try {
     window.localStorage.removeItem(ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY);
   } catch {}
+}
+
+export function exportFrozenLessonAudit(lesson: FrozenLesson | null = loadFrozenLesson()): FrozenLessonAudit | null {
+  if (!lesson) return null;
+  const authoredSteps = lesson.steps.filter((step) => step.chosenMove !== null);
+  const steps: FrozenLessonAuditStep[] = authoredSteps
+    .slice()
+    .sort((a, b) => a.stepIndex - b.stepIndex)
+    .map((step) => {
+      const replies = step.fritzReplyEvents ?? [];
+      return {
+        stepIndex: step.stepIndex,
+        handNumber: step.handNumber ?? 1,
+        chosenMove: step.chosenMove,
+        coachingText: step.coachingText,
+        playerHandCount: step.playerHand.length,
+        playerHand: step.playerHand,
+        hasBoardState: Boolean(step.boardState),
+        hasMatchStateJson: Boolean(step.matchStateJson),
+        replyEventsCount: replies.length,
+        usableReplyStateCount: replies.filter(
+          (reply) => Boolean(reply.boardAfter && reply.botHandAfter && reply.playerHandAfter),
+        ).length,
+        replyTypes: replies.map((reply) => reply.type),
+        hasAnyReplyBoardAfter: replies.some((reply) => Boolean(reply.boardAfter)),
+        hasAnyReplyBotHandAfter: replies.some((reply) => Boolean(reply.botHandAfter)),
+        hasAnyReplyPlayerHandAfter: replies.some((reply) => Boolean(reply.playerHandAfter)),
+      };
+    });
+
+  return {
+    lessonId: lesson.lessonId,
+    fixedGameId: lesson.fixedGameId,
+    stepCount: lesson.steps.length,
+    authoredStepCount: authoredSteps.length,
+    matchSnapshotPresent: Boolean(lesson.matchSnapshot),
+    firstAuthoredStepIndex: steps[0]?.stepIndex ?? null,
+    firstFullMatchStateStepIndex: steps.find((step) => step.hasMatchStateJson)?.stepIndex ?? null,
+    steps,
+  };
+}
+
+export function buildOriginalTranscriptDraftFromFrozenLesson(
+  lesson: FrozenLesson | null = loadFrozenLesson(),
+): GuidedTranscriptDraft | null {
+  if (!lesson) return null;
+  const authoredSteps = lesson.steps
+    .filter((step) => step.chosenMove !== null)
+    .slice()
+    .sort((a, b) => a.stepIndex - b.stepIndex);
+
+  const initialState =
+    authoredSteps.find((step) => typeof step.matchStateJson === 'string' && step.matchStateJson.length > 0)?.matchStateJson
+    ?? lesson.matchSnapshot
+    ?? '';
+
+  const turns: GuidedTurn[] = authoredSteps.map((step) => ({
+    stepIndex: step.stepIndex,
+    handNumber: step.handNumber ?? 1,
+    coachingText: step.coachingText ?? '',
+    stateBefore: step.matchStateJson ?? '',
+    expectedPlayerMove: parseChosenMoveToTranscriptMove(step.chosenMove) ?? { type: 'pass' },
+    playerStateAfter: '',
+    fritzReplies: (step.fritzReplyEvents ?? [])
+      .filter((reply) => Boolean(reply.boardAfter && reply.botHandAfter && reply.playerHandAfter))
+      .map((reply) => ({
+        type: reply.type,
+        tile: reply.tile,
+        position: reply.position,
+        pointsScored: reply.pointsScored,
+        runningPlayerScore: 0,
+        runningFritzScore: reply.runningScore,
+        stateAfter: JSON.stringify({
+          source: 'v1-frozen-reply',
+          boardAfter: reply.boardAfter,
+          botHandAfter: reply.botHandAfter,
+          playerHandAfter: reply.playerHandAfter,
+          handOver: reply.handOver,
+          gameOver: reply.gameOver,
+          turnContinues: reply.turnContinues,
+        }),
+        handEnded: reply.handEnded,
+      })),
+  }));
+
+  return {
+    transcript: {
+      lessonId: lesson.lessonId || 'original-coached',
+      version: 'v1-explicit',
+      initialState,
+      turns,
+    },
+    activeStepIndex: null,
+  };
+}
+
+export function exportFrozenLessonBoardDiffs(
+  lesson: FrozenLesson | null = loadFrozenLesson(),
+): FrozenLessonBoardDiff[] {
+  if (!lesson) return [];
+  const authoredSteps = lesson.steps
+    .filter((step) => step.chosenMove !== null)
+    .slice()
+    .sort((a, b) => a.stepIndex - b.stepIndex);
+  const diffs: FrozenLessonBoardDiff[] = [];
+  for (let i = 0; i < authoredSteps.length - 1; i += 1) {
+    const from = authoredSteps[i]!;
+    const to = authoredSteps[i + 1]!;
+    if ((from.handNumber ?? 1) !== (to.handNumber ?? 1)) continue;
+    const fromBoardTiles = extractTileKeysFromSerializedBoard(from.boardState);
+    const toBoardTiles = extractTileKeysFromSerializedBoard(to.boardState);
+    const diff = multisetDiff(toBoardTiles, fromBoardTiles);
+    diffs.push({
+      fromStepIndex: from.stepIndex,
+      toStepIndex: to.stepIndex,
+      handNumber: from.handNumber ?? 1,
+      fromChosenMove: from.chosenMove,
+      toChosenMove: to.chosenMove,
+      fromPlayerHand: from.playerHand,
+      toPlayerHand: to.playerHand,
+      addedTiles: diff.added,
+      removedTiles: diff.removed,
+      fromBoardTileCount: fromBoardTiles.length,
+      toBoardTileCount: toBoardTiles.length,
+      coachingText: to.coachingText ?? '',
+    });
+  }
+  return diffs;
 }
 
 export function saveFrozenLesson(lesson: FrozenLesson): void {

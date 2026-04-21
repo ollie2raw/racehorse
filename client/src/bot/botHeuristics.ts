@@ -45,6 +45,8 @@ const MC_SAMPLES = 8;
 const CHAIN_TREE_DEPTH = 5;
 const CHAIN_TREE_WIDTH = 3;
 const WIN_TARGET = 60;
+const MASTER_ENDGAME_BUDGET_MS = 90;
+const EXACT_CHAIN_BUDGET_MS = 45;
 
 // Endgame minimax kicks in when total tiles (bot + you) is at or below this.
 const ENDGAME_TILE_THRESHOLD = 8;
@@ -1632,7 +1634,7 @@ export function chooseBotMove(
   if (difficulty === 'master' && totalTiles <= masterEndgameThreshold) {
     const SAMPLE_COUNT = 16;
     const depth = endgameDepth(totalTiles);
-    const deadlineMs = Number.POSITIVE_INFINITY;
+    const deadlineMs = performance.now() + MASTER_ENDGAME_BUDGET_MS;
     const moveVotes = new Map<Move, number>();
     const moveScoreTotals = new Map<Move, number>();
 
@@ -1748,7 +1750,7 @@ export function chooseBotMove(
     });
 
   if (totalTiles <= 16 && prelim.length > 1) {
-    const exactDeadlineMs = Number.POSITIVE_INFINITY;
+    const exactDeadlineMs = performance.now() + EXACT_CHAIN_BUDGET_MS;
     const topN = Math.min(4, prelim.length);
     for (let i = 0; i < topN; i++) {
       if (performance.now() > exactDeadlineMs) break;

@@ -130,6 +130,7 @@ export interface LessonV2AuthoringSession {
   updatedAt: string;
   handStarts: LessonV2HandStart[];
   events: LessonV2Event[];
+  matchSnapshot: string | null;
   /**
    * Index of the last event that has been recorded.  -1 means no events yet.
    * Used to restore authoring position on page reload.
@@ -369,11 +370,108 @@ export function createV2AuthoringSession(lessonId: string, gameId: string): Less
     updatedAt: now,
     handStarts: [],
     events: [],
+    matchSnapshot: null,
     lastEventIndex: -1,
   };
 }
 
 // ─── Frozen lesson ───────────────────────────────────────────────────────────
+
+function buildTileCountMap(keys: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const key of keys) {
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function inferPlayerHandBeforePlay(event: LessonV2Event): string[] {
+  if (event.actor !== 'player' || event.action !== 'play' || !event.tile) {
+    return [...event.playerHandAfter];
+  }
+  return [...event.playerHandAfter, event.tile];
+}
+
+function findDrawnTiles(before: string[], after: string[]): string[] {
+  const beforeCounts = buildTileCountMap(before);
+  const drawn: string[] = [];
+  for (const key of after) {
+    const remaining = beforeCounts.get(key) ?? 0;
+    if (remaining > 0) {
+      beforeCounts.set(key, remaining - 1);
+    } else {
+      drawn.push(key);
+    }
+  }
+  return drawn;
+}
+
+function normalizeLessonEvents(events: LessonV2Event[]): LessonV2Event[] {
+  const normalized: LessonV2Event[] = [];
+
+  for (let i = 0; i < events.length; i += 1) {
+    const current = events[i]!;
+    normalized.push({ ...current, eventIndex: normalized.length });
+
+    if (
+      current.actor !== 'player' ||
+      current.action !== 'play' ||
+      !current.turnContinues ||
+      current.handOver ||
+      current.gameOver
+    ) {
+      continue;
+    }
+
+    const next = events[i + 1] ?? null;
+    if (!next || next.handNumber !== current.handNumber) continue;
+    if (next.actor !== 'player' || next.action !== 'play') continue;
+
+    const currentHandAfter = [...current.playerHandAfter];
+    const nextHandBefore = inferPlayerHandBeforePlay(next);
+    const drawnTiles = findDrawnTiles(currentHandAfter, nextHandBefore);
+    if (drawnTiles.length === 0) continue;
+    const boneyardDelta = current.boneyardCountAfter - next.boneyardCountAfter;
+    if (boneyardDelta !== drawnTiles.length) continue;
+
+    let runningHand = [...currentHandAfter];
+    let runningBoneyard = current.boneyardCountAfter;
+    for (let drawIndex = 0; drawIndex < drawnTiles.length; drawIndex += 1) {
+      const drawnTile = drawnTiles[drawIndex]!;
+      runningHand = [...runningHand, drawnTile];
+      runningBoneyard = Math.max(0, runningBoneyard - 1);
+      normalized.push({
+        eventIndex: normalized.length,
+        handNumber: current.handNumber,
+        actor: 'player',
+        action: 'draw',
+        boardAfter: current.boardAfter,
+        playerHandAfter: [...runningHand],
+        fritzHandAfter: [...current.fritzHandAfter],
+        boneyardCountAfter: runningBoneyard,
+        pointsScored: 0,
+        playerScoreAfter: current.playerScoreAfter,
+        fritzScoreAfter: current.fritzScoreAfter,
+        turnContinues: true,
+        handOver: false,
+        gameOver: false,
+        coachingText: '',
+      });
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeFrozenHandStarts(
+  handStarts: LessonV2HandStart[],
+  events: LessonV2Event[],
+): LessonV2HandStart[] {
+  return handStarts.map((handStart) => ({
+    ...handStart,
+    firstEventIndex: events.findIndex((event) => event.handNumber === handStart.handNumber),
+  }));
+}
 
 export function loadV2FrozenLesson(): LessonV2 | null {
   const raw = lsGet(LESSON_V2_FROZEN_KEY);
@@ -381,7 +479,12 @@ export function loadV2FrozenLesson(): LessonV2 | null {
   try {
     const parsed = JSON.parse(raw) as LessonV2;
     if (parsed.version !== 2 || !Array.isArray(parsed.events)) return null;
-    return parsed;
+    const normalizedEvents = normalizeLessonEvents(parsed.events);
+    return {
+      ...parsed,
+      events: normalizedEvents,
+      handStarts: normalizeFrozenHandStarts(parsed.handStarts ?? [], normalizedEvents),
+    };
   } catch {
     return null;
   }
@@ -395,20 +498,164 @@ export function clearV2FrozenLesson(): void {
   lsRemove(LESSON_V2_FROZEN_KEY);
 }
 
+function parseTileKeySafe(key: string | undefined): { low: number; high: number } | null {
+  if (!key) return null;
+  const parts = key.split('|');
+  if (parts.length !== 2) return null;
+  const low = Number(parts[0]);
+  const high = Number(parts[1]);
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+  return { low, high };
+}
+
+function restoreHandStartStateFromEvent(
+  handStart: LessonV2HandStart,
+  firstEvent: LessonV2Event | null | undefined,
+): BotMatchState | null {
+  try {
+    const base = JSON.parse(handStart.matchStateJson) as BotMatchState;
+    if (!firstEvent) return base;
+
+    const playedTile = parseTileKeySafe(firstEvent.tile);
+    const playerHandAfter = firstEvent.playerHandAfter
+      .map((key) => parseTileKeySafe(key))
+      .filter((tile): tile is { low: number; high: number } => tile !== null);
+    const fritzHandAfter = firstEvent.fritzHandAfter
+      .map((key) => parseTileKeySafe(key))
+      .filter((tile): tile is { low: number; high: number } => tile !== null);
+
+    const playerHandBefore =
+      firstEvent.actor === 'player' && firstEvent.action === 'play' && playedTile
+        ? [...playerHandAfter, playedTile]
+        : playerHandAfter;
+    const fritzHandBefore =
+      firstEvent.actor === 'fritz' && firstEvent.action === 'play' && playedTile
+        ? [...fritzHandAfter, playedTile]
+        : fritzHandAfter;
+
+    const playerScoreBefore =
+      firstEvent.actor === 'player'
+        ? firstEvent.playerScoreAfter - firstEvent.pointsScored
+        : firstEvent.playerScoreAfter;
+    const fritzScoreBefore =
+      firstEvent.actor === 'fritz'
+        ? firstEvent.fritzScoreAfter - firstEvent.pointsScored
+        : firstEvent.fritzScoreAfter;
+
+    return {
+      ...base,
+      handNumber: handStart.handNumber,
+      board: null,
+      handOpen: false,
+      currentPlayer: firstEvent.actor === 'player' ? 'you' : 'bot',
+      handOver: false,
+      gameOver: false,
+      winnerId: null,
+      consecutivePasses: 0,
+      turnIndex: 0,
+      players: {
+        you: { hand: playerHandBefore, score: playerScoreBefore },
+        bot: { hand: fritzHandBefore, score: fritzScoreBefore },
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHandStartsFromEvents(session: LessonV2AuthoringSession): LessonV2HandStart[] {
+  const byHand = new Map<number, LessonV2HandStart>();
+  for (const handStart of session.handStarts) {
+    if (!byHand.has(handStart.handNumber)) {
+      byHand.set(handStart.handNumber, handStart);
+    }
+  }
+
+  const handNumbers = Array.from(new Set(session.events.map((event) => event.handNumber))).sort((a, b) => a - b);
+
+  return handNumbers.map((handNumber) => {
+    const firstEventIndex = session.events.findIndex((event) => event.handNumber === handNumber);
+    const firstEvent = firstEventIndex >= 0 ? session.events[firstEventIndex]! : null;
+    const existing = byHand.get(handNumber);
+    if (!firstEvent || !existing?.matchStateJson) {
+      return existing ?? {
+        handNumber,
+        matchStateJson: '',
+        firstEventIndex,
+      };
+    }
+
+    try {
+      const base = JSON.parse(existing.matchStateJson) as BotMatchState;
+      const playedTile = parseTileKeySafe(firstEvent.tile);
+      const playerHandAfter = firstEvent.playerHandAfter.map((key) => parseTileKeySafe(key)).filter((tile): tile is { low: number; high: number } => tile !== null);
+      const fritzHandAfter = firstEvent.fritzHandAfter.map((key) => parseTileKeySafe(key)).filter((tile): tile is { low: number; high: number } => tile !== null);
+
+      const playerHandBefore =
+        firstEvent.actor === 'player' && firstEvent.action === 'play' && playedTile
+          ? [...playerHandAfter, playedTile]
+          : playerHandAfter;
+      const fritzHandBefore =
+        firstEvent.actor === 'fritz' && firstEvent.action === 'play' && playedTile
+          ? [...fritzHandAfter, playedTile]
+          : fritzHandAfter;
+
+      const playerScoreBefore =
+        firstEvent.actor === 'player'
+          ? firstEvent.playerScoreAfter - firstEvent.pointsScored
+          : firstEvent.playerScoreAfter;
+      const fritzScoreBefore =
+        firstEvent.actor === 'fritz'
+          ? firstEvent.fritzScoreAfter - firstEvent.pointsScored
+          : firstEvent.fritzScoreAfter;
+
+      const repaired: BotMatchState = {
+        ...base,
+        handNumber,
+        board: null,
+        handOpen: false,
+        currentPlayer: firstEvent.actor === 'player' ? 'you' : 'bot',
+        handOver: false,
+        gameOver: false,
+        winnerId: null,
+        consecutivePasses: 0,
+        turnIndex: 0,
+        players: {
+          you: { hand: playerHandBefore, score: playerScoreBefore },
+          bot: { hand: fritzHandBefore, score: fritzScoreBefore },
+        },
+      };
+
+      return {
+        handNumber,
+        matchStateJson: JSON.stringify(repaired),
+        firstEventIndex,
+      };
+    } catch {
+      return {
+        handNumber,
+        matchStateJson: existing.matchStateJson,
+        firstEventIndex,
+      };
+    }
+  });
+}
+
 /**
  * Promote an authoring session to a frozen lesson (publish).
  * Creates a clean LessonV2 from the session and saves it.
  */
 export function freezeV2Lesson(session: LessonV2AuthoringSession): LessonV2 {
   const now = new Date().toISOString();
+  const normalizedEvents = normalizeLessonEvents(session.events);
   const lesson: LessonV2 = {
     version: 2,
     lessonId: session.lessonId,
     gameId: session.gameId,
     createdAt: session.createdAt,
     updatedAt: now,
-    handStarts: [...session.handStarts],
-    events: [...session.events],
+    handStarts: normalizeFrozenHandStarts(normalizeHandStartsFromEvents(session), normalizedEvents),
+    events: normalizedEvents,
   };
   saveV2FrozenLesson(lesson);
   return lesson;
@@ -450,4 +697,26 @@ export function restoreHandStart(handStart: LessonV2HandStart): BotMatchState | 
   } catch {
     return null;
   }
+}
+
+export function restoreGuidedV2HandStart(
+  lesson: LessonV2,
+  handNumber: number,
+): { state: BotMatchState | null; firstEventIndex: number } {
+  const handStart = lesson.handStarts.find((h) => h.handNumber === handNumber);
+  const firstEventIndex =
+    handStart?.firstEventIndex ??
+    lesson.events.findIndex((event) => event.handNumber === handNumber);
+  const firstEvent =
+    firstEventIndex >= 0 ? lesson.events[firstEventIndex] : null;
+
+  if (!handStart) {
+    return { state: null, firstEventIndex };
+  }
+
+  const restored = restoreHandStartStateFromEvent(handStart, firstEvent);
+  return {
+    state: restored,
+    firstEventIndex,
+  };
 }

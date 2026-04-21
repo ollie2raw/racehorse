@@ -15,7 +15,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import '../learning/coach.css';
 
 interface AuthoringCoachPanelProps {
-  /** 0-based index of the current player turn being authored */
+  /** 0-based index of the current player move being authored */
   stepIndex: number;
   /** Current textarea value (lifted to parent) */
   noteText: string;
@@ -87,16 +87,16 @@ export default function AuthoringCoachPanel({
             letterSpacing: '0.04em',
           }}
         >
-          Step {stepIndex + 1}
-        </span>
-      </div>
+            Move {stepIndex + 1}
+          </span>
+        </div>
 
       <textarea
         ref={textareaRef}
         value={noteText}
         onChange={(e) => onNoteChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Type your coaching note for this turn…"
+        placeholder="Type your coaching note for this move…"
         rows={4}
         style={{
           width: '100%',
@@ -152,7 +152,7 @@ export default function AuthoringCoachPanel({
           lineHeight: 1.4,
         }}
       >
-        Note is auto-saved when you play a tile.
+        Coaching text is attached when you play the next tile.
       </p>
     </div>
   );
