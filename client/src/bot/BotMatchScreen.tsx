@@ -326,6 +326,61 @@ function guidedWinnerIdFromScores(playerScore: number, fritzScore: number): BotP
   return playerScore >= fritzScore ? 'you' : 'bot';
 }
 
+function normalizedBoardTileMultiset(board: BoardState | null): string[] {
+  if (!board) return [];
+  const keys: string[] = [];
+  for (const placed of board.mainLine ?? []) {
+    keys.push(toTileKey(placed.tile));
+  }
+  for (const hub of board.hubDoubles ?? []) {
+    for (const branch of hub.branches ?? []) {
+      if (!branch) continue;
+      for (const placed of branch.tiles ?? []) {
+        keys.push(toTileKey(placed.tile));
+      }
+    }
+  }
+  return keys.sort();
+}
+
+function normalizedOpenEndValues(board: BoardState | null): number[] {
+  return getMatchableOpenEnds(board)
+    .map((end) => end.matchValue)
+    .sort((a, b) => a - b);
+}
+
+function guidedV2EquivalentOutcome(
+  result: BotActionResult,
+  expected: LessonV2Event,
+): boolean {
+  const expectedBoard = parseLessonV2BoardState(expected.boardAfter);
+  const actualBoard = result.state.board;
+  if (!sameTileKeyMultiset(
+    normalizedBoardTileMultiset(actualBoard),
+    normalizedBoardTileMultiset(expectedBoard),
+  )) return false;
+  const actualOpenEnds = normalizedOpenEndValues(actualBoard);
+  const expectedOpenEnds = normalizedOpenEndValues(expectedBoard);
+  if (actualOpenEnds.length !== expectedOpenEnds.length) return false;
+  for (let i = 0; i < actualOpenEnds.length; i += 1) {
+    if (actualOpenEnds[i] !== expectedOpenEnds[i]) return false;
+  }
+
+  const actualPlayerHand = result.state.players.you.hand.map(toTileKey);
+  const actualFritzHand = result.state.players.bot.hand.map(toTileKey);
+  if (!sameTileKeyMultiset(actualPlayerHand, expected.playerHandAfter)) return false;
+  if (!sameTileKeyMultiset(actualFritzHand, expected.fritzHandAfter)) return false;
+
+  const actualScored = result.scored?.points ?? 0;
+  if (actualScored !== expected.pointsScored) return false;
+  if (result.state.players.you.score !== expected.playerScoreAfter) return false;
+  if (result.state.players.bot.score !== expected.fritzScoreAfter) return false;
+  if (result.state.handOver !== expected.handOver) return false;
+  if (result.state.gameOver !== expected.gameOver) return false;
+  if (result.state.currentPlayer !== (expected.turnContinues ? 'you' : 'bot') && !expected.handOver && !expected.gameOver) return false;
+  return true;
+}
+
 interface GuidedCoachTip {
   tile: Tile;
   bestMove: Move;
@@ -2638,14 +2693,37 @@ export default function BotMatchScreen({
       return [];
     }
   }, [match, wantsOriginalGuidedRecordMode]);
+  const currentExpectedV2PlayerEvent = useMemo(() => {
+    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return null;
+    return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex);
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
   const activePlacementMoves = useMemo(
     () =>
-      wantsOriginalGuidedRecordMode && selectedController === 'bot' && selectedTile
+      isGuidedV2Mode && !isGuidedV2OffLine && currentExpectedV2PlayerEvent?.action === 'play'
+        ? userPlayMoves.filter((move) => {
+            if (!move.tile || !currentExpectedV2PlayerEvent.tile) return false;
+            if (toTileKey(move.tile) !== currentExpectedV2PlayerEvent.tile) return false;
+            if (currentExpectedV2PlayerEvent.position) {
+              return move.position === currentExpectedV2PlayerEvent.position;
+            }
+            return true;
+          })
+        : wantsOriginalGuidedRecordMode && selectedController === 'bot' && selectedTile
         ? getGuidedRecordBotMovesForTile(selectedTile)
         : wantsOriginalGuidedRecordMode && selectedController === 'bot'
           ? botPlayMoves
           : userPlayMoves,
-    [botPlayMoves, getGuidedRecordBotMovesForTile, selectedController, selectedTile, userPlayMoves, wantsOriginalGuidedRecordMode],
+    [
+      botPlayMoves,
+      currentExpectedV2PlayerEvent,
+      getGuidedRecordBotMovesForTile,
+      isGuidedV2Mode,
+      isGuidedV2OffLine,
+      selectedController,
+      selectedTile,
+      userPlayMoves,
+      wantsOriginalGuidedRecordMode,
+    ],
   );
 
   useEffect(() => {
@@ -2853,11 +2931,6 @@ export default function BotMatchScreen({
   const currentV2CoachingText = useMemo(() => {
     if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return '';
     return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex)?.coachingText ?? '';
-  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
-
-  const currentExpectedV2PlayerEvent = useMemo(() => {
-    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return null;
-    return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex);
   }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
 
   const authoringV2PlayerMoveIndex = useMemo(
@@ -3528,18 +3601,7 @@ export default function BotMatchScreen({
       const expectedKey = expected?.tile ?? null;
       const expectedPos = expected?.position ?? null;
       const tileMatch = playedKey && expectedKey && playedKey === expectedKey;
-      const legalPositionsForExpectedTile = expectedKey
-        ? userPlayMoves
-            .filter((candidate) => candidate.tile && toTileKey(candidate.tile) === expectedKey)
-            .map((candidate) => candidate.position)
-            .filter((candidate): candidate is PlacementPosition => typeof candidate === 'string')
-        : [];
-      const expectedPositionStillExists =
-        !!expectedPos && legalPositionsForExpectedTile.includes(expectedPos as PlacementPosition);
-      const posMatch =
-        !expectedPos ||
-        (typeof position === 'string' && position === expectedPos) ||
-        (tileMatch && !expectedPositionStillExists);
+      const posMatch = !expectedPos || move.position === expectedPos;
       if (tileMatch && posMatch && expected) {
         // Apply authoritative state from the event instead of raw engine output
         const board = parseLessonV2BoardState(expected.boardAfter);
@@ -3597,6 +3659,14 @@ export default function BotMatchScreen({
 
         return;   // skip applyAndNotify — state was already set above
       } else {
+        console.log('[guided-v2-mismatch]', {
+          guidedV2EventIndex,
+          expectedTile: expected?.tile ?? null,
+          expectedPosition: expectedPos,
+          clickedTile: playedKey,
+          clickedPosition: typeof position === 'string' ? position : null,
+          posMatch,
+        });
         setIsGuidedV2OffLine(true);
         pushToast('You went off the lesson. Continuing live from here.');
       }
