@@ -322,6 +322,10 @@ function sameTileKeyMultiset(a: string[], b: string[]): boolean {
   return counts.size === 0;
 }
 
+function guidedWinnerIdFromScores(playerScore: number, fritzScore: number): BotPlayerId {
+  return playerScore >= fritzScore ? 'you' : 'bot';
+}
+
 interface GuidedCoachTip {
   tile: Tile;
   bestMove: Move;
@@ -1614,6 +1618,9 @@ export default function BotMatchScreen({
         handOver: event.handOver,
         gameOver: event.gameOver,
         handNumber: event.handNumber,
+        winnerId: event.gameOver
+          ? guidedWinnerIdFromScores(event.playerScoreAfter, event.fritzScoreAfter)
+          : prev.winnerId,
       }));
 
       window.setTimeout(() => {
@@ -1751,6 +1758,9 @@ export default function BotMatchScreen({
         handOver: event.handOver,
         gameOver: event.gameOver,
         handNumber: event.handNumber,
+        winnerId: event.gameOver
+          ? guidedWinnerIdFromScores(event.playerScoreAfter, event.fritzScoreAfter)
+          : prev.winnerId,
       }));
 
       if (event.action === 'draw') {
@@ -3551,6 +3561,9 @@ export default function BotMatchScreen({
           currentPlayer: nextPlayer,
           handOver: expected.handOver,
           gameOver: expected.gameOver,
+          winnerId: expected.gameOver
+            ? guidedWinnerIdFromScores(expected.playerScoreAfter, expected.fritzScoreAfter)
+            : prev.winnerId,
         }));
         if (expected.pointsScored > 0) queueSound(() => playScoreSound(expected.pointsScored, isMuted), 80);
         queueSound(() => playTileSound('standard', isMuted), 0);
