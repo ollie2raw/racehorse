@@ -202,12 +202,11 @@ export async function completeGhostGame(params: {
   playerMoveLog?: GhostMoveLogEntry[];
   accessToken?: string | null;
 }): Promise<GhostCompletionResult> {
-  const { accessToken, ...bodyParams } = params;
+  const { accessToken: _accessToken, ...bodyParams } = params;
   const response = await requestJson<{ ok: true; result: GhostCompletionResult }>(
     '/api/ghost/complete',
     {
       method: 'POST',
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       body: JSON.stringify(bodyParams),
     },
   );
