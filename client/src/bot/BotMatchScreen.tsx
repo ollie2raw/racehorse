@@ -5447,6 +5447,13 @@ export default function BotMatchScreen({
     (_, rowIdx) => match.players.you.hand.slice(rowIdx * 4, rowIdx * 4 + 4),
   ).filter((row) => row.length > 0);
   const renderedHandRows = isLessonLayoutMode ? lessonHandRows : normalHandRows;
+  const learnHandAreaStyle = isLessonLayoutMode
+    ? {
+        minHeight: `${168 + Math.max(0, lessonHandRows.length - 1) * 112}px`,
+        height: `${168 + Math.max(0, lessonHandRows.length - 1) * 112}px`,
+        overflow: 'visible',
+      }
+    : undefined;
 
   const lessonCoachPanel = showLessonCoachPanel ? (
     <div className="lesson-coach-slot">
@@ -5499,70 +5506,72 @@ export default function BotMatchScreen({
   ) : null;
 
   const handTray = (
-    <div
+    <div className={isLessonLayoutMode ? 'learn-lesson-hand-card' : ''} style={learnHandAreaStyle}>
+      <div
         className={`hand-area wl-hand-area ${isLessonLayoutMode ? 'learn-lesson-hand-area' : ''}`}
-      data-ui="tray"
-    >
-      <div className="tray-rail">
-        <div className="tray-center" ref={handAreaRef}>
-          <div
-            className={`hand-container ${
-              isLessonLayoutMode
-                ? 'is-lesson-grid'
-                : handCompactStacked
-                  ? 'is-stacked'
-                  : ''
-            }`}
-          >
-            {renderedHandRows.map((row, rowIdx) => (
-              <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
-                {row.map((tile, idx) => {
-                  const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
-                  const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
-                  const absoluteIdx = match.players.you.hand.findIndex((handTile) => tileEquals(handTile, tile));
-                  const tileKey = `${tile.low}-${tile.high}`;
-                  const guidedPts = isGuidedMode ? (guidedScoringTiles.get(tileKey) ?? 0) : 0;
-                  const guidedClass = isGuidedMode && playable
-                    ? guidedPts > 0 ? 'guided-scoring' : 'guided-legal'
-                    : '';
-                  const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
-                  return (
-                    <div
-                      key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
-                      className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}`}
-                    >
-                      {isGuidedMode && playable && guidedPts > 0 && (
-                        <span className="guided-score-badge">+{guidedPts}</span>
-                      )}
-                      <DominoTile
-                        tile={tile}
-                        size={handTileSize}
-                        rotation={0}
-                        className={[baseClass, guidedClass].filter(Boolean).join(' ')}
-                        selected={selected}
-                        highlight={playable}
-                        disabled={!handActive || botTurn || drawSequenceActive}
-                        onClick={() => {
-                          if (isDailyFritzMode) {
-                            traceDailyFritzEvent('[input] tile click', {
-                              tile: toTileKey(tile),
-                              playable,
-                              handActive,
-                              botTurn,
-                              drawSequenceActive,
-                            });
-                          }
-                          if (!handActive || botTurn) return;
-                          if (!playable) return;
-                          setSelectedTile(tile);
-                          setSelectedController('you');
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+        data-ui="tray"
+      >
+        <div className="tray-rail">
+          <div className="tray-center" ref={handAreaRef}>
+            <div
+              className={`hand-container ${
+                isLessonLayoutMode
+                  ? 'is-lesson-grid'
+                  : handCompactStacked
+                    ? 'is-stacked'
+                    : ''
+              }`}
+            >
+              {renderedHandRows.map((row, rowIdx) => (
+                <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
+                  {row.map((tile, idx) => {
+                    const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
+                    const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
+                    const absoluteIdx = match.players.you.hand.findIndex((handTile) => tileEquals(handTile, tile));
+                    const tileKey = `${tile.low}-${tile.high}`;
+                    const guidedPts = isGuidedMode ? (guidedScoringTiles.get(tileKey) ?? 0) : 0;
+                    const guidedClass = isGuidedMode && playable
+                      ? guidedPts > 0 ? 'guided-scoring' : 'guided-legal'
+                      : '';
+                    const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
+                    return (
+                      <div
+                        key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
+                        className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}`}
+                      >
+                        {isGuidedMode && playable && guidedPts > 0 && (
+                          <span className="guided-score-badge">+{guidedPts}</span>
+                        )}
+                        <DominoTile
+                          tile={tile}
+                          size={handTileSize}
+                          rotation={0}
+                          className={[baseClass, guidedClass].filter(Boolean).join(' ')}
+                          selected={selected}
+                          highlight={playable}
+                          disabled={!handActive || botTurn || drawSequenceActive}
+                          onClick={() => {
+                            if (isDailyFritzMode) {
+                              traceDailyFritzEvent('[input] tile click', {
+                                tile: toTileKey(tile),
+                                playable,
+                                handActive,
+                                botTurn,
+                                drawSequenceActive,
+                              });
+                            }
+                            if (!handActive || botTurn) return;
+                            if (!playable) return;
+                            setSelectedTile(tile);
+                            setSelectedController('you');
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

@@ -391,8 +391,10 @@
   width: 100%;
   max-width: none;
   min-height: 108px;
+  max-height: min(40dvh, 360px);
   padding: 14px 18px 16px;
   gap: 10px;
+  overflow: hidden;
   border-radius: 16px;
   border: 1.5px solid rgba(90, 160, 220, 0.26);
   background:
@@ -472,6 +474,9 @@
   flex-direction: column;
   gap: 10px;
   max-width: 34rem;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
 }
 
 .lesson-coach-title {
@@ -534,31 +539,41 @@
 .lesson-coach-slot {
   padding: 0;
   flex: 0 0 auto;
+  margin: 0;
 }
 
 .learn-lesson-screen {
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .learn-lesson-main {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(380px, 42fr) minmax(540px, 58fr);
   gap: 20px;
   padding: 18px 18px 16px;
   align-items: stretch;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .learn-lesson-sidebar {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .learn-lesson-board-column {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -566,12 +581,14 @@
 .learn-lesson-stage-shell {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: flex;
 }
 
 .learn-lesson-board-area {
   flex: 1 1 auto;
-  min-height: clamp(520px, calc(100dvh - 210px), 920px);
+  min-height: 0;
+  height: 100%;
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
@@ -590,6 +607,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  justify-content: flex-start;
+  padding-top: 0;
 }
 
 .learn-lesson-hand-header {
@@ -598,6 +617,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 0 6px;
+  flex: 0 0 auto;
 }
 
 .learn-lesson-hand-label,
@@ -609,24 +629,19 @@
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(14, 22, 30, 0.72);
-  color: rgba(221, 233, 240, 0.78);
+  color: rgba(231, 241, 248, 0.9);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.learn-lesson-hand-area.hand-area {
-  position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
+.learn-lesson-hand-card {
   width: 100%;
-  height: auto;
   min-height: 152px;
-  flex: 0 0 auto;
   margin: 0;
-  padding: 14px 14px 16px;
+  padding: 18px;
   border-radius: 22px;
   background:
     linear-gradient(180deg, rgba(13, 19, 28, 0.92), rgba(8, 12, 18, 0.96)),
@@ -636,52 +651,118 @@
     0 18px 56px rgba(0, 0, 0, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     inset 0 0 0 1px rgba(118, 198, 255, 0.04);
+  box-sizing: border-box;
+}
+
+.learn-lesson-hand-area.hand-area {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  height: auto !important;
+  min-height: 0;
+  max-height: none !important;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  display: block !important;
+  border-radius: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  align-items: initial !important;
 }
 
 .learn-lesson-hand-area .tray-rail {
-  min-height: 100%;
+  min-height: 0;
+  height: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
   padding: 0;
 }
 
 .learn-lesson-hand-area .tray-center {
-  width: 100%;
-  overflow: hidden;
+  width: auto;
+  overflow: visible;
+  height: auto;
+  min-height: 0;
+  display: block;
+  padding: 0;
+  flex: 0 0 auto;
 }
 
 .learn-lesson-hand-area .hand-container {
-  width: 100%;
+  width: auto;
   height: auto;
   min-height: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   white-space: normal;
-  justify-content: flex-start;
 }
 
 .learn-lesson-hand-area .hand-container.is-lesson-grid {
   display: grid;
   grid-template-rows: repeat(4, auto);
-  gap: 12px;
+  gap: 14px;
   align-content: start;
   justify-items: stretch;
+  padding-top: 0;
+  width: max-content;
+  max-width: calc((4 * 240px) + (3 * 16px));
+  min-width: 0;
+  margin: 0 auto;
+  justify-content: start;
 }
 
 .learn-lesson-hand-area .hand-row {
+  display: flex;
   justify-content: flex-start;
-  gap: 12px;
-  width: 100%;
+  gap: 16px;
+  width: fit-content;
   min-width: 0;
   flex-wrap: nowrap;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .learn-lesson-hand-area .guided-tile-wrap {
   display: inline-flex;
   flex: 0 0 auto;
+  padding: 3px;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .learn-lesson-hand-area .hand-container.is-lesson-grid .domino-tile {
   margin: 0;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.28));
+  transform: none !important;
+}
+
+.learn-lesson-hand-area .hand-container .domino-tile:not(.disabled):not(.selected):hover,
+.learn-lesson-hand-area .hand-container .domino-tile.selected,
+.learn-lesson-hand-area .hand-container .domino-tile.new-draw {
+  transform: none !important;
+}
+
+.learn-lesson-hand-area .guided-legal,
+.learn-lesson-hand-area .guided-scoring,
+.learn-lesson-hand-area .guided-legal .domino-tile,
+.learn-lesson-hand-area .guided-scoring .domino-tile {
+  box-shadow: none !important;
+}
+
+.learn-lesson-hand-area .guided-legal .domino-body {
+  box-shadow:
+    0 0 0 2px #34d399,
+    0 8px 18px rgba(0, 0, 0, 0.28) !important;
+}
+
+.learn-lesson-hand-area .guided-scoring .domino-body {
+  box-shadow:
+    0 0 0 2px #f59e0b,
+    0 10px 20px rgba(0, 0, 0, 0.3) !important;
 }
 
 @media (max-width: 1360px) {
@@ -736,7 +817,7 @@
   }
 
   .learn-lesson-hand-header {
-    padding: 0 2px;
+    padding: 0 6px;
     flex-wrap: wrap;
   }
 
@@ -747,16 +828,20 @@
   }
 
   .learn-lesson-hand-area.hand-area {
-    padding: 12px 10px 14px;
+    padding: 0;
+  }
+
+  .learn-lesson-hand-card {
+    padding: 18px 12px 18px;
     border-radius: 18px;
   }
 
   .learn-lesson-hand-area .hand-container.is-lesson-grid {
-    gap: 10px;
+    gap: 14px;
   }
 
   .learn-lesson-hand-area .hand-row {
-    gap: 10px;
+    gap: 12px;
   }
 
   .lesson-coach-panel {
