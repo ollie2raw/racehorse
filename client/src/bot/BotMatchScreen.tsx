@@ -5429,11 +5429,479 @@ export default function BotMatchScreen({
   const handRevealScoredPips = sumTilePips(handRevealScoredTiles);
 
   const isFullscreenReady = true;
+  const isLessonLayoutMode =
+    isGuidedTranscriptMode || wantsOriginalGuidedRecordMode || isGuidedV2Mode;
+  const showLessonCoachPanel =
+    isLessonLayoutMode &&
+    match.currentPlayer === 'you' &&
+    !match.handOver &&
+    !match.gameOver;
+  const normalHandRows = handCompactStacked
+    ? [
+        match.players.you.hand.slice(0, Math.ceil(match.players.you.hand.length / 2)),
+        match.players.you.hand.slice(Math.ceil(match.players.you.hand.length / 2)),
+      ]
+    : [match.players.you.hand];
+  const lessonHandRows = Array.from(
+    { length: Math.min(4, Math.ceil(match.players.you.hand.length / 4)) },
+    (_, rowIdx) => match.players.you.hand.slice(rowIdx * 4, rowIdx * 4 + 4),
+  ).filter((row) => row.length > 0);
+  const renderedHandRows = isLessonLayoutMode ? lessonHandRows : normalHandRows;
+
+  const lessonCoachPanel = showLessonCoachPanel ? (
+    <div className="lesson-coach-slot">
+      {isGuidedTranscriptMode && guidedTranscript && (
+        <LessonCoachPanel
+          stepIndex={lessonStepIndex}
+          totalSteps={guidedTranscript.turns.length}
+          coachingText={currentTranscriptTurn?.coachingText ?? ''}
+          onBestMove={playLessonBestMove}
+          canBestMove={
+            !isOffAuthoredLine &&
+            currentTranscriptTurn?.expectedPlayerMove.type === 'play' &&
+            userPlayMoves.length > 0
+          }
+          isOffAuthoredLine={isOffAuthoredLine}
+        />
+      )}
+      {wantsOriginalGuidedRecordMode && guidedTranscript && (
+        <LessonCoachPanel
+          stepIndex={guidedTranscript.turns.findIndex((turn) => turn.stepIndex === lessonStepIndex)}
+          totalSteps={guidedTranscript.turns.length}
+          coachingText={currentTranscriptTurn?.coachingText ?? ''}
+          onBestMove={() => {}}
+          canBestMove={false}
+          isOffAuthoredLine={false}
+        />
+      )}
+      {isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson && (
+        <LessonCoachPanel
+          stepIndex={frozenV2Lesson.events
+            .slice(0, guidedV2EventIndex)
+            .filter((e) => e.actor === 'player' && e.action === 'play').length}
+          totalSteps={frozenV2Lesson.events
+            .filter((e) => e.actor === 'player' && e.action === 'play').length}
+          coachingText={currentV2CoachingText}
+          onBestMove={playLessonBestMove}
+          canBestMove={Boolean(
+            currentExpectedV2PlayerEvent &&
+            currentExpectedV2PlayerEvent.actor === 'player' &&
+            currentExpectedV2PlayerEvent.action === 'play' &&
+            currentExpectedV2PlayerEvent.tile &&
+            userPlayMoves.some(
+              (m) => m.tile && toTileKey(m.tile) === currentExpectedV2PlayerEvent.tile,
+            )
+          )}
+          isOffAuthoredLine={false}
+        />
+      )}
+    </div>
+  ) : null;
+
+  const handTray = (
+    <div
+        className={`hand-area wl-hand-area ${isLessonLayoutMode ? 'learn-lesson-hand-area' : ''}`}
+      data-ui="tray"
+    >
+      <div className="tray-rail">
+        <div className="tray-center" ref={handAreaRef}>
+          <div
+            className={`hand-container ${
+              isLessonLayoutMode
+                ? 'is-lesson-grid'
+                : handCompactStacked
+                  ? 'is-stacked'
+                  : ''
+            }`}
+          >
+            {renderedHandRows.map((row, rowIdx) => (
+              <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
+                {row.map((tile, idx) => {
+                  const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
+                  const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
+                  const absoluteIdx = match.players.you.hand.findIndex((handTile) => tileEquals(handTile, tile));
+                  const tileKey = `${tile.low}-${tile.high}`;
+                  const guidedPts = isGuidedMode ? (guidedScoringTiles.get(tileKey) ?? 0) : 0;
+                  const guidedClass = isGuidedMode && playable
+                    ? guidedPts > 0 ? 'guided-scoring' : 'guided-legal'
+                    : '';
+                  const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
+                  return (
+                    <div
+                      key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
+                      className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}`}
+                    >
+                      {isGuidedMode && playable && guidedPts > 0 && (
+                        <span className="guided-score-badge">+{guidedPts}</span>
+                      )}
+                      <DominoTile
+                        tile={tile}
+                        size={handTileSize}
+                        rotation={0}
+                        className={[baseClass, guidedClass].filter(Boolean).join(' ')}
+                        selected={selected}
+                        highlight={playable}
+                        disabled={!handActive || botTurn || drawSequenceActive}
+                        onClick={() => {
+                          if (isDailyFritzMode) {
+                            traceDailyFritzEvent('[input] tile click', {
+                              tile: toTileKey(tile),
+                              playable,
+                              handActive,
+                              botTurn,
+                              drawSequenceActive,
+                            });
+                          }
+                          if (!handActive || botTurn) return;
+                          if (!playable) return;
+                          setSelectedTile(tile);
+                          setSelectedController('you');
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const boardStage = (
+    <div className={`wl-stage-shell ${isLessonLayoutMode ? 'learn-lesson-stage-shell' : ''}`}>
+      <div
+        className={`board-area wl-board-area ${ghostBoardPulse ? 'ghost-board-pulse' : ''} ${isLessonLayoutMode ? 'learn-lesson-board-area' : ''}`}
+        data-ui="board"
+      >
+        {scoreToast && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 16,
+              left: '50%',
+              transform: scoreToast.visible ? 'translate(-50%, 0px)' : 'translate(-50%, -14px)',
+              opacity: scoreToast.visible ? 1 : 0,
+              transition: 'opacity 250ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+              zIndex: 14,
+              background: 'rgba(255,255,255,0.06)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 999,
+              padding: '10px 22px',
+              color: scoreToast.tone === 'you'
+                ? 'rgba(151, 241, 205, 0.98)'
+                : 'rgba(255, 180, 180, 0.95)',
+              fontSize: '1.24rem',
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+              display: 'inline-flex',
+              alignItems: 'center',
+              pointerEvents: 'none',
+              boxShadow: scoreToast.tone === 'you'
+                ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(100,220,160,0.1)'
+                : 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(220,100,100,0.1)',
+            }}
+          >
+            {renderScoreToastMessage(scoreToast.message)}
+          </div>
+        )}
+        {!match.gameOver && (
+          <div
+            ref={boneyardRef}
+            className="boneyard-pill"
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              zIndex: 8,
+              borderRadius: 999,
+              border: '1.5px solid rgba(236,252,245,0.28)',
+              background: 'rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+              color: 'rgba(232,245,240,0.98)',
+              padding: '7px 14px',
+              fontSize: '1rem',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              pointerEvents: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
+            <span className="boneyard-count">{match.boneyard.length}</span>
+            {match.boneyard.length > 0 && match.boneyard.length <= 2 ? (
+              <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
+            ) : null}
+          </div>
+        )}
+        {isGhostMode && ghostAgreementType && (
+          <div className={`ghost-agreement-indicator ${ghostAgreementType}`}>
+            {ghostAgreementType === 'agrees' ? '✓ Ghost agrees' : '✓ Ghost thinks so'}
+          </div>
+        )}
+        {isGhostMode && ghostPlayedTile && (
+          <div className="ghost-played-overlay" aria-hidden="true">
+            <DominoTile tile={ghostPlayedTile} size={52} className="ghost-played-tile" />
+          </div>
+        )}
+        {(isAuthoringMode || isAuthoringV2Mode) && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
+          <AuthoringCoachPanel
+            stepIndex={isAuthoringV2Mode ? authoringV2PlayerMoveIndex : authoringSteps.length}
+            noteText={authoringNoteText}
+            onNoteChange={setAuthoringNoteText}
+            onSaveNote={saveAuthoringNoteOnly}
+          />
+        )}
+        {isGuidedMode && !isAuthoringMode && !frozenLesson && (
+          <CoachPanel
+            preMoveRec={coach.preMoveRec}
+            preMoveEval={coach.preMoveEval}
+            postMoveFeedback={coach.postMoveFeedback}
+            postMoveEval={coach.postMoveEval}
+            onPlayBest={playBestMove}
+            onDismissFeedback={coach.dismissFeedback}
+            isOnlyPlay={guidedCoachTip?.isOnlyPlay ?? false}
+            currentPlayer={match.currentPlayer === 'you' ? 'you' : 'bot'}
+            turnIndex={match.turnIndex ?? 0}
+            debugMode={showDebug}
+          />
+        )}
+        {isGuidedMode && showDebug && frozenLesson && (() => {
+          const renderedHand = match.players.you.hand.map((t) => `${t.low}|${t.high}`);
+          const frozenStep0Hand = frozenLesson.steps[0]?.playerHand ?? [];
+          const handsMatch =
+            renderedHand.slice().sort().join(',') === frozenStep0Hand.slice().sort().join(',');
+          const isMismatch = guidedInitSourceRef.current === 'seeded-deal' && !handsMatch;
+          return (
+            <div style={{
+              position: 'fixed',
+              top: 8,
+              left: 8,
+              right: 8,
+              zIndex: 9999,
+              background: isMismatch ? 'rgba(180,30,20,0.92)' : 'rgba(0,0,0,0.82)',
+              border: isMismatch
+                ? '2px solid rgba(255,80,60,0.9)'
+                : '1px solid rgba(100,220,160,0.4)',
+              borderRadius: 8,
+              padding: '8px 12px',
+              fontFamily: 'monospace',
+              fontSize: '0.68rem',
+              color: 'rgba(220,240,230,0.92)',
+              lineHeight: 1.7,
+              pointerEvents: 'none',
+            }}>
+              {isMismatch && (
+                <div style={{ color: 'rgba(255,120,100,1)', fontWeight: 700, marginBottom: 4, fontSize: '0.75rem' }}>
+                  ⚠ GUIDED HAND MISMATCH — matchStateJson absent, seeded PRNG gave WRONG GAME
+                </div>
+              )}
+              <div>
+                <span style={{ color: 'rgba(180,200,190,0.6)' }}>source: </span>
+                <span style={{ color: isMismatch ? 'rgba(255,160,100,1)' : 'rgba(100,240,160,0.9)', fontWeight: 600 }}>
+                  {guidedInitSourceRef.current ?? '—'}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'rgba(180,200,190,0.6)' }}>rendered: </span>
+                {renderedHand.join(' · ') || '—'}
+              </div>
+              <div>
+                <span style={{ color: 'rgba(180,200,190,0.6)' }}>frozen s0: </span>
+                {frozenStep0Hand.join(' · ') || '—'}
+              </div>
+              <div style={{ marginTop: 2, fontWeight: 700, color: handsMatch ? 'rgba(100,240,160,0.95)' : 'rgba(255,100,80,1)' }}>
+                {handsMatch ? '✓ hands match' : '✗ HANDS DIFFER'}
+              </div>
+            </div>
+          );
+        })()}
+        {isDailyFritzMode && showDebug && (
+          <div style={{
+            position: 'fixed',
+            top: 8,
+            left: 8,
+            right: 8,
+            zIndex: 9999,
+            background: 'rgba(10,20,40,0.88)',
+            border: '1px solid rgba(80,160,255,0.4)',
+            borderRadius: 8,
+            padding: '8px 12px',
+            fontFamily: 'monospace',
+            fontSize: '0.68rem',
+            color: 'rgba(200,220,255,0.92)',
+            lineHeight: 1.8,
+            pointerEvents: 'none',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: '0.72rem', color: 'rgba(100,180,255,1)', marginBottom: 2 }}>
+              ⚙ Daily Fritz Debug
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>phase: </span>
+              <span style={{ fontWeight: 600, color: 'rgba(100,240,200,0.95)' }}>{lastDailyFlowLabelRef.current}</span>
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>hand: </span>{match.handNumber}
+              {'  '}
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>player: </span>
+              <span style={{ color: match.currentPlayer === 'you' ? 'rgba(100,255,160,0.9)' : 'rgba(255,180,80,0.9)' }}>
+                {match.currentPlayer}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>score: </span>
+              you {match.players.you.score} · bot {match.players.bot.score}
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>handOver: </span>
+              <span style={{ color: match.handOver ? 'rgba(255,200,80,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                {String(match.handOver)}
+              </span>
+              {'  '}
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>gameOver: </span>
+              <span style={{ color: match.gameOver ? 'rgba(255,100,80,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                {String(match.gameOver)}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>revealTimer: </span>
+              <span style={{ color: handRevealTimerRef.current !== null ? 'rgba(255,220,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                {handRevealTimerRef.current !== null ? '⏱ running' : 'idle'}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>handReveal: </span>
+              <span style={{ color: handReveal !== null ? 'rgba(255,220,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                {handReveal !== null ? '✓ visible' : 'null'}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>nextHandReady: </span>
+              <span style={{ color: dailyFritzNextHandRef.current?.result != null ? 'rgba(100,255,160,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                {dailyFritzNextHandRef.current?.result != null ? '✓ prefetched' : dailyFritzNextHandRef.current?.promise != null ? '⏳ in-flight' : 'none'}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>transitionInFlight: </span>
+              <span style={{ color: handTransitionInFlightRef.current ? 'rgba(255,180,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                {String(handTransitionInFlightRef.current)}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: 'rgba(140,170,210,0.7)' }}>submitSucceeded: </span>
+              <span style={{ color: dailyFritzSubmitSucceededRef.current ? 'rgba(100,255,160,0.9)' : 'rgba(140,170,210,0.55)' }}>
+                {String(dailyFritzSubmitSucceededRef.current)}
+              </span>
+            </div>
+          </div>
+        )}
+        <Board
+          board={match.board}
+          legalMoves={activePlacementMoves}
+          selectedTile={selectedTile}
+          handNumber={match.handNumber}
+          handOver={match.handOver}
+          gameOver={match.gameOver}
+          lastPlayedTile={lastPlayedTile}
+          onPositionClick={onPositionClick}
+          tileSize={72}
+          profileDailyFritz={isDailyFritzMode}
+        />
+        <div
+          className="wl-controls-tray"
+          style={{
+            position: 'absolute',
+            bottom: 12,
+            right: 12,
+            zIndex: 20,
+            display: 'flex',
+            gap: 4,
+            alignItems: 'center',
+            background: 'rgba(255,255,255,0.08)',
+            borderRadius: 999,
+            padding: '6px 10px',
+            border: '1.5px solid rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(20px)',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+          }}
+        >
+          <button
+            onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
+            title="Toggle table color"
+            className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
+            style={{ width: 22, height: 22 }}
+          >
+            <span className="table-theme-dot" aria-hidden="true" style={{ width: 10, height: 10 }} />
+          </button>
+          <button
+            className="btn text icon-btn volume-btn"
+            onClick={() => setIsMuted((prev) => !prev)}
+            title={isMuted ? 'Unmute' : 'Mute'}
+            style={{
+              padding: '6px 8px',
+              color: 'rgba(232,245,240,0.9)',
+              background: 'none',
+              border: 'none',
+            }}
+          >
+            <VolumeIcon isMuted={isMuted} style={{ width: 20, height: 20 }} />
+          </button>
+          <button
+            className="btn text icon-btn fullscreen-btn"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            style={{
+              padding: '6px 8px',
+              color: 'rgba(232,245,240,0.9)',
+              background: 'none',
+              border: 'none',
+            }}
+          >
+            <FullscreenIcon isFullscreen={isFullscreen} style={{ width: 20, height: 20 }} />
+          </button>
+          <button
+            onClick={() => setShowLeaveConfirm(true)}
+            title="Leave game"
+            style={{
+              padding: '6px 8px',
+              color: 'rgba(232,245,240,0.8)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
+              <polyline points="9 21 9 12 15 12 15 21" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div
       ref={rootRef}
-      className={`screen game-screen walnut-live theme-${uiTheme} bot-match-screen`}
+      className={`screen game-screen walnut-live theme-${uiTheme} bot-match-screen ${isLessonLayoutMode ? 'learn-lesson-screen' : ''}`}
     >
       <ScoreTrackOverlay
         open={scoreTrackOpen}
@@ -5861,451 +6329,31 @@ export default function BotMatchScreen({
         </div>
       </div>
 
-      <div className="wl-stage-shell">
-        <div
-          className={`board-area wl-board-area ${ghostBoardPulse ? 'ghost-board-pulse' : ''}`}
-          data-ui="board"
-        >
-          {scoreToast && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 16,
-                left: '50%',
-                transform: scoreToast.visible ? 'translate(-50%, 0px)' : 'translate(-50%, -14px)',
-                opacity: scoreToast.visible ? 1 : 0,
-                transition: 'opacity 250ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                zIndex: 14,
-                background: 'rgba(255,255,255,0.06)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 999,
-                padding: '10px 22px',
-                color: scoreToast.tone === 'you'
-                  ? 'rgba(151, 241, 205, 0.98)'
-                  : 'rgba(255, 180, 180, 0.95)',
-                fontSize: '1.24rem',
-                fontWeight: 700,
-                letterSpacing: '0.04em',
-                lineHeight: 1,
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
-                alignItems: 'center',
-                pointerEvents: 'none',
-                boxShadow: scoreToast.tone === 'you'
-                  ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(100,220,160,0.1)'
-                  : 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(220,100,100,0.1)',
-              }}
-            >
-              {renderScoreToastMessage(scoreToast.message)}
+      {isLessonLayoutMode ? (
+        <div className="learn-lesson-main">
+          <div className="learn-lesson-sidebar">
+            {lessonCoachPanel}
+            <div className="learn-lesson-hand-shell">
+              <div className="learn-lesson-hand-header">
+                <span className="learn-lesson-hand-label">Your Hand</span>
+                <span className="learn-lesson-hand-count">
+                  {match.players.you.hand.length} tile{match.players.you.hand.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {handTray}
             </div>
-          )}
-          {!match.gameOver && (
-            <div
-              ref={boneyardRef}
-              className="boneyard-pill"
-              style={{
-                position: 'absolute',
-                top: 12,
-                right: 12,
-                zIndex: 8,
-                borderRadius: 999,
-                border: '1.5px solid rgba(236,252,245,0.28)',
-                background: 'rgba(255,255,255,0.08)',
-                backdropFilter: 'blur(20px)',
-                boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-                color: 'rgba(232,245,240,0.98)',
-                padding: '7px 14px',
-                fontSize: '1rem',
-                fontWeight: 800,
-                letterSpacing: '0.02em',
-                pointerEvents: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
-              <span className="boneyard-count">{match.boneyard.length}</span>
-              {match.boneyard.length > 0 && match.boneyard.length <= 2 ? (
-                <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
-              ) : null}
-            </div>
-          )}
-          {isGhostMode && ghostAgreementType && (
-            <div className={`ghost-agreement-indicator ${ghostAgreementType}`}>
-              {ghostAgreementType === 'agrees' ? '✓ Ghost agrees' : '✓ Ghost thinks so'}
-            </div>
-          )}
-          {isGhostMode && ghostPlayedTile && (
-            <div className="ghost-played-overlay" aria-hidden="true">
-              <DominoTile tile={ghostPlayedTile} size={52} className="ghost-played-tile" />
-            </div>
-          )}
-          {(isAuthoringMode || isAuthoringV2Mode) && match.currentPlayer === 'you' && !match.handOver && !match.gameOver && (
-            <AuthoringCoachPanel
-              stepIndex={isAuthoringV2Mode ? authoringV2PlayerMoveIndex : authoringSteps.length}
-              noteText={authoringNoteText}
-              onNoteChange={setAuthoringNoteText}
-              onSaveNote={saveAuthoringNoteOnly}
-            />
-          )}
-          {isGuidedMode && !isAuthoringMode && !frozenLesson && (
-            <CoachPanel
-              preMoveRec={coach.preMoveRec}
-              preMoveEval={coach.preMoveEval}
-              postMoveFeedback={coach.postMoveFeedback}
-              postMoveEval={coach.postMoveEval}
-              onPlayBest={playBestMove}
-              onDismissFeedback={coach.dismissFeedback}
-              isOnlyPlay={guidedCoachTip?.isOnlyPlay ?? false}
-              currentPlayer={match.currentPlayer === 'you' ? 'you' : 'bot'}
-              turnIndex={match.turnIndex ?? 0}
-              debugMode={showDebug}
-            />
-          )}
-          {/* ── Admin debug overlay: visible in guided mode when BOT_DEBUG=1 ─── */}
-          {isGuidedMode && showDebug && frozenLesson && (() => {
-            const renderedHand = match.players.you.hand.map((t) => `${t.low}|${t.high}`);
-            const frozenStep0Hand = frozenLesson.steps[0]?.playerHand ?? [];
-            const handsMatch =
-              renderedHand.slice().sort().join(',') === frozenStep0Hand.slice().sort().join(',');
-            const isMismatch = guidedInitSourceRef.current === 'seeded-deal' && !handsMatch;
-            return (
-              <div style={{
-                position: 'fixed',
-                top: 8,
-                left: 8,
-                right: 8,
-                zIndex: 9999,
-                background: isMismatch ? 'rgba(180,30,20,0.92)' : 'rgba(0,0,0,0.82)',
-                border: isMismatch
-                  ? '2px solid rgba(255,80,60,0.9)'
-                  : '1px solid rgba(100,220,160,0.4)',
-                borderRadius: 8,
-                padding: '8px 12px',
-                fontFamily: 'monospace',
-                fontSize: '0.68rem',
-                color: 'rgba(220,240,230,0.92)',
-                lineHeight: 1.7,
-                pointerEvents: 'none',
-              }}>
-                {isMismatch && (
-                  <div style={{ color: 'rgba(255,120,100,1)', fontWeight: 700, marginBottom: 4, fontSize: '0.75rem' }}>
-                    ⚠ GUIDED HAND MISMATCH — matchStateJson absent, seeded PRNG gave WRONG GAME
-                  </div>
-                )}
-                <div>
-                  <span style={{ color: 'rgba(180,200,190,0.6)' }}>source: </span>
-                  <span style={{ color: isMismatch ? 'rgba(255,160,100,1)' : 'rgba(100,240,160,0.9)', fontWeight: 600 }}>
-                    {guidedInitSourceRef.current ?? '—'}
-                  </span>
-                </div>
-                <div>
-                  <span style={{ color: 'rgba(180,200,190,0.6)' }}>rendered: </span>
-                  {renderedHand.join(' · ') || '—'}
-                </div>
-                <div>
-                  <span style={{ color: 'rgba(180,200,190,0.6)' }}>frozen s0: </span>
-                  {frozenStep0Hand.join(' · ') || '—'}
-                </div>
-                <div style={{ marginTop: 2, fontWeight: 700, color: handsMatch ? 'rgba(100,240,160,0.95)' : 'rgba(255,100,80,1)' }}>
-                  {handsMatch ? '✓ hands match' : '✗ HANDS DIFFER'}
-                </div>
-              </div>
-            );
-          })()}
-          {/* ── Daily Fritz debug overlay: visible when BOT_DEBUG=1 ─── */}
-          {isDailyFritzMode && showDebug && (
-            <div style={{
-              position: 'fixed',
-              top: 8,
-              left: 8,
-              right: 8,
-              zIndex: 9999,
-              background: 'rgba(10,20,40,0.88)',
-              border: '1px solid rgba(80,160,255,0.4)',
-              borderRadius: 8,
-              padding: '8px 12px',
-              fontFamily: 'monospace',
-              fontSize: '0.68rem',
-              color: 'rgba(200,220,255,0.92)',
-              lineHeight: 1.8,
-              pointerEvents: 'none',
-            }}>
-              <div style={{ fontWeight: 700, fontSize: '0.72rem', color: 'rgba(100,180,255,1)', marginBottom: 2 }}>
-                ⚙ Daily Fritz Debug
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>phase: </span>
-                <span style={{ fontWeight: 600, color: 'rgba(100,240,200,0.95)' }}>{lastDailyFlowLabelRef.current}</span>
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>hand: </span>{match.handNumber}
-                {'  '}
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>player: </span>
-                <span style={{ color: match.currentPlayer === 'you' ? 'rgba(100,255,160,0.9)' : 'rgba(255,180,80,0.9)' }}>
-                  {match.currentPlayer}
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>score: </span>
-                you {match.players.you.score} · bot {match.players.bot.score}
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>handOver: </span>
-                <span style={{ color: match.handOver ? 'rgba(255,200,80,0.9)' : 'rgba(140,170,210,0.55)' }}>
-                  {String(match.handOver)}
-                </span>
-                {'  '}
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>gameOver: </span>
-                <span style={{ color: match.gameOver ? 'rgba(255,100,80,0.9)' : 'rgba(140,170,210,0.55)' }}>
-                  {String(match.gameOver)}
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>revealTimer: </span>
-                <span style={{ color: handRevealTimerRef.current !== null ? 'rgba(255,220,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
-                  {handRevealTimerRef.current !== null ? '⏱ running' : 'idle'}
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>handReveal: </span>
-                <span style={{ color: handReveal !== null ? 'rgba(255,220,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
-                  {handReveal !== null ? '✓ visible' : 'null'}
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>nextHandReady: </span>
-                <span style={{ color: dailyFritzNextHandRef.current?.result != null ? 'rgba(100,255,160,0.9)' : 'rgba(140,170,210,0.55)' }}>
-                  {dailyFritzNextHandRef.current?.result != null ? '✓ prefetched' : dailyFritzNextHandRef.current?.promise != null ? '⏳ in-flight' : 'none'}
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>transitionInFlight: </span>
-                <span style={{ color: handTransitionInFlightRef.current ? 'rgba(255,180,60,0.9)' : 'rgba(140,170,210,0.55)' }}>
-                  {String(handTransitionInFlightRef.current)}
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'rgba(140,170,210,0.7)' }}>submitSucceeded: </span>
-                <span style={{ color: dailyFritzSubmitSucceededRef.current ? 'rgba(100,255,160,0.9)' : 'rgba(140,170,210,0.55)' }}>
-                  {String(dailyFritzSubmitSucceededRef.current)}
-                </span>
-              </div>
-            </div>
-          )}
-          <Board
-            board={match.board}
-            legalMoves={activePlacementMoves}
-            selectedTile={selectedTile}
-            handNumber={match.handNumber}
-            handOver={match.handOver}
-            gameOver={match.gameOver}
-            lastPlayedTile={lastPlayedTile}
-            onPositionClick={onPositionClick}
-            tileSize={72}
-            profileDailyFritz={isDailyFritzMode}
-          />
-          <div
-            className="wl-controls-tray"
-            style={{
-              position: 'absolute',
-              bottom: 12,
-              right: 12,
-              zIndex: 20,
-              display: 'flex',
-              gap: 4,
-              alignItems: 'center',
-              background: 'rgba(255,255,255,0.08)',
-              borderRadius: 999,
-              padding: '6px 10px',
-              border: '1.5px solid rgba(255,255,255,0.12)',
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-            }}
-          >
-            <button
-              onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
-              title="Toggle table color"
-              className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
-              style={{ width: 22, height: 22 }}
-            >
-              <span className="table-theme-dot" aria-hidden="true" style={{ width: 10, height: 10 }} />
-            </button>
-            <button
-              className="btn text icon-btn volume-btn"
-              onClick={() => setIsMuted((prev) => !prev)}
-              title={isMuted ? 'Unmute' : 'Mute'}
-              style={{
-                padding: '6px 8px',
-                color: 'rgba(232,245,240,0.9)',
-                background: 'none',
-                border: 'none',
-              }}
-            >
-              <VolumeIcon isMuted={isMuted} style={{ width: 20, height: 20 }} />
-            </button>
-            <button
-              className="btn text icon-btn fullscreen-btn"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-              style={{
-                padding: '6px 8px',
-                color: 'rgba(232,245,240,0.9)',
-                background: 'none',
-                border: 'none',
-              }}
-            >
-              <FullscreenIcon isFullscreen={isFullscreen} style={{ width: 20, height: 20 }} />
-            </button>
-            <button
-              onClick={() => setShowLeaveConfirm(true)}
-              title="Leave game"
-              style={{
-                padding: '6px 8px',
-                color: 'rgba(232,245,240,0.8)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
-                <polyline points="9 21 9 12 15 12 15 21" />
-              </svg>
-            </button>
+          </div>
+          <div className="learn-lesson-board-column">
+            {boardStage}
           </div>
         </div>
-      </div>
-
-      {(isGuidedTranscriptMode || wantsOriginalGuidedRecordMode || isGuidedV2Mode) &&
-        match.currentPlayer === 'you' &&
-        !match.handOver &&
-        !match.gameOver && (
-          <div className="lesson-coach-slot">
-            {isGuidedTranscriptMode && guidedTranscript && (
-              <LessonCoachPanel
-                stepIndex={lessonStepIndex}
-                totalSteps={guidedTranscript.turns.length}
-                coachingText={currentTranscriptTurn?.coachingText ?? ''}
-                onBestMove={playLessonBestMove}
-                canBestMove={
-                  !isOffAuthoredLine &&
-                  currentTranscriptTurn?.expectedPlayerMove.type === 'play' &&
-                  userPlayMoves.length > 0
-                }
-                isOffAuthoredLine={isOffAuthoredLine}
-              />
-            )}
-            {wantsOriginalGuidedRecordMode && guidedTranscript && (
-              <LessonCoachPanel
-                stepIndex={guidedTranscript.turns.findIndex((turn) => turn.stepIndex === lessonStepIndex)}
-                totalSteps={guidedTranscript.turns.length}
-                coachingText={currentTranscriptTurn?.coachingText ?? ''}
-                onBestMove={() => {}}
-                canBestMove={false}
-                isOffAuthoredLine={false}
-              />
-            )}
-            {isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson && (
-              <LessonCoachPanel
-                stepIndex={frozenV2Lesson.events
-                  .slice(0, guidedV2EventIndex)
-                  .filter((e) => e.actor === 'player' && e.action === 'play').length}
-                totalSteps={frozenV2Lesson.events
-                  .filter((e) => e.actor === 'player' && e.action === 'play').length}
-                coachingText={currentV2CoachingText}
-                onBestMove={playLessonBestMove}
-                canBestMove={Boolean(
-                  currentExpectedV2PlayerEvent &&
-                  currentExpectedV2PlayerEvent.actor === 'player' &&
-                  currentExpectedV2PlayerEvent.action === 'play' &&
-                  currentExpectedV2PlayerEvent.tile &&
-                  userPlayMoves.some(
-                    (m) => m.tile && toTileKey(m.tile) === currentExpectedV2PlayerEvent.tile,
-                  )
-                )}
-                isOffAuthoredLine={false}
-              />
-            )}
-          </div>
-        )}
-
-      <div className="hand-area wl-hand-area" data-ui="tray">
-        <div className="tray-rail">
-          <div className="tray-center" ref={handAreaRef}>
-            <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
-              {(handCompactStacked
-                ? [
-                    match.players.you.hand.slice(0, Math.ceil(match.players.you.hand.length / 2)),
-                    match.players.you.hand.slice(Math.ceil(match.players.you.hand.length / 2)),
-                  ]
-                : [match.players.you.hand]
-              ).map((row, rowIdx) => (
-                <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
-                  {row.map((tile, idx) => {
-                    const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
-                    const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
-                    const absoluteIdx = match.players.you.hand.findIndex((handTile) => tileEquals(handTile, tile));
-                    const tileKey = `${tile.low}-${tile.high}`;
-                    const guidedPts = isGuidedMode ? (guidedScoringTiles.get(tileKey) ?? 0) : 0;
-                    const guidedClass = isGuidedMode && playable
-                      ? guidedPts > 0 ? 'guided-scoring' : 'guided-legal'
-                      : '';
-                    const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
-                    return (
-                      <div
-                        key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
-                        className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}`}
-                      >
-                        {isGuidedMode && playable && guidedPts > 0 && (
-                          <span className="guided-score-badge">+{guidedPts}</span>
-                        )}
-                        <DominoTile
-                          tile={tile}
-                          size={handTileSize}
-                          rotation={0}
-                          className={[baseClass, guidedClass].filter(Boolean).join(' ')}
-                          selected={selected}
-                          highlight={playable}
-                          disabled={!handActive || botTurn || drawSequenceActive}
-                          onClick={() => {
-                            if (isDailyFritzMode) {
-                              traceDailyFritzEvent('[input] tile click', {
-                                tile: toTileKey(tile),
-                                playable,
-                                handActive,
-                                botTurn,
-                                drawSequenceActive,
-                              });
-                            }
-                            if (!handActive || botTurn) return;
-                            if (!playable) return;
-                            setSelectedTile(tile);
-                            setSelectedController('you');
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+      ) : (
+        <>
+          {boardStage}
+          {lessonCoachPanel}
+          {handTray}
+        </>
+      )}
 
       {flyingTiles.map((ft) => (
         <div
