@@ -1373,6 +1373,62 @@ function getPacificDateKey(date: Date = new Date()): string {
   }).format(date);
 }
 
+function getPacificDateTimeParts(date: Date = new Date()): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+} {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const getNumber = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return {
+    year: getNumber('year'),
+    month: getNumber('month'),
+    day: getNumber('day'),
+    hour: getNumber('hour'),
+    minute: getNumber('minute'),
+    second: getNumber('second'),
+  };
+}
+
+function getPacificOffsetMinutes(date: Date = new Date()): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    timeZoneName: 'shortOffset',
+  }).formatToParts(date);
+  const raw = parts.find((part) => part.type === 'timeZoneName')?.value ?? 'GMT-8';
+  const match = raw.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+  if (!match) return -8 * 60;
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = Number(match[2] ?? 0);
+  const minutes = Number(match[3] ?? 0);
+  return sign * (hours * 60 + minutes);
+}
+
+function getPacificDateKeyDaysFromNow(daysFromNow: number): string {
+  return getPacificDateKey(new Date(Date.now() + daysFromNow * 86400000));
+}
+
+function getNextPacificWarmupAt(hour = 0, minute = 2): Date {
+  const now = new Date();
+  const pacific = getPacificDateTimeParts(now);
+  const nextUtcGuess = new Date(Date.UTC(pacific.year, pacific.month - 1, pacific.day + 1, hour, minute, 0, 0));
+  const offsetMinutes = getPacificOffsetMinutes(nextUtcGuess);
+  return new Date(nextUtcGuess.getTime() - offsetMinutes * 60000);
+}
+
 function normalizeDailyFritzTier(value: unknown): DailyFritzTier | null {
   const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (raw === 'rookie' || raw === 'standard' || raw === 'elite' || raw === 'master') {
@@ -1585,17 +1641,38 @@ async function upsertDailyFritzRun(record: DailyFritzRunRecord): Promise<DailyFr
 async function ensureDailyFritzRunForDate(
   runDate: string,
   options?: { fritzTier?: DailyFritzTier; dealSize?: 7 | 14; winningScore?: number },
+  diagnostics?: {
+    requestId?: string;
+    log: (label: string, ms: number, extra?: Record<string, unknown>) => void;
+  },
 ): Promise<DailyFritzRunRecord | null> {
   try {
+    const existingStartedAt = Date.now();
     const existing = await getDailyFritzRun(runDate);
+    diagnostics?.log('ensure:getDailyFritzRun', Date.now() - existingStartedAt, {
+      cacheHit: Boolean(existing),
+      requestId: diagnostics.requestId,
+      runDate,
+    });
     if (existing) return existing;
+
+    const generateStartedAt = Date.now();
     const generated = generateDailyFritzRun(
       runDate,
       options?.fritzTier ?? 'elite',
       options?.dealSize ?? 7,
       options?.winningScore ?? 60,
     );
-    return upsertDailyFritzRun({
+    diagnostics?.log('ensure:generateDailyFritzRun', Date.now() - generateStartedAt, {
+      requestId: diagnostics?.requestId,
+      runDate,
+      dealSize: generated.dealSize,
+      winningScore: generated.winningScore,
+      handCount: generated.handDeals.length,
+    });
+
+    const upsertStartedAt = Date.now();
+    const saved = await upsertDailyFritzRun({
       runDate: generated.runDate,
       seed: generated.seed,
       fritzTier: generated.fritzTier,
@@ -1607,6 +1684,12 @@ async function ensureDailyFritzRunForDate(
       invalidatedAt: generated.invalidatedAt,
       metadata: generated.metadata,
     });
+    diagnostics?.log('ensure:upsertDailyFritzRun', Date.now() - upsertStartedAt, {
+      requestId: diagnostics?.requestId,
+      runDate,
+      persisted: Boolean(saved),
+    });
+    return saved;
   } catch (error) {
     if (isMissingDailyFritzTable(error)) {
       console.warn('[daily-fritz] table missing; apply supabase/daily_fritz.sql');
@@ -1614,6 +1697,50 @@ async function ensureDailyFritzRunForDate(
     }
     throw error;
   }
+}
+
+async function warmDailyFritzRuns(reason: 'startup' | 'scheduled', runDates: string[]): Promise<void> {
+  const startedAt = Date.now();
+  console.log('[daily-fritz-warmup] start', {
+    reason,
+    runDates,
+  });
+  try {
+    const results = await Promise.all(
+      runDates.map(async (runDate) => {
+        const beforeCached = dailyFritzRunCache.has(runDate);
+        const warmedStartedAt = Date.now();
+        const run = await ensureDailyFritzRunForDate(runDate);
+        return {
+          runDate,
+          ms: Date.now() - warmedStartedAt,
+          beforeCached,
+          afterCached: dailyFritzRunCache.has(runDate),
+          status: run?.status ?? null,
+        };
+      }),
+    );
+    console.log('[daily-fritz-warmup] success', {
+      reason,
+      totalMs: Date.now() - startedAt,
+      results,
+    });
+  } catch (error) {
+    console.warn('[daily-fritz-warmup] error', {
+      reason,
+      totalMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function scheduleDailyFritzWarmup(): void {
+  const nextWarmupAt = getNextPacificWarmupAt(0, 2);
+  const delayMs = Math.max(1000, nextWarmupAt.getTime() - Date.now());
+  setTimeout(async () => {
+    await warmDailyFritzRuns('scheduled', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]);
+    scheduleDailyFritzWarmup();
+  }, delayMs);
 }
 
 async function getDailyFritzAttempt(runDate: string, userId: string): Promise<DailyFritzAttemptRecord | null> {
@@ -2114,31 +2241,84 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
 
 app.get('/api/daily-fritz/today', async (req, res) => {
   const requestStartedAt = Date.now();
-  const mark = (label: string, startedAt: number) => {
+  const requestId = randomUUID().slice(0, 8);
+  const isDevLike = process.env.NODE_ENV !== 'production';
+  const mark = (label: string, startedAt: number, extra?: Record<string, unknown>) => {
     const now = Date.now();
     console.log('[daily-fritz-server] today', {
+      requestId,
       label,
       ms: now - startedAt,
       totalMs: now - requestStartedAt,
+      ...extra,
     });
   };
   try {
+    console.log('[daily-fritz-server] today', {
+      requestId,
+      label: 'entry',
+      totalMs: 0,
+      method: req.method,
+      path: req.path,
+    });
+
     const authStartedAt = Date.now();
     const authenticatedUserId = await getAuthenticatedUserId(req);
-    mark('auth', authStartedAt);
+    mark('auth', authStartedAt, { authenticated: Boolean(authenticatedUserId) });
     if (!authenticatedUserId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    const runDate = getPacificDateKey();
+    const dateCalcStartedAt = Date.now();
+    const requestedDebugDate = typeof req.query.debugDate === 'string' ? req.query.debugDate.trim() : '';
+    if (requestedDebugDate && !isDevLike) {
+      res.status(400).json({ error: 'debugDate is only available outside production.' });
+      return;
+    }
+    if (requestedDebugDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDebugDate)) {
+      res.status(400).json({ error: 'debugDate must be in YYYY-MM-DD format.' });
+      return;
+    }
+    const runDate = requestedDebugDate || getPacificDateKey();
+    mark('dateKey', dateCalcStartedAt, {
+      runDate,
+      usedDebugDate: Boolean(requestedDebugDate),
+    });
+
+    const cacheProbeStartedAt = Date.now();
+    const hadCachedRun = dailyFritzRunCache.has(runDate);
+    mark('cacheProbe', cacheProbeStartedAt, { runDate, hadCachedRun });
+
     const runSummaryStartedAt = Date.now();
     let run = await getDailyFritzRunSummary(runDate);
-    mark('getDailyFritzRunSummary', runSummaryStartedAt);
+    mark('getDailyFritzRunSummary', runSummaryStartedAt, {
+      runDate,
+      cacheHit: Boolean(run),
+      hadCachedRun,
+    });
     if (!run) {
       const ensureStartedAt = Date.now();
-      const generated = await ensureDailyFritzRunForDate(runDate);
-      mark('ensureDailyFritzRunForDate', ensureStartedAt);
+      const generated = await ensureDailyFritzRunForDate(
+        runDate,
+        undefined,
+        {
+          requestId,
+          log: (label, ms, extra) => {
+            console.log('[daily-fritz-server] today', {
+              requestId,
+              label,
+              ms,
+              totalMs: Date.now() - requestStartedAt,
+              ...extra,
+            });
+          },
+        },
+      );
+      mark('ensureDailyFritzRunForDate', ensureStartedAt, {
+        runDate,
+        generated: Boolean(generated),
+      });
       run = generated
         ? {
             runDate: generated.runDate,
@@ -2159,26 +2339,38 @@ app.get('/api/daily-fritz/today', async (req, res) => {
     }
 
     const userStateStartedAt = Date.now();
+    const attemptPromiseStartedAt = Date.now();
+    const streakPromiseStartedAt = Date.now();
     const [attempt, streak] = await Promise.all([
-      getDailyFritzAttempt(runDate, authenticatedUserId),
-      getDailyFritzStreak(authenticatedUserId, runDate),
+      getDailyFritzAttempt(runDate, authenticatedUserId).then((value) => {
+        mark('getDailyFritzAttempt', attemptPromiseStartedAt, {
+          runDate,
+          status: value?.status ?? 'none',
+        });
+        return value;
+      }),
+      getDailyFritzStreak(authenticatedUserId, runDate).then((value) => {
+        mark('getDailyFritzStreak', streakPromiseStartedAt, {
+          runDate,
+          streak: value,
+        });
+        return value;
+      }),
     ]);
-    mark('getDailyFritzAttempt+getDailyFritzStreak', userStateStartedAt);
+    mark('userStateCombined', userStateStartedAt, { runDate });
     let ownRank: number | null = null;
     if (attempt?.status === 'completed') {
       const leaderboardStartedAt = Date.now();
       const leaderboard = await buildDailyFritzLeaderboard(runDate);
-      mark('buildDailyFritzLeaderboard', leaderboardStartedAt);
+      mark('buildDailyFritzLeaderboard', leaderboardStartedAt, {
+        runDate,
+        entryCount: leaderboard.length,
+      });
       ownRank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
     }
 
-    console.log('[daily-fritz-server] today', {
-      label: 'response',
-      totalMs: Date.now() - requestStartedAt,
-      attemptStatus: attempt?.status ?? 'none',
-      runDate,
-    });
-    res.json({
+    const serializeStartedAt = Date.now();
+    const payload = {
       ok: true,
       run_date: run.runDate,
       fritz_tier: run.fritzTier,
@@ -2189,7 +2381,21 @@ app.get('/api/daily-fritz/today', async (req, res) => {
       result: attempt?.status === 'completed' ? attempt.result : null,
       rank: ownRank,
       leaderboard_preview: [],
+    };
+    mark('serializeResponse', serializeStartedAt, {
+      runDate,
+      payloadKeys: Object.keys(payload).length,
     });
+    console.log('[daily-fritz-server] today', {
+      requestId,
+      label: 'response',
+      totalMs: Date.now() - requestStartedAt,
+      attemptStatus: attempt?.status ?? 'none',
+      runDate,
+      hadCachedRun,
+      cacheMiss: !hadCachedRun,
+    });
+    res.json(payload);
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to load today’s Daily Fritz run.',
@@ -4240,9 +4446,8 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
 
 const PORT = 3001;
 
-void ensureDailyFritzRunForDate(getPacificDateKey()).catch((error) => {
-  console.warn('[daily-fritz] startup generation failed:', error);
-});
+void warmDailyFritzRuns('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]);
+scheduleDailyFritzWarmup();
 
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
