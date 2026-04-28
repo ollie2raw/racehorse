@@ -12,6 +12,7 @@ import {
   type LessonV2Event,
   type LessonV2AuthoringSession,
 } from './lessonV2';
+import { GUIDED_LESSON_COACHING_BY_VISIBLE_STEP } from './guidedLessonNotes';
 
 const GUEST_LEARN_PREVIEW_BOARD: BoardState = {
   mainLine: [
@@ -31,8 +32,7 @@ const GUEST_LEARN_PREVIEW_BOARD: BoardState = {
 
 const GUEST_LEARN_PREVIEW_FALLBACK = {
   board: GUEST_LEARN_PREVIEW_BOARD,
-  coachingText:
-    "There’s a few good opportunities to open with here. I would typically start with the double 6 then 6-3 which scores 3 points, but we also have the double 1 and no other 1's in our hand meaning if we start the hand by playing our double 1, we have to draw.",
+  coachingText: GUIDED_LESSON_COACHING_BY_VISIBLE_STEP[0] ?? "There are a few good openings here.",
   turnLabel: 'Turn 2 / 60',
   progress: 2 / 60,
 };
@@ -105,6 +105,7 @@ interface LearnHomeProps {
   onStartGuidedAuthoring?: () => void;
   onFreezeLesson?: () => void;
   isAdmin?: boolean;
+  showAdminView?: boolean;
   onStartGuidedV2Game?: () => void;
   onStartAuthoringV2?: () => void;
 }
@@ -115,6 +116,7 @@ export default function LearnHome({
   onStartGuidedAuthoring: _onStartGuidedAuthoring,
   onFreezeLesson: _onFreezeLesson,
   isAdmin,
+  showAdminView = false,
   onStartGuidedV2Game,
   onStartAuthoringV2,
 }: LearnHomeProps) {
@@ -124,9 +126,9 @@ export default function LearnHome({
 
   useEffect(() => {
     setV2FrozenLesson(loadV2FrozenLesson());
-    if (!isAdmin) return;
+    if (!isAdmin || !showAdminView) return;
     setV2AuthoringSession(loadV2AuthoringSession());
-  }, [isAdmin]);
+  }, [isAdmin, showAdminView]);
 
   const guestPreviewMoment = useMemo(
     () => pickPreviewMoment(v2FrozenLesson) ?? GUEST_LEARN_PREVIEW_FALLBACK,
@@ -143,7 +145,7 @@ export default function LearnHome({
     setTimeout(() => setV2FreezeFlash(false), 2000);
   };
 
-  if (!isAdmin) {
+  if (!isAdmin || !showAdminView) {
     return (
       <LayoutScreen
         className="ghost-setup-screen mode-subpage-screen mode-accent-ghost learn-home-guest-screen"

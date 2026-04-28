@@ -21,16 +21,43 @@ interface LessonCoachPanelProps {
   isOffAuthoredLine?: boolean;
 }
 
-function splitCoachingCopy(text: string): { title: string; body: string } {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (!normalized) return { title: '', body: '' };
-  const firstSentenceMatch = normalized.match(/^(.+?[.!?])(\s+|$)(.*)$/);
-  if (!firstSentenceMatch) {
-    return { title: normalized, body: '' };
+function splitCoachingCopy(text: string): { title: string; body: string[]; callout: string | null } {
+  let callout: string | null = null;
+  let remainingText = text.trim();
+
+  const playMatch = remainingText.match(/(Play:?\s*.*|Start with\s*\d-\d.*)$/im);
+  if (playMatch) {
+    callout = playMatch[1].trim();
+    remainingText = remainingText.substring(0, playMatch.index).trim();
   }
-  const title = firstSentenceMatch[1].trim();
-  const body = firstSentenceMatch[3].trim();
-  return { title, body };
+
+  if (!remainingText) return { title: '', body: [], callout };
+
+  const paragraphs = remainingText.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+
+  if (paragraphs.length === 0) {
+    return { title: '', body: [], callout };
+  }
+
+  const firstParagraph = paragraphs[0];
+  const firstSentenceMatch = firstParagraph.match(/^(.+?[.!?])(\s+|$)(.*)$/s);
+
+  let title = firstParagraph;
+  const body: string[] = [];
+
+  if (firstSentenceMatch) {
+    title = firstSentenceMatch[1].trim();
+    const restOfFirst = firstSentenceMatch[3].trim();
+    if (restOfFirst) {
+      body.push(restOfFirst);
+    }
+  }
+
+  for (let i = 1; i < paragraphs.length; i++) {
+    body.push(paragraphs[i]);
+  }
+
+  return { title, body, callout };
 }
 
 function deriveCoachChips(text: string): string[] {
@@ -56,7 +83,7 @@ export default function LessonCoachPanel({
   canBestMove,
   isOffAuthoredLine = false,
 }: LessonCoachPanelProps) {
-  const { title, body } = splitCoachingCopy(coachingText);
+  const { title, body, callout } = splitCoachingCopy(coachingText);
   const chips = deriveCoachChips(coachingText);
   return (
     <div className="coach-panel lesson-coach-panel">
@@ -69,36 +96,56 @@ export default function LessonCoachPanel({
             </span>
           )}
         </div>
-        <button
-          onClick={onBestMove}
-          disabled={!canBestMove}
-          className="lesson-coach-bestmove-btn"
-        >
-          Show Best Move →
-        </button>
       </div>
 
-      {isOffAuthoredLine ? (
-        <div className="lesson-coach-copy-wrap">
-          <p className="lesson-coach-offline-title">Offline fallback active</p>
-          <p className="lesson-coach-offline-copy">
-            You went off the authored line, so this hand will continue live from here.
-          </p>
+      <div className="lesson-coach-scroll-area">
+        {isOffAuthoredLine ? (
+          <div className="lesson-coach-copy-wrap">
+            <p className="lesson-coach-offline-title">Offline fallback active</p>
+            <p className="lesson-coach-offline-copy">
+              You went off the authored line, so this hand will continue live from here.
+            </p>
+          </div>
+        ) : coachingText ? (
+          <div className="lesson-coach-copy-wrap">
+            <p className="lesson-coach-title">{title || coachingText}</p>
+            {body.length > 0 ? (
+              <div className="lesson-coach-body-paragraphs">
+                {body.map((p, i) => (
+                  <p key={i} className="lesson-coach-copy">{p}</p>
+                ))}
+              </div>
+            ) : null}
+            {chips.length > 0 ? (
+              <div className="lesson-coach-chips">
+                {chips.map((chip) => (
+                  <span key={chip} className="lesson-coach-chip">{chip}</span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="lesson-coach-empty">No coaching note for this turn.</p>
+        )}
+      </div>
+
+      {!isOffAuthoredLine && callout && (
+        <div className="lesson-coach-callout">
+          <span className="lesson-coach-callout-label">BEST MOVE</span>
+          <span className="lesson-coach-callout-text">{callout}</span>
         </div>
-      ) : coachingText ? (
-        <div className="lesson-coach-copy-wrap">
-          <p className="lesson-coach-title">{title || coachingText}</p>
-          {body ? <p className="lesson-coach-copy">{body}</p> : null}
-          {chips.length > 0 ? (
-            <div className="lesson-coach-chips">
-              {chips.map((chip) => (
-                <span key={chip} className="lesson-coach-chip">{chip}</span>
-              ))}
-            </div>
-          ) : null}
+      )}
+
+      {!isOffAuthoredLine && (
+        <div className="lesson-coach-actions">
+          <button
+            onClick={onBestMove}
+            disabled={!canBestMove}
+            className="lesson-coach-bestmove-btn"
+          >
+            Show Best Move →
+          </button>
         </div>
-      ) : (
-        <p className="lesson-coach-empty">No coaching note for this turn.</p>
       )}
     </div>
   );

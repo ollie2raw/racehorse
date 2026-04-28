@@ -143,6 +143,19 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         params.setRoomRecoveryState('idle');
         params.setRoomRecoveryMessage('');
       }
+
+      if (import.meta.env.DEV) {
+        const hand = nextState?.players?.[params.youRef.current]?.hand;
+        if (!hand || hand.length === 0) {
+          console.warn('[multiplayer-debug] Server sent empty hand or player not found', {
+            statePlayerIds: nextState?.playerIds,
+            youRef: params.youRef.current,
+            socketId: socket.id,
+            players: nextState ? Object.keys(nextState.players) : null
+          });
+        }
+      }
+
       params.setOptimisticPlayedTile((prev) => {
         if (!prev) return null;
         const nextHand = nextState?.players?.[params.youRef.current]?.hand ?? [];

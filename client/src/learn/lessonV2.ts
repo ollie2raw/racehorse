@@ -18,6 +18,7 @@
 import type { BoardState, PlacedTile, TileOrientation } from '../types.ts';
 import type { BotActionResult, BotMatchState, BotPlayerId } from '../bot/botEngine';
 import { serializeGhostBoardState } from '../ghost/logic';
+import { applyGuidedLessonCoachingText } from './guidedLessonNotes';
 
 // ─── Storage keys ────────────────────────────────────────────────────────────
 
@@ -346,7 +347,7 @@ export function loadV2AuthoringSession(): LessonV2AuthoringSession | null {
   try {
     const parsed = JSON.parse(raw) as LessonV2AuthoringSession;
     if (!parsed.lessonId || !Array.isArray(parsed.events)) return null;
-    return parsed;
+    return applyGuidedLessonCoachingText(parsed);
   } catch {
     return null;
   }
@@ -481,11 +482,11 @@ export function loadV2FrozenLesson(): LessonV2 | null {
     const parsed = JSON.parse(raw) as LessonV2;
     if (parsed.version !== 2 || !Array.isArray(parsed.events)) return null;
     const normalizedEvents = normalizeLessonEvents(parsed.events);
-    return {
+    return applyGuidedLessonCoachingText({
       ...parsed,
       events: normalizedEvents,
       handStarts: normalizeFrozenHandStarts(parsed.handStarts ?? [], normalizedEvents),
-    };
+    });
   } catch {
     return null;
   }

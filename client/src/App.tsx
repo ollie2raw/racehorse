@@ -1280,6 +1280,17 @@ export default function App() {
 
   const applyJoinedRoomResponse = useCallback((resp: any) => {
     applyRoomEventMeta(resp.eventMeta);
+
+    const resolvedYou =
+      typeof resp?.you === 'string' && resp.you
+        ? resp.you
+        : socket?.id ?? '';
+
+    if (resolvedYou) {
+      setYou(resolvedYou);
+      youRef.current = resolvedYou;
+    }
+
     setJoinedRoom(resp.roomCode);
     setRoomCode(resp.roomCode);
     setState(resp.state ?? null);
@@ -1289,7 +1300,18 @@ export default function App() {
     setCanDraw(typeof resp.canDraw === 'boolean' ? resp.canDraw : false);
     setRoomRecoveryState('idle');
     setRoomRecoveryMessage('');
-  }, [applyRoomEventMeta, clearTransientRoomUi]);
+
+    if (import.meta.env.DEV) {
+      console.warn('[multiplayer-debug] applyJoinedRoomResponse identity/state', {
+        respYou: resp?.you,
+        socketId: socket?.id,
+        resolvedYou,
+        playerIds: resp?.state?.playerIds,
+        playerKeys: resp?.state?.players ? Object.keys(resp.state.players) : null,
+        resolvedHandLength: resp?.state?.players?.[resolvedYou]?.hand?.length ?? null,
+      });
+    }
+  }, [applyRoomEventMeta, clearTransientRoomUi, socket?.id]);
 
   const roomSocketSyncParams = useMemo(
     () => ({
@@ -2395,6 +2417,16 @@ export default function App() {
 
   // ─── Render ───────────────────────────────────────────────
   const appRootClassName = 'app large-mode';
+  const showLearnAdminView = (() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get('learnAdmin')?.trim().toLowerCase();
+      return raw === '1' || raw === 'true' || raw === 'yes';
+    } catch {
+      return false;
+    }
+  })();
 
   if (appMode === 'noBrainer') {
     return (
@@ -2429,6 +2461,7 @@ export default function App() {
           <LearnHome
             onBack={() => setAppMode('home')}
             isAdmin={isAdmin}
+            showAdminView={Boolean(isAdmin && showLearnAdminView)}
             onStartGuidedGame={() => {
               setIsGuidedMode(true);
               // Use elite Fritz if a frozen lesson exists (authored vs Elite Fritz)

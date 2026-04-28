@@ -2941,6 +2941,39 @@ export default function BotMatchScreen({
     [authoringV2Events],
   );
 
+  // [guided-note-align] DIAGNOSTICS
+  useEffect(() => {
+    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return;
+    const currentEvent = frozenV2Lesson.events[guidedV2EventIndex];
+    if (!currentEvent) return;
+
+    // Only log when a player decision is up next (or currently waiting)
+    const nextPlayerEv = nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex);
+    if (!nextPlayerEv) return;
+
+    // We only want to log once per eventIndex wait state
+    if (currentEvent.eventIndex !== nextPlayerEv.eventIndex) return;
+
+    const uiStepNumber = frozenV2Lesson.events
+      .slice(0, guidedV2EventIndex)
+      .filter((e) => e.actor === 'player' && e.action === 'play').length;
+      
+    const board = parseLessonV2BoardState(currentEvent.boardAfter);
+
+    console.log('[guided-note-align]', JSON.stringify({
+      uiStepNumber,
+      eventsArrayIndex: guidedV2EventIndex,
+      eventIndex: currentEvent.eventIndex,
+      actor: currentEvent.actor,
+      action: currentEvent.action,
+      tile: currentEvent.tile,
+      placementSide: currentEvent.position,
+      coachingTextStart: (currentEvent.coachingText || '').substring(0, 80),
+      bestMoveTile: currentExpectedV2PlayerEvent?.tile,
+      playerHandTiles: currentEvent.playerHandAfter,
+    }));
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, currentExpectedV2PlayerEvent]);
+
   const ghostSuggestedPlayerMove = useMemo(
     () =>
       isGhostMode
@@ -5442,18 +5475,6 @@ export default function BotMatchScreen({
         match.players.you.hand.slice(Math.ceil(match.players.you.hand.length / 2)),
       ]
     : [match.players.you.hand];
-  const lessonHandRows = Array.from(
-    { length: Math.min(4, Math.ceil(match.players.you.hand.length / 4)) },
-    (_, rowIdx) => match.players.you.hand.slice(rowIdx * 4, rowIdx * 4 + 4),
-  ).filter((row) => row.length > 0);
-  const renderedHandRows = isLessonLayoutMode ? lessonHandRows : normalHandRows;
-  const learnHandAreaStyle = isLessonLayoutMode
-    ? {
-        minHeight: `${168 + Math.max(0, lessonHandRows.length - 1) * 112}px`,
-        height: `${168 + Math.max(0, lessonHandRows.length - 1) * 112}px`,
-        overflow: 'visible',
-      }
-    : undefined;
 
   const lessonCoachPanel = showLessonCoachPanel ? (
     <div className="lesson-coach-slot">
@@ -5506,23 +5527,19 @@ export default function BotMatchScreen({
   ) : null;
 
   const handTray = (
-    <div className={isLessonLayoutMode ? 'learn-lesson-hand-card' : ''} style={learnHandAreaStyle}>
+    <div className={isLessonLayoutMode ? 'learn-lesson-hand-wrapper' : ''}>
       <div
-        className={`hand-area wl-hand-area ${isLessonLayoutMode ? 'learn-lesson-hand-area' : ''}`}
+        className="hand-area wl-hand-area"
         data-ui="tray"
       >
         <div className="tray-rail">
           <div className="tray-center" ref={handAreaRef}>
             <div
               className={`hand-container ${
-                isLessonLayoutMode
-                  ? 'is-lesson-grid'
-                  : handCompactStacked
-                    ? 'is-stacked'
-                    : ''
+                handCompactStacked ? 'is-stacked' : ''
               }`}
             >
-              {renderedHandRows.map((row, rowIdx) => (
+              {normalHandRows.map((row, rowIdx) => (
                 <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
                   {row.map((tile, idx) => {
                     const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
@@ -6342,18 +6359,10 @@ export default function BotMatchScreen({
         <div className="learn-lesson-main">
           <div className="learn-lesson-sidebar">
             {lessonCoachPanel}
-            <div className="learn-lesson-hand-shell">
-              <div className="learn-lesson-hand-header">
-                <span className="learn-lesson-hand-label">Your Hand</span>
-                <span className="learn-lesson-hand-count">
-                  {match.players.you.hand.length} tile{match.players.you.hand.length === 1 ? '' : 's'}
-                </span>
-              </div>
-              {handTray}
-            </div>
           </div>
           <div className="learn-lesson-board-column">
             {boardStage}
+            {handTray}
           </div>
         </div>
       ) : (
