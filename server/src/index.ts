@@ -3086,6 +3086,60 @@ function clearSocketRematchReady(roomCode: string | undefined, socketId: string)
 }
 
 /**
+ * Build a personalized hand:ended payload for a specific player.
+ */
+function buildHandEndedPayload(room: Room, playerId: string) {
+  if (!room.state) return null;
+  const opponentId = room.state.playerIds.find((id) => id !== playerId) ?? null;
+  const opponentHand = opponentId ? (room.state.players[opponentId]?.hand ?? []) : [];
+  const myHand = room.state.players[playerId]?.hand ?? [];
+
+  // Compute awards directly from remaining tiles — do NOT use score deltas
+  // (scores are already applied to room.state before this runs)
+  const opponentPipSum = opponentHand.reduce((s, t) => s + t.high + t.low, 0);
+  const myPipSum = myHand.reduce((s, t) => s + t.high + t.low, 0);
+
+  // Winner is whoever went out (hand.length === 0), or lowest pips in blocked hand
+  const iWentOut = myHand.length === 0;
+  const opponentWentOut = opponentHand.length === 0;
+
+  const youScoreDelta = iWentOut
+    ? Math.round(opponentPipSum / 5)
+    : opponentWentOut
+    ? 0
+    : myPipSum <= opponentPipSum
+    ? Math.round(opponentPipSum / 5) // blocked hand, I had lower pips
+    : 0;
+
+  const opponentScoreDelta = opponentWentOut
+    ? Math.round(myPipSum / 5)
+    : iWentOut
+    ? 0
+    : opponentPipSum <= myPipSum
+    ? Math.round(myPipSum / 5) // blocked hand, opponent had lower pips
+    : 0;
+
+  let handWinnerId: string | null = null;
+  if (iWentOut) handWinnerId = playerId;
+  else if (opponentWentOut) handWinnerId = opponentId;
+  else if (myPipSum <= opponentPipSum) handWinnerId = playerId;
+  else handWinnerId = opponentId;
+
+  return {
+    handNumber: room.state.handNumber,
+    opponentRemainingTiles: opponentHand,
+    yourRemainingTiles: myHand,
+    pointsAwarded: {
+      you: youScoreDelta,
+      opponent: opponentScoreDelta,
+    },
+    whoWentOut: iWentOut ? playerId : opponentWentOut ? opponentId : null,
+    winnerId: handWinnerId,
+    handWinnerId: handWinnerId,
+  };
+}
+
+/**
  * Send state update to all players in a room.
  * Each player receives:
  * - The game state
@@ -3381,43 +3435,11 @@ function broadcastStateUpdate(roomCode: string) {
           if (pid.startsWith('bot:fritz:')) continue;
           const playerSocket = io.sockets.sockets.get(pid);
           if (!playerSocket) continue;
-          const opponentId = room.state.playerIds.find((id) => id !== pid) ?? null;
-          const opponentHand = opponentId ? (room.state.players[opponentId]?.hand ?? []) : [];
-          const myHand = room.state.players[pid]?.hand ?? [];
 
-          // Compute awards directly from remaining tiles — do NOT use score deltas
-          // (scores are already applied to room.state before this runs)
-          const opponentPipSum = opponentHand.reduce((s, t) => s + t.high + t.low, 0);
-          const myPipSum = myHand.reduce((s, t) => s + t.high + t.low, 0);
-
-          // Winner is whoever went out (hand.length === 0), or lowest pips in blocked hand
-          const iWentOut = myHand.length === 0;
-          const opponentWentOut = opponentHand.length === 0;
-
-          const youScoreDelta = iWentOut
-            ? Math.round(opponentPipSum / 5)
-            : opponentWentOut
-            ? 0
-            : myPipSum <= opponentPipSum
-            ? Math.round(opponentPipSum / 5) // blocked hand, I had lower pips
-            : 0;
-
-          const opponentScoreDelta = opponentWentOut
-            ? Math.round(myPipSum / 5)
-            : iWentOut
-            ? 0
-            : opponentPipSum <= myPipSum
-            ? Math.round(myPipSum / 5) // blocked hand, opponent had lower pips
-            : 0;
-
-          playerSocket.emit('hand:ended', {
-            handNumber: room.state.handNumber,
-            opponentRemainingTiles: opponentHand,
-            pointsAwarded: {
-              you: youScoreDelta,
-              opponent: opponentScoreDelta,
-            },
-          });
+          const payload = buildHandEndedPayload(room, pid);
+          if (payload) {
+            playerSocket.emit('hand:ended', payload);
+          }
         }
       }
     }
@@ -4155,6 +4177,12 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       if (existingRoom && userId) {
         const existingPlayer = roster.find((player) => player.userId === userId);
         if (existingPlayer) {
+          const oldSocket = io.sockets.sockets.get(existingPlayer.id);
+          if (oldSocket && oldSocket.id !== socket.id && oldSocket.connected) {
+            console.log(`[room:join] REJECTED: user ${userId} already connected via ${oldSocket.id}`);
+            return cb?.({ ok: false, error: 'already_connected' });
+          }
+
           console.log(`[room:join] RECONNECT: migrating ${existingPlayer.id} -> ${socket.id} for userId=${userId}`);
           migrateRoomSeat(roomCode, existingPlayer.id, socket.id);
           roster = roster
@@ -4273,6 +4301,14 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
           broadcastStateUpdate(room.code);
         } catch {
           // non-fatal
+        }
+
+        // REPLAY hand:ended if rejoining into a handOver state
+        if (room.state.handOver && !room.state.gameOver) {
+          const payload = buildHandEndedPayload(room, socket.id);
+          if (payload) {
+            socket.emit('hand:ended', payload);
+          }
         }
       }
     } catch (err: unknown) {

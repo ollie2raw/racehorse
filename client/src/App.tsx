@@ -957,6 +957,11 @@ export default function App() {
   const handRevealAutoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [handRevealAutoProgress, setHandRevealAutoProgress] = useState(1);
   const isMutedRef = useRef(isMuted);
+  const roomIdentityRef = useRef<{
+    username: string;
+    userId: string | null;
+    authToken: string | null;
+  } | null>(null);
   const youRef = useRef(you);
   const matchRecordKeyRef = useRef('');
   const prevGameOverRef = useRef(false);
@@ -1226,6 +1231,7 @@ export default function App() {
     (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
       const { keepPlayers = false, clearRoomCode = true } = options;
       setJoinedRoom(null);
+      roomIdentityRef.current = null;
       if (clearRoomCode) setRoomCode('');
       setState(null);
       setLegalMoves([]);
@@ -1271,18 +1277,21 @@ export default function App() {
       setError('');
       setActionError('');
       try {
-        const resp = await emitWithAck<any>(
-          targetSocket,
-          'room:create',
-          {
-            username: authProfile?.username ?? 'Guest',
-            userId: multiplayerIdentityUserId,
-            authToken: multiplayerAuthToken,
-          },
-        );
+        const username = authProfile?.username ?? 'Guest';
+        const userId = multiplayerIdentityUserId;
+        const authToken = multiplayerAuthToken;
+
+        const resp = await emitWithAck<any>(targetSocket, 'room:create', {
+          username,
+          userId,
+          authToken,
+        });
         if (!resp?.ok) {
           throw new Error(resp?.error ?? 'Unable to create room.');
         }
+
+        roomIdentityRef.current = { username, userId, authToken };
+
         setError('');
         setActionError('');
         setState(null);
@@ -1310,6 +1319,14 @@ export default function App() {
 
   const applyJoinedRoomResponse = useCallback((resp: any) => {
     applyRoomEventMeta(resp.eventMeta);
+
+    if (!roomIdentityRef.current) {
+      roomIdentityRef.current = {
+        username: authProfile?.username ?? 'Guest',
+        userId: multiplayerIdentityUserId,
+        authToken: multiplayerAuthToken,
+      };
+    }
 
     const resolvedYou =
       typeof resp?.you === 'string' && resp.you
@@ -1456,6 +1473,7 @@ export default function App() {
     draggingStateRef,
     isMutedRef,
     handRevealShownRef,
+    roomIdentityRef,
     setSocket,
     setIsConnected,
     setIsConnecting,
@@ -1546,6 +1564,7 @@ export default function App() {
     setRoomRecoveryMessage,
     setFriendsOpen,
     setFriendInvite,
+    roomIdentityRef,
     lastRoomStorageKey: LAST_ROOM_STORAGE_KEY,
   });
 

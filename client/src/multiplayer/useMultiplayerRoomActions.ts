@@ -77,17 +77,23 @@ type UseMultiplayerRoomActionsParams = {
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
   setFriendsOpen: Dispatch<SetStateAction<boolean>>;
   setFriendInvite: Dispatch<SetStateAction<FriendInvite>>;
+  roomIdentityRef: MutableRefObject<{
+    username: string;
+    userId: string | null;
+    authToken: string | null;
+  } | null>;
   lastRoomStorageKey: string;
 };
 
 export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParams) {
   const roomJoinConfig = useCallback(
-    (): RoomJoinConfig => ({
-      username: params.authUsername,
-      userId: params.authUserId,
-      authToken: params.authToken,
-    }),
-    [params.authUsername, params.authUserId, params.authToken],
+    (): RoomJoinConfig =>
+      params.roomIdentityRef.current ?? {
+        username: params.authUsername,
+        userId: params.authUserId,
+        authToken: params.authToken,
+      },
+    [params.authUsername, params.authUserId, params.authToken, params.roomIdentityRef],
   );
 
   const onCreatePrivateRoom = useCallback(async (): Promise<{

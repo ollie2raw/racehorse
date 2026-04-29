@@ -80,6 +80,11 @@ type UseMultiplayerConnectionParams = {
   draggingStateRef: MutableRefObject<boolean>;
   isMutedRef: MutableRefObject<boolean>;
   handRevealShownRef: MutableRefObject<number | null>;
+  roomIdentityRef: MutableRefObject<{
+    username: string;
+    userId: string | null;
+    authToken: string | null;
+  } | null>;
   setSocket: Dispatch<SetStateAction<Socket | null>>;
   setIsConnected: Dispatch<SetStateAction<boolean>>;
   setIsConnecting: Dispatch<SetStateAction<boolean>>;
@@ -186,7 +191,8 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       const current = latestRef.current;
       if (current.intentionalDisconnectRef.current) return;
       current.clearReconnectAttemptTimer();
-      current.reconnectAttemptCountRef.current = 0;
+      // Note: reconnectAttemptCountRef is NOT reset here. 
+      // It is only reset upon successful room:join to preserve backoff across reconnect cycles.
       current.setIsRecoveringConnection(false);
       current.setRoomRecoveryState(current.joinedRoomRef.current ? 'resyncing' : 'idle');
       current.setRoomRecoveryMessage(current.joinedRoomRef.current ? 'Syncing room state…' : '');
@@ -223,98 +229,80 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         return;
       }
 
-      if (!current.preventAutoRejoinRef.current) {
-        const code = current.normalizeRoomCode(current.joinedRoomRef.current ?? current.roomCode);
-        if (code && !current.rejoinInFlightRef.current) {
-          current.rejoinInFlightRef.current = true;
-          try {
-            console.warn('[rejoin] attempting room:join after reconnect', { code });
-            const resp = await current.emitWithAck<any>(s, 'room:join', code, {
-              username: current.authProfileRef.current?.username ?? 'Guest',
-              userId: current.multiplayerIdentityUserIdRef.current,
-              authToken: current.authAccessTokenRef.current,
-            });
-            if (resp?.ok) {
-              console.warn('[rejoin] room:join restored room', {
-                roomCode: resp.roomCode,
-                you: resp.you,
-                hasState: Boolean(resp.state),
-              });
-              current.applyJoinedRoomResponse(resp);
-              current.reconnectShouldJoinRef.current = false;
-              current.reconnectRoomCodeRef.current = resp.roomCode;
-              current.setIsRecoveringConnection(false);
-              current.setRoomRecoveryState('idle');
-              current.setRoomRecoveryMessage('');
-              return;
-            }
-            if (import.meta.env.DEV) {
-              console.log('[rejoin] room:join not ok', { code, resp });
-            }
-            const errorText = String(resp?.error ?? '').toLowerCase();
-            if (errorText.includes('not found')) {
-              current.setIsRecoveringConnection(false);
-              current.setRoomRecoveryState('failed');
-              current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
-            } else {
-              scheduleReconnectAttempt(current, 'Room reconnect rejected. Retrying…', {
-                code,
-                error: resp?.error ?? 'not_ok',
-              });
-            }
-          } catch (error) {
-            scheduleReconnectAttempt(current, 'Room reconnect timed out. Retrying…', {
-              code,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          } finally {
-            current.rejoinInFlightRef.current = false;
-          }
-        }
-      }
-
-      if (current.inviteJoinInFlightRef.current) return;
-      const reconnectCode = current.normalizeRoomCode(
-        current.reconnectRoomCodeRef.current ?? current.joinedRoomRef.current ?? '',
+      // Consolidated Join/Recovery Path
+      // Prioritize recovery if we have an explicit signal or a previously joined room.
+      const isRecoveryAttempt = current.reconnectShouldJoinRef.current || !!current.joinedRoomRef.current;
+      const roomToJoin = current.normalizeRoomCode(
+        current.reconnectRoomCodeRef.current ?? current.joinedRoomRef.current ?? current.roomCode
       );
-      if (current.reconnectShouldJoinRef.current && reconnectCode && !current.preventAutoRejoinRef.current) {
+
+      if (roomToJoin && !current.preventAutoRejoinRef.current && !current.rejoinInFlightRef.current) {
+        current.rejoinInFlightRef.current = true;
         try {
-          const resp = await current.emitWithAck<any>(s, 'room:join', reconnectCode, {
+          console.warn('[rejoin] attempting room:join after connect', { 
+            code: roomToJoin, 
+            isRecovery: isRecoveryAttempt,
+            attempt: current.reconnectAttemptCountRef.current
+          });
+          
+          const rejoinIdentity = current.roomIdentityRef.current ?? {
             username: current.authProfileRef.current?.username ?? 'Guest',
             userId: current.multiplayerIdentityUserIdRef.current,
             authToken: current.authAccessTokenRef.current,
-          });
-          if (!resp?.ok) {
-            const errorText = String(resp?.error ?? '').toLowerCase();
-            if (errorText.includes('not found') && typeof window !== 'undefined') {
-              window.localStorage.removeItem(current.lastRoomStorageKey);
-              current.setIsRecoveringConnection(false);
-              current.setRoomRecoveryState('failed');
-              current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
+          };
+          
+          const resp = await current.emitWithAck<any>(s, 'room:join', roomToJoin, rejoinIdentity);
+          
+          if (resp?.ok) {
+            console.warn('[rejoin] room:join success', {
+              roomCode: resp.roomCode,
+              you: resp.you,
+            });
+            current.reconnectAttemptCountRef.current = 0; // Success! Reset backoff.
+            current.applyJoinedRoomResponse(resp);
+            current.reconnectShouldJoinRef.current = false;
+            current.reconnectRoomCodeRef.current = resp.roomCode;
+            current.setIsRecoveringConnection(false);
+            current.setRoomRecoveryState('idle');
+            current.setRoomRecoveryMessage('');
+            
+            if (isRecoveryAttempt) {
+              current.showToast('Reconnected to room.', 1200);
             } else {
-              scheduleReconnectAttempt(current, 'Room reconnect rejected. Retrying…', {
-                code: reconnectCode,
-                error: resp?.error ?? 'not_ok',
-              });
+              current.setAppMode('multiplayer');
             }
             return;
           }
-          current.applyJoinedRoomResponse(resp);
-          current.setAppMode('multiplayer');
-          current.reconnectShouldJoinRef.current = false;
-          current.reconnectRoomCodeRef.current = resp.roomCode;
-          current.setIsRecoveringConnection(false);
-          current.setRoomRecoveryState('idle');
-          current.setRoomRecoveryMessage('');
-          current.showToast('Reconnected to room.', 1200);
+          
+          // Failed with response
+          const errorText = String(resp?.error ?? '').toLowerCase();
+          if (errorText.includes('not found')) {
+            if (isRecoveryAttempt && typeof window !== 'undefined') {
+              window.localStorage.removeItem(current.lastRoomStorageKey);
+            }
+            current.setIsRecoveringConnection(false);
+            current.setRoomRecoveryState('failed');
+            current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
+          } else if (isRecoveryAttempt) {
+            scheduleReconnectAttempt(current, 'Room reconnect rejected. Retrying…', {
+              code: roomToJoin,
+              error: resp?.error ?? 'not_ok',
+            });
+          }
         } catch (error) {
-          scheduleReconnectAttempt(current, 'Could not restore room state. Retrying…', {
-            code: reconnectCode,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          current.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
+          if (isRecoveryAttempt) {
+            scheduleReconnectAttempt(current, 'Room reconnect timed out. Retrying…', {
+              code: roomToJoin,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        } finally {
+          current.rejoinInFlightRef.current = false;
         }
-        return;
+        
+        // If this was an explicit recovery attempt, we stop here (either failed-permanently or scheduled retry).
+        // If it was just an auto-join from URL that failed, we fall through to try saved room.
+        if (isRecoveryAttempt) return;
       }
 
       if (current.preventAutoRejoinRef.current || current.autoJoinAttemptedRef.current) return;
@@ -337,6 +325,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             current.showToast('Saved room is no longer available.', 2000);
             return;
           }
+          current.reconnectAttemptCountRef.current = 0; // Success!
           current.applyJoinedRoomResponse(resp);
           current.showToast('Rejoined room.', 1200);
         } catch (error) {
