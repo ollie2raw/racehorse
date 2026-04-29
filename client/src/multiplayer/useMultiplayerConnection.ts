@@ -60,6 +60,7 @@ type UseMultiplayerConnectionParams = {
   authUserRef: MutableRefObject<{ id?: string | null; email?: string | null } | null>;
   authProfileRef: MutableRefObject<{ username?: string | null } | null>;
   authAccessTokenRef: MutableRefObject<string | null>;
+  multiplayerIdentityUserIdRef: MutableRefObject<string | null>;
   joinedRoomRef: MutableRefObject<string | null>;
   youRef: MutableRefObject<string>;
   stateRef: MutableRefObject<GameState | null>;
@@ -119,6 +120,40 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
   const latestRef = useRef(params);
   latestRef.current = params;
 
+  const scheduleReconnectAttempt = useCallback(
+    (
+      current: UseMultiplayerConnectionParams,
+      message: string,
+      details: Record<string, unknown> = {},
+    ) => {
+      if (
+        current.intentionalDisconnectRef.current ||
+        current.preventAutoRejoinRef.current ||
+        !current.reconnectShouldJoinRef.current
+      ) {
+        return false;
+      }
+      const nextAttempt = current.reconnectAttemptCountRef.current + 1;
+      current.reconnectAttemptCountRef.current = nextAttempt;
+      current.setIsRecoveringConnection(true);
+      current.setRoomRecoveryState('reconnecting');
+      current.setRoomRecoveryMessage(message);
+      current.clearReconnectAttemptTimer();
+      const delayMs = Math.min(10_000, 1500 + Math.min(nextAttempt, 8) * 750);
+      console.warn('[socket] room reconnect retry scheduled', {
+        attempt: nextAttempt,
+        delayMs,
+        roomCode: current.reconnectRoomCodeRef.current,
+        ...details,
+      });
+      current.reconnectAttemptTimerRef.current = setTimeout(() => {
+        current.connectRef.current?.();
+      }, delayMs);
+      return true;
+    },
+    [],
+  );
+
   const connect = useCallback(() => {
     const p = latestRef.current;
     if (p.isConnecting || p.socket?.connected) return;
@@ -167,17 +202,15 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         current.authUserRef.current?.email?.split('@')[0] ??
         'player';
       if (userId) {
-        try {
-          await current.emitWithAck<any>(s, 'presence:identify', {
+        void current.emitWithAck<any>(s, 'presence:identify', {
             userId,
             username,
             authToken: current.authAccessTokenRef.current,
-          });
-        } catch (error) {
+          }).catch((error) => {
           if (import.meta.env.DEV) {
             console.log('[presence] identify failed', error instanceof Error ? error.message : error);
           }
-        }
+        });
       }
 
       if (current.pendingCreateOnConnectRef.current) {
@@ -195,12 +228,18 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         if (code && !current.rejoinInFlightRef.current) {
           current.rejoinInFlightRef.current = true;
           try {
+            console.warn('[rejoin] attempting room:join after reconnect', { code });
             const resp = await current.emitWithAck<any>(s, 'room:join', code, {
               username: current.authProfileRef.current?.username ?? 'Guest',
-              userId: current.authUserRef.current?.id ?? null,
+              userId: current.multiplayerIdentityUserIdRef.current,
               authToken: current.authAccessTokenRef.current,
             });
             if (resp?.ok) {
+              console.warn('[rejoin] room:join restored room', {
+                roomCode: resp.roomCode,
+                you: resp.you,
+                hasState: Boolean(resp.state),
+              });
               current.applyJoinedRoomResponse(resp);
               current.reconnectShouldJoinRef.current = false;
               current.reconnectRoomCodeRef.current = resp.roomCode;
@@ -212,14 +251,22 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             if (import.meta.env.DEV) {
               console.log('[rejoin] room:join not ok', { code, resp });
             }
-            current.setRoomRecoveryState('failed');
-            current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
-          } catch (error) {
-            if (import.meta.env.DEV) {
-              console.log('[rejoin] room:join failed', error instanceof Error ? error.message : error);
+            const errorText = String(resp?.error ?? '').toLowerCase();
+            if (errorText.includes('not found')) {
+              current.setIsRecoveringConnection(false);
+              current.setRoomRecoveryState('failed');
+              current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
+            } else {
+              scheduleReconnectAttempt(current, 'Room reconnect rejected. Retrying…', {
+                code,
+                error: resp?.error ?? 'not_ok',
+              });
             }
-            current.setRoomRecoveryState('failed');
-            current.setRoomRecoveryMessage('Could not reach room. Return to home.');
+          } catch (error) {
+            scheduleReconnectAttempt(current, 'Room reconnect timed out. Retrying…', {
+              code,
+              error: error instanceof Error ? error.message : String(error),
+            });
           } finally {
             current.rejoinInFlightRef.current = false;
           }
@@ -234,15 +281,22 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         try {
           const resp = await current.emitWithAck<any>(s, 'room:join', reconnectCode, {
             username: current.authProfileRef.current?.username ?? 'Guest',
-            userId: current.authUserRef.current?.id ?? null,
+            userId: current.multiplayerIdentityUserIdRef.current,
             authToken: current.authAccessTokenRef.current,
           });
           if (!resp?.ok) {
-            if (typeof window !== 'undefined') {
+            const errorText = String(resp?.error ?? '').toLowerCase();
+            if (errorText.includes('not found') && typeof window !== 'undefined') {
               window.localStorage.removeItem(current.lastRoomStorageKey);
+              current.setIsRecoveringConnection(false);
+              current.setRoomRecoveryState('failed');
+              current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
+            } else {
+              scheduleReconnectAttempt(current, 'Room reconnect rejected. Retrying…', {
+                code: reconnectCode,
+                error: resp?.error ?? 'not_ok',
+              });
             }
-            current.setRoomRecoveryState('failed');
-            current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
             return;
           }
           current.applyJoinedRoomResponse(resp);
@@ -254,8 +308,10 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           current.setRoomRecoveryMessage('');
           current.showToast('Reconnected to room.', 1200);
         } catch (error) {
-          current.setRoomRecoveryState('failed');
-          current.setRoomRecoveryMessage('Could not restore room state. Retry reconnect.');
+          scheduleReconnectAttempt(current, 'Could not restore room state. Retrying…', {
+            code: reconnectCode,
+            error: error instanceof Error ? error.message : String(error),
+          });
           current.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
         }
         return;
@@ -271,7 +327,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         try {
           const resp = await current.emitWithAck<any>(s, 'room:join', savedCode, {
             username: current.authProfileUsername ?? 'Guest',
-            userId: current.authUserId ?? null,
+            userId: current.multiplayerIdentityUserIdRef.current,
             authToken: current.authAccessTokenRef.current,
           });
           if (!resp?.ok) {
@@ -319,18 +375,11 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         current.setRoomRecoveryState('reconnecting');
         current.setRoomRecoveryMessage('Connection lost. Reconnecting to room…');
         current.clearTransientRoomUi();
-        const nextAttempt = current.reconnectAttemptCountRef.current + 1;
-        current.reconnectAttemptCountRef.current = nextAttempt;
         console.warn('[socket] disconnected mid-game, reconnect scheduled', {
-          attempt: nextAttempt,
-          maxAttempts: 8,
           reason,
           roomCode: roomBeforeDisconnect,
         });
-        current.clearReconnectAttemptTimer();
-        current.reconnectAttemptTimerRef.current = setTimeout(() => {
-          current.connectRef.current?.();
-        }, 2000);
+        scheduleReconnectAttempt(current, 'Connection lost. Reconnecting to room…', { reason });
         return;
       }
 
@@ -461,32 +510,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         !current.intentionalDisconnectRef.current &&
         !current.preventAutoRejoinRef.current;
       if (shouldRetryReconnect) {
-        const nextAttempt = current.reconnectAttemptCountRef.current + 1;
-        current.reconnectAttemptCountRef.current = nextAttempt;
-        if (nextAttempt <= 8) {
-          current.setIsRecoveringConnection(true);
-          current.setRoomRecoveryState('reconnecting');
-          current.setRoomRecoveryMessage('Connection unstable. Retrying…');
-          console.warn('[socket] reconnect attempt failed, retrying', {
-            attempt: nextAttempt,
-            maxAttempts: 8,
-            roomCode: current.reconnectRoomCodeRef.current,
-          });
-          current.clearReconnectAttemptTimer();
-          current.reconnectAttemptTimerRef.current = setTimeout(() => {
-            current.connectRef.current?.();
-          }, 2000);
-          return;
-        }
-        console.warn('[socket] reconnect attempt failed, entering slow retry mode', {
-          attempts: nextAttempt,
-          roomCode: current.reconnectRoomCodeRef.current,
-        });
-        current.setIsRecoveringConnection(false);
-        current.setRoomRecoveryState('failed');
-        current.setRoomRecoveryMessage('Reconnect failed. Retry to restore the room.');
-        current.setError('');
-        current.clearReconnectAttemptTimer();
+        scheduleReconnectAttempt(current, 'Connection unstable. Retrying…');
         return;
       }
       current.setServerWaking(true);
@@ -494,7 +518,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     });
 
     p.setSocket(s);
-  }, []);
+  }, [scheduleReconnectAttempt]);
 
   const retryRoomRecovery = useCallback(() => {
     const p = latestRef.current;

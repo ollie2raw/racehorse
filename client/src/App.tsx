@@ -134,6 +134,21 @@ function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
 }
 
 const LAST_ROOM_STORAGE_KEY = 'racehorse_last_room_code';
+const GUEST_ID_STORAGE_KEY = 'racehorse_guest_identity_v1';
+
+function getOrCreateGuestIdentityId(): string {
+  const fallback = () => `guest_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  if (typeof window === 'undefined') return fallback();
+  try {
+    const existing = window.localStorage.getItem(GUEST_ID_STORAGE_KEY);
+    if (existing?.startsWith('guest_')) return existing;
+    const next = fallback();
+    window.localStorage.setItem(GUEST_ID_STORAGE_KEY, next);
+    return next;
+  } catch {
+    return fallback();
+  }
+}
 
 function getBoardEnds(board: GameState['board']): [number, number] {
   if (!board) return [-1, -1];
@@ -830,9 +845,13 @@ export default function App() {
     refreshAuthProfile,
     applyProfilePatch,
   } = useAuth();
+  const [guestIdentityId] = useState(getOrCreateGuestIdentityId);
+  const multiplayerIdentityUserId = authUser?.id ?? guestIdentityId;
+  const multiplayerAuthToken = authUser?.id ? authAccessToken : null;
   const authUserRef = useRef(authUser);
   const authProfileRef = useRef(authProfile);
   const authAccessTokenRef = useRef<string | null>(authAccessToken);
+  const multiplayerIdentityUserIdRef = useRef(multiplayerIdentityUserId);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
@@ -1097,6 +1116,10 @@ export default function App() {
   }, [authAccessToken]);
 
   useEffect(() => {
+    multiplayerIdentityUserIdRef.current = multiplayerIdentityUserId;
+  }, [multiplayerIdentityUserId]);
+
+  useEffect(() => {
     if (justVerified) {
       showToast('✓ Email verified! Welcome to Racehorse Dominoes.', 5000);
     }
@@ -1253,8 +1276,8 @@ export default function App() {
           'room:create',
           {
             username: authProfile?.username ?? 'Guest',
-            userId: authUser?.id ?? null,
-            authToken: authAccessToken,
+            userId: multiplayerIdentityUserId,
+            authToken: multiplayerAuthToken,
           },
         );
         if (!resp?.ok) {
@@ -1282,7 +1305,7 @@ export default function App() {
         throw e;
       }
     },
-    [authProfile?.username, authUser?.id, authAccessToken, resolvePendingCreate, applyRoomEventMeta, clearTransientRoomUi],
+    [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate, applyRoomEventMeta, clearTransientRoomUi],
   );
 
   const applyJoinedRoomResponse = useCallback((resp: any) => {
@@ -1413,6 +1436,7 @@ export default function App() {
     authUserRef,
     authProfileRef,
     authAccessTokenRef,
+    multiplayerIdentityUserIdRef,
     joinedRoomRef,
     youRef,
     stateRef,
@@ -1467,13 +1491,13 @@ export default function App() {
   });
 
   const authUsernameRef = useRef(authProfile?.username ?? 'Guest');
-  const authUserIdRef = useRef<string | null>(authUser?.id ?? null);
-  const authTokenRef = useRef<string | null>(authAccessToken);
+  const authUserIdRef = useRef<string | null>(multiplayerIdentityUserId);
+  const authTokenRef = useRef<string | null>(multiplayerAuthToken);
   useEffect(() => {
     authUsernameRef.current = authProfile?.username ?? 'Guest';
-    authUserIdRef.current = authUser?.id ?? null;
-    authTokenRef.current = authAccessToken;
-  }, [authProfile?.username, authUser?.id, authAccessToken]);
+    authUserIdRef.current = multiplayerIdentityUserId;
+    authTokenRef.current = multiplayerAuthToken;
+  }, [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken]);
 
   const {
     onCreatePrivateRoom,
@@ -1499,8 +1523,8 @@ export default function App() {
     roomCode,
     friendInvite,
     authUsername: authProfile?.username ?? 'Guest',
-    authUserId: authUser?.id ?? null,
-    authToken: authAccessToken,
+    authUserId: multiplayerIdentityUserId,
+    authToken: multiplayerAuthToken,
     authUsernameRef,
     authUserIdRef,
     authTokenRef,
@@ -2819,7 +2843,7 @@ export default function App() {
           socket.off('connect', retry);
           socket.emit(
             'tournament:create',
-            { username: authProfile?.username ?? 'Guest', userId: authUser?.id ?? null },
+            { username: authProfile?.username ?? 'Guest', userId: multiplayerIdentityUserId },
             (resp: any) => {
               if (!resp?.ok) return setError(resp?.error ? `Create failed: ${resp.error}` : 'Failed to create lobby.');
               setTournamentId(resp.id);
@@ -2833,7 +2857,7 @@ export default function App() {
       }
       socket.emit(
         'tournament:create',
-        { username: authProfile?.username ?? 'Guest', userId: authUser?.id ?? null },
+        { username: authProfile?.username ?? 'Guest', userId: multiplayerIdentityUserId },
         (resp: any) => {
           if (!resp?.ok) return setError(resp?.error ? `Create failed: ${resp.error}` : 'Failed to create lobby.');
           setTournamentId(resp.id);
@@ -2853,7 +2877,7 @@ export default function App() {
       socket.emit(
         'tournament:join',
         code,
-        { username: authProfile?.username ?? 'Guest', userId: authUser?.id ?? null },
+        { username: authProfile?.username ?? 'Guest', userId: multiplayerIdentityUserId },
         (resp: any) => {
           if (!resp?.ok) {
             return setError(resp?.error === 'already_started' ? 'Tournament already started.' : 'Join failed.');
@@ -2892,7 +2916,8 @@ export default function App() {
         code,
         {
           username: authProfile?.username ?? 'Guest',
-          userId: authUser?.id ?? null,
+          userId: multiplayerIdentityUserId,
+          authToken: multiplayerAuthToken,
         },
         (resp: any) => {
           if (!resp?.ok) return setError('Spectate failed.');

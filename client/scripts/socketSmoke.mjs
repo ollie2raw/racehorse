@@ -544,10 +544,73 @@ async function scenarioTokenlessUuidClaimRejected() {
   );
 }
 
+async function scenarioGuestSeatReconnect() {
+  return withClients(
+    [
+      { label: 'host', userId: 'guest_smoke_host', username: 'Guest' },
+      { label: 'guest', userId: 'guest_smoke_player', username: 'Guest' },
+    ],
+    async ({ host, guest }) => {
+      const createResp = await emitAck(host.socket, 'room:create', {
+        username: host.state.username,
+        userId: host.state.userId,
+      });
+      assert(createResp?.ok, 'guest host failed to create room');
+      const roomCode = createResp.roomCode;
+      assert(roomCode, 'missing room code');
+
+      const joinResp = await emitAck(
+        guest.socket,
+        'room:join',
+        roomCode,
+        { username: guest.state.username, userId: guest.state.userId },
+      );
+      assert(joinResp?.ok, 'generic guest failed initial join');
+      await waitForRoomCount(host, 2);
+      await startTwoPlayerGame(host, guest, roomCode);
+
+      guest.disconnect();
+      await delay(250);
+
+      const guestReconnect = createClient('guestReconnect', 'guest_smoke_player', 'Guest');
+      try {
+        await guestReconnect.connectAndIdentify();
+        const rejoinResp = await emitAck(
+          guestReconnect.socket,
+          'room:join',
+          roomCode,
+          { username: guestReconnect.state.username, userId: guestReconnect.state.userId },
+        );
+        assert(rejoinResp?.ok, `generic guest reconnect failed: ${rejoinResp?.error ?? 'unknown'}`);
+        assert(rejoinResp.you === guestReconnect.socket.id, 'generic guest reconnect socket id mismatch');
+        assert(
+          Array.isArray(rejoinResp.players) &&
+            rejoinResp.players.some((player) => player.id === guestReconnect.socket.id && player.userId === 'guest_smoke_player'),
+          'generic guest seat was not migrated to reconnect socket',
+        );
+        assert(
+          rejoinResp.state?.players?.[guestReconnect.socket.id]?.hand?.length === 7 ||
+            Array.isArray(rejoinResp.state?.players?.[guestReconnect.socket.id]?.hand),
+          'generic guest reconnect did not receive local player state',
+        );
+        return {
+          roomCode,
+          checks: {
+            stableGuestIdentityReconnect: true,
+          },
+        };
+      } finally {
+        guestReconnect.disconnect();
+      }
+    },
+  );
+}
+
 const scenarios = [
   { name: 'lifecycle-reconnect', run: scenarioLifecycleReconnect },
   { name: 'room-switch-cleanup', run: scenarioRoomSwitchCleanup },
   { name: 'seat-migration-and-spectator-rejection', run: scenarioSeatMigrationAndSpectatorRejection },
+  { name: 'guest-seat-reconnect', run: scenarioGuestSeatReconnect },
   { name: 'tokenless-uuid-claim-rejected', run: scenarioTokenlessUuidClaimRejected },
 ];
 

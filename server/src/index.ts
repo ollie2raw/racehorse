@@ -940,8 +940,8 @@ type RoomJoinConfig = { username?: string; userId?: string | null; authToken?: s
 type AckFn = (payload: any) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
-const RECONNECT_GRACE_MS = 90_000;
-const ROOM_CLEANUP_GRACE_MS = 60_000;
+const RECONNECT_GRACE_MS = 5 * 60_000;
+const ROOM_CLEANUP_GRACE_MS = 5 * 60_000;
 type ReconnectSeat = {
   oldSocketId: string;
   username: string;
