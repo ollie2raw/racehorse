@@ -287,12 +287,20 @@ export default function DailyFritzScreen({
           : currentLeaderboardRow.pointDiff > 0
             ? 'success'
             : 'neutral';
+    const resultTone =
+      currentLeaderboardRow == null && !today?.result
+        ? 'neutral'
+        : currentLeaderboardRow
+          ? currentLeaderboardRow.won ? 'success' : 'danger'
+          : Boolean(today?.result?.won)
+            ? 'success'
+            : 'danger';
 
     return [
-      { label: 'Your Rank', value: rankValue, sublabel: 'Today’s placement', tone: 'accent' },
-      { label: 'Score', value: scoreValue, sublabel: 'Your final scoreline', tone: 'neutral' },
-      { label: 'Diff', value: diffValue, sublabel: 'Point differential', tone: diffTone },
-      { label: 'Result', value: resultValue, sublabel: 'Match outcome', tone: 'neutral' },
+      { label: 'Your Rank', value: rankValue, sublabel: 'Where you finished today', tone: 'accent' },
+      { label: 'Score', value: scoreValue, sublabel: 'Your score against Fritz', tone: 'neutral' },
+      { label: 'Diff', value: diffValue, sublabel: 'Final point margin', tone: diffTone },
+      { label: 'Result', value: resultValue, sublabel: 'Win or loss today', tone: resultTone },
     ];
   }, [currentLeaderboardRow, today]);
   const showAuthPrompt =

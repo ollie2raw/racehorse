@@ -36,12 +36,12 @@ export default function DailyFritzLeaderboard({
   return (
     <div className={`daily-fritz-leaderboard ${pageVariant ? 'is-page' : ''}`}>
       <div className={`daily-fritz-leaderboard-head ${pageVariant ? 'is-page' : ''}`}>
-        <span>#</span>
+        <span>{pageVariant ? 'Rank' : '#'}</span>
         <span>Player</span>
         <span>Result</span>
         <span>Score</span>
         <span>Diff</span>
-        <span>{pageVariant ? 'Meta' : 'Moves'}</span>
+        <span>{pageVariant ? 'Session' : 'Moves'}</span>
         {!pageVariant ? <span>Time</span> : null}
       </div>
       <div className="daily-fritz-leaderboard-list">
@@ -91,7 +91,16 @@ export default function DailyFritzLeaderboard({
                 {row.pointDiff >= 0 ? '+' : ''}{row.pointDiff}
               </span>
               {pageVariant ? (
-                <span className="daily-fritz-meta-cell">{row.movesUsed} moves • {formatCompletedAt(row.completedAt)}</span>
+                <span className="daily-fritz-meta-cell">
+                  <span className="daily-fritz-meta-metric">
+                    <span className="daily-fritz-meta-label">Moves</span>
+                    <span className="daily-fritz-meta-value">{row.movesUsed}</span>
+                  </span>
+                  <span className="daily-fritz-meta-metric">
+                    <span className="daily-fritz-meta-label">Time</span>
+                    <span className="daily-fritz-meta-value">{formatCompletedAt(row.completedAt)}</span>
+                  </span>
+                </span>
               ) : (
                 <>
                   <span className="daily-fritz-moves-cell">{row.movesUsed}</span>

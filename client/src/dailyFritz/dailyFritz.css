@@ -433,13 +433,13 @@
 }
 
 .daily-fritz-leaderboard-head.is-page {
-  grid-template-columns: 56px minmax(240px, 1fr) 92px 128px 92px minmax(180px, 0.9fr);
+  grid-template-columns: 64px minmax(260px, 1.15fr) 100px 132px 94px minmax(230px, 0.95fr);
   padding: 0 18px;
   margin-bottom: 10px;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 0.78rem;
+  color: rgba(228, 239, 235, 0.62);
+  font-size: 0.84rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   white-space: nowrap;
 }
 
@@ -482,12 +482,12 @@
 }
 
 .daily-fritz-leaderboard-row.is-page {
-  grid-template-columns: 56px minmax(240px, 1fr) 92px 128px 92px minmax(180px, 0.9fr);
-  min-height: 74px;
-  height: 74px;
-  padding: 0 20px;
-  gap: 14px;
-  border-radius: 14px;
+  grid-template-columns: 64px minmax(260px, 1.15fr) 100px 132px 94px minmax(230px, 0.95fr);
+  min-height: 90px;
+  height: 90px;
+  padding: 0 22px;
+  gap: 16px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.055);
   background: transparent;
   position: relative;
@@ -557,8 +557,8 @@
 .daily-fritz-rank-value {
   min-width: 18px;
   text-align: right;
-  font-size: 1.18rem;
-  font-weight: 700;
+  font-size: 1.3rem;
+  font-weight: 800;
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, 0.62);
@@ -585,8 +585,8 @@
 }
 
 .daily-fritz-avatar {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   flex: 0 0 auto;
   display: inline-flex;
@@ -595,7 +595,7 @@
   background: rgba(36, 53, 74, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.09);
   color: rgba(255, 255, 255, 0.5);
-  font-size: 0.88rem;
+  font-size: 0.98rem;
   font-weight: 700;
 }
 
@@ -611,7 +611,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: rgba(255, 255, 255, 0.9);
-  font-size: 1.18rem;
+  font-size: 1.32rem;
   font-weight: 700;
 }
 
@@ -622,7 +622,7 @@
 
 .daily-fritz-you-pill {
   margin-left: 7px;
-  font-size: 0.68rem;
+  font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: rgba(149, 240, 202, 0.65);
@@ -648,14 +648,14 @@
 }
 
 .daily-fritz-leaderboard-row.is-page .daily-fritz-result-cell {
-  width: 46px;
-  min-width: 46px;
-  height: 28px;
-  padding: 0 10px;
+  width: 58px;
+  min-width: 58px;
+  height: 36px;
+  padding: 0 12px;
   justify-self: start;
   background: rgba(255, 255, 255, 0.04);
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: 0.92rem;
+  font-weight: 800;
   letter-spacing: 0.04em;
 }
 
@@ -684,7 +684,7 @@
 }
 
 .daily-fritz-leaderboard-row.is-page .daily-fritz-score-cell {
-  font-size: 1.32rem;
+  font-size: 1.46rem;
   font-weight: 800;
   color: rgba(245, 248, 250, 0.94);
 }
@@ -694,8 +694,8 @@
 }
 
 .daily-fritz-leaderboard-row.is-page .daily-fritz-diff-cell {
-  font-size: 1.08rem;
-  font-weight: 600;
+  font-size: 1.22rem;
+  font-weight: 700;
 }
 
 .daily-fritz-diff-cell {
@@ -703,15 +703,35 @@
 }
 
 .daily-fritz-meta-cell {
-  justify-self: start;
+  justify-self: stretch;
   min-width: 0;
-  color: rgba(228, 238, 243, 0.76);
-  font-size: 1rem;
-  font-weight: 500;
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: center;
+}
+
+.daily-fritz-meta-metric {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.daily-fritz-meta-label {
+  color: rgba(219, 233, 228, 0.62);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-meta-value {
+  color: rgba(246, 249, 250, 0.96);
+  font-size: 1.14rem;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
 
 .daily-fritz-leaderboard-row.is-current-user:not(.is-page) {
@@ -785,6 +805,22 @@
   color: rgba(211, 226, 220, 0.76);
 }
 
+.leaderboard-screen--fritz .leaderboard-screen-statlabel {
+  font-size: 0.84rem;
+  letter-spacing: 0.06em;
+  color: rgba(225, 236, 232, 0.62);
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-statvalue {
+  font-size: clamp(2.65rem, 3vw, 3.05rem);
+  letter-spacing: 0.01em;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-statsub {
+  font-size: 1rem;
+  color: rgba(233, 240, 237, 0.62);
+}
+
 @media (max-width: 1024px) {
   .daily-fritz-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -810,29 +846,33 @@
 
   .daily-fritz-leaderboard-head.is-page,
   .daily-fritz-leaderboard-row.is-page {
-    grid-template-columns: 52px minmax(180px, 1fr) 84px 110px 78px minmax(150px, 0.85fr);
+    grid-template-columns: 52px minmax(180px, 1fr) 84px 110px 78px minmax(180px, 0.95fr);
   }
 
   .daily-fritz-leaderboard-head.is-page {
-    font-size: 0.7rem;
+    font-size: 0.76rem;
   }
 
   .daily-fritz-leaderboard-row.is-page {
-    min-height: 66px;
-    height: 66px;
+    min-height: 82px;
+    height: 82px;
   }
 
   .daily-fritz-avatar {
-    width: 34px;
-    height: 34px;
+    width: 38px;
+    height: 38px;
   }
 
   .daily-fritz-player-name {
-    font-size: 1rem;
+    font-size: 1.12rem;
   }
 
-  .daily-fritz-meta-cell {
-    font-size: 0.92rem;
+  .daily-fritz-meta-label {
+    font-size: 0.74rem;
+  }
+
+  .daily-fritz-meta-value {
+    font-size: 1.02rem;
   }
 }
 
@@ -916,7 +956,9 @@
   .daily-fritz-meta-cell {
     grid-area: meta;
     justify-self: start;
-    white-space: normal;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
   }
 
   .daily-fritz-actions {
