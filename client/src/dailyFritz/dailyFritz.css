@@ -494,6 +494,37 @@
   background: linear-gradient(180deg, rgba(12, 34, 26, 0.88), rgba(12, 20, 27, 0.86));
 }
 
+.daily-fritz-leaderboard-page-panel {
+  gap: 20px;
+}
+
+.daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard {
+  gap: 16px;
+}
+
+.daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-head {
+  padding: 0 18px;
+}
+
+.daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-list {
+  gap: 12px;
+}
+
+.daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-row {
+  min-height: 76px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(11, 18, 31, 0.86), rgba(9, 15, 24, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 28px rgba(2, 8, 16, 0.16);
+}
+
+.daily-fritz-leaderboard-page-panel .daily-fritz-empty {
+  padding: 28px;
+  border-radius: 24px;
+}
+
 .daily-fritz-empty {
   border-radius: 20px;
   border: 1px dashed rgba(255, 255, 255, 0.14);
@@ -566,6 +597,16 @@
     grid-template-columns: 42px minmax(0, 1.2fr) 52px 92px 72px 72px 68px;
     font-size: 0.84rem;
   }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-head {
+    padding: 0 12px;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-row {
+    min-height: 68px;
+    padding: 14px 12px;
+    border-radius: 18px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -606,6 +647,49 @@
 
   .daily-fritz-modal-head {
     flex-direction: column;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-head {
+    display: none;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+    grid-template-areas:
+      "player player player player"
+      "rank result score diff"
+      "moves moves time time";
+    gap: 10px;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-rank-cell {
+    grid-area: rank;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-player-cell {
+    grid-area: player;
+    font-size: 0.95rem;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-result-cell {
+    grid-area: result;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-score-cell {
+    grid-area: score;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-diff-cell {
+    grid-area: diff;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-moves-cell {
+    grid-area: moves;
+  }
+
+  .daily-fritz-leaderboard-page-panel .daily-fritz-time-cell {
+    grid-area: time;
+    justify-self: end;
   }
 
   .daily-fritz-actions {

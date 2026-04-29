@@ -4,6 +4,7 @@ import type { UserProfile } from '../auth/useAuth';
 import type { GhostProfileSummary } from '../ghost/api';
 import BotMatchScreen from '../bot/BotMatchScreen';
 import LayoutScreen from '../ui/LayoutScreen';
+import LeaderboardPageShell from '../ui/LeaderboardPageShell';
 import DailyFritzLeaderboard from './DailyFritzLeaderboard';
 import {
   fetchDailyFritzLeaderboard,
@@ -272,6 +273,26 @@ export default function DailyFritzScreen({
     );
   }
 
+  if (leaderboardOpen) {
+    return (
+      <LeaderboardPageShell
+        className="mode-subpage-screen mode-accent-daily-fritz"
+        panelClassName="daily-fritz-leaderboard-page-panel"
+        label="Daily Fritz"
+        title="Leaderboard"
+        subtitle={`${today ? formatDateLabel(today.run_date) : 'Today'} • Same deals for every player`}
+        onClose={() => setLeaderboardOpen(false)}
+      >
+        <DailyFritzLeaderboard
+          rows={leaderboard}
+          loading={leaderboardLoading}
+          error={leaderboardError}
+          currentUsername={currentUsername}
+        />
+      </LeaderboardPageShell>
+    );
+  }
+
   return (
     <LayoutScreen
       className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz"
@@ -410,26 +431,6 @@ export default function DailyFritzScreen({
         </div>
       </div>
 
-      {leaderboardOpen && (
-        <div className="daily-fritz-overlay" role="dialog" aria-modal="true" onClick={() => setLeaderboardOpen(false)}>
-          <div className="daily-fritz-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="daily-fritz-modal-head">
-              <div>
-                <span className="lobby-kicker daily-fritz-kicker">Daily Fritz</span>
-                <h3>Leaderboard</h3>
-                {today && <p>{formatDateLabel(today.run_date)} • Same deals for every player</p>}
-              </div>
-              <button className="mode-inline-btn" onClick={() => setLeaderboardOpen(false)}>Close</button>
-            </div>
-            <DailyFritzLeaderboard
-              rows={leaderboard}
-              loading={leaderboardLoading}
-              error={leaderboardError}
-              currentUsername={currentUsername}
-            />
-          </div>
-        </div>
-      )}
     </LayoutScreen>
   );
 }

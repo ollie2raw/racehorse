@@ -22,6 +22,7 @@ import {
 } from './api';
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
 import LayoutScreen from '../ui/LayoutScreen';
+import LeaderboardPageShell from '../ui/LeaderboardPageShell';
 import './dailyPuzzle.css';
 
 interface DailyPuzzleScreenProps {
@@ -221,6 +222,13 @@ function formatPuzzleDateLabel(dateText: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function formatPuzzleElapsed(seconds: number): string {
+  const safe = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
 }
 
 function createPuzzleMatchState(puzzle: CuratedDailyPuzzle): BotMatchState {
@@ -1000,14 +1008,17 @@ export default function DailyPuzzleScreen({
   }
 
   const currentUserId = user?.id ?? null;
-  const renderLeaderboardRows = (rows: DailyPuzzleLeaderboardEntry[]) => (
+  const renderLeaderboardRows = (
+    rows: DailyPuzzleLeaderboardEntry[],
+    variant: 'compact' | 'page' = 'compact',
+  ) => (
     <div className="daily-leaderboard-list">
       {rows.map((row, idx) => {
         const isCurrentUser = Boolean(currentUserId) && row.userId === currentUserId;
         const rankLabel = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
         return (
           <div
-            className={`daily-leaderboard-row ${isCurrentUser ? 'is-current-user' : ''}`}
+            className={`daily-leaderboard-row ${variant === 'page' ? 'is-page' : ''} ${isCurrentUser ? 'is-current-user' : ''}`}
             key={`${row.userId}-${idx}`}
           >
             <span className="daily-leaderboard-rank">{rankLabel}</span>
@@ -1019,11 +1030,47 @@ export default function DailyPuzzleScreen({
             </span>
             <span className="daily-leaderboard-stat">{row.bestScore}</span>
             <span className="daily-leaderboard-stat">{row.bestMovesUsed}</span>
+            {variant === 'page' ? (
+              <span className="daily-leaderboard-stat">{formatPuzzleElapsed(row.bestSeconds)}</span>
+            ) : null}
           </div>
         );
       })}
     </div>
   );
+
+  if (showLobby && dailyLeaderboardOpen) {
+    return (
+      <LeaderboardPageShell
+        className="mode-subpage-screen mode-accent-daily"
+        panelClassName="daily-puzzle-leaderboard-page-panel"
+        label="Daily Puzzle"
+        title="Leaderboard"
+        subtitle={`${formattedDisplayDate} • Best score, then fewest moves, then fastest time`}
+        onClose={() => setDailyLeaderboardOpen(false)}
+      >
+        <div className="daily-leaderboard-panel daily-leaderboard-page-panel">
+          <div className="daily-leaderboard-head daily-leaderboard-head-page" aria-hidden="true">
+            <span>Rank</span>
+            <span>Player</span>
+            <span>Score</span>
+            <span>Moves</span>
+            <span>Time</span>
+          </div>
+          {leaderboardLoading && (
+            <p className="daily-leaderboard-loading">
+              <span className="daily-inline-spinner" aria-hidden="true" />
+              Loading leaderboard...
+            </p>
+          )}
+          {!leaderboardLoading && leaderboard.length === 0 && (
+            <p className="daily-leaderboard-empty">No scores yet today. Be the first on the board.</p>
+          )}
+          {!leaderboardLoading && leaderboard.length > 0 && renderLeaderboardRows(leaderboard, 'page')}
+        </div>
+      </LeaderboardPageShell>
+    );
+  }
 
   if (showLobby) {
     const selectedLobbyPuzzle = puzzle;
@@ -1213,47 +1260,6 @@ export default function DailyPuzzleScreen({
                     Today
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
-        {dailyLeaderboardOpen && (
-          <div
-            className="daily-puzzle-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Today's leaderboard"
-            onClick={() => setDailyLeaderboardOpen(false)}
-          >
-            <div className="daily-puzzle-modal daily-leaderboard-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="daily-leaderboard-modal-head">
-                <div style={{ display: 'grid', gap: 4 }}>
-                  <h3>Today&apos;s Leaderboard</h3>
-                  <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
-                    {formattedDisplayDate} · Best score then fewest moves
-                  </p>
-                </div>
-                <button className="mode-inline-btn" onClick={() => setDailyLeaderboardOpen(false)}>
-                  Close
-                </button>
-              </div>
-              <div className="daily-leaderboard-panel daily-leaderboard-panel-modal daily-leaderboard-modal-body">
-                <div className="daily-leaderboard-head" aria-hidden="true">
-                  <span>Rank</span>
-                  <span>Player</span>
-                  <span>Points</span>
-                  <span>Tiles Used</span>
-                </div>
-                {leaderboardLoading && (
-                  <p className="daily-leaderboard-loading">
-                    <span className="daily-inline-spinner" aria-hidden="true" />
-                    Loading leaderboard...
-                  </p>
-                )}
-                {!leaderboardLoading && leaderboard.length === 0 && (
-                  <p className="daily-leaderboard-empty">🏆 No scores yet today — be the first!</p>
-                )}
-                {!leaderboardLoading && leaderboard.length > 0 && renderLeaderboardRows(leaderboard)}
               </div>
             </div>
           </div>
