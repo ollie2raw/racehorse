@@ -437,7 +437,7 @@ export const GUIDED_LESSON_COACHING_BY_VISIBLE_STEP: string[] = Object.entries(R
   .map(entry => entry[1]);
 
 export function applyGuidedLessonCoachingText<
-  T extends { events?: Array<{ eventIndex?: number; actor?: string; action?: string; coachingText?: string }> }
+  T extends { events?: Array<{ eventIndex?: number; actor?: string; action?: string; coachingText?: string; tile?: string }> }
 >(lesson: T): T {
   if (!lesson?.events) return lesson;
 
