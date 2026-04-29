@@ -317,6 +317,31 @@
   justify-self: end;
 }
 
+.daily-leaderboard-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-self: end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.daily-leaderboard-metric-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: rgba(216, 229, 236, 0.74);
+  line-height: 1;
+}
+
+.daily-leaderboard-metric-value {
+  font-size: 1.34rem;
+  font-weight: 800;
+  line-height: 1;
+  color: rgba(244, 248, 250, 0.96);
+  font-variant-numeric: tabular-nums;
+}
+
 .daily-leaderboard-row.is-page {
   min-height: 64px;
   height: 64px;
@@ -485,21 +510,8 @@
   color: rgba(208, 224, 233, 0.94);
 }
 
-.daily-leaderboard-row.is-page .daily-leaderboard-stat {
-  font-size: 1.2rem;
-  font-weight: 600;
-  line-height: 1;
-  color: rgba(235, 244, 249, 0.92);
-}
-
-.daily-leaderboard-row.is-page .daily-leaderboard-score {
+.daily-leaderboard-row.is-page .daily-leaderboard-score .daily-leaderboard-metric-value {
   font-size: 1.46rem;
-  font-weight: 800;
-}
-
-.daily-leaderboard-row.is-page .daily-leaderboard-moves,
-.daily-leaderboard-row.is-page .daily-leaderboard-time {
-  color: rgba(255, 255, 255, 0.84);
 }
 
 .daily-you-pill {
@@ -555,12 +567,20 @@
     min-height: 72px;
   }
 
-  .daily-leaderboard-row.is-page .daily-leaderboard-stat {
-    font-size: 1rem;
+  .daily-leaderboard-row.is-page .daily-leaderboard-metric {
+    align-items: flex-start;
   }
 
-  .daily-leaderboard-row.is-page .daily-leaderboard-score {
-    font-size: 1.18rem;
+  .daily-leaderboard-row.is-page .daily-leaderboard-metric-label {
+    font-size: 0.72rem;
+  }
+
+  .daily-leaderboard-row.is-page .daily-leaderboard-metric-value {
+    font-size: 1.06rem;
+  }
+
+  .daily-leaderboard-row.is-page .daily-leaderboard-score .daily-leaderboard-metric-value {
+    font-size: 1.2rem;
   }
 
   .daily-leaderboard-row.is-page .daily-leaderboard-rank {

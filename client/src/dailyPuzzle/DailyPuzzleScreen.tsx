@@ -1096,11 +1096,27 @@ export default function DailyPuzzleScreen({
                 </>
               )}
             </span>
-            <span className="daily-leaderboard-stat daily-leaderboard-score">{row.bestScore}</span>
-            <span className="daily-leaderboard-stat daily-leaderboard-moves">{row.bestMovesUsed}</span>
             {variant === 'page' ? (
-              <span className="daily-leaderboard-stat daily-leaderboard-time">{formatPuzzleElapsed(row.bestSeconds)}</span>
-            ) : null}
+              <>
+                <span className="daily-leaderboard-metric daily-leaderboard-score">
+                  <span className="daily-leaderboard-metric-label">Score</span>
+                  <span className="daily-leaderboard-metric-value">{row.bestScore}</span>
+                </span>
+                <span className="daily-leaderboard-metric daily-leaderboard-moves">
+                  <span className="daily-leaderboard-metric-label">Moves</span>
+                  <span className="daily-leaderboard-metric-value">{row.bestMovesUsed}</span>
+                </span>
+                <span className="daily-leaderboard-metric daily-leaderboard-time">
+                  <span className="daily-leaderboard-metric-label">Time</span>
+                  <span className="daily-leaderboard-metric-value">{formatPuzzleElapsed(row.bestSeconds)}</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="daily-leaderboard-stat daily-leaderboard-score">{row.bestScore}</span>
+                <span className="daily-leaderboard-stat daily-leaderboard-moves">{row.bestMovesUsed}</span>
+              </>
+            )}
           </div>
         );
       })}
