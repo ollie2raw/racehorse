@@ -811,6 +811,22 @@
   color: rgba(225, 236, 232, 0.62);
 }
 
+.leaderboard-screen--fritz .leaderboard-screen-main {
+  padding-top: 18px;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-titleblock {
+  margin-bottom: 20px;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-subtitle {
+  margin-top: -2px;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-stats {
+  margin-bottom: 20px;
+}
+
 .leaderboard-screen--fritz .leaderboard-screen-statvalue {
   font-size: clamp(2.65rem, 3vw, 3.05rem);
   letter-spacing: 0.01em;
