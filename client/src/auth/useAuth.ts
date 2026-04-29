@@ -170,6 +170,7 @@ function clearLocalSupabaseAuthTokens(): void {
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [justVerified, setJustVerified] = useState(false);
 
@@ -315,6 +316,7 @@ export function useAuth() {
       if (event === 'SIGNED_OUT' || !sessionUser) {
         setUser(null);
         setProfile(null);
+        setAccessToken(null);
         return;
       }
 
@@ -355,11 +357,13 @@ export function useAuth() {
         const {
           data: { session },
         } = await withTimeout(supabase.auth.getSession(), SESSION_BOOTSTRAP_TIMEOUT_MS);
+        setAccessToken(session?.access_token ?? null);
         await syncSession('INITIAL_BOOTSTRAP', session?.user ?? null);
       } catch {
         if (active) {
           setUser(null);
           setProfile(null);
+          setAccessToken(null);
         }
       } finally {
         if (active) setLoading(false);
@@ -378,6 +382,7 @@ export function useAuth() {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!active) return;
       try {
+        setAccessToken(session?.access_token ?? null);
         await syncSession(event, session?.user ?? null);
       } finally {
         if (active) setLoading(false);
@@ -656,6 +661,7 @@ export function useAuth() {
   return {
     user,
     profile,
+    accessToken,
     loading,
     justVerified,
     supabaseEnabled: isSupabaseConfigured,

@@ -59,6 +59,7 @@ type UseMultiplayerConnectionParams = {
   socketRef: MutableRefObject<Socket | null>;
   authUserRef: MutableRefObject<{ id?: string | null; email?: string | null } | null>;
   authProfileRef: MutableRefObject<{ username?: string | null } | null>;
+  authAccessTokenRef: MutableRefObject<string | null>;
   joinedRoomRef: MutableRefObject<string | null>;
   youRef: MutableRefObject<string>;
   stateRef: MutableRefObject<GameState | null>;
@@ -167,7 +168,11 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         'player';
       if (userId) {
         try {
-          await current.emitWithAck<any>(s, 'presence:identify', { userId, username });
+          await current.emitWithAck<any>(s, 'presence:identify', {
+            userId,
+            username,
+            authToken: current.authAccessTokenRef.current,
+          });
         } catch (error) {
           if (import.meta.env.DEV) {
             console.log('[presence] identify failed', error instanceof Error ? error.message : error);
@@ -193,6 +198,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             const resp = await current.emitWithAck<any>(s, 'room:join', code, {
               username: current.authProfileRef.current?.username ?? 'Guest',
               userId: current.authUserRef.current?.id ?? null,
+              authToken: current.authAccessTokenRef.current,
             });
             if (resp?.ok) {
               current.applyJoinedRoomResponse(resp);
@@ -229,6 +235,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           const resp = await current.emitWithAck<any>(s, 'room:join', reconnectCode, {
             username: current.authProfileRef.current?.username ?? 'Guest',
             userId: current.authUserRef.current?.id ?? null,
+            authToken: current.authAccessTokenRef.current,
           });
           if (!resp?.ok) {
             if (typeof window !== 'undefined') {
@@ -265,6 +272,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           const resp = await current.emitWithAck<any>(s, 'room:join', savedCode, {
             username: current.authProfileUsername ?? 'Guest',
             userId: current.authUserId ?? null,
+            authToken: current.authAccessTokenRef.current,
           });
           if (!resp?.ok) {
             if (typeof window !== 'undefined') {

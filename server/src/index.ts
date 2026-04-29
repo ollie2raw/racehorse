@@ -936,7 +936,7 @@ const io = new Server(server, {
 });
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
-type RoomJoinConfig = { username?: string; userId?: string | null };
+type RoomJoinConfig = { username?: string; userId?: string | null; authToken?: string | null };
 type AckFn = (payload: any) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
@@ -1095,6 +1095,26 @@ function normalizeUserId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const raw = value.trim();
   return raw || null;
+}
+
+function normalizeAuthToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  return raw || null;
+}
+
+async function resolveSocketIdentity(config: RoomJoinConfig): Promise<{ username: string; userId: string | null }> {
+  const username = normalizeUsername(config.username);
+  const claimedUserId = normalizeUserId(config.userId);
+  const authToken = normalizeAuthToken(config.authToken);
+  if (!authToken) {
+    // Do not trust client-claimed production UUIDs without a verified token.
+    // Non-UUID ids are kept for local smoke tests and legacy guest-style flows.
+    return { username, userId: claimedUserId && !isUuidLike(claimedUserId) ? claimedUserId : null };
+  }
+
+  const verifiedUserId = await getAuthenticatedUserIdFromToken(authToken);
+  return { username, userId: verifiedUserId };
 }
 
 function isUuidLike(value: string | null | undefined): boolean {
@@ -3552,17 +3572,21 @@ io.on('connection', (socket: Socket) => {
 
   socket.on(
     'presence:identify',
-    (payload: { userId?: string | null; username?: string }, cb?: AckFn) => {
-    const userId = normalizeUserId(payload?.userId);
-    if (!userId) return cb?.({ ok: false });
-    console.log('[presence] identify received', userId);
-    removeSocketPresence();
-    socket.data.userId = userId;
-    socket.data.username = normalizeUsername(payload?.username ?? socket.data?.username);
-    const existing = socketsByUserId.get(userId) ?? new Set<string>();
-    existing.add(socket.id);
-    socketsByUserId.set(userId, existing);
-    cb?.({ ok: true });
+    async (payload: RoomJoinConfig, cb?: AckFn) => {
+    try {
+      const { username, userId } = await resolveSocketIdentity(payload ?? {});
+      if (!userId) return cb?.({ ok: false });
+      console.log('[presence] identify received', userId);
+      removeSocketPresence();
+      socket.data.userId = userId;
+      socket.data.username = username;
+      const existing = socketsByUserId.get(userId) ?? new Set<string>();
+      existing.add(socket.id);
+      socketsByUserId.set(userId, existing);
+      cb?.({ ok: true });
+    } catch {
+      cb?.({ ok: false });
+    }
   });
 
   socket.on('presence:online', (argUserIds: unknown, cb?: AckFn) => {
@@ -3965,20 +3989,20 @@ io.on('connection', (socket: Socket) => {
   });
 
 
-  socket.on('room:create', (arg1?: unknown, arg2?: unknown) => {
+  socket.on('room:create', async (arg1?: unknown, arg2?: unknown) => {
     const config = (
       arg1 && typeof arg1 === 'object' && !Array.isArray(arg1) ? arg1 : {}
     ) as RoomJoinConfig;
     const cb = (typeof arg1 === 'function' ? arg1 : arg2) as AckFn | undefined;
-    const username = normalizeUsername(config.username);
-    const userId = normalizeUserId(config.userId);
     const {
       username: _ignoredUsername,
       userId: _ignoredUserId,
+      authToken: _ignoredAuthToken,
       ...roomConfig
     } = config as Record<string, unknown>;
     console.log(`[room:create] socket=${socket.id}`);
     try {
+      const { username, userId } = await resolveSocketIdentity(config);
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
       const room = createRoom(socket.id, roomConfig as Record<string, unknown>);
@@ -4014,16 +4038,15 @@ io.on('connection', (socket: Socket) => {
   });
 
   
-socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
+socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     const cb = (
       typeof arg3 === 'function' ? arg3 : typeof arg2 === 'function' ? arg2 : undefined
     ) as AckFn | undefined;
     const config =
       arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? (arg2 as RoomJoinConfig) : {};
-    const username = normalizeUsername(config.username);
-    const userId = normalizeUserId(config.userId);
     const code = String(argCode ?? '').trim().toUpperCase();
     try {
+      const { username, userId } = await resolveSocketIdentity(config);
       if (!code) return cb?.({ ok: false, error: 'missing_code' });
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
@@ -4092,7 +4115,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     }
   });
 
-  socket.on('room:join', (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
+  socket.on('room:join', async (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
     const cb = (
       typeof arg3 === 'function' ? arg3 : typeof arg2 === 'function' ? arg2 : undefined
     ) as AckFn | undefined;
@@ -4100,24 +4123,25 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
       arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? (arg2 as RoomJoinConfig) : null;
     const codeFromObject =
       argCode && typeof argCode === 'object' && !Array.isArray(argCode)
-        ? (argCode as { roomCode?: unknown; username?: unknown; userId?: unknown })
+        ? (argCode as { roomCode?: unknown; username?: unknown; userId?: unknown; authToken?: unknown })
         : null;
     const configFromCodeObject: RoomJoinConfig | null = codeFromObject
       ? {
           username:
             typeof codeFromObject.username === 'string' ? codeFromObject.username : undefined,
           userId: typeof codeFromObject.userId === 'string' ? codeFromObject.userId : null,
+          authToken: typeof codeFromObject.authToken === 'string' ? codeFromObject.authToken : null,
         }
       : null;
     const config = explicitConfig ?? configFromCodeObject ?? {};
-    const username = normalizeUsername(config.username);
-    const userId = normalizeUserId(config.userId);
     const rawCode = codeFromObject?.roomCode ?? argCode;
     const roomCode = String(rawCode ?? '')
       .trim()
       .toUpperCase();
-    console.log(`[room:join] socket=${socket.id}, code=${roomCode}, user=${username} (${userId})`);
+    console.log(`[room:join] socket=${socket.id}, code=${roomCode}`);
     try {
+      const { username, userId } = await resolveSocketIdentity(config);
+      console.log(`[room:join] identity user=${username} (${userId})`);
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
       let room: Room | null = null;
@@ -4274,6 +4298,14 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     console.log(`[game:start] socket=${socket.id}, code=${roomCode}`);
     try {
       const existingRoom = getRoom(roomCode);
+      if (!existingRoom.players.includes(socket.id)) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Only room players can start the game.' });
+        return;
+      }
+      if (existingRoom.players[0] !== socket.id) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Only the room host can start the game.' });
+        return;
+      }
       const liveCount = io.sockets.adapter.rooms.get(roomCode)?.size ?? 0;
       const rosterCount = (
         roomPlayersByCode.get(roomCode) ??
@@ -4323,11 +4355,14 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
     const roomCode = String(code).trim().toUpperCase();
     console.log(`[hand:next] socket=${socket.id}, code=${roomCode}`);
     try {
-      const room = await nextHand(roomCode, io);
-      console.log(`[hand:next] new hand started, handNumber=${room.state?.handNumber}`);
-      broadcastStateUpdate(room.code);
-      maybeFinalizeTournamentMatch(room);
-      if (typeof cb === 'function') cb({ ok: true });
+      const room = getRoom(roomCode);
+      if (!room.players.includes(socket.id)) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Only room players can advance hands.' });
+        return;
+      }
+      if (typeof cb === 'function') {
+        cb({ ok: false, error: 'Use hand:ready to advance hands.' });
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[hand:next] ERROR: ${message}`);

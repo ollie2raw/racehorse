@@ -817,6 +817,7 @@ export default function App() {
   const {
     user: authUser,
     profile: authProfile,
+    accessToken: authAccessToken,
     loading: authLoading,
     justVerified,
     supabaseEnabled,
@@ -831,6 +832,7 @@ export default function App() {
   } = useAuth();
   const authUserRef = useRef(authUser);
   const authProfileRef = useRef(authProfile);
+  const authAccessTokenRef = useRef<string | null>(authAccessToken);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
@@ -1091,6 +1093,10 @@ export default function App() {
   }, [authProfile]);
 
   useEffect(() => {
+    authAccessTokenRef.current = authAccessToken;
+  }, [authAccessToken]);
+
+  useEffect(() => {
     if (justVerified) {
       showToast('✓ Email verified! Welcome to Racehorse Dominoes.', 5000);
     }
@@ -1127,7 +1133,7 @@ export default function App() {
 
     const emitIdentify = () => {
       console.log('[presence] emitting presence:identify', { userId: authUser.id, connected: socket.connected });
-      socket.emit('presence:identify', { userId: authUser.id, username }, () => {
+      socket.emit('presence:identify', { userId: authUser.id, username, authToken: authAccessToken }, () => {
         console.log('[presence] identify ack received');
       });
     };
@@ -1143,7 +1149,7 @@ export default function App() {
     return () => {
       socket.off('connect', emitIdentify);
     };
-  }, [socket, authUser?.id, authProfile?.username, authUser?.email]);
+  }, [socket, authUser?.id, authProfile?.username, authUser?.email, authAccessToken]);
 
   useEffect(() => {
     joinedRoomRef.current = joinedRoom;
@@ -1248,6 +1254,7 @@ export default function App() {
           {
             username: authProfile?.username ?? 'Guest',
             userId: authUser?.id ?? null,
+            authToken: authAccessToken,
           },
         );
         if (!resp?.ok) {
@@ -1275,7 +1282,7 @@ export default function App() {
         throw e;
       }
     },
-    [authProfile?.username, authUser?.id, resolvePendingCreate, applyRoomEventMeta, clearTransientRoomUi],
+    [authProfile?.username, authUser?.id, authAccessToken, resolvePendingCreate, applyRoomEventMeta, clearTransientRoomUi],
   );
 
   const applyJoinedRoomResponse = useCallback((resp: any) => {
@@ -1405,6 +1412,7 @@ export default function App() {
     socketRef,
     authUserRef,
     authProfileRef,
+    authAccessTokenRef,
     joinedRoomRef,
     youRef,
     stateRef,
@@ -1460,10 +1468,12 @@ export default function App() {
 
   const authUsernameRef = useRef(authProfile?.username ?? 'Guest');
   const authUserIdRef = useRef<string | null>(authUser?.id ?? null);
+  const authTokenRef = useRef<string | null>(authAccessToken);
   useEffect(() => {
     authUsernameRef.current = authProfile?.username ?? 'Guest';
     authUserIdRef.current = authUser?.id ?? null;
-  }, [authProfile?.username, authUser?.id]);
+    authTokenRef.current = authAccessToken;
+  }, [authProfile?.username, authUser?.id, authAccessToken]);
 
   const {
     onCreatePrivateRoom,
@@ -1490,8 +1500,10 @@ export default function App() {
     friendInvite,
     authUsername: authProfile?.username ?? 'Guest',
     authUserId: authUser?.id ?? null,
+    authToken: authAccessToken,
     authUsernameRef,
     authUserIdRef,
+    authTokenRef,
     normalizeRoomCode,
     normalizeRoomPlayers,
     emitWithAck,
@@ -1900,6 +1912,7 @@ export default function App() {
   const canUseRematch = Boolean(
     state?.gameOver && joinedRoom && !isSpectatingMatch && !isTournamentMatch && state.playerIds.includes(you),
   );
+  const isRoomHost = players[0]?.id === you;
   const rematchWaitingText = rematchRequested
     ? (() => {
         const readyNames = rematchReadyIds
@@ -3595,12 +3608,12 @@ export default function App() {
                     </span>
                     {p.id === you && <span className="mode-room-item-sub">@{p.username}</span>}
                   </div>
-                  {p.id === you && <span className="badge multiplayer-host-badge">Host</span>}
+                  {p.id === players[0]?.id && <span className="badge multiplayer-host-badge">Host</span>}
                 </div>
               ))}
               {players.length < 2 && <div className="waiting multiplayer-waiting-live">Waiting for another player...</div>}
             </div>
-            {players.length === 2 && (
+            {players.length === 2 && isRoomHost && (
               <button
                 className={`mode-option mode-option-primary mode-accent-multiplayer ${pendingUiAction === 'start' ? 'is-loading' : ''}`}
                 onClick={startGame}
@@ -3609,6 +3622,12 @@ export default function App() {
                 <span className="mode-option-title">{pendingUiAction === 'start' ? 'Starting…' : 'Start Game'}</span>
                 <span className="mode-option-meta">Begin the live multiplayer hand</span>
               </button>
+            )}
+            {players.length === 2 && !isRoomHost && (
+              <div className="mode-option mode-option-secondary" style={{ cursor: 'default' }}>
+                <span className="mode-option-title">Waiting for Host</span>
+                <span className="mode-option-meta">The room host starts the match.</span>
+              </div>
             )}
             {roomRecoveryState !== 'idle' && (
               <div className="mode-option mode-option-secondary" style={{ cursor: 'default' }}>

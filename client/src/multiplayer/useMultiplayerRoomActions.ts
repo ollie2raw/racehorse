@@ -7,6 +7,7 @@ type PendingUiAction = null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'p
 type RoomJoinConfig = {
   username: string;
   userId: string | null;
+  authToken: string | null;
 };
 
 type FriendInvite = {
@@ -33,8 +34,10 @@ type UseMultiplayerRoomActionsParams = {
   friendInvite: FriendInvite;
   authUsername: string;
   authUserId: string | null;
+  authToken: string | null;
   authUsernameRef: MutableRefObject<string>;
   authUserIdRef: MutableRefObject<string | null>;
+  authTokenRef: MutableRefObject<string | null>;
   normalizeRoomCode: (value: unknown) => string;
   normalizeRoomPlayers: (value: unknown) => any[];
   emitWithAck: <TResp>(
@@ -82,8 +85,9 @@ export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParam
     (): RoomJoinConfig => ({
       username: params.authUsername,
       userId: params.authUserId,
+      authToken: params.authToken,
     }),
-    [params.authUsername, params.authUserId],
+    [params.authUsername, params.authUserId, params.authToken],
   );
 
   const onCreatePrivateRoom = useCallback(async (): Promise<{
@@ -249,6 +253,7 @@ export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParam
           {
             username: params.authUsernameRef.current,
             userId: params.authUserIdRef.current,
+            authToken: params.authTokenRef.current,
           },
         );
         if (!resp?.ok) {

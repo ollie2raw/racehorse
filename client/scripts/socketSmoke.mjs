@@ -255,16 +255,30 @@ async function scenarioLifecycleReconnect() {
       assert(bravoRejoin?.ok, 'bravo failed to rejoin after leave');
       await waitForRoomCount(alpha, 2);
 
-      await startTwoPlayerGame(alpha, bravo, roomCode);
-
-      const spectateResp = await emitAck(
+      const spectateBeforeStartResp = await emitAck(
         spectator.socket,
         'room:spectate',
         roomCode,
         { username: spectator.state.username, userId: spectator.state.userId },
       );
-      assert(spectateResp?.ok, 'spectator failed to spectate room');
-      const initialSpectatorState = latestState(spectator);
+      assert(spectateBeforeStartResp?.ok, 'spectator failed to spectate room before start');
+
+      const spectatorStart = await emitAck(spectator.socket, 'game:start', roomCode);
+      assert(
+        spectatorStart?.ok === false && /only room players/i.test(String(spectatorStart?.error ?? '')),
+        'spectator was allowed to start the game',
+      );
+
+      const nonHostStart = await emitAck(bravo.socket, 'game:start', roomCode);
+      assert(
+        nonHostStart?.ok === false && /only the room host/i.test(String(nonHostStart?.error ?? '')),
+        'non-host player was allowed to start the game',
+      );
+
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      await waitForStateCount(spectator, 1, 'state:spectate');
+      const initialSpectatorState = latestState(spectator, 'state:spectate');
       assert(initialSpectatorState?.state, 'spectator did not receive initial state snapshot');
 
       const currentFor = getActivePlayer([alpha, bravo]);
@@ -322,6 +336,8 @@ async function scenarioLifecycleReconnect() {
           checks: {
             createJoin: true,
             leaveRejoin: true,
+            spectatorStartRejected: true,
+            nonHostStartRejected: true,
             startGame: true,
             spectateUpdates: spectator.state.spectateUpdates.length > 0,
             reconnectMigration: true,
@@ -499,10 +515,40 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
   );
 }
 
+async function scenarioTokenlessUuidClaimRejected() {
+  return withClients(
+    [
+      {
+        label: 'claimer',
+        userId: 'uuid-claim-smoke',
+        username: 'UuidClaim',
+      },
+    ],
+    async ({ claimer }) => {
+      const createResp = await emitAck(claimer.socket, 'room:create', {
+        username: claimer.state.username,
+        userId: '11111111-1111-4111-8111-111111111111',
+      });
+      assert(createResp?.ok, 'uuid claimer failed to create room');
+      assert(
+        Array.isArray(createResp.players) && createResp.players[0]?.userId === null,
+        'tokenless UUID userId claim was trusted',
+      );
+      return {
+        roomCode: createResp.roomCode,
+        checks: {
+          tokenlessUuidClaimRejected: true,
+        },
+      };
+    },
+  );
+}
+
 const scenarios = [
   { name: 'lifecycle-reconnect', run: scenarioLifecycleReconnect },
   { name: 'room-switch-cleanup', run: scenarioRoomSwitchCleanup },
   { name: 'seat-migration-and-spectator-rejection', run: scenarioSeatMigrationAndSpectatorRejection },
+  { name: 'tokenless-uuid-claim-rejected', run: scenarioTokenlessUuidClaimRejected },
 ];
 
 async function main() {
