@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import LayoutScreen from './LayoutScreen';
 import './leaderboardPage.css';
 
 interface LeaderboardPageShellProps {
@@ -6,8 +7,9 @@ interface LeaderboardPageShellProps {
   title: string;
   subtitle: string;
   onClose: () => void;
-  closeLabel?: string;
+  backLabel?: string;
   className?: string;
+  contentClassName?: string;
   panelClassName?: string;
   children: ReactNode;
 }
@@ -17,33 +19,33 @@ export default function LeaderboardPageShell({
   title,
   subtitle,
   onClose,
-  closeLabel = 'Close',
+  backLabel = 'Back',
   className,
+  contentClassName,
   panelClassName,
   children,
 }: LeaderboardPageShellProps) {
   return (
-    <div className={`layout-screen screen leaderboard-page-screen${className ? ` ${className}` : ''}`}>
-      <div className="layout-screen-bg" aria-hidden="true" />
-      <div className="layout-screen-beam" aria-hidden="true" />
-      <div className="layout-screen-vignette" aria-hidden="true" />
-      <div className="layout-screen-inner leaderboard-page-inner">
-        <div className="layout-screen-content leaderboard-page-content">
-          <section className={`leaderboard-page-panel${panelClassName ? ` ${panelClassName}` : ''}`}>
-            <div className="leaderboard-page-header">
-              <div className="leaderboard-page-copy">
-                <p className="leaderboard-page-label">{label}</p>
-                <h1 className="leaderboard-page-title">{title}</h1>
-                <p className="leaderboard-page-subtitle">{subtitle}</p>
-              </div>
-              <button type="button" className="leaderboard-page-close" onClick={onClose}>
-                {closeLabel}
-              </button>
-            </div>
-            <div className="leaderboard-page-body">{children}</div>
-          </section>
+    <LayoutScreen
+      className={`screen leaderboard-page-screen mode-subpage-screen${className ? ` ${className}` : ''}`}
+      title={
+        <>
+          <span className="leaderboard-screen-label">{label}</span>
+          <span className="leaderboard-screen-title-text">{title}</span>
+        </>
+      }
+      subtitle={subtitle}
+      contentClassName={`multiplayer-menu-card screen-shell leaderboard-screen-content${contentClassName ? ` ${contentClassName}` : ''}`}
+    >
+      <section className={`mode-entry-panel leaderboard-screen-panel${panelClassName ? ` ${panelClassName}` : ''}`}>
+        <div className="leaderboard-screen-toolbar">
+          <button type="button" className="mode-option mode-option-secondary leaderboard-screen-back" onClick={onClose}>
+            <span className="mode-option-title">{backLabel}</span>
+            <span className="mode-option-meta">Return to the previous daily screen</span>
+          </button>
         </div>
-      </div>
-    </div>
+        <div className="leaderboard-screen-body">{children}</div>
+      </section>
+    </LayoutScreen>
   );
 }

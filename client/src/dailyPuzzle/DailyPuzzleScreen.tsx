@@ -1047,6 +1047,7 @@ export default function DailyPuzzleScreen({
         label="Daily Puzzle"
         title="Leaderboard"
         subtitle={`${formattedDisplayDate} • Best score, then fewest moves, then fastest time`}
+        backLabel="Back to Daily Puzzle"
         onClose={() => setDailyLeaderboardOpen(false)}
       >
         <div className="daily-leaderboard-panel daily-leaderboard-page-panel">

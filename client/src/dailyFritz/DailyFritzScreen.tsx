@@ -281,6 +281,7 @@ export default function DailyFritzScreen({
         label="Daily Fritz"
         title="Leaderboard"
         subtitle={`${today ? formatDateLabel(today.run_date) : 'Today'} • Same deals for every player`}
+        backLabel="Back to Daily Fritz"
         onClose={() => setLeaderboardOpen(false)}
       >
         <DailyFritzLeaderboard
