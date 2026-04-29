@@ -1406,6 +1406,7 @@ export default function App() {
     authUserRef,
     authProfileRef,
     joinedRoomRef,
+    youRef,
     stateRef,
     pendingCreateOnConnectRef,
     reconnectRoomCodeRef,
@@ -1822,6 +1823,19 @@ export default function App() {
   const myHand = optimisticPlayedTile
     ? handForRenderBase.filter((t) => !tileEquals(t, optimisticPlayedTile))
     : handForRenderBase;
+
+  if (import.meta.env.DEV && joinedRoom && state) {
+    console.warn('[multiplayer-debug] App myHand derived JSON', JSON.stringify({
+      you,
+      playerIds: state.playerIds,
+      playerKeys: Object.keys(state.players ?? {}),
+      authoritativeMyHandLength: authoritativeMyHand.length,
+      myHandLength: myHand.length,
+      myHandSample: myHand[0] ?? null,
+      playersShape: state.players,
+      handCounts: state.handCounts ?? null,
+    }, null, 2));
+  }
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const authoritativeOpponentTileCount =
     state && opponentId
@@ -2115,7 +2129,12 @@ export default function App() {
   const handReadyRecoveryRef = useRef(false);
   useEffect(() => {
     const needsReady =
-      Boolean(state?.handOver) && !state?.gameOver && !handReveal && Boolean(joinedRoom) && socket?.connected;
+      Boolean(state?.handOver) &&
+      !state?.gameOver &&
+      !handReveal &&
+      handRevealShownRef.current !== state?.handNumber &&
+      Boolean(joinedRoom) &&
+      socket?.connected;
     if (!needsReady) {
       handReadyRecoveryRef.current = false;
       return;
@@ -3713,54 +3732,14 @@ export default function App() {
             />
           )}
           {handReveal && !state.gameOver && (
-            <div
-              style={{
-                position: 'fixed',
-                inset: 0,
-                zIndex: 1500,
-                display: 'grid',
-                placeItems: 'center',
-                background: 'rgba(6, 10, 18, 0.62)',
-                backdropFilter: 'blur(4px)',
-              }}
-            >
-              <div
-                style={{
-                  background: 'rgba(10,18,15,0.95)',
-                  border: '1px solid rgba(236,252,245,0.14)',
-                  borderRadius: 20,
-                  padding: 32,
-                  minWidth: 420,
-                  boxShadow: '0 26px 70px rgba(0,0,0,0.48)',
-                  color: 'rgba(232,245,240,0.95)',
-                  display: 'grid',
-                  gap: 18,
-                  opacity: 0.92 + handRevealAutoProgress * 0.08,
-                }}
-              >
+            <div className="game-over-overlay hand-over-upgraded-overlay">
+              <div className="game-over-card hand-over-upgraded-card">
                 {(() => {
                   const youPoints = handReveal.pointsAwarded.you;
-                  const oppPoints = handReveal.pointsAwarded.opponent;
-                  const youWonHand = youPoints > oppPoints;
-                  const oppWonHand = oppPoints > youPoints;
-                  const winnerText = youWonHand
-                    ? `🎉 You won this hand  +${youPoints} pts`
-                    : oppWonHand
-                      ? `${opponentName} won this hand  +${oppPoints} pts`
-                      : 'Hand ended  +0 pts';
-                  const winnerColor = youWonHand
-                    ? 'rgba(125, 241, 197, 0.95)'
-                    : 'rgba(223,236,244,0.86)';
-                  return (
-                    <>
-                <h3 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>Hand Over</h3>
-                <p style={{ margin: 0, fontSize: '1rem', color: winnerColor }}>
-                  {winnerText}
-                </p>
-                    </>
-                  );
-                })()}
-                {(() => {
+                  const opponentPoints = handReveal.pointsAwarded.opponent;
+                  const winner =
+                    youPoints > opponentPoints ? 'you' : opponentPoints > youPoints ? 'opponent' : 'none';
+                  const pointsAwarded = Math.max(youPoints, opponentPoints, 0);
                   const yourCount = handReveal.yourRemainingTiles.length;
                   const oppCount = handReveal.opponentRemainingTiles.length;
                   const whoWentOutRaw =
@@ -3772,113 +3751,117 @@ export default function App() {
                     (Boolean(opponentId) && whoWentOutRaw === opponentId) ||
                     (whoWentOutRaw == null && oppCount === 0);
                   const blocked = yourCount > 0 && oppCount > 0;
-
-                  const sectionLabelStyle = {
-                    fontSize: '0.86rem',
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase' as const,
-                    color: 'rgba(200,220,215,0.78)',
-                    fontWeight: 700,
-                    textAlign: 'center' as const,
-                  };
-
-                  const tileRowStyle = {
-                    display: 'flex',
-                    flexWrap: 'wrap' as const,
-                    gap: 8,
-                    justifyContent: 'center' as const,
-                  };
-
-                  if (youWentOut && !blocked) {
-                    return (
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        <div style={sectionLabelStyle}>
-                          {opponentName} had {oppCount} tile{oppCount === 1 ? '' : 's'} remaining:
-                        </div>
-                        <div style={tileRowStyle}>
-                          {handReveal.opponentRemainingTiles.map((tile, idx) => (
-                            <DominoTile
-                              key={`reveal-${idx}-${tile.low}-${tile.high}`}
-                              tile={tile}
-                              size={48}
-                              className="hand-over-tile"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  if (oppWentOut && !blocked) {
-                    return (
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        <div style={sectionLabelStyle}>Your remaining tiles:</div>
-                        <div style={tileRowStyle}>
-                          {handReveal.yourRemainingTiles.map((tile, idx) => (
-                            <DominoTile
-                              key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
-                              tile={tile}
-                              size={48}
-                              className="hand-over-tile"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  }
+                  const scoredTiles =
+                    winner === 'you'
+                      ? handReveal.opponentRemainingTiles
+                      : winner === 'opponent'
+                        ? handReveal.yourRemainingTiles
+                        : [...handReveal.yourRemainingTiles, ...handReveal.opponentRemainingTiles];
+                  const scoredPips = scoredTiles.reduce((sum, tile) => sum + tile.low + tile.high, 0);
+                  const summaryLabel =
+                    winner === 'you'
+                      ? 'You won this hand'
+                      : winner === 'opponent'
+                        ? `${opponentName} won this hand`
+                        : 'Hand ended blocked';
 
                   return (
-                    <div style={{ display: 'grid', gap: 16 }}>
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        <div style={sectionLabelStyle}>Your remaining tiles</div>
-                        <div style={tileRowStyle}>
-                          {handReveal.yourRemainingTiles.map((tile, idx) => (
-                            <DominoTile
-                              key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
-                              tile={tile}
-                              size={48}
-                              className="hand-over-tile"
-                            />
-                          ))}
+                    <>
+                      <div className="game-over-header">
+                        <div className="game-over-title-block">
+                          <span className="game-over-kicker">Hand Complete</span>
+                          <h3 className="victory-title">Hand Over</h3>
+                        </div>
+                        <div className={`hand-over-points-pill ${winner === 'opponent' ? 'is-opponent' : 'is-you'}`}>
+                          +{pointsAwarded}
                         </div>
                       </div>
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        <div style={sectionLabelStyle}>{opponentName} remaining tiles</div>
-                        <div style={tileRowStyle}>
-                          {handReveal.opponentRemainingTiles.map((tile, idx) => (
-                            <DominoTile
-                              key={`reveal-${idx}-${tile.low}-${tile.high}`}
-                              tile={tile}
-                              size={48}
-                              className="hand-over-tile"
-                            />
-                          ))}
-                        </div>
+
+                      <div className={`hand-over-summary-card ${winner === 'opponent' ? 'winner-opponent' : 'winner-you'}`}>
+                        <span className="hand-over-summary-label">{summaryLabel}</span>
+                        <strong>+{pointsAwarded} points awarded</strong>
+                        <p>
+                          {scoredPips} remaining pips rounded to {pointsAwarded} point
+                          {pointsAwarded === 1 ? '' : 's'}.
+                        </p>
                       </div>
-                    </div>
+
+                      {blocked ? (
+                        <div className="hand-over-reveal-grid">
+                          <div className={`hand-over-reveal-panel ${winner === 'you' ? 'is-winner' : ''}`}>
+                            <div className="hand-over-reveal-label">Your Remaining Tiles</div>
+                            <div className="hand-over-tile-row">
+                              {handReveal.yourRemainingTiles.map((tile, idx) => (
+                                <DominoTile
+                                  key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
+                                  tile={tile}
+                                  size={52}
+                                  className="hand-over-tile"
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          <div className={`hand-over-reveal-panel ${winner === 'opponent' ? 'is-winner' : ''}`}>
+                            <div className="hand-over-reveal-label">{opponentName} Remaining Tiles</div>
+                            <div className="hand-over-tile-row">
+                              {handReveal.opponentRemainingTiles.map((tile, idx) => (
+                                <DominoTile
+                                  key={`opponent-reveal-${idx}-${tile.low}-${tile.high}`}
+                                  tile={tile}
+                                  size={52}
+                                  className="hand-over-tile"
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : youWentOut ? (
+                        <div className="hand-over-reveal-panel is-winner">
+                          <div className="hand-over-reveal-label">You cleared your hand</div>
+                          <p className="hand-over-reveal-copy">
+                            {opponentName} had {oppCount} tile{oppCount === 1 ? '' : 's'} remaining
+                          </p>
+                          {handReveal.opponentRemainingTiles.length > 0 && (
+                            <div className="hand-over-tile-row">
+                              {handReveal.opponentRemainingTiles.map((tile, idx) => (
+                                <DominoTile
+                                  key={`opponent-reveal-${idx}-${tile.low}-${tile.high}`}
+                                  tile={tile}
+                                  size={52}
+                                  className="hand-over-tile"
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="hand-over-reveal-panel is-winner">
+                          <div className="hand-over-reveal-label">
+                            {oppWentOut ? `${opponentName} cleared their hand` : 'Your Remaining Tiles'}
+                          </div>
+                          <p className="hand-over-reveal-copy">Your remaining tiles</p>
+                          {handReveal.yourRemainingTiles.length > 0 && (
+                            <div className="hand-over-tile-row">
+                              {handReveal.yourRemainingTiles.map((tile, idx) => (
+                                <DominoTile
+                                  key={`you-reveal-${idx}-${tile.low}-${tile.high}`}
+                                  tile={tile}
+                                  size={52}
+                                  className="hand-over-tile"
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   );
                 })()}
-                <div style={{ display: 'grid', gap: 6, marginTop: 2 }}>
+                <div className="hand-over-progress-track">
                   <div
-                    style={{
-                      height: 4,
-                      borderRadius: 999,
-                      background: 'rgba(236,252,245,0.12)',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: '100%',
-                        width: `${Math.max(0, Math.min(1, handRevealAutoProgress)) * 100}%`,
-                        background: 'linear-gradient(90deg, rgba(125,241,197,0.9), rgba(125,241,197,0.45))',
-                        transition: 'width 50ms linear',
-                      }}
-                    />
-                  </div>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(200,220,215,0.66)' }}>
-                    Next hand in {Math.max(0, Math.ceil(handRevealAutoProgress * 4))}s
-                  </p>
+                    className="hand-over-progress-fill"
+                    style={{ width: `${Math.max(0, Math.min(1, handRevealAutoProgress)) * 100}%` }}
+                  />
                 </div>
               </div>
             </div>

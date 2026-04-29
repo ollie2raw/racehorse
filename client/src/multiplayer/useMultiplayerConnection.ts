@@ -60,6 +60,7 @@ type UseMultiplayerConnectionParams = {
   authUserRef: MutableRefObject<{ id?: string | null; email?: string | null } | null>;
   authProfileRef: MutableRefObject<{ username?: string | null } | null>;
   joinedRoomRef: MutableRefObject<string | null>;
+  youRef: MutableRefObject<string>;
   stateRef: MutableRefObject<GameState | null>;
   pendingCreateOnConnectRef: MutableRefObject<boolean>;
   reconnectRoomCodeRef: MutableRefObject<string | null>;
@@ -155,6 +156,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       current.setRoomRecoveryMessage(current.joinedRoomRef.current ? 'Syncing room state…' : '');
       current.setIsConnected(true);
       current.setYou(s.id ?? '');
+      current.youRef.current = s.id ?? '';
       current.setIsConnecting(false);
       current.setServerWaking(false);
 

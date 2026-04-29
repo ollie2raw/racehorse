@@ -138,6 +138,16 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         });
       }
 
+      if (import.meta.env.DEV) {
+        console.warn('[multiplayer-debug] incoming state hand lookup', {
+          youRef: params.youRef.current,
+          playerKeys: nextState?.players ? Object.keys(nextState.players) : null,
+          playerIds: nextState?.playerIds,
+          lookupHandLength: nextState?.players?.[params.youRef.current]?.hand?.length ?? null,
+          playersShape: nextState?.players,
+        });
+      }
+
       params.setState(nextState);
       if (params.joinedRoomRef.current) {
         params.setRoomRecoveryState('idle');
@@ -172,6 +182,15 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
     const onStateSpectate = (payload: { state?: GameState | null; eventMeta?: RoomEventMeta }) => {
       params.applyRoomEventMeta(payload?.eventMeta);
       const nextState = payload?.state ?? null;
+      if (nextState?.playerIds?.includes(params.youRef.current)) {
+        if (import.meta.env.DEV) {
+          console.warn('[state:spectate] ignored spectator snapshot for seated player', {
+            youRef: params.youRef.current,
+            sequence: nextState.sequence,
+          });
+        }
+        return;
+      }
       if (nextState) {
         if (
           typeof nextState.sequence === 'number' &&

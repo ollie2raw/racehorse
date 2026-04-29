@@ -181,6 +181,8 @@ function getInactivePlayer(clients) {
 async function startTwoPlayerGame(alpha, bravo, roomCode) {
   const alphaStateCountBeforeStart = alpha.state.stateUpdates.length;
   const bravoStateCountBeforeStart = bravo.state.stateUpdates.length;
+  const alphaSpectateCountBeforeStart = alpha.state.spectateUpdates.length;
+  const bravoSpectateCountBeforeStart = bravo.state.spectateUpdates.length;
   const startResp = await emitAck(alpha.socket, 'game:start', roomCode);
   assert(startResp?.ok, `game:start failed: ${startResp?.error ?? 'unknown'}`);
   const [alphaGameState, bravoGameState] = await Promise.all([
@@ -189,6 +191,30 @@ async function startTwoPlayerGame(alpha, bravo, roomCode) {
   ]);
   assert(alphaGameState?.state, 'alpha did not receive initial game state');
   assert(bravoGameState?.state, 'bravo did not receive initial game state');
+
+  const alphaId = alpha.socket.id;
+  const bravoId = bravo.socket.id;
+  assert(alphaId && bravoId, 'socket ids missing after game start');
+
+  assert(alphaGameState.state.players?.[alphaId]?.hand?.length === 7, 'alpha local hand was not revealed with 7 tiles');
+  assert(alphaGameState.state.players?.[bravoId]?.hand?.length === 0, 'alpha received opponent hand during active play');
+  assert(alphaGameState.state.handCounts?.[alphaId] === 7, 'alpha handCounts missing own count');
+  assert(alphaGameState.state.handCounts?.[bravoId] === 7, 'alpha handCounts missing opponent count');
+
+  assert(bravoGameState.state.players?.[bravoId]?.hand?.length === 7, 'bravo local hand was not revealed with 7 tiles');
+  assert(bravoGameState.state.players?.[alphaId]?.hand?.length === 0, 'bravo received opponent hand during active play');
+  assert(bravoGameState.state.handCounts?.[bravoId] === 7, 'bravo handCounts missing own count');
+  assert(bravoGameState.state.handCounts?.[alphaId] === 7, 'bravo handCounts missing opponent count');
+
+  await delay(SETTLE_MS);
+  assert(
+    alpha.state.spectateUpdates.length === alphaSpectateCountBeforeStart,
+    'alpha received a spectator snapshot as a seated player',
+  );
+  assert(
+    bravo.state.spectateUpdates.length === bravoSpectateCountBeforeStart,
+    'bravo received a spectator snapshot as a seated player',
+  );
 }
 
 async function scenarioLifecycleReconnect() {

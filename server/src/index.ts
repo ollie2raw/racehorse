@@ -3000,7 +3000,10 @@ function migrateRoomSeat(roomCode: string, oldSocketId: string, newSocketId: str
     );
     const nextPlayers: Record<string, any> = { ...room.state.players };
     if (nextPlayers[oldSocketId]) {
-      nextPlayers[newSocketId] = nextPlayers[oldSocketId];
+      nextPlayers[newSocketId] = {
+        ...nextPlayers[oldSocketId],
+        id: newSocketId,
+      };
       delete nextPlayers[oldSocketId];
     }
     room.state = {
@@ -3282,11 +3285,13 @@ function broadcastStateUpdate(roomCode: string) {
     if (!playerSocket.rooms.has(roomCode)) {
       playerSocket.join(roomCode);
       playerSocket.data.roomId = roomCode;
+      playerSocket.data.playerId = pid;
     }
   }
 
   const sockets = io.sockets.adapter.rooms.get(roomCode);
   if (!sockets) return;
+
   const currentScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
@@ -3296,6 +3301,13 @@ function broadcastStateUpdate(roomCode: string) {
     const socket = io.sockets.sockets.get(socketId);
     if (socket) {
       const isPlayer = room.state.playerIds.includes(socketId);
+      const recipientPlayerId =
+        room.state.playerIds.includes(socketId)
+          ? socketId
+          : typeof socket.data?.playerId === 'string' && room.state.playerIds.includes(socket.data.playerId)
+            ? socket.data.playerId
+            : null;
+
       const legalMoves = isPlayer ? getRoomLegalMoves(roomCode, socketId) : [];
       const canDraw = isPlayer ? getRoomCanDraw(roomCode, socketId) : false;
 
@@ -3312,7 +3324,10 @@ function broadcastStateUpdate(roomCode: string) {
           if (!playerState) {
             return [pid, { id: pid, hand: [], score: 0 }];
           }
-          const canReveal = room.state!.handOver || room.state!.gameOver || pid === socketId;
+          const canReveal =
+            room.state!.handOver ||
+            room.state!.gameOver ||
+            pid === recipientPlayerId;
           return [
             pid,
             {
@@ -3391,7 +3406,9 @@ function broadcastStateUpdate(roomCode: string) {
   room.lastBroadcastScores = currentScores;
 
   // TOURNAMENT_SPECTATE_BROADCAST
-  // Spectator-safe broadcast to anyone in the Socket.IO room (hands hidden)
+  // Spectator-safe broadcast only to non-player sockets. Active players already
+  // received personalized state:update above; sending this to them would hide
+  // their own hand with the same sequence number.
   if (room.state) {
     const { __drawSequenceActive, ...stateForSpectatorsBase } = room.state as any;
     void __drawSequenceActive;
@@ -3407,10 +3424,25 @@ function broadcastStateUpdate(roomCode: string) {
         room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
       ),
     };
-    io.to(room.code).emit('state:spectate', {
+    const spectatorPayload = {
       state: stateForSpectators,
       eventMeta: getRoomMatchEventMeta(room.code),
-    });
+    };
+    const currentRoomSockets = io.sockets.adapter.rooms.get(room.code);
+    if (currentRoomSockets) {
+      for (const socketId of currentRoomSockets) {
+        const recipient = io.sockets.sockets.get(socketId);
+        if (!recipient) continue;
+        const playerId =
+          room.state.playerIds.includes(socketId)
+            ? socketId
+            : typeof recipient.data?.playerId === 'string' && room.state.playerIds.includes(recipient.data.playerId)
+              ? recipient.data.playerId
+              : null;
+        if (playerId) continue;
+        recipient.emit('state:spectate', spectatorPayload);
+      }
+    }
   }
 
   const roomAfter = (() => { try { return getRoom(roomCode); } catch { return null; } })();
@@ -3954,6 +3986,7 @@ io.on('connection', (socket: Socket) => {
       socket.data.roomId = room.code;
       socket.data.username = username;
       socket.data.userId = userId;
+      socket.data.playerId = socket.id;
       const roomPlayers: RoomPlayer[] = [{ id: socket.id, username, userId }];
       roomPlayersByCode.set(room.code, roomPlayers);
       appendRoomEvent(room, {
@@ -4007,6 +4040,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
       socket.data.roomId = code;
       socket.data.username = username;
       socket.data.userId = userId;
+      socket.data.playerId = socket.id;
 
       // Send roster snapshot
       const roster = roomPlayersByCode.get(code) ?? [];
@@ -4022,7 +4056,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
               if (!playerState) {
                 return [pid, { id: pid, hand: [], score: 0 }];
               }
-              const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id;
+              const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id || pid === socket.data?.playerId;
               return [
                 pid,
                 {
@@ -4105,6 +4139,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
             );
           roomPlayersByCode.set(roomCode, roster);
           socket.data.roomId = roomCode;
+          socket.data.playerId = socket.id;
           room = existingRoom;
           migratedByUserId = true;
           appendRoomEvent(room, {
@@ -4152,6 +4187,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
       socket.data.roomId = room.code;
       socket.data.username = username;
       socket.data.userId = userId;
+      socket.data.playerId = socket.id;
       const existingIdx = roster.findIndex((p) => p.id === socket.id);
       if (existingIdx >= 0) {
         roster[existingIdx] = { id: socket.id, username, userId };
@@ -4179,7 +4215,7 @@ socket.on('room:spectate', (argCode: unknown, arg2?: unknown, arg3?: unknown) =>
                 if (!playerState) {
                   return [pid, { id: pid, hand: [], score: 0 }];
                 }
-                const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id;
+                const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id || pid === socket.data?.playerId;
                 return [
                   pid,
                   {
