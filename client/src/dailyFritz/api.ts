@@ -121,8 +121,11 @@ export interface DailyFritzStartResponse {
 
 export interface DailyFritzNextHandResponse {
   ok: true;
+  run_date: string;
   current_hand_index: number;
   hand: BotHandDeal;
+  replayed?: boolean;
+  ignored?: boolean;
 }
 
 export interface DailyFritzCompleteResponse {
@@ -172,6 +175,8 @@ export class DailyFritzEndOfRunError extends Error {
 export async function nextDailyFritzHand(input: {
   attemptId: string;
   verifiedMatchId: string;
+  runDate: string;
+  completedHandIndex: number;
   completedHandScores: { you: number; fritz: number };
 }): Promise<DailyFritzNextHandResponse> {
   // Use a manual fetch so we can inspect the status code before throwing.
@@ -187,6 +192,8 @@ export async function nextDailyFritzHand(input: {
       body: JSON.stringify({
         attempt_id: input.attemptId,
         verified_match_id: input.verifiedMatchId,
+        run_date: input.runDate,
+        completed_hand_index: input.completedHandIndex,
         completed_hand_scores: input.completedHandScores,
       }),
     },
@@ -253,6 +260,7 @@ export async function buildDailyFritzCompletionHash(input: {
 export async function completeDailyFritz(input: {
   attemptId: string;
   verifiedMatchId: string;
+  runDate: string;
   completionHash: string;
   finalScore: number;
   opponentScore: number;
@@ -266,6 +274,7 @@ export async function completeDailyFritz(input: {
     body: JSON.stringify({
       attempt_id: input.attemptId,
       verified_match_id: input.verifiedMatchId,
+      run_date: input.runDate,
       completion_hash: input.completionHash,
       final_score: input.finalScore,
       opponent_score: input.opponentScore,

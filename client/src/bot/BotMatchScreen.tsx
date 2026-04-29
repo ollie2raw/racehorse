@@ -906,6 +906,7 @@ export default function BotMatchScreen({
   const ghostCompleteKeyRef = useRef('');
   const dailyFritzCompleteKeyRef = useRef('');
   const dailyFritzSubmitSucceededRef = useRef(false);
+  const dailyFritzAutoSubmitBlockedRef = useRef(false);
   // One-way guard: set to true when advanceHand starts, reset on success or fatal error.
   // Prevents overlapping hand-transition calls (e.g. from watchdog + 5s timer firing together).
   const handTransitionInFlightRef = useRef(false);
@@ -930,6 +931,7 @@ export default function BotMatchScreen({
   const [dailyFritzHandIndex, setDailyFritzHandIndex] = useState(
     () => dailyFritzPackage?.current_hand_index ?? 0,
   );
+  const [dailyFritzSubmitRetryNonce, setDailyFritzSubmitRetryNonce] = useState(0);
 
   // ── Guided Lesson state (player-facing, reads frozenLesson) ──────────────
   /** Tracks how many player turns have been completed in the lesson */
@@ -1024,8 +1026,13 @@ export default function BotMatchScreen({
   );
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
+  const enableDailyFritzProfiling =
+    import.meta.env.DEV &&
+    isDailyFritzMode &&
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('DAILY_FRITZ_PROFILE') === '1';
 
-  if (isDailyFritzMode && typeof window !== 'undefined') {
+  if (enableDailyFritzProfiling && typeof window !== 'undefined') {
     const win = window as typeof window & {
       __dailyFritzProfile?: {
         botMatchScreenRenderCount?: number;
@@ -2384,26 +2391,9 @@ export default function BotMatchScreen({
     });
   }, [match.gameOver, match.handNumber, match.winnerId, match.players.you.score, match.players.bot.score, onMatchComplete]);
 
-  useEffect(() => {
-    if (!isDailyFritzMode || !dailyFritzPackage || !userId) return;
-
-    if (!match.gameOver) {
-      console.log('[daily-complete] modal state = not-game-over');
-      // Only reset guards when game is genuinely not over (e.g. mid-game).
-      // Never reset if we already succeeded — completion is one-way.
-      if (!dailyFritzSubmitSucceededRef.current) {
-        dailyFritzCompleteKeyRef.current = '';
-        setGhostResultLoading(false);
-        setGhostResultError(null);
-      }
-      return;
-    }
-
-    // Permanent guard: once submission succeeded, never submit again.
-    if (dailyFritzSubmitSucceededRef.current) {
-      console.log('[daily-complete] modal state = already-succeeded (permanent guard)');
-      return;
-    }
+  const submitDailyFritzCompletion = useCallback(() => {
+    if (!isDailyFritzMode || !dailyFritzPackage || !userId || !match.gameOver) return;
+    if (dailyFritzSubmitSucceededRef.current || dailyFritzAutoSubmitBlockedRef.current) return;
 
     console.log('[daily-complete] game over reached');
 
@@ -2415,7 +2405,6 @@ export default function BotMatchScreen({
       movesUsed,
     ].join(':');
 
-    // Per-run dedup guard: same key means we already kicked off this exact submission.
     if (dailyFritzCompleteKeyRef.current === completionKey) {
       console.log('[daily-complete] modal state = dedup-skipped key=' + completionKey);
       return;
@@ -2427,9 +2416,6 @@ export default function BotMatchScreen({
     setGhostResultLoading(true);
     setGhostResultError(null);
 
-    // Capture the moveLog value synchronously at submission time so that
-    // async dep changes to moveLog cannot affect this in-flight request.
-    // We parse and stringify to ensure a canonical representation (no undefineds, etc).
     const capturedMoveLog = JSON.parse(JSON.stringify(moveLog));
 
     void (async () => {
@@ -2454,6 +2440,7 @@ export default function BotMatchScreen({
         const response = await completeDailyFritz({
           attemptId: dailyFritzPackage.attempt_id,
           verifiedMatchId: dailyFritzPackage.verified_match_id,
+          runDate: dailyFritzPackage.run_date,
           completionHash,
           finalScore: match.players.you.score,
           opponentScore: match.players.bot.score,
@@ -2462,9 +2449,8 @@ export default function BotMatchScreen({
           handsPlayed: match.handNumber,
           moveLog: capturedMoveLog,
         });
-        // Mark permanent success BEFORE any setState so that no re-run can
-        // start a second submission even if React re-runs this effect.
         dailyFritzSubmitSucceededRef.current = true;
+        dailyFritzAutoSubmitBlockedRef.current = false;
         console.log('[daily-complete] submit success');
         console.log('[daily-flow] submit success', { key: completionKey, rank: response.rank ?? null });
         setDailyFritzLeaderboard(response.leaderboard_preview);
@@ -2472,11 +2458,9 @@ export default function BotMatchScreen({
         setGhostResultLoading(false);
         console.log('[daily-complete] modal state = complete');
       } catch (err) {
-        // Do NOT reset dailyFritzCompleteKeyRef here. Resetting it was the
-        // root cause of the infinite retry loop: error → key reset → dep
-        // change (moveLog) → re-run → another submit → same error → loop.
-        // Instead, leave the key set so no further submission attempt fires.
         const errMsg = err instanceof Error ? err.message : 'Daily Fritz submission failed.';
+        dailyFritzAutoSubmitBlockedRef.current = true;
+        dailyFritzCompleteKeyRef.current = '';
         console.log('[daily-complete] submit error', errMsg);
         console.log('[daily-flow] submit error', { key: completionKey, error: errMsg });
         setGhostResultLoading(false);
@@ -2486,18 +2470,58 @@ export default function BotMatchScreen({
     })();
   }, [
     dailyFritzPackage,
+    dailyFritzHandIndex,
     isDailyFritzMode,
+    isAuthoringMode,
+    isGuidedMode,
     match.gameOver,
     match.handNumber,
     match.players.bot.score,
     match.players.you.score,
     match.winnerId,
-    // moveLog intentionally excluded: it changes asynchronously after game
-    // over (late appendMove calls) and would cause spurious re-runs of this
-    // effect. We capture moveLog synchronously at submission time instead.
     movesUsed,
-    // onDailyFritzComplete intentionally excluded: it is not used in this
-    // effect body and was causing spurious re-runs on parent re-renders.
+    moveLog,
+    userId,
+  ]);
+
+  const retryDailyFritzCompletion = useCallback(() => {
+    if (!ghostResultError || ghostResultLoading || dailyFritzSubmitSucceededRef.current) return;
+    dailyFritzAutoSubmitBlockedRef.current = false;
+    setGhostResultError(null);
+    setDailyFritzSubmitRetryNonce((prev) => prev + 1);
+  }, [ghostResultError, ghostResultLoading]);
+
+  useEffect(() => {
+    if (!isDailyFritzMode || !dailyFritzPackage || !userId) return;
+
+    if (!match.gameOver) {
+      console.log('[daily-complete] modal state = not-game-over');
+      if (!dailyFritzSubmitSucceededRef.current) {
+        dailyFritzCompleteKeyRef.current = '';
+        dailyFritzAutoSubmitBlockedRef.current = false;
+        setGhostResultLoading(false);
+        setGhostResultError(null);
+      }
+      return;
+    }
+
+    if (dailyFritzSubmitSucceededRef.current) {
+      console.log('[daily-complete] modal state = already-succeeded (permanent guard)');
+      return;
+    }
+
+    if (dailyFritzAutoSubmitBlockedRef.current) {
+      console.log('[daily-complete] modal state = waiting-for-manual-retry');
+      return;
+    }
+
+    submitDailyFritzCompletion();
+  }, [
+    dailyFritzPackage,
+    dailyFritzSubmitRetryNonce,
+    isDailyFritzMode,
+    match.gameOver,
+    submitDailyFritzCompletion,
     userId,
   ]);
 
@@ -3052,6 +3076,8 @@ export default function BotMatchScreen({
           promise: nextDailyFritzHand({
             attemptId: dailyFritzPackage.attempt_id,
             verifiedMatchId: dailyFritzPackage.verified_match_id,
+            runDate: dailyFritzPackage.run_date,
+            completedHandIndex: dailyFritzHandIndex,
             completedHandScores: {
               you: result.state.players.you.score,
               fritz: result.state.players.bot.score,
@@ -3111,6 +3137,7 @@ export default function BotMatchScreen({
     if (msg) pushToast(msg);
   }, [
     dailyFritzPackage,
+    dailyFritzHandIndex,
     isDailyFritzMode,
     isMuted,
     opponentLabel,
@@ -4830,6 +4857,8 @@ export default function BotMatchScreen({
           nextDailyFritzHand({
             attemptId: dailyFritzPackage.attempt_id,
             verifiedMatchId: dailyFritzPackage.verified_match_id,
+            runDate: dailyFritzPackage.run_date,
+            completedHandIndex: dailyFritzHandIndex,
             completedHandScores: {
               you: match.players.you.score,
               fritz: match.players.bot.score,
@@ -4929,7 +4958,7 @@ export default function BotMatchScreen({
         opponentKnownMissing: [],
       };
     });
-  }, [dailyFritzPackage, isDailyFritzMode, isAuthoringMode, isGuidedV1MinimalMode, frozenLesson, lessonStepIndex, isGuidedV2Mode, frozenV2Lesson, match.players.bot.score, match.players.you.score]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dailyFritzHandIndex, dailyFritzPackage, isDailyFritzMode, isAuthoringMode, isGuidedV1MinimalMode, frozenLesson, lessonStepIndex, isGuidedV2Mode, frozenV2Lesson, match.players.bot.score, match.players.you.score]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!handReveal || match.gameOver) {
@@ -5838,7 +5867,7 @@ export default function BotMatchScreen({
           lastPlayedTile={lastPlayedTile}
           onPositionClick={onPositionClick}
           tileSize={72}
-          profileDailyFritz={isDailyFritzMode}
+          profileDailyFritz={enableDailyFritzProfiling}
         />
         <div
           className="wl-controls-tray"
@@ -6124,6 +6153,16 @@ export default function BotMatchScreen({
                         ? 'Ranked'
                       : 'Submitted'}
               </strong>
+              {ghostResultError ? (
+                <button
+                  type="button"
+                  className="mode-inline-btn"
+                  onClick={retryDailyFritzCompletion}
+                  style={{ marginTop: 10, alignSelf: 'flex-start' }}
+                >
+                  Retry Submit
+                </button>
+              ) : null}
             </div>
           )}
           {isGhostMode && (
