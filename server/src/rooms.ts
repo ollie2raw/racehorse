@@ -30,6 +30,7 @@ export type Room = {
   nextHandReady: Set<string>;
   rematchReady: Set<string>;
   lastHandEndedNotifiedHand: number | null;
+  lastHandEndedAtMs: number | null;
   lastBroadcastScores: Record<string, number>;
   ghostMoveLogs: Record<string, GhostMoveLogEntry[]>;
   ghostTurnIndex: number;
@@ -41,7 +42,9 @@ export type Room = {
 
 const rooms = new Map<RoomCode, Room>();
 const drawSequencesByRoom = new Map<RoomCode, Promise<void>>();
+const nextHandStartsByRoom = new Map<RoomCode, Promise<Room>>();
 const DRAW_STEP_MS = 500;
+const MIN_HAND_OVER_MS = 2500;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -122,6 +125,7 @@ export function createRoom(hostSocketId: string, config: Partial<Config> = {}): 
     nextHandReady: new Set<string>(),
     rematchReady: new Set<string>(),
     lastHandEndedNotifiedHand: null,
+    lastHandEndedAtMs: null,
     lastBroadcastScores: {},
     ghostMoveLogs: {},
     ghostTurnIndex: 0,
@@ -157,6 +161,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
     nextHandReady: new Set<string>(),
     rematchReady: new Set<string>(),
     lastHandEndedNotifiedHand: null,
+    lastHandEndedAtMs: null,
     lastBroadcastScores: {},
     ghostMoveLogs: {},
     ghostTurnIndex: 0,
@@ -212,6 +217,7 @@ export function deleteRoom(code: string): boolean {
 function appendResolutionEvents(room: Room, previousState: GameState, actorSocketId: string): void {
   if (!room.state) return;
   if (!previousState.handOver && room.state.handOver) {
+    room.lastHandEndedAtMs = Date.now();
     appendRoomEvent(room, {
       type: 'hand_ended',
       actorSocketId,
@@ -349,17 +355,18 @@ export async function runDrawSequence(
   }
 }
 
-export async function startGame(code: string, io: Server): Promise<Room> {
+export async function startGame(
+  code: string,
+  io: Server,
+  options: { allowRestart?: boolean } = {},
+): Promise<Room> {
   const room = getRoom(code);
 
   if (room.players.length !== 2) {
     throw new Error('Need exactly 2 players to start.');
   }
 
-  // Defensive: If game is in a stale state (handOver but not gameOver), allow restart
-  // This handles edge cases where the room got stuck
-  if (room.state && !room.state.gameOver && !room.state.handOver) {
-    // Game is actively in progress - don't allow restart
+  if (room.state && !options.allowRestart) {
     throw new Error('Game is already in progress.');
   }
 
@@ -386,19 +393,10 @@ export async function startGame(code: string, io: Server): Promise<Room> {
       currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex],
     },
   });
-  const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
-  await runDrawSequence(
-    room.code,
-    currentPlayerId,
-    io,
-    () => room.state as GameState,
-    (next) => {
-      room.state = next;
-    },
-  );
   room.nextHandReady.clear();
   room.rematchReady.clear();
   room.lastHandEndedNotifiedHand = null;
+  room.lastHandEndedAtMs = null;
   room.lastBroadcastScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
@@ -428,18 +426,9 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
       currentPlayerId: room.state.playerIds[room.state.currentPlayerIndex],
     },
   });
-  const currentPlayerId = room.state.playerIds[room.state.currentPlayerIndex];
-  await runDrawSequence(
-    room.code,
-    currentPlayerId,
-    io,
-    () => room.state as GameState,
-    (next) => {
-      room.state = next;
-    },
-  );
   room.nextHandReady.clear();
   room.lastHandEndedNotifiedHand = null;
+  room.lastHandEndedAtMs = null;
   room.lastBroadcastScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
@@ -450,12 +439,18 @@ export async function readyForNextHand(
   code: string,
   socketId: string,
   io: Server,
-): Promise<{ started: boolean; room: Room }> {
+  handNumber?: number,
+  onStateReady?: (roomCode: string) => void,
+): Promise<{ started: boolean; room: Room; ignored?: boolean; waitMs?: number }> {
   const room = getRoom(code);
   if (!room.state) throw new Error('Game not started.');
   if (room.state.gameOver) return { started: false, room };
-  if (!room.state.handOver) return { started: false, room };
   if (!room.players.includes(socketId)) throw new Error('Player not in room.');
+  if (typeof handNumber === 'number' && handNumber !== room.state.handNumber) {
+    return { started: false, room, ignored: true };
+  }
+  if (!room.state.handOver) return { started: false, room };
+  const readyHandNumber = room.state.handNumber;
 
   room.nextHandReady.add(socketId);
   appendRoomEvent(room, {
@@ -468,9 +463,56 @@ export async function readyForNextHand(
     },
   });
   if (room.nextHandReady.size >= room.players.length) {
-    room.nextHandReady.clear();
-    const startedRoom = await nextHand(code, io);
-    return { started: true, room: startedRoom };
+    const existingStart = nextHandStartsByRoom.get(code);
+    if (existingStart) {
+      const currentRoom = await existingStart;
+      const currentState = currentRoom.state;
+      return {
+        started: Boolean(currentState && currentState.handNumber !== readyHandNumber && !currentState.handOver),
+        room: currentRoom,
+        ignored: true,
+      };
+    }
+
+    const waitMs = Math.max(
+      0,
+      MIN_HAND_OVER_MS - (Date.now() - (room.lastHandEndedAtMs ?? Date.now())),
+    );
+    const advance = (async () => {
+      const latest = getRoom(code);
+      const endedAt = latest.lastHandEndedAtMs ?? Date.now();
+      const delayMs = Math.max(0, MIN_HAND_OVER_MS - (Date.now() - endedAt));
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+
+      const fresh = getRoom(code);
+      if (
+        !fresh.state ||
+        fresh.state.gameOver ||
+        !fresh.state.handOver ||
+        fresh.nextHandReady.size < fresh.players.length
+      ) {
+        return fresh;
+      }
+
+      fresh.nextHandReady.clear();
+      const startedRoom = await nextHand(code, io);
+      onStateReady?.(startedRoom.code);
+      return startedRoom;
+    })();
+
+    nextHandStartsByRoom.set(code, advance);
+    void advance
+      .catch((err: unknown) => {
+        console.error('[hand:ready] scheduled next hand failed', err);
+      })
+      .finally(() => {
+        if (nextHandStartsByRoom.get(code) === advance) {
+          nextHandStartsByRoom.delete(code);
+        }
+      });
+    return { started: false, room, waitMs };
   }
 
   return { started: false, room };
@@ -499,13 +541,14 @@ export async function act(
 
   const { type } = action;
 
+  if (state.__drawSequenceActive) {
+    throw new Error('Draw already in progress.');
+  }
+
   // ─────────────────────────────
   // DRAW
   // ─────────────────────────────
   if (type === 'DRAW') {
-    if (state.__drawSequenceActive) {
-      return room;
-    }
     if (!canDraw(state, socketId)) {
       const currentId = state.playerIds[state.currentPlayerIndex];
       if (currentId !== socketId) {
@@ -581,17 +624,32 @@ export async function act(
       },
     });
     if (forcedDraw) {
+      const acceptedMoveSequence = room.state.sequence;
+      room.state = withDrawSequenceFlag(room.state as GameState, true);
       onStateReady(room.code);
-      await runDrawSequence(
-        room.code,
-        socketId,
-        io,
-        () => room.state as GameState,
-        (next) => {
-          room.state = next;
-        },
-        [forcedDraw],
-      );
+      setTimeout(() => {
+        void runDrawSequence(
+          room.code,
+          socketId,
+          io,
+          () => room.state as GameState,
+          (next) => {
+            room.state = next;
+          },
+          [forcedDraw],
+        ).then(
+          () => {
+            appendResolutionEvents(room, previousState, socketId);
+            onStateReady(room.code);
+          },
+          (err: unknown) => {
+            console.error('[game:action] forced draw sequence failed after MOVE', err);
+            room.state = withDrawSequenceFlag(room.state as GameState, false);
+            onStateReady(room.code);
+          },
+        );
+      }, 0);
+      return { ...room, state: { ...(room.state as GameState), sequence: acceptedMoveSequence } };
     }
     appendResolutionEvents(room, previousState, socketId);
     return room;

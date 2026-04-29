@@ -829,6 +829,7 @@ export default function App() {
   const [pendingUiAction, setPendingUiAction] = useState<
     null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'
   >(null);
+  const pendingActionRef = useRef<boolean>(false);
   const {
     user: authUser,
     profile: authProfile,
@@ -1216,6 +1217,7 @@ export default function App() {
     setOptimisticPlayedTile(null);
     setOpponentDragging(false);
     draggingStateRef.current = false;
+    pendingActionRef.current = false;
     if (drawSequenceTimeoutRef.current) {
       clearTimeout(drawSequenceTimeoutRef.current);
       drawSequenceTimeoutRef.current = null;
@@ -1241,6 +1243,7 @@ export default function App() {
       setRematchRequested(false);
       setRematchReadyIds([]);
       setScoreTrackOpen(false);
+      pendingActionRef.current = false;
       if (!keepPlayers) {
         setPlayers([]);
       }
@@ -1705,13 +1708,52 @@ export default function App() {
     [socket, joinedRoom, state, you],
   );
 
+  const isGameplayActionBlocked = useCallback(() => {
+    if (!socket || !joinedRoom || !state || !you) return true;
+    if (
+      !socket.connected ||
+      roomRecoveryState !== 'idle' ||
+      isRecoveringConnection ||
+      rejoinInFlightRef.current
+    ) {
+      showToast('Reconnecting...', 1200);
+      return true;
+    }
+    if (pendingActionRef.current) return true;
+    if (pendingUiAction === 'draw' || pendingUiAction === 'pass' || pendingUiAction === 'play') {
+      return true;
+    }
+    if (state.handOver || state.gameOver) return true;
+    if (!state.playerIds.includes(you)) return true;
+    return state.playerIds[state.currentPlayerIndex] !== you;
+  }, [
+    socket,
+    joinedRoom,
+    state,
+    you,
+    roomRecoveryState,
+    isRecoveringConnection,
+    pendingUiAction,
+    showToast,
+  ]);
+
   // Game actions
   const draw = useCallback(async () => {
     setActionError('');
     const boneyardLockedNow = (state?.boneyard.length ?? 0) <= 2;
-    if (!socket || !joinedRoom || boneyardLockedNow || drawSequenceActive) return;
+    if (
+      !socket ||
+      !joinedRoom ||
+      boneyardLockedNow ||
+      drawSequenceActive ||
+      !canDraw ||
+      isGameplayActionBlocked()
+    ) {
+      return;
+    }
     emitDraggingState(false);
     setPendingUiAction('draw');
+    pendingActionRef.current = true;
     const boardEnds = getBoardEnds(state?.board ?? null);
     const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
     const validMoves = legalMoves
@@ -1746,14 +1788,17 @@ export default function App() {
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
+      pendingActionRef.current = false;
     }
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, showScoreLikeToast, drawSequenceActive]);
+  }, [socket, joinedRoom, state, you, legalMoves, canDraw, appendMultiplayerMove, emitDraggingState, showToast, drawSequenceActive, isGameplayActionBlocked]);
 
   const pass = useCallback(async () => {
     setActionError('');
-    if (!socket || !joinedRoom || drawSequenceActive) return;
+    const hasPassMove = legalMoves.some((m) => m.type === 'pass');
+    if (!socket || !joinedRoom || drawSequenceActive || !hasPassMove || isGameplayActionBlocked()) return;
     emitDraggingState(false);
     setPendingUiAction('pass');
+    pendingActionRef.current = true;
     const boardEnds = getBoardEnds(state?.board ?? null);
     const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
     const validMoves = legalMoves
@@ -1788,13 +1833,17 @@ export default function App() {
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
+      pendingActionRef.current = false;
     }
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, drawSequenceActive]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, drawSequenceActive, isGameplayActionBlocked]);
 
   const play = useCallback(
     async (position: PlacementPosition) => {
       setActionError('');
       if (!socket || !joinedRoom || !selectedTile) return;
+
+      if (isGameplayActionBlocked()) return;
+
       const tileToPlay = selectedTile;
       const selectedMove = legalMoves.find(
         (m) =>
@@ -1803,8 +1852,15 @@ export default function App() {
           m.position === position &&
           tileEquals(m.tile, tileToPlay),
       );
+      if (!selectedMove) {
+        emitDraggingState(false);
+        setSelectedTile(null);
+        setActionError('That tile cannot be played there.');
+        return;
+      }
       emitDraggingState(false);
       setPendingUiAction('play');
+      pendingActionRef.current = true;
       setSelectedTile(null);
       setOptimisticPlayedTile(tileToPlay);
       setDrawStepMyHand(null);
@@ -1825,6 +1881,7 @@ export default function App() {
             move: { tile: tileToPlay, position },
           },
         );
+
         if (!resp?.ok) {
           setActionError(resp?.error ?? 'Unable to play tile.');
           setOptimisticPlayedTile(null);
@@ -1863,9 +1920,10 @@ export default function App() {
         showToast(e instanceof Error ? e.message : 'Action failed', 2000);
       } finally {
         setPendingUiAction((prev) => (prev === 'play' ? null : prev));
+        pendingActionRef.current = false;
       }
     },
-    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, flashLastPlayed],
+    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, flashLastPlayed, isGameplayActionBlocked],
   );
 
   // Derived state
@@ -1988,25 +2046,57 @@ export default function App() {
         }
       : null;
   const boardLegalMoves = useMemo(
-    () => (isMyTurn ? legalMoves : EMPTY_MOVES),
-    [isMyTurn, legalMoves],
+    () =>
+      isMyTurn &&
+      roomRecoveryState === 'idle' &&
+      !isRecoveringConnection &&
+      !pendingActionRef.current &&
+      pendingUiAction !== 'draw' &&
+      pendingUiAction !== 'pass' &&
+      pendingUiAction !== 'play'
+        ? legalMoves
+        : EMPTY_MOVES,
+    [isMyTurn, legalMoves, roomRecoveryState, isRecoveringConnection, pendingUiAction],
+  );
+  const selectedTileHasLegalPlay = useMemo(
+    () =>
+      Boolean(
+        selectedTile &&
+          boardLegalMoves.some(
+            (m) =>
+              m.type === 'play' &&
+              m.tile &&
+              m.position &&
+              tileEquals(m.tile, selectedTile),
+          ),
+      ),
+    [boardLegalMoves, selectedTile],
   );
   const boardSelectedTile = useMemo(
-    () => (isMyTurn ? selectedTile : null),
-    [isMyTurn, selectedTile],
+    () => (selectedTileHasLegalPlay ? selectedTile : null),
+    [selectedTileHasLegalPlay, selectedTile],
   );
   const boardShowOpenEndGlow = useMemo(
     () => Boolean(isMyTurn && opponentDragging),
     [isMyTurn, opponentDragging],
   );
   const handSelectedTile = useMemo(
-    () => (isMyTurn ? selectedTile : null),
-    [isMyTurn, selectedTile],
+    () => (selectedTileHasLegalPlay ? selectedTile : null),
+    [selectedTileHasLegalPlay, selectedTile],
   );
 
   const handleTileTap = useCallback(
     (tile: Tile) => {
-      if (!isMyTurn || state?.handOver || state?.gameOver) return;
+      if (
+        !isMyTurn ||
+        state?.handOver ||
+        state?.gameOver ||
+        roomRecoveryState !== 'idle' ||
+        isRecoveringConnection ||
+        pendingActionRef.current
+      ) {
+        return;
+      }
       if (selectedTile && tileEquals(selectedTile, tile)) {
         setSelectedTile(null);
         emitDraggingState(false);
@@ -2015,7 +2105,7 @@ export default function App() {
       setSelectedTile(tile);
       emitDraggingState(true);
     },
-    [isMyTurn, state?.handOver, state?.gameOver, selectedTile, emitDraggingState],
+    [isMyTurn, state?.handOver, state?.gameOver, roomRecoveryState, isRecoveringConnection, selectedTile, emitDraggingState],
   );
 
   useEffect(() => {
@@ -2170,15 +2260,16 @@ export default function App() {
 
 
   const continueAfterHandReveal = useCallback(() => {
+    const readyHandNumber = handReveal?.handNumber ?? state?.handNumber;
     if (socket && joinedRoom) {
-      emitWithAck(socket, 'hand:ready', joinedRoom).catch((error) => {
+      emitWithAck(socket, 'hand:ready', joinedRoom, readyHandNumber).catch((error) => {
         if (import.meta.env.DEV) {
           console.warn('[hand:ready] failed:', error instanceof Error ? error.message : error);
         }
       });
     }
     setHandReveal(null);
-  }, [socket, joinedRoom]);
+  }, [socket, joinedRoom, handReveal?.handNumber, state?.handNumber]);
 
   // Recover lost hand:ready on reconnect — if the server says the hand is over but
   // we're not in a reveal window, the hand:ready was lost during disconnect. Re-emit it.
@@ -2200,14 +2291,14 @@ export default function App() {
     if (import.meta.env.DEV) {
       console.log('[hand:ready] recovering lost hand:ready signal after reconnect');
     }
-    emitWithAck(socket!, 'hand:ready', joinedRoom!).catch((error) => {
+    emitWithAck(socket!, 'hand:ready', joinedRoom!, state?.handNumber).catch((error) => {
       handReadyRecoveryRef.current = false;
       showToast('Could not signal hand ready. Reconnecting…', 2500);
       if (import.meta.env.DEV) {
         console.warn('[hand:ready] recovery failed:', error instanceof Error ? error.message : error);
       }
     });
-  }, [state?.handOver, state?.gameOver, handReveal, joinedRoom, socket]);
+  }, [state?.handOver, state?.gameOver, state?.handNumber, handReveal, joinedRoom, socket]);
 
   useEffect(() => {
     if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
@@ -2240,7 +2331,15 @@ export default function App() {
 
   useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-    if (!handActive || !isMyTurn || hasPlayMoves || drawSequenceActive) {
+    if (
+      !handActive ||
+      !isMyTurn ||
+      hasPlayMoves ||
+      drawSequenceActive ||
+      roomRecoveryState !== 'idle' ||
+      isRecoveringConnection ||
+      pendingActionRef.current
+    ) {
       autoTurnActionKeyRef.current = '';
       return;
     }
@@ -2257,7 +2356,7 @@ export default function App() {
     } else {
       pass();
     }
-  }, [state, isMyTurn, hasPlayMoves, canDrawNow, canPass, myHand.length, boneyardCount, draw, pass, drawSequenceActive]);
+  }, [state, isMyTurn, hasPlayMoves, canDrawNow, canPass, myHand.length, boneyardCount, draw, pass, drawSequenceActive, roomRecoveryState, isRecoveringConnection]);
 
   useEffect(() => {
     if (!state) {

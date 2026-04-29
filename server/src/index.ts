@@ -4379,7 +4379,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       const room = await act(roomCode, socket.id, action, io, (code) => broadcastStateUpdate(code));
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
-      if (typeof cb === 'function') cb({ ok: true });
+      if (typeof cb === 'function') cb({ ok: true, sequence: room.state?.sequence ?? null });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[game:action] ERROR: ${message}`);
@@ -4406,15 +4406,26 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     }
   });
 
-  socket.on('hand:ready', async (code, cb) => {
+  socket.on('hand:ready', async (code, arg2?: unknown, arg3?: unknown) => {
     const roomCode = String(code).trim().toUpperCase();
+    const handNumber = typeof arg2 === 'number' && Number.isFinite(arg2) ? arg2 : undefined;
+    const cb = (typeof arg2 === 'function' ? arg2 : arg3) as AckFn | undefined;
     try {
-      const result = await readyForNextHand(roomCode, socket.id, io);
+      const result = await readyForNextHand(roomCode, socket.id, io, handNumber, (code) => {
+        broadcastStateUpdate(code);
+      });
       if (result.started) {
         broadcastStateUpdate(result.room.code);
         maybeFinalizeTournamentMatch(result.room);
       }
-      cb?.({ ok: true, started: result.started });
+      cb?.({
+        ok: !result.ignored,
+        started: result.started,
+        ignored: Boolean(result.ignored),
+        handNumber: result.room.state?.handNumber ?? null,
+        waitMs: result.waitMs ?? 0,
+        error: result.ignored ? 'stale_or_duplicate_hand_ready' : undefined,
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       cb?.({ ok: false, error: message });
@@ -4480,7 +4491,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
           players: [...room.players],
         },
       });
-      await startGame(room.code, io);
+      await startGame(room.code, io, { allowRestart: true });
       broadcastStateUpdate(room.code);
       io.to(room.code).emit('game:rematch:started', { roomCode: room.code });
       emitRematchStatus(room.code);

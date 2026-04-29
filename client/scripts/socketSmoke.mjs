@@ -1,9 +1,19 @@
+import { execFileSync } from 'node:child_process';
+import net from 'node:net';
 import { io } from 'socket.io-client';
 
 const SERVER_URL = process.env.SMOKE_SERVER_URL || 'http://127.0.0.1:3001';
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
 const REPEAT_COUNT = Math.max(1, Number(process.env.SMOKE_REPEAT || 1));
 const SETTLE_MS = Math.max(50, Number(process.env.SMOKE_SETTLE_MS || 250));
+
+const SERVER_ENDPOINT = (() => {
+  const parsed = new URL(SERVER_URL);
+  return {
+    host: parsed.hostname,
+    port: Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80)),
+  };
+})();
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -13,6 +23,68 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function getPortListenerDetails() {
+  try {
+    const output = execFileSync(
+      'lsof',
+      ['-nP', `-iTCP:${SERVER_ENDPOINT.port}`, '-sTCP:LISTEN'],
+      { encoding: 'utf8' },
+    ).trim();
+    return output || `no listener on tcp:${SERVER_ENDPOINT.port}`;
+  } catch {
+    return `no listener on tcp:${SERVER_ENDPOINT.port}`;
+  }
+}
+
+function waitForTcpReady(timeoutMs = TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({
+      host: SERVER_ENDPOINT.host,
+      port: SERVER_ENDPOINT.port,
+    });
+
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`Timed out waiting for tcp://${SERVER_ENDPOINT.host}:${SERVER_ENDPOINT.port}`));
+    }, timeoutMs);
+
+    const cleanup = () => clearTimeout(timer);
+
+    socket.once('connect', () => {
+      cleanup();
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('error', (error) => {
+      cleanup();
+      socket.destroy();
+      reject(error);
+    });
+  });
+}
+
+async function waitForServerReady(timeoutMs = TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      await waitForTcpReady(Math.min(1000, timeoutMs));
+      return;
+    } catch (error) {
+      lastError = error;
+      await delay(200);
+    }
+  }
+  throw new Error(
+    [
+      `server not ready at ${SERVER_URL}`,
+      `timeoutMs=${timeoutMs}`,
+      `portCheck=${getPortListenerDetails()}`,
+      `lastError=${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    ].join(' | '),
+  );
 }
 
 function onceWithTimeout(socket, event, predicate = () => true, timeoutMs = TIMEOUT_MS) {
@@ -89,7 +161,17 @@ function createClient(label, userId, username) {
         }
       }
       if (!connected) {
-        throw lastError instanceof Error ? lastError : new Error(`${label} failed to connect`);
+        const baseMessage = lastError instanceof Error ? lastError.message : `${label} failed to connect`;
+        throw new Error(
+          [
+            `${label} failed to connect`,
+            `serverUrl=${SERVER_URL}`,
+            `timeoutMs=${TIMEOUT_MS}`,
+            `connectErrors=${JSON.stringify(state.connectErrors.slice(-5))}`,
+            `portCheck=${getPortListenerDetails()}`,
+            `lastError=${baseMessage}`,
+          ].join(' | '),
+        );
       }
     }
     const resp = await emitAck(socket, 'presence:identify', { userId, username });
@@ -168,6 +250,209 @@ function getPlayableMove(client) {
   const state = latestState(client);
   const legalMoves = Array.isArray(state?.legalMoves) ? state.legalMoves : [];
   return legalMoves.find((move) => move?.type === 'play' && move?.tile && move?.position) ?? null;
+}
+
+function getCurrentPlayerId(client) {
+  const state = latestState(client)?.state;
+  if (!state) return null;
+  return state.playerIds?.[state.currentPlayerIndex] ?? null;
+}
+
+function getClientBySocketId(clients, socketId) {
+  return clients.find((client) => client.socket.id === socketId) ?? null;
+}
+
+function boardTileCount(board) {
+  if (!board) return 0;
+  const mainCount = Array.isArray(board.mainLine) ? board.mainLine.length : 0;
+  const branchCount = Array.isArray(board.hubDoubles)
+    ? board.hubDoubles.reduce(
+        (sum, hub) =>
+          sum +
+          (Array.isArray(hub?.branches)
+            ? hub.branches.reduce((branchSum, branch) => branchSum + (branch?.tiles?.length ?? 0), 0)
+            : 0),
+        0,
+      )
+    : 0;
+  return mainCount + branchCount;
+}
+
+function tileEquals(a, b) {
+  if (!a || !b) return false;
+  return (a.low === b.low && a.high === b.high) || (a.low === b.high && a.high === b.low);
+}
+
+async function waitForSequenceAtLeast(client, minimumSequence) {
+  const current = latestState(client)?.state?.sequence;
+  if (typeof current === 'number' && current >= minimumSequence) return latestState(client);
+  return onceWithTimeout(
+    client.socket,
+    'state:update',
+    (payload) => typeof payload?.state?.sequence === 'number' && payload.state.sequence >= minimumSequence,
+  );
+}
+
+async function waitForAllConnectedClientsSequence(clients, minimumSequence) {
+  await Promise.all(
+    clients
+      .filter((client) => client.socket.connected)
+      .map((client) => waitForSequenceAtLeast(client, minimumSequence)),
+  );
+}
+
+async function waitForAllConnectedClientsHandOver(clients) {
+  const connectedClients = clients.filter((client) => client.socket.connected);
+  await Promise.all(
+    connectedClients.map((client) => {
+      if (latestState(client)?.state?.handOver === true) return Promise.resolve(latestState(client));
+      return onceWithTimeout(
+        client.socket,
+        'state:update',
+        (payload) => payload?.state?.handOver === true,
+      );
+    }),
+  );
+  return latestState(connectedClients[0])?.state ?? null;
+}
+
+async function waitForTurnReady(clients) {
+  const connectedClients = clients.filter((client) => client.socket.connected);
+  const readyNow = () => {
+    const referenceState = latestState(connectedClients[0])?.state;
+    if (!referenceState) return false;
+    if (referenceState.handOver || referenceState.gameOver) return true;
+    const currentId = referenceState.playerIds?.[referenceState.currentPlayerIndex];
+    const current = getClientBySocketId(connectedClients, currentId);
+    if (!current) return false;
+    const currentPayload = latestState(current);
+    const legalMoves = Array.isArray(currentPayload?.legalMoves) ? currentPayload.legalMoves : [];
+    return Boolean(
+      currentPayload?.canDraw ||
+        legalMoves.some((move) => move?.type === 'play' || move?.type === 'pass'),
+    );
+  };
+
+  if (readyNow()) return latestState(connectedClients[0])?.state ?? null;
+  const deadline = Date.now() + TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await Promise.race([
+      Promise.all(
+        connectedClients.map((client) =>
+          onceWithTimeout(client.socket, 'state:update', () => true, Math.max(100, SETTLE_MS * 2)),
+        ),
+      ).catch(() => null),
+      delay(Math.max(100, SETTLE_MS)),
+    ]);
+    if (readyNow()) return latestState(connectedClients[0])?.state ?? null;
+  }
+  throw new Error('turn did not become playable/drawable/passable after post-MOVE sequencing');
+}
+
+async function waitForPlayableClient(clients, roomCode, maxSteps = 20) {
+  for (let step = 0; step < maxSteps; step += 1) {
+    const playable = getActivePlayer(clients);
+    if (playable) return playable;
+
+    const currentId = getCurrentPlayerId(clients[0]);
+    const current = getClientBySocketId(clients, currentId);
+    assert(current, 'could not identify current player while searching for playable move');
+    const stateBefore = latestState(current)?.state;
+    const canDrawNow = Boolean(latestState(current)?.canDraw);
+    const hasPassMove = Array.isArray(latestState(current)?.legalMoves)
+      ? latestState(current).legalMoves.some((move) => move?.type === 'pass')
+      : false;
+    if (!canDrawNow && !hasPassMove) break;
+    const resp = await emitAck(
+      current.socket,
+      'game:action',
+      roomCode,
+      canDrawNow ? { type: 'DRAW' } : { type: 'PASS' },
+    );
+    assert(resp?.ok, `advance action failed while seeking play: ${resp?.error ?? 'unknown'}`);
+    const targetSequence =
+      typeof resp.sequence === 'number' ? resp.sequence : (stateBefore?.sequence ?? 0) + 1;
+    await waitForAllConnectedClientsSequence(clients, targetSequence);
+    await delay(SETTLE_MS);
+  }
+  return getActivePlayer(clients);
+}
+
+async function playUntilHandOver(clients, roomCode, maxIterations = 120) {
+  const progressTail = [];
+  let lastSequence = latestState(clients[0])?.state?.sequence ?? null;
+  let consecutiveNoProgress = 0;
+
+  const snapshotProgress = (iteration, client, state, action, resp, beforeSequence) => {
+    const payload = latestState(client);
+    const legalMoves = Array.isArray(payload?.legalMoves) ? payload.legalMoves : [];
+    const handCounts = state?.handCounts ?? {};
+    return {
+      iteration,
+      sequence: state?.sequence ?? null,
+      beforeSequence,
+      ackSequence: typeof resp?.sequence === 'number' ? resp.sequence : null,
+      handNumber: state?.handNumber ?? null,
+      currentPlayerId: state?.playerIds?.[state.currentPlayerIndex] ?? null,
+      currentClient: client?.state?.label ?? null,
+      legalMovesCount: legalMoves.length,
+      hasPlay: legalMoves.some((move) => move?.type === 'play'),
+      canDraw: Boolean(payload?.canDraw),
+      hasPass: legalMoves.some((move) => move?.type === 'pass'),
+      boneyardLength: state?.boneyard?.length ?? null,
+      handCounts,
+      actionType: action?.type ?? null,
+      ackOk: Boolean(resp?.ok),
+      ackError: resp?.error ?? null,
+      boardTileCount: boardTileCount(state?.board),
+      consecutiveNoProgress,
+    };
+  };
+
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    const state = latestState(clients[0])?.state;
+    if (state?.handOver) return state;
+    assert(state, 'missing state while playing to hand over');
+
+    const currentId = state.playerIds[state.currentPlayerIndex];
+    const current = getClientBySocketId(clients, currentId);
+    assert(current, 'could not identify current player while playing to hand over');
+
+    const move = getPlayableMove(current);
+    const action = move
+      ? { type: 'MOVE', move: { tile: move.tile, position: move.position } }
+      : latestState(current)?.canDraw
+        ? { type: 'DRAW' }
+        : { type: 'PASS' };
+    const beforeSequence = latestState(current)?.state?.sequence ?? state.sequence;
+    const resp = await emitAck(current.socket, 'game:action', roomCode, action);
+    const diagnostic = snapshotProgress(iteration + 1, current, state, action, resp, beforeSequence);
+    progressTail.push(diagnostic);
+    if (progressTail.length > 8) progressTail.shift();
+    assert(
+      resp?.ok,
+      `action failed while playing to hand over: ${resp?.error ?? 'unknown'}; recent=${JSON.stringify(progressTail)}`,
+    );
+    const targetSequence =
+      typeof resp.sequence === 'number' ? resp.sequence : beforeSequence + 1;
+    await waitForAllConnectedClientsSequence(clients, targetSequence);
+    const afterSequence = latestState(clients[0])?.state?.sequence ?? null;
+    if (afterSequence === lastSequence) {
+      consecutiveNoProgress += 1;
+    } else {
+      consecutiveNoProgress = 0;
+      lastSequence = afterSequence;
+    }
+    if (consecutiveNoProgress >= 5) {
+      throw new Error(`No sequence progress while playing to hand over; recent=${JSON.stringify(progressTail)}`);
+    }
+    if (clients.some((client) => client.socket.connected && latestState(client)?.state?.handOver === true)) {
+      return await waitForAllConnectedClientsHandOver(clients);
+    }
+    await waitForTurnReady(clients);
+    await delay(50);
+  }
+  throw new Error(`Hand did not end after ${maxIterations} iterations; recent=${JSON.stringify(progressTail)}`);
 }
 
 function getActivePlayer(clients) {
@@ -281,7 +566,7 @@ async function scenarioLifecycleReconnect() {
       const initialSpectatorState = latestState(spectator, 'state:spectate');
       assert(initialSpectatorState?.state, 'spectator did not receive initial state snapshot');
 
-      const currentFor = getActivePlayer([alpha, bravo]);
+      const currentFor = await waitForPlayableClient([alpha, bravo], roomCode);
       assert(currentFor, 'could not identify active player');
       const playMove = getPlayableMove(currentFor);
       assert(playMove, 'no playable move found for active player');
@@ -488,7 +773,8 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
           'room roster did not replace old bravo socket id during migration',
         );
 
-        const activeClient = getActivePlayer([alpha, bravoClone]);
+        await waitForSequenceAtLeast(bravoClone, migrateResp.state?.sequence ?? 0);
+        const activeClient = await waitForPlayableClient([alpha, bravoClone], roomCode);
         const inactiveClient = getInactivePlayer([alpha, bravoClone]);
         assert(activeClient && inactiveClient, 'could not identify active/inactive players after migration');
         const inactiveMove = getPlayableMove(inactiveClient);
@@ -504,6 +790,356 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
       } finally {
         bravoClone.disconnect();
       }
+    },
+  );
+}
+
+async function scenarioMidHandActionReliability() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'action-user-a', username: 'ActionA' },
+      { label: 'bravo', userId: 'action-user-b', username: 'ActionB' },
+    ],
+    async ({ alpha, bravo }) => {
+      const createResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+      });
+      assert(createResp?.ok, 'alpha failed to create room');
+      const roomCode = createResp.roomCode;
+      assert(roomCode, 'missing room code');
+
+      const joinResp = await emitAck(bravo.socket, 'room:join', roomCode, {
+        username: bravo.state.username,
+        userId: bravo.state.userId,
+      });
+      assert(joinResp?.ok, 'bravo failed to join');
+      await waitForRoomCount(alpha, 2);
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      const firstActive = await waitForPlayableClient([alpha, bravo], roomCode);
+      assert(firstActive, 'could not identify active player with legal play');
+      const firstInactive = firstActive === alpha ? bravo : alpha;
+      const firstMove = getPlayableMove(firstActive);
+      assert(firstMove, 'active player had no legal play');
+
+      const inactiveResp = await emitAck(firstInactive.socket, 'game:action', roomCode, {
+        type: 'MOVE',
+        move: { tile: firstMove.tile, position: firstMove.position },
+      });
+      assert(inactiveResp?.ok === false, 'inactive player action unexpectedly succeeded');
+
+      const before = latestState(firstActive)?.state;
+      const beforeSequence = before?.sequence ?? 0;
+      const beforeBoardCount = boardTileCount(before?.board);
+      const beforeHand = before?.players?.[firstActive.socket.id]?.hand ?? [];
+      assert(beforeHand.some((tile) => tileEquals(tile, firstMove.tile)), 'played tile missing before action');
+
+      const playResp = await emitAck(firstActive.socket, 'game:action', roomCode, {
+        type: 'MOVE',
+        move: { tile: firstMove.tile, position: firstMove.position },
+      });
+      assert(playResp?.ok, `legal play failed: ${playResp?.error ?? 'unknown'}`);
+      assert(
+        typeof playResp.sequence === 'number' && playResp.sequence > beforeSequence,
+        'legal play ack did not include an advanced sequence',
+      );
+      const afterUpdate = await waitForSequenceAtLeast(firstActive, playResp.sequence);
+      const after = afterUpdate.state;
+      const afterHand = after.players?.[firstActive.socket.id]?.hand ?? [];
+      assert(after.sequence > beforeSequence, 'state sequence did not increase after legal play');
+      assert(boardTileCount(after.board) > beforeBoardCount, 'board did not change after legal play');
+      assert(!afterHand.some((tile) => tileEquals(tile, firstMove.tile)), 'played tile remained in active hand');
+
+      const duplicateResp = await emitAck(firstActive.socket, 'game:action', roomCode, {
+        type: 'MOVE',
+        move: { tile: firstMove.tile, position: firstMove.position },
+      });
+      assert(duplicateResp?.ok === false, 'duplicate action unexpectedly succeeded');
+      const duplicateSequence = latestState(firstActive)?.state?.sequence;
+      await delay(SETTLE_MS);
+      assert(
+        latestState(firstActive)?.state?.sequence === duplicateSequence,
+        'duplicate rejected action changed authoritative sequence',
+      );
+
+      const reconnectTarget = await waitForPlayableClient([alpha, bravo], roomCode);
+      assert(reconnectTarget, 'could not find playable active player before reconnect');
+      const reconnectUser = {
+        userId: reconnectTarget.state.userId,
+        username: reconnectTarget.state.username,
+        label: `${reconnectTarget.state.label}Reconnect`,
+      };
+      reconnectTarget.disconnect();
+      await delay(250);
+
+      const reconnected = createClient(reconnectUser.label, reconnectUser.userId, reconnectUser.username);
+      try {
+        await reconnected.connectAndIdentify();
+        const rejoinResp = await emitAck(reconnected.socket, 'room:join', roomCode, {
+          username: reconnectUser.username,
+          userId: reconnectUser.userId,
+        });
+        assert(rejoinResp?.ok, `rejoin before action failed: ${rejoinResp?.error ?? 'unknown'}`);
+        assert(rejoinResp.you === reconnected.socket.id, 'rejoin did not bind new socket id');
+        assert(Array.isArray(rejoinResp.legalMoves), 'rejoin response missing legalMoves');
+
+        const liveClients = reconnectTarget === alpha ? [reconnected, bravo] : [alpha, reconnected];
+        await waitForRoomCount(liveClients.find((client) => client !== reconnected), 2);
+        await waitForSequenceAtLeast(reconnected, rejoinResp.state?.sequence ?? 0);
+        const reconnectedPlayable = await waitForPlayableClient(liveClients, roomCode);
+        assert(reconnectedPlayable === reconnected, 'reconnected active player did not regain playable turn');
+        const reconnectMove = getPlayableMove(reconnected);
+        assert(reconnectMove, 'reconnected player missing legal move');
+        const reconnectBefore = latestState(reconnected)?.state;
+        const reconnectResp = await emitAck(reconnected.socket, 'game:action', roomCode, {
+          type: 'MOVE',
+          move: { tile: reconnectMove.tile, position: reconnectMove.position },
+        });
+        assert(reconnectResp?.ok, `reconnected legal action failed: ${reconnectResp?.error ?? 'unknown'}`);
+        assert(
+          typeof reconnectResp.sequence === 'number' &&
+            reconnectResp.sequence > (reconnectBefore?.sequence ?? 0),
+          'reconnected action ack did not advance sequence',
+        );
+        const reconnectAfter = await waitForSequenceAtLeast(reconnected, reconnectResp.sequence);
+        assert(
+          !((reconnectAfter.state.players?.[reconnected.socket.id]?.hand ?? []).some((tile) =>
+            tileEquals(tile, reconnectMove.tile),
+          )),
+          'reconnected played tile remained in hand',
+        );
+
+        return {
+          roomCode,
+          checks: {
+            legalActionAckedWithSequence: true,
+            legalActionRemovedTileAndChangedBoard: true,
+            inactiveActionRejected: true,
+            duplicateActionRejectedWithoutMutation: true,
+            reconnectActionWorksAfterMigration: true,
+          },
+        };
+      } finally {
+        reconnected.disconnect();
+      }
+    },
+  );
+}
+
+async function assertPostMoveState(clients, actor, move, beforeState, ackSequence) {
+  await waitForAllConnectedClientsSequence(clients, ackSequence);
+
+  const beforeBoardCount = boardTileCount(beforeState.board);
+  for (const client of clients.filter((entry) => entry.socket.connected)) {
+    const payload = latestState(client);
+    const state = payload?.state;
+    assert(state, `${client.state.label} missing post-MOVE state`);
+    assert(
+      typeof state.sequence === 'number' && state.sequence >= ackSequence,
+      `${client.state.label} did not reach MOVE ack sequence`,
+    );
+    assert(boardTileCount(state.board) > beforeBoardCount, `${client.state.label} board did not include played tile`);
+    assert(
+      state.playerIds?.includes(state.playerIds[state.currentPlayerIndex]),
+      `${client.state.label} current player index is invalid`,
+    );
+
+    if (client === actor) {
+      const ownHand = state.players?.[actor.socket.id]?.hand ?? [];
+      assert(!ownHand.some((tile) => tileEquals(tile, move.tile)), 'actor still sees played tile in own hand');
+    } else if (!state.handOver && !state.gameOver) {
+      const actorHand = state.players?.[actor.socket.id]?.hand ?? [];
+      assert(actorHand.length === 0, `${client.state.label} received actor hand during active play`);
+    }
+
+    const currentId = state.playerIds[state.currentPlayerIndex];
+    const legalMoves = Array.isArray(payload?.legalMoves) ? payload.legalMoves : [];
+    if (!state.handOver && !state.gameOver && client.socket.id !== currentId) {
+      assert(legalMoves.length === 0, `${client.state.label} received legal moves while inactive`);
+      assert(payload?.canDraw === false, `${client.state.label} canDraw true while inactive`);
+    }
+    if (!state.handOver && !state.gameOver && client.socket.id === currentId) {
+      const hasPlay = legalMoves.some((legalMove) => legalMove?.type === 'play');
+      const hasPass = legalMoves.some((legalMove) => legalMove?.type === 'pass');
+      assert(!payload?.canDraw || !hasPlay, `${client.state.label} canDraw true while legal play exists`);
+      assert(payload?.canDraw || hasPlay || hasPass, `${client.state.label} current turn has no action available`);
+    }
+  }
+
+  await waitForTurnReady(clients);
+}
+
+async function scenarioPostMoveStability() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'post-move-user-a', username: 'PostMoveA' },
+      { label: 'bravo', userId: 'post-move-user-b', username: 'PostMoveB' },
+    ],
+    async ({ alpha, bravo }) => {
+      const createResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+      });
+      assert(createResp?.ok, 'alpha failed to create room');
+      const roomCode = createResp.roomCode;
+      assert(roomCode, 'missing room code');
+
+      const joinResp = await emitAck(bravo.socket, 'room:join', roomCode, {
+        username: bravo.state.username,
+        userId: bravo.state.userId,
+      });
+      assert(joinResp?.ok, 'bravo failed to join');
+      await waitForRoomCount(alpha, 2);
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      const clients = [alpha, bravo];
+      let movesChecked = 0;
+      for (let step = 0; step < 8 && movesChecked < 5; step += 1) {
+        const actor = await waitForPlayableClient(clients, roomCode);
+        assert(actor, 'could not identify active player with legal play during post-MOVE stability');
+        const move = getPlayableMove(actor);
+        assert(move, 'active player did not have a playable move during post-MOVE stability');
+        const beforeState = latestState(actor)?.state;
+        assert(beforeState, 'missing actor state before post-MOVE stability action');
+        assert(beforeState.playerIds[beforeState.currentPlayerIndex] === actor.socket.id, 'actor was not current player');
+        assert(
+          (beforeState.players?.[actor.socket.id]?.hand ?? []).some((tile) => tileEquals(tile, move.tile)),
+          'actor did not have selected tile before post-MOVE stability action',
+        );
+
+        const resp = await emitAck(actor.socket, 'game:action', roomCode, {
+          type: 'MOVE',
+          move: { tile: move.tile, position: move.position },
+        });
+        assert(resp?.ok, `post-MOVE legal action failed: ${resp?.error ?? 'unknown'}`);
+        assert(
+          typeof resp.sequence === 'number' && resp.sequence > beforeState.sequence,
+          'post-MOVE ack missing accepted placement sequence',
+        );
+        await assertPostMoveState(clients, actor, move, beforeState, resp.sequence);
+        movesChecked += 1;
+        if (latestState(actor)?.state?.handOver) break;
+      }
+
+      assert(movesChecked >= 3, `post-MOVE stability checked too few moves: ${movesChecked}`);
+
+      const staleActor = await waitForPlayableClient(clients, roomCode);
+      assert(staleActor, 'could not identify active player for stale MOVE rejection');
+      const staleMove = getPlayableMove(staleActor);
+      assert(staleMove, 'active player missing stale MOVE candidate');
+      const staleBefore = latestState(staleActor)?.state;
+      assert(staleBefore, 'missing stale MOVE setup state');
+      const staleResp = await emitAck(staleActor.socket, 'game:action', roomCode, {
+        type: 'MOVE',
+        move: { tile: staleMove.tile, position: staleMove.position },
+      });
+      assert(staleResp?.ok, `stale setup MOVE failed: ${staleResp?.error ?? 'unknown'}`);
+      await waitForAllConnectedClientsSequence(clients, staleResp.sequence);
+      await waitForTurnReady(clients);
+
+      const duplicateSequenceBefore = Math.max(
+        ...clients.map((client) => latestState(client)?.state?.sequence ?? staleBefore.sequence),
+      );
+      const duplicateResp = await emitAck(staleActor.socket, 'game:action', roomCode, {
+        type: 'MOVE',
+        move: { tile: staleMove.tile, position: staleMove.position },
+      });
+      assert(duplicateResp?.ok === false, 'stale duplicate MOVE unexpectedly succeeded');
+      await delay(SETTLE_MS);
+      const duplicateSequenceAfter = Math.max(
+        ...clients.map((client) => latestState(client)?.state?.sequence ?? duplicateSequenceBefore),
+      );
+      assert(
+        duplicateSequenceAfter === duplicateSequenceBefore,
+        'stale duplicate MOVE mutated authoritative sequence',
+      );
+
+      return {
+        roomCode,
+        checks: {
+          repeatedMoveAcksHaveSequence: true,
+          repeatedMovesReachBothClients: true,
+          playedTilesRemovedFromActorHand: true,
+          inactiveHandsRemainMasked: true,
+          staleMoveRejectedWithoutMutation: true,
+        },
+      };
+    },
+  );
+}
+
+async function scenarioStartAndHandReadyGuards() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'ready-user-a', username: 'ReadyA' },
+      { label: 'bravo', userId: 'ready-user-b', username: 'ReadyB' },
+    ],
+    async ({ alpha, bravo }) => {
+      const createResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+      });
+      assert(createResp?.ok, 'alpha failed to create room');
+      const roomCode = createResp.roomCode;
+      assert(roomCode, 'missing room code');
+
+      const joinResp = await emitAck(bravo.socket, 'room:join', roomCode, {
+        username: bravo.state.username,
+        userId: bravo.state.userId,
+      });
+      assert(joinResp?.ok, 'bravo failed to join');
+      await waitForRoomCount(alpha, 2);
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      const activeStartState = latestState(alpha)?.state;
+      assert(activeStartState && !activeStartState.handOver, 'game did not start active hand');
+      const duplicateStart = await emitAck(alpha.socket, 'game:start', roomCode);
+      assert(duplicateStart?.ok === false, 'game:start reset or accepted an active match');
+      assert(
+        latestState(alpha)?.state?.handNumber === activeStartState.handNumber,
+        'duplicate game:start changed hand number',
+      );
+
+      const handOverState = await playUntilHandOver([alpha, bravo], roomCode);
+      assert(handOverState.handOver && !handOverState.gameOver, 'expected hand over before game over');
+      const handOverHandNumber = handOverState.handNumber;
+
+      const startDuringHandOver = await emitAck(alpha.socket, 'game:start', roomCode);
+      assert(startDuringHandOver?.ok === false, 'game:start reset or accepted a hand-over match');
+      assert(
+        latestState(alpha)?.state?.handNumber === handOverHandNumber,
+        'game:start during hand over changed hand number',
+      );
+
+      const staleReady = await emitAck(alpha.socket, 'hand:ready', roomCode, handOverHandNumber - 1);
+      assert(staleReady?.ok === false && staleReady?.ignored, 'stale hand:ready was not ignored');
+      assert(latestState(alpha)?.state?.handOver, 'stale hand:ready advanced the hand');
+
+      const firstReady = await emitAck(alpha.socket, 'hand:ready', roomCode, handOverHandNumber);
+      assert(firstReady?.ok && firstReady.started === false, 'first hand:ready should not start next hand alone');
+
+      const secondReady = await emitAck(bravo.socket, 'hand:ready', roomCode, handOverHandNumber);
+      assert(secondReady?.ok && secondReady.started === false, 'second current hand:ready should schedule next hand');
+      assert(
+        typeof secondReady.waitMs === 'number' && secondReady.waitMs >= 2000,
+        `hand:ready did not report a meaningful server-side hold, got ${secondReady.waitMs}`,
+      );
+      await waitForAllConnectedClientsSequence([alpha, bravo], handOverState.sequence + 1);
+      const nextState = latestState(alpha)?.state;
+      assert(nextState?.handNumber === handOverHandNumber + 1, 'next hand did not start after both ready');
+      assert(!nextState?.handOver, 'next hand state still marked handOver');
+
+      return {
+        roomCode,
+        checks: {
+          duplicateStartRejectedActive: true,
+          duplicateStartRejectedHandOver: true,
+          staleHandReadyIgnored: true,
+          handReadyRequiresBothPlayers: true,
+          handReadyHasServerHold: true,
+        },
+      };
     },
   );
 }
@@ -620,31 +1256,8 @@ async function scenarioHandEndedReplay() {
       await waitForRoomCount(alpha, 2);
       await startTwoPlayerGame(alpha, bravo, roomCode);
 
-      // Play until hand is over
-      let iterations = 0;
-      while (iterations < 100) {
-        iterations++;
-        const state = latestState(alpha)?.state;
-        if (state?.handOver) break;
-
-        const current = getActivePlayer([alpha, bravo]);
-        if (!current) {
-          // If no playable move, must draw
-          const activeId = latestState(alpha).state.playerIds[latestState(alpha).state.currentPlayerIndex];
-          const activeClient = alpha.socket.id === activeId ? alpha : bravo;
-          await emitAck(activeClient.socket, 'game:action', roomCode, { type: 'DRAW' });
-        } else {
-          const move = getPlayableMove(current);
-          await emitAck(current.socket, 'game:action', roomCode, {
-            type: 'MOVE',
-            move: { tile: move.tile, position: move.position },
-          });
-        }
-        await delay(50);
-      }
-
-      const finalState = latestState(alpha)?.state;
-      assert(finalState?.handOver, 'Hand did not end after 100 iterations');
+      const finalState = await playUntilHandOver([alpha, bravo], roomCode);
+      assert(finalState?.handOver, 'Hand did not end before replay check');
       assert(!finalState?.gameOver, 'Game ended prematurely (unlikely with default scores)');
 
       // Now bravo disconnects and rejoins
@@ -844,6 +1457,9 @@ const scenarios = [
   { name: 'lifecycle-reconnect', run: scenarioLifecycleReconnect },
   { name: 'room-switch-cleanup', run: scenarioRoomSwitchCleanup },
   { name: 'seat-migration-and-spectator-rejection', run: scenarioSeatMigrationAndSpectatorRejection },
+  { name: 'mid-hand-action-reliability', run: scenarioMidHandActionReliability },
+  { name: 'post-move-stability', run: scenarioPostMoveStability },
+  { name: 'start-and-hand-ready-guards', run: scenarioStartAndHandReadyGuards },
   { name: 'guest-seat-reconnect', run: scenarioGuestSeatReconnect },
   { name: 'tokenless-uuid-claim-rejected', run: scenarioTokenlessUuidClaimRejected },
   { name: 'hand-ended-replay', run: scenarioHandEndedReplay },
@@ -852,6 +1468,7 @@ const scenarios = [
 ];
 
 async function main() {
+  await waitForServerReady();
   const results = [];
   for (let iteration = 1; iteration <= REPEAT_COUNT; iteration += 1) {
     for (const scenario of scenarios) {
