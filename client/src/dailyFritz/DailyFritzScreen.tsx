@@ -266,14 +266,19 @@ export default function DailyFritzScreen({
         : today?.rank != null
           ? `#${today.rank}`
           : '—';
-    const resultValue = currentLeaderboardRow
-      ? `${currentLeaderboardRow.won ? 'W' : 'L'} ${currentLeaderboardRow.finalScore}-${currentLeaderboardRow.opponentScore}`
+    const scoreValue = currentLeaderboardRow
+      ? `${currentLeaderboardRow.finalScore}-${currentLeaderboardRow.opponentScore}`
       : today?.result
-        ? `${Boolean(today.result.won) ? 'W' : 'L'} ${Number(today.result.final_score ?? 0)}-${Number(today.result.opponent_score ?? 0)}`
+        ? `${Number(today.result.final_score ?? 0)}-${Number(today.result.opponent_score ?? 0)}`
         : '—';
     const diffValue = currentLeaderboardRow
-      ? `${currentLeaderboardRow.pointDiff >= 0 ? '+' : ''}${currentLeaderboardRow.pointDiff} / ${currentLeaderboardRow.movesUsed}`
+      ? `${currentLeaderboardRow.pointDiff >= 0 ? '+' : ''}${currentLeaderboardRow.pointDiff}`
       : '—';
+    const resultValue = currentLeaderboardRow
+      ? currentLeaderboardRow.won ? 'Win' : 'Loss'
+      : today?.result
+        ? Boolean(today.result.won) ? 'Win' : 'Loss'
+        : '—';
     const diffTone =
       currentLeaderboardRow == null
         ? 'neutral'
@@ -285,8 +290,9 @@ export default function DailyFritzScreen({
 
     return [
       { label: 'Your Rank', value: rankValue, sublabel: 'Today’s placement', tone: 'accent' },
-      { label: 'Your Result', value: resultValue, sublabel: 'Result / scoreline', tone: 'neutral' },
-      { label: 'Diff / Moves', value: diffValue, sublabel: 'Point diff / turns used', tone: diffTone },
+      { label: 'Score', value: scoreValue, sublabel: 'Your final scoreline', tone: 'neutral' },
+      { label: 'Diff', value: diffValue, sublabel: 'Point differential', tone: diffTone },
+      { label: 'Result', value: resultValue, sublabel: 'Match outcome', tone: 'neutral' },
     ];
   }, [currentLeaderboardRow, today]);
   const showAuthPrompt =

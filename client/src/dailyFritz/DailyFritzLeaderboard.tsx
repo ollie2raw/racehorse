@@ -41,8 +41,8 @@ export default function DailyFritzLeaderboard({
         <span>Result</span>
         <span>Score</span>
         <span>Diff</span>
-        <span>Moves</span>
-        <span>Time</span>
+        <span>{pageVariant ? 'Meta' : 'Moves'}</span>
+        {!pageVariant ? <span>Time</span> : null}
       </div>
       <div className="daily-fritz-leaderboard-list">
         {rows.map((row) => {
@@ -90,8 +90,14 @@ export default function DailyFritzLeaderboard({
               <span className="daily-fritz-diff-cell">
                 {row.pointDiff >= 0 ? '+' : ''}{row.pointDiff}
               </span>
-              <span className="daily-fritz-moves-cell">{row.movesUsed}</span>
-              <span className="daily-fritz-time-cell">{formatCompletedAt(row.completedAt)}</span>
+              {pageVariant ? (
+                <span className="daily-fritz-meta-cell">{row.movesUsed} moves • {formatCompletedAt(row.completedAt)}</span>
+              ) : (
+                <>
+                  <span className="daily-fritz-moves-cell">{row.movesUsed}</span>
+                  <span className="daily-fritz-time-cell">{formatCompletedAt(row.completedAt)}</span>
+                </>
+              )}
             </div>
           );
         })}
