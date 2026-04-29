@@ -37,6 +37,11 @@ function traceCameraDebug(
   payload: Record<string, unknown>,
 ): void {
   if (typeof window === 'undefined') return;
+  try {
+    if (window.localStorage.getItem('BOARD_CAMERA_DEBUG') !== '1') return;
+  } catch {
+    return;
+  }
   const timestamp =
     typeof performance !== 'undefined' && typeof performance.now === 'function'
       ? Number(performance.now().toFixed(2))
@@ -552,7 +557,12 @@ function BoardComponent({
   const boardTileCount = board
     ? board.mainLine.length +
       board.hubDoubles.reduce(
-        (sum, hub) => sum + hub.branches.reduce((branchSum, branch) => branchSum + branch.tiles.length, 0),
+        (sum, hub) =>
+          sum +
+          (hub.branches ?? []).reduce(
+            (branchSum, branch) => branchSum + (branch?.tiles?.length ?? 0),
+            0,
+          ),
         0,
       )
     : 0;
