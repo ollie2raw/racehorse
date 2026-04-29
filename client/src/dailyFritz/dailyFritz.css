@@ -407,6 +407,14 @@
   gap: 10px;
 }
 
+.daily-fritz-leaderboard.is-page {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+}
+
 .daily-fritz-leaderboard-head,
 .daily-fritz-leaderboard-row {
   display: grid;
@@ -424,9 +432,33 @@
   padding: 0 10px;
 }
 
+.daily-fritz-leaderboard-head.is-page {
+  grid-template-columns: 44px 1fr 90px 80px 70px 60px 68px;
+  padding: 0 18px;
+  margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
 .daily-fritz-leaderboard-list {
   display: grid;
   gap: 8px;
+}
+
+.daily-fritz-leaderboard.is-page .daily-fritz-leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  padding-right: 2px;
 }
 
 .daily-fritz-leaderboard-row {
@@ -449,6 +481,153 @@
   font-weight: 600;
 }
 
+.daily-fritz-leaderboard-row.is-page {
+  grid-template-columns: 44px 1fr 90px 80px 70px 60px 68px;
+  min-height: 62px;
+  height: 62px;
+  padding: 0 18px;
+  gap: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  background: transparent;
+  position: relative;
+  box-shadow: none;
+}
+
+.daily-fritz-leaderboard-row.is-page:hover {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.daily-fritz-leaderboard-row.is-page.is-current-user {
+  background: rgba(149, 240, 202, 0.05);
+  border-color: rgba(149, 240, 202, 0.22);
+  box-shadow: none;
+}
+
+.daily-fritz-top-accent {
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 2px;
+  border-radius: 2px;
+}
+
+.daily-fritz-top-accent.rank-1 {
+  background: #d8b56f;
+}
+
+.daily-fritz-top-accent.rank-2 {
+  background: #a0abb8;
+}
+
+.daily-fritz-top-accent.rank-3 {
+  background: #c07a4f;
+}
+
+.daily-fritz-leaderboard-row.is-page .daily-fritz-rank-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.daily-fritz-rank-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.daily-fritz-rank-dot.rank-1 {
+  background: #d8b56f;
+  box-shadow: 0 0 6px rgba(216, 181, 111, 0.6);
+}
+
+.daily-fritz-rank-dot.rank-2 {
+  background: #a0abb8;
+  box-shadow: 0 0 6px rgba(160, 171, 184, 0.6);
+}
+
+.daily-fritz-rank-dot.rank-3 {
+  background: #c07a4f;
+  box-shadow: 0 0 6px rgba(192, 122, 79, 0.6);
+}
+
+.daily-fritz-rank-value {
+  min-width: 18px;
+  text-align: right;
+  font-size: 1.18rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.daily-fritz-rank-value.rank-1 {
+  color: #d8b56f;
+}
+
+.daily-fritz-rank-value.rank-2 {
+  color: #a0abb8;
+}
+
+.daily-fritz-rank-value.rank-3 {
+  color: #c07a4f;
+}
+
+.daily-fritz-leaderboard-row.is-page .daily-fritz-player-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-weight: 400;
+}
+
+.daily-fritz-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(36, 53, 74, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.daily-fritz-avatar.is-current-user {
+  background: rgba(149, 240, 202, 0.16);
+  border-color: rgba(149, 240, 202, 0.38);
+  color: #95f0ca;
+}
+
+.daily-fritz-player-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.12rem;
+  font-weight: 700;
+}
+
+.daily-fritz-leaderboard-row.is-page.is-current-user .daily-fritz-player-name {
+  color: #95f0ca;
+  font-weight: 600;
+}
+
+.daily-fritz-you-pill {
+  margin-left: 7px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(149, 240, 202, 0.65);
+}
+
 .daily-fritz-result-cell,
 .daily-fritz-score-cell,
 .daily-fritz-diff-cell {
@@ -468,6 +647,18 @@
   font-weight: 800;
 }
 
+.daily-fritz-leaderboard-row.is-page .daily-fritz-result-cell {
+  width: 30px;
+  min-width: 30px;
+  height: 24px;
+  padding: 0;
+  justify-self: start;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .daily-fritz-result-cell.is-win {
   color: #96f0ca;
   background: rgba(22, 74, 42, 0.28);
@@ -482,11 +673,35 @@
   min-width: 86px;
 }
 
+.daily-fritz-leaderboard-row.is-page .daily-fritz-score-cell,
+.daily-fritz-leaderboard-row.is-page .daily-fritz-diff-cell {
+  min-width: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  justify-content: flex-start;
+}
+
+.daily-fritz-leaderboard-row.is-page .daily-fritz-score-cell {
+  font-size: 1.32rem;
+  font-weight: 800;
+  color: rgba(245, 248, 250, 0.94);
+}
+
+.daily-fritz-leaderboard-row.is-page.is-current-user .daily-fritz-score-cell {
+  color: #95f0ca;
+}
+
+.daily-fritz-leaderboard-row.is-page .daily-fritz-diff-cell {
+  font-size: 1.08rem;
+  font-weight: 600;
+}
+
 .daily-fritz-diff-cell {
   min-width: 54px;
 }
 
-.daily-fritz-leaderboard-row.is-current-user {
+.daily-fritz-leaderboard-row.is-current-user:not(.is-page) {
   border-color: rgba(74, 222, 128, 0.28);
   box-shadow:
     inset 0 0 0 1px rgba(74, 222, 128, 0.14),
@@ -494,35 +709,12 @@
   background: linear-gradient(180deg, rgba(12, 34, 26, 0.88), rgba(12, 20, 27, 0.86));
 }
 
-.daily-fritz-leaderboard-page-panel {
-  gap: 20px;
-}
-
-.daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard {
-  gap: 16px;
-}
-
-.daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-head {
-  padding: 0 18px;
-}
-
-.daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-list {
-  gap: 12px;
-}
-
-.daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-row {
-  min-height: 76px;
-  padding: 16px 18px;
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(11, 18, 31, 0.86), rgba(9, 15, 24, 0.94));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 14px 28px rgba(2, 8, 16, 0.16);
-}
-
-.daily-fritz-leaderboard-page-panel .daily-fritz-empty {
-  padding: 28px;
-  border-radius: 24px;
+.daily-fritz-leaderboard-row.is-page .daily-fritz-moves-cell,
+.daily-fritz-leaderboard-row.is-page .daily-fritz-time-cell {
+  font-size: 1.04rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.82);
+  font-variant-numeric: tabular-nums;
 }
 
 .daily-fritz-empty {
@@ -598,14 +790,27 @@
     font-size: 0.84rem;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-head {
-    padding: 0 12px;
+  .daily-fritz-leaderboard-head.is-page,
+  .daily-fritz-leaderboard-row.is-page {
+    grid-template-columns: 44px minmax(0, 1fr) 76px 70px 58px 56px 62px;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-row {
-    min-height: 68px;
-    padding: 14px 12px;
-    border-radius: 18px;
+  .daily-fritz-leaderboard-head.is-page {
+    font-size: 0.7rem;
+  }
+
+  .daily-fritz-leaderboard-row.is-page {
+    min-height: 56px;
+    height: 56px;
+  }
+
+  .daily-fritz-avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .daily-fritz-player-name {
+    font-size: 1rem;
   }
 }
 
@@ -649,45 +854,48 @@
     flex-direction: column;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-head {
+  .daily-fritz-leaderboard-head.is-page {
     display: none;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-leaderboard-row {
+  .daily-fritz-leaderboard-row.is-page {
     grid-template-columns: minmax(0, 1fr) repeat(3, auto);
     grid-template-areas:
       "player player player player"
       "rank result score diff"
       "moves moves time time";
     gap: 10px;
+    height: auto;
+    min-height: 72px;
+    padding: 14px 14px 16px;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-rank-cell {
+  .daily-fritz-leaderboard-row.is-page .daily-fritz-rank-cell {
     grid-area: rank;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-player-cell {
+  .daily-fritz-leaderboard-row.is-page .daily-fritz-player-cell {
     grid-area: player;
     font-size: 0.95rem;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-result-cell {
+  .daily-fritz-leaderboard-row.is-page .daily-fritz-result-cell {
     grid-area: result;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-score-cell {
+  .daily-fritz-leaderboard-row.is-page .daily-fritz-score-cell {
     grid-area: score;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-diff-cell {
+  .daily-fritz-leaderboard-row.is-page .daily-fritz-diff-cell {
     grid-area: diff;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-moves-cell {
+  .daily-fritz-leaderboard-row.is-page .daily-fritz-moves-cell {
     grid-area: moves;
   }
 
-  .daily-fritz-leaderboard-page-panel .daily-fritz-time-cell {
+  .daily-fritz-leaderboard-row.is-page .daily-fritz-time-cell {
     grid-area: time;
     justify-self: end;
   }

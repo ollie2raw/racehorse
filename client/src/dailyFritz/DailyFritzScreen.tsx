@@ -4,7 +4,7 @@ import type { UserProfile } from '../auth/useAuth';
 import type { GhostProfileSummary } from '../ghost/api';
 import BotMatchScreen from '../bot/BotMatchScreen';
 import LayoutScreen from '../ui/LayoutScreen';
-import LeaderboardPageShell from '../ui/LeaderboardPageShell';
+import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import DailyFritzLeaderboard from './DailyFritzLeaderboard';
 import {
   fetchDailyFritzLeaderboard,
@@ -36,6 +36,16 @@ function formatDateLabel(dateText: string): string {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+  });
+}
+
+function formatLeaderboardDateLabel(dateText: string): string {
+  const parsed = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateText;
+  return parsed.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
   });
 }
 
@@ -239,6 +249,46 @@ export default function DailyFritzScreen({
   }, [today]);
 
   const currentUsername = profile?.username?.trim() ?? null;
+  const currentLeaderboardRow = useMemo(
+    () =>
+      leaderboard.find((row) =>
+        Boolean(row.is_current_user) ||
+        (currentUsername != null &&
+          currentUsername.trim().length > 0 &&
+          row.username.trim().toLowerCase() === currentUsername.trim().toLowerCase()),
+      ) ?? null,
+    [currentUsername, leaderboard],
+  );
+  const leaderboardSummaryCards = useMemo<LeaderboardSummaryCard[]>(() => {
+    const rankValue =
+      currentLeaderboardRow?.rank != null
+        ? `#${currentLeaderboardRow.rank}`
+        : today?.rank != null
+          ? `#${today.rank}`
+          : '—';
+    const resultValue = currentLeaderboardRow
+      ? `${currentLeaderboardRow.won ? 'W' : 'L'} ${currentLeaderboardRow.finalScore}-${currentLeaderboardRow.opponentScore}`
+      : today?.result
+        ? `${Boolean(today.result.won) ? 'W' : 'L'} ${Number(today.result.final_score ?? 0)}-${Number(today.result.opponent_score ?? 0)}`
+        : '—';
+    const diffValue = currentLeaderboardRow
+      ? `${currentLeaderboardRow.pointDiff >= 0 ? '+' : ''}${currentLeaderboardRow.pointDiff} / ${currentLeaderboardRow.movesUsed}`
+      : '—';
+    const diffTone =
+      currentLeaderboardRow == null
+        ? 'neutral'
+        : currentLeaderboardRow.pointDiff < 0
+          ? 'danger'
+          : currentLeaderboardRow.pointDiff > 0
+            ? 'success'
+            : 'neutral';
+
+    return [
+      { label: 'Your Rank', value: rankValue, sublabel: 'Today’s placement', tone: 'accent' },
+      { label: 'Your Result', value: resultValue, sublabel: 'Result / scoreline', tone: 'neutral' },
+      { label: 'Diff / Moves', value: diffValue, sublabel: 'Point diff / turns used', tone: diffTone },
+    ];
+  }, [currentLeaderboardRow, today]);
   const showAuthPrompt =
     !loading &&
     Boolean(
@@ -276,12 +326,14 @@ export default function DailyFritzScreen({
   if (leaderboardOpen) {
     return (
       <LeaderboardPageShell
+        mode="fritz"
         className="mode-subpage-screen mode-accent-daily-fritz"
-        panelClassName="daily-fritz-leaderboard-page-panel"
         label="Daily Fritz"
         title="Leaderboard"
-        subtitle={`${today ? formatDateLabel(today.run_date) : 'Today'} • Same deals for every player`}
+        subtitle={`${today ? formatLeaderboardDateLabel(today.run_date) : 'Today'} · Global ranking`}
         backLabel="Back to Daily Fritz"
+        summaryCards={leaderboardSummaryCards}
+        resultsLabel={`Global Results · ${leaderboard.length} ${leaderboard.length === 1 ? 'player' : 'players'}`}
         onClose={() => setLeaderboardOpen(false)}
       >
         <DailyFritzLeaderboard
@@ -289,6 +341,7 @@ export default function DailyFritzScreen({
           loading={leaderboardLoading}
           error={leaderboardError}
           currentUsername={currentUsername}
+          variant="page"
         />
       </LeaderboardPageShell>
     );
