@@ -173,6 +173,12 @@ interface BotHandReveal {
   botRemainingTiles: Tile[];
 }
 
+type LocalRunToken = {
+  id: number;
+  lifecycleVersion: number;
+  kind: 'player-draw' | 'bot-turn';
+};
+
 function traceDailyFritzEvent(
   tag: string,
   payload: Record<string, unknown>,
@@ -920,6 +926,9 @@ export default function BotMatchScreen({
     error: unknown;
   } | null>(null);
   const botChainPauseRef = useRef(false);
+  const lifecycleVersionRef = useRef(0);
+  const localRunIdRef = useRef(0);
+  const activeLocalRunRef = useRef<LocalRunToken | null>(null);
   const matchRef = useRef(match);
   const prevTurnRef = useRef<BotPlayerId>(match.currentPlayer);
   const guidedFreeplayProcessedBotTurnRef = useRef<string | null>(null);
@@ -1874,6 +1883,10 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     return () => {
+      lifecycleVersionRef.current += 1;
+      activeLocalRunRef.current = null;
+      drawSequenceActiveRef.current = false;
+      setDrawSequenceActive(false);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
       if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
@@ -1993,6 +2006,43 @@ export default function BotMatchScreen({
     }
   }, []);
 
+  const setDrawSequenceActiveBoth = useCallback((val: boolean) => {
+    drawSequenceActiveRef.current = val;
+    setDrawSequenceActive(val);
+  }, []);
+
+  const invalidateLocalRuns = useCallback(() => {
+    lifecycleVersionRef.current += 1;
+    activeLocalRunRef.current = null;
+    setDrawSequenceActiveBoth(false);
+  }, [setDrawSequenceActiveBoth]);
+
+  const beginLocalRun = useCallback((kind: LocalRunToken['kind']): LocalRunToken => {
+    const token: LocalRunToken = {
+      id: ++localRunIdRef.current,
+      lifecycleVersion: lifecycleVersionRef.current,
+      kind,
+    };
+    activeLocalRunRef.current = token;
+    return token;
+  }, []);
+
+  const isLocalRunCurrent = useCallback((token: LocalRunToken): boolean => {
+    const active = activeLocalRunRef.current;
+    return Boolean(
+      active &&
+      active.id === token.id &&
+      active.lifecycleVersion === token.lifecycleVersion &&
+      lifecycleVersionRef.current === token.lifecycleVersion,
+    );
+  }, []);
+
+  const finishLocalRun = useCallback((token: LocalRunToken) => {
+    if (activeLocalRunRef.current?.id === token.id) {
+      activeLocalRunRef.current = null;
+    }
+  }, []);
+
   const renderScoreToastMessage = useCallback((message: string) => {
     const pointsMatch = message.match(/\+\d+/);
     if (!pointsMatch || typeof pointsMatch.index !== 'number') return message;
@@ -2093,12 +2143,18 @@ export default function BotMatchScreen({
     setAnalyzerOpen(true);
   };
 
+  const exitMatch = useCallback(() => {
+    invalidateLocalRuns();
+    onBack();
+  }, [invalidateLocalRuns, onBack]);
+
   const startFreshMatch = () => {
     if (isDailyFritzMode) {
       onDailyFritzComplete?.();
-      onBack();
+      exitMatch();
       return;
     }
+    invalidateLocalRuns();
     clearPersistedLeagueMatch();
     localPendingRegisteredRef.current = false;
     localPendingResolvedRef.current = false;
@@ -3190,11 +3246,6 @@ export default function BotMatchScreen({
     notifyBotActionResult({ ...result, state: adjustedState });
   }, [isDailyFritzMode, notifyBotActionResult]);
 
-  const setDrawSequenceActiveBoth = useCallback((val: boolean) => {
-    drawSequenceActiveRef.current = val;
-    setDrawSequenceActive(val);
-  }, []);
-
   const triggerDrawStepAnimation = useCallback((drawer: BotPlayerId, nextState: BotMatchState) => {
     if (drawer === 'you') {
       const pulseIndex = nextState.players.you.hand.length - 1;
@@ -3224,19 +3275,26 @@ export default function BotMatchScreen({
   }, []);
 
   const runDrawSequenceLocal = useCallback(
-    async (initialState: BotMatchState, player: BotPlayerId): Promise<BotActionResult> => {
+    async (
+      initialState: BotMatchState,
+      player: BotPlayerId,
+      token?: LocalRunToken,
+    ): Promise<BotActionResult> => {
       let current = initialState;
       let drewAny = false;
 
       while (asPlayMoves(getLegalMoves(current, player)).length === 0) {
+        if (token && !isLocalRunCurrent(token)) break;
         const step = drawOne(current, player);
         if (!step.drew) break;
         drewAny = true;
         current = step.state;
+        if (token && !isLocalRunCurrent(token)) break;
         setMatch(current);
         queueSound(() => playDrawSound(isMuted), 0);
         triggerDrawStepAnimation(player, current);
         await new Promise<void>((resolve) => setTimeout(resolve, DRAW_STEP_MS));
+        if (token && !isLocalRunCurrent(token)) break;
       }
 
       if (asPlayMoves(getLegalMoves(current, player)).length === 0) {
@@ -3252,7 +3310,7 @@ export default function BotMatchScreen({
         drew: drewAny ? { player, tile: current.players[player].hand[current.players[player].hand.length - 1] } : undefined,
       };
     },
-    [triggerDrawStepAnimation, isMuted],
+    [triggerDrawStepAnimation, isMuted, isLocalRunCurrent],
   );
 
   /**
@@ -4342,12 +4400,14 @@ export default function BotMatchScreen({
     let actionResolved = false;
     let playedTileForHighlight: Tile | null = null;
     const thinkDelayMs = 1500;
+    const runToken = beginLocalRun('bot-turn');
     botChainPauseRef.current = false;
 
     const timer = setTimeout(() => {
       void (async () => {
         console.log('[BOT-TURN] timer fired', { cancelled, currentPlayer: match.currentPlayer });
         try {
+          if (!isLocalRunCurrent(runToken)) return;
           let working = match;
           let result: BotActionResult | null = null;
           let chosen: BotChoice | null = null;
@@ -4360,8 +4420,8 @@ export default function BotMatchScreen({
           const botPlayable = asPlayMoves(getLegalMoves(working, 'bot'));
           if (botPlayable.length === 0) {
             setDrawSequenceActiveBoth(true);
-            const drawPass = await runDrawSequenceLocal(working, 'bot');
-            if (cancelled) return;
+            const drawPass = await runDrawSequenceLocal(working, 'bot', runToken);
+            if (cancelled || !isLocalRunCurrent(runToken)) return;
             working = drawPass.state;
 
             if (drawPass.drew) {
@@ -4467,7 +4527,7 @@ export default function BotMatchScreen({
             );
           }
 
-          if (cancelled || actionResolved) return;
+          if (cancelled || actionResolved || !isLocalRunCurrent(runToken)) return;
           if (chosen) setLastBotChoice(chosen);
           if (isGhostMode) {
             setLastBotChoice(null);
@@ -4589,17 +4649,22 @@ export default function BotMatchScreen({
               console.log('[v2-capture] fritz', { eventIndex, action: captureAction, tile: v2event.tile });
             }
 
+            if (!isLocalRunCurrent(runToken)) return;
             applyAndNotify(result);
             flashLastPlayed(playedTileForHighlight);
           }
         } finally {
-          setDrawSequenceActiveBoth(false);
+          if (isLocalRunCurrent(runToken)) {
+            finishLocalRun(runToken);
+            setDrawSequenceActiveBoth(false);
+          }
         }
       })();
     }, thinkDelayMs);
 
     const maxThinkingTimer = setTimeout(() => {
       if (cancelled || actionResolved) return;
+      if (!isLocalRunCurrent(runToken)) return;
       const live = matchRef.current;
       if (!live || live.currentPlayer !== 'bot' || live.handOver || live.gameOver) return;
       const fallbackPlay = asPlayMoves(getLegalMoves(live, 'bot'))[0];
@@ -4635,6 +4700,8 @@ export default function BotMatchScreen({
       }
       setLastBotChoice(null);
       setSelectedTile(null);
+      if (!isLocalRunCurrent(runToken)) return;
+      finishLocalRun(runToken);
       applyAndNotify(forcedResult);
       flashLastPlayed(fallbackPlay.tile ?? null);
     }, 3000);
@@ -4657,6 +4724,9 @@ export default function BotMatchScreen({
     isGuidedTranscriptMode,
     runDrawSequenceLocal,
     setDrawSequenceActiveBoth,
+    beginLocalRun,
+    isLocalRunCurrent,
+    finishLocalRun,
     isMuted,
     toEngineBestFromChoice,
   ]);
@@ -4790,6 +4860,7 @@ export default function BotMatchScreen({
       });
     }
 
+    invalidateLocalRuns();
     setSelectedTile(null);
     flashLastPlayed(null);
     setLastBotChoice(null);
@@ -4958,7 +5029,7 @@ export default function BotMatchScreen({
         opponentKnownMissing: [],
       };
     });
-  }, [dailyFritzHandIndex, dailyFritzPackage, isDailyFritzMode, isAuthoringMode, isGuidedV1MinimalMode, frozenLesson, lessonStepIndex, isGuidedV2Mode, frozenV2Lesson, match.players.bot.score, match.players.you.score]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dailyFritzHandIndex, dailyFritzPackage, isDailyFritzMode, isAuthoringMode, isGuidedV1MinimalMode, frozenLesson, lessonStepIndex, isGuidedV2Mode, frozenV2Lesson, match.players.bot.score, match.players.you.score, invalidateLocalRuns]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!handReveal || match.gameOver) {
@@ -5104,7 +5175,7 @@ export default function BotMatchScreen({
     // draw/pass sequences via the authored timeline.  The live boneyard must not
     // be touched while on-line.
     if (isGuidedV2Mode && !isGuidedV2OffLine) return;
-    let cancelled = false;
+    const runToken = beginLocalRun('player-draw');
     const beforeEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
     const handBefore = match.players.you.hand.map(toTileTuple);
@@ -5134,7 +5205,7 @@ export default function BotMatchScreen({
               ? match
               : { ...match, consecutivePasses: 1 };
           const fastResult = passTurn(resolveBase, 'you');
-          if (cancelled) return;
+          if (!isLocalRunCurrent(runToken)) return;
           console.log('[daily-flow] blocked hand resolved', {
             handEnded: Boolean(fastResult.handEnded),
             yourScore: fastResult.state.players.you.score,
@@ -5181,8 +5252,8 @@ export default function BotMatchScreen({
           return;
         }
         // ── Normal draw-or-pass flow ───────────────────────────────────────────
-        const result = await runDrawSequenceLocal(match, 'you');
-        if (cancelled) return;
+        const result = await runDrawSequenceLocal(match, 'you', runToken);
+        if (!isLocalRunCurrent(runToken)) return;
         setSelectedTile(null);
         if (result.drew) {
           if (isGhostMode) {
@@ -5275,13 +5346,16 @@ export default function BotMatchScreen({
         }
         applyAndNotify(result);
       } finally {
-        setDrawSequenceActiveBoth(false);
+        if (isLocalRunCurrent(runToken)) {
+          finishLocalRun(runToken);
+          setDrawSequenceActiveBoth(false);
+        }
       }
     })();
     return () => {
-      cancelled = true;
+      // Progress renders from this draw sequence should not cancel its final pass/block result.
     };
-  }, [match, userPlayMoves.length, appendGhostMove, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, isGhostMode, isAuthoringMode, recordAuthoringStep, isMuted, getFritzBestMove, isGuidedTranscriptMode, currentTranscriptTurn, acceptGuidedTranscriptTurn, isGuidedV1MinimalMode, isGuidedV1OnlineMode, currentLessonStep, lessonStepIndex, pushToast]);
+  }, [match, userPlayMoves.length, appendGhostMove, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, beginLocalRun, isLocalRunCurrent, finishLocalRun, isGhostMode, isAuthoringMode, recordAuthoringStep, isMuted, getFritzBestMove, isGuidedTranscriptMode, currentTranscriptTurn, acceptGuidedTranscriptTurn, isGuidedV1MinimalMode, isGuidedV1OnlineMode, currentLessonStep, lessonStepIndex, pushToast]);
 
   useEffect(() => {
     if (!isDailyPuzzleRun || !dailyPuzzleDate || !match.gameOver) return;
@@ -5477,7 +5551,7 @@ export default function BotMatchScreen({
         <div style={{ textAlign: 'center', color: 'white', padding: 40 }}>
           <h3>Game State Error</h3>
           <p>The match state is incomplete or malformed.</p>
-          <button className="btn" onClick={onBack}>Return to Home</button>
+          <button className="btn" onClick={exitMatch}>Return to Home</button>
         </div>
       </div>
     );
@@ -6107,10 +6181,10 @@ export default function BotMatchScreen({
           }
           onPrimary={startFreshMatch}
           secondaryLabel="Home"
-          onSecondary={onBack}
+          onSecondary={exitMatch}
           extraActionLabel={isGuidedMode ? undefined : "Analyze Game"}
           onExtraAction={isGuidedMode ? undefined : openAnalyzer}
-          onClose={onBack}
+          onClose={exitMatch}
         >
           {!isGuidedMode &&
             !isGhostMode &&
@@ -6534,11 +6608,11 @@ export default function BotMatchScreen({
                       })
                       .finally(() => {
                         void Promise.resolve(onProfileRefresh?.()).catch(() => {});
-                        onBack();
+                        exitMatch();
                       });
                     return;
                   }
-                  onBack();
+                  exitMatch();
                 }}
                 style={{
                   flex: 1,
