@@ -24,7 +24,6 @@ import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
 import LayoutScreen from '../ui/LayoutScreen';
 import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import {
-  ClaudeModeScreen,
   ClaudePrimaryAction,
   ClaudeSecondaryAction,
   ClaudeSectionLabel,
@@ -1163,98 +1162,122 @@ export default function DailyPuzzleScreen({
     const selectedLobbyPuzzle = puzzle;
     return (
       <>
-        <div className="screen mode-subpage-screen mode-accent-daily daily-entry-screen claude-mode-screen-shell">
-          <ClaudeModeScreen
-            accent="#ffb800"
-            eyebrow={isArchiveMode ? 'Puzzle Archive' : "Today's Challenge"}
-            title={isArchiveMode ? 'PUZZLE\nARCHIVE' : 'DAILY\nPUZZLE'}
-            description={
-              isArchiveMode
-                ? 'Play any past puzzle just for fun.'
-                : 'Score as many points as you can in one turn.'
-            }
-            decor="P"
-            backLabel="Back to Home"
-            onBack={onBack}
-            heroFooter={
-              <div className="claude-mode-chip-row">
-                <span className="claude-mode-chip">{formattedDisplayDate}</span>
-                <span className="claude-mode-chip">{isArchiveMode ? 'Archive' : 'Daily'}</span>
-                <span className="claude-mode-chip">One-turn high score</span>
+        <div className="screen mode-subpage-screen mode-accent-daily daily-entry-screen">
+          <div className="daily-dash" style={{ ['--dash-accent' as string]: '#f0c040' }}>
+
+            {/* ── Top bar ── */}
+            <header className="daily-dash-topbar">
+              <div className="daily-dash-brand">RACEHORSE</div>
+              <button type="button" className="daily-dash-back" onClick={onBack}>
+                <svg viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M7.5 2L3 6l4.5 4" />
+                </svg>
+                Back to Home
+              </button>
+            </header>
+
+            {/* ── Main content ── */}
+            <main className="daily-dash-main">
+
+              {/* Header */}
+              <div className="daily-dash-header">
+                <p className="daily-dash-eyebrow">
+                  {isArchiveMode ? 'Puzzle Archive' : 'Daily Puzzle'}
+                </p>
+                <h1 className="daily-dash-title">
+                  {isArchiveMode ? "Puzzle Archive" : "Today’s Challenge"}
+                </h1>
+                <p className="daily-dash-subtitle">
+                  {isArchiveMode
+                    ? 'Play any past puzzle just for fun.'
+                    : 'Score as many points as you can in one turn.'}
+                </p>
               </div>
-            }
-            panel={
-              <div className="claude-mode-panel-stack">
-                <div className="claude-mode-info-card">
-                  <ClaudeSectionLabel color="#ffb800">Today's Board</ClaudeSectionLabel>
-                  <ClaudeStatLine label="Date" value={formattedDisplayDate} />
-                  <ClaudeStatLine label="Mode" value={isArchiveMode ? 'Archive' : 'Daily'} />
-                  <ClaudeStatLine label="Format" value="One-turn high score" />
-                  <ClaudeStatLine
-                    label="Streak"
-                    value={isArchiveMode ? 'Off' : `${streakDays} day${streakDays === 1 ? '' : 's'}`}
-                    accent={isArchiveMode ? undefined : '#ffb800'}
-                  />
+
+              <div className="daily-dash-separator" aria-hidden="true" />
+
+              {/* Body */}
+              <div className="daily-dash-body">
+
+                {/* Left: details */}
+                <div className="daily-dash-details">
+                  <div className="claude-mode-info-card">
+                    <ClaudeSectionLabel color="#f0c040">
+                      {isArchiveMode ? 'Archive Details' : "Today’s Board"}
+                    </ClaudeSectionLabel>
+                    <ClaudeStatLine label="Date" value={formattedDisplayDate} />
+                    <ClaudeStatLine label="Mode" value={isArchiveMode ? 'Archive' : 'Daily'} />
+                    <ClaudeStatLine label="Format" value="One-turn high score" />
+                    <ClaudeStatLine
+                      label="Streak"
+                      value={isArchiveMode ? 'Off' : `${streakDays} day${streakDays === 1 ? '' : 's'}`}
+                      accent={isArchiveMode ? undefined : '#f0c040'}
+                    />
+                  </div>
+
+                  {isArchiveMode && (
+                    <div className="daily-entry-status-card claude-mode-card">
+                      <span className="daily-entry-status-label">Archive</span>
+                      <strong>Play any past puzzle.</strong>
+                      <p>Archive runs do not affect streaks or the daily leaderboard.</p>
+                    </div>
+                  )}
+
+                  {loadError ? <p className="auth-inline-error">{loadError}</p> : null}
+                  {!loading && !loadError && !selectedLobbyPuzzle ? (
+                    <p className="auth-inline-error">
+                      {isArchiveMode
+                        ? `No puzzle exists for ${formattedDisplayDate}.`
+                        : "Today’s puzzle is not posted yet."}
+                    </p>
+                  ) : null}
+                  {runtimeInitError ? <p className="auth-inline-error">{runtimeInitError}</p> : null}
                 </div>
 
-                <ClaudeSecondaryAction
-                  title="Choose Date"
-                  meta={isArchiveMode ? 'Load another archived puzzle' : 'Browse archive or pick a specific day'}
-                  onClick={() => setArchivePickerOpen(true)}
-                />
-
-                {isArchiveMode && (
-                  <div className="daily-entry-status-card claude-mode-card">
-                    <span className="daily-entry-status-label">Archive</span>
-                    <strong>Play any past puzzle.</strong>
-                    <p>Archive runs do not affect streaks or the daily leaderboard.</p>
-                  </div>
-                )}
-
-                <ClaudePrimaryAction
-                  accent="#ffb800"
-                  disabled={loading || (!archiveDateDirty && !selectedPuzzleReady)}
-                  title={archiveTargetIsToday ? 'Start Daily Puzzle' : 'Play Archived Puzzle'}
-                  meta={
-                    archiveTargetIsToday
-                      ? 'Play today’s one-turn puzzle'
-                      : 'Load and play this archived puzzle'
-                  }
-                  onClick={() => {
-                    const nextDate = archiveInputHasCompleteDate
-                      ? normalizeDateInputToLocalKey(archiveDateInput)
-                      : selectedDateSeed;
-                    if (nextDate !== selectedDateSeed) {
-                      pendingStartDateRef.current = nextDate;
-                      setArchiveDateInput(nextDate);
-                      setSelectedDateSeed(nextDate);
-                      setLoadError(null);
-                      setDailyLeaderboardOpen(false);
-                      return;
+                {/* Right: actions */}
+                <div className="daily-dash-actions">
+                  <ClaudePrimaryAction
+                    accent="#f0c040"
+                    disabled={loading || (!archiveDateDirty && !selectedPuzzleReady)}
+                    title={archiveTargetIsToday ? 'Start Daily Puzzle' : 'Play Archived Puzzle'}
+                    meta={
+                      archiveTargetIsToday
+                        ? "Play today’s one-turn puzzle"
+                        : 'Load and play this archived puzzle'
                     }
-                    if (!puzzle || puzzle.puzzleDate !== nextDate) return;
-                    void startDailyPuzzle();
-                  }}
-                />
-                {archiveTargetIsToday && (
-                  <ClaudeSecondaryAction
-                    title="Leaderboard"
-                    meta="See today’s top scores"
-                    onClick={() => setDailyLeaderboardOpen(true)}
+                    onClick={() => {
+                      const nextDate = archiveInputHasCompleteDate
+                        ? normalizeDateInputToLocalKey(archiveDateInput)
+                        : selectedDateSeed;
+                      if (nextDate !== selectedDateSeed) {
+                        pendingStartDateRef.current = nextDate;
+                        setArchiveDateInput(nextDate);
+                        setSelectedDateSeed(nextDate);
+                        setLoadError(null);
+                        setDailyLeaderboardOpen(false);
+                        return;
+                      }
+                      if (!puzzle || puzzle.puzzleDate !== nextDate) return;
+                      void startDailyPuzzle();
+                    }}
                   />
-                )}
-                {loadError ? <p className="auth-inline-error">{loadError}</p> : null}
-                {!loading && !loadError && !selectedLobbyPuzzle ? (
-                  <p className="auth-inline-error">
-                    {isArchiveMode
-                      ? `No puzzle exists for ${formattedDisplayDate}.`
-                      : "Today's puzzle is not posted yet."}
-                  </p>
-                ) : null}
-                {runtimeInitError ? <p className="auth-inline-error">{runtimeInitError}</p> : null}
+                  <ClaudeSecondaryAction
+                    title="Choose Date"
+                    meta={isArchiveMode ? 'Load another archived puzzle' : 'Browse archive or pick a specific day'}
+                    onClick={() => setArchivePickerOpen(true)}
+                  />
+                  {archiveTargetIsToday && (
+                    <ClaudeSecondaryAction
+                      title="Leaderboard"
+                      meta="See today’s top scores"
+                      onClick={() => setDailyLeaderboardOpen(true)}
+                    />
+                  )}
+                </div>
+
               </div>
-            }
-          />
+            </main>
+          </div>
         </div>
         {archivePickerOpen && (
           <div

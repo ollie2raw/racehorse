@@ -6,7 +6,6 @@ import BotMatchScreen from '../bot/BotMatchScreen';
 import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import DailyFritzLeaderboard from './DailyFritzLeaderboard';
 import {
-  ClaudeModeScreen,
   ClaudePrimaryAction,
   ClaudeSecondaryAction,
   ClaudeSectionLabel,
@@ -347,107 +346,125 @@ export default function DailyFritzScreen({
   }
 
   return (
-    <div className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz claude-mode-screen-shell">
-      <ClaudeModeScreen
-        accent="#00f0c8"
-        eyebrow="Today's Challenge"
-        title={'DAILY\nFRITZ'}
-        description="Same deal for everyone. One run only."
-        decor="F"
-        backLabel="Back to Home"
-        onBack={onBack}
-        heroFooter={
-          <div className="claude-mode-chip-row">
-            <span className="claude-mode-chip is-danger">
-              {today ? tierDisplayLabel(today.fritz_tier) : 'Daily Run'}
-            </span>
-            <span className="claude-mode-chip">{today ? `${today.deal_size}-tile` : 'Fixed format'}</span>
-          </div>
-        }
-        panel={
-          <div className="claude-mode-panel-stack">
+    <div className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz">
+      <div className="daily-dash" style={{ ['--dash-accent' as string]: '#e05c6a' }}>
 
+        {/* ── Top bar ── */}
+        <header className="daily-dash-topbar">
+          <div className="daily-dash-brand">RACEHORSE</div>
+          <button type="button" className="daily-dash-back" onClick={onBack}>
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M7.5 2L3 6l4.5 4" />
+            </svg>
+            Back to Home
+          </button>
+        </header>
+
+        {/* ── Main content ── */}
+        <main className="daily-dash-main">
+
+          {/* Header */}
+          <div className="daily-dash-header">
+            <p className="daily-dash-eyebrow">Daily Fritz</p>
+            <h1 className="daily-dash-title">Daily Fritz Match</h1>
+            <p className="daily-dash-subtitle">Same deal for everyone. One run only.</p>
+          </div>
+
+          <div className="daily-dash-separator" aria-hidden="true" />
+
+          {/* Body — varies by load/auth/data state */}
           {loading ? (
             <div className="daily-fritz-empty claude-mode-card">Loading today’s run…</div>
           ) : showAuthPrompt ? (
-            <div className="daily-fritz-empty claude-mode-card">
-              <p>Sign in to play Daily Fritz.</p>
-              <ClaudePrimaryAction accent="#00f0c8" title="Sign In" meta="Open account access" onClick={onOpenAuth} />
+            <div className="daily-dash-body daily-fritz-home-body">
+              <div className="daily-dash-details daily-fritz-home-primary">
+                <div className="daily-fritz-empty claude-mode-card">
+                  <p>Sign in to play Daily Fritz.</p>
+                </div>
+              </div>
+              <div className="daily-dash-actions daily-fritz-home-secondary">
+                <ClaudePrimaryAction accent="#e05c6a" title="Sign In" meta="Open account access" onClick={onOpenAuth} />
+              </div>
             </div>
           ) : error ? (
             <div className="daily-fritz-empty claude-mode-card">{error}</div>
           ) : today ? (
-            <>
-              <div className="claude-mode-info-card">
-                <ClaudeSectionLabel color="#00f0c8">Match Details</ClaudeSectionLabel>
-                <ClaudeStatLine label="Date" value={formatDateLabel(today.run_date)} />
-                <ClaudeStatLine label="Tier" value={tierDisplayLabel(today.fritz_tier)} accent={today.fritz_tier === 'elite' ? '#ff7070' : undefined} />
-                <ClaudeStatLine label="Mode" value={`${today.deal_size}-tile`} />
-                <ClaudeStatLine
-                  label="Streak"
-                  value={`${today.streak} day${today.streak === 1 ? '' : 's'}`}
-                  accent="#00f0c8"
-                />
-              </div>
-
-              {today.attempt_status === 'started' && (
-                <div className="daily-fritz-status-card is-active claude-mode-card">
-                  <span className="daily-fritz-status-label">In Progress</span>
-                  <strong>Resume your run.</strong>
-                  <p>Your spot is saved.</p>
+            <div className="daily-dash-body daily-fritz-home-body">
+              <div className="daily-dash-details daily-fritz-home-primary">
+                <div className="claude-mode-info-card">
+                  <ClaudeSectionLabel color="#e05c6a">Match Details</ClaudeSectionLabel>
+                  <ClaudeStatLine label="Date" value={formatDateLabel(today.run_date)} />
+                  <ClaudeStatLine label="Tier" value={tierDisplayLabel(today.fritz_tier)} accent={today.fritz_tier === 'elite' ? '#ff7070' : undefined} />
+                  <ClaudeStatLine label="Mode" value={`${today.deal_size}-tile`} />
+                  <ClaudeStatLine
+                    label="Streak"
+                    value={`${today.streak} day${today.streak === 1 ? '' : 's'}`}
+                    accent="#e05c6a"
+                  />
                 </div>
-              )}
 
-              {today.attempt_status === 'completed' && (
-                <div className="daily-fritz-status-card is-complete claude-mode-card">
-                  <div className="daily-fritz-result-grid">
-                    <div className={`daily-fritz-summary-card daily-fritz-result-card daily-fritz-result-outcome-card ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>
-                      <div className="daily-fritz-stat-layout">
-                        <span>Result</span>
-                        <span className={`daily-fritz-result-pill ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>
-                          {Boolean(today.result?.won) ? 'Win' : 'Loss'}
-                        </span>
-                      </div>
+                {today.attempt_status === 'completed' && (
+                  <section className="daily-fritz-summary-strip claude-mode-card" aria-label="Daily Fritz result summary">
+                    <div className="daily-fritz-summary-strip-header">
+                      <span className="daily-fritz-status-label">Result Summary</span>
                     </div>
-                    <div className="daily-fritz-summary-card daily-fritz-result-card">
-                      <div className="daily-fritz-stat-layout">
-                        <span>Score</span>
-                        <strong>
+                    <div className="daily-fritz-summary-strip-grid">
+                      <div className="daily-fritz-summary-item">
+                        <span className="daily-fritz-summary-label">Result</span>
+                        <strong className={`daily-fritz-summary-value ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>
+                          {Boolean(today.result?.won) ? 'Win' : 'Loss'}
+                        </strong>
+                      </div>
+                      <div className="daily-fritz-summary-item">
+                        <span className="daily-fritz-summary-label">Score</span>
+                        <strong className="daily-fritz-summary-value">
                           {Number(today.result?.final_score ?? 0)}-{Number(today.result?.opponent_score ?? 0)}
                         </strong>
                       </div>
-                    </div>
-                    <div className="daily-fritz-summary-card daily-fritz-result-card">
-                      <div className="daily-fritz-stat-layout">
-                        <span>Point Diff</span>
-                        <strong>
+                      <div className="daily-fritz-summary-item">
+                        <span className="daily-fritz-summary-label">Point Diff</span>
+                        <strong className="daily-fritz-summary-value">
                           {Number(today.result?.point_diff ?? 0) >= 0 ? '+' : ''}
                           {Number(today.result?.point_diff ?? 0)}
                         </strong>
                       </div>
-                    </div>
-                    <div className="daily-fritz-summary-card daily-fritz-result-card">
-                      <div className="daily-fritz-stat-layout">
-                        <span>Rank</span>
-                        <strong>{today.rank ? `#${today.rank}` : '—'}</strong>
+                      <div className="daily-fritz-summary-item">
+                        <span className="daily-fritz-summary-label">Rank</span>
+                        <strong className="daily-fritz-summary-value">{today.rank ? `#${today.rank}` : '—'}</strong>
                       </div>
                     </div>
+                  </section>
+                )}
+              </div>
+
+              <div className="daily-dash-actions daily-fritz-home-secondary">
+                {today.attempt_status === 'started' && (
+                  <div className="daily-fritz-status-card is-active claude-mode-card">
+                    <span className="daily-fritz-status-label">In Progress</span>
+                    <strong>Resume your run.</strong>
+                    <p>Your spot is saved.</p>
                   </div>
-                </div>
-              )}
+                )}
 
-              {today.attempt_status === 'abandoned' && (
-                <div className="daily-fritz-status-card is-muted claude-mode-card">
-                  <span className="daily-fritz-status-label">Spent</span>
-                  <strong>Today's run is spent.</strong>
-                  <p>Come back tomorrow for a new one.</p>
-                </div>
-              )}
+                {today.attempt_status === 'completed' && (
+                  <div className="daily-fritz-status-card is-complete-panel claude-mode-card">
+                    <span className="daily-fritz-status-label">Completed</span>
+                    <strong>Today’s run is locked.</strong>
+                    <p>Your result is posted. Leaderboard remains available as a secondary view.</p>
+                  </div>
+                )}
 
-              <div className="claude-mode-panel-stack">
-                {today.attempt_status !== 'completed' && today.attempt_status !== 'abandoned' && (
+                {today.attempt_status === 'abandoned' && (
+                  <div className="daily-fritz-status-card is-muted claude-mode-card">
+                    <span className="daily-fritz-status-label">Spent</span>
+                    <strong>Today’s run is spent.</strong>
+                    <p>Come back tomorrow for a new one.</p>
+                  </div>
+                )}
+
+                {today.attempt_status !== 'completed' && today.attempt_status !== 'abandoned' ? (
                   <ClaudePrimaryAction
-                    accent="#00f0c8"
+                    accent="#e05c6a"
                     onClick={() => void beginRun()}
                     title={today.attempt_status === 'started' ? 'Resume Match' : 'Start Daily Fritz Match'}
                     meta={
@@ -456,20 +473,21 @@ export default function DailyFritzScreen({
                         : 'Play today’s fixed Fritz match'
                     }
                   />
-                )}
+                ) : null}
 
-                <ClaudeSecondaryAction
-                  title="Leaderboard"
-                  meta="See today’s standings"
-                  onClick={() => void openLeaderboard()}
-                />
+                <div className="daily-fritz-secondary-panel claude-mode-card">
+                  <ClaudeSecondaryAction
+                    title="Leaderboard"
+                    meta="See today’s standings"
+                    onClick={() => void openLeaderboard()}
+                  />
+                </div>
               </div>
-
-            </>
+            </div>
           ) : null}
-          </div>
-        }
-      />
+
+        </main>
+      </div>
     </div>
   );
 }

@@ -35,11 +35,8 @@ export default function LeaderboardPageShell({
   footerNote,
   children,
 }: LeaderboardPageShellProps) {
-  const decor = mode === 'fritz' ? 'F' : 'P';
   return (
     <div className={`leaderboard-screen leaderboard-screen--${mode}${className ? ` ${className}` : ''}`}>
-      <div className="leaderboard-screen-bg" aria-hidden="true" />
-      <div className="leaderboard-screen-vignette" aria-hidden="true" />
       <header className="leaderboard-screen-topbar">
         <div className="leaderboard-screen-wordmark">RACEHORSE</div>
         <button type="button" className="leaderboard-screen-backlink" onClick={onClose}>
@@ -52,7 +49,6 @@ export default function LeaderboardPageShell({
 
       <main className="leaderboard-screen-main">
         <section className="leaderboard-screen-hero">
-          <div className="leaderboard-screen-decor" aria-hidden="true">{decor}</div>
           <div className="leaderboard-screen-titleblock">
             <div className="leaderboard-screen-accentbar" aria-hidden="true" />
             <p className="leaderboard-screen-eyebrow">{label}</p>

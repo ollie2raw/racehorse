@@ -27,6 +27,7 @@ const PROFILE_REQUEST_TIMEOUT_MS = 5000;
 const DEFAULT_GLICKO_RATING = 800;
 const DEFAULT_GLICKO_RD = 200;
 const DEFAULT_GLICKO_VOL = 0.06;
+const EMAIL_VERIFICATION_PENDING_KEY = 'racehorse_email_verification_pending';
 
 function needsLegacyRatingNormalization(profile: Record<string, unknown> | null | undefined): boolean {
   if (!profile) return false;
@@ -164,6 +165,41 @@ function clearLocalSupabaseAuthTokens(): void {
     }
   } catch {
     // no-op
+  }
+}
+
+function markEmailVerificationPending(email: string): void {
+  if (typeof window === 'undefined') return;
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return;
+  try {
+    window.localStorage.setItem(
+      EMAIL_VERIFICATION_PENDING_KEY,
+      JSON.stringify({ email: normalizedEmail, createdAt: Date.now() }),
+    );
+  } catch {
+    // no-op
+  }
+}
+
+function consumeEmailVerificationPending(email: string | null | undefined): boolean {
+  if (typeof window === 'undefined') return false;
+  const normalizedEmail = email?.trim().toLowerCase();
+  if (!normalizedEmail) return false;
+  try {
+    const raw = window.localStorage.getItem(EMAIL_VERIFICATION_PENDING_KEY);
+    if (!raw) return false;
+    window.localStorage.removeItem(EMAIL_VERIFICATION_PENDING_KEY);
+    const parsed = JSON.parse(raw) as { email?: unknown; createdAt?: unknown };
+    const pendingEmail =
+      typeof parsed.email === 'string' ? parsed.email.trim().toLowerCase() : '';
+    const createdAt = typeof parsed.createdAt === 'number' ? parsed.createdAt : 0;
+    const maxAgeMs = 14 * 24 * 60 * 60 * 1000;
+    if (!pendingEmail || pendingEmail !== normalizedEmail) return false;
+    if (!createdAt || Date.now() - createdAt > maxAgeMs) return false;
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -321,11 +357,13 @@ export function useAuth() {
       }
 
       setUser(sessionUser);
-      if (event === 'SIGNED_IN' && sessionUser.email_confirmed_at) {
-        // Detect email verification redirect: SIGNED_IN fires when
-        // the user clicks the confirmation link and lands back in the app.
-        // We distinguish this from a normal sign-in by checking that
-        // there was no prior user in state (user was null before).
+      if (
+        event === 'SIGNED_IN' &&
+        sessionUser.email_confirmed_at &&
+        consumeEmailVerificationPending(sessionUser.email)
+      ) {
+        // Only show the verification toast after a signup flow in this browser
+        // actually left a pending verification marker.
         setJustVerified((prev) => {
           if (prev) return prev;
           return true;
@@ -455,6 +493,7 @@ export function useAuth() {
         if (data.user) {
           void hydrateProfile(data.user);
           if (!data.session) {
+            markEmailVerificationPending(email);
             return {
               error: null,
               pendingVerification: true,
