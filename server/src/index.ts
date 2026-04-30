@@ -78,6 +78,7 @@ import {
 } from './rooms';
 import { appendRoomEvent, resetRoomEventLog } from './roomEvents';
 import type { GameState } from './game/types';
+import { assertValidGameState } from './game/invariants';
 
 const allowedOriginPatterns = [
   /^http:\/\/localhost(?::\d+)?$/i,
@@ -3096,6 +3097,9 @@ function migrateRoomSeat(roomCode: string, oldSocketId: string, newSocketId: str
   if (room.rematchReady.has(oldSocketId)) {
     room.rematchReady.delete(oldSocketId);
     room.rematchReady.add(newSocketId);
+    // Broadcast updated status so the opponent's "Waiting for…" UI reflects
+    // the migrated socket id without requiring another game:rematch event.
+    emitRematchStatus(roomCode);
   }
 
   const roster = roomPlayersByCode.get(roomCode) ?? [];
@@ -3293,6 +3297,7 @@ function buildHandEndedPayload(room: Room, playerId: string) {
 function broadcastStateUpdate(roomCode: string) {
   const room = getRoom(roomCode);
   if (!room.state) return;
+  assertValidGameState(room.state, `broadcastStateUpdate:${roomCode}`);
 
   // WEEKLY_STATS_LOGGING (non-tournament only)
   const cfg = (room as any).config ?? {};

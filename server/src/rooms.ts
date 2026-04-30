@@ -1,4 +1,5 @@
 import { GameState, Config, PlacementPosition, Move, Tile, BoardState } from './game/types';
+import { assertValidGameState } from './game/invariants';
 import type { Server } from 'socket.io';
 import {
   createInitialState,
@@ -406,6 +407,7 @@ export async function startGame(
   const state0 = createInitialState(room.players, room.config);
   const state1 = startNewHand(state0);
   room.state = state1;
+  assertValidGameState(room.state, `startGame:${code}`);
   room.ghostMoveLogs = Object.fromEntries(room.players.map((playerId) => [playerId, []]));
   room.ghostTurnIndex = 0;
   if (room.events.some((event) => event.type === 'match_started')) {
@@ -451,6 +453,7 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
   room.asyncStateVersion += 1;
   const state1 = startNewHand(room.state);
   room.state = state1;
+  assertValidGameState(room.state, `nextHand:${code}`);
   room.ghostTurnIndex = 0;
   appendRoomEvent(room, {
     type: 'hand_started',
@@ -592,6 +595,7 @@ export async function act(
     const previousState = state;
     const result = resolveManualDrawAtomically(state, socketId);
     room.state = result.state;
+    assertValidGameState(room.state, `act:DRAW:${code}`);
     appendRoomEvent(room, {
       type: 'draw_requested',
       actorSocketId: socketId,
@@ -673,6 +677,7 @@ export async function act(
     });
     room.ghostTurnIndex += 1;
     room.state = stateAfterMove;
+    assertValidGameState(room.state, `act:MOVE:${code}`);
     appendRoomEvent(room, {
       type: 'tile_played',
       actorSocketId: socketId,
@@ -686,6 +691,7 @@ export async function act(
     if (forcedDraw) {
       const resolved = resolveForcedDrawAtomically(stateAfterMove, socketId, forcedDraw);
       room.state = resolved.state;
+      assertValidGameState(room.state, `act:MOVE:forcedDraw:${code}`);
       logMpDebug('mp-forced-draw', {
         roomCode: room.code,
         playerId: socketId,
@@ -742,6 +748,7 @@ export async function act(
     });
     room.ghostTurnIndex += 1;
     room.state = applyMove(state, socketId, { type: 'pass' }).state;
+    assertValidGameState(room.state, `act:PASS:${code}`);
     appendRoomEvent(room, {
       type: 'turn_passed',
       actorSocketId: socketId,
