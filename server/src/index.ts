@@ -3458,11 +3458,9 @@ function broadcastStateUpdate(roomCode: string) {
         }),
       );
 
-      const { __drawSequenceActive, ...stateForClient } = room.state as any;
-      void __drawSequenceActive;
       socket.emit('state:update', {
         state: {
-          ...stateForClient,
+          ...room.state,
           players: maskedPlayers,
           handCounts,
         },
@@ -3498,10 +3496,8 @@ function broadcastStateUpdate(roomCode: string) {
   // received personalized state:update above; sending this to them would hide
   // their own hand with the same sequence number.
   if (room.state) {
-    const { __drawSequenceActive, ...stateForSpectatorsBase } = room.state as any;
-    void __drawSequenceActive;
     const stateForSpectators = {
-      ...stateForSpectatorsBase,
+      ...room.state,
       players: Object.fromEntries(
         room.state.playerIds.map((pid) => {
           const ps = room.state!.players[pid];
@@ -4425,6 +4421,14 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       const room = await act(roomCode, socket.id, action, io, (code) => broadcastStateUpdate(code));
       broadcastStateUpdate(room.code);
       maybeFinalizeTournamentMatch(room);
+      if (process.env.NODE_ENV !== 'production' || process.env.MP_DEBUG === '1' || process.env.DEBUG_MP === '1') {
+        console.log('[mp-action-ack]', {
+          roomCode: room.code,
+          playerId: socket.id,
+          action: action?.type,
+          sequence: room.state?.sequence ?? null,
+        });
+      }
       if (typeof cb === 'function') cb({ ok: true, sequence: room.state?.sequence ?? null });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';

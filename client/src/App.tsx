@@ -53,12 +53,38 @@ function emitWithAck<TResp>(
   ...argsWithoutAck: any[]
 ): Promise<TResp> {
   return new Promise((resolve, reject) => {
+    const mpDebug =
+      typeof window !== 'undefined' && window.localStorage.getItem('mp_debug') === '1';
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (mpDebug) {
+      console.log('[mp-action-client] sent', {
+        event,
+        payload: argsWithoutAck[argsWithoutAck.length - 1],
+      });
+    }
     const t = window.setTimeout(
-      () => reject(new Error(`${event} timed out after 8000ms`)),
+      () => {
+        if (mpDebug) {
+          const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+          console.warn('[mp-action-client] timeout', {
+            event,
+            elapsedMs: Number((endedAt - startedAt).toFixed(1)),
+          });
+        }
+        reject(new Error(`${event} timed out after 8000ms`));
+      },
       8000,
     );
     socket.emit(event, ...argsWithoutAck, (resp: TResp) => {
       window.clearTimeout(t);
+       if (mpDebug) {
+        const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        console.log('[mp-action-client] ack', {
+          event,
+          elapsedMs: Number((endedAt - startedAt).toFixed(1)),
+          response: resp,
+        });
+      }
       resolve(resp);
     });
   });

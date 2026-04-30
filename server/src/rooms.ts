@@ -45,11 +45,20 @@ const drawSequencesByRoom = new Map<RoomCode, Promise<void>>();
 const nextHandStartsByRoom = new Map<RoomCode, Promise<Room>>();
 const DRAW_STEP_MS = 500;
 const MIN_HAND_OVER_MS = 2500;
+const MP_DEBUG =
+  process.env.NODE_ENV !== 'production' ||
+  process.env.MP_DEBUG === '1' ||
+  process.env.DEBUG_MP === '1';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function withDrawSequenceFlag(state: GameState, active: boolean): GameState {
   return { ...state, __drawSequenceActive: active };
+}
+
+function logMpDebug(scope: string, payload: Record<string, unknown>): void {
+  if (!MP_DEBUG) return;
+  console.log(`[${scope}]`, payload);
 }
 
 function normalizeTileKey(tile: Tile): string {
@@ -253,31 +262,90 @@ export async function runDrawSequence(
   getState: () => GameState,
   setState: (s: GameState) => void,
   preDrawnTiles: Tile[] = [],
+  options: {
+    onStateReady?: (roomCode: string) => void;
+    reason?: string;
+    preActivated?: boolean;
+  } = {},
 ): Promise<void> {
   const existing = drawSequencesByRoom.get(roomId);
   if (existing) {
+    logMpDebug('mp-draw-server', {
+      roomId,
+      playerId,
+      reason: options.reason ?? 'unknown',
+      event: 'await_existing_sequence',
+    });
     await existing;
     return;
   }
 
   const sequence = (async () => {
     let current = getState();
-    if (current.__drawSequenceActive) {
+    if (current.__drawSequenceActive && !options.preActivated) {
       // Stale flag recovery: if no active sequence is registered but state says active,
       // clear the flag so turn-driving logic cannot deadlock.
       setState(withDrawSequenceFlag(current, false));
+      options.onStateReady?.(roomId);
+      logMpDebug('mp-draw-server', {
+        roomId,
+        playerId,
+        reason: options.reason ?? 'unknown',
+        event: 'cleared_stale_active_flag',
+        sequence: current.sequence,
+      });
       current = getState();
     }
 
     const initialPlayable = getLegalMoves(current, playerId).some((move) => move.type === 'play');
-    if (initialPlayable) return;
+    if (initialPlayable) {
+      if (options.preActivated || preDrawnTiles.length > 0) {
+        setState(withDrawSequenceFlag(current, false));
+        options.onStateReady?.(roomId);
+        logMpDebug('mp-draw-server', {
+          roomId,
+          playerId,
+          reason: options.reason ?? 'unknown',
+          event: 'skip_sequence_already_playable_after_pre_draw',
+          sequence: current.sequence,
+        });
+        return;
+      }
+      logMpDebug('mp-draw-server', {
+        roomId,
+        playerId,
+        reason: options.reason ?? 'unknown',
+        event: 'skip_sequence_already_playable',
+        sequence: current.sequence,
+      });
+      return;
+    }
 
     setState(withDrawSequenceFlag(current, true));
+    options.onStateReady?.(roomId);
     current = getState();
+    logMpDebug('mp-draw-server', {
+      roomId,
+      playerId,
+      reason: options.reason ?? 'unknown',
+      event: 'sequence_start',
+      sequence: current.sequence,
+      boneyardCount: current.boneyard.length,
+      preDrawnTiles: preDrawnTiles.length,
+    });
 
     try {
       if (preDrawnTiles.length > 0) {
         for (const tile of preDrawnTiles) {
+          logMpDebug('mp-draw-server', {
+            roomId,
+            playerId,
+            reason: options.reason ?? 'unknown',
+            event: 'pre_drawn_tile_emit',
+            tile: normalizeTileKey(tile),
+            boneyardCount: current.boneyard.length,
+            drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+          });
           io.to(playerId).emit('game:draw_step', {
             playerId,
             tile,
@@ -315,6 +383,16 @@ export async function runDrawSequence(
         current = next;
         setState(withDrawSequenceFlag(current, true));
         current = getState();
+        logMpDebug('mp-draw-server', {
+          roomId,
+          playerId,
+          reason: options.reason ?? 'unknown',
+          event: 'draw_step',
+          drew: drew ? normalizeTileKey(drew) : null,
+          sequence: current.sequence,
+          boneyardCount: current.boneyard.length,
+          drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+        });
         appendRoomEvent(room, {
           type: 'tile_drawn',
           actorSocketId: playerId,
@@ -342,8 +420,27 @@ export async function runDrawSequence(
         if (playable.length > 0) break;
         await sleep(DRAW_STEP_MS);
       }
+    } catch (error) {
+      logMpDebug('mp-draw-server', {
+        roomId,
+        playerId,
+        reason: options.reason ?? 'unknown',
+        event: 'sequence_error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     } finally {
       setState(withDrawSequenceFlag(current, false));
+      options.onStateReady?.(roomId);
+      logMpDebug('mp-draw-server', {
+        roomId,
+        playerId,
+        reason: options.reason ?? 'unknown',
+        event: 'sequence_finally',
+        sequence: current.sequence,
+        boneyardCount: current.boneyard.length,
+        drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+      });
     }
   })();
 
@@ -575,7 +672,7 @@ export async function act(
       throw new Error('You have a legal play — you may not draw.');
     }
 
-    room.state = withDrawSequenceFlag(state, false);
+    room.state = withDrawSequenceFlag(state, true);
     appendRoomEvent(room, {
       type: 'draw_requested',
       actorSocketId: socketId,
@@ -583,16 +680,37 @@ export async function act(
         handNumber: state.handNumber,
       },
     });
+    logMpDebug('mp-action', {
+      roomCode: room.code,
+      playerId: socketId,
+      action: 'DRAW',
+      event: 'accepted',
+      sequence: room.state.sequence,
+      handNumber: room.state.handNumber,
+      boneyardCount: room.state.boneyard.length,
+    });
     onStateReady(room.code);
-    await runDrawSequence(
-      room.code,
-      socketId,
-      io,
-      () => room.state as GameState,
-      (next) => {
-        room.state = next;
-      },
-    );
+    setTimeout(() => {
+      void runDrawSequence(
+        room.code,
+        socketId,
+        io,
+        () => room.state as GameState,
+        (next) => {
+          room.state = next;
+        },
+        [],
+        {
+          onStateReady,
+          reason: 'manual_draw',
+          preActivated: true,
+        },
+      ).catch((err: unknown) => {
+        console.error('[game:action] draw sequence failed after DRAW', err);
+        room.state = withDrawSequenceFlag(room.state as GameState, false);
+        onStateReady(room.code);
+      });
+    }, 0);
     return room;
   }
 
@@ -641,6 +759,15 @@ export async function act(
     if (forcedDraw) {
       const acceptedMoveSequence = room.state.sequence;
       room.state = withDrawSequenceFlag(room.state as GameState, true);
+      logMpDebug('mp-forced-draw', {
+        roomCode: room.code,
+        playerId: socketId,
+        action: 'MOVE',
+        event: 'forced_draw_detected',
+        sequence: acceptedMoveSequence,
+        tile: normalizeTileKey(forcedDraw),
+        handNumber: room.state.handNumber,
+      });
       onStateReady(room.code);
       setTimeout(() => {
         void runDrawSequence(
@@ -652,10 +779,14 @@ export async function act(
             room.state = next;
           },
           [forcedDraw],
+          {
+            onStateReady,
+            reason: 'forced_draw_after_move',
+            preActivated: true,
+          },
         ).then(
           () => {
             appendResolutionEvents(room, previousState, socketId);
-            onStateReady(room.code);
           },
           (err: unknown) => {
             console.error('[game:action] forced draw sequence failed after MOVE', err);

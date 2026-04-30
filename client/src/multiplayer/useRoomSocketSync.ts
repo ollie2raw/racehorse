@@ -80,6 +80,8 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
   useEffect(() => {
     const { socket } = params;
     if (!socket) return;
+    const isMpDebug =
+      typeof window !== 'undefined' && window.localStorage.getItem('mp_debug') === '1';
 
     const onFriendInvited = (payload: {
       fromUsername: string;
@@ -119,10 +121,11 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
           typeof nextState.sequence === 'number' &&
           nextState.sequence < params.maxSequenceRef.current
         ) {
-          if (import.meta.env.DEV) {
+          if (import.meta.env.DEV || isMpDebug) {
             console.warn('[mp-state-apply] rejected stale state:update', {
               incoming: nextState.sequence,
               highWatermark: params.maxSequenceRef.current,
+              drawActive: Boolean(nextState.__drawSequenceActive),
             });
           }
           return;
@@ -130,11 +133,14 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         params.maxSequenceRef.current = nextState.sequence ?? -1;
       }
 
-      if (import.meta.env.DEV) {
-        console.log('[state:update]', {
+      if (import.meta.env.DEV || isMpDebug) {
+        console.log('[mp-state-apply] state:update', {
           joinedRoom: params.joinedRoomRef.current,
           hasState: Boolean(payload?.state),
           sequence: nextState?.sequence,
+          drawActive: Boolean(nextState?.__drawSequenceActive),
+          boneyardCount: nextState?.boneyard?.length ?? null,
+          myHandLength: nextState?.players?.[params.youRef.current]?.hand?.length ?? null,
         });
       }
 
@@ -173,7 +179,19 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       });
       params.setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       params.setCanDraw(Boolean(payload?.canDraw));
-      if (!params.drawSequenceActiveRef.current) {
+      if (nextState?.__drawSequenceActive) {
+        if (isMpDebug) {
+          console.log('[mp-draw-client] authoritative draw active=true', {
+            sequence: nextState.sequence,
+          });
+        }
+        params.setDrawSequenceActiveBoth(true);
+      } else {
+        if (isMpDebug && params.drawSequenceActiveRef.current) {
+          console.log('[mp-draw-client] authoritative draw active=false', {
+            sequence: nextState?.sequence ?? null,
+          });
+        }
         clearDrawPreview(params);
       }
       params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
@@ -196,7 +214,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
           typeof nextState.sequence === 'number' &&
           nextState.sequence < params.maxSequenceRef.current
         ) {
-          if (import.meta.env.DEV) {
+          if (import.meta.env.DEV || isMpDebug) {
             console.warn('[mp-state-apply] rejected stale state:spectate', {
               incoming: nextState.sequence,
               highWatermark: params.maxSequenceRef.current,
@@ -215,8 +233,10 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       params.setOptimisticPlayedTile(null);
       params.setLegalMoves([]);
       params.setCanDraw(false);
-      if (!params.drawSequenceActiveRef.current) {
+      if (!nextState?.__drawSequenceActive) {
         clearDrawPreview(params);
+      } else {
+        params.setDrawSequenceActiveBoth(true);
       }
       params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
     };
@@ -228,6 +248,14 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       drawerHandCount: number;
     }) => {
       if (!payload) return;
+      if (isMpDebug) {
+        console.log('[mp-draw-client] draw_step', {
+          playerId: payload.playerId,
+          hasTile: Boolean(payload.tile),
+          boneyardCount: payload.boneyardCount,
+          drawerHandCount: payload.drawerHandCount,
+        });
+      }
       params.playDrawSound(params.isMutedRef.current);
       params.setDrawSequenceActiveBoth(true);
       params.setDrawStepActorId(payload.playerId);
