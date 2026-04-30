@@ -349,6 +349,16 @@ async function waitForTurnReady(clients) {
   throw new Error('turn did not become playable/drawable/passable after post-MOVE sequencing');
 }
 
+async function waitForDrawActiveState(client, active) {
+  const already = latestState(client)?.state?.__drawSequenceActive;
+  if (already === active) return latestState(client);
+  return onceWithTimeout(
+    client.socket,
+    'state:update',
+    (payload) => payload?.state?.__drawSequenceActive === active,
+  );
+}
+
 async function waitForPlayableClient(clients, roomCode, maxSteps = 20) {
   for (let step = 0; step < maxSteps; step += 1) {
     const playable = getActivePlayer(clients);
@@ -927,6 +937,108 @@ async function scenarioMidHandActionReliability() {
   );
 }
 
+async function scenarioDrawActiveActionGuards() {
+  return withClients(
+    [
+      { label: 'alpha', userId: 'draw-guard-user-a', username: 'DrawGuardA' },
+      { label: 'bravo', userId: 'draw-guard-user-b', username: 'DrawGuardB' },
+    ],
+    async ({ alpha, bravo }) => {
+      const createResp = await emitAck(alpha.socket, 'room:create', {
+        username: alpha.state.username,
+        userId: alpha.state.userId,
+      });
+      assert(createResp?.ok, 'alpha failed to create room');
+      const roomCode = createResp.roomCode;
+      assert(roomCode, 'missing room code');
+
+      const joinResp = await emitAck(bravo.socket, 'room:join', roomCode, {
+        username: bravo.state.username,
+        userId: bravo.state.userId,
+      });
+      assert(joinResp?.ok, 'bravo failed to join');
+      await waitForRoomCount(alpha, 2);
+      await startTwoPlayerGame(alpha, bravo, roomCode);
+
+      let drawer = null;
+      const clients = [alpha, bravo];
+      for (let step = 0; step < 30; step += 1) {
+        const currentId = getCurrentPlayerId(alpha);
+        const current = getClientBySocketId(clients, currentId);
+        assert(current, 'could not identify current player while seeking draw window');
+        const hasPlayMove = Boolean(getPlayableMove(current));
+        const canDrawNow = Boolean(latestState(current)?.canDraw);
+        if (!hasPlayMove && canDrawNow) {
+          drawer = current;
+          break;
+        }
+
+        assert(hasPlayMove, 'expected a playable move before reaching a draw window');
+        const move = getPlayableMove(current);
+        const resp = await emitAck(current.socket, 'game:action', roomCode, {
+          type: 'MOVE',
+          move: { tile: move.tile, position: move.position },
+        });
+        assert(resp?.ok, `setup MOVE failed while seeking draw window: ${resp?.error ?? 'unknown'}`);
+        await waitForAllConnectedClientsSequence(clients, resp.sequence);
+        await waitForTurnReady(clients);
+      }
+
+      assert(drawer, 'could not reach a manual DRAW opportunity');
+      const other = drawer === alpha ? bravo : alpha;
+
+      const actorDrawActivePromise = waitForDrawActiveState(drawer, true);
+      const otherDrawActivePromise = waitForDrawActiveState(other, true);
+      const drawResp = await emitAck(drawer.socket, 'game:action', roomCode, { type: 'DRAW' });
+      assert(drawResp?.ok, `DRAW failed: ${drawResp?.error ?? 'unknown'}`);
+
+      const actorDrawActive = await actorDrawActivePromise;
+      const otherDrawActive = await otherDrawActivePromise;
+      assert(actorDrawActive?.canDraw === false, 'drawer still had canDraw while draw-active');
+      assert(
+        !Array.isArray(actorDrawActive?.legalMoves) || actorDrawActive.legalMoves.length === 0,
+        'drawer still received legalMoves while draw-active',
+      );
+      assert(otherDrawActive?.canDraw === false, 'opponent had canDraw while other player draw-active');
+      assert(
+        !Array.isArray(otherDrawActive?.legalMoves) || otherDrawActive.legalMoves.length === 0,
+        'opponent still received legalMoves while draw-active',
+      );
+
+      const duplicateDrawResp = await emitAck(drawer.socket, 'game:action', roomCode, { type: 'DRAW' });
+      assert(
+        duplicateDrawResp?.ok === false && /draw already in progress/i.test(String(duplicateDrawResp?.error ?? '')),
+        `duplicate DRAW during draw-active was not rejected correctly: ${duplicateDrawResp?.error}`,
+      );
+      const passResp = await emitAck(drawer.socket, 'game:action', roomCode, { type: 'PASS' });
+      assert(
+        passResp?.ok === false && /draw already in progress/i.test(String(passResp?.error ?? '')),
+        `PASS during draw-active was not rejected correctly: ${passResp?.error}`,
+      );
+      const moveResp = await emitAck(drawer.socket, 'game:action', roomCode, {
+        type: 'MOVE',
+        move: { tile: { low: 0, high: 0 }, position: 'left' },
+      });
+      assert(
+        moveResp?.ok === false && /draw already in progress/i.test(String(moveResp?.error ?? '')),
+        `MOVE during draw-active was not rejected correctly: ${moveResp?.error}`,
+      );
+
+      await Promise.all(clients.map((client) => waitForDrawActiveState(client, false)));
+      await waitForTurnReady(clients);
+
+      return {
+        roomCode,
+        checks: {
+          drawActiveHidesLegalMoves: true,
+          drawActiveRejectsDuplicateDraw: true,
+          drawActiveRejectsOtherActions: true,
+        },
+      };
+    },
+  );
+}
+
 async function assertPostMoveState(clients, actor, move, beforeState, ackSequence) {
   await waitForAllConnectedClientsSequence(clients, ackSequence);
 
@@ -1458,6 +1570,7 @@ const scenarios = [
   { name: 'room-switch-cleanup', run: scenarioRoomSwitchCleanup },
   { name: 'seat-migration-and-spectator-rejection', run: scenarioSeatMigrationAndSpectatorRejection },
   { name: 'mid-hand-action-reliability', run: scenarioMidHandActionReliability },
+  { name: 'draw-active-action-guards', run: scenarioDrawActiveActionGuards },
   { name: 'post-move-stability', run: scenarioPostMoveStability },
   { name: 'start-and-hand-ready-guards', run: scenarioStartAndHandReadyGuards },
   { name: 'guest-seat-reconnect', run: scenarioGuestSeatReconnect },

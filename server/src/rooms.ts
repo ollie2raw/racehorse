@@ -27,6 +27,7 @@ export type Room = {
   players: string[]; // socket ids in seat order
   state: GameState | null; // null until game started
   config: Partial<Config>;
+  asyncStateVersion: number;
   nextHandReady: Set<string>;
   rematchReady: Set<string>;
   lastHandEndedNotifiedHand: number | null;
@@ -131,6 +132,7 @@ export function createRoom(hostSocketId: string, config: Partial<Config> = {}): 
     players: [hostSocketId],
     state: null,
     config,
+    asyncStateVersion: 0,
     nextHandReady: new Set<string>(),
     rematchReady: new Set<string>(),
     lastHandEndedNotifiedHand: null,
@@ -167,6 +169,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
     players: [],
     state: null,
     config,
+    asyncStateVersion: 0,
     nextHandReady: new Set<string>(),
     rematchReady: new Set<string>(),
     lastHandEndedNotifiedHand: null,
@@ -255,6 +258,14 @@ function appendResolutionEvents(room: Room, previousState: GameState, actorSocke
   }
 }
 
+function roomDrawContextVersion(roomId: string): number | null {
+  try {
+    return getRoom(roomId).asyncStateVersion;
+  } catch {
+    return null;
+  }
+}
+
 export async function runDrawSequence(
   roomId: string,
   playerId: string,
@@ -280,8 +291,27 @@ export async function runDrawSequence(
     return;
   }
 
+  const expectedAsyncStateVersion = roomDrawContextVersion(roomId);
+
   const sequence = (async () => {
+    const isCurrentContext = () => roomDrawContextVersion(roomId) === expectedAsyncStateVersion;
+    const abortIfStale = (event: string) => {
+      if (isCurrentContext()) return true;
+      logMpDebug('mp-draw-server', {
+        roomId,
+        playerId,
+        reason: options.reason ?? 'unknown',
+        event,
+        expectedAsyncStateVersion,
+        actualAsyncStateVersion: roomDrawContextVersion(roomId),
+      });
+      return false;
+    };
+
     let current = getState();
+    if (!abortIfStale('sequence_abort_stale_context_before_start')) {
+      return;
+    }
     if (current.__drawSequenceActive && !options.preActivated) {
       // Stale flag recovery: if no active sequence is registered but state says active,
       // clear the flag so turn-driving logic cannot deadlock.
@@ -337,6 +367,9 @@ export async function runDrawSequence(
     try {
       if (preDrawnTiles.length > 0) {
         for (const tile of preDrawnTiles) {
+          if (!abortIfStale('sequence_abort_stale_context_before_pre_draw_emit')) {
+            return;
+          }
           logMpDebug('mp-draw-server', {
             roomId,
             playerId,
@@ -362,6 +395,9 @@ export async function runDrawSequence(
       }
 
       while (true) {
+        if (!abortIfStale('sequence_abort_stale_context_before_step')) {
+          return;
+        }
         const drawableCount = Math.max(0, current.boneyard.length - current.config.deadTileCount);
         if (drawableCount === 0) break;
 
@@ -419,6 +455,9 @@ export async function runDrawSequence(
         const playable = getLegalMoves(current, playerId).filter((move) => move.type === 'play');
         if (playable.length > 0) break;
         await sleep(DRAW_STEP_MS);
+        if (!abortIfStale('sequence_abort_stale_context_after_sleep')) {
+          return;
+        }
       }
     } catch (error) {
       logMpDebug('mp-draw-server', {
@@ -430,6 +469,9 @@ export async function runDrawSequence(
       });
       throw error;
     } finally {
+      if (!abortIfStale('sequence_skip_finally_stale_context')) {
+        return;
+      }
       setState(withDrawSequenceFlag(current, false));
       options.onStateReady?.(roomId);
       logMpDebug('mp-draw-server', {
@@ -448,7 +490,9 @@ export async function runDrawSequence(
   try {
     await sequence;
   } finally {
-    drawSequencesByRoom.delete(roomId);
+    if (drawSequencesByRoom.get(roomId) === sequence) {
+      drawSequencesByRoom.delete(roomId);
+    }
   }
 }
 
@@ -483,6 +527,7 @@ export async function startGame(
   }
 
   // Create fresh game state (either first start or restart after stale state)
+  room.asyncStateVersion += 1;
   const state0 = createInitialState(room.players, room.config);
   const state1 = startNewHand(state0);
   room.state = withDrawSequenceFlag(state1, false);
@@ -528,6 +573,7 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
   }
 
   // Start new hand
+  room.asyncStateVersion += 1;
   const state1 = startNewHand(room.state);
   room.state = withDrawSequenceFlag(state1, false);
   room.ghostTurnIndex = 0;
@@ -837,6 +883,7 @@ export async function act(
 export function getRoomLegalMoves(code: string, playerId: string) {
   const room = getRoom(code);
   if (!room.state) return [];
+  if (room.state.__drawSequenceActive) return [];
 
   const currentId = room.state.playerIds[room.state.currentPlayerIndex];
   if (currentId !== playerId) return [];
