@@ -82,6 +82,16 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
     if (!socket) return;
     const isMpDebug =
       typeof window !== 'undefined' && window.localStorage.getItem('mp_debug') === '1';
+    const drawAnimationStepTimers: Array<ReturnType<typeof setTimeout>> = [];
+
+    const clearPendingDrawAnimationTimers = () => {
+      while (drawAnimationStepTimers.length > 0) {
+        const timer = drawAnimationStepTimers.pop();
+        if (timer) {
+          clearTimeout(timer);
+        }
+      }
+    };
 
     const onFriendInvited = (payload: {
       fromUsername: string;
@@ -248,6 +258,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       drawerHandCount: number;
     }) => {
       if (!payload) return;
+      clearPendingDrawAnimationTimers();
       if (isMpDebug) {
         console.log('[mp-draw-client] draw_step', {
           playerId: payload.playerId,
@@ -331,13 +342,14 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
           stoppedReason: payload.final?.stoppedReason ?? null,
         });
       }
+      clearPendingDrawAnimationTimers();
       params.setDrawStepActorId(payload.playerId);
       if (params.drawSequenceTimeoutRef.current) {
         clearTimeout(params.drawSequenceTimeoutRef.current);
       }
 
       payload.steps.forEach((step, index) => {
-        window.setTimeout(() => {
+        const stepTimer = window.setTimeout(() => {
           params.playDrawSound(params.isMutedRef.current);
           params.setBoneyardDisplayCount(step.boneyardCount);
 
@@ -358,9 +370,10 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
                   id,
                 },
               ]);
-              window.setTimeout(() => {
+              const removalTimer = window.setTimeout(() => {
                 params.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id));
               }, 1800);
+              drawAnimationStepTimers.push(removalTimer);
             }
           }
 
@@ -368,9 +381,11 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
             params.setDrawStepOpponentHandCount(step.drawerHandCount);
           }
         }, index * 150);
+        drawAnimationStepTimers.push(stepTimer);
       });
 
       params.drawSequenceTimeoutRef.current = setTimeout(() => {
+        clearPendingDrawAnimationTimers();
         clearDrawPreview(params);
       }, payload.steps.length * 150 + 1800);
     };
@@ -391,6 +406,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       socket.off('state:spectate', onStateSpectate);
       socket.off('game:draw_step', onDrawStep);
       socket.off('game:draw_animation', onDrawAnimation);
+      clearPendingDrawAnimationTimers();
     };
   }, [params]);
 }
