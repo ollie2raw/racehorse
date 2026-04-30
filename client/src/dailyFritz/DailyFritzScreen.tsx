@@ -401,7 +401,7 @@ export default function DailyFritzScreen({
               {today.attempt_status === 'completed' && (
                 <div className="daily-fritz-status-card is-complete claude-mode-card">
                   <div className="daily-fritz-result-grid">
-                    <div className="daily-fritz-summary-card daily-fritz-result-card daily-fritz-result-outcome-card">
+                    <div className={`daily-fritz-summary-card daily-fritz-result-card daily-fritz-result-outcome-card ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>
                       <div className="daily-fritz-stat-layout">
                         <span>Result</span>
                         <span className={`daily-fritz-result-pill ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>

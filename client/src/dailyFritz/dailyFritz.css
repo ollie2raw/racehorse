@@ -261,46 +261,85 @@
   white-space: nowrap;
 }
 
-.daily-fritz-result-grid .daily-fritz-summary-card strong {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 0;
-  font-size: clamp(1.34rem, 1.72vw, 1.68rem);
-  font-weight: 850;
-  line-height: 1;
-}
-
-.daily-fritz-result-pill.is-win {
-  color: #96f0ca;
-  border-color: rgba(74, 222, 128, 0.3);
-  background: rgba(22, 74, 42, 0.44);
-}
-
-.daily-fritz-result-pill.is-loss {
-  color: #fbb4b4;
-  border-color: rgba(248, 113, 113, 0.28);
-  background: rgba(76, 24, 24, 0.42);
-}
-
 .daily-fritz-result-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+  margin-top: 10px;
 }
 
-.daily-fritz-result-card {
-  min-height: 90px;
+.daily-fritz-summary-card {
+  min-height: 108px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
 }
 
-.daily-fritz-result-outcome-card .daily-fritz-result-pill {
-  height: 30px;
-  padding: 0 16px;
-  font-size: 1rem;
+.daily-fritz-summary-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.daily-fritz-result-outcome-card.is-win::after { background: #34d399; }
+.daily-fritz-result-outcome-card.is-loss::after { background: #ef4444; }
+
+.daily-fritz-stat-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.daily-fritz-stat-layout span:first-child {
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.daily-fritz-summary-card strong {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: clamp(1.4rem, 2vw, 1.8rem);
+  font-weight: 900;
   line-height: 1;
+  color: #fff;
 }
 
-.daily-fritz-result-outcome-card strong {
-  align-items: center;
+.daily-fritz-result-pill {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-result-pill.is-win {
+  color: #34d399;
+}
+
+.daily-fritz-result-pill.is-loss {
+  color: #ef4444;
+}
+
+@media (max-width: 900px) {
+  .daily-fritz-result-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 500px) {
+  .daily-fritz-result-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .daily-fritz-actions {
