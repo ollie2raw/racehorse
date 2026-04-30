@@ -64,7 +64,6 @@ export interface GameState {
   winnerId: string | null;
   consecutivePasses: number;
   sequence: number;
-  __drawSequenceActive?: boolean;
 }
 
 export interface Move {

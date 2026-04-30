@@ -137,7 +137,6 @@ function createClient(label, userId, username) {
     stateUpdates: [],
     spectateUpdates: [],
     drawAnimations: [],
-    drawSteps: [],
     connectErrors: [],
   };
 
@@ -145,7 +144,6 @@ function createClient(label, userId, username) {
   socket.on('state:update', (payload) => state.stateUpdates.push(payload));
   socket.on('state:spectate', (payload) => state.spectateUpdates.push(payload));
   socket.on('game:draw_animation', (payload) => state.drawAnimations.push(payload));
-  socket.on('game:draw_step', (payload) => state.drawSteps.push(payload));
   socket.on('connect_error', (error) => state.connectErrors.push(error?.message || String(error)));
 
   async function connectAndIdentify() {
@@ -243,13 +241,6 @@ async function waitForDrawAnimationCount(client, minimumCount) {
     return client.state.drawAnimations[client.state.drawAnimations.length - 1] ?? null;
   }
   return onceWithTimeout(client.socket, 'game:draw_animation', () => client.state.drawAnimations.length >= minimumCount);
-}
-
-async function waitForDrawStepCount(client, minimumCount, timeoutMs = TIMEOUT_MS) {
-  if (client.state.drawSteps.length >= minimumCount) {
-    return client.state.drawSteps[client.state.drawSteps.length - 1] ?? null;
-  }
-  return onceWithTimeout(client.socket, 'game:draw_step', () => client.state.drawSteps.length >= minimumCount, timeoutMs);
 }
 
 async function waitForRoomCount(client, expectedCount, timeoutMs = TIMEOUT_MS) {
@@ -472,16 +463,6 @@ async function waitForTurnReady(clients) {
     if (readyNow()) return latestState(connectedClients[0])?.state ?? null;
   }
   throw new Error('turn did not become playable/drawable/passable after post-MOVE sequencing');
-}
-
-async function waitForDrawActiveState(client, active) {
-  const already = latestState(client)?.state?.__drawSequenceActive;
-  if (already === active) return latestState(client);
-  return onceWithTimeout(
-    client.socket,
-    'state:update',
-    (payload) => payload?.state?.__drawSequenceActive === active,
-  );
 }
 
 async function waitForPlayableClient(clients, roomCode, maxSteps = 20) {
@@ -1120,8 +1101,7 @@ async function scenarioDrawActiveActionGuards() {
 
       const actorAfter = latestState(drawer);
       const otherAfter = latestState(other);
-      assert(actorAfter?.state?.__drawSequenceActive !== true, 'manual DRAW left drawer in draw-active');
-      assert(otherAfter?.state?.__drawSequenceActive !== true, 'manual DRAW left opponent in draw-active');
+      // __drawSequenceActive removed from GameState: atomicity guaranteed structurally.
       assert(
         typeof drawResp.sequence === 'number' && drawResp.sequence === actorAfter?.state?.sequence,
         'manual DRAW ack sequence did not match final authoritative state',
@@ -1160,7 +1140,6 @@ async function scenarioDrawActiveActionGuards() {
 async function scenarioForcedDrawAsyncBehavior() {
   // Tests that MOVE forced-draw is resolved atomically:
   // - ack returns the FINAL (post-draw) sequence, not the pre-draw placement sequence
-  // - no state:update ever carries __drawSequenceActive=true
   // - game:draw_animation with mode 'forced_draw' is emitted to both clients
   // - both clients converge on the same final sequence
   return withClients(
@@ -1220,11 +1199,6 @@ async function scenarioForcedDrawAsyncBehavior() {
           const actorAnimCountBefore = actor.state.drawAnimations.length;
           const otherAnimCountBefore = other.state.drawAnimations.length;
 
-          // Snapshot all state:update sequences received before the MOVE so we can
-          // verify none of them carry __drawSequenceActive=true after the fact.
-          const alphaStateCountBefore = alpha.state.stateUpdates.length;
-          const bravoStateCountBefore = bravo.state.stateUpdates.length;
-
           const moveResp = await emitAck(actor.socket, 'game:action', roomCode, {
             type: 'MOVE',
             move: { tile: candidateMove.tile, position: candidateMove.position },
@@ -1260,21 +1234,11 @@ async function scenarioForcedDrawAsyncBehavior() {
             'forced-draw opponent received tile identity in draw_animation steps',
           );
 
-          // Invariant: __drawSequenceActive must never have been true in any
-          // state:update received between the MOVE and convergence.
-          const alphaNewUpdates = alpha.state.stateUpdates.slice(alphaStateCountBefore);
-          const bravoNewUpdates = bravo.state.stateUpdates.slice(bravoStateCountBefore);
-          const anyAlphaDrawActive = alphaNewUpdates.some((u) => u?.state?.__drawSequenceActive === true);
-          const anyBravoDrawActive = bravoNewUpdates.some((u) => u?.state?.__drawSequenceActive === true);
-          assert(!anyAlphaDrawActive, 'atomic forced-draw: state:update with __drawSequenceActive=true received by alpha (invariant violated)');
-          assert(!anyBravoDrawActive, 'atomic forced-draw: state:update with __drawSequenceActive=true received by bravo (invariant violated)');
-
           // Invariant: both clients converge on identical final state.
+          // (__drawSequenceActive removed from GameState; atomicity is structural.)
           const finalAlpha = latestState(alpha);
           const finalBravo = latestState(bravo);
           assert(finalAlpha?.state && finalBravo?.state, 'missing final forced-draw state');
-          assert(finalAlpha.state.__drawSequenceActive !== true, 'actor final state has draw-active=true');
-          assert(finalBravo.state.__drawSequenceActive !== true, 'opponent final state has draw-active=true');
           assert(
             finalAlpha.state.sequence === finalBravo.state.sequence,
             `forced-draw clients ended on different sequences: ${finalAlpha.state.sequence} vs ${finalBravo.state.sequence}`,

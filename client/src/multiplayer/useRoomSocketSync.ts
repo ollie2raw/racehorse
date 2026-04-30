@@ -135,7 +135,6 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
             console.warn('[mp-state-apply] rejected stale state:update', {
               incoming: nextState.sequence,
               highWatermark: params.maxSequenceRef.current,
-              drawActive: Boolean(nextState.__drawSequenceActive),
             });
           }
           return;
@@ -148,7 +147,6 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
           joinedRoom: params.joinedRoomRef.current,
           hasState: Boolean(payload?.state),
           sequence: nextState?.sequence,
-          drawActive: Boolean(nextState?.__drawSequenceActive),
           boneyardCount: nextState?.boneyard?.length ?? null,
           myHandLength: nextState?.players?.[params.youRef.current]?.hand?.length ?? null,
         });
@@ -189,21 +187,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       });
       params.setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       params.setCanDraw(Boolean(payload?.canDraw));
-      if (nextState?.__drawSequenceActive) {
-        if (isMpDebug) {
-          console.log('[mp-draw-client] authoritative draw active=true', {
-            sequence: nextState.sequence,
-          });
-        }
-        params.setDrawSequenceActiveBoth(true);
-      } else {
-        if (isMpDebug && params.drawSequenceActiveRef.current) {
-          console.log('[mp-draw-client] authoritative draw active=false', {
-            sequence: nextState?.sequence ?? null,
-          });
-        }
-        clearDrawPreview(params);
-      }
+      clearDrawPreview(params);
       params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
     };
 
@@ -243,75 +227,8 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       params.setOptimisticPlayedTile(null);
       params.setLegalMoves([]);
       params.setCanDraw(false);
-      if (!nextState?.__drawSequenceActive) {
-        clearDrawPreview(params);
-      } else {
-        params.setDrawSequenceActiveBoth(true);
-      }
+      clearDrawPreview(params);
       params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
-    };
-
-    const onDrawStep = (payload: {
-      playerId: string;
-      tile: Tile | null;
-      boneyardCount: number;
-      drawerHandCount: number;
-    }) => {
-      if (!payload) return;
-      clearPendingDrawAnimationTimers();
-      if (isMpDebug) {
-        console.log('[mp-draw-client] draw_step', {
-          playerId: payload.playerId,
-          hasTile: Boolean(payload.tile),
-          boneyardCount: payload.boneyardCount,
-          drawerHandCount: payload.drawerHandCount,
-        });
-      }
-      params.playDrawSound(params.isMutedRef.current);
-      params.setDrawSequenceActiveBoth(true);
-      params.setDrawStepActorId(payload.playerId);
-      if (params.drawSequenceTimeoutRef.current) {
-        clearTimeout(params.drawSequenceTimeoutRef.current);
-      }
-      params.drawSequenceTimeoutRef.current = setTimeout(() => {
-        params.setDrawSequenceActiveBoth(false);
-      }, 5000);
-      params.setBoneyardDisplayCount(payload.boneyardCount);
-
-      if (params.boneyardRef.current) {
-        const from = params.boneyardRef.current.getBoundingClientRect();
-        const isMe = payload.playerId === params.youRef.current;
-        const targetEl: HandTileTarget = isMe ? params.handAreaRef.current : params.opponentPillRef.current;
-        if (targetEl) {
-          const to = targetEl.getBoundingClientRect();
-          const id = ++params.flyingTileIdRef.current;
-          params.setFlyingTiles((prev) => [
-            ...prev,
-            {
-              x: from.left + from.width / 2,
-              y: from.top + from.height / 2,
-              toX: to.left + to.width / 2,
-              toY: to.top + to.height / 2,
-              id,
-            },
-          ]);
-          setTimeout(() => params.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id)), 1800);
-        }
-      }
-
-      const isMe = payload.playerId === params.youRef.current;
-      if (isMe && payload.tile) {
-        const drawnTile = payload.tile;
-        params.setDrawStepMyHand((prev) => {
-          const base = prev ?? (params.stateRef.current?.players?.[params.youRef.current]?.hand ?? []);
-          const next = [...base, drawnTile];
-          params.setDrawPulseIndex(next.length - 1);
-          setTimeout(() => params.setDrawPulseIndex(null), 400);
-          return next;
-        });
-      } else if (!isMe) {
-        params.setDrawStepOpponentHandCount(payload.drawerHandCount);
-      }
     };
 
     const onDrawAnimation = (payload: {
@@ -395,7 +312,6 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
     socket.on('room:update', onRoomUpdate);
     socket.on('state:update', onStateUpdate);
     socket.on('state:spectate', onStateSpectate);
-    socket.on('game:draw_step', onDrawStep);
     socket.on('game:draw_animation', onDrawAnimation);
 
     return () => {
@@ -404,7 +320,6 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       socket.off('room:update', onRoomUpdate);
       socket.off('state:update', onStateUpdate);
       socket.off('state:spectate', onStateSpectate);
-      socket.off('game:draw_step', onDrawStep);
       socket.off('game:draw_animation', onDrawAnimation);
       clearPendingDrawAnimationTimers();
     };

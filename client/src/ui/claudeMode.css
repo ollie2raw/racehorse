@@ -783,7 +783,7 @@
 .claude-accordion-home__live {
   position: absolute;
   top: 18px;
-  right: 18px;
+  left: 18px;
   z-index: 2;
   display: inline-flex;
   align-items: center;

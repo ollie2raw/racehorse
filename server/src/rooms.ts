@@ -82,10 +82,6 @@ const MP_DEBUG =
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function withDrawSequenceFlag(state: GameState, active: boolean): GameState {
-  return { ...state, __drawSequenceActive: active };
-}
-
 function logMpDebug(scope: string, payload: Record<string, unknown>): void {
   if (!MP_DEBUG) return;
   console.log(`[${scope}]`, payload);
@@ -240,23 +236,6 @@ export function getRoom(code: string): Room {
   return room;
 }
 
-export function cancelActiveDrawSequenceForRoom(code: string, reason: string): boolean {
-  const room = rooms.get(code);
-  if (!room?.state?.__drawSequenceActive) return false;
-
-  room.asyncStateVersion += 1;
-  room.state = withDrawSequenceFlag(room.state, false);
-  logMpDebug('mp-draw-server', {
-    roomId: code,
-    event: 'cancel_active_draw_sequence',
-    reason,
-    asyncStateVersion: room.asyncStateVersion,
-    handNumber: room.state.handNumber,
-    sequence: room.state.sequence,
-  });
-  return true;
-}
-
 export function deleteRoom(code: string): boolean {
   return rooms.delete(code);
 }
@@ -349,8 +328,7 @@ type ResolveForcedDrawResult = {
  * function records the forced tile as the first animation step, then continues
  * drawing until the player has a legal play or the boneyard is exhausted.
  *
- * INVARIANT: never sets __drawSequenceActive; all state mutations are complete
- * before the function returns.
+ * INVARIANT: all state mutations are complete before the function returns.
  */
 function resolveForcedDrawAtomically(
   stateAfterMove: GameState,
@@ -427,7 +405,7 @@ export async function startGame(
   room.asyncStateVersion += 1;
   const state0 = createInitialState(room.players, room.config);
   const state1 = startNewHand(state0);
-  room.state = withDrawSequenceFlag(state1, false);
+  room.state = state1;
   room.ghostMoveLogs = Object.fromEntries(room.players.map((playerId) => [playerId, []]));
   room.ghostTurnIndex = 0;
   if (room.events.some((event) => event.type === 'match_started')) {
@@ -472,7 +450,7 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
   // Start new hand
   room.asyncStateVersion += 1;
   const state1 = startNewHand(room.state);
-  room.state = withDrawSequenceFlag(state1, false);
+  room.state = state1;
   room.ghostTurnIndex = 0;
   appendRoomEvent(room, {
     type: 'hand_started',
@@ -595,10 +573,6 @@ export async function act(
   let state = room.state;
 
   const { type } = action;
-
-  if (state.__drawSequenceActive) {
-    throw new Error('Draw already in progress.');
-  }
 
   // ─────────────────────────────
   // DRAW
@@ -786,7 +760,6 @@ export async function act(
 export function getRoomLegalMoves(code: string, playerId: string) {
   const room = getRoom(code);
   if (!room.state) return [];
-  if (room.state.__drawSequenceActive) return [];
 
   const currentId = room.state.playerIds[room.state.currentPlayerIndex];
   if (currentId !== playerId) return [];
@@ -798,7 +771,6 @@ export function getRoomLegalMoves(code: string, playerId: string) {
 export function getRoomCanDraw(code: string, playerId: string): boolean {
   const room = getRoom(code);
   if (!room.state) return false;
-  if (room.state.__drawSequenceActive) return false;
   return canDraw(room.state, playerId);
 }
 

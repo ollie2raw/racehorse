@@ -73,7 +73,6 @@ import {
   getRoomCanDraw,
   getRoomMatchEventMeta,
   getRoomMatchEventSnapshot,
-  cancelActiveDrawSequenceForRoom,
   type ManualDrawAnimationStep,
   type Room,
 } from './rooms';
@@ -3061,7 +3060,6 @@ function migrateRoomSeat(roomCode: string, oldSocketId: string, newSocketId: str
   const room = getRoom(roomCode);
   const idx = room.players.indexOf(oldSocketId);
   if (idx < 0) return;
-  const wasDrawActive = Boolean(room.state?.__drawSequenceActive);
   room.players[idx] = newSocketId;
 
   if (room.state) {
@@ -3085,9 +3083,6 @@ function migrateRoomSeat(roomCode: string, oldSocketId: string, newSocketId: str
       room.lastBroadcastScores[newSocketId] = room.lastBroadcastScores[oldSocketId];
       delete room.lastBroadcastScores[oldSocketId];
     }
-  }
-  if (wasDrawActive) {
-    cancelActiveDrawSequenceForRoom(roomCode, 'seat_migration');
   }
   if (room.ghostMoveLogs[oldSocketId]) {
     room.ghostMoveLogs[newSocketId] = room.ghostMoveLogs[oldSocketId];
