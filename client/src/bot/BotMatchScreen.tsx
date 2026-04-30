@@ -419,7 +419,6 @@ function moveEntriesToGhostMoveLog(entries: MoveEntry[]): GhostMoveLogEntry[] {
       branch: entry.action === 'draw' ? 'draw' : entry.action === 'pass' ? 'pass' : entry.action === 'place' && entry.tile ? (entry.boardState.find(s => s.tile[0] === entry.tile![0] && s.tile[1] === entry.tile![1])?.position ?? 'left') : null,
       hand_before: entry.handBefore.map(([low, high]) => `${low}|${high}`),
       score_delta: entry.pointsScored,
-      forced_draw: entry.action === 'draw',
     }));
 }
 
@@ -1970,11 +1969,9 @@ export default function BotMatchScreen({
     }
   };
 
-  const pushToast = useCallback((msg: string, ms = 1400) => {
-    if (!msg) return;
+  const pushToast = useCallback((_msg: string, _ms = 1400) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast(msg);
-    toastTimerRef.current = setTimeout(() => setToast(''), ms);
+    setToast('');
   }, []);
 
   const showBoardToast = useCallback((message: string, tone: 'you' | 'bot') => {
@@ -5435,7 +5432,7 @@ export default function BotMatchScreen({
       ? match.winnerId === 'you'
         ? 'You win the match'
         : `${opponentLabel} wins the match`
-      : 'Hand complete'
+      : ''
     : botTurn
       ? `${opponentLabel} thinking`
       : 'Your move';
@@ -6041,7 +6038,7 @@ export default function BotMatchScreen({
           { label: 'You', score: match.players.you.score, tone: 'you' },
         ]}
       />
-      {toast && <div className="toast">{toast}</div>}
+      {false && toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
         <div className="game-over-overlay hand-over-upgraded-overlay">
           <div className="game-over-card hand-over-upgraded-card">
@@ -6134,13 +6131,16 @@ export default function BotMatchScreen({
                   Next Hand →
                 </button>
               ) : (
-                <div className="hand-over-premium-progress-track">
-                  <div
-                    className="hand-over-premium-progress-fill"
-                    style={{ width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%` }}
-                  />
-                </div>
-              )}
+                  <div className="hand-over-premium-progress-track">
+                    <div
+                      className="hand-over-premium-progress-fill"
+                      style={{
+                        width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%`,
+                        transition: 'width 5000ms linear',
+                      }}
+                    />
+                  </div>
+                )}
             </div>
           </div>
         </div>
@@ -6411,19 +6411,23 @@ export default function BotMatchScreen({
             justifyContent: 'center',
           }}
         >
-          <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
-            {turnLabel}
-          </span>
+          {turnLabel ? (
+            <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
+              {turnLabel}
+            </span>
+          ) : null}
           <span
             className="open-ends-pill"
             style={{
               position: 'absolute',
-              left: 'calc(100% + 8px)',
+              left: turnLabel ? 'calc(100% + 8px)' : '50%',
+              transform: turnLabel ? 'none' : 'translateX(-50%)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               lineHeight: 1.05,
+              visibility: match.handOver && !match.gameOver ? 'hidden' : 'visible',
               background: 'rgba(255,255,255,0.07)',
               border: '1px solid rgba(255,255,255,0.15)',
               borderRadius: 999,

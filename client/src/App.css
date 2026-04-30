@@ -4197,12 +4197,23 @@ button:hover:not(:disabled) {
   color: #fff;
 }
 
+.final-score .player-name-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .final-score .score {
   font-family: 'Outfit', system-ui, sans-serif;
   font-size: 1.8rem;
   font-weight: 900;
   line-height: 1;
   color: rgba(255, 255, 255, 0.92);
+  margin-left: auto;
+  text-align: right;
+  min-width: 3ch;
 }
 
 .final-score.winner .score {
@@ -4285,9 +4296,9 @@ button:hover:not(:disabled) {
 }
 
 .final-score .crown {
-  margin-left: 8px;
   font-size: 1.5rem;
   animation: crown-pulse 1800ms ease-in-out infinite;
+  flex: 0 0 auto;
 }
 
 .game-over-result-stat {

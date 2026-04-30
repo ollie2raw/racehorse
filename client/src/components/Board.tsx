@@ -567,7 +567,7 @@ function BoardComponent({
       )
     : 0;
 
-  const isResettingBoard = handOver || !board || board.mainLine.length === 0;
+  const isResettingBoard = !board || board.mainLine.length === 0;
 
   const openEndPositions = useMemo(() => {
     if (!board || isResettingBoard) return [] as PlacementPosition[];
@@ -683,8 +683,8 @@ function BoardComponent({
   }, [showOpenEndGlow, board, openEndPositions, isResettingBoard]);
 
   const resetSignature = useMemo(
-    () => `${handNumber}:${handOver}:${gameOver}:${isResettingBoard}`,
-    [gameOver, handNumber, handOver, isResettingBoard],
+    () => `${handNumber}:${gameOver}:${isResettingBoard}`,
+    [gameOver, handNumber, isResettingBoard],
   );
 
   useEffect(() => {

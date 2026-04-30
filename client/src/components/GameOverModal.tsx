@@ -80,11 +80,11 @@ export default function GameOverModal({
               key={idx}
               className={`final-score ${row.winner ? 'winner' : ''}`}
             >
-              <span className="player-name">{row.label}</span>
-              <span className="score">
-                {row.value}
+              <span className="player-name-group">
+                <span className="player-name">{row.label}</span>
+                {row.showCrown && <span className="crown">👑</span>}
               </span>
-              {row.showCrown && <span className="crown">👑</span>}
+              <span className="score">{row.value}</span>
             </div>
           ))}
         </div>

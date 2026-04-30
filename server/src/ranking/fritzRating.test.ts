@@ -17,9 +17,9 @@ vi.mock('../supabaseUtils', () => ({
 const mockedSupabaseFetch = vi.mocked(supabaseFetch);
 
 describe('Fritz rating processing', () => {
-  it('keeps the server Master rating aligned with the visible 2200 tier', () => {
+  it('keeps the server Master rating aligned with the visible 2400 tier', () => {
     expect(getFritzConfig(FRITZ_MASTER_ID)).toMatchObject({
-      rating: 2200,
+      rating: 2400,
       rd: 50,
       difficulty: 'master',
     });

@@ -861,6 +861,7 @@ export default function App() {
   const [multiplayerMoveLog, setMultiplayerMoveLog] = useState<MoveEntry[]>([]);
   const multiplayerMoveCounterRef = useRef(1);
   const previousStateForAnalysisRef = useRef<GameState | null>(null);
+  const frozenHandOverBoardRef = useRef<{ handNumber: number; board: NonNullable<GameState['board']> } | null>(null);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
   const [pendingUiAction, setPendingUiAction] = useState<
@@ -2395,6 +2396,34 @@ export default function App() {
       pass();
     }
   }, [state, isMyTurn, hasPlayMoves, canDrawNow, canPass, myHand.length, boneyardCount, draw, pass, drawSequenceActive, roomRecoveryState, isRecoveringConnection]);
+
+  useEffect(() => {
+    if (!state) {
+      frozenHandOverBoardRef.current = null;
+      return;
+    }
+
+    if (state.board) {
+      frozenHandOverBoardRef.current = {
+        handNumber: state.handNumber,
+        board: state.board,
+      };
+      return;
+    }
+
+    if (!state.handOver) {
+      frozenHandOverBoardRef.current = null;
+    }
+  }, [state]);
+
+  const boardForDisplay = useMemo(() => {
+    if (state?.board) return state.board;
+    const frozenBoard = frozenHandOverBoardRef.current;
+    if (state?.handOver && frozenBoard && frozenBoard.handNumber === state.handNumber) {
+      return frozenBoard.board;
+    }
+    return null;
+  }, [state]);
 
   useEffect(() => {
     if (!state) {
@@ -4254,7 +4283,7 @@ export default function App() {
                 </button>
               </div>
               <Board
-                board={state?.board ?? null}
+                board={boardForDisplay}
                 legalMoves={boardLegalMoves}
                 selectedTile={boardSelectedTile}
                 lastPlayedTile={lastPlayedTile}

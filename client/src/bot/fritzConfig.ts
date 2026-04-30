@@ -36,7 +36,7 @@ export const FRITZ_TIERS = {
   master: {
     id: FRITZ_MASTER_ID,
     label: 'Master',
-    ratingLabel: '2200',
+    ratingLabel: '2400',
     description: 'Sampled endgame search. No mercy.',
     subdescription: undefined as string | undefined,
     difficulty: 'master' as const,
