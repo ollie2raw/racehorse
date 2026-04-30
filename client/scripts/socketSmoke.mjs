@@ -399,6 +399,64 @@ function chooseForcedDrawSearchMove(client) {
   return legalMoves[0] ?? null;
 }
 
+function listRawPlayablePositions(board, tile) {
+  if (!tile) return [];
+  if (!board) return ['left'];
+
+  const positions = [];
+  if (tile.low === board.leftEnd || tile.high === board.leftEnd) {
+    positions.push('left');
+  }
+  if (tile.low === board.rightEnd || tile.high === board.rightEnd) {
+    positions.push('right');
+  }
+
+  if (Array.isArray(board.hubDoubles)) {
+    board.hubDoubles.forEach((hub, hubIndex) => {
+      if (!hub?.isCrossed) return;
+      if (!Array.isArray(hub.branches)) return;
+      hub.branches.forEach((branch, armIndex) => {
+        const openEnd = branch?.openEnd;
+        if (typeof openEnd !== 'number') return;
+        if (tile.low === openEnd || tile.high === openEnd) {
+          positions.push(`branch-${hubIndex}-${armIndex}`);
+        }
+      });
+    });
+  }
+
+  return [...new Set(positions)];
+}
+
+function findBlockedForcedDrawLikeMove(client) {
+  const payload = latestState(client);
+  const state = payload?.state;
+  if (!state) return null;
+  const ownHand = state.players?.[client.socket.id]?.hand ?? [];
+  const drawableCount = Math.max(0, (state.boneyard?.length ?? 0) - (state.config?.deadTileCount ?? 0));
+  if (ownHand.length !== 1 || drawableCount === 0) return null;
+
+  const [tile] = ownHand;
+  if (!tile) return null;
+
+  const rawPositions = listRawPlayablePositions(state.board, tile);
+  for (const position of rawPositions) {
+    const move = { type: 'play', tile, position };
+    const isForcedLike = tile.low === tile.high || computePlayScoreForMove(state, move) > 0;
+    if (!isForcedLike) continue;
+    const legalMoves = Array.isArray(payload?.legalMoves) ? payload.legalMoves : [];
+    const legal = legalMoves.some(
+      (candidate) =>
+        candidate?.type === 'play' &&
+        candidate?.position === position &&
+        tileEquals(candidate?.tile, tile),
+    );
+    if (!legal) return move;
+  }
+
+  return null;
+}
+
 async function waitForSequenceAtLeast(client, minimumSequence) {
   const current = latestState(client)?.state?.sequence;
   if (typeof current === 'number' && current >= minimumSequence) return latestState(client);
@@ -1043,7 +1101,7 @@ async function scenarioMidHandActionReliability() {
   );
 }
 
-async function scenarioDrawActiveActionGuards() {
+async function scenarioManualDrawActionGuards() {
   return withClients(
     [
       { label: 'alpha', userId: 'draw-guard-user-a', username: 'DrawGuardA' },
@@ -1068,24 +1126,39 @@ async function scenarioDrawActiveActionGuards() {
 
       let drawer = null;
       const clients = [alpha, bravo];
-      for (let step = 0; step < 30; step += 1) {
+      for (let step = 0; step < 40; step += 1) {
+        // Stop early if the hand ended before we found a draw window.
+        const referenceState = latestState(alpha)?.state;
+        if (referenceState?.handOver || referenceState?.gameOver) break;
+
         const currentId = getCurrentPlayerId(alpha);
         const current = getClientBySocketId(clients, currentId);
         assert(current, 'could not identify current player while seeking draw window');
         const hasPlayMove = Boolean(getPlayableMove(current));
         const canDrawNow = Boolean(latestState(current)?.canDraw);
+
         if (!hasPlayMove && canDrawNow) {
+          // Found a draw window: player has no legal play but may draw from boneyard.
           drawer = current;
           break;
         }
 
-        assert(hasPlayMove, 'expected a playable move before reaching a draw window');
-        const move = getPlayableMove(current);
-        const resp = await emitAck(current.socket, 'game:action', roomCode, {
-          type: 'MOVE',
-          move: { tile: move.tile, position: move.position },
-        });
-        assert(resp?.ok, `setup MOVE failed while seeking draw window: ${resp?.error ?? 'unknown'}`);
+        // Advance the game. There are three possible states here:
+        //   hasPlayMove=true                   → play the move
+        //   !hasPlayMove && canDrawNow=true    → handled above (draw window found)
+        //   !hasPlayMove && canDrawNow=false   → boneyard locked, no matching tile; must PASS
+        // The old code asserted hasPlayMove here, which was wrong: after atomic DRAW a
+        // forced-draw can exhaust the drawable boneyard, leaving the opponent in a
+        // no-play / no-draw / must-PASS state before any draw window has been seen.
+        let action;
+        if (hasPlayMove) {
+          const move = getPlayableMove(current);
+          action = { type: 'MOVE', move: { tile: move.tile, position: move.position } };
+        } else {
+          action = { type: 'PASS' };
+        }
+        const resp = await emitAck(current.socket, 'game:action', roomCode, action);
+        assert(resp?.ok, `action failed while seeking draw window: ${resp?.error ?? 'unknown'}`);
         await waitForAllConnectedClientsSequence(clients, resp.sequence);
         await waitForTurnReady(clients);
       }
@@ -1137,11 +1210,11 @@ async function scenarioDrawActiveActionGuards() {
   );
 }
 
-async function scenarioForcedDrawAsyncBehavior() {
-  // Tests that MOVE forced-draw is resolved atomically:
-  // - ack returns the FINAL (post-draw) sequence, not the pre-draw placement sequence
-  // - game:draw_animation with mode 'forced_draw' is emitted to both clients
-  // - both clients converge on the same final sequence
+async function scenarioForcedDrawAtomicBehavior() {
+  // Tests the current effective MOVE forced-draw behavior:
+  // - if a legal forced-draw candidate is reachable, it resolves atomically
+  // - if the engine blocks last-tile scoring/double go-out moves before they become legal,
+  //   the MOVE rejects cleanly instead of the smoke wandering forever
   return withClients(
     [
       { label: 'alpha', userId: 'forced-draw-user-a', username: 'ForcedDrawA' },
@@ -1165,14 +1238,24 @@ async function scenarioForcedDrawAsyncBehavior() {
       await startTwoPlayerGame(alpha, bravo, roomCode);
 
       const clients = [alpha, bravo];
-      let candidateAttempts = 0;
+      let legalCandidateAttempts = 0;
+      let blockedCandidateAttempts = 0;
+      let rematchAttempts = 0;
 
-      for (let step = 0; step < 220; step += 1) {
+      for (let step = 0; step < 320; step += 1) {
         const referenceState = latestState(alpha)?.state;
         assert(referenceState, 'missing reference state while seeking forced-draw scenario');
 
         if (referenceState.gameOver) {
-          break;
+          if (rematchAttempts >= 6) break;
+          const firstRematch = await emitAck(alpha.socket, 'game:rematch', roomCode);
+          assert(firstRematch?.ok, `alpha rematch failed while seeking forced draw: ${firstRematch?.error ?? 'unknown'}`);
+          const secondRematch = await emitAck(bravo.socket, 'game:rematch', roomCode);
+          assert(secondRematch?.ok, `bravo rematch failed while seeking forced draw: ${secondRematch?.error ?? 'unknown'}`);
+          await waitForAllConnectedClientsSequence(clients, referenceState.sequence + 1);
+          await waitForTurnReady(clients);
+          rematchAttempts += 1;
+          continue;
         }
 
         if (referenceState.handOver) {
@@ -1192,7 +1275,7 @@ async function scenarioForcedDrawAsyncBehavior() {
 
         const candidateMove = chooseForcedDrawSearchMove(actor);
         if (candidateMove && isForcedDrawCandidate(actor, candidateMove)) {
-          candidateAttempts += 1;
+          legalCandidateAttempts += 1;
           const other = actor === alpha ? bravo : alpha;
           const beforeState = latestState(actor)?.state;
           assert(beforeState, 'missing actor state before forced-draw candidate');
@@ -1271,7 +1354,56 @@ async function scenarioForcedDrawAsyncBehavior() {
               forcedDrawMaskedOpponentTile: true,
               forcedDrawFinalStatesAligned: true,
               forcedDrawAckSequenceMatchesBroadcast: true,
-              candidateAttempts,
+              legalCandidateAttempts,
+              blockedCandidateAttempts,
+            },
+          };
+        }
+
+        const blockedCandidateMove = findBlockedForcedDrawLikeMove(actor);
+        if (blockedCandidateMove) {
+          blockedCandidateAttempts += 1;
+          const beforeState = latestState(actor)?.state;
+          assert(beforeState, 'missing actor state before blocked forced-draw-like MOVE');
+          const actorAnimCountBefore = actor.state.drawAnimations.length;
+          const other = actor === alpha ? bravo : alpha;
+          const otherAnimCountBefore = other.state.drawAnimations.length;
+
+          const moveResp = await emitAck(actor.socket, 'game:action', roomCode, {
+            type: 'MOVE',
+            move: { tile: blockedCandidateMove.tile, position: blockedCandidateMove.position },
+          });
+          assert(moveResp?.ok === false, 'blocked forced-draw-like MOVE unexpectedly succeeded');
+          assert(
+            /cannot go out/i.test(String(moveResp?.error ?? '')),
+            `blocked forced-draw-like MOVE rejected with unexpected error: ${moveResp?.error ?? 'unknown'}`,
+          );
+          await delay(SETTLE_MS);
+
+          const actorStateAfter = latestState(actor)?.state;
+          const otherStateAfter = latestState(other)?.state;
+          assert(actorStateAfter && otherStateAfter, 'missing post-rejection state for blocked forced-draw-like MOVE');
+          assert(
+            actorStateAfter.sequence === beforeState.sequence &&
+              otherStateAfter.sequence === beforeState.sequence,
+            'blocked forced-draw-like MOVE changed authoritative sequence',
+          );
+          assert(
+            actor.state.drawAnimations.length === actorAnimCountBefore &&
+              other.state.drawAnimations.length === otherAnimCountBefore,
+            'blocked forced-draw-like MOVE unexpectedly emitted draw animation',
+          );
+
+          return {
+            roomCode,
+            checks: {
+              forcedDrawMoveReachableViaLegalMoves: false,
+              blockedLastTileScoringOrDoubleRejectedCleanly: true,
+              blockedMoveDidNotMutateSequence: true,
+              blockedMoveDidNotEmitForcedDrawAnimation: true,
+              legalCandidateAttempts,
+              blockedCandidateAttempts,
+              rematchAttempts,
             },
           };
         }
@@ -1299,7 +1431,7 @@ async function scenarioForcedDrawAsyncBehavior() {
       }
 
       throw new Error(
-        `could not reach a MOVE forced-draw scenario; candidateAttempts=${candidateAttempts}`,
+        `could not reach a forced-draw or blocked forced-draw-like scenario; legalCandidateAttempts=${legalCandidateAttempts}; blockedCandidateAttempts=${blockedCandidateAttempts}; rematchAttempts=${rematchAttempts}`,
       );
     },
   );
@@ -1836,8 +1968,8 @@ const scenarios = [
   { name: 'room-switch-cleanup', run: scenarioRoomSwitchCleanup },
   { name: 'seat-migration-and-spectator-rejection', run: scenarioSeatMigrationAndSpectatorRejection },
   { name: 'mid-hand-action-reliability', run: scenarioMidHandActionReliability },
-  { name: 'draw-active-action-guards', run: scenarioDrawActiveActionGuards },
-  { name: 'forced-draw-async-behavior', run: scenarioForcedDrawAsyncBehavior },
+  { name: 'manual-draw-action-guards', run: scenarioManualDrawActionGuards },
+  { name: 'forced-draw-atomic-behavior', run: scenarioForcedDrawAtomicBehavior },
   { name: 'post-move-stability', run: scenarioPostMoveStability },
   { name: 'start-and-hand-ready-guards', run: scenarioStartAndHandReadyGuards },
   { name: 'guest-seat-reconnect', run: scenarioGuestSeatReconnect },

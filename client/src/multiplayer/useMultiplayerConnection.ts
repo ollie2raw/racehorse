@@ -82,6 +82,7 @@ type UseMultiplayerConnectionParams = {
   draggingStateRef: MutableRefObject<boolean>;
   isMutedRef: MutableRefObject<boolean>;
   handRevealShownRef: MutableRefObject<number | null>;
+  handRevealTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   maxSequenceRef: MutableRefObject<number>;
   roomIdentityRef: MutableRefObject<{
     username: string;
@@ -340,15 +341,17 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     s.on('disconnect', (reason) => {
       const current = latestRef.current;
       const roomBeforeDisconnect = current.joinedRoomRef.current;
-      const stateBeforeDisconnect = current.stateRef.current;
-      const isRecoverableSession = !stateBeforeDisconnect || !stateBeforeDisconnect.gameOver;
+      // Recover any time we have a room to return to — including the game-over /
+      // rematch screen — so players can reconnect and still initiate a rematch.
+      // Intentional disconnects and explicit leave actions are still protected by
+      // the intentionalDisconnectRef and preventAutoRejoinRef guards below.
+      const isRecoverableSession = Boolean(roomBeforeDisconnect);
       const shouldAttemptReconnect =
-        Boolean(roomBeforeDisconnect) &&
         isRecoverableSession &&
         !current.preventAutoRejoinRef.current &&
         !current.intentionalDisconnectRef.current;
 
-      if (roomBeforeDisconnect && isRecoverableSession && !current.preventAutoRejoinRef.current && !current.intentionalDisconnectRef.current) {
+      if (isRecoverableSession && !current.preventAutoRejoinRef.current && !current.intentionalDisconnectRef.current) {
         current.reconnectRoomCodeRef.current = roomBeforeDisconnect;
         current.reconnectShouldJoinRef.current = true;
       }
@@ -467,7 +470,8 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         }
       }
       current.handRevealShownRef.current = payload.handNumber;
-      window.setTimeout(() => {
+      current.handRevealTimerRef.current = window.setTimeout(() => {
+        current.handRevealTimerRef.current = null;
         latestRef.current.setHandReveal({
           ...payload,
           yourRemainingTiles,
@@ -490,6 +494,15 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           before: current.maxSequenceRef.current,
         });
       }
+      // Cancel any pending hand-reveal timer from the previous game so the
+      // stale reveal modal cannot appear on top of the new game.
+      if (current.handRevealTimerRef.current !== null) {
+        clearTimeout(current.handRevealTimerRef.current);
+        current.handRevealTimerRef.current = null;
+      }
+      current.setHandReveal(null);
+      current.handRevealShownRef.current = null;
+      current.clearTransientRoomUi();
       current.maxSequenceRef.current = -1;
       current.setRematchRequested(false);
       current.setRematchReadyIds([]);

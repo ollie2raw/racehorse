@@ -964,6 +964,7 @@ export default function App() {
   const [handCompactStacked, setHandCompactStacked] = useState(false);
   const autoTurnActionKeyRef = useRef<string>('');
   const handRevealShownRef = useRef<number | null>(null);
+  const handRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevOppCountRef = useRef<number | null>(null);
   const [oppTilePulse, setOppTilePulse] = useState(false);
   const prevBoardTileCountRef = useRef(0);
@@ -1512,6 +1513,7 @@ export default function App() {
     draggingStateRef,
     isMutedRef,
     handRevealShownRef,
+    handRevealTimerRef,
     maxSequenceRef,
     roomIdentityRef,
     setSocket,
@@ -2191,18 +2193,50 @@ export default function App() {
     if (multiplayerRatingRefreshKeyRef.current === key) return;
     multiplayerRatingRefreshKeyRef.current = key;
     setMultiplayerRatingPending(true);
-    void Promise.resolve(refreshAuthProfile())
-      .catch((err) => {
-        console.warn('[Multiplayer Rating] profile refresh failed:', err);
-      })
-      .finally(() => {
-        setMultiplayerRatingPending(false);
-      });
+    let cancelled = false;
+    const baselineRating = multiplayerRatingBaseline;
+    const retryDelaysMs = [0, 700, 1400, 2400, 3600, 5200];
+
+    void (async () => {
+      try {
+        for (let i = 0; i < retryDelaysMs.length; i += 1) {
+          const delayMs = retryDelaysMs[i];
+          if (delayMs > 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+          }
+          if (cancelled) return;
+
+          try {
+            await Promise.resolve(refreshAuthProfile());
+          } catch (err) {
+            console.warn('[Multiplayer Rating] profile refresh failed:', err);
+          }
+
+          if (cancelled) return;
+          const latestRating = authProfileRef.current?.glicko_rating;
+          if (
+            latestRating != null &&
+            (baselineRating == null || Number(latestRating) !== baselineRating || i === retryDelaysMs.length - 1)
+          ) {
+            return;
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setMultiplayerRatingPending(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     authUser,
     isSpectatingMatch,
     isTournamentMatch,
     joinedRoom,
+    multiplayerRatingBaseline,
     players,
     refreshAuthProfile,
     state,
