@@ -1,18 +1,26 @@
 .leaderboard-screen {
   position: relative;
-  min-height: 100vh;
   min-height: 100dvh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.97);
   background:
     radial-gradient(ellipse 52% 36% at 50% 0%, rgba(45, 212, 191, 0.22) 0%, transparent 68%),
-    linear-gradient(180deg, #03101d 0%, #031324 40%, #02111f 100%);
+    linear-gradient(180deg, #01010a 0%, #04050d 35%, #080912 100%);
 }
 
 .leaderboard-screen--puzzle {
   background:
-    radial-gradient(ellipse 52% 36% at 50% 0%, rgba(245, 158, 11, 0.18) 0%, transparent 68%),
-    linear-gradient(180deg, #03101d 0%, #031324 40%, #02111f 100%);
+    radial-gradient(ellipse 52% 36% at 50% 0%, rgba(240, 192, 64, 0.18) 0%, transparent 68%),
+    linear-gradient(180deg, #01010a 0%, #04050d 35%, #080912 100%);
+}
+
+.leaderboard-screen--fritz {
+  background:
+    radial-gradient(ellipse 52% 36% at 50% 0%, rgba(224, 92, 106, 0.18) 0%, transparent 68%),
+    linear-gradient(180deg, #01010a 0%, #04050d 35%, #080912 100%);
 }
 
 .leaderboard-screen-bg,
@@ -38,40 +46,55 @@
 .leaderboard-screen-topbar {
   position: relative;
   z-index: 1;
-  height: 50px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 clamp(20px, 4vw, 56px);
+  padding: 0 clamp(16px, 2.4vw, 24px) clamp(8px, 1.4vh, 12px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
 .leaderboard-screen-wordmark {
-  font-size: 0.78rem;
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 15px;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.34em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.38);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .leaderboard-screen-backlink {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.54);
-  font-size: 0.86rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.74);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: color 140ms ease;
+  padding: 6px 12px;
+  border-radius: 4px;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
 .leaderboard-screen-backlink:hover {
-  color: rgba(255, 255, 255, 0.68);
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.leaderboard-screen-backlink:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.78);
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 1px rgba(61, 142, 255, 0.38),
+    0 0 0 6px rgba(61, 142, 255, 0.16),
+    0 10px 28px rgba(0, 0, 0, 0.24);
 }
 
 .leaderboard-screen-backlink svg {
@@ -87,32 +110,93 @@
 .leaderboard-screen-main {
   position: relative;
   z-index: 1;
-  max-width: 1260px;
-  width: 100%;
-  margin: 0 auto;
-  height: calc(100vh - 50px);
-  height: calc(100dvh - 50px);
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(500px, 1.08fr);
+  gap: 0;
+  padding: clamp(8px, 1.6vh, 14px) clamp(12px, 1.7vw, 18px) clamp(12px, 1.9vh, 18px);
+}
+
+.leaderboard-screen-hero {
+  position: relative;
+  overflow: hidden;
   display: flex;
-  flex-direction: column;
-  padding: 30px clamp(24px, 3.6vw, 56px) 24px;
+  align-items: flex-end;
+  min-height: 0;
+  padding: clamp(22px, 3.1vw, 46px);
+  background:
+    radial-gradient(ellipse 75% 62% at 0% 100%, rgba(45, 212, 191, 0.22), transparent 72%),
+    radial-gradient(ellipse 56% 36% at 100% 0%, rgba(45, 212, 191, 0.08), transparent 75%),
+    linear-gradient(180deg, #04050d 0%, #01010a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 0;
+}
+
+.leaderboard-screen--puzzle .leaderboard-screen-hero {
+  background:
+    radial-gradient(ellipse 75% 62% at 0% 100%, rgba(240, 192, 64, 0.22), transparent 72%),
+    radial-gradient(ellipse 56% 36% at 100% 0%, rgba(240, 192, 64, 0.08), transparent 75%),
+    linear-gradient(180deg, #04050d 0%, #01010a 100%);
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-hero {
+  background:
+    radial-gradient(ellipse 75% 62% at 0% 100%, rgba(224, 92, 106, 0.22), transparent 72%),
+    radial-gradient(ellipse 56% 36% at 100% 0%, rgba(224, 92, 106, 0.08), transparent 75%),
+    linear-gradient(180deg, #04050d 0%, #01010a 100%);
+}
+
+.leaderboard-screen-hero::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: linear-gradient(90deg, #2dd4bf, rgba(45, 212, 191, 0.22), transparent);
+}
+
+.leaderboard-screen--puzzle .leaderboard-screen-hero::after {
+  background: linear-gradient(90deg, #f0c040, rgba(240, 192, 64, 0.22), transparent);
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-hero::after {
+  background: linear-gradient(90deg, #e05c6a, rgba(224, 92, 106, 0.22), transparent);
+}
+
+.leaderboard-screen-decor {
+  position: absolute;
+  top: -28px;
+  right: -8px;
+  color: rgba(45, 212, 191, 0.05);
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: clamp(180px, 18vw, 270px);
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.leaderboard-screen--puzzle .leaderboard-screen-decor {
+  color: rgba(240, 192, 64, 0.05);
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-decor {
+  color: rgba(224, 92, 106, 0.05);
 }
 
 .leaderboard-screen-titleblock {
-  flex-shrink: 0;
-  margin-bottom: 28px;
+  position: relative;
+  z-index: 1;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
 }
 
 .leaderboard-screen-accentbar {
   width: 44px;
   height: 4px;
-  border-radius: 2px;
   background: #2dd4bf;
-  box-shadow: 0 0 10px rgba(45, 212, 191, 0.53);
   margin-bottom: 14px;
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.53);
 }
 
 .leaderboard-screen--puzzle .leaderboard-screen-accentbar {
@@ -121,27 +205,43 @@
 }
 
 .leaderboard-screen-eyebrow {
-  margin: 0 0 10px;
-  font-size: 0.92rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  margin: 0 0 14px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.64);
+  color: #2dd4bf;
 }
 
 .leaderboard-screen-title {
-  margin: 0 0 12px;
-  font-size: clamp(3rem, 4.6vw, 4.2rem);
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  margin: 0;
   color: #fff;
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: clamp(46px, 5.7vw, 84px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  text-shadow: 0 0 60px rgba(45, 212, 191, 0.16);
 }
 
 .leaderboard-screen-subtitle {
-  margin: 0;
-  font-size: 1.12rem;
-  color: rgba(255, 255, 255, 0.56);
+  margin: 16px 0 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.leaderboard-screen-panel {
+  min-height: 0;
+  padding: clamp(20px, 2.6vw, 40px);
+  background: linear-gradient(180deg, rgba(8, 9, 18, 0.98), rgba(13, 15, 28, 0.98));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
 }
 
 .leaderboard-screen-stats {
@@ -149,18 +249,15 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   flex-shrink: 0;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 .leaderboard-screen-statcard {
-  min-height: 148px;
-  padding: 20px 24px;
-  border-radius: 18px;
+  min-height: 132px;
+  padding: 18px 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 16, 28, 0.55);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -176,17 +273,19 @@
 
 .leaderboard-screen-statlabel {
   margin: 0 0 10px;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.52);
+  color: rgba(255, 255, 255, 0.42);
 }
 
 .leaderboard-screen-statvalue {
   margin: 0 0 8px;
-  font-size: 2.5rem;
-  font-weight: 800;
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: clamp(2.4rem, 3vw, 3rem);
+  font-weight: 900;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: #fff;
@@ -210,9 +309,9 @@
 
 .leaderboard-screen-statsub {
   margin: 0;
-  font-size: 0.94rem;
+  font-size: 0.96rem;
   line-height: 1.45;
-  color: rgba(255, 255, 255, 0.50);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .leaderboard-screen-divider {
@@ -220,7 +319,7 @@
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .leaderboard-screen-dividerline {
@@ -230,9 +329,10 @@
 }
 
 .leaderboard-screen-dividertext {
-  font-size: 0.78rem;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.42);
 }
@@ -242,6 +342,9 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
 }
 
 .leaderboard-screen-footnote {
@@ -253,9 +356,21 @@
   text-align: center;
 }
 
+@media (max-width: 980px) {
+  .leaderboard-screen-main {
+    grid-template-columns: 1fr;
+  }
+
+  .leaderboard-screen-hero {
+    min-height: 220px;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 0;
+  }
+}
+
 @media (max-width: 900px) {
   .leaderboard-screen-main {
-    padding: 22px 16px 18px;
+    padding: 8px 12px 12px;
   }
 
   .leaderboard-screen-stats {
@@ -277,13 +392,7 @@
     padding: 0 16px;
   }
 
-  .leaderboard-screen-wordmark {
-    font-size: 0.68rem;
-    letter-spacing: 0.14em;
-  }
-
-  .leaderboard-screen-backlink {
-    font-size: 0.72rem;
-    letter-spacing: 0.05em;
+  .leaderboard-screen-panel {
+    padding: 16px 18px;
   }
 }

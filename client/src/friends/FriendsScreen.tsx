@@ -11,6 +11,7 @@ import {
   type FriendRecord,
   type FriendRequestRecord,
 } from './friendsApi';
+import '../ui/claudeUtilityPanels.css';
 
 interface FriendsScreenProps {
   open: boolean;
@@ -94,64 +95,38 @@ export default function FriendsScreen({
       aria-modal="true"
       aria-label="Friends"
       onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1900,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'rgba(6, 10, 18, 0.62)',
-        backdropFilter: 'blur(4px)',
-      }}
+      className="claude-utility-overlay"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(860px, calc(100vw - 24px))',
-          borderRadius: '16px',
-          border: '1px solid rgba(236,252,245,0.2)',
-          background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '18px',
-          color: 'rgba(235,245,242,0.96)',
-          display: 'grid',
-          gap: 12,
-          maxHeight: 'calc(100dvh - 24px)',
-          overflow: 'auto',
-        }}
+        className="claude-utility-panel claude-utility-panel--medium"
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Friends</h3>
-          <button className="mode-inline-btn" onClick={onClose}>
+        <div className="claude-utility-header">
+          <div className="claude-utility-titleblock">
+            <p className="claude-utility-kicker">Social</p>
+            <h3 className="claude-utility-title">Friends</h3>
+          </div>
+          <button className="mode-inline-btn claude-utility-close" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>{headerText}</p>
+        <p className="claude-utility-subtitle">{headerText}</p>
 
         {!user && <p className="auth-inline-error">Sign in to use friends.</p>}
 
         {user && (
           <>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) auto',
-                gap: 8,
-                alignItems: 'stretch',
-              }}
-            >
+            <div className="claude-utility-inputrow">
               <input
                 type="text"
                 placeholder="Add friend by username"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="mode-join-input"
-                style={{ height: 44, borderRadius: 12 }}
+                className="claude-utility-input"
               />
               <button
                 className="mode-inline-btn"
-                style={{ height: 44, borderRadius: 12 }}
                 onClick={async () => {
                   const resp = await sendFriendRequest(user.id, query);
                   if (resp.error) {
@@ -173,51 +148,31 @@ export default function FriendsScreen({
             {!loading && (
               <div style={{ display: 'grid', gap: 12 }}>
                 <div style={{ display: 'grid', gap: 8 }}>
-                  <h4 style={{ margin: 0 }}>Friends</h4>
+                  <h4 className="claude-utility-section-title">Friends</h4>
                   {friends.length === 0 && (
                     <p style={{ margin: 0, color: 'rgba(196,213,223,0.82)' }}>
                       No friends yet. Add someone by username above.
                     </p>
                   )}
                   {friends.map((friend) => (
-                    <div
-                      key={friend.id}
-                      style={{
-                        borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        background: 'rgba(12,20,34,0.66)',
-                        padding: '9px 10px',
-                        display: 'grid',
-                        gap: 6,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: 10,
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <div key={friend.id} className="claude-utility-row">
+                      <div className="claude-utility-rowhead">
+                        <div className="claude-utility-rowmain">
                           <span
                             aria-hidden="true"
+                            className="claude-utility-statusdot"
                             style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: 999,
                               background: friend.online ? '#34d399' : 'rgba(148,163,184,0.6)',
                               boxShadow: friend.online
                                 ? '0 0 10px rgba(52,211,153,0.85)'
                                 : '0 0 0 rgba(0,0,0,0)',
-                              flexShrink: 0,
                             }}
                           />
                           <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             @{friend.username}
                           </strong>
                         </div>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', alignItems: 'center' }}>
+                        <div className="claude-utility-rowactions">
                           <button
                             className="mode-inline-btn"
                             style={{
@@ -295,20 +250,10 @@ export default function FriendsScreen({
                 </div>
 
                 {hasPendingRequests && (
-                  <div style={{ display: 'grid', gap: 8, borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: 12 }}>
-                    <h4 style={{ margin: 0 }}>Requests</h4>
+                  <div className="claude-utility-section">
+                    <h4 className="claude-utility-section-title">Requests</h4>
                     {incoming.map((req) => (
-                      <div
-                        key={req.id}
-                        style={{
-                          borderRadius: 10,
-                          border: '1px solid rgba(255,255,255,0.14)',
-                          background: 'rgba(12,20,34,0.66)',
-                          padding: 10,
-                          display: 'grid',
-                          gap: 8,
-                        }}
-                      >
+                      <div key={req.id} className="claude-utility-row">
                         <span>@{req.username} sent you a request</span>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button
@@ -341,15 +286,7 @@ export default function FriendsScreen({
                       </div>
                     ))}
                     {outgoing.map((req) => (
-                      <div
-                        key={req.id}
-                        style={{
-                          borderRadius: 10,
-                          border: '1px solid rgba(255,255,255,0.14)',
-                          background: 'rgba(12,20,34,0.66)',
-                          padding: 10,
-                        }}
-                      >
+                      <div key={req.id} className="claude-utility-row">
                         Pending: @{req.username}
                       </div>
                     ))}

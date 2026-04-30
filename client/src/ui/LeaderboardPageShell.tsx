@@ -35,6 +35,7 @@ export default function LeaderboardPageShell({
   footerNote,
   children,
 }: LeaderboardPageShellProps) {
+  const decor = mode === 'fritz' ? 'F' : 'P';
   return (
     <div className={`leaderboard-screen leaderboard-screen--${mode}${className ? ` ${className}` : ''}`}>
       <div className="leaderboard-screen-bg" aria-hidden="true" />
@@ -50,39 +51,43 @@ export default function LeaderboardPageShell({
       </header>
 
       <main className="leaderboard-screen-main">
-        <section className="leaderboard-screen-titleblock">
-          <div className="leaderboard-screen-accentbar" aria-hidden="true" />
-          <p className="leaderboard-screen-eyebrow">{label}</p>
-          <h1 className="leaderboard-screen-title">{title}</h1>
-          <p className="leaderboard-screen-subtitle">{subtitle}</p>
-        </section>
-
-        {summaryCards.length > 0 ? (
-          <section className="leaderboard-screen-stats" aria-label="Leaderboard summary">
-            {summaryCards.map((card) => (
-              <article
-                key={card.label}
-                className={`leaderboard-screen-statcard leaderboard-screen-statcard--${card.tone ?? 'neutral'}`}
-              >
-                <p className="leaderboard-screen-statlabel">{card.label}</p>
-                <p className="leaderboard-screen-statvalue">{card.value}</p>
-                {card.sublabel ? <p className="leaderboard-screen-statsub">{card.sublabel}</p> : null}
-              </article>
-            ))}
-          </section>
-        ) : null}
-
-        {resultsLabel ? (
-          <div className="leaderboard-screen-divider" aria-hidden="true">
-            <span className="leaderboard-screen-dividerline" />
-            <span className="leaderboard-screen-dividertext">{resultsLabel}</span>
-            <span className="leaderboard-screen-dividerline" />
+        <section className="leaderboard-screen-hero">
+          <div className="leaderboard-screen-decor" aria-hidden="true">{decor}</div>
+          <div className="leaderboard-screen-titleblock">
+            <div className="leaderboard-screen-accentbar" aria-hidden="true" />
+            <p className="leaderboard-screen-eyebrow">{label}</p>
+            <h1 className="leaderboard-screen-title">{title}</h1>
+            <p className="leaderboard-screen-subtitle">{subtitle}</p>
           </div>
-        ) : null}
+        </section>
+        <section className="leaderboard-screen-panel">
+          {summaryCards.length > 0 ? (
+            <section className="leaderboard-screen-stats" aria-label="Leaderboard summary">
+              {summaryCards.map((card) => (
+                <article
+                  key={card.label}
+                  className={`leaderboard-screen-statcard leaderboard-screen-statcard--${card.tone ?? 'neutral'}`}
+                >
+                  <p className="leaderboard-screen-statlabel">{card.label}</p>
+                  <p className="leaderboard-screen-statvalue">{card.value}</p>
+                  {card.sublabel ? <p className="leaderboard-screen-statsub">{card.sublabel}</p> : null}
+                </article>
+              ))}
+            </section>
+          ) : null}
 
-        <section className="leaderboard-screen-listframe">{children}</section>
+          {resultsLabel ? (
+            <div className="leaderboard-screen-divider" aria-hidden="true">
+              <span className="leaderboard-screen-dividerline" />
+              <span className="leaderboard-screen-dividertext">{resultsLabel}</span>
+              <span className="leaderboard-screen-dividerline" />
+            </div>
+          ) : null}
 
-        {footerNote ? <p className="leaderboard-screen-footnote">{footerNote}</p> : null}
+          <section className="leaderboard-screen-listframe">{children}</section>
+
+          {footerNote ? <p className="leaderboard-screen-footnote">{footerNote}</p> : null}
+        </section>
       </main>
     </div>
   );

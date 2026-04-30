@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
-import LayoutScreen from '../ui/LayoutScreen';
 import type { GhostProfileSummary } from './api';
 import { fetchGhostProfileSummary, fetchGhostProfileSummaryByUsername } from './api';
 import { fetchFriends, type FriendRecord } from '../friends/friendsApi';
+import {
+  ClaudeModeScreen,
+  ClaudePrimaryAction,
+  ClaudeSecondaryAction,
+  ClaudeSectionLabel,
+} from '../ui/claudeMode';
 import './ghostMode.css';
 
 const UNLOCK_THRESHOLD = 5;
@@ -163,28 +168,206 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
 
   if (!userId) {
     return (
-      <LayoutScreen
-        className="screen mode-subpage-screen mode-accent-ghost mode-auth-gate-screen"
-        title="Sign In Required"
-        subtitle="Ghost Mode is tied to your account and training progress."
-        contentClassName="mode-auth-gate-content"
-      >
-        <button className="mode-inline-btn" onClick={onBack}>Back to Home</button>
-      </LayoutScreen>
+      <div className="screen ghost-setup-screen mode-subpage-screen mode-accent-ghost claude-mode-screen-shell">
+        <ClaudeModeScreen
+          accent="#a78bfa"
+          eyebrow="Single Player"
+          title={'GHOST\nMODE'}
+          description="Ghost Mode is tied to your account and training progress."
+          decor="G"
+          backLabel="Back to Home"
+          onBack={onBack}
+          panel={
+            <div className="claude-mode-panel-stack">
+              <div className="ghost-setup-panel">
+                <ClaudeSectionLabel color="#a78bfa">Sign In Required</ClaudeSectionLabel>
+                <h3>Ghost Mode tracks your rolling self.</h3>
+                <p>Create an account so the game can build your ghost from completed Fritz runs.</p>
+              </div>
+            </div>
+          }
+        />
+      </div>
     );
   }
 
   return (
-    <LayoutScreen
-      className="ghost-setup-screen mode-subpage-screen mode-accent-ghost"
-      title="Ghost Mode"
-      subtitle="Play against a version of yourself — or a friend — trained on real Fritz matches."
-      contentClassName="screen-shell ghost-setup-content"
-    >
-      <div className="ghost-setup-grid">
-        <div className="ghost-setup-left-col">
+    <div className="screen ghost-setup-screen mode-subpage-screen mode-accent-ghost claude-mode-screen-shell">
+      <ClaudeModeScreen
+        accent="#a78bfa"
+        eyebrow="Single Player"
+        title={'GHOST\nMODE'}
+        description="Play against a version of yourself or a friend trained on real Fritz matches."
+        decor="G"
+        backLabel="Back to Single Player"
+        onBack={onBack}
+        heroFooter={
+          <div className="claude-mode-chip-row">
+            <span className="claude-mode-chip">{selectedUsername}</span>
+            <span className="claude-mode-chip">{trainingGamesPlayed} training games</span>
+            <span className="claude-mode-chip">{confidencePct}% style confidence</span>
+          </div>
+        }
+        panel={
+          <div className="claude-mode-panel-stack ghost-claude-panel">
+            {userId && (
+              <div className="ghost-friend-selector">
+                <ClaudeSectionLabel color="#a78bfa">Select Opponent</ClaudeSectionLabel>
+                <div className="ghost-friend-list">
+                  <button
+                    className={`ghost-friend-btn ${selectedUserId === userId ? 'active' : ''}`}
+                    onClick={() => handleSelectFriend(null)}
+                  >
+                    You {tier === 'trained' ? '✓' : tier === 'early' ? '⚡' : ''}
+                  </button>
+                  <button
+                    className={`ghost-friend-btn ghost-friend-btn-featured ${selectedUserId === featuredUserId ? 'active' : ''}`}
+                    onClick={() => featuredUserId && handleSelectFriend({ id: 'featured', userId: featuredUserId, username: featuredUsername, online: true })}
+                  >
+                    <span className="ghost-featured-mark" aria-hidden="true">★</span>
+                    <span>@{featuredUsername}</span>
+                  </button>
+                  {visibleFriends.map((f) => (
+                    <button
+                      key={f.userId}
+                      className={`ghost-friend-btn ${selectedUserId === f.userId ? 'active' : ''}`}
+                      onClick={() => handleSelectFriend(f)}
+                    >
+                      {f.username}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedUserId && loading && (
+              <div className="ghost-setup-panel">
+                <ClaudeSectionLabel color="#a78bfa">Loading Ghost Profile</ClaudeSectionLabel>
+                <h3>Preparing {selectedUsername}…</h3>
+              </div>
+            )}
+
+            {selectedUserId && !loading && error && (
+              <div className="ghost-setup-panel">
+                <ClaudeSectionLabel color="#a78bfa">Ghost Unavailable</ClaudeSectionLabel>
+                <h3>{error}</h3>
+              </div>
+            )}
+
+            {selectedUserId && !loading && !error && summary && !isLocked && (
+              <div className="ghost-setup-panel">
+                {tier === 'early' && isViewingOwnGhost && (
+                  <div className="ghost-tier-badge ghost-tier-badge--early">
+                    ⚡ Early Ghost — still learning ({fritzGamesPlayed}/{UNLOCK_THRESHOLD} games to unlock)
+                  </div>
+                )}
+                {tier === 'trained' && isViewingOwnGhost && (
+                  <div className="ghost-tier-badge ghost-tier-badge--trained">
+                    ✓ Trained Ghost — {confidencePct}% style confidence
+                  </div>
+                )}
+                {tier !== 'trained' && isViewingOwnGhost && summary.styleProfile && (
+                  <div className="ghost-tier-badge ghost-tier-badge--early">
+                    Still learning — {trainingGamesPlayed}/{TRAINED_THRESHOLD} usable training games, {confidencePct}% style confidence
+                  </div>
+                )}
+
+                <div className="ghost-setup-header">
+                  <div className="ghost-setup-average">
+                    <p className="ghost-setup-eyebrow">Ghost Avg</p>
+                    <h3>{summary.avgScore == null ? '—' : `${summary.avgScore} pts`}</h3>
+                  </div>
+                  {summary.styleProfile && (
+                    <div className="ghost-confidence-ring" title={`${confidencePct}% style confidence`}>
+                      <svg viewBox="0 0 36 36" className="ghost-ring-svg">
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
+                        <circle
+                          cx="18" cy="18" r="15.9" fill="none"
+                          stroke="#8e6dff" strokeWidth="3"
+                          strokeDasharray={`${confidencePct} 100`}
+                          strokeLinecap="round"
+                          transform="rotate(-90 18 18)"
+                        />
+                      </svg>
+                      <span className="ghost-ring-label">{confidencePct}%</span>
+                    </div>
+                  )}
+                </div>
+                <p className="ghost-setup-note">
+                  Style confidence measures how much usable move history your ghost has learned from. It is not a win-rate or strength rating.
+                </p>
+
+                <div className="ghost-setup-history">
+                  <div>
+                    <p className="ghost-setup-eyebrow">Last 5 Scores</p>
+                    <div className="ghost-score-list">
+                      {(recentScores.length > 0 ? recentScores : ['—']).map((score, index) => (
+                        <span key={`${score}-${index}`} className="ghost-score-pill">
+                          {typeof score === 'number' ? `${score} pts` : score}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  {renderSparkline(recentScores)}
+                </div>
+
+                {summary.styleProfile && (
+                  <div className="ghost-style-profile">
+                    <p className="ghost-setup-eyebrow">Style Profile</p>
+                    <div className="ghost-style-grid">
+                      <div className="ghost-style-item">
+                        <span>Scoring Bias</span>
+                        <div className="ghost-style-bar"><div style={{ width: `${summary.styleProfile.scoringBias * 100}%` }} /></div>
+                      </div>
+                      <div className="ghost-style-item">
+                        <span>Double Priority</span>
+                        <div className="ghost-style-bar"><div style={{ width: `${summary.styleProfile.doublePriority * 100}%` }} /></div>
+                      </div>
+                      <div className="ghost-style-item">
+                        <span>Board Control</span>
+                        <div className="ghost-style-bar"><div style={{ width: `${summary.styleProfile.attackSetup * 100}%` }} /></div>
+                      </div>
+                      <div className="ghost-style-item">
+                        <span>Branching</span>
+                        <div className="ghost-style-bar"><div style={{ width: `${summary.styleProfile.branchingFrequency * 100}%` }} /></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="ghost-training-diagnostics">
+                  Ghost diagnostics: {trainingHealth}. Training counter {trainingGamesPlayed};
+                  recent logs {compositeSourceGames}; style snapshots {styleSnapshotCount};
+                  move memory {compositeStateCount}; padding games {summary.paddingGames};
+                  average turn points {summary.styleProfile ? summary.styleProfile.avgTurnPoints.toFixed(1) : 'unavailable'};
+                  rebuilt {formatDiagnosticDate(compositeLog?.generatedAt)}.
+                  {styleSnapshotCount === 0
+                    ? ' If this stays at zero after completed Fritz games, the completion request or move log is not being saved correctly.'
+                    : confidence < 0.85
+                      ? ` ${gamesToReliableStyle} more usable style ${gamesToReliableStyle === 1 ? 'game' : 'games'} to reach the learning tier; ${gamesToMaxConfidence} to reach full confidence.`
+                      : ' Training data looks healthy. If the ghost still feels weak, tune the competitive move resolver next.'}
+                </div>
+              </div>
+            )}
+
+            {isLocked && (
+              <div className="ghost-locked-panel">
+                <ClaudeSectionLabel color="#a78bfa">Locked</ClaudeSectionLabel>
+                <h3 className="ghost-locked-title">Your ghost unlocks after 5 Fritz games.</h3>
+                <p className="ghost-locked-sub">
+                  Complete <strong>{gamesToUnlock}</strong> more Fritz {gamesToUnlock === 1 ? 'game' : 'games'} to start playing your ghost.
+                </p>
+                <div className="ghost-progress-row">
+                  <div className="ghost-progress-bar">
+                    <div className="ghost-progress-fill" style={{ width: `${Math.min(100, (fritzGamesPlayed / UNLOCK_THRESHOLD) * 100)}%` }} />
+                  </div>
+                  <span className="ghost-progress-label">{fritzGamesPlayed}/{UNLOCK_THRESHOLD}</span>
+                </div>
+              </div>
+            )}
+
           <div className="ghost-explainer-panel">
-            <p className="ghost-setup-eyebrow">How to use Ghost Mode</p>
+            <ClaudeSectionLabel color="#a78bfa">How to Use Ghost Mode</ClaudeSectionLabel>
             <h3 className="ghost-explainer-title">Play the ghost that learns how you play.</h3>
             <div className="ghost-explainer-steps" aria-label="Ghost mode steps">
               <div className="ghost-explainer-step">
@@ -222,185 +405,33 @@ export default function GhostSetupScreen({ userId, fritzGamesPlayed = 0, onBack,
               <span className={`ghost-tier-pill ${trainingGamesPlayed >= TRAINED_THRESHOLD ? 'active' : ''}`}>30 games — Trained ✓</span>
             </div>
           </div>
-        </div>
-
-        <div className="ghost-setup-middle-col">
-          {!userId && (
-            <div className="ghost-setup-panel">
-              <p className="ghost-setup-eyebrow">Sign in required</p>
-              <h3>Ghost Mode tracks your rolling self.</h3>
-              <p>Create an account so the game can build your ghost from completed Fritz runs.</p>
+            <div className="claude-mode-panel-stack">
+              <ClaudePrimaryAction
+                accent="#a78bfa"
+                title="Play Ghost"
+                meta={
+                  !userId
+                    ? 'Sign in to unlock this mode'
+                    : isLocked
+                      ? `Unlocks after ${UNLOCK_THRESHOLD} Fritz games`
+                      : loading
+                        ? 'Loading ghost profile…'
+                        : summary
+                          ? `Opponent: ${selectedUsername}`
+                          : 'Ghost profile unavailable'
+                }
+                onClick={() => summary && onStart(summary, selectedUsername, selectedUserId)}
+                disabled={!canPlay}
+              />
+              <ClaudeSecondaryAction
+                title="Back to Home"
+                meta="Return to game mode menu"
+                onClick={onBack}
+              />
             </div>
-          )}
-
-          {selectedUserId && loading && (
-            <div className="ghost-setup-panel">
-              <p className="ghost-setup-eyebrow">Loading ghost profile</p>
-              <h3>Preparing {selectedUsername}…</h3>
-            </div>
-          )}
-
-          {selectedUserId && !loading && error && (
-            <div className="ghost-setup-panel">
-              <p className="ghost-setup-eyebrow">Ghost unavailable</p>
-              <h3>{error}</h3>
-            </div>
-          )}
-
-          {selectedUserId && !loading && !error && summary && !isLocked && (
-            <div className="ghost-setup-panel">
-              {tier === 'early' && isViewingOwnGhost && (
-                <div className="ghost-tier-badge ghost-tier-badge--early">
-                  ⚡ Early Ghost — still learning ({fritzGamesPlayed}/{UNLOCK_THRESHOLD} games to unlock)
-                </div>
-              )}
-              {tier === 'trained' && isViewingOwnGhost && (
-                <div className="ghost-tier-badge ghost-tier-badge--trained">
-                  ✓ Trained Ghost — {confidencePct}% style confidence
-                </div>
-              )}
-              {tier !== 'trained' && isViewingOwnGhost && summary.styleProfile && (
-                <div className="ghost-tier-badge ghost-tier-badge--early">
-                  Still learning — {trainingGamesPlayed}/{TRAINED_THRESHOLD} usable training games, {confidencePct}% style confidence
-                </div>
-              )}
-
-              <div className="ghost-setup-header">
-                <div className="ghost-setup-average">
-                  <p className="ghost-setup-eyebrow">Ghost Avg</p>
-                  <h3>{summary.avgScore == null ? '—' : `${summary.avgScore} pts`}</h3>
-                </div>
-                {summary.styleProfile && (
-                  <div className="ghost-confidence-ring" title={`${confidencePct}% style confidence`}>
-                    <svg viewBox="0 0 36 36" className="ghost-ring-svg">
-                      <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
-                      <circle
-                        cx="18" cy="18" r="15.9" fill="none"
-                        stroke="#8e6dff" strokeWidth="3"
-                        strokeDasharray={`${confidencePct} 100`}
-                        strokeLinecap="round"
-                        transform="rotate(-90 18 18)"
-                      />
-                    </svg>
-                    <span className="ghost-ring-label">{confidencePct}%</span>
-                  </div>
-                )}
-              </div>
-              <p className="ghost-setup-note">
-                Style confidence measures how much usable move history your ghost has learned from. It is not a win-rate or strength rating.
-              </p>
-
-              <div className="ghost-setup-history">
-                <div>
-                  <p className="ghost-setup-eyebrow">Last 5 Scores</p>
-                  <div className="ghost-score-list">
-                    {(recentScores.length > 0 ? recentScores : ['—']).map((score, index) => (
-                      <span key={`${score}-${index}`} className="ghost-score-pill">
-                        {typeof score === 'number' ? `${score} pts` : score}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                {renderSparkline(recentScores)}
-              </div>
-
-              {summary.styleProfile && (
-                <div className="ghost-style-profile">
-                  <p className="ghost-setup-eyebrow">Style Profile</p>
-                  <div className="ghost-style-grid">
-                    <div className="ghost-style-item">
-                      <span>Scoring Bias</span>
-                      <div className="ghost-style-bar"><div style={{ width: `${summary.styleProfile.scoringBias * 100}%` }} /></div>
-                    </div>
-                    <div className="ghost-style-item">
-                      <span>Double Priority</span>
-                      <div className="ghost-style-bar"><div style={{ width: `${summary.styleProfile.doublePriority * 100}%` }} /></div>
-                    </div>
-                    <div className="ghost-style-item">
-                      <span>Board Control</span>
-                      <div className="ghost-style-bar"><div style={{ width: `${summary.styleProfile.attackSetup * 100}%` }} /></div>
-                    </div>
-                    <div className="ghost-style-item">
-                      <span>Branching</span>
-                      <div className="ghost-style-bar"><div style={{ width: `${summary.styleProfile.branchingFrequency * 100}%` }} /></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="ghost-training-diagnostics">
-                Ghost diagnostics: {trainingHealth}. Training counter {trainingGamesPlayed};
-                recent logs {compositeSourceGames}; style snapshots {styleSnapshotCount};
-                move memory {compositeStateCount}; padding games {summary.paddingGames};
-                average turn points {summary.styleProfile ? summary.styleProfile.avgTurnPoints.toFixed(1) : 'unavailable'};
-                rebuilt {formatDiagnosticDate(compositeLog?.generatedAt)}.
-                {styleSnapshotCount === 0
-                  ? ' If this stays at zero after completed Fritz games, the completion request or move log is not being saved correctly.'
-                  : confidence < 0.85
-                    ? ` ${gamesToReliableStyle} more usable style ${gamesToReliableStyle === 1 ? 'game' : 'games'} to reach the learning tier; ${gamesToMaxConfidence} to reach full confidence.`
-                    : ' Training data looks healthy. If the ghost still feels weak, tune the competitive move resolver next.'}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="ghost-setup-right-col">
-          {userId && (
-            <div className="ghost-friend-selector">
-              <p className="ghost-setup-eyebrow">Select Opponent</p>
-              <div className="ghost-friend-list">
-                <button
-                  className={`ghost-friend-btn ${selectedUserId === userId ? 'active' : ''}`}
-                  onClick={() => handleSelectFriend(null)}
-                >
-                  You {tier === 'trained' ? '✓' : tier === 'early' ? '⚡' : ''}
-                </button>
-                <button
-                  className={`ghost-friend-btn ghost-friend-btn-featured ${selectedUserId === featuredUserId ? 'active' : ''}`}
-                  onClick={() => featuredUserId && handleSelectFriend({ id: 'featured', userId: featuredUserId, username: featuredUsername, online: true })}
-                >
-                  <span className="ghost-featured-mark" aria-hidden="true">★</span>
-                  <span>@{featuredUsername}</span>
-                </button>
-                {visibleFriends.map((f) => (
-                  <button
-                    key={f.userId}
-                    className={`ghost-friend-btn ${selectedUserId === f.userId ? 'active' : ''}`}
-                    onClick={() => handleSelectFriend(f)}
-                  >
-                    {f.username}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="mode-actions ghost-setup-actions">
-            <button
-              className="mode-option mode-option-primary mode-accent-ghost ghost-setup-start"
-              onClick={() => summary && onStart(summary, selectedUsername, selectedUserId)}
-              disabled={!canPlay}
-            >
-              <span className="mode-option-title">Play Ghost</span>
-              <span className="mode-option-meta">
-                {!userId
-                  ? 'Sign in to unlock this mode'
-                  : isLocked
-                    ? `Unlocks after ${UNLOCK_THRESHOLD} Fritz games`
-                  : loading
-                    ? 'Loading ghost profile…'
-                    : summary
-                      ? `Opponent: ${selectedUsername}`
-                      : 'Ghost profile unavailable'}
-              </span>
-            </button>
-            <button className="mode-option mode-option-secondary bot-setup-back" onClick={onBack}>
-              <span className="mode-option-title">Back to Home</span>
-              <span className="mode-option-meta">Return to game mode menu</span>
-            </button>
           </div>
-        </div>
-      </div>
-    </LayoutScreen>
+        }
+      />
+    </div>
   );
 }

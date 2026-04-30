@@ -8,6 +8,7 @@ import {
   type PersonalStatsInsights,
   type StatsSummary,
 } from './statsApi';
+import '../ui/claudeUtilityPanels.css';
 
 interface StatsScreenProps {
   open: boolean;
@@ -166,89 +167,34 @@ export default function StatsScreen({
       aria-modal="true"
       aria-label="Profile stats"
       onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1900,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'rgba(6, 10, 18, 0.62)',
-        backdropFilter: 'blur(4px)',
-        pointerEvents: open ? 'auto' : 'none',
-        opacity: open ? 1 : 0,
-        visibility: open ? 'visible' : 'hidden',
-        transform: open ? 'scale(1)' : 'scale(0.97)',
-        transition: 'opacity 180ms ease, transform 180ms ease',
-      }}
+      className="claude-utility-overlay"
+      style={{ pointerEvents: open ? 'auto' : 'none', opacity: open ? 1 : 0, visibility: open ? 'visible' : 'hidden', transform: open ? 'scale(1)' : 'scale(0.97)', transition: 'opacity 180ms ease, transform 180ms ease' }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          position: 'relative',
-          zIndex: 1901,
-          pointerEvents: 'auto',
-          width: 'min(1320px, calc(100vw - 24px))',
-          maxHeight: 'min(96vh, 980px)',
-          borderRadius: '20px',
-          border: '1px solid rgba(236,252,245,0.2)',
-          background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '18px',
-          color: 'rgba(235,245,242,0.96)',
-          display: 'grid',
-          gap: '12px',
-          overflow: 'auto',
-        }}
+        className="claude-utility-panel"
+        style={{ position: 'relative', zIndex: 1901, pointerEvents: 'auto' }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>
-            <h3 style={{ margin: 0, fontSize: '1.4rem' }}>{headerTitle}</h3>
+        <div className="claude-utility-header">
+          <div className="claude-utility-titleblock" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>
+            <div className="claude-utility-titleblock">
+              <p className="claude-utility-kicker">Profile / Stats</p>
+              <h3 className="claude-utility-title">{headerTitle}</h3>
+            </div>
             {stats.ghostRating != null && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  borderRadius: 999,
-                  fontSize: '0.9rem',
-                  color: '#d8b4fe',
-                  fontWeight: 700,
-                  letterSpacing: '0.03em',
-                  background: 'rgba(168, 85, 247, 0.1)',
-                  border: '1px solid rgba(216, 180, 254, 0.18)',
-                }}
-              >
+              <span className="claude-utility-pill">
                 <span aria-hidden="true">👻</span>
                 <span>Ghost Rating {stats.ghostRating}</span>
               </span>
             )}
           </div>
-          <button className="mode-inline-btn" onClick={onClose}>
+          <button className="mode-inline-btn claude-utility-close" onClick={onClose}>
             Close
           </button>
         </div>
 
         {rankingProfile && (
-          <div
-            style={{
-              padding: '16px 18px',
-              borderRadius: '12px',
-              background: 'rgba(20, 28, 45, 0.72)',
-              border: '1px solid rgba(236, 252, 245, 0.12)',
-              display: 'grid',
-              gap: '8px',
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-          >
+          <div className="claude-utility-section">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                <span style={{ fontSize: '1rem', color: 'rgba(191,213,223,0.9)', fontWeight: 700 }}>Ranked Rating</span>
                {rankingProfile.rank && (
@@ -306,16 +252,7 @@ export default function StatsScreen({
         {!loading && !error && (
           <div style={{ display: 'grid', gap: '12px', minHeight: '220px' }}>
             {fritz && (
-              <section
-                style={{
-                  display: 'grid',
-                  gap: '12px',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(94, 234, 212, 0.14)',
-                  background: 'rgba(8, 18, 30, 0.52)',
-                }}
-              >
+              <section className="claude-utility-section">
                 <div style={{ display: 'grid', gap: 4 }}>
                   <strong style={{ fontSize: '1.18rem', color: 'rgba(240,248,255,0.96)' }}>Fritz / Ranked</strong>
                 </div>
@@ -377,16 +314,7 @@ export default function StatsScreen({
                     gap: '12px',
               }}
             >
-              <section
-                style={{
-                  display: 'grid',
-                  gap: '12px',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(216, 180, 254, 0.16)',
-                  background: 'rgba(33, 18, 52, 0.28)',
-                }}
-              >
+              <section className="claude-utility-section">
                 <div style={{ display: 'grid', gap: 4 }}>
                   <strong style={{ fontSize: '1.18rem', color: 'rgba(240,248,255,0.96)' }}>Ghost Mode</strong>
                 </div>
@@ -406,16 +334,7 @@ export default function StatsScreen({
                 </div>
               </section>
 
-              <section
-                style={{
-                  display: 'grid',
-                  gap: '12px',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(240, 192, 64, 0.16)',
-                  background: 'rgba(44, 31, 10, 0.24)',
-                }}
-              >
+              <section className="claude-utility-section">
                 <div style={{ display: 'grid', gap: 4 }}>
                   <strong style={{ fontSize: '1.18rem', color: 'rgba(240,248,255,0.96)' }}>Daily Puzzle</strong>
                 </div>
