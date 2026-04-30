@@ -370,6 +370,21 @@ export async function startGame(
     throw new Error('Game is already in progress.');
   }
 
+  // Clear any stale async sequences from a previous game so they cannot
+  // corrupt the new game's state via dangling Promise closures.
+  if (drawSequencesByRoom.has(code)) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[mp-draw-server] startGame: clearing stale drawSequence for room ${code}`);
+    }
+    drawSequencesByRoom.delete(code);
+  }
+  if (nextHandStartsByRoom.has(code)) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[mp-draw-server] startGame: clearing stale nextHandStart for room ${code}`);
+    }
+    nextHandStartsByRoom.delete(code);
+  }
+
   // Create fresh game state (either first start or restart after stale state)
   const state0 = createInitialState(room.players, room.config);
   const state1 = startNewHand(state0);

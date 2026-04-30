@@ -82,6 +82,7 @@ type UseMultiplayerConnectionParams = {
   draggingStateRef: MutableRefObject<boolean>;
   isMutedRef: MutableRefObject<boolean>;
   handRevealShownRef: MutableRefObject<number | null>;
+  maxSequenceRef: MutableRefObject<number>;
   roomIdentityRef: MutableRefObject<{
     username: string;
     userId: string | null;
@@ -483,9 +484,16 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     });
 
     s.on('game:rematch:started', () => {
-      latestRef.current.setRematchRequested(false);
-      latestRef.current.setRematchReadyIds([]);
-      latestRef.current.showToast('Rematch started.', 1200);
+      const current = latestRef.current;
+      if (import.meta.env.DEV) {
+        console.log('[mp-rematch] game:rematch:started — resetting maxSequenceRef', {
+          before: current.maxSequenceRef.current,
+        });
+      }
+      current.maxSequenceRef.current = -1;
+      current.setRematchRequested(false);
+      current.setRematchReadyIds([]);
+      current.showToast('Rematch started.', 1200);
     });
 
     s.on('player:dragging', (payload: { playerId?: string; dragging?: boolean }) => {

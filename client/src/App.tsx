@@ -1485,6 +1485,7 @@ export default function App() {
     draggingStateRef,
     isMutedRef,
     handRevealShownRef,
+    maxSequenceRef,
     roomIdentityRef,
     setSocket,
     setIsConnected,

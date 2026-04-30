@@ -120,9 +120,9 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
           nextState.sequence < params.maxSequenceRef.current
         ) {
           if (import.meta.env.DEV) {
-            console.warn('[state:update] ignored stale sequence', {
+            console.warn('[mp-state-apply] rejected stale state:update', {
               incoming: nextState.sequence,
-              current: params.maxSequenceRef.current,
+              highWatermark: params.maxSequenceRef.current,
             });
           }
           return;
@@ -197,9 +197,9 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
           nextState.sequence < params.maxSequenceRef.current
         ) {
           if (import.meta.env.DEV) {
-            console.warn('[state:spectate] ignored stale sequence', {
+            console.warn('[mp-state-apply] rejected stale state:spectate', {
               incoming: nextState.sequence,
-              current: params.maxSequenceRef.current,
+              highWatermark: params.maxSequenceRef.current,
             });
           }
           return;
