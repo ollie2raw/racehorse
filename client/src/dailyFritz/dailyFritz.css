@@ -704,7 +704,6 @@
 .daily-fritz-score-cell {
   min-width: 86px;
 }
-
 .daily-fritz-leaderboard-row.is-page .daily-fritz-score-cell,
 .daily-fritz-leaderboard-row.is-page .daily-fritz-diff-cell {
   min-width: 0;
@@ -715,19 +714,18 @@
   min-height: 0;
 }
 
+.daily-fritz-leaderboard-row.is-page .daily-fritz-diff-cell {
+  display: flex;
+}
+
 .daily-fritz-leaderboard-row.is-page .daily-fritz-score-cell {
-  font-size: 1.46rem;
-  font-weight: 800;
+  font-size: 2.1rem;
+  font-weight: 900;
   color: rgba(245, 248, 250, 0.94);
 }
 
 .daily-fritz-leaderboard-row.is-page.is-current-user .daily-fritz-score-cell {
   color: #95f0ca;
-}
-
-.daily-fritz-leaderboard-row.is-page .daily-fritz-diff-cell {
-  font-size: 1.22rem;
-  font-weight: 700;
 }
 
 .daily-fritz-diff-cell {
@@ -760,8 +758,8 @@
 
 .daily-fritz-meta-value {
   color: rgba(246, 249, 250, 0.96);
-  font-size: 1.14rem;
-  font-weight: 700;
+  font-size: 1.42rem;
+  font-weight: 800;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }

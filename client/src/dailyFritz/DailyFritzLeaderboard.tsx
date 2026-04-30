@@ -35,15 +35,17 @@ export default function DailyFritzLeaderboard({
 
   return (
     <div className={`daily-fritz-leaderboard ${pageVariant ? 'is-page' : ''}`}>
-      <div className={`daily-fritz-leaderboard-head ${pageVariant ? 'is-page' : ''}`}>
-        <span>{pageVariant ? 'Rank' : '#'}</span>
-        <span>Player</span>
-        <span>Result</span>
-        <span>Score</span>
-        <span>Diff</span>
-        <span>{pageVariant ? 'Session' : 'Moves'}</span>
-        {!pageVariant ? <span>Time</span> : null}
-      </div>
+      {!pageVariant && (
+        <div className="daily-fritz-leaderboard-head">
+          <span>#</span>
+          <span>Player</span>
+          <span>Result</span>
+          <span>Score</span>
+          <span>Diff</span>
+          <span>Moves</span>
+          <span>Time</span>
+        </div>
+      )}
       <div className="daily-fritz-leaderboard-list">
         {rows.map((row) => {
           const isCurrentUser =
@@ -88,7 +90,16 @@ export default function DailyFritzLeaderboard({
                 <span>{row.finalScore}-{row.opponentScore}</span>
               </span>
               <span className="daily-fritz-diff-cell">
-                {row.pointDiff >= 0 ? '+' : ''}{row.pointDiff}
+                {pageVariant ? (
+                  <span className="daily-fritz-meta-metric">
+                    <span className="daily-fritz-meta-label">Diff</span>
+                    <span className="daily-fritz-meta-value">
+                      {row.pointDiff >= 0 ? '+' : ''}{row.pointDiff}
+                    </span>
+                  </span>
+                ) : (
+                  <>{row.pointDiff >= 0 ? '+' : ''}{row.pointDiff}</>
+                )}
               </span>
               {pageVariant ? (
                 <span className="daily-fritz-meta-cell">

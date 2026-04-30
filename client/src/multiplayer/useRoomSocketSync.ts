@@ -317,7 +317,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
     const onDrawAnimation = (payload: {
       playerId: string;
       sequence: number;
-      mode: 'manual_draw';
+      mode: 'manual_draw' | 'forced_draw';
       steps: Array<{
         tile: Tile | null;
         boneyardCount: number;
@@ -331,7 +331,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         gameOver: boolean;
       };
     }) => {
-      if (!payload || payload.mode !== 'manual_draw' || !Array.isArray(payload.steps) || payload.steps.length === 0) {
+      if (!payload || (payload.mode !== 'manual_draw' && payload.mode !== 'forced_draw') || !Array.isArray(payload.steps) || payload.steps.length === 0) {
         return;
       }
       if (isMpDebug) {

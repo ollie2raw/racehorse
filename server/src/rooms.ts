@@ -63,12 +63,17 @@ export type ActResult = {
     stoppedReason: 'playable' | 'locked_pass';
     finalState: GameState;
   };
+  forcedDrawAnimation?: {
+    playerId: string;
+    sequence: number;
+    steps: ManualDrawAnimationStep[];
+    stoppedReason: 'playable' | 'locked_pass' | 'locked_no_pass';
+    finalState: GameState;
+  };
 };
 
 const rooms = new Map<RoomCode, Room>();
-const drawSequencesByRoom = new Map<RoomCode, Promise<void>>();
 const nextHandStartsByRoom = new Map<RoomCode, Promise<Room>>();
-const DRAW_STEP_MS = 500;
 const MIN_HAND_OVER_MS = 2500;
 const MP_DEBUG =
   process.env.NODE_ENV !== 'production' ||
@@ -235,24 +240,12 @@ export function getRoom(code: string): Room {
   return room;
 }
 
-export function reconcileDrawSequenceFlag(code: string): boolean {
-  const room = rooms.get(code);
-  if (!room?.state) return false;
-  const hasSequence = drawSequencesByRoom.has(code);
-  if (room.state.__drawSequenceActive && !hasSequence) {
-    room.state = withDrawSequenceFlag(room.state, false);
-    return true;
-  }
-  return false;
-}
-
 export function cancelActiveDrawSequenceForRoom(code: string, reason: string): boolean {
   const room = rooms.get(code);
   if (!room?.state?.__drawSequenceActive) return false;
 
   room.asyncStateVersion += 1;
   room.state = withDrawSequenceFlag(room.state, false);
-  drawSequencesByRoom.delete(code);
   logMpDebug('mp-draw-server', {
     roomId: code,
     event: 'cancel_active_draw_sequence',
@@ -300,14 +293,6 @@ function appendResolutionEvents(room: Room, previousState: GameState, actorSocke
   }
 }
 
-function roomDrawContextVersion(roomId: string): number | null {
-  try {
-    return getRoom(roomId).asyncStateVersion;
-  } catch {
-    return null;
-  }
-}
-
 function resolveManualDrawAtomically(
   state: GameState,
   playerId: string,
@@ -352,234 +337,66 @@ function resolveManualDrawAtomically(
   };
 }
 
-export async function runDrawSequence(
-  roomId: string,
+type ResolveForcedDrawResult = {
+  state: GameState;
+  animationSteps: ManualDrawAnimationStep[];
+  stoppedReason: 'playable' | 'locked_pass' | 'locked_no_pass';
+};
+
+/**
+ * Synchronously resolves a forced draw after MOVE. `stateAfterMove` already
+ * contains `forcedTile` in the player's hand (applyMove put it there). This
+ * function records the forced tile as the first animation step, then continues
+ * drawing until the player has a legal play or the boneyard is exhausted.
+ *
+ * INVARIANT: never sets __drawSequenceActive; all state mutations are complete
+ * before the function returns.
+ */
+function resolveForcedDrawAtomically(
+  stateAfterMove: GameState,
   playerId: string,
-  io: Server,
-  getState: () => GameState,
-  setState: (s: GameState) => void,
-  preDrawnTiles: Tile[] = [],
-  options: {
-    onStateReady?: (roomCode: string) => void;
-    reason?: string;
-    preActivated?: boolean;
-  } = {},
-): Promise<void> {
-  const existing = drawSequencesByRoom.get(roomId);
-  if (existing) {
-    logMpDebug('mp-draw-server', {
-      roomId,
-      playerId,
-      reason: options.reason ?? 'unknown',
-      event: 'await_existing_sequence',
-    });
-    await existing;
-    return;
+  forcedTile: Tile,
+): ResolveForcedDrawResult {
+  let current = stateAfterMove;
+  const animationSteps: ManualDrawAnimationStep[] = [];
+
+  // The forced tile is already in the player's hand — record it as step 0.
+  animationSteps.push({
+    tile: forcedTile,
+    boneyardCount: current.boneyard.length,
+    drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+  });
+
+  // If the forced tile immediately gives a legal play, we're done.
+  if (getLegalMoves(current, playerId).some((move) => move.type === 'play')) {
+    return { state: current, animationSteps, stoppedReason: 'playable' };
   }
 
-  const expectedAsyncStateVersion = roomDrawContextVersion(roomId);
-
-  const sequence = (async () => {
-    const isCurrentContext = () => roomDrawContextVersion(roomId) === expectedAsyncStateVersion;
-    const abortIfStale = (event: string) => {
-      if (isCurrentContext()) return true;
-      logMpDebug('mp-draw-server', {
-        roomId,
-        playerId,
-        reason: options.reason ?? 'unknown',
-        event,
-        expectedAsyncStateVersion,
-        actualAsyncStateVersion: roomDrawContextVersion(roomId),
-      });
-      return false;
-    };
-
-    let current = getState();
-    if (!abortIfStale('sequence_abort_stale_context_before_start')) {
-      return;
-    }
-    if (current.__drawSequenceActive && !options.preActivated) {
-      // Stale flag recovery: if no active sequence is registered but state says active,
-      // clear the flag so turn-driving logic cannot deadlock.
-      setState(withDrawSequenceFlag(current, false));
-      options.onStateReady?.(roomId);
-      logMpDebug('mp-draw-server', {
-        roomId,
-        playerId,
-        reason: options.reason ?? 'unknown',
-        event: 'cleared_stale_active_flag',
-        sequence: current.sequence,
-      });
-      current = getState();
+  // Keep drawing. Max iterations = initial boneyard size + 1 (safety ceiling;
+  // the loop naturally exits when drawOne returns !drew).
+  const maxIterations = stateAfterMove.boneyard.length + 1;
+  for (let i = 0; i < maxIterations; i++) {
+    const step = drawOne(current, playerId);
+    if (!step.drew) {
+      // Boneyard exhausted — forced auto-pass.
+      const passed = applyMove(current, playerId, { type: 'pass' }).state;
+      return { state: passed, animationSteps, stoppedReason: 'locked_pass' };
     }
 
-    const initialPlayable = getLegalMoves(current, playerId).some((move) => move.type === 'play');
-    if (initialPlayable) {
-      if (options.preActivated || preDrawnTiles.length > 0) {
-        setState(withDrawSequenceFlag(current, false));
-        options.onStateReady?.(roomId);
-        logMpDebug('mp-draw-server', {
-          roomId,
-          playerId,
-          reason: options.reason ?? 'unknown',
-          event: 'skip_sequence_already_playable_after_pre_draw',
-          sequence: current.sequence,
-        });
-        return;
-      }
-      logMpDebug('mp-draw-server', {
-        roomId,
-        playerId,
-        reason: options.reason ?? 'unknown',
-        event: 'skip_sequence_already_playable',
-        sequence: current.sequence,
-      });
-      return;
-    }
-
-    setState(withDrawSequenceFlag(current, true));
-    options.onStateReady?.(roomId);
-    current = getState();
-    logMpDebug('mp-draw-server', {
-      roomId,
-      playerId,
-      reason: options.reason ?? 'unknown',
-      event: 'sequence_start',
-      sequence: current.sequence,
+    current = step.state;
+    animationSteps.push({
+      tile: step.drew,
       boneyardCount: current.boneyard.length,
-      preDrawnTiles: preDrawnTiles.length,
+      drawerHandCount: current.players[playerId]?.hand.length ?? 0,
     });
 
-    try {
-      if (preDrawnTiles.length > 0) {
-        for (const tile of preDrawnTiles) {
-          if (!abortIfStale('sequence_abort_stale_context_before_pre_draw_emit')) {
-            return;
-          }
-          logMpDebug('mp-draw-server', {
-            roomId,
-            playerId,
-            reason: options.reason ?? 'unknown',
-            event: 'pre_drawn_tile_emit',
-            tile: normalizeTileKey(tile),
-            boneyardCount: current.boneyard.length,
-            drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-          });
-          io.to(playerId).emit('game:draw_step', {
-            playerId,
-            tile,
-            boneyardCount: current.boneyard.length,
-            drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-          });
-          io.to(roomId).except(playerId).emit('game:draw_step', {
-            playerId,
-            tile: null,
-            boneyardCount: current.boneyard.length,
-            drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-          });
-        }
-      }
-
-      while (true) {
-        if (!abortIfStale('sequence_abort_stale_context_before_step')) {
-          return;
-        }
-        const drawableCount = Math.max(0, current.boneyard.length - current.config.deadTileCount);
-        if (drawableCount === 0) break;
-
-        const room = getRoom(roomId);
-        const handBefore = current.players[playerId]?.hand ?? [];
-        appendGhostMove(room, playerId, {
-          turn: currentGhostTurn(room),
-          hand_number: current.handNumber,
-          actor: 'you',
-          board_state: serializeGhostBoardState(current.board),
-          tile_played: null,
-          branch: 'draw',
-          hand_before: handBefore.map(normalizeTileKey),
-          score_delta: 0,
-          forced_draw: false,
-        });
-
-        const { state: next, drew } = drawOne(current, playerId);
-        current = next;
-        setState(withDrawSequenceFlag(current, true));
-        current = getState();
-        logMpDebug('mp-draw-server', {
-          roomId,
-          playerId,
-          reason: options.reason ?? 'unknown',
-          event: 'draw_step',
-          drew: drew ? normalizeTileKey(drew) : null,
-          sequence: current.sequence,
-          boneyardCount: current.boneyard.length,
-          drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-        });
-        appendRoomEvent(room, {
-          type: 'tile_drawn',
-          actorSocketId: playerId,
-          payload: {
-            tile: drew ? normalizeTileKey(drew) : null,
-            boneyardCount: current.boneyard.length,
-            drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-          },
-        });
-
-        io.to(playerId).emit('game:draw_step', {
-          playerId,
-          tile: drew,
-          boneyardCount: current.boneyard.length,
-          drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-        });
-        io.to(roomId).except(playerId).emit('game:draw_step', {
-          playerId,
-          tile: null,
-          boneyardCount: current.boneyard.length,
-          drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-        });
-
-        const playable = getLegalMoves(current, playerId).filter((move) => move.type === 'play');
-        if (playable.length > 0) break;
-        await sleep(DRAW_STEP_MS);
-        if (!abortIfStale('sequence_abort_stale_context_after_sleep')) {
-          return;
-        }
-      }
-    } catch (error) {
-      logMpDebug('mp-draw-server', {
-        roomId,
-        playerId,
-        reason: options.reason ?? 'unknown',
-        event: 'sequence_error',
-        message: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    } finally {
-      if (!abortIfStale('sequence_skip_finally_stale_context')) {
-        return;
-      }
-      setState(withDrawSequenceFlag(current, false));
-      options.onStateReady?.(roomId);
-      logMpDebug('mp-draw-server', {
-        roomId,
-        playerId,
-        reason: options.reason ?? 'unknown',
-        event: 'sequence_finally',
-        sequence: current.sequence,
-        boneyardCount: current.boneyard.length,
-        drawerHandCount: current.players[playerId]?.hand.length ?? 0,
-      });
-    }
-  })();
-
-  drawSequencesByRoom.set(roomId, sequence);
-  try {
-    await sequence;
-  } finally {
-    if (drawSequencesByRoom.get(roomId) === sequence) {
-      drawSequencesByRoom.delete(roomId);
+    if (getLegalMoves(current, playerId).some((move) => move.type === 'play')) {
+      return { state: current, animationSteps, stoppedReason: 'playable' };
     }
   }
+
+  // Safety fallback — should not be reached with correct boneyard logic.
+  return { state: current, animationSteps, stoppedReason: 'locked_no_pass' };
 }
 
 export async function startGame(
@@ -599,12 +416,6 @@ export async function startGame(
 
   // Clear any stale async sequences from a previous game so they cannot
   // corrupt the new game's state via dangling Promise closures.
-  if (drawSequencesByRoom.has(code)) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[mp-draw-server] startGame: clearing stale drawSequence for room ${code}`);
-    }
-    drawSequencesByRoom.delete(code);
-  }
   if (nextHandStartsByRoom.has(code)) {
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[mp-draw-server] startGame: clearing stale nextHandStart for room ${code}`);
@@ -899,46 +710,40 @@ export async function act(
       },
     });
     if (forcedDraw) {
-      const acceptedMoveSequence = room.state.sequence;
-      room.state = withDrawSequenceFlag(room.state as GameState, true);
+      const resolved = resolveForcedDrawAtomically(stateAfterMove, socketId, forcedDraw);
+      room.state = resolved.state;
       logMpDebug('mp-forced-draw', {
         roomCode: room.code,
         playerId: socketId,
         action: 'MOVE',
-        event: 'forced_draw_detected',
-        sequence: acceptedMoveSequence,
-        tile: normalizeTileKey(forcedDraw),
+        event: 'forced_draw_resolved_sync',
+        sequence: room.state.sequence,
+        tilesDrawn: resolved.animationSteps.length,
+        stoppedReason: resolved.stoppedReason,
+        boneyardCount: room.state.boneyard.length,
         handNumber: room.state.handNumber,
       });
-      onStateReady(room.code);
-      setTimeout(() => {
-        void runDrawSequence(
-          room.code,
-          socketId,
-          io,
-          () => room.state as GameState,
-          (next) => {
-            room.state = next;
+      for (const step of resolved.animationSteps) {
+        appendRoomEvent(room, {
+          type: 'tile_drawn',
+          actorSocketId: socketId,
+          payload: {
+            tile: normalizeTileKey(step.tile),
+            boneyardCount: step.boneyardCount,
+            drawerHandCount: step.drawerHandCount,
           },
-          [forcedDraw],
-          {
-            onStateReady,
-            reason: 'forced_draw_after_move',
-            preActivated: true,
-          },
-        ).then(
-          () => {
-            appendResolutionEvents(room, previousState, socketId);
-          },
-          (err: unknown) => {
-            console.error('[game:action] forced draw sequence failed after MOVE', err);
-            room.state = withDrawSequenceFlag(room.state as GameState, false);
-            onStateReady(room.code);
-          },
-        );
-      }, 0);
+        });
+      }
+      appendResolutionEvents(room, previousState, socketId);
       return {
-        room: { ...room, state: { ...(room.state as GameState), sequence: acceptedMoveSequence } },
+        room,
+        forcedDrawAnimation: {
+          playerId: socketId,
+          sequence: room.state.sequence,
+          steps: resolved.animationSteps,
+          stoppedReason: resolved.stoppedReason,
+          finalState: room.state as GameState,
+        },
       };
     }
     appendResolutionEvents(room, previousState, socketId);

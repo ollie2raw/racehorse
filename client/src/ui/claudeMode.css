@@ -768,9 +768,16 @@
   font-size: clamp(108px, 11.5vw, 180px);
   font-weight: 900;
   line-height: 1;
-  color: rgba(var(--panel-accent-rgb), 0.05);
+  color: rgba(var(--panel-accent-rgb), 0.06);
+  filter: saturate(0.75);
   user-select: none;
   pointer-events: none;
+  transition: color 300ms ease, opacity 300ms ease;
+}
+
+.claude-accordion-home__panel.is-active .claude-accordion-home__big-number,
+.claude-accordion-home__panel:hover .claude-accordion-home__big-number {
+  color: rgba(var(--panel-accent-rgb), 0.1);
 }
 
 .claude-accordion-home__live {

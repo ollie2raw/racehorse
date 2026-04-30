@@ -1158,6 +1158,11 @@ async function scenarioDrawActiveActionGuards() {
 }
 
 async function scenarioForcedDrawAsyncBehavior() {
+  // Tests that MOVE forced-draw is resolved atomically:
+  // - ack returns the FINAL (post-draw) sequence, not the pre-draw placement sequence
+  // - no state:update ever carries __drawSequenceActive=true
+  // - game:draw_animation with mode 'forced_draw' is emitted to both clients
+  // - both clients converge on the same final sequence
   return withClients(
     [
       { label: 'alpha', userId: 'forced-draw-user-a', username: 'ForcedDrawA' },
@@ -1210,12 +1215,15 @@ async function scenarioForcedDrawAsyncBehavior() {
         if (candidateMove && isForcedDrawCandidate(actor, candidateMove)) {
           candidateAttempts += 1;
           const other = actor === alpha ? bravo : alpha;
-          const actorDrawActivePromise = waitForDrawActiveState(actor, true);
-          const otherDrawActivePromise = waitForDrawActiveState(other, true);
-          const actorDrawStepCountBefore = actor.state.drawSteps.length;
-          const otherDrawStepCountBefore = other.state.drawSteps.length;
           const beforeState = latestState(actor)?.state;
           assert(beforeState, 'missing actor state before forced-draw candidate');
+          const actorAnimCountBefore = actor.state.drawAnimations.length;
+          const otherAnimCountBefore = other.state.drawAnimations.length;
+
+          // Snapshot all state:update sequences received before the MOVE so we can
+          // verify none of them carry __drawSequenceActive=true after the fact.
+          const alphaStateCountBefore = alpha.state.stateUpdates.length;
+          const bravoStateCountBefore = bravo.state.stateUpdates.length;
 
           const moveResp = await emitAck(actor.socket, 'game:action', roomCode, {
             type: 'MOVE',
@@ -1224,77 +1232,61 @@ async function scenarioForcedDrawAsyncBehavior() {
           assert(moveResp?.ok, `forced-draw candidate MOVE failed: ${moveResp?.error ?? 'unknown'}`);
           assert(
             typeof moveResp.sequence === 'number' && moveResp.sequence > beforeState.sequence,
-            'forced-draw candidate ack missing accepted placement sequence',
+            'forced-draw ack sequence must be strictly greater than pre-MOVE sequence (atomic: ack carries post-draw sequence)',
           );
 
-          const duplicateDrawResp = await emitAck(actor.socket, 'game:action', roomCode, { type: 'DRAW' });
-          const duplicatePassResp = await emitAck(actor.socket, 'game:action', roomCode, { type: 'PASS' });
-          const duplicateMoveResp = await emitAck(actor.socket, 'game:action', roomCode, {
-            type: 'MOVE',
-            move: { tile: { low: 0, high: 0 }, position: 'left' },
-          });
-
-          const actorDrawActive = await actorDrawActivePromise;
-          const otherDrawActive = await otherDrawActivePromise;
-          assert(actorDrawActive?.state?.__drawSequenceActive === true, 'forced draw did not set actor draw-active');
-          assert(otherDrawActive?.state?.__drawSequenceActive === true, 'forced draw did not set opponent draw-active');
-          assert(actorDrawActive?.canDraw === false, 'actor had canDraw during forced draw-active');
-          assert(
-            !Array.isArray(actorDrawActive?.legalMoves) || actorDrawActive.legalMoves.length === 0,
-            'actor received legalMoves during forced draw-active',
-          );
-          assert(otherDrawActive?.canDraw === false, 'opponent had canDraw during forced draw-active');
-          assert(
-            !Array.isArray(otherDrawActive?.legalMoves) || otherDrawActive.legalMoves.length === 0,
-            'opponent received legalMoves during forced draw-active',
-          );
-
-          const rejectedWhileActive =
-            duplicateDrawResp?.ok === false &&
-            duplicatePassResp?.ok === false &&
-            duplicateMoveResp?.ok === false &&
-            /draw already in progress/i.test(String(duplicateDrawResp?.error ?? '')) &&
-            /draw already in progress/i.test(String(duplicatePassResp?.error ?? '')) &&
-            /draw already in progress/i.test(String(duplicateMoveResp?.error ?? ''));
-
-          let actorDrawStep;
-          let otherDrawStep;
-          try {
-            actorDrawStep = await waitForDrawStepCount(actor, actorDrawStepCountBefore + 1, 1500);
-            otherDrawStep = await waitForDrawStepCount(other, otherDrawStepCountBefore + 1, 1500);
-          } catch {
-            await Promise.all(clients.map((client) => waitForDrawActiveState(client, false)));
-            await waitForTurnReady(clients);
-            continue;
-          }
-
-          if (!rejectedWhileActive) {
-            await Promise.all(clients.map((client) => waitForDrawActiveState(client, false)));
-            await waitForTurnReady(clients);
-            continue;
-          }
-
-          assert(actorDrawStep?.tile, 'forced-draw drawer did not receive hidden tile identity');
-          assert(actorDrawStep?.playerId === actor.socket.id, 'forced-draw actor draw_step playerId mismatch');
-          assert(otherDrawStep?.tile == null, 'forced-draw opponent received hidden tile identity');
-          assert(otherDrawStep?.playerId === actor.socket.id, 'forced-draw opponent draw_step playerId mismatch');
-
-          await Promise.all(clients.map((client) => waitForDrawActiveState(client, false)));
+          // Wait for animation payloads and final state convergence.
+          const [actorAnim, otherAnim] = await Promise.all([
+            waitForDrawAnimationCount(actor, actorAnimCountBefore + 1),
+            waitForDrawAnimationCount(other, otherAnimCountBefore + 1),
+          ]);
+          await waitForAllConnectedClientsSequence(clients, moveResp.sequence);
           await waitForTurnReady(clients);
 
+          // Invariant: draw_animation mode must be 'forced_draw'.
+          assert(actorAnim?.mode === 'forced_draw', `actor got draw_animation with wrong mode: ${actorAnim?.mode}`);
+          assert(otherAnim?.mode === 'forced_draw', `opponent got draw_animation with wrong mode: ${otherAnim?.mode}`);
+
+          // Invariant: actor receives tile identities, opponent receives nulls.
+          const actorSteps = Array.isArray(actorAnim?.steps) ? actorAnim.steps : [];
+          const otherSteps = Array.isArray(otherAnim?.steps) ? otherAnim.steps : [];
+          assert(actorSteps.length > 0, 'forced-draw animation had zero steps for actor');
+          assert(
+            actorSteps[0]?.tile != null,
+            'forced-draw actor did not receive tile identity in first step',
+          );
+          assert(
+            otherSteps.every((s) => s?.tile == null),
+            'forced-draw opponent received tile identity in draw_animation steps',
+          );
+
+          // Invariant: __drawSequenceActive must never have been true in any
+          // state:update received between the MOVE and convergence.
+          const alphaNewUpdates = alpha.state.stateUpdates.slice(alphaStateCountBefore);
+          const bravoNewUpdates = bravo.state.stateUpdates.slice(bravoStateCountBefore);
+          const anyAlphaDrawActive = alphaNewUpdates.some((u) => u?.state?.__drawSequenceActive === true);
+          const anyBravoDrawActive = bravoNewUpdates.some((u) => u?.state?.__drawSequenceActive === true);
+          assert(!anyAlphaDrawActive, 'atomic forced-draw: state:update with __drawSequenceActive=true received by alpha (invariant violated)');
+          assert(!anyBravoDrawActive, 'atomic forced-draw: state:update with __drawSequenceActive=true received by bravo (invariant violated)');
+
+          // Invariant: both clients converge on identical final state.
           const finalAlpha = latestState(alpha);
           const finalBravo = latestState(bravo);
           assert(finalAlpha?.state && finalBravo?.state, 'missing final forced-draw state');
-          assert(finalAlpha.state.__drawSequenceActive !== true, 'actor final state left draw-active true');
-          assert(finalBravo.state.__drawSequenceActive !== true, 'opponent final state left draw-active true');
-          assert(finalAlpha.state.sequence === finalBravo.state.sequence, 'forced-draw clients ended on different sequences');
+          assert(finalAlpha.state.__drawSequenceActive !== true, 'actor final state has draw-active=true');
+          assert(finalBravo.state.__drawSequenceActive !== true, 'opponent final state has draw-active=true');
+          assert(
+            finalAlpha.state.sequence === finalBravo.state.sequence,
+            `forced-draw clients ended on different sequences: ${finalAlpha.state.sequence} vs ${finalBravo.state.sequence}`,
+          );
+          assert(
+            finalAlpha.state.sequence === moveResp.sequence,
+            `forced-draw ack sequence ${moveResp.sequence} does not match final broadcast sequence ${finalAlpha.state.sequence}`,
+          );
           assert(finalAlpha.state.handNumber === finalBravo.state.handNumber, 'forced-draw clients ended on different hands');
           assert(boardTileCount(finalAlpha.state.board) === boardTileCount(finalBravo.state.board), 'forced-draw final boards differed');
-          assert(
-            JSON.stringify(finalAlpha.state.handCounts) === JSON.stringify(finalBravo.state.handCounts),
-            'forced-draw final handCounts differed',
-          );
 
+          // Invariant: current player has a legal next action.
           const finalCurrentId = finalAlpha.state.playerIds[finalAlpha.state.currentPlayerIndex];
           const finalCurrent = getClientBySocketId(clients, finalCurrentId);
           assert(finalCurrent, 'forced-draw final current player missing');
@@ -1309,12 +1301,12 @@ async function scenarioForcedDrawAsyncBehavior() {
             roomCode,
             checks: {
               forcedDrawDetectedAfterMove: true,
-              forcedDrawSetDrawActive: true,
-              forcedDrawEmittedDrawStep: true,
-              forcedDrawRejectedConcurrentActions: true,
-              forcedDrawClearedDrawActive: true,
+              forcedDrawAckCarriesPostDrawSequence: true,
+              forcedDrawNeverSetDrawActiveFlag: true,
+              forcedDrawEmittedDrawAnimation: true,
               forcedDrawMaskedOpponentTile: true,
               forcedDrawFinalStatesAligned: true,
+              forcedDrawAckSequenceMatchesBroadcast: true,
               candidateAttempts,
             },
           };
@@ -1343,7 +1335,7 @@ async function scenarioForcedDrawAsyncBehavior() {
       }
 
       throw new Error(
-        `could not reach a MOVE forced-draw with emitted draw_step; candidateAttempts=${candidateAttempts}; smallest deterministic hook needed: a server test fixture that seeds a known hand+boneyard replacement tile`,
+        `could not reach a MOVE forced-draw scenario; candidateAttempts=${candidateAttempts}`,
       );
     },
   );
