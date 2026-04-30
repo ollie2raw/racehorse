@@ -63,6 +63,8 @@ type UseMultiplayerRoomActionsParams = {
       | 'dailyFritz'
       | 'league'
       | 'learn'
+      | 'friends'
+      | 'stats'
       | 'ratingHistory'
       | 'singlePlayerHub'
       | 'tournament'
@@ -75,7 +77,6 @@ type UseMultiplayerRoomActionsParams = {
   setPendingUiAction: Dispatch<SetStateAction<PendingUiAction>>;
   setRoomRecoveryState: Dispatch<SetStateAction<'idle' | 'reconnecting' | 'resyncing' | 'failed'>>;
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
-  setFriendsOpen: Dispatch<SetStateAction<boolean>>;
   setFriendInvite: Dispatch<SetStateAction<FriendInvite>>;
   roomIdentityRef: MutableRefObject<{
     username: string;
@@ -329,7 +330,6 @@ export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParam
       }
       params.applyJoinedRoomResponse(resp);
       params.setAppMode('multiplayer');
-      params.setFriendsOpen(false);
       params.autoJoinAttemptedRef.current = false;
       params.setFriendInvite(null);
     } catch (error) {

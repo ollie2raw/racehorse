@@ -46,6 +46,8 @@ type UseMultiplayerConnectionParams = {
     | 'dailyFritz'
     | 'league'
     | 'learn'
+    | 'friends'
+    | 'stats'
     | 'ratingHistory'
     | 'singlePlayerHub'
     | 'tournament';
