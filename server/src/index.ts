@@ -74,9 +74,11 @@ import {
   getRoomMatchEventMeta,
   getRoomMatchEventSnapshot,
   cancelActiveDrawSequenceForRoom,
+  type ManualDrawAnimationStep,
   type Room,
 } from './rooms';
 import { appendRoomEvent, resetRoomEventLog } from './roomEvents';
+import type { GameState } from './game/types';
 
 const allowedOriginPatterns = [
   /^http:\/\/localhost(?::\d+)?$/i,
@@ -3125,6 +3127,54 @@ function emitRematchStatus(roomCode: string) {
   });
 }
 
+function emitManualDrawAnimationPayload(
+  roomCode: string,
+  payload: {
+    playerId: string;
+    sequence: number;
+    steps: ManualDrawAnimationStep[];
+    stoppedReason: 'playable' | 'locked_pass';
+    finalState: GameState;
+  },
+) {
+  const hasPlayableFollowUp = getRoomLegalMoves(roomCode, payload.playerId).some((move) => move.type === 'play');
+  io.to(payload.playerId).emit('game:draw_animation', {
+    playerId: payload.playerId,
+    sequence: payload.sequence,
+    mode: 'manual_draw',
+    steps: payload.steps.map((step) => ({
+      tile: step.tile,
+      boneyardCount: step.boneyardCount,
+      drawerHandCount: step.drawerHandCount,
+    })),
+    final: {
+      drewCount: payload.steps.length,
+      stoppedReason: payload.stoppedReason,
+      canPlayNow: hasPlayableFollowUp,
+      handOver: payload.finalState.handOver,
+      gameOver: payload.finalState.gameOver,
+    },
+  });
+
+  io.to(roomCode).except(payload.playerId).emit('game:draw_animation', {
+    playerId: payload.playerId,
+    sequence: payload.sequence,
+    mode: 'manual_draw',
+    steps: payload.steps.map((step) => ({
+      tile: null,
+      boneyardCount: step.boneyardCount,
+      drawerHandCount: step.drawerHandCount,
+    })),
+    final: {
+      drewCount: payload.steps.length,
+      stoppedReason: payload.stoppedReason,
+      canPlayNow: false,
+      handOver: payload.finalState.handOver,
+      gameOver: payload.finalState.gameOver,
+    },
+  });
+}
+
 function clearSocketRematchReady(roomCode: string | undefined, socketId: string) {
   if (!roomCode) return;
   try {
@@ -4423,8 +4473,12 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.' });
         return;
       }
-      const room = await act(roomCode, socket.id, action, io, (code) => broadcastStateUpdate(code));
+      const result = await act(roomCode, socket.id, action, io, (code) => broadcastStateUpdate(code));
+      const room = result.room;
       broadcastStateUpdate(room.code);
+      if (result.manualDrawAnimation) {
+        emitManualDrawAnimationPayload(room.code, result.manualDrawAnimation);
+      }
       maybeFinalizeTournamentMatch(room);
       if (process.env.NODE_ENV !== 'production' || process.env.MP_DEBUG === '1' || process.env.DEBUG_MP === '1') {
         console.log('[mp-action-ack]', {

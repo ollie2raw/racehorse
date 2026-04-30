@@ -136,12 +136,14 @@ function createClient(label, userId, username) {
     roomUpdates: [],
     stateUpdates: [],
     spectateUpdates: [],
+    drawAnimations: [],
     connectErrors: [],
   };
 
   socket.on('room:update', (payload) => state.roomUpdates.push(payload));
   socket.on('state:update', (payload) => state.stateUpdates.push(payload));
   socket.on('state:spectate', (payload) => state.spectateUpdates.push(payload));
+  socket.on('game:draw_animation', (payload) => state.drawAnimations.push(payload));
   socket.on('connect_error', (error) => state.connectErrors.push(error?.message || String(error)));
 
   async function connectAndIdentify() {
@@ -232,6 +234,13 @@ async function waitForStateCount(client, minimumCount, type = 'state:update') {
         ? client.state.stateUpdates.length >= minimumCount
         : client.state.spectateUpdates.length >= minimumCount,
   );
+}
+
+async function waitForDrawAnimationCount(client, minimumCount) {
+  if (client.state.drawAnimations.length >= minimumCount) {
+    return client.state.drawAnimations[client.state.drawAnimations.length - 1] ?? null;
+  }
+  return onceWithTimeout(client.socket, 'game:draw_animation', () => client.state.drawAnimations.length >= minimumCount);
 }
 
 async function waitForRoomCount(client, expectedCount, timeoutMs = TIMEOUT_MS) {
@@ -987,52 +996,45 @@ async function scenarioDrawActiveActionGuards() {
       assert(drawer, 'could not reach a manual DRAW opportunity');
       const other = drawer === alpha ? bravo : alpha;
 
-      const actorDrawActivePromise = waitForDrawActiveState(drawer, true);
-      const otherDrawActivePromise = waitForDrawActiveState(other, true);
+      const actorAnimationCountBefore = drawer.state.drawAnimations.length;
+      const otherAnimationCountBefore = other.state.drawAnimations.length;
       const drawResp = await emitAck(drawer.socket, 'game:action', roomCode, { type: 'DRAW' });
       assert(drawResp?.ok, `DRAW failed: ${drawResp?.error ?? 'unknown'}`);
+      await waitForAllConnectedClientsSequence(clients, drawResp.sequence);
 
-      const actorDrawActive = await actorDrawActivePromise;
-      const otherDrawActive = await otherDrawActivePromise;
-      assert(actorDrawActive?.canDraw === false, 'drawer still had canDraw while draw-active');
+      const actorAfter = latestState(drawer);
+      const otherAfter = latestState(other);
+      assert(actorAfter?.state?.__drawSequenceActive !== true, 'manual DRAW left drawer in draw-active');
+      assert(otherAfter?.state?.__drawSequenceActive !== true, 'manual DRAW left opponent in draw-active');
       assert(
-        !Array.isArray(actorDrawActive?.legalMoves) || actorDrawActive.legalMoves.length === 0,
-        'drawer still received legalMoves while draw-active',
+        typeof drawResp.sequence === 'number' && drawResp.sequence === actorAfter?.state?.sequence,
+        'manual DRAW ack sequence did not match final authoritative state',
       );
-      assert(otherDrawActive?.canDraw === false, 'opponent had canDraw while other player draw-active');
+
+      const actorAnimation = await waitForDrawAnimationCount(drawer, actorAnimationCountBefore + 1);
+      const otherAnimation = await waitForDrawAnimationCount(other, otherAnimationCountBefore + 1);
+      assert(Array.isArray(actorAnimation?.steps) && actorAnimation.steps.length > 0, 'drawer missing draw animation steps');
+      assert(Array.isArray(otherAnimation?.steps) && otherAnimation.steps.length === actorAnimation.steps.length, 'opponent missing draw animation steps');
       assert(
-        !Array.isArray(otherDrawActive?.legalMoves) || otherDrawActive.legalMoves.length === 0,
-        'opponent still received legalMoves while draw-active',
+        actorAnimation.steps.every((step) => step?.tile),
+        'drawer animation did not include drawn tile identities',
+      );
+      assert(
+        otherAnimation.steps.every((step) => step?.tile == null),
+        'opponent animation leaked drawn tile identity',
       );
 
       const duplicateDrawResp = await emitAck(drawer.socket, 'game:action', roomCode, { type: 'DRAW' });
-      assert(
-        duplicateDrawResp?.ok === false && /draw already in progress/i.test(String(duplicateDrawResp?.error ?? '')),
-        `duplicate DRAW during draw-active was not rejected correctly: ${duplicateDrawResp?.error}`,
-      );
-      const passResp = await emitAck(drawer.socket, 'game:action', roomCode, { type: 'PASS' });
-      assert(
-        passResp?.ok === false && /draw already in progress/i.test(String(passResp?.error ?? '')),
-        `PASS during draw-active was not rejected correctly: ${passResp?.error}`,
-      );
-      const moveResp = await emitAck(drawer.socket, 'game:action', roomCode, {
-        type: 'MOVE',
-        move: { tile: { low: 0, high: 0 }, position: 'left' },
-      });
-      assert(
-        moveResp?.ok === false && /draw already in progress/i.test(String(moveResp?.error ?? '')),
-        `MOVE during draw-active was not rejected correctly: ${moveResp?.error}`,
-      );
-
-      await Promise.all(clients.map((client) => waitForDrawActiveState(client, false)));
+      assert(duplicateDrawResp?.ok === false, 'duplicate manual DRAW unexpectedly succeeded after final state');
       await waitForTurnReady(clients);
 
       return {
         roomCode,
         checks: {
-          drawActiveHidesLegalMoves: true,
-          drawActiveRejectsDuplicateDraw: true,
-          drawActiveRejectsOtherActions: true,
+          manualDrawAckedFinalSequence: true,
+          manualDrawDidNotSetDrawActive: true,
+          manualDrawAnimationDelivered: true,
+          manualDrawRejectedDuplicateFollowUp: true,
         },
       };
     },

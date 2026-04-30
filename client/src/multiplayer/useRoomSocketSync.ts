@@ -303,12 +303,85 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       }
     };
 
+    const onDrawAnimation = (payload: {
+      playerId: string;
+      sequence: number;
+      mode: 'manual_draw';
+      steps: Array<{
+        tile: Tile | null;
+        boneyardCount: number;
+        drawerHandCount: number;
+      }>;
+      final: {
+        drewCount: number;
+        stoppedReason: 'playable' | 'locked_pass' | 'locked_no_pass';
+        canPlayNow: boolean;
+        handOver: boolean;
+        gameOver: boolean;
+      };
+    }) => {
+      if (!payload || payload.mode !== 'manual_draw' || !Array.isArray(payload.steps) || payload.steps.length === 0) {
+        return;
+      }
+      if (isMpDebug) {
+        console.log('[mp-draw-client] draw_animation', {
+          playerId: payload.playerId,
+          sequence: payload.sequence,
+          steps: payload.steps.length,
+          stoppedReason: payload.final?.stoppedReason ?? null,
+        });
+      }
+      params.setDrawStepActorId(payload.playerId);
+      if (params.drawSequenceTimeoutRef.current) {
+        clearTimeout(params.drawSequenceTimeoutRef.current);
+      }
+
+      payload.steps.forEach((step, index) => {
+        window.setTimeout(() => {
+          params.playDrawSound(params.isMutedRef.current);
+          params.setBoneyardDisplayCount(step.boneyardCount);
+
+          if (params.boneyardRef.current) {
+            const from = params.boneyardRef.current.getBoundingClientRect();
+            const isMe = payload.playerId === params.youRef.current;
+            const targetEl: HandTileTarget = isMe ? params.handAreaRef.current : params.opponentPillRef.current;
+            if (targetEl) {
+              const to = targetEl.getBoundingClientRect();
+              const id = ++params.flyingTileIdRef.current;
+              params.setFlyingTiles((prev) => [
+                ...prev,
+                {
+                  x: from.left + from.width / 2,
+                  y: from.top + from.height / 2,
+                  toX: to.left + to.width / 2,
+                  toY: to.top + to.height / 2,
+                  id,
+                },
+              ]);
+              window.setTimeout(() => {
+                params.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id));
+              }, 1800);
+            }
+          }
+
+          if (payload.playerId !== params.youRef.current) {
+            params.setDrawStepOpponentHandCount(step.drawerHandCount);
+          }
+        }, index * 150);
+      });
+
+      params.drawSequenceTimeoutRef.current = setTimeout(() => {
+        clearDrawPreview(params);
+      }, payload.steps.length * 150 + 1800);
+    };
+
     socket.on('friend:invited', onFriendInvited);
     socket.on('friend:invite:error', onFriendInviteError);
     socket.on('room:update', onRoomUpdate);
     socket.on('state:update', onStateUpdate);
     socket.on('state:spectate', onStateSpectate);
     socket.on('game:draw_step', onDrawStep);
+    socket.on('game:draw_animation', onDrawAnimation);
 
     return () => {
       socket.off('friend:invited', onFriendInvited);
@@ -317,6 +390,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       socket.off('state:update', onStateUpdate);
       socket.off('state:spectate', onStateSpectate);
       socket.off('game:draw_step', onDrawStep);
+      socket.off('game:draw_animation', onDrawAnimation);
     };
   }, [params]);
 }

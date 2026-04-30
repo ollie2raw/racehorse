@@ -41,6 +41,30 @@ export type Room = {
   events: RoomMatchEvent[];
 };
 
+export type ManualDrawAnimationStep = {
+  tile: Tile;
+  boneyardCount: number;
+  drawerHandCount: number;
+};
+
+type ResolveManualDrawResult = {
+  state: GameState;
+  animationSteps: ManualDrawAnimationStep[];
+  stoppedReason: 'playable' | 'locked_pass';
+  passed: boolean;
+};
+
+export type ActResult = {
+  room: Room;
+  manualDrawAnimation?: {
+    playerId: string;
+    sequence: number;
+    steps: ManualDrawAnimationStep[];
+    stoppedReason: 'playable' | 'locked_pass';
+    finalState: GameState;
+  };
+};
+
 const rooms = new Map<RoomCode, Room>();
 const drawSequencesByRoom = new Map<RoomCode, Promise<void>>();
 const nextHandStartsByRoom = new Map<RoomCode, Promise<Room>>();
@@ -282,6 +306,50 @@ function roomDrawContextVersion(roomId: string): number | null {
   } catch {
     return null;
   }
+}
+
+function resolveManualDrawAtomically(
+  state: GameState,
+  playerId: string,
+): ResolveManualDrawResult {
+  let current = state;
+  const animationSteps: ManualDrawAnimationStep[] = [];
+
+  while (getLegalMoves(current, playerId).every((move) => move.type !== 'play')) {
+    const step = drawOne(current, playerId);
+    if (!step.drew) {
+      const passed = applyMove(current, playerId, { type: 'pass' }).state;
+      return {
+        state: passed,
+        animationSteps,
+        stoppedReason: 'locked_pass',
+        passed: true,
+      };
+    }
+
+    current = step.state;
+    animationSteps.push({
+      tile: step.drew,
+      boneyardCount: current.boneyard.length,
+      drawerHandCount: current.players[playerId]?.hand.length ?? 0,
+    });
+
+    if (getLegalMoves(current, playerId).some((move) => move.type === 'play')) {
+      return {
+        state: current,
+        animationSteps,
+        stoppedReason: 'playable',
+        passed: false,
+      };
+    }
+  }
+
+  return {
+    state: current,
+    animationSteps,
+    stoppedReason: 'playable',
+    passed: false,
+  };
 }
 
 export async function runDrawSequence(
@@ -709,7 +777,7 @@ export async function act(
   action: ActionPayload,
   io: Server,
   onStateReady: (roomCode: string) => void,
-): Promise<Room> {
+): Promise<ActResult> {
   const room = getRoom(code);
   if (!room.state) throw new Error('Game not started.');
 
@@ -736,7 +804,9 @@ export async function act(
       throw new Error('You have a legal play — you may not draw.');
     }
 
-    room.state = withDrawSequenceFlag(state, true);
+    const previousState = state;
+    const result = resolveManualDrawAtomically(state, socketId);
+    room.state = result.state;
     appendRoomEvent(room, {
       type: 'draw_requested',
       actorSocketId: socketId,
@@ -753,29 +823,37 @@ export async function act(
       handNumber: room.state.handNumber,
       boneyardCount: room.state.boneyard.length,
     });
-    onStateReady(room.code);
-    setTimeout(() => {
-      void runDrawSequence(
-        room.code,
-        socketId,
-        io,
-        () => room.state as GameState,
-        (next) => {
-          room.state = next;
+    for (const step of result.animationSteps) {
+      appendRoomEvent(room, {
+        type: 'tile_drawn',
+        actorSocketId: socketId,
+        payload: {
+          tile: normalizeTileKey(step.tile),
+          boneyardCount: step.boneyardCount,
+          drawerHandCount: step.drawerHandCount,
         },
-        [],
-        {
-          onStateReady,
-          reason: 'manual_draw',
-          preActivated: true,
-        },
-      ).catch((err: unknown) => {
-        console.error('[game:action] draw sequence failed after DRAW', err);
-        room.state = withDrawSequenceFlag(room.state as GameState, false);
-        onStateReady(room.code);
       });
-    }, 0);
-    return room;
+    }
+    if (result.passed) {
+      appendRoomEvent(room, {
+        type: 'turn_passed',
+        actorSocketId: socketId,
+        payload: {
+          handNumber: room.state.handNumber,
+        },
+      });
+    }
+    appendResolutionEvents(room, previousState, socketId);
+    return {
+      room,
+      manualDrawAnimation: {
+        playerId: socketId,
+        sequence: room.state.sequence,
+        steps: result.animationSteps,
+        stoppedReason: result.stoppedReason,
+        finalState: room.state,
+      },
+    };
   }
 
   // ─────────────────────────────
@@ -859,10 +937,12 @@ export async function act(
           },
         );
       }, 0);
-      return { ...room, state: { ...(room.state as GameState), sequence: acceptedMoveSequence } };
+      return {
+        room: { ...room, state: { ...(room.state as GameState), sequence: acceptedMoveSequence } },
+      };
     }
     appendResolutionEvents(room, previousState, socketId);
-    return room;
+    return { room };
   }
 
   // ─────────────────────────────
@@ -891,7 +971,7 @@ export async function act(
       },
     });
     appendResolutionEvents(room, previousState, socketId);
-    return room;
+    return { room };
   }
 
   throw new Error('Unknown action type.');
