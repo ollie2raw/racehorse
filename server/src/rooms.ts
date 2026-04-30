@@ -222,6 +222,24 @@ export function reconcileDrawSequenceFlag(code: string): boolean {
   return false;
 }
 
+export function cancelActiveDrawSequenceForRoom(code: string, reason: string): boolean {
+  const room = rooms.get(code);
+  if (!room?.state?.__drawSequenceActive) return false;
+
+  room.asyncStateVersion += 1;
+  room.state = withDrawSequenceFlag(room.state, false);
+  drawSequencesByRoom.delete(code);
+  logMpDebug('mp-draw-server', {
+    roomId: code,
+    event: 'cancel_active_draw_sequence',
+    reason,
+    asyncStateVersion: room.asyncStateVersion,
+    handNumber: room.state.handNumber,
+    sequence: room.state.sequence,
+  });
+  return true;
+}
+
 export function deleteRoom(code: string): boolean {
   return rooms.delete(code);
 }
