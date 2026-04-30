@@ -91,6 +91,8 @@ type AppMode =
   | 'dailyFritz'
   | 'league'
   | 'learn'
+  | 'friends'
+  | 'stats'
   | 'ratingHistory'
   | 'singlePlayerHub'
   | 'tournament';
@@ -863,9 +865,7 @@ export default function App() {
   const authAccessTokenRef = useRef<string | null>(authAccessToken);
   const multiplayerIdentityUserIdRef = useRef(multiplayerIdentityUserId);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
-  const [friendsOpen, setFriendsOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [serverWaking, setServerWaking] = useState(false);
   const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
@@ -1574,7 +1574,6 @@ export default function App() {
     setPendingUiAction,
     setRoomRecoveryState,
     setRoomRecoveryMessage,
-    setFriendsOpen,
     setFriendInvite,
     roomIdentityRef,
     lastRoomStorageKey: LAST_ROOM_STORAGE_KEY,
@@ -2837,6 +2836,41 @@ export default function App() {
     );
   }
 
+  if (appMode === 'friends') {
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Friends…" />}>
+          <FriendsScreen
+            open={true}
+            user={authUser}
+            socket={socket}
+            joinedRoom={joinedRoom}
+            currentUsername={authProfile?.username ?? ''}
+            showToast={showToast}
+            onCopyInviteLink={copyInviteLink}
+            onCreatePrivateRoom={onCreatePrivateRoom}
+            onClose={() => setAppMode('home')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'stats') {
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Stats…" />}>
+          <StatsScreen
+            open={true}
+            user={authUser}
+            profile={authProfile}
+            onClose={() => setAppMode('home')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   if (appMode === 'singlePlayerHub') {
     const singlePlayerModes = [
       {
@@ -2896,15 +2930,19 @@ export default function App() {
                     key={mode.id}
                     type="button"
                     className="claude-mode-choice-row"
-                    style={{ ['--row-accent' as string]: mode.accent }}
+                    style={{
+                      ['--row-accent' as string]: mode.accent,
+                      ['--row-accent-rgb' as string]: claudeRgb(mode.accent),
+                    }}
                     onClick={mode.action}
                   >
-                    <span className="claude-mode-choice-row__ghost-dot" aria-hidden="true" />
                     <span className="claude-mode-choice-row__content">
                       <span className="claude-mode-choice-row__title">{mode.title}</span>
                       <span className="claude-mode-choice-row__meta">{mode.meta}</span>
                     </span>
-                    <span className="claude-mode-choice-row__dot" aria-hidden="true" />
+                    <svg className="claude-mode-choice-row__arrow" viewBox="0 0 14 14" aria-hidden="true">
+                      <path d="M3.5 7h7M7.5 3.5l3.5 3.5-3.5 3.5" />
+                    </svg>
                   </button>
                 ))}
                 <ClaudeSecondaryAction
@@ -3478,10 +3516,10 @@ export default function App() {
                       Sign In · Profile
                     </button>
                   )}
-                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setFriendsOpen(true)}>
+                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setAppMode('friends')}>
                     Friends
                   </button>
-                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setStatsOpen(true)}>
+                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setAppMode('stats')}>
                     Stats
                   </button>
                 </div>
@@ -3576,23 +3614,6 @@ export default function App() {
               }
             }}
             signingOut={signingOut}
-          />
-          <StatsScreen
-            open={statsOpen}
-            user={authUser}
-            profile={authProfile}
-            onClose={() => setStatsOpen(false)}
-          />
-          <FriendsScreen
-            open={friendsOpen}
-            user={authUser}
-            socket={socket}
-            joinedRoom={joinedRoom}
-            currentUsername={authProfile?.username ?? ''}
-            showToast={showToast}
-            onCopyInviteLink={copyInviteLink}
-            onCreatePrivateRoom={onCreatePrivateRoom}
-            onClose={() => setFriendsOpen(false)}
           />
         </Suspense>
         <WeeklyStatsScreen

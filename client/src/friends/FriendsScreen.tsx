@@ -11,7 +11,7 @@ import {
   type FriendRecord,
   type FriendRequestRecord,
 } from './friendsApi';
-import '../ui/claudeUtilityPanels.css';
+import './friendsScreen.css';
 
 interface FriendsScreenProps {
   open: boolean;
@@ -71,7 +71,6 @@ export default function FriendsScreen({
         setFriends((prev) => prev.map((f) => ({ ...f, online: set.has(f.userId) })));
       });
     };
-
     checkPresence();
     const interval = setInterval(checkPresence, 30000);
     socket.on('connect', checkPresence);
@@ -81,133 +80,127 @@ export default function FriendsScreen({
     };
   }, [open, socket, friends.length]);
 
-  const headerText = useMemo(() => {
-    if (!user) return 'Sign in to use Friends';
-    return `Friends (${friends.length})`;
-  }, [user, friends.length]);
+  const onlineCount = useMemo(() => friends.filter((f) => f.online).length, [friends]);
   const hasPendingRequests = incoming.length > 0 || outgoing.length > 0;
 
   if (!open) return null;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Friends"
-      onClick={onClose}
-      className="claude-utility-overlay"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="claude-utility-panel claude-utility-panel--medium"
-      >
-        <div className="claude-utility-header">
-          <div className="claude-utility-titleblock">
-            <p className="claude-utility-kicker">Social</p>
-            <h3 className="claude-utility-title">Friends</h3>
+    <div className="friends-page" role="dialog" aria-modal="true" aria-label="Friends">
+      {/* ── Top bar ── */}
+      <header className="friends-page-topbar">
+        <div className="friends-page-brand">RACEHORSE</div>
+        <button type="button" className="friends-page-back" onClick={onClose}>
+          <svg viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
+            <path d="M7.5 2L3 6l4.5 4" />
+          </svg>
+          Back to Home
+        </button>
+      </header>
+
+      {/* ── Split layout ── */}
+      <div className="friends-page-split">
+
+        {/* Left hero */}
+        <div className="friends-page-hero">
+          <div className="friends-page-hero__atmo" aria-hidden="true" />
+          <div className="friends-page-hero__line" aria-hidden="true" />
+          <div className="friends-page-hero__decor" aria-hidden="true">F</div>
+          <div className="friends-page-hero__content">
+            <p className="friends-page-hero__eyebrow">SOCIAL</p>
+            <h1 className="friends-page-hero__title">FRIENDS</h1>
+            <div className="friends-page-hero__stats">
+              <div className="friends-page-hero__stat">
+                <span className="friends-page-hero__stat-val friends-page-hero__stat-val--online">{onlineCount}</span>
+                <span className="friends-page-hero__stat-label">ONLINE</span>
+              </div>
+              <div className="friends-page-hero__stat">
+                <span className="friends-page-hero__stat-val">{friends.length}</span>
+                <span className="friends-page-hero__stat-label">FRIENDS</span>
+              </div>
+            </div>
           </div>
-          <button className="mode-inline-btn claude-utility-close" onClick={onClose}>
-            Close
-          </button>
         </div>
 
-        <p className="claude-utility-subtitle">{headerText}</p>
+        {/* Right control pane */}
+        <div className="friends-page-panel">
 
-        {!user && <p className="auth-inline-error">Sign in to use friends.</p>}
+          {!user && (
+            <p className="friends-page-auth-note">Sign in to use friends.</p>
+          )}
 
-        {user && (
-          <>
-            <div className="claude-utility-inputrow">
-              <input
-                type="text"
-                placeholder="Add friend by username"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="claude-utility-input"
-              />
-              <button
-                className="mode-inline-btn"
-                onClick={async () => {
-                  const resp = await sendFriendRequest(user.id, query);
-                  if (resp.error) {
-                    setError(resp.error);
-                    return;
-                  }
-                  setQuery('');
-                  setError(null);
-                  await loadFriends();
-                }}
-              >
-                Add
-              </button>
-            </div>
+          {user && (
+            <>
+              {/* Add friend */}
+              <p className="friends-page-section-label">Add Friend</p>
+              <div className="friends-page-add-row">
+                <input
+                  type="text"
+                  placeholder="USERNAME"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="friends-page-input"
+                />
+                <button
+                  type="button"
+                  className="friends-page-add-btn"
+                  onClick={async () => {
+                    const resp = await sendFriendRequest(user.id, query);
+                    if (resp.error) { setError(resp.error); return; }
+                    setQuery('');
+                    setError(null);
+                    await loadFriends();
+                  }}
+                >
+                  Add
+                </button>
+              </div>
 
-            {error && <p className="auth-inline-error">{error}</p>}
-            {loading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading friends...</p>}
+              {error && <p className="friends-page-error">{error}</p>}
+              {loading && <p className="friends-page-note">Loading friends…</p>}
 
-            {!loading && (
-              <div style={{ display: 'grid', gap: 12 }}>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <h4 className="claude-utility-section-title">Friends</h4>
+              {/* Friends list */}
+              {!loading && (
+                <>
+                  <p className="friends-page-section-label">Your Friends</p>
                   {friends.length === 0 && (
-                    <p style={{ margin: 0, color: 'rgba(196,213,223,0.82)' }}>
-                      No friends yet. Add someone by username above.
-                    </p>
+                    <p className="friends-page-note">No friends yet. Add someone by username above.</p>
                   )}
-                  {friends.map((friend) => (
-                    <div key={friend.id} className="claude-utility-row">
-                      <div className="claude-utility-rowhead">
-                        <div className="claude-utility-rowmain">
+                  <div className="friends-page-list">
+                    {friends.map((friend) => (
+                      <div key={friend.id} className="friends-page-row">
+                        <div className="friends-page-row__left">
                           <span
                             aria-hidden="true"
-                            className="claude-utility-statusdot"
+                            className="friends-page-dot"
                             style={{
-                              background: friend.online ? '#34d399' : 'rgba(148,163,184,0.6)',
-                              boxShadow: friend.online
-                                ? '0 0 10px rgba(52,211,153,0.85)'
-                                : '0 0 0 rgba(0,0,0,0)',
+                              background: friend.online ? '#00e676' : 'rgba(255,255,255,0.18)',
+                              boxShadow: friend.online ? '0 0 8px #00e67688' : 'none',
                             }}
                           />
-                          <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            @{friend.username}
-                          </strong>
+                          <div>
+                            <div className="friends-page-row__name">@{friend.username}</div>
+                            <div className="friends-page-row__meta">
+                              {friend.online ? 'Online' : 'Offline'}
+                            </div>
+                          </div>
                         </div>
-                        <div className="claude-utility-rowactions">
+                        <div className="friends-page-row__actions">
                           <button
-                            className="mode-inline-btn"
-                            style={{
-                              padding: '4px 8px',
-                              fontSize: '0.75rem',
-                              background: friend.online
-                                ? 'linear-gradient(170deg, rgba(29,55,66,0.88) 0%, rgba(11,21,34,0.9) 100%)'
-                                : 'rgba(255,255,255,0.08)',
-                              borderColor: friend.online
-                                ? 'rgba(149, 240, 202, 0.45)'
-                                : 'rgba(255,255,255,0.16)',
-                              opacity: friend.online ? 1 : 0.72,
-                            }}
+                            type="button"
+                            className="friends-page-action-btn friends-page-action-btn--invite"
+                            style={{ opacity: friend.online ? 1 : 0.6 }}
                             onClick={async () => {
                               if (!socket?.connected) return;
-
-                              // Ensure room exists FIRST and wait for it
                               let roomInfo;
-
                               if (!joinedRoom) {
                                 const created = await onCreatePrivateRoom?.();
-                                if (!created?.ok || !created?.roomCode) {
-                                  showToast('Unable to create room.', 2000);
-                                  return;
-                                }
+                                if (!created?.ok || !created?.roomCode) { showToast('Unable to create room.', 2000); return; }
                                 roomInfo = created;
                               } else {
                                 roomInfo = await onCopyInviteLink();
                               }
-
-                              if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) {
-                                showToast('Create a room first.', 2000);
-                                return;
-                              }
-
+                              if (!roomInfo?.ok || !roomInfo.roomCode || !roomInfo.inviteUrl) { showToast('Create a room first.', 2000); return; }
                               socket.emit('friend:invite', {
                                 toUserId: friend.userId,
                                 fromUsername: currentUsername || user?.email?.split('@')[0] || 'player',
@@ -215,98 +208,95 @@ export default function FriendsScreen({
                                 inviteUrl: roomInfo.inviteUrl,
                               });
                               onClose();
-
                               setCopiedFriendId(friend.id);
-                              setTimeout(() => {
-                                setCopiedFriendId((prev) => (prev === friend.id ? null : prev));
-                              }, 2000);
+                              setTimeout(() => { setCopiedFriendId((prev) => (prev === friend.id ? null : prev)); }, 2000);
                             }}
                             title={joinedRoom ? 'Copy invite link' : 'Create room and copy invite link'}
                           >
-                            {copiedFriendId === friend.id ? 'Copied!' : '⚡ Invite'}
-                          </button>
-                          <button className="mode-inline-btn" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => setSelectedFriend(friend)}>
-                            📊 Stats
+                            {copiedFriendId === friend.id ? 'Copied!' : 'Invite'}
                           </button>
                           <button
-                            className="mode-inline-btn"
-                            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                            type="button"
+                            className="friends-page-action-btn"
+                            onClick={() => setSelectedFriend(friend)}
+                          >
+                            Stats
+                          </button>
+                          <button
+                            type="button"
+                            className="friends-page-action-btn friends-page-action-btn--danger"
                             onClick={async () => {
                               if (!user) return;
                               const resp = await removeFriend(friend.id, user.id);
-                              if (resp.error) {
-                                setError(resp.error);
-                                return;
-                              }
+                              if (resp.error) { setError(resp.error); return; }
                               await loadFriends();
                             }}
                           >
-                            🗑 Remove
+                            Remove
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {hasPendingRequests && (
-                  <div className="claude-utility-section">
-                    <h4 className="claude-utility-section-title">Requests</h4>
-                    {incoming.map((req) => (
-                      <div key={req.id} className="claude-utility-row">
-                        <span>@{req.username} sent you a request</span>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button
-                            className="mode-inline-btn"
-                            onClick={async () => {
-                              const resp = await acceptFriendRequest(req.id, user.id);
-                              if (resp.error) {
-                                setError(resp.error);
-                                return;
-                              }
-                              await loadFriends();
-                            }}
-                          >
-                            Accept
-                          </button>
-                          <button
-                            className="mode-inline-btn"
-                            onClick={async () => {
-                              const resp = await declineFriendRequest(req.id, user.id);
-                              if (resp.error) {
-                                setError(resp.error);
-                                return;
-                              }
-                              await loadFriends();
-                            }}
-                          >
-                            Decline
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {outgoing.map((req) => (
-                      <div key={req.id} className="claude-utility-row">
-                        Pending: @{req.username}
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
+
+                  {/* Pending requests */}
+                  {hasPendingRequests && (
+                    <>
+                      <p className="friends-page-section-label" style={{ marginTop: 20 }}>Requests</p>
+                      <div className="friends-page-list">
+                        {incoming.map((req) => (
+                          <div key={req.id} className="friends-page-row">
+                            <span className="friends-page-row__name">@{req.username} sent you a request</span>
+                            <div className="friends-page-row__actions">
+                              <button
+                                type="button"
+                                className="friends-page-action-btn friends-page-action-btn--invite"
+                                onClick={async () => {
+                                  const resp = await acceptFriendRequest(req.id, user.id);
+                                  if (resp.error) { setError(resp.error); return; }
+                                  await loadFriends();
+                                }}
+                              >
+                                Accept
+                              </button>
+                              <button
+                                type="button"
+                                className="friends-page-action-btn friends-page-action-btn--danger"
+                                onClick={async () => {
+                                  const resp = await declineFriendRequest(req.id, user.id);
+                                  if (resp.error) { setError(resp.error); return; }
+                                  await loadFriends();
+                                }}
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        {outgoing.map((req) => (
+                          <div key={req.id} className="friends-page-row">
+                            <span className="friends-page-row__name" style={{ color: 'rgba(255,255,255,0.42)' }}>
+                              Pending: @{req.username}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
+
       <StatsScreen
         open={Boolean(selectedFriend)}
         user={user}
         targetUserId={selectedFriend?.userId ?? null}
         profile={
           selectedFriend
-            ? {
-                id: selectedFriend.userId,
-                username: selectedFriend.username,
-              }
+            ? { id: selectedFriend.userId, username: selectedFriend.username }
             : null
         }
         title={selectedFriend ? `@${selectedFriend.username} / Stats` : 'Friend Stats'}

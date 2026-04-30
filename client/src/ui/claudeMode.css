@@ -171,13 +171,100 @@
 .claude-mode-secondary,
 .claude-home-mode-card,
 .claude-mode-join-box button,
-.claude-mode-segmented button,
-.claude-mode-choice-row {
+.claude-mode-segmented button {
   appearance: none;
   border: 0;
   background: none;
   color: inherit;
   font: inherit;
+}
+
+/* ── Choice rows (Single-Player / mode list) ── */
+.claude-mode-choice-row {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px 22px 20px 20px;
+  cursor: pointer;
+  text-align: left;
+  background: transparent;
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  border-left: 3px solid rgba(var(--row-accent-rgb, 61, 142, 255), 0.22);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 150ms ease, border-left-color 150ms ease;
+}
+
+.claude-mode-choice-row:hover {
+  background: rgba(var(--row-accent-rgb, 61, 142, 255), 0.07);
+  border-left-color: var(--row-accent, #3d8eff);
+}
+
+.claude-mode-choice-row__content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.claude-mode-choice-row__title {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+  transition: color 150ms ease;
+}
+
+.claude-mode-choice-row:hover .claude-mode-choice-row__title {
+  color: #fff;
+}
+
+.claude-mode-choice-row__meta {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.38);
+  line-height: 1.5;
+}
+
+.claude-mode-choice-row__badge {
+  margin-top: 6px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.18);
+}
+
+.claude-mode-choice-row__arrow {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 150ms ease;
+}
+
+.claude-mode-choice-row:hover .claude-mode-choice-row__arrow {
+  stroke: var(--row-accent, #3d8eff);
+}
+
+/* legacy – hidden */
+.claude-mode-choice-row__ghost-dot,
+.claude-mode-choice-row__dot {
+  display: none;
 }
 
 .claude-mode-primary {
@@ -200,8 +287,7 @@
 
 .claude-mode-primary__title,
 .claude-mode-secondary__title,
-.claude-home-mode-card__title,
-.claude-mode-choice-row__title {
+.claude-home-mode-card__title {
   font-family: 'Barlow Condensed', system-ui, sans-serif;
   font-size: 18px;
   font-weight: 800;
@@ -211,8 +297,7 @@
 
 .claude-mode-primary__meta,
 .claude-mode-secondary__meta,
-.claude-home-mode-card__meta,
-.claude-mode-choice-row__meta {
+.claude-home-mode-card__meta {
   font-family: 'Space Grotesk', system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.45;

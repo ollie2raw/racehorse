@@ -1,0 +1,343 @@
+/* statsScreen.css — Full-page stats matching rh2-social.jsx MyStatsPage */
+
+.stats-page {
+  position: fixed;
+  inset: 0;
+  z-index: 1900;
+  display: flex;
+  flex-direction: column;
+  background: #01010a;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.97);
+}
+
+/* ── Top bar ── */
+.stats-page-topbar {
+  height: 46px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(20px, 3vw, 52px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(1, 1, 10, 0.94);
+  backdrop-filter: blur(24px);
+  position: relative;
+  z-index: 100;
+}
+
+.stats-page-brand {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.stats-page-back {
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.32);
+  transition: color 120ms ease;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-page-back:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ── Hero rating strip (full width) ── */
+.stats-page-hero-strip {
+  flex-shrink: 0;
+  background: #04050d;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px clamp(24px, 4vw, 60px);
+  position: relative;
+  overflow: hidden;
+}
+
+.stats-page-hero-strip__atmo {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: radial-gradient(ellipse 80% 100% at 0% 100%, rgba(0, 240, 200, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.stats-page-hero-strip__line {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, #00f0c8, rgba(0, 240, 200, 0.1), transparent);
+}
+
+.stats-page-hero-strip__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.stats-page-hero-strip__eyebrow {
+  margin: 0 0 8px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: #00f0c8;
+}
+
+.stats-page-hero-strip__rating-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.stats-page-hero-strip__rating {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: clamp(52px, 7vw, 80px);
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-page-hero-strip__prov {
+  font-size: 1.7rem;
+  color: rgba(236, 252, 245, 0.4);
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.stats-page-hero-strip__rank {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: #00f0c8;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.stats-page-hero-strip__sub-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.stats-page-hero-strip__sub-row span {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.stats-page-hero-strip__bar-col {
+  flex: 1;
+  max-width: 320px;
+}
+
+.stats-page-hero-strip__bar-track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  margin-bottom: 6px;
+}
+
+.stats-page-hero-strip__bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #34d399, #00f0c8);
+  box-shadow: 0 0 12px rgba(0, 240, 200, 0.5);
+  transition: width 600ms ease-out;
+}
+
+.stats-page-hero-strip__bar-labels {
+  display: flex;
+  justify-content: space-between;
+}
+
+.stats-page-hero-strip__bar-labels span {
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.22);
+}
+
+/* ── Scrollable body ── */
+.stats-page-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  padding: clamp(20px, 3vh, 36px) clamp(24px, 4vw, 60px);
+}
+
+.stats-page-note {
+  margin: 0 0 16px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.stats-page-error-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stats-page-error {
+  margin: 0;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 13px;
+  color: #ef4444;
+}
+
+.stats-page-retry {
+  appearance: none;
+  padding: 5px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* ── Sections ── */
+.stats-page-section {
+  margin-bottom: 32px;
+}
+
+.stats-page-section-label {
+  margin: 0 0 16px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* ── Stat cards (sharp, no border-radius) ── */
+.stats-page-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.stats-page-grid--6 {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.stats-page-grid--4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.stats-page-grid--2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.stats-page-statcard {
+  padding: 14px 16px;
+  background: #0d0f1c;
+  border-top: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.stats-page-statcard__label {
+  margin: 0 0 6px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.stats-page-statcard__value {
+  margin: 0;
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-page-tier-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.stats-page-tier-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.stats-page-tier-games {
+  margin: 3px 0 0;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* ── Two-column ghost/puzzle layout ── */
+.stats-page-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .stats-page-grid--6 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .stats-page-grid--4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stats-page-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-page-hero-strip__bar-col {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .stats-page-grid--6 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

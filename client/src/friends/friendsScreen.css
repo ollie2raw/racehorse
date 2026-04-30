@@ -1,0 +1,353 @@
+/* friendsScreen.css — Full-page split-screen matching rh2-social.jsx */
+
+.friends-page {
+  position: fixed;
+  inset: 0;
+  z-index: 1900;
+  display: flex;
+  flex-direction: column;
+  background: #01010a;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.97);
+}
+
+/* ── Top bar ── */
+.friends-page-topbar {
+  height: 46px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(20px, 3vw, 52px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(1, 1, 10, 0.94);
+  backdrop-filter: blur(24px);
+  position: relative;
+  z-index: 100;
+}
+
+.friends-page-brand {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.friends-page-back {
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.32);
+  transition: color 120ms ease;
+}
+
+.friends-page-back:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ── Split layout ── */
+.friends-page-split {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Left hero ── */
+.friends-page-hero {
+  width: 38%;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  background: #04050d;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 clamp(28px, 4vw, 52px) clamp(36px, 5vh, 64px);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.friends-page-hero__atmo {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 55%;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 70% at 0% 100%, rgba(61, 142, 255, 0.20) 0%, transparent 70%);
+}
+
+.friends-page-hero__line {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #3d8eff, rgba(61, 142, 255, 0.2), transparent);
+}
+
+.friends-page-hero__decor {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: clamp(180px, 18vw, 220px);
+  font-weight: 900;
+  color: rgba(61, 142, 255, 0.04);
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+}
+
+.friends-page-hero__content {
+  position: relative;
+  z-index: 1;
+}
+
+.friends-page-hero__eyebrow {
+  margin: 0 0 14px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: #3d8eff;
+  opacity: 0.8;
+}
+
+.friends-page-hero__title {
+  margin: 0 0 20px;
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: clamp(56px, 7vw, 88px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: #fff;
+  line-height: 0.9;
+}
+
+.friends-page-hero__stats {
+  display: flex;
+  gap: 20px;
+}
+
+.friends-page-hero__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.friends-page-hero__stat-val {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 36px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.friends-page-hero__stat-val--online {
+  color: #00e676;
+}
+
+.friends-page-hero__stat-label {
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.30);
+}
+
+/* ── Right panel ── */
+.friends-page-panel {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: clamp(28px, 4vh, 52px) clamp(28px, 4vw, 52px);
+  background: #080912;
+  position: relative;
+}
+
+.friends-page-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(61, 142, 255, 0.18);
+}
+
+.friends-page-section-label {
+  margin: 0 0 12px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.friends-page-auth-note,
+.friends-page-note {
+  margin: 0 0 16px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.friends-page-error {
+  margin: 0 0 12px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 13px;
+  color: #ef4444;
+}
+
+/* Add friend row */
+.friends-page-add-row {
+  display: flex;
+  gap: 0;
+  margin-bottom: 28px;
+}
+
+.friends-page-input {
+  flex: 1;
+  height: 42px;
+  padding: 0 16px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-right: none;
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: #fff;
+  transition: border-color 120ms ease;
+}
+
+.friends-page-input:focus {
+  border-color: rgba(61, 142, 255, 0.5);
+  outline: none;
+}
+
+.friends-page-add-btn {
+  padding: 0 20px;
+  height: 42px;
+  border: none;
+  cursor: pointer;
+  background: #3d8eff;
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #01010a;
+  transition: filter 120ms ease;
+}
+
+.friends-page-add-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* Friends list */
+.friends-page-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.friends-page-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 12px;
+}
+
+.friends-page-row__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.friends-page-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 200ms ease;
+}
+
+.friends-page-row__name {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.friends-page-row__meta {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.30);
+  margin-top: 2px;
+}
+
+.friends-page-row__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.friends-page-action-btn {
+  appearance: none;
+  padding: 5px 12px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  transition: filter 120ms ease;
+}
+
+.friends-page-action-btn:hover {
+  filter: brightness(1.2);
+}
+
+.friends-page-action-btn--invite {
+  background: rgba(61, 142, 255, 0.09);
+  border-color: rgba(61, 142, 255, 0.26);
+  color: #3d8eff;
+}
+
+.friends-page-action-btn--danger {
+  background: rgba(239, 68, 68, 0.07);
+  border-color: rgba(239, 68, 68, 0.22);
+  color: #ef4444;
+}
+
+@media (max-width: 700px) {
+  .friends-page-hero {
+    display: none;
+  }
+
+  .friends-page-split {
+    flex-direction: column;
+  }
+}
