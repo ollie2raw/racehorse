@@ -34,6 +34,13 @@ import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
 import { useRenderProfiler } from './debug/renderProfiler';
 import {
+  ClaudeModeScreen,
+  ClaudePrimaryAction,
+  ClaudeSecondaryAction,
+  ClaudeSectionLabel,
+  claudeRgb,
+} from './ui/claudeMode';
+import {
   loadAuthoringSession,
   saveFrozenLesson,
   loadFrozenLesson,
@@ -70,6 +77,22 @@ type TournamentPlayer = {
   userId?: string | null;
   isBot?: boolean;
 };
+
+type AppMode =
+  | 'home'
+  | 'multiplayer'
+  | 'noBrainer'
+  | 'botSetup'
+  | 'bot'
+  | 'ghostSetup'
+  | 'ghost'
+  | 'daily'
+  | 'dailyFritz'
+  | 'league'
+  | 'learn'
+  | 'ratingHistory'
+  | 'singlePlayerHub'
+  | 'tournament';
 
 const EMPTY_MOVES: Move[] = [];
 
@@ -704,22 +727,7 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [appMode, setAppMode] = useState<
-    | 'home'
-    | 'multiplayer'
-    | 'noBrainer'
-    | 'botSetup'
-    | 'bot'
-    | 'ghostSetup'
-    | 'ghost'
-    | 'daily'
-    | 'dailyFritz'
-    | 'league'
-    | 'learn'
-    | 'ratingHistory'
-    | 'singlePlayerHub'
-    | 'tournament'
-  >('home');
+  const [appMode, setAppMode] = useState<AppMode>('home');
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -1979,6 +1987,9 @@ export default function App() {
   const homePlayersOnline = playersOnlineCount ?? 142;
   const homeActiveRooms = Math.max(12, Math.round(homePlayersOnline / 12));
   const homeLeaderRating = '1,820';
+  const [activeHomeMode, setActiveHomeMode] = useState<
+    'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn'
+  >('multiplayer');
   const weeklyAwardRows = Array.isArray(weeklyAwards?.awards) ? weeklyAwards.awards : [];
   const weeklyLeaderHandle = useMemo(() => {
     const mostWins = weeklyAwardRows.find((entry: any) =>
@@ -2828,61 +2839,62 @@ export default function App() {
   if (appMode === 'singlePlayerHub') {
     return (
       <div className={appRootClassName}>
-        <LayoutScreen
-          className="screen lobby-screen mode-home-screen mode-subpage-screen"
-          title="Single Player Modes"
-          subtitle="Choose a mode to play solo or against a bot."
-          contentClassName="screen-shell"
-        >
-          <div className="mode-hub" style={{ width: '100%' }}>
-            <div className="mode-hub-grid">
-              <section className="mode-hub-middle" aria-label="Single player modes">
-                <p className="mode-section-label mode-section-label-practice">Choose Mode</p>
-                <div className="mode-hub-middle-cards single-player-hub-cards">
-                <button
-                  className="mode-option mode-option-secondary mode-accent-bot mode-card-bot"
-                  onClick={() => setAppMode('botSetup')}
-                >
-                  <span className="mode-option-title">Play vs Fritz</span>
-                  <span className="mode-option-meta">Test yourself against the toughest opponent in the room</span>
-                </button>
-                <button
-                  className="mode-option mode-option-secondary mode-accent-ghost mode-card-ghost"
-                  onClick={() => setAppMode('ghostSetup')}
-                >
-                  <span className="mode-option-title">Ghost Mode</span>
-                  <span className="mode-option-meta">
-                    Play against a ghost trained on your own playstyle
+        <div className="screen lobby-screen mode-home-screen mode-subpage-screen claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
+          <ClaudeModeScreen
+            accent="#3d8eff"
+            eyebrow="Choose your mode"
+            title={'SINGLE\nPLAYER'}
+            description="Play vs Fritz, train against your ghost, climb your league, or drill one-turn clears."
+            decor="S"
+            backLabel="Back to Home"
+            onBack={() => setAppMode('home')}
+            heroFooter={
+              <div className="claude-mode-chip-row">
+                <span className="claude-mode-chip">Fritz</span>
+                <span className="claude-mode-chip">Ghost</span>
+                <span className="claude-mode-chip">League</span>
+                <span className="claude-mode-chip">Lab</span>
+              </div>
+            }
+            panel={
+              <div className="claude-mode-panel-stack">
+                <ClaudeSectionLabel>Select Mode</ClaudeSectionLabel>
+                <button type="button" className="claude-mode-choice-row" style={{ ['--row-accent' as string]: '#3d8eff' }} onClick={() => setAppMode('botSetup')}>
+                  <span className="claude-mode-choice-row__ghost-dot" aria-hidden="true" />
+                  <span className="claude-mode-choice-row__content">
+                    <span className="claude-mode-choice-row__title">Play vs Fritz</span>
+                    <span className="claude-mode-choice-row__meta">Test yourself against the toughest opponent in the room.</span>
                   </span>
-                  </button>
-
-                <button
-                  className="mode-option mode-option-secondary mode-accent-league mode-card-league"
-                  onClick={() => setAppMode('league')}
-                >
-                  <span className="mode-option-title">
-                    
-                    Your League
-                  </span>
-                  <span className="mode-option-meta">
-                    One match a day. Climb the table, survive promotion and relegation.
-                  </span>
+                  <span className="claude-mode-choice-row__dot" aria-hidden="true" />
                 </button>
-                <button
-                  className="mode-option mode-option-secondary mode-accent-bot mode-card-practice"
-                  onClick={() => setAppMode('noBrainer')}
-                >
-                  <span className="mode-option-title">No Brainer Lab</span>
-                  <span className="mode-option-meta">Practice one turn clear runs with curated hands</span>
+                <button type="button" className="claude-mode-choice-row" style={{ ['--row-accent' as string]: '#c040ff' }} onClick={() => setAppMode('ghostSetup')}>
+                  <span className="claude-mode-choice-row__ghost-dot" aria-hidden="true" />
+                  <span className="claude-mode-choice-row__content">
+                    <span className="claude-mode-choice-row__title">Ghost Mode</span>
+                    <span className="claude-mode-choice-row__meta">Play against a ghost trained on your own playstyle.</span>
+                  </span>
+                  <span className="claude-mode-choice-row__dot" aria-hidden="true" />
                 </button>
-                </div>
-              </section>
-            </div>
-            <button className="mode-inline-btn single-player-hub-back" onClick={() => setAppMode('home')}>
-              Back to Home
-            </button>
-          </div>
-        </LayoutScreen>
+                <button type="button" className="claude-mode-choice-row" style={{ ['--row-accent' as string]: '#00f0c8' }} onClick={() => setAppMode('league')}>
+                  <span className="claude-mode-choice-row__ghost-dot" aria-hidden="true" />
+                  <span className="claude-mode-choice-row__content">
+                    <span className="claude-mode-choice-row__title">Your League</span>
+                    <span className="claude-mode-choice-row__meta">One match a day. Climb the table and survive promotion.</span>
+                  </span>
+                  <span className="claude-mode-choice-row__dot" aria-hidden="true" />
+                </button>
+                <button type="button" className="claude-mode-choice-row" style={{ ['--row-accent' as string]: '#60a5fa' }} onClick={() => setAppMode('noBrainer')}>
+                  <span className="claude-mode-choice-row__ghost-dot" aria-hidden="true" />
+                  <span className="claude-mode-choice-row__content">
+                    <span className="claude-mode-choice-row__title">No Brainer Lab</span>
+                    <span className="claude-mode-choice-row__meta">Practice one-turn clear runs with curated hands.</span>
+                  </span>
+                  <span className="claude-mode-choice-row__dot" aria-hidden="true" />
+                </button>
+              </div>
+            }
+          />
+        </div>
       </div>
     );
     }
@@ -3433,107 +3445,68 @@ export default function App() {
   if (appMode === 'home') {
     return (
       <div ref={appRootRef} className={appRootClassName}>
-        <div className="layout-screen screen lobby-screen mode-home-screen mode-accent-multiplayer home-lobby-screen" style={{ paddingLeft: '65px', paddingRight: '65px' }}>
+        <div className="layout-screen screen lobby-screen mode-home-screen mode-accent-multiplayer home-lobby-screen claude-home-shell claude-home-screen-shell">
           <div className="layout-screen-bg" aria-hidden="true" />
           <div className="layout-screen-beam" aria-hidden="true" />
           <div className="layout-screen-vignette" aria-hidden="true" />
           <div className="layout-screen-inner home-lobby-shell">
-            <div className="home-main-column" style={{ paddingLeft: "35px", paddingRight: "35px" }}>
-              <div className="mode-hub home-restored-cards" style={{ width: '100%' }}>
-                  <section className="home-utility-grid is-quad" aria-label="Quick actions">
-                    <div className="home-utility-brand" aria-label="Racehorse">
-                      <span className="home-brand-iconbox" aria-hidden="true">
-                        <BoneyardStackIcon className="home-brand-icon" />
-                      </span>
-                      <span className="home-brand-wordmark">RACEHORSE</span>
-                    </div>
-
-                    {authUser ? (
-                      <button
-                        className="mode-option home-utility-card mode-accent-multiplayer"
-                        onClick={() => setUsernameModalOpen(true)}
-                        aria-label="Open player profile"
-                      >
-                        <span className="home-utility-profile-line">
-                          <span className="mode-option-title">{myHandle}</span>
-                          <span className="home-utility-profile-sep">·</span>
-                          <span className="home-utility-profile-rating">{homeRatingLabel}</span>
-                        </span>
-                      </button>
-                    ) : (
-                      <button className="mode-option home-utility-card mode-accent-multiplayer" onClick={() => setAuthModalOpen(true)}>
-                        <span className="home-utility-profile-line">
-                          <span className="mode-option-title">Sign in</span>
-                          <span className="home-utility-profile-rating">Profile</span>
-                        </span>
-                      </button>
-                    )}
-
-                    <button className="mode-option home-utility-card mode-accent-bot" onClick={() => setStatsOpen(true)}>
-                      <span className="mode-option-title">My Stats</span>
+            <div className="claude-accordion-home">
+              <div className="claude-accordion-home__topbar">
+                <div className="claude-accordion-home__brand">RACEHORSE</div>
+                <div className="claude-accordion-home__utilities">
+                  {authUser ? (
+                    <button className="claude-accordion-home__utility" onClick={() => setUsernameModalOpen(true)}>
+                      {myHandle} · {homeRatingLabel}
                     </button>
-
-                    <button className="mode-option home-utility-card mode-accent-track" onClick={() => setFriendsOpen(true)}>
-                      <span className="mode-option-title">Friends</span>
+                  ) : (
+                    <button className="claude-accordion-home__utility" onClick={() => setAuthModalOpen(true)}>
+                      Sign In · Profile
                     </button>
-                  </section>
-
-                  <div className="home-main-grid">
+                  )}
+                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setFriendsOpen(true)}>
+                    Friends
+                  </button>
+                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setStatsOpen(true)}>
+                    Stats
+                  </button>
+                </div>
+              </div>
+              <div className="claude-accordion-home__body">
+                {[
+                  { id: 'multiplayer', short: 'MULTI', label: 'Multiplayer Online', desc: 'Create a private room and play head to head in real time', accent: '#38bdf8', live: true, action: () => setAppMode('multiplayer') },
+                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz, Ghost Mode, Your League & No Brainer Lab', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
+                  { id: 'dailyFritz', short: 'FRITZ', label: 'Daily Fritz Match', desc: 'One fixed live Fritz match per day. Same deals for everyone.', accent: '#e05c6a', action: () => setAppMode('dailyFritz') },
+                  { id: 'daily', short: 'PUZZLE', label: 'Daily Puzzle', desc: 'Solve today’s featured scenario and compare leaderboard results', accent: '#f0c040', action: () => setAppMode('daily') },
+                  { id: 'tournament', short: 'TOURN', label: 'Tournament Mode', desc: 'Round robin (4+ players), matches to 30, play everyone once', accent: '#fb923c', action: () => { setError(''); setAppMode('tournament'); } },
+                  { id: 'learn', short: 'LEARN', label: 'Learn Academy', desc: 'New to dominoes? Learn how to play and win.', accent: '#34d399', action: () => setAppMode('learn') },
+                ].map((mode, index, all) => {
+                  const isActive = activeHomeMode === mode.id;
+                  const hasActive = activeHomeMode !== null;
+                  return (
                     <button
-                      className="mode-option mode-accent-multiplayer mode-card-play-online"
-                      onClick={() => setAppMode('multiplayer')}
+                      key={mode.id}
+                      type="button"
+                      className={`claude-accordion-home__panel${isActive ? ' is-active' : ''}${hasActive ? ' has-active' : ''}`}
+                      style={{ ['--panel-accent' as string]: mode.accent, ['--panel-accent-rgb' as string]: claudeRgb(mode.accent), borderRight: index < all.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
+                      onMouseEnter={() => setActiveHomeMode(mode.id as typeof activeHomeMode)}
+                      onFocus={() => setActiveHomeMode(mode.id as typeof activeHomeMode)}
+                      onClick={mode.action}
                     >
-                      <span className="mode-option-title">Multiplayer Online</span>
-                      <span className="mode-option-meta">Create a private room and play head to head in real time</span>
+                      <div className="claude-accordion-home__panel-atmo" />
+                      <div className="claude-accordion-home__big-number">{index + 1}</div>
+                      {mode.live ? <div className="claude-accordion-home__live">LIVE</div> : null}
+                      <div className="claude-accordion-home__panel-content">
+                        <div className="claude-accordion-home__mode-number">MODE {String(index + 1).padStart(2, '0')}</div>
+                        <div className="claude-accordion-home__mode-title">{mode.label}</div>
+                        <div className="claude-accordion-home__mode-desc">{mode.desc}</div>
+                        <div className="claude-accordion-home__enter">Enter</div>
+                      </div>
+                      <div className="claude-accordion-home__collapsed">
+                        <div className="claude-accordion-home__collapsed-label">{mode.short}</div>
+                      </div>
                     </button>
-
-                    <button
-                      className="mode-option mode-accent-daily-fritz mode-card-daily-fritz"
-                      onClick={() => setAppMode('dailyFritz')}
-                    >
-                      <span className="mode-option-title">Daily Fritz Match</span>
-                      <span className="mode-option-meta">
-                        One fixed live Fritz match per day. Same deals for everyone.
-                      </span>
-                    </button>
-
-                    <button
-                      className="mode-option mode-accent-daily mode-card-daily"
-                      onClick={() => setAppMode('daily')}
-                    >
-                      <span className="mode-option-title">Daily Puzzle</span>
-                      <span className="mode-option-meta">
-                        Solve today's featured scenario and compare leaderboard results
-                      </span>
-                    </button>
-
-                    <button
-                      className="mode-option mode-accent-bot mode-card-single-player"
-                      onClick={() => setAppMode('singlePlayerHub')}
-                    >
-                      <span className="mode-option-title">Single Player Modes</span>
-                      <span className="mode-option-meta">Play vs Fritz, Ghost Mode, Your League, & No Brainer Lab</span>
-                    </button>
-
-                    <button
-                      className="mode-option mode-accent-tournament mode-card-compete"
-                      onClick={() => {
-                        setError('');
-                        setAppMode('tournament');
-                      }}
-                    >
-                      <span className="mode-option-title">Tournament Mode</span>
-                      <span className="mode-option-meta">Round robin (4+ players), matches to 30, play everyone once</span>
-                    </button>
-
-                    <button
-                      className="mode-option mode-accent-learn mode-card-learn"
-                      onClick={() => setAppMode('learn')}
-                    >
-                      <span className="mode-option-title">Learn Academy</span>
-                      <span className="mode-option-meta">New to dominoes? Learn how to play and win.</span>
-                    </button>
-                  </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -3641,167 +3614,167 @@ export default function App() {
 
       {/* Disconnected Lobby Screen */}
       {!isConnected && !isRecoveringConnection && (
-        <LayoutScreen
-          className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-disconnected"
-          title="Multiplayer Online"
-          subtitle="Connect to create a room or join a friend using a room code."
-          contentClassName="multiplayer-menu-card screen-shell"
-        >
-            <p className="lobby-server mode-server-line multiplayer-server-line">Server: {serverUrl}</p>
-            <div className="mode-actions mode-entry-panel">
-              <button
-                className="mode-option mode-option-primary mode-accent-multiplayer multiplayer-connect-hero"
-                onClick={connect}
-                disabled={isConnecting}
-              >
-                <span className="mode-option-title">
-                  {isConnecting ? 'Connecting...' : 'Connect'}
-                </span>
-                <span className="mode-option-meta">Enable room creation and room joins</span>
-              </button>
-              <button className="mode-option mode-option-secondary multiplayer-create-muted" onClick={createRoom} disabled>
-                <span className="mode-option-title">Create New Room</span>
-                <span className="mode-option-meta">Connect first to start hosting</span>
-              </button>
-              <div className="mode-join-row">
-                <input
-                  className="mode-join-input"
-                  type="text"
-                  placeholder="Room Code"
-                  value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  maxLength={6}
-                  disabled
+        <div className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
+          <ClaudeModeScreen
+            accent="#3d8eff"
+            eyebrow="Real-time Online"
+            title={'MULTI\nPLAYER'}
+            description="Connect to create a room or join a friend using a room code."
+            decor="M"
+            backLabel="Back to Home"
+            onBack={() => setAppMode('home')}
+            heroFooter={<div className="claude-mode-chip-row"><span className="claude-mode-chip">Server {serverUrl}</span></div>}
+            panel={
+              <div className="claude-mode-panel-stack">
+                <ClaudePrimaryAction
+                  accent="#3d8eff"
+                  title={isConnecting ? 'Connecting...' : 'Connect'}
+                  meta="Enable room creation and room joins"
+                  onClick={connect}
+                  disabled={isConnecting}
                 />
-                <button className="mode-inline-btn multiplayer-join-btn" onClick={joinRoom} disabled>
-                  Join Room
-                </button>
+                <ClaudeSecondaryAction title="Create New Room" meta="Connect first to start hosting" disabled />
+                <div className="claude-mode-join-box">
+                  <input
+                    type="text"
+                    placeholder="ROOM CODE"
+                    value={roomCode}
+                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                    maxLength={6}
+                    disabled
+                  />
+                  <button type="button" onClick={joinRoom} disabled>
+                    Join
+                  </button>
+                </div>
+                {serverWaking ? (
+                  <div className="claude-mode-card" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                    Connecting to server... this may take up to 60 seconds on first load.
+                  </div>
+                ) : null}
               </div>
-              {serverWaking && (
-                <p className="mode-subtitle" style={{ margin: '2px 0 0' }}>
-                  Connecting to server... (this may take up to 60 seconds on first load)
-                </p>
-              )}
-            </div>
-        </LayoutScreen>
+            }
+          />
+        </div>
       )}
 
       {/* Lobby Screen */}
       {isConnected && !joinedRoom && (
-        <LayoutScreen
-          className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-lobby"
-          title="Join or Create a Room"
-          subtitle="Create a new room or enter a code to join your friend instantly."
-          contentClassName="multiplayer-menu-card screen-shell"
-        >
-            <div className="mode-actions mode-entry-panel">
-              <button
-                className={`mode-option mode-option-primary mode-accent-multiplayer multiplayer-create-hero ${pendingUiAction === 'create' ? 'is-loading' : ''}`}
-                onClick={createRoom}
-                disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
-              >
-                <span className="mode-option-title">{pendingUiAction === 'create' ? 'Creating…' : 'Create New Room'}</span>
-                <span className="mode-option-meta">Start a room and share the code</span>
-              </button>
-              <div className="mode-join-row">
-                <input
-                  className="mode-join-input"
-                  type="text"
-                  placeholder="Room Code"
-                  value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  maxLength={6}
+        <div className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
+          <ClaudeModeScreen
+            accent="#3d8eff"
+            eyebrow="Private Room"
+            title={'JOIN OR\nCREATE'}
+            description="Create a new room or enter a code to join your friend instantly."
+            decor="R"
+            backLabel="Disconnect"
+            onBack={() => disconnect('user disconnect')}
+            heroFooter={<div className="claude-mode-chip-row"><span className="claude-mode-chip">Connected</span></div>}
+            panel={
+              <div className="claude-mode-panel-stack">
+                <ClaudePrimaryAction
+                  accent="#3d8eff"
+                  title={pendingUiAction === 'create' ? 'Creating…' : 'Create New Room'}
+                  meta="Start a room and share the code"
+                  onClick={createRoom}
                   disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
                 />
-                <button
-                  className={`mode-inline-btn multiplayer-join-btn ${pendingUiAction === 'join' ? 'is-loading' : ''}`}
-                  onClick={joinRoom}
-                  disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
-                >
-                  {pendingUiAction === 'join' ? 'Joining…' : 'Join Room'}
-                </button>
+                <div className="claude-mode-join-box">
+                  <input
+                    type="text"
+                    placeholder="ROOM CODE"
+                    value={roomCode}
+                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                    maxLength={6}
+                    disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
+                  />
+                  <button
+                    type="button"
+                    onClick={joinRoom}
+                    disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
+                  >
+                    {pendingUiAction === 'join' ? 'Joining…' : 'Join'}
+                  </button>
+                </div>
               </div>
-              <button className="mode-option mode-option-secondary multiplayer-disconnect-muted" onClick={() => disconnect('user disconnect')}>
-                <span className="mode-option-title">Disconnect</span>
-                <span className="mode-option-meta">Return to offline mode selector</span>
-              </button>
-            </div>
-        </LayoutScreen>
+            }
+          />
+        </div>
       )}
 
       {/* Room Screen (waiting for game) */}
       {isConnected && joinedRoom && !state && (
-        <LayoutScreen
-          className="screen room-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer multiplayer-screen-room"
-          title={<span>Room: <span className="multiplayer-room-code">{joinedRoom}</span></span>}
-          subtitle="Waiting for all players to join before starting the hand."
-          contentClassName="multiplayer-menu-card screen-shell"
-        >
-            <div className="mode-entry-panel room-entry-panel">
-            <div className="players-list mode-room-list multiplayer-players-panel">
-              <h3 className="multiplayer-players-label">Players ({players.length}/2)</h3>
-              {players.map((p) => (
-                <div
-                  key={p.id}
-                  className={`player-item mode-room-item ${p.id === you ? 'you' : ''}`}
-                >
-                  <div className="mode-room-item-label">
-                    <span className="mode-room-item-title">
-                      {p.id === you ? 'You' : `@${p.username}`}
-                    </span>
-                    {p.id === you && <span className="mode-room-item-sub">@{p.username}</span>}
+        <div className="screen room-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
+          <ClaudeModeScreen
+            accent="#3d8eff"
+            eyebrow="Room Code"
+            title={joinedRoom}
+            description="Waiting for all players to join before starting the hand."
+            decor="R"
+            heroClassName="claude-mode-hero--room-code"
+            panelClassName="claude-mode-panel--room-lobby"
+            backLabel="Leave Room"
+            onBack={() => disconnect('user leave room')}
+            heroFooter={<div className="claude-mode-chip-row"><span className="claude-mode-chip">{players.length}/2 players connected</span></div>}
+            panel={
+              <div className="claude-mode-panel-stack">
+                <ClaudeSectionLabel>Players</ClaudeSectionLabel>
+                {players.map((p) => (
+                  <div key={p.id} className={`claude-mode-player-card ${p.id === players[0]?.id ? 'is-host' : ''}`}>
+                    <div>
+                      <div className="claude-mode-player-card__title">{p.id === you ? 'You' : `@${p.username}`}</div>
+                      <div className="claude-mode-player-card__meta">
+                        {p.id === you ? `@${p.username}` : p.id === players[0]?.id ? 'Room host' : 'Connected'}
+                      </div>
+                    </div>
+                    {p.id === players[0]?.id ? <span className="claude-mode-pill">Host</span> : null}
                   </div>
-                  {p.id === players[0]?.id && <span className="badge multiplayer-host-badge">Host</span>}
-                </div>
-              ))}
-              {players.length < 2 && <div className="waiting multiplayer-waiting-live">Waiting for another player...</div>}
-            </div>
-            {players.length === 2 && isRoomHost && (
-              <button
-                className={`mode-option mode-option-primary mode-accent-multiplayer ${pendingUiAction === 'start' ? 'is-loading' : ''}`}
-                onClick={startGame}
-                disabled={pendingUiAction === 'start'}
-              >
-                <span className="mode-option-title">{pendingUiAction === 'start' ? 'Starting…' : 'Start Game'}</span>
-                <span className="mode-option-meta">Begin the live multiplayer hand</span>
-              </button>
-            )}
-            {players.length === 2 && !isRoomHost && (
-              <div className="mode-option mode-option-secondary" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">Waiting for Host</span>
-                <span className="mode-option-meta">The room host starts the match.</span>
+                ))}
+                {players.length < 2 ? (
+                  <div className="claude-mode-player-card is-muted">
+                    <div>
+                      <div className="claude-mode-player-card__title">Waiting for another player…</div>
+                      <div className="claude-mode-player-card__meta">Share the invite link or room code.</div>
+                    </div>
+                  </div>
+                ) : null}
+                {players.length === 2 && isRoomHost ? (
+                  <ClaudePrimaryAction
+                    accent="#3d8eff"
+                    title={pendingUiAction === 'start' ? 'Starting…' : 'Start Game'}
+                    meta="Begin the live multiplayer hand"
+                    onClick={startGame}
+                    disabled={pendingUiAction === 'start'}
+                  />
+                ) : null}
+                {players.length === 2 && !isRoomHost ? (
+                  <div className="claude-mode-card">
+                    <div className="claude-mode-player-card__title">Waiting for Host</div>
+                    <div className="claude-mode-player-card__meta">The room host starts the match.</div>
+                  </div>
+                ) : null}
+                {roomRecoveryState !== 'idle' ? (
+                  <div className="claude-mode-card">
+                    <div className="claude-mode-player-card__title">
+                      {roomRecoveryState === 'reconnecting'
+                        ? 'Reconnecting…'
+                        : roomRecoveryState === 'resyncing'
+                          ? 'Syncing room…'
+                          : 'Reconnect Failed'}
+                    </div>
+                    <div className="claude-mode-player-card__meta">
+                      {roomRecoveryMessage || 'Restoring your room session.'}
+                    </div>
+                  </div>
+                ) : null}
+                {roomRecoveryState === 'failed' ? (
+                  <ClaudePrimaryAction accent="#3d8eff" title="Retry Reconnect" meta="Attempt to restore this room session" onClick={retryRoomRecovery} />
+                ) : null}
+                <ClaudeSecondaryAction title="Copy Invite Link" meta="Share one-tap room join with friends" onClick={copyInviteLink} />
               </div>
-            )}
-            {roomRecoveryState !== 'idle' && (
-              <div className="mode-option mode-option-secondary" style={{ cursor: 'default' }}>
-                <span className="mode-option-title">
-                  {roomRecoveryState === 'reconnecting'
-                    ? 'Reconnecting…'
-                    : roomRecoveryState === 'resyncing'
-                      ? 'Syncing room…'
-                      : 'Reconnect Failed'}
-                </span>
-                <span className="mode-option-meta">
-                  {roomRecoveryMessage || 'Restoring your room session.'}
-                </span>
-              </div>
-            )}
-            {roomRecoveryState === 'failed' && (
-              <button className="mode-option mode-option-primary mode-accent-multiplayer" onClick={retryRoomRecovery}>
-                <span className="mode-option-title">Retry Reconnect</span>
-                <span className="mode-option-meta">Attempt to restore this room session</span>
-              </button>
-            )}
-            <button className="mode-option mode-option-secondary multiplayer-copy-cta" onClick={copyInviteLink}>
-              <span className="mode-option-title">Copy Invite Link</span>
-              <span className="mode-option-meta">Share one-tap room join with friends</span>
-            </button>
-            <button className="mode-option mode-option-secondary multiplayer-leave-muted" onClick={() => disconnect('user leave room')}>
-              <span className="mode-option-title">Leave Room</span>
-              <span className="mode-option-meta">Exit this room and return to setup</span>
-            </button>
-            </div>
-        </LayoutScreen>
+            }
+          />
+        </div>
       )}
 
       {/* Game Screen */}

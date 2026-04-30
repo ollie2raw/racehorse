@@ -945,7 +945,7 @@
   height: 100dvh;
   width: 100%;
   overflow: hidden;
-  padding-inline: 24px !important;
+  padding: 0 !important;
 }
 
 .daily-entry-screen .screen-shell {

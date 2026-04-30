@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Racehorse — Redesign v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Space+Grotesk:wght@400;500;600&family=Outfit:wght@700;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="rh2-shared.jsx"></script>
+<script type="text/babel" src="rh2-home.jsx"></script>
+<script type="text/babel" src="rh2-single.jsx"></script>
+<script type="text/babel" src="rh2-ghost.jsx"></script>
+<script type="text/babel" src="rh2-daily.jsx"></script>
+<script type="text/babel" src="rh2-multi.jsx"></script>
+<script type="text/babel" src="rh2-social.jsx"></script>
+<script type="text/babel" src="rh-leaderboard.jsx"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: #01010a;
+    color: rgba(255,255,255,0.88);
+    -webkit-font-smoothing: antialiased;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+  #root { height: 100%; }
+  @keyframes screenSlide {
+    from { opacity: 0; transform: translateX(16px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .screen-in { animation: screenSlide 200ms cubic-bezier(0.22,1,0.36,1) both; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useCallback } = React;
+
+/* ── Screen map (v2) ─────────────────────────────────────── */
+const SCREENS2 = {
+  'home':               HomeScreen,
+  'single-player':      SinglePlayerModes,
+  'fritz-setup':        FritzSetup,
+  'ghost-mode':         GhostMode,
+  'daily-puzzle-setup': DailyPuzzleSetup,
+  'daily-fritz-setup':  DailyFritzSetup,
+  'daily-fritz-result': DailyFritzResult,
+  'multiplayer':        MultiplayerSetup,
+  'multiplayer-lobby':  MultiplayerLobby,
+  'tournament':         TournamentLobby,
+  'friends':            FriendsPage,
+  'my-stats':           MyStatsPage,
+  'leaderboard-fritz':  LeaderboardFritz,
+  'leaderboard-puzzle': LeaderboardPuzzle,
+};
+
+const SCREEN_LIST2 = [
+  { id: 'home',               label: 'Home' },
+  { id: 'single-player',      label: 'Single Player' },
+  { id: 'fritz-setup',        label: 'Fritz Setup' },
+  { id: 'ghost-mode',         label: 'Ghost Mode' },
+  { id: 'daily-puzzle-setup', label: 'Daily Puzzle' },
+  { id: 'daily-fritz-setup',  label: 'Daily Fritz' },
+  { id: 'daily-fritz-result', label: 'Fritz Result' },
+  { id: 'multiplayer',        label: 'Multiplayer' },
+  { id: 'multiplayer-lobby',  label: 'MP Lobby' },
+  { id: 'tournament',         label: 'Tournament' },
+  { id: 'friends',            label: 'Friends' },
+  { id: 'my-stats',           label: 'My Stats' },
+  { id: 'leaderboard-fritz',  label: 'LB Fritz' },
+  { id: 'leaderboard-puzzle', label: 'LB Puzzle' },
+];
+
+function ScreenPicker2({ current, onChange }) {
+  const [open, setOpen] = useState(false);
+  const cur = SCREEN_LIST2.find(s => s.id === current);
+
+  return (
+    <div style={{ position: 'fixed', bottom: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
+      {open && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(4,5,13,0.97)', border: '1px solid rgba(255,255,255,0.10)',
+          padding: '10px', backdropFilter: 'blur(28px)',
+          display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 4, width: 500,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+        }}>
+          {SCREEN_LIST2.map(s => (
+            <button key={s.id} onClick={() => { onChange(s.id); setOpen(false); }} style={{
+              padding: '7px 8px', cursor: 'pointer', textAlign: 'center',
+              background: s.id === current ? 'rgba(0,240,200,0.10)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${s.id === current ? 'rgba(0,240,200,0.30)' : 'rgba(255,255,255,0.07)'}`,
+              fontFamily: "'Barlow Condensed',sans-serif", fontSize: '11px', fontWeight: 700,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: s.id === current ? '#00f0c8' : 'rgba(255,255,255,0.45)',
+              transition: 'all 120ms ease',
+            }}
+              onMouseEnter={e => { if(s.id!==current){ e.currentTarget.style.color='rgba(255,255,255,0.8)'; e.currentTarget.style.background='rgba(255,255,255,0.06)'; }}}
+              onMouseLeave={e => { if(s.id!==current){ e.currentTarget.style.color='rgba(255,255,255,0.45)'; e.currentTarget.style.background='rgba(255,255,255,0.03)'; }}}
+            >{s.label}</button>
+          ))}
+        </div>
+      )}
+      <button onClick={() => setOpen(o => !o)} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '6px 16px',
+        background: 'rgba(4,5,13,0.95)', border: '1px solid rgba(255,255,255,0.12)',
+        backdropFilter: 'blur(24px)', cursor: 'pointer',
+        fontFamily: "'Barlow Condensed',sans-serif", fontSize: '11px', fontWeight: 700,
+        letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
+        transition: 'all 130ms ease',
+      }}
+        onMouseEnter={e => e.currentTarget.style.borderColor='rgba(255,255,255,0.22)'}
+        onMouseLeave={e => e.currentTarget.style.borderColor='rgba(255,255,255,0.12)'}
+      >
+        <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+          <rect x="1" y="1" width="3.5" height="3.5" rx="0.6" /><rect x="6.5" y="1" width="3.5" height="3.5" rx="0.6" />
+          <rect x="1" y="6.5" width="3.5" height="3.5" rx="0.6" /><rect x="6.5" y="6.5" width="3.5" height="3.5" rx="0.6" />
+        </svg>
+        {cur?.label || 'Screens'}
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d={open ? 'M1 5.5L4 2.5l3 3' : 'M1 2.5L4 5.5l3-3'} />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/* ── App ─────────────────────────────────────────────────── */
+function App() {
+  const [screen, setScreen] = useState(() => {
+    try { return localStorage.getItem('rh2-screen') || 'home'; } catch { return 'home'; }
+  });
+  const [key, setKey] = useState(0);
+
+  const navigate = useCallback((to) => {
+    try { localStorage.setItem('rh2-screen', to); } catch {}
+    setScreen(to);
+    setKey(k => k + 1);
+  }, []);
+
+  const ScreenComp = SCREENS2[screen] || HomeScreen;
+
+  return (
+    <>
+      <div key={key} className="screen-in">
+        <ScreenComp navigate={navigate} />
+      </div>
+      <ScreenPicker2 current={screen} onChange={navigate} />
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
