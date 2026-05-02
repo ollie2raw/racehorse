@@ -1,4 +1,5 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect } from 'react';
+import { ScoreBoard } from './ScoreBoard';
 
 interface TrackPlayer {
   label: string;
@@ -13,13 +14,6 @@ interface ScoreTrackOverlayProps {
   target?: number;
 }
 
-function clampScore(value: number, target: number): number {
-  if (!Number.isFinite(value)) return 0;
-  if (value < 0) return 0;
-  if (value > target) return target;
-  return Math.floor(value);
-}
-
 export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: ScoreTrackOverlayProps) {
   useEffect(() => {
     if (!open) return;
@@ -32,34 +26,6 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
 
   if (!open) return null;
 
-  const laneLength = Math.floor(target / 2);
-  // 6 groups of 5 on the left for each row.
-  const topMainLane = Array.from({ length: laneLength }, (_, i) => laneLength - i); // 30..1
-  const bottomMainLane = Array.from({ length: laneLength }, (_, i) => laneLength + 1 + i); // 31..60
-  const renderLane = (
-    values: number[],
-    pegValue: number | null,
-    player: TrackPlayer,
-    lane: 'outer' | 'inner',
-  ) => {
-    const nodes: ReactNode[] = [];
-    values.forEach((n, idx) => {
-      nodes.push(
-        <div
-          key={`${player.label}-${lane}-hole-${n}`}
-          className={`score-hole ${pegValue === n ? `is-peg ${player.tone}` : ''} ${n % 5 === 0 ? 'is-mark' : ''} ${n % 15 === 0 ? 'is-major' : ''}`}
-          title={`${player.label}: ${n}`}
-        />,
-      );
-      if (idx < values.length - 1 && (idx + 1) % 5 === 0) {
-        nodes.push(
-          <div key={`${player.label}-${lane}-gap-${n}`} className="score-gap" aria-hidden="true" />,
-        );
-      }
-    });
-    return nodes;
-  };
-
   return (
     <div className="score-track-overlay" role="dialog" aria-modal="true" aria-label="Score track">
       <button className="score-track-backdrop" onClick={onClose} aria-label="Close score track" />
@@ -70,46 +36,9 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
             Close
           </button>
         </div>
-        <div className="score-track-board">
-          {players.map((player, playerIndex) => {
-            const pegAt = clampScore(player.score, target);
-            const isMirrored = playerIndex === 1;
-            const topSoloPeg = pegAt === 0;
-            const bottomSoloPeg = pegAt >= target;
-            const topMainPeg = pegAt >= 1 && pegAt <= laneLength ? pegAt : null;
-            const bottomMainPeg = pegAt > laneLength && pegAt < target ? pegAt : null;
-            return (
-              <div
-                className={`score-track-lane ${isMirrored ? 'score-track-lane--mirrored' : ''}`}
-                key={player.label}
-              >
-                <div className="score-track-meta">
-                  <span className="score-track-name">{player.label}</span>
-                  <span className="score-track-value">{player.score}</span>
-                </div>
-                <div className="score-track-lane-grid">
-                  <div className="score-track-holes score-track-holes--outer">
-                    {renderLane(topMainLane, topMainPeg, player, 'outer')}
-                    <div className="score-gap score-gap-solo" aria-hidden="true" />
-                    <div
-                      className={`score-hole score-hole-solo ${topSoloPeg ? `is-peg ${player.tone}` : ''}`}
-                      title={`${player.label}: start`}
-                    />
-                  </div>
-                  <div className="score-track-holes score-track-holes--inner">
-                    {renderLane(bottomMainLane, bottomMainPeg, player, 'inner')}
-                    <div className="score-gap score-gap-solo" aria-hidden="true" />
-                    <div
-                      className={`score-hole score-hole-solo ${bottomSoloPeg ? `is-peg ${player.tone}` : ''}`}
-                      title={`${player.label}: finish`}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <ScoreBoard players={players} target={target} />
       </div>
     </div>
   );
 }
+

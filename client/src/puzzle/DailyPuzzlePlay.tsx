@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { Board, DominoTile, RotateOverlay } from '../components';
+import { Board, DominoTile, RotateOverlay, ScoreBoard } from '../components';
 import type { Move, PlacedTile, Tile, BoardState } from '../types';
 import {
   applyPlayMove,
@@ -279,6 +279,32 @@ export default function DailyPuzzlePlay({
 
       <div className="wl-stage-shell">
         <div className="board-area wl-board-area" data-ui="board">
+          <div
+            style={{
+              position: 'absolute',
+              top: 12,
+              left: 12,
+              zIndex: 8,
+              borderRadius: 18,
+              border: '1.5px solid rgba(236,252,245,0.22)',
+              background: 'rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+              padding: '4px 8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <ScoreBoard
+              compact
+              target={60}
+              players={[
+                { label: 'Puzzle', score: 0, tone: 'opp' },
+                { label: 'You', score: moves, tone: 'you' },
+              ]}
+            />
+          </div>
           <Board
             board={match.board}
             legalMoves={legalMoves}

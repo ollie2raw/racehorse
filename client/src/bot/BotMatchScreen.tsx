@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay, RotateOverlay } from '../components';
+import { Board, BoneyardStackIcon, DominoTile, ScoreBoard, ScoreTrackOverlay, RotateOverlay } from '../components';
 import TileRack from '../components/TileRack';
 import type { BoardState, BranchArm, HubDouble, Move, PlacedTile, PlacementPosition, Tile } from '../types';
 import {
@@ -5410,9 +5410,11 @@ export default function BotMatchScreen({
       const isLandscape = window.innerWidth > window.innerHeight;
       const isMobileWidth = window.innerWidth <= 900;
       
-      const forceTwoRows = !isLandscape && isMobileWidth && tileCount > 7;
+      // Split into two rows if hand is large
+      const forceTwoRows = tileCount > 9;
       
-      const maxTileSize = 56;
+      // Shrink tiles if hand is large or in mobile landscape
+      const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 46 : 56);
       let tileWidth = maxTileSize;
       
       // Calculate available width for hand
@@ -5422,7 +5424,7 @@ export default function BotMatchScreen({
       tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
       
       const trayHeight = forceTwoRows 
-        ? (isMobileWidth ? 110 : 138) 
+        ? 138 
         : (isLandscape && isMobileWidth ? 70 : 120);
         
       document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
@@ -5716,6 +5718,34 @@ export default function BotMatchScreen({
         className={`board-area wl-board-area ${ghostBoardPulse ? 'ghost-board-pulse' : ''} ${isLessonLayoutMode ? 'learn-lesson-board-area' : ''}`}
         data-ui="board"
       >
+        {!match.gameOver && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 12,
+              left: 12,
+              zIndex: 8,
+              borderRadius: 18,
+              border: '1.5px solid rgba(236,252,245,0.22)',
+              background: 'rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+              padding: '4px 8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <ScoreBoard
+              compact
+              target={60}
+              players={[
+                { label: opponentLabel, score: match.players.bot.score, tone: 'opp' },
+                { label: 'You', score: match.players.you.score, tone: 'you' },
+              ]}
+            />
+          </div>
+        )}
         {scoreToast && (
           <div
             style={{
@@ -6419,7 +6449,12 @@ export default function BotMatchScreen({
           </div>
         </div>
 
-        <div className="bot-hud-center-cluster" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="bot-hud-center-cluster" style={{ 
+          position: 'relative', 
+          display: handActive ? 'flex' : 'none', 
+          alignItems: 'center', 
+          justifyContent: 'center' 
+        }}>
           {turnLabel ? (
             <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`} style={{ transform: 'none' }}>
               {turnLabel}
@@ -6434,7 +6469,7 @@ export default function BotMatchScreen({
               padding: '0 18px',
               gap: '8px',
               borderRadius: '999px',
-              display: match.handOver && !match.gameOver ? 'none' : 'flex',
+              display: 'flex',
               flexDirection: 'row',
               alignItems: 'center',
               position: 'absolute',

@@ -3,7 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import type { Socket } from 'socket.io-client';
 import './App.css';
-import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay, RotateOverlay } from './components';
+import { Board, BoneyardStackIcon, DominoTile, ScoreBoard, ScoreTrackOverlay, RotateOverlay } from './components';
 import TileRack from './components/TileRack';
 import {
   playDrawSound,
@@ -1978,6 +1978,7 @@ export default function App() {
   const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
   const isMyTurn = currentTurnId === you;
   const authoritativeMyHand = state?.players[you]?.hand ?? [];
+  const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
   const handForRenderBase = drawSequenceActive && drawStepActorId === you
     ? (drawStepMyHand ?? authoritativeMyHand)
     : authoritativeMyHand;
@@ -2266,10 +2267,11 @@ export default function App() {
       const isLandscape = window.innerWidth > window.innerHeight;
       const isMobileWidth = window.innerWidth <= 900;
       
-      // Force two rows only in portrait mobile if hand is large
-      const forceTwoRows = !isLandscape && isMobileWidth && tileCount > 7;
+      // Split into two rows if hand is large
+      const forceTwoRows = tileCount > 9;
       
-      const maxTileSize = 56;
+      // Shrink tiles if hand is large or in mobile landscape
+      const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 46 : 56);
       let tileWidth = maxTileSize;
       
       // Calculate available width for hand
@@ -4131,7 +4133,7 @@ export default function App() {
                 position: 'absolute',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                display: 'flex',
+                display: isHandActive ? 'flex' : 'none',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
@@ -4189,8 +4191,36 @@ export default function App() {
           </div>
 
           <div className="wl-stage-shell">
-            <div className="board-area wl-board-area" data-ui="board">
-              {scoreToast && (
+              <div className="board-area wl-board-area" data-ui="board">
+                {!state.gameOver && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 12,
+                      left: 12,
+                      zIndex: 8,
+                      borderRadius: 18,
+                      border: '1.5px solid rgba(236,252,245,0.22)',
+                      background: 'rgba(255,255,255,0.08)',
+                      backdropFilter: 'blur(20px)',
+                      boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+                      padding: '4px 8px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <ScoreBoard
+                      compact
+                      target={60}
+                      players={[
+                        { label: opponentName, score: opponentScore, tone: 'opp' },
+                        { label: myName, score: myScore, tone: 'you' },
+                      ]}
+                    />
+                  </div>
+                )}
+                {scoreToast && (
                 <div
                   style={{
                     position: 'absolute',
