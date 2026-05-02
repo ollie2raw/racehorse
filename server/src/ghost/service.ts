@@ -632,7 +632,11 @@ function buildStyleProfileFromSnapshots(
   };
 }
 
-function buildCompositeLog(games: GhostGameRow[], styleGames: GhostGameRow[]): GhostCompositeLog {
+function buildCompositeLog(
+  games: GhostGameRow[],
+  styleGames: GhostGameRow[],
+  previousLog?: GhostCompositeLog | null,
+): GhostCompositeLog {
   const states = new Map<
     string,
     {
@@ -691,8 +695,19 @@ function buildCompositeLog(games: GhostGameRow[], styleGames: GhostGameRow[]): G
       return a.boardState.localeCompare(b.boardState);
     });
 
+  const existingSnapshots = new Map<string, GhostGameStyleSnapshot>();
+  if (previousLog?.recentGameStyles) {
+    for (const snapshot of previousLog.recentGameStyles) {
+      existingSnapshots.set(snapshot.gameId, snapshot);
+    }
+  }
+
   const recentGameStyles = styleGames
-    .map((game) => analyzeGameStyle(game))
+    .map((game) => {
+      const existing = existingSnapshots.get(game.id);
+      if (existing) return existing;
+      return analyzeGameStyle(game);
+    })
     .filter((entry): entry is GhostGameStyleSnapshot => Boolean(entry))
     .slice(0, 20);
 
@@ -755,9 +770,9 @@ export function computeFritzRatingChange(
 
 export async function getGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
   const profile = await ensureGhostProfile(userId);
-  const recentGames = await fetchRecentGhostGames(userId, 20);
-  const styleGames = await fetchRecentGhostGames(userId, 50);
-  const compositeLog = recentGames.length > 0 ? buildCompositeLog(recentGames, styleGames) : null;
+  const styleGames = await fetchRecentGhostGames(userId, 30);
+  const recentGames = styleGames.slice(0, 20);
+  const compositeLog = recentGames.length > 0 ? buildCompositeLog(recentGames, styleGames, profile.composite_log) : null;
   const styleProfile = compositeLog
     ? buildStyleProfileFromSnapshots(compositeLog.recentGameStyles)
     : null;
@@ -831,9 +846,9 @@ export async function completeGhostGame(params: {
     matchId: params.matchId,
   });
 
-  const recentGames = await fetchRecentGhostGames(params.userId, 20);
-  const styleGames = await fetchRecentGhostGames(params.userId, 50);
-  const compositeLog = buildCompositeLog(recentGames, styleGames);
+  const styleGames = await fetchRecentGhostGames(params.userId, 30);
+  const recentGames = styleGames.slice(0, 20);
+  const compositeLog = buildCompositeLog(recentGames, styleGames, profile.composite_log);
   const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
   const isRatingEligible = isGhostRatingEligible(params.finalScore, params.opponentScore);
 
