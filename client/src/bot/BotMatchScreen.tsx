@@ -5406,15 +5406,33 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     const updateHandTileSize = () => {
+      const isMobile = window.innerWidth <= 600;
       const tileCount = Math.max(1, match.players.you.hand.length);
-      const forceTwoRows = tileCount > 9;
-      const maxTileSize = 56; // 14-tile reference size cap
+      
+      // On mobile portrait, we almost always want 2 rows to keep it compact and reachable
+      const forceTwoRows = isMobile || tileCount > 9;
+      
+      const maxTileSize = isMobile ? 44 : 56; 
       let tileWidth = maxTileSize;
-      if (tileCount >= 9 && tileCount <= 10) tileWidth = 64;
-      else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
-      else if (tileCount >= 15) tileWidth = 48;
+      
+      if (!isMobile) {
+        if (tileCount >= 9 && tileCount <= 10) tileWidth = 64;
+        else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
+        else if (tileCount >= 15) tileWidth = 48;
+      } else {
+        // Mobile sizes
+        if (tileCount <= 7) tileWidth = 44;
+        else if (tileCount <= 10) tileWidth = 40;
+        else tileWidth = 36;
+      }
+      
       tileWidth = Math.min(tileWidth, maxTileSize);
-      const trayHeight = forceTwoRows ? 138 : 120;
+      
+      // Calculate tray height based on rows and safe area
+      const trayHeight = forceTwoRows 
+        ? (isMobile ? 110 : 138) 
+        : 120;
+        
       document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
       setHandCompactStacked(forceTwoRows);
@@ -5570,10 +5588,15 @@ export default function BotMatchScreen({
     !match.handOver &&
     !match.gameOver;
   const normalHandRows = handCompactStacked
-    ? [
-        match.players.you.hand.slice(0, Math.ceil(match.players.you.hand.length / 2)),
-        match.players.you.hand.slice(Math.ceil(match.players.you.hand.length / 2)),
-      ]
+    ? (() => {
+        const tiles = match.players.you.hand;
+        const isMobile = typeof window !== 'undefined' && window.innerWidth <= 600;
+        if (isMobile && tiles.length === 7) {
+          return [tiles.slice(0, 4), tiles.slice(4)];
+        }
+        const midpoint = Math.ceil(tiles.length / 2);
+        return [tiles.slice(0, midpoint), tiles.slice(midpoint)];
+      })()
     : [match.players.you.hand];
 
   const lessonCoachPanel = showLessonCoachPanel ? (
@@ -6349,120 +6372,106 @@ export default function BotMatchScreen({
       )}
 
       <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
-        <div className="bot-hud-left-cluster">
-          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <button
-              type="button"
-              className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
-              ref={opponentPillRef}
-              onClick={() => setScoreTrackOpen(true)}
-              aria-label="Open score track"
-              style={{ width: ghostSubLabel ? 'auto' : 110, minWidth: ghostSubLabel ? 140 : 110, padding: '0 12px' }}
-            >
-              <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-                {ghostSubLabel && (
-                  <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
-                    {formatGhostName(ghostSubLabel)}
-                  </span>
-                )}
-                <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
-              </div>
-              <span className="wl-player-score">{match.players.bot.score}</span>
-            </button>
-            {wantsOriginalGuidedRecordMode ? (
-              <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 420 }}>
-                {guidedRecordFritzPalette.map((tile, idx) => {
-                  const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
-                  return (
-                  <DominoTile
-                    key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
-                    tile={tile}
-                    size={32}
-                    rotation={0}
-                    selected={selectedController === 'bot' && !!selectedTile && tileEquals(selectedTile, tile)}
-                    highlight={playable}
-                    disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
-                    onClick={() => {
-                      if (!handActive || match.currentPlayer !== 'bot') return;
-                      if (!playable) return;
-                      setSelectedTile(tile);
-                      setSelectedController('bot');
-                    }}
-                  />
-                )})}
-              </div>
-            ) : (
-              <TileRack
-                count={match.players.bot.hand.length}
-                isActive={botTurn}
-                variant="default"
-              />
-            )}          </div>
-        </div>
+        <div className="bot-hud-row-1">
+          <div className="bot-hud-left-cluster">
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
+                ref={opponentPillRef}
+                onClick={() => setScoreTrackOpen(true)}
+                aria-label="Open score track"
+                style={{ width: 'auto', minWidth: ghostSubLabel ? 'min(140px, 32vw)' : 'min(110px, 25vw)', padding: '0 12px' }}
+              >
+                <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
+                  {ghostSubLabel && (
+                    <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
+                      {formatGhostName(ghostSubLabel)}
+                    </span>
+                  )}
+                  <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
+                </div>
+                <span className="wl-player-score">{match.players.bot.score}</span>
+              </button>
+              {wantsOriginalGuidedRecordMode ? (
+                <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'min(420px, 40vw)' }}>
+                  {guidedRecordFritzPalette.map((tile, idx) => {
+                    const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
+                    return (
+                    <DominoTile
+                      key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
+                      tile={tile}
+                      size={28}
+                      rotation={0}
+                      selected={selectedController === 'bot' && !!selectedTile && tileEquals(selectedTile, tile)}
+                      highlight={playable}
+                      disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
+                      onClick={() => {
+                        if (!handActive || match.currentPlayer !== 'bot') return;
+                        if (!playable) return;
+                        setSelectedTile(tile);
+                        setSelectedController('bot');
+                      }}
+                    />
+                  )})}
+                </div>
+              ) : (
+                <TileRack
+                  count={match.players.bot.hand.length}
+                  isActive={botTurn}
+                  variant="default"
+                />
+              )}          </div>
+          </div>
 
-        <div
-          className="bot-hud-center-cluster wl-center-status"
-          style={{
-            position: 'absolute',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {turnLabel ? (
-            <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
-              {turnLabel}
-            </span>
-          ) : null}
-          <span
-            className="open-ends-pill"
+          <div
+            className="bot-hud-right-cluster"
             style={{
-              position: 'absolute',
-              left: turnLabel ? 'calc(100% + 8px)' : '50%',
-              transform: turnLabel ? 'none' : 'translateX(-50%)',
+              justifySelf: 'end',
+              marginLeft: 'auto',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              lineHeight: 1.05,
-              visibility: match.handOver && !match.gameOver ? 'hidden' : 'visible',
-              background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 999,
-              padding: '4px 12px',
-              fontSize: '0.78rem',
-              color: 'rgba(232,245,240,0.8)',
-              fontWeight: 600,
+              gap: 8,
             }}
           >
-            <span>{openEndsSum}</span>
-            <span style={{ fontSize: '0.66rem', opacity: 0.9 }}>open</span>
-          </span>
+            <button
+              type="button"
+              className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
+              onClick={() => setScoreTrackOpen(true)}
+              aria-label="Open score track"
+              style={{ width: 'auto', minWidth: 'min(130px, 30vw)' }}
+            >
+              <span className="wl-player-label">You</span>
+              <span className="wl-player-score">{match.players.you.score}</span>
+            </button>
+          </div>
         </div>
 
-        <div
-          className="bot-hud-right-cluster"
-          style={{
-            gridColumn: 3,
-            justifySelf: 'end',
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          <button
-            type="button"
-            className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
-            onClick={() => setScoreTrackOpen(true)}
-            aria-label="Open score track"
-            style={{ width: 130, minWidth: 'unset' }}
+        <div className="bot-hud-row-2">
+          <div
+            className="bot-hud-center-cluster wl-center-status"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            <span className="wl-player-label">You</span>
-            <span className="wl-player-score">{match.players.you.score}</span>
-          </button>
+            {turnLabel ? (
+              <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
+                {turnLabel}
+              </span>
+            ) : null}
+            <span
+              className="open-ends-pill"
+              data-has-turn-label={!!turnLabel}
+              style={{
+                visibility: match.handOver && !match.gameOver ? 'hidden' : 'visible',
+              }}
+            >
+              <span>{openEndsSum}</span>
+              <span style={{ fontSize: '0.66rem', opacity: 0.9 }}>open</span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -6546,12 +6555,12 @@ export default function BotMatchScreen({
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: '480px',
+              width: 'min(480px, calc(100vw - 32px))',
               borderRadius: 20,
               border: '1px solid rgba(255,255,255,0.10)',
               background: 'rgb(18, 22, 32)',
               boxShadow: '0 32px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-              padding: '48px 44px',
+              padding: 'clamp(24px, 6vw, 44px) clamp(20px, 5vw, 40px)',
               color: 'rgba(235, 245, 242, 0.96)',
             }}
           >

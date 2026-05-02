@@ -1,3 +1,20 @@
+/* ─── Global Mobile Safety ──────────────────────────────────── */
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  min-height: 100dvh;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 /* ─── Variables ─────────────────────────────────────────────── */
 
 :root {
@@ -54,6 +71,10 @@
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
 
+  /* Mobile Breakpoints */
+  --mobile-w: 600px;
+  --very-small-w: 380px;
+
   /* Shared non-game background stack */
   --menu-bg-base:
     linear-gradient(180deg, #03101d 0%, #031324 38%, #02111f 100%);
@@ -94,11 +115,18 @@
   min-height: 100dvh;
   height: auto;
   width: 100%;
-  padding-top: 32px;
-  padding-inline: clamp(20px, 6vw, 60px);
-  padding-bottom: var(--space-lg);
+  padding-top: clamp(16px, 4vh, 32px);
+  padding-inline: clamp(12px, 4vw, 60px);
+  padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+@media (max-width: 600px) {
+  .layout-screen {
+    padding-top: 12px;
+    padding-inline: 12px;
+  }
 }
 
 .layout-screen-bg,
@@ -219,7 +247,15 @@
     --hero-top: clamp(34px, 5.6vh, 66px);
     padding-top: clamp(12px, 2.2vh, 24px);
     padding-inline: var(--space-sm);
-    padding-bottom: var(--space-md);
+    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .layout-screen-inner {
+    height: auto;
+    min-height: 0;
+    margin-top: 0;
   }
 }
 
@@ -3948,6 +3984,13 @@ button:hover:not(:disabled) {
   gap: 8px;
 }
 
+@media (max-width: 600px) {
+  .hand-row {
+    padding-inline: 12px;
+    gap: 6px;
+  }
+}
+
 .icon-btn {
   width: 32px;
   height: 32px;
@@ -5292,7 +5335,11 @@ button:hover:not(:disabled) {
     display: flex;
     flex-direction: column;
     height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
     overflow: hidden;
+    width: 100%;
+    max-width: 100%;
   }
 
   .wl-board-area,
@@ -5303,22 +5350,12 @@ button:hover:not(:disabled) {
   .wl-stage {
     width: 100%;
     min-width: 0;
-    height: 55vw;
-    min-height: 280px;
-    max-height: 420px;
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
     overflow: hidden;
     position: relative;
-  }
-
-  .board-canvas {
-    width: 100% !important;
-    max-width: 100%;
-    min-width: 0;
-    height: auto !important;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform-origin: center center;
   }
 
   .wl-hand-area,
@@ -5327,8 +5364,52 @@ button:hover:not(:disabled) {
   .bot-hand {
     flex-shrink: 0;
     height: auto;
-    overflow-x: auto;
-    overflow-y: hidden;
+    width: 100%;
+    padding-bottom: env(safe-area-inset-bottom, 12px);
+    background: linear-gradient(180deg, rgba(12, 18, 26, 0.95), rgba(8, 12, 18, 0.98));
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .hand-container {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 8px !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 12px 16px !important;
+    overflow: visible !important;
+  }
+
+  .hand-row {
+    display: contents !important;
+  }
+
+  .domino-tile {
+    width: clamp(64px, 21vw, 92px) !important;
+    height: auto !important;
+  }
+
+  .pip-half {
+    padding: 2px !important;
+  }
+
+  .board-zoom-tray,
+  .wl-controls-tray {
+    padding: 4px 6px !important;
+    gap: 4px !important;
+    bottom: 8px !important;
+    right: 8px !important;
+    transform: scale(0.85);
+    transform-origin: bottom right;
+  }
+
+  .icon-btn {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
   }
 
   .screen,

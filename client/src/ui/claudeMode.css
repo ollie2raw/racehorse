@@ -572,6 +572,14 @@
     linear-gradient(180deg, #02040a 0%, #050711 38%, #090b15 100%);
 }
 
+@media (max-width: 720px) {
+  .claude-home-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+}
+
 .claude-home-shell .layout-screen-inner {
   width: 100%;
   height: 100%;
@@ -590,6 +598,13 @@
   flex-direction: column;
   background: #01010a;
   overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .claude-accordion-home {
+    height: auto;
+    overflow: visible;
+  }
 }
 
 .screen.claude-mode-screen-shell,
@@ -1086,65 +1101,156 @@
   }
 }
 
-@media (max-width: 980px) {
-  .claude-mode-screen,
-  .claude-home-layout {
+@media (max-width: 768px) {
+  .claude-mode-screen {
     grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .claude-mode-hero {
+    min-height: 240px;
+    padding: 24px;
+    align-items: center;
+    text-align: center;
+  }
+
+  .claude-mode-hero__content {
+    max-width: 100%;
+  }
+
+  .claude-mode-hero__title {
+    font-size: 42px;
+    white-space: normal;
+  }
+
+  .claude-mode-hero__decor {
+    font-size: 140px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.03;
+  }
+
+  .claude-mode-hero__description {
+    display: none;
   }
 
   .claude-mode-panel {
+    padding: 16px;
     border-left: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
 
-  .claude-home-hero {
-    min-height: 0;
-  }
-}
-
-@media (max-width: 720px) {
-  .claude-accordion-home__topbar {
-    gap: 12px;
+  .claude-home-shell {
     height: auto;
-    align-items: flex-start;
-    flex-direction: column;
-    padding-top: 14px;
-    padding-bottom: 14px;
+    min-height: 100dvh;
+    overflow-y: auto;
+    padding: 0 !important;
+  }
+
+  .claude-accordion-home {
+    height: auto;
+    overflow: visible;
+    background: transparent;
+  }
+
+  .claude-accordion-home__topbar {
+    padding: 12px 16px;
+    height: auto;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .claude-accordion-home__brand {
+    font-size: 14px;
+    width: 100%;
+    text-align: center;
+    margin-bottom: 4px;
   }
 
   .claude-accordion-home__utilities {
-    margin-left: 0;
-    flex-wrap: wrap;
+    width: 100%;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .claude-accordion-home__utility {
+    font-size: 12px;
+    padding: 6px 12px;
   }
 
   .claude-accordion-home__body {
     flex-direction: column;
+    height: auto;
+    overflow: visible;
+    padding: 12px;
+    gap: 10px;
   }
 
   .claude-accordion-home__panel,
   .claude-accordion-home__panel.is-active,
   .claude-accordion-home__panel.has-active:not(.is-active) {
-    flex: 1 1 0;
-    min-height: 120px;
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 90px;
+    height: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    position: relative;
+    overflow: hidden;
+    margin: 0;
+  }
+
+  .claude-accordion-home__panel-content {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    padding: 18px 20px;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .claude-accordion-home__mode-number {
+    font-size: 9px;
+    margin-bottom: 4px;
+  }
+
+  .claude-accordion-home__mode-title {
+    font-size: 22px;
+    margin-bottom: 6px;
+  }
+
+  .claude-accordion-home__mode-desc {
+    font-size: 13px;
+    margin-bottom: 14px;
+    color: rgba(255, 255, 255, 0.6);
+    max-width: 85%;
+    display: block !important;
+  }
+
+  .claude-accordion-home__enter {
+    margin-top: 4px;
+    padding: 8px 18px;
+    border-radius: 4px;
+  }
+
+  .claude-accordion-home__big-number {
+    font-size: 90px;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.04;
   }
 
   .claude-accordion-home__collapsed {
     display: none;
-  }
-
-  .claude-accordion-home__panel-content {
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
-  }
-
-  .claude-mode-join-box {
-    grid-template-columns: 1fr;
-  }
-
-  .claude-mode-join-box input {
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    border-bottom: 0;
   }
 }
 

@@ -2,6 +2,16 @@
   display: none;
 }
 
+@media (max-width: 1100px) {
+  .learn-player-screen .layout-screen-inner,
+  .learn-player-screen .layout-screen-content.screen-shell,
+  .learn-player-screen .game-screen {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow-y: auto !important;
+  }
+}
+
 .learn-player-screen .layout-screen-inner,
 .learn-player-screen .layout-screen-content.screen-shell {
   height: 100vh;

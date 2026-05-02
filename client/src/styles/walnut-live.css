@@ -184,6 +184,14 @@ body {
   color: rgba(232, 245, 239, 0.92);
 }
 
+@media (max-width: 600px) {
+  .wl-turn-label {
+    padding: 5px 12px;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+  }
+}
+
 .wl-turn-label.your-turn {
   border-color: rgba(149, 240, 202, 0.56);
   color: var(--wl-mint);
@@ -921,8 +929,8 @@ body {
   .wl-top-rail {
     grid-template-columns: 1fr;
     gap: 6px;
-    width: calc(100vw - 14px);
-    padding: 4px 6px 2px;
+    width: 100%;
+    padding: 4px 10px 2px;
   }
 
   .wl-player-pill,
@@ -930,26 +938,32 @@ body {
   .wl-center-status {
     justify-items: center;
     text-align: center;
+    width: 100%;
+    max-width: none;
   }
 
   .wl-stage-shell {
     padding: 8px;
-    width: calc(100vw - 14px);
+    width: 100%;
   }
 
   .wl-board-area {
-    height: min(64vh, calc(100vh - 190px)) !important;
-    min-height: 300px !important;
+    height: auto !important;
+    flex: 1 1 auto !important;
+    min-height: 280px !important;
   }
 
   .wl-hand-area {
-    left: 7px !important;
-    right: 7px !important;
-    width: auto !important;
-    height: var(--tray-height);
-    padding: 0 8px;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 80px;
+    padding: 8px 12px;
     display: flex;
     align-items: center;
+    position: relative !important;
+    background: rgba(8, 14, 18, 0.9);
   }
 
   .wl-hand-area .tray-rail {
