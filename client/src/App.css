@@ -3678,8 +3678,47 @@ button:hover:not(:disabled) {
   touch-action: manipulation;
 }
 
-.domino-tile:not(.disabled):not(.board-tile):hover {
-  box-shadow: var(--tile-shadow-hover);
+@media (max-width: 768px) {
+  .mode-live-badge,
+  .claude-accordion-home__live {
+    display: none !important;
+  }
+
+  .wl-hand-area .domino-tile {
+    width: clamp(44px, 14vw, 58px) !important;
+    height: auto !important;
+  }
+
+  .hand-container {
+    padding-inline: 12px !important;
+    gap: 6px !important;
+  }
+
+  .placement-zone {
+    min-width: 48px;
+    min-height: 48px;
+    z-index: 25 !important;
+    border-width: 3px !important;
+    pointer-events: auto !important;
+  }
+
+  .placement-zone.active {
+    border: 3px solid #35f0c0 !important;
+    background: rgba(53, 240, 192, 0.28) !important;
+    box-shadow: 0 0 24px rgba(53, 240, 192, 0.6) !important;
+    animation: zone-glow-mobile 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes zone-glow-mobile {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(53, 240, 192, 0.3);
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    box-shadow: 0 0 24px 8px rgba(53, 240, 192, 0.5);
+    transform: translate(-50%, -50%) scale(1.08);
+  }
 }
 
 /* Board tiles should not hover-animate to avoid layout jitter */
