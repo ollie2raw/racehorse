@@ -3,169 +3,48 @@
   min-height: 48px;
 }
 
-.bot-match-screen .bot-hud-row-1,
-.bot-match-screen .bot-hud-row-2 {
-  display: contents;
-}
-
-@media (max-width: 600px) {
-  .bot-match-screen .bot-top-rail {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 8px 10px;
-    height: auto;
-    min-height: 0;
-    background: rgba(8, 12, 18, 0.96);
-    backdrop-filter: blur(12px);
-    z-index: 10;
-  }
-
-  .bot-match-screen .bot-hud-row-1 {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    gap: 4px;
-  }
-
-  .bot-match-screen .bot-hud-row-2 {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    gap: 12px;
-  }
-
-  .bot-match-screen .wl-player-pill,
-  .bot-match-screen .wl-player-pill-btn {
-    height: 32px !important;
-    min-height: 32px !important;
-    padding: 0 8px !important;
-    font-size: 0.7rem !important;
-    width: auto !important;
-    min-width: 80px !important;
-  }
-
-  .bot-match-screen .wl-player-score {
-    font-size: 0.9rem !important;
-  }
-
-  .bot-match-screen .wl-hand-area {
-    height: auto !important;
-    min-height: 96px !important;
-    max-height: 200px !important;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
-    background: rgba(8, 12, 18, 0.98) !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    position: relative !important;
-    z-index: 20;
-    flex-shrink: 0 !important;
-  }
-
-  .bot-match-layout {
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100dvh !important;
-    overflow: hidden !important;
-  }
-
-  .bot-match-screen .board-area {
-    flex: 1 1 auto !important;
-    height: auto !important;
-    min-height: 200px !important;
-    position: relative !important;
-  }
-}
-
-.bot-match-screen .wl-hand-area {
-  height: var(--tray-height, 120px) !important;
-  min-height: 120px !important;
-  max-height: 220px !important;
-  border-radius: 16px 16px 0 0 !important;
-}
-
-.bot-match-screen .tray-center {
-  padding: 0 8px !important;
-}
-
-.bot-match-screen .bot-tray-controls {
-  display: inline-flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 6px !important;
-  padding: 4px 6px !important;
-  border-radius: 12px !important;
-}
-
 .bot-match-screen .bot-top-rail {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  position: relative;
-  min-height: 54px;
-}
-
-@media (max-width: 600px) {
-  .bot-match-screen .bot-top-rail {
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
-    padding: 4px 10px;
-  }
-
-  .bot-match-screen .bot-hud-center-cluster {
-    position: static !important;
-    transform: none !important;
-    grid-column: 1 / -1;
-    order: -1;
-    justify-content: space-between;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 2px 0;
-  }
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 8px 16px !important;
+  position: relative !important;
+  min-height: 60px !important;
+  background: rgba(0, 0, 0, 0.2) !important;
 }
 
 .bot-match-screen .bot-hud-left-cluster {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-self: start;
-  min-width: 0;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  justify-self: start !important;
 }
 
 .bot-match-screen .bot-hud-center-cluster {
-  justify-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: min(44vw, 460px);
-}
-
-.bot-match-screen .ghost-average-pill {
-  position: absolute;
-  top: -34px;
-  left: 50%;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  padding: 6px 12px;
-  background: rgba(118, 80, 175, 0.2);
-  border: 1px solid rgba(199, 177, 255, 0.24);
-  color: rgba(236, 230, 255, 0.94);
-  font-size: 0.78rem;
-  font-weight: 700;
-  white-space: nowrap;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  justify-self: center !important;
 }
 
 .bot-match-screen .bot-hud-right-cluster {
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  justify-self: end !important;
 }
+
+@media (max-width: 600px) {
+  .bot-match-screen .bot-top-rail {
+    grid-template-columns: 1fr 1fr !important;
+    row-gap: 8px !important;
+  }
+  .bot-match-screen .bot-hud-center-cluster {
+    grid-column: 1 / -1 !important;
+  }
+}
+
 
 .bot-match-screen .bot-center-zone {
   min-width: 0;
@@ -216,26 +95,25 @@
 
 .bot-match-screen .open-ends-pill {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  left: calc(100% + 6px);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  line-height: 1.05;
-  background: rgba(255, 255, 255, 0.07);
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 0.78rem;
-  color: rgba(232, 245, 240, 0.8);
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  color: rgba(232, 245, 240, 0.85);
   font-weight: 600;
   z-index: 10;
   white-space: nowrap;
 }
 
 .bot-match-screen .open-ends-pill[data-has-turn-label='true'] {
-  left: calc(100% + 8px);
+  left: calc(100% + 6px);
   transform: none;
 }
 
@@ -590,47 +468,6 @@
   content: none;
 }
 
-@media (max-width: 768px) {
-  .bot-match-screen .bot-top-rail,
-  .bot-match-screen .bot-hud-center-cluster,
-  .bot-match-screen .bot-hud-left-cluster,
-  .bot-match-screen .bot-hud-right-cluster {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .bot-match-screen .bot-top-rail {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 0 6px;
-  }
-
-  .bot-match-screen .wl-board-area,
-  .bot-match-screen .board-container,
-  .bot-match-screen .board-canvas {
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-  }
-
-  .bot-match-screen .wl-controls-tray button,
-  .bot-match-screen .bot-tray-controls button,
-  .bot-match-screen .mode-inline-btn {
-    min-height: 44px;
-    font-size: 13px;
-  }
-
-  .bot-match-screen .bot-victory-actions {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .bot-match-screen .bot-victory-actions button {
-    width: 100%;
-  }
-}
 
 @media (max-width: 768px) {
   .bot-match-screen .wl-stage-shell,

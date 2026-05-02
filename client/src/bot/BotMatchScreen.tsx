@@ -6367,106 +6367,100 @@ export default function BotMatchScreen({
       )}
 
       <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
-        <div className="bot-hud-row-1">
-          <div className="bot-hud-left-cluster">
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <button
-                type="button"
-                className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
-                ref={opponentPillRef}
-                onClick={() => setScoreTrackOpen(true)}
-                aria-label="Open score track"
-                style={{ width: 'auto', minWidth: ghostSubLabel ? 'min(140px, 32vw)' : 'min(110px, 25vw)', padding: '0 12px' }}
-              >
-                <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-                  {ghostSubLabel && (
-                    <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
-                      {formatGhostName(ghostSubLabel)}
-                    </span>
-                  )}
-                  <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
-                </div>
-                <span className="wl-player-score">{match.players.bot.score}</span>
-              </button>
-              {wantsOriginalGuidedRecordMode ? (
-                <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'min(420px, 40vw)' }}>
-                  {guidedRecordFritzPalette.map((tile, idx) => {
-                    const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
-                    return (
-                    <DominoTile
-                      key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
-                      tile={tile}
-                      size={28}
-                      rotation={0}
-                      selected={selectedController === 'bot' && !!selectedTile && tileEquals(selectedTile, tile)}
-                      highlight={playable}
-                      disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
-                      onClick={() => {
-                        if (!handActive || match.currentPlayer !== 'bot') return;
-                        if (!playable) return;
-                        setSelectedTile(tile);
-                        setSelectedController('bot');
-                      }}
-                    />
-                  )})}
-                </div>
-              ) : (
-                <TileRack
-                  count={match.players.bot.hand.length}
-                  isActive={botTurn}
-                  variant="default"
-                />
-              )}          </div>
-          </div>
-
-          <div
-            className="bot-hud-right-cluster"
-            style={{
-              justifySelf: 'end',
-              marginLeft: 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
+        <div className="bot-hud-left-cluster">
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <button
               type="button"
-              className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
+              className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
+              ref={opponentPillRef}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
-              style={{ width: 'auto', minWidth: 'min(130px, 30vw)' }}
+              style={{ width: 'auto', minWidth: ghostSubLabel ? 'min(140px, 32vw)' : 'min(110px, 25vw)', padding: '0 12px' }}
             >
-              <span className="wl-player-label">You</span>
-              <span className="wl-player-score">{match.players.you.score}</span>
+              <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
+                {ghostSubLabel && (
+                  <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
+                    {formatGhostName(ghostSubLabel)}
+                  </span>
+                )}
+                <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
+              </div>
+              <span className="wl-player-score">{match.players.bot.score}</span>
             </button>
+            {wantsOriginalGuidedRecordMode ? (
+              <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'min(420px, 40vw)' }}>
+                {guidedRecordFritzPalette.map((tile, idx) => {
+                  const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
+                  return (
+                  <DominoTile
+                    key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
+                    tile={tile}
+                    size={28}
+                    rotation={0}
+                    selected={selectedController === 'bot' && !!selectedTile && tileEquals(selectedTile, tile)}
+                    highlight={playable}
+                    disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
+                    onClick={() => {
+                      if (!handActive || match.currentPlayer !== 'bot') return;
+                      if (!playable) return;
+                      setSelectedTile(tile);
+                      setSelectedController('bot');
+                    }}
+                  />
+                )})}
+              </div>
+            ) : (
+              <TileRack
+                count={match.players.bot.hand.length}
+                isActive={botTurn}
+                variant="default"
+              />
+            )}
           </div>
         </div>
 
-        <div className="bot-hud-row-2">
+        <div className="bot-hud-center-cluster" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {turnLabel ? (
+            <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`} style={{ transform: 'none' }}>
+              {turnLabel}
+            </span>
+          ) : null}
           <div
-            className="bot-hud-center-cluster wl-center-status"
+            className="open-ends-pill"
             style={{
-              display: 'flex',
+              width: 'auto',
+              minWidth: 'unset',
+              height: '45px',
+              padding: '0 18px',
+              gap: '8px',
+              borderRadius: '999px',
+              display: match.handOver && !match.gameOver ? 'none' : 'flex',
+              flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'center',
+              position: 'absolute',
+              left: 'calc(100% + 12px)',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              boxShadow: 'none',
+              lineHeight: 1,
             }}
           >
-            {turnLabel ? (
-              <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
-                {turnLabel}
-              </span>
-            ) : null}
-            <span
-              className="open-ends-pill"
-              data-has-turn-label={!!turnLabel}
-              style={{
-                visibility: match.handOver && !match.gameOver ? 'hidden' : 'visible',
-              }}
-            >
-              <span>{openEndsSum}</span>
-              <span style={{ fontSize: '0.66rem', opacity: 0.9 }}>open</span>
-            </span>
+            <span style={{ fontSize: '1.6rem', fontWeight: 800 }}>{openEndsSum}</span>
+            <span style={{ fontSize: '1.0rem', opacity: 0.7, letterSpacing: '0.02em', textTransform: 'uppercase' }}>OPEN</span>
           </div>
+        </div>
+
+        <div className="bot-hud-right-cluster">
+          <button
+            type="button"
+            className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
+            onClick={() => setScoreTrackOpen(true)}
+            aria-label="Open score track"
+            style={{ width: 'auto', minWidth: 'min(130px, 30vw)' }}
+          >
+            <span className="wl-player-label">You</span>
+            <span className="wl-player-score">{match.players.you.score}</span>
+          </button>
         </div>
       </div>
 

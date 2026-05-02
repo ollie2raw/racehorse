@@ -270,6 +270,11 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
           params.playDrawSound(params.isMutedRef.current);
           params.setBoneyardDisplayCount(step.boneyardCount);
 
+          if (!params.boneyardRef.current) {
+            clearPendingDrawAnimationTimers();
+            return;
+          }
+
           if (params.boneyardRef.current) {
             const from = params.boneyardRef.current.getBoundingClientRect();
             const isMe = payload.playerId === params.youRef.current;

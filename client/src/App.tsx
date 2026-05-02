@@ -1255,6 +1255,7 @@ export default function App() {
     setOpponentDragging(false);
     draggingStateRef.current = false;
     pendingActionRef.current = false;
+    setHandReveal(null);
     if (drawSequenceTimeoutRef.current) {
       clearTimeout(drawSequenceTimeoutRef.current);
       drawSequenceTimeoutRef.current = null;
@@ -1714,9 +1715,18 @@ export default function App() {
     if (!socket || !joinedRoom || !state?.gameOver || rematchRequested) return;
     setRematchRequested(true);
     socket.emit('game:rematch', joinedRoom, (resp: any) => {
-      if (resp?.ok) return;
-      setRematchRequested(false);
-      showToast(resp?.error ?? 'Rematch failed.');
+      if (!resp?.ok) {
+        setRematchRequested(false);
+        showToast(resp?.error ?? 'Rematch failed.');
+        return;
+      }
+      // If the server already started the rematch (both players ready), clear
+      // the pending state immediately via the ack. The game:rematch:started
+      // broadcast will also reset it, but if that event is missed on a marginal
+      // connection this ack ensures the button is never stuck permanently.
+      if (resp?.started) {
+        setRematchRequested(false);
+      }
     });
   }, [socket, joinedRoom, state?.gameOver, rematchRequested, showToast]);
 
@@ -4133,23 +4143,25 @@ export default function App() {
                 className="open-ends-pill"
                 style={{
                   position: 'absolute',
-                  left: 'calc(100% + 8px)',
+                  left: 'calc(100% + 12px)',
                   display: 'flex',
-                  flexDirection: 'column',
+                  flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  lineHeight: 1.05,
-                  background: 'rgba(255,255,255,0.07)',
+                  gap: '8px',
+                  height: '45px',
+                  lineHeight: 1,
+                  background: 'rgba(255,255,255,0.08)',
                   border: '1px solid rgba(255,255,255,0.15)',
                   borderRadius: 999,
-                  padding: '4px 12px',
-                  fontSize: '0.78rem',
-                  color: 'rgba(232,245,240,0.8)',
+                  padding: '0 18px',
+                  fontSize: '1.4rem',
+                  color: 'rgba(232,245,240,0.85)',
                   fontWeight: 600,
                 }}
               >
-                <span>{openEndsSum}</span>
-                <span style={{ fontSize: '0.66rem', opacity: 0.9 }}>open</span>
+                <span style={{ fontSize: '1.6rem' }}>{openEndsSum}</span>
+                <span style={{ fontSize: '1.0rem', opacity: 0.7, letterSpacing: '0.02em', textTransform: 'uppercase' }}>open</span>
               </span>
             </div>
             <div

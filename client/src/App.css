@@ -5098,31 +5098,35 @@ button:hover:not(:disabled) {
 }
 
 .large-mode .wl-turn-label {
-  font-size: 1.24rem !important;
-  padding: 10px 22px !important;
-  letter-spacing: 0.08em !important;
+  font-size: 1.6rem !important;
+  padding: 12px 30px !important;
+  letter-spacing: 0.06em !important;
   border-width: 1.5px !important;
 }
 
 .large-mode .open-ends-pill {
-  min-width: 72px !important;
-  padding: 8px 16px !important;
-  border-width: 1.8px !important;
-  background: rgba(255, 255, 255, 0.12) !important;
-  color: rgba(244, 252, 248, 0.98) !important;
+  min-width: unset !important;
+  height: 42px !important;
+  padding: 0 16px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  border-width: 1.2px !important;
+  background: rgba(255, 255, 255, 0.1) !important;
 }
 
 .large-mode .open-ends-pill > span:first-child {
-  font-size: 1.48rem !important;
+  font-size: 1.5rem !important;
   font-weight: 800 !important;
   line-height: 1 !important;
 }
 
 .large-mode .open-ends-pill > span:last-child {
-  font-size: 0.86rem !important;
-  letter-spacing: 0.08em !important;
+  font-size: 0.88rem !important;
+  letter-spacing: 0.04em !important;
   text-transform: uppercase !important;
-  opacity: 0.92 !important;
+  opacity: 0.8 !important;
 }
 
 .large-mode .boneyard-pill,

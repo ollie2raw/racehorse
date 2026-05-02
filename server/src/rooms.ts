@@ -23,6 +23,13 @@ import {
 
 export type RoomCode = string;
 
+export type LeadTracker = {
+  aId: string;
+  bId: string;
+  maxLeadA: number;
+  maxLeadB: number;
+};
+
 export type Room = {
   code: RoomCode;
   players: string[]; // socket ids in seat order
@@ -37,6 +44,8 @@ export type Room = {
   ghostMoveLogs: Record<string, GhostMoveLogEntry[]>;
   ghostTurnIndex: number;
   matchId: string;
+  matchLogged: boolean;
+  leadTracker: LeadTracker | null;
   eventLogVersion: 1;
   eventSequence: number;
   events: RoomMatchEvent[];
@@ -166,6 +175,8 @@ export function createRoom(hostSocketId: string, config: Partial<Config> = {}): 
     lastBroadcastScores: {},
     ghostMoveLogs: {},
     ghostTurnIndex: 0,
+    matchLogged: false,
+    leadTracker: null,
     ...createRoomEventState(),
   };
   appendRoomEvent(room, {
@@ -203,6 +214,8 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
     lastBroadcastScores: {},
     ghostMoveLogs: {},
     ghostTurnIndex: 0,
+    matchLogged: false,
+    leadTracker: null,
     ...createRoomEventState(),
   };
   appendRoomEvent(room, {
@@ -563,6 +576,10 @@ export interface ActionPayload {
   };
 }
 
+/**
+ * Processes an action for a room.
+ * Note: `onStateReady` is passed through to `readyForNextHand` only. `act()` itself does not invoke it.
+ */
 export async function act(
   code: string,
   socketId: string,
@@ -574,6 +591,13 @@ export async function act(
   if (!room.state) throw new Error('Game not started.');
 
   let state = room.state;
+
+  if (state.handOver && !state.gameOver && action.type !== 'DRAW' && action.type !== 'PASS') {
+    throw new Error('Hand is over. Waiting for next hand to start.');
+  }
+  if (state.gameOver) {
+    throw new Error('Game is over. Only rematch or leave is accepted.');
+  }
 
   const { type } = action;
 

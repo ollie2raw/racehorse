@@ -3287,6 +3287,39 @@ function buildHandEndedPayload(room: Room, playerId: string) {
   };
 }
 
+function maskStateForRecipient(state: GameState, recipientPlayerId: string | null): GameState {
+  const canRevealAll = state.handOver || state.gameOver;
+  return {
+    ...state,
+    players: Object.fromEntries(
+      state.playerIds.map((pid) => {
+        const ps = state.players[pid];
+        if (!ps) {
+          return [pid, { id: pid, hand: [], score: 0 }];
+        }
+        const reveal = canRevealAll || pid === recipientPlayerId;
+        return [
+          pid,
+          {
+            ...ps,
+            hand: reveal ? ps.hand : [],
+          },
+        ];
+      }),
+    ),
+  };
+}
+
+/**
+ * Derives a handCounts map from a (possibly masked) state.
+ * The client uses this to render opponent hand sizes without seeing actual tiles.
+ */
+function getHandCounts(state: GameState): Record<string, number> {
+  return Object.fromEntries(
+    state.playerIds.map((pid) => [pid, state.players[pid]?.hand.length ?? 0]),
+  );
+}
+
 /**
  * Send state update to all players in a room.
  * Each player receives:
@@ -3310,18 +3343,22 @@ function broadcastStateUpdate(roomCode: string) {
     const scoreA = room.state.players[aId]?.score ?? 0;
     const scoreB = room.state.players[bId]?.score ?? 0;
     const diff = scoreA - scoreB; // + means A is leading
-    const t = ((room as any)._leadTracker ??= { aId, bId, maxLeadA: 0, maxLeadB: 0 });
+    const t = (room.leadTracker ??= { aId, bId, maxLeadA: 0, maxLeadB: 0 });
     if (t.aId !== aId || t.bId !== bId) {
-      (room as any)._leadTracker = { aId, bId, maxLeadA: 0, maxLeadB: 0 };
+      room.leadTracker = { aId, bId, maxLeadA: 0, maxLeadB: 0 };
     } else {
       if (diff > 0) t.maxLeadA = Math.max(t.maxLeadA, diff);
       if (diff < 0) t.maxLeadB = Math.max(t.maxLeadB, -diff);
     }
   }
 
-  if (room.state.gameOver && !isTournamentRoom && !(room as any)._matchLogged) {
+  if (room.state.gameOver && !isTournamentRoom && !room.matchLogged) {
     const pids = room.state.playerIds;
     if (Array.isArray(pids) && pids.length === 2) {
+      // Set the guard synchronously before launching the async IIFE so that
+      // rapid back-to-back broadcastStateUpdate calls can't both slip through.
+      room.matchLogged = true;
+
       const roster = roomPlayersByCode.get(room.code) ?? [];
       const byId = new Map(roster.map((p) => [p.id, p]));
       const aId = pids[0];
@@ -3344,7 +3381,7 @@ function broadcastStateUpdate(roomCode: string) {
             tournamentId: typeof cfg.tournamentId === 'string' ? cfg.tournamentId : undefined,
             tournamentMatchId: typeof cfg.tournamentMatchId === 'string' ? cfg.tournamentMatchId : undefined,
             maxDeficitWinner: (() => {
-              const t = (room as any)._leadTracker;
+              const t = room.leadTracker;
               if (!t) return 0;
               if (winnerSocketId === aId) return t.maxLeadB ?? 0;
               if (winnerSocketId === bId) return t.maxLeadA ?? 0;
@@ -3409,6 +3446,7 @@ function broadcastStateUpdate(roomCode: string) {
                     finalScore: p.myScore,
                     opponentScore: p.oppScore,
                     moveLog,
+                    matchId: room.matchId,
                   });
                 }
               }
@@ -3494,9 +3532,12 @@ function broadcastStateUpdate(roomCode: string) {
           }
         } catch (err) {
           console.warn('Ranking/Match logging failed', err);
+          // Note: matchLogged was already set to true above (before this IIFE),
+          // which is intentional — it prevents infinite retry loops on transient
+          // errors. The game result should be considered logged; individual
+          // sub-operations log their own errors above.
         }
       })();
-      (room as any)._matchLogged = true;
     }
   }
 
@@ -3534,39 +3575,9 @@ function broadcastStateUpdate(roomCode: string) {
       const legalMoves = isPlayer ? getRoomLegalMoves(roomCode, socketId) : [];
       const canDraw = isPlayer ? getRoomCanDraw(roomCode, socketId) : false;
 
-      const handCounts = Object.fromEntries(
-        room.state.playerIds.map((pid) => {
-          const ps = room.state!.players[pid];
-          return [pid, ps?.hand?.length ?? 0];
-        }),
-      );
-
-      const maskedPlayers = Object.fromEntries(
-        room.state.playerIds.map((pid) => {
-          const playerState = room.state!.players[pid];
-          if (!playerState) {
-            return [pid, { id: pid, hand: [], score: 0 }];
-          }
-          const canReveal =
-            room.state!.handOver ||
-            room.state!.gameOver ||
-            pid === recipientPlayerId;
-          return [
-            pid,
-            {
-              ...playerState,
-              hand: canReveal ? playerState.hand : [],
-            },
-          ];
-        }),
-      );
-
+      const maskedState = maskStateForRecipient(room.state, recipientPlayerId);
       socket.emit('state:update', {
-        state: {
-          ...room.state,
-          players: maskedPlayers,
-          handCounts,
-        },
+        state: { ...maskedState, handCounts: getHandCounts(maskedState) },
         legalMoves,
         canDraw,
         eventMeta: getRoomMatchEventMeta(room.code),
@@ -3599,18 +3610,8 @@ function broadcastStateUpdate(roomCode: string) {
   // received personalized state:update above; sending this to them would hide
   // their own hand with the same sequence number.
   if (room.state) {
-    const stateForSpectators = {
-      ...room.state,
-      players: Object.fromEntries(
-        room.state.playerIds.map((pid) => {
-          const ps = room.state!.players[pid];
-          return [pid, { ...ps, hand: [] }];
-        }),
-      ),
-      handCounts: Object.fromEntries(
-        room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
-      ),
-    };
+    const spectatorMasked = maskStateForRecipient(room.state, null);
+    const stateForSpectators = { ...spectatorMasked, handCounts: getHandCounts(spectatorMasked) };
     const spectatorPayload = {
       state: stateForSpectators,
       eventMeta: getRoomMatchEventMeta(room.code),
@@ -4238,29 +4239,9 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
 
       // Send a spectator-safe snapshot to just this socket.
       if (room.state) {
-        const stateWithCounts = {
-          ...room.state,
-          players: Object.fromEntries(
-            room.state.playerIds.map((pid: string) => {
-              const playerState = room.state!.players[pid];
-              if (!playerState) {
-                return [pid, { id: pid, hand: [], score: 0 }];
-              }
-              const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id || pid === socket.data?.playerId;
-              return [
-                pid,
-                {
-                  ...playerState,
-                  hand: canReveal ? playerState.hand : [],
-                },
-              ];
-            }),
-          ),
-          handCounts: Object.fromEntries(
-            room.state.playerIds.map((pid: string) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
-          ),        };
+        const specMasked = maskStateForRecipient(room.state, null);
         socket.emit('state:update', {
-          state: stateWithCounts,
+          state: { ...specMasked, handCounts: getHandCounts(specMasked) },
           legalMoves: [],
           canDraw: false,
           eventMeta: getRoomMatchEventMeta(code),
@@ -4324,8 +4305,10 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         if (existingPlayer) {
           const oldSocket = io.sockets.sockets.get(existingPlayer.id);
           if (oldSocket && oldSocket.id !== socket.id && oldSocket.connected) {
-            console.log(`[room:join] REJECTED: user ${userId} already connected via ${oldSocket.id}`);
-            return cb?.({ ok: false, error: 'already_connected' });
+            console.log(`[room:join] FORCE-DISCONNECT: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
+            oldSocket.emit('room:session:superseded', { reason: 'new_session', newSocketId: socket.id });
+            oldSocket.disconnect(true);
+            await new Promise(resolve => setTimeout(resolve, 50));
           }
 
           console.log(`[room:join] RECONNECT: migrating ${existingPlayer.id} -> ${socket.id} for userId=${userId}`);
@@ -4403,30 +4386,12 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       roomPlayersByCode.set(room.code, roster);
       io.to(room.code).emit('room:update', { players: roster });
       console.log(`[room:join] joined room=${room.code}, players=${room.players.length}`);
+      
+      const recipientId = socket.data?.playerId ?? socket.id;
       const stateWithCounts = room.state
-        ? {
-            ...room.state,
-            players: Object.fromEntries(
-              room.state.playerIds.map((pid) => {
-                const playerState = room.state!.players[pid];
-                if (!playerState) {
-                  return [pid, { id: pid, hand: [], score: 0 }];
-                }
-                const canReveal = room.state!.handOver || room.state!.gameOver || pid === socket.id || pid === socket.data?.playerId;
-                return [
-                  pid,
-                  {
-                    ...playerState,
-                    hand: canReveal ? playerState.hand : [],
-                  },
-                ];
-              }),
-            ),
-            handCounts: Object.fromEntries(
-              room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.hand.length ?? 0]),
-            ),
-          }
+        ? (() => { const m = maskStateForRecipient(room.state!, recipientId); return { ...m, handCounts: getHandCounts(m) }; })()
         : null;
+
       const rejoinLegalMoves = room.state ? getRoomLegalMoves(room.code, socket.id) : [];
       const rejoinCanDraw = room.state ? getRoomCanDraw(room.code, socket.id) : false;
       cb?.({
@@ -4439,15 +4404,8 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         canDraw: rejoinCanDraw,
         eventMeta: getRoomMatchEventMeta(room.code),
       });
-      // Broadcast updated state so the rejoined socket
-      // receives legal moves immediately as a fallback.
-      if (room.state) {
-        try {
-          broadcastStateUpdate(room.code);
-        } catch {
-          // non-fatal
-        }
 
+      if (room.state) {
         // REPLAY hand:ended if rejoining into a handOver state
         if (room.state.handOver && !room.state.gameOver) {
           const payload = buildHandEndedPayload(room, socket.id);
@@ -4547,25 +4505,6 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     }
   });
 
-  socket.on('hand:next', async (code, cb) => {
-    const roomCode = String(code).trim().toUpperCase();
-    console.log(`[hand:next] socket=${socket.id}, code=${roomCode}`);
-    try {
-      const room = getRoom(roomCode);
-      if (!room.players.includes(socket.id)) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Only room players can advance hands.' });
-        return;
-      }
-      if (typeof cb === 'function') {
-        cb({ ok: false, error: 'Use hand:ready to advance hands.' });
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[hand:next] ERROR: ${message}`);
-      if (typeof cb === 'function') cb({ ok: false, error: message });
-    }
-  });
-
   socket.on('hand:ready', async (code, arg2?: unknown, arg3?: unknown) => {
     const roomCode = String(code).trim().toUpperCase();
     const handNumber = typeof arg2 === 'number' && Number.isFinite(arg2) ? arg2 : undefined;
@@ -4630,8 +4569,8 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       }
 
       room.rematchReady.clear();
-      (room as any)._matchLogged = false;
-      (room as any)._leadTracker = {
+      room.matchLogged = false;
+      room.leadTracker = {
         aId: room.players[0],
         bId: room.players[1],
         maxLeadA: 0,
@@ -4652,8 +4591,13 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         },
       });
       await startGame(room.code, io, { allowRestart: true });
-      broadcastStateUpdate(room.code);
+      // game:rematch:started MUST be emitted before broadcastStateUpdate so the
+      // client resets its sequence watermark before the first state:update of
+      // the new game arrives. If the order is reversed, a client whose watermark
+      // is still at the old game's final sequence number will silently discard
+      // the new game state as stale, leaving the board frozen.
       io.to(room.code).emit('game:rematch:started', { roomCode: room.code });
+      broadcastStateUpdate(room.code);
       emitRematchStatus(room.code);
       cb?.({ ok: true, started: true });
     } catch (err: unknown) {
