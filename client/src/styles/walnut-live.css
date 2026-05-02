@@ -689,11 +689,14 @@ body {
   height: clamp(10px, 0.92vw, 15px);
   border-radius: 999px;
   position: relative;
-  background: radial-gradient(circle at 50% 56%, rgba(18, 10, 7, 0.96), rgba(7, 4, 3, 0.99));
-  border: 1px solid rgba(28, 15, 10, 0.56);
+  background: radial-gradient(circle at 50% 40%, rgba(10, 6, 4, 0.98), rgba(4, 2, 1, 0.99));
+  border: 0.5px solid rgba(28, 15, 10, 0.45);
   box-shadow:
-    inset 0 1px 0 rgba(252, 229, 201, 0.14),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+    inset 0 2px 4px rgba(0, 0, 0, 0.6),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.05),
+    0 1px 1px rgba(255, 255, 255, 0.08);
+  opacity: 0.65;
+  transition: all 0.2s ease;
 }
 
 .score-hole::before {
@@ -703,9 +706,9 @@ body {
   border-radius: 999px;
   background: radial-gradient(
     circle at 36% 32%,
-    rgba(255, 255, 255, 0.16) 0%,
-    rgba(18, 9, 6, 0.92) 58%,
-    rgba(4, 2, 1, 0.98) 100%
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(10, 6, 4, 0.95) 60%,
+    rgba(4, 2, 1, 0.99) 100%
   );
 }
 
@@ -717,8 +720,8 @@ body {
   width: 20%;
   height: 20%;
   border-radius: 999px;
-  background: rgba(255, 241, 224, 0.22);
-  filter: blur(0.4px);
+  background: rgba(255, 255, 255, 0.05);
+  filter: blur(0.5px);
 }
 
 .score-gap {
@@ -734,74 +737,88 @@ body {
 
 .score-hole-solo {
   box-shadow:
-    inset 0 1px 0 rgba(252, 229, 201, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.52),
-    0 0 0 1px rgba(35, 19, 12, 0.38);
+    inset 0 2px 3px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(35, 19, 12, 0.25);
 }
 
 .score-hole.is-mark {
+  border-color: rgba(217, 170, 119, 0.15);
   box-shadow:
-    inset 0 1px 0 rgba(248, 214, 173, 0.2),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(217, 170, 119, 0.16);
+    inset 0 2px 4px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(217, 170, 119, 0.1);
 }
 
 .score-hole.is-major {
   transform: scale(1.08);
+  border-color: rgba(217, 170, 119, 0.25);
 }
 
 .score-hole.is-peg {
-  border-color: rgba(255, 255, 255, 0.52);
+  opacity: 1;
+  transform: scale(1.1);
+  border-color: rgba(255, 255, 255, 0.65);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.22),
-    0 2px 5px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    0 0 12px var(--peg-glow, rgba(255, 255, 255, 0.3)),
+    0 4px 8px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  z-index: 10;
+  animation: peg-pulse-once 350ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .score-hole.is-peg::before {
   inset: 1px;
   background: radial-gradient(
     circle at 34% 28%,
-    rgba(255, 255, 255, 0.62) 0%,
-    rgba(255, 255, 255, 0.1) 20%,
-    transparent 24%
+    rgba(255, 255, 255, 0.7) 0%,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 30%
   );
 }
 
 .score-hole.is-peg::after {
   left: 32%;
   top: 20%;
-  width: 26%;
-  height: 26%;
-  background: rgba(255, 255, 255, 0.75);
-  filter: blur(0.3px);
+  width: 28%;
+  height: 28%;
+  background: rgba(255, 255, 255, 0.85);
+  filter: blur(0.2px);
+  opacity: 1;
 }
 
 .score-hole.is-peg.you {
-  background: radial-gradient(circle at 45% 62%, #22564c 0%, #1a3f38 78%, #132e29 100%);
+  --peg-glow: rgba(149, 240, 202, 0.65);
+  background: radial-gradient(circle at 45% 62%, #2d7a6e 0%, #1a3f38 78%, #132e29 100%);
 }
 
 .score-hole.is-peg.opp {
-  background: radial-gradient(circle at 45% 62%, #6e543c 0%, #4d3828 78%, #36271c 100%);
+  --peg-glow: rgba(216, 181, 111, 0.65);
+  background: radial-gradient(circle at 45% 62%, #8e6d4c 0%, #4d3828 78%, #36271c 100%);
 }
 
 .score-hole.is-peg.you::before {
   background: radial-gradient(
     circle at 35% 26%,
-    rgba(202, 253, 236, 0.9) 0%,
-    rgba(123, 208, 184, 0.76) 30%,
-    rgba(43, 114, 95, 0.96) 100%
+    rgba(212, 255, 241, 0.95) 0%,
+    rgba(149, 240, 202, 0.8) 35%,
+    rgba(43, 114, 95, 0.98) 100%
   );
 }
 
 .score-hole.is-peg.opp::before {
   background: radial-gradient(
     circle at 35% 26%,
-    rgba(248, 223, 193, 0.94) 0%,
-    rgba(198, 153, 108, 0.78) 30%,
-    rgba(112, 78, 49, 0.96) 100%
+    rgba(255, 238, 214, 0.95) 0%,
+    rgba(216, 181, 111, 0.8) 35%,
+    rgba(112, 78, 49, 0.98) 100%
   );
 }
+
+@keyframes peg-pulse-once {
+  0% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.25); filter: brightness(1.3); }
+  100% { transform: scale(1.1); filter: brightness(1); }
+}
+
 
 .walnut-live.theme-brown {
   background:
