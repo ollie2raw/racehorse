@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Board, DominoTile } from '../components';
+import { Board, DominoTile, RotateOverlay } from '../components';
 import { applyPlayMove, getLegalMoves, type BotMatchState } from '../bot/botEngine';
 import type { Move, Tile } from '../types';
 import { getPuzzleForSeed } from './getDailyPuzzle';
@@ -179,7 +179,9 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
   };
 
   return (
-    <div className="screen game-screen walnut-live theme-green">
+    <>
+      <RotateOverlay />
+      <div className="screen game-screen walnut-live theme-green">
       <div className="wl-top-rail" data-ui="hud">
         <div className="wl-player-pill is-active">
           <div className="wl-pill-top">
@@ -313,5 +315,6 @@ export default function DailyPuzzleScreen({ onBack }: DailyPuzzleScreenProps) {
         </div>
       )}
     </div>
+    </>
   );
 }

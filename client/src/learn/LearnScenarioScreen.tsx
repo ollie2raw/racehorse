@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { LessonScenario } from './types';
 import { applyPlayMove, getLegalMoves, simulatePlacement, isDouble } from '../bot/botEngine';
 import type { BotMatchState } from '../bot/botEngine';
-import { Board, DominoTile } from '../components';
+import { Board, DominoTile, RotateOverlay } from '../components';
 import type { Tile, Move, PlacementPosition, PlacedTile } from '../types';
 import { compareMovesFeedback } from './feedback';
 import type { MoveRating } from './feedback';
@@ -239,6 +239,8 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
   }, [completed, selectedTile, currentStep]);
 
   return (
+    <>
+    <RotateOverlay />
     <div className="screen learn-scenario-screen" style={{ 
       background: 'linear-gradient(180deg, #0f172a 0%, #020617 100%)',
       color: 'white',
@@ -428,5 +430,6 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
         )}
       </div>
     </div>
+    </>
   );
 }

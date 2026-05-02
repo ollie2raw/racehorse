@@ -3311,6 +3311,66 @@ button:hover:not(:disabled) {
   padding: 12px;
 }
 
+/* ─── Rotate Overlay ────────────────────────────────────────── */
+
+.rotate-phone-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: #01010a;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+  color: #fff;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+.rotate-phone-content {
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.rotate-icon-wrapper {
+  color: #3d8eff;
+  animation: rotate-phone-anim 2s ease-in-out infinite;
+}
+
+@keyframes rotate-phone-anim {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(90deg); }
+  75% { transform: rotate(90deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.rotate-title {
+  margin: 0;
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.rotate-text {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+@media (max-width: 768px) and (orientation: portrait) {
+  .game-screen {
+    display: none !important;
+  }
+  .rotate-phone-overlay {
+    display: flex;
+  }
+}
+
 /* ─── Game Screen ───────────────────────────────────────────── */
 
 .game-screen {

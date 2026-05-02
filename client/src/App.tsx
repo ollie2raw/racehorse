@@ -3,7 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import type { Socket } from 'socket.io-client';
 import './App.css';
-import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from './components';
+import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay, RotateOverlay } from './components';
 import TileRack from './components/TileRack';
 import {
   playDrawSound,
@@ -2253,15 +2253,25 @@ export default function App() {
   useEffect(() => {
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, myHand.length);
-      const forceTwoRows = tileCount > 9;
-      const maxTileSize = 56; // 14-tile reference size cap
+      const isLandscape = window.innerWidth > window.innerHeight;
+      const isMobileWidth = window.innerWidth <= 900;
+      
+      // Force two rows only in portrait mobile if hand is large
+      const forceTwoRows = !isLandscape && isMobileWidth && tileCount > 7;
+      
+      const maxTileSize = 56;
       let tileWidth = maxTileSize;
-      if (tileCount >= 9 && tileCount <= 10) tileWidth = 64;
-      else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
-      else if (tileCount >= 15) tileWidth = 48;
-      tileWidth = Math.min(tileWidth, maxTileSize);
-      const trayHeight = forceTwoRows ? 138 : 120;
+      
+      // Calculate available width for hand
+      const containerWidth = trayCenterRef.current?.offsetWidth ?? window.innerWidth - 40;
+      const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
+      
+      // Dynamic tile width based on available space
+      tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
+      
+      const trayHeight = forceTwoRows ? 138 : (isLandscape && isMobileWidth ? 70 : 120);
       document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
+      
       setHandTileSize(tileWidth);
       setHandCompactStacked(forceTwoRows);
     };
@@ -3905,7 +3915,9 @@ export default function App() {
 
       {/* Game Screen */}
       {(isConnected || isRecoveringConnection) && joinedRoom && state && (
-        <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
+        <>
+          <RotateOverlay />
+          <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
           {roomRecoveryState !== 'idle' && (
             <div
               style={{
@@ -4083,7 +4095,6 @@ export default function App() {
               </div>
             </div>
           )}
-
           <div className="wl-top-rail" data-ui="hud" style={{ position: 'relative' }}>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <button
@@ -4354,14 +4365,14 @@ export default function App() {
                   tileSize={handTileSize}
                   compactStacked={handCompactStacked}
                   drawPulseIndex={drawPulseIndex}
-                />
-              </div>
+                  />
+                  </div>
+                  </div>
+                  </div>
+                  </div>
+                  </>
+                  )}
 
-
-            </div>
-          </div>
-        </div>
-      )}
       <Suspense fallback={null}>
         <GameReviewer
           open={analyzerOpen}

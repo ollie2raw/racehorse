@@ -1126,6 +1126,8 @@
     height: auto !important;
     min-height: 0 !important;
     overflow: visible !important;
+    flex-direction: column !important;
+    display: flex !important;
   }
 
   .claude-accordion-home__topbar {

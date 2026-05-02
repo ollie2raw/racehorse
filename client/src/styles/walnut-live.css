@@ -925,6 +925,91 @@ body {
   }
 }
 
+@media (max-width: 900px) and (orientation: landscape) {
+  .walnut-live {
+    padding: 4px 6px 6px;
+    gap: 4px;
+  }
+
+  .wl-top-rail {
+    grid-template-columns: auto 1fr auto;
+    padding: 2px 6px;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .wl-player-pill {
+    width: auto;
+    min-width: 110px;
+    min-height: 38px;
+    padding: 3px 10px;
+    border-radius: 12px;
+  }
+
+  .wl-player-label {
+    font-size: 9px;
+  }
+
+  .wl-player-score {
+    font-size: 20px;
+  }
+
+  .wl-turn-label {
+    padding: 4px 10px;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+  }
+
+  .wl-center-status {
+    gap: 2px;
+  }
+
+  .open-ends-pill {
+    padding: 2px 8px !important;
+    font-size: 0.7rem !important;
+  }
+
+  .wl-stage-shell {
+    padding: 0 4px;
+  }
+
+  .wl-board-area {
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  .wl-hand-area {
+    min-height: 70px !important;
+    height: 70px !important;
+    padding: 4px 10px;
+  }
+
+  .wl-hand-area .hand-container {
+    gap: 4px;
+  }
+
+  .wl-hand-area .tray-controls {
+    padding: 3px;
+    border-radius: 12px;
+  }
+
+  .wl-hand-area .btn.text.compact,
+  .wl-hand-area .optional-draw-btn.compact {
+    width: 70px;
+    min-width: 70px;
+    min-height: 24px;
+    font-size: 0.55rem;
+  }
+
+  .wl-hand-area .tray-controls .fullscreen-btn,
+  .wl-hand-area .tray-controls .volume-btn {
+    width: 26px;
+    min-width: 26px;
+    height: 26px;
+    min-height: 26px;
+  }
+}
+
 @media (max-width: 900px) {
   .wl-top-rail {
     grid-template-columns: 1fr;

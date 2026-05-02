@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay } from '../components';
+import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay, RotateOverlay } from '../components';
 import TileRack from '../components/TileRack';
 import type { BoardState, BranchArm, HubDouble, Move, PlacedTile, PlacementPosition, Tile } from '../types';
 import {
@@ -5406,32 +5406,24 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     const updateHandTileSize = () => {
-      const isMobile = window.innerWidth <= 600;
       const tileCount = Math.max(1, match.players.you.hand.length);
+      const isLandscape = window.innerWidth > window.innerHeight;
+      const isMobileWidth = window.innerWidth <= 900;
       
-      // On mobile portrait, we almost always want 2 rows to keep it compact and reachable
-      const forceTwoRows = isMobile || tileCount > 9;
+      const forceTwoRows = !isLandscape && isMobileWidth && tileCount > 7;
       
-      const maxTileSize = isMobile ? 44 : 56; 
+      const maxTileSize = 56;
       let tileWidth = maxTileSize;
       
-      if (!isMobile) {
-        if (tileCount >= 9 && tileCount <= 10) tileWidth = 64;
-        else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
-        else if (tileCount >= 15) tileWidth = 48;
-      } else {
-        // Mobile sizes
-        if (tileCount <= 7) tileWidth = 44;
-        else if (tileCount <= 10) tileWidth = 40;
-        else tileWidth = 36;
-      }
+      // Calculate available width for hand
+      const containerWidth = window.innerWidth - 40;
+      const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
       
-      tileWidth = Math.min(tileWidth, maxTileSize);
+      tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
       
-      // Calculate tray height based on rows and safe area
       const trayHeight = forceTwoRows 
-        ? (isMobile ? 110 : 138) 
-        : 120;
+        ? (isMobileWidth ? 110 : 138) 
+        : (isLandscape && isMobileWidth ? 70 : 120);
         
       document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
@@ -6048,10 +6040,13 @@ export default function BotMatchScreen({
   );
 
   return (
-    <div
-      ref={rootRef}
-      className={`screen game-screen walnut-live theme-${uiTheme} bot-match-screen ${isLessonLayoutMode ? 'learn-lesson-screen' : ''}`}
-    >
+    <>
+      <RotateOverlay />
+      <div
+        ref={rootRef}
+        className={`screen game-screen walnut-live theme-${uiTheme} bot-match-screen ${isLessonLayoutMode ? 'learn-lesson-screen' : ''}`}
+      >
+
       <ScoreTrackOverlay
         open={scoreTrackOpen}
         onClose={() => setScoreTrackOpen(false)}
@@ -6646,5 +6641,6 @@ export default function BotMatchScreen({
         </div>
       )}
     </div>
+    </>
   );
 }

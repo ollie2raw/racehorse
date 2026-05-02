@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { Board, DominoTile } from '../components';
+import { Board, DominoTile, RotateOverlay } from '../components';
 import type { Move, PlacedTile, Tile, BoardState } from '../types';
 import {
   applyPlayMove,
@@ -257,7 +257,9 @@ export default function DailyPuzzlePlay({
   };
 
   return (
-    <div className="screen game-screen walnut-live daily-puzzle-play-screen">
+    <>
+      <RotateOverlay />
+      <div className="screen game-screen walnut-live daily-puzzle-play-screen">
       <div className="wl-top-rail" data-ui="hud">
         <div className="wl-player-pill is-active">
           <div className="wl-pill-top">
@@ -368,5 +370,6 @@ export default function DailyPuzzlePlay({
         </div>
       )}
     </div>
+    </>
   );
 }

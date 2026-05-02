@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { Board, DominoTile } from '../components';
+import { Board, DominoTile, RotateOverlay } from '../components';
 import {
   applyPlayMove,
   getDisplayOpenEnds,
@@ -745,15 +745,22 @@ export default function DailyPuzzleScreen({
     if (!runtimeState) return;
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, runtimeState.players.you.hand.length);
-      const forceTwoRows = tileCount > 9;
-      const maxTileSize = 56; // 14-tile reference size cap
+      const isLandscape = window.innerWidth > window.innerHeight;
+      const isMobileWidth = window.innerWidth <= 900;
+      
+      const forceTwoRows = !isLandscape && isMobileWidth && tileCount > 7;
+      
+      const maxTileSize = 56;
       let tileWidth = maxTileSize;
-      if (tileCount >= 9 && tileCount <= 10) tileWidth = 64;
-      else if (tileCount >= 11 && tileCount <= 14) tileWidth = 56;
-      else if (tileCount >= 15) tileWidth = 48;
-      tileWidth = Math.min(tileWidth, maxTileSize);
-      const trayHeight = forceTwoRows ? 138 : 120;
+      
+      const containerWidth = window.innerWidth - 40;
+      const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
+      
+      tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
+      
+      const trayHeight = forceTwoRows ? 138 : (isLandscape && isMobileWidth ? 70 : 120);
       document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
+      
       setHandTileSize(tileWidth);
       setHandCompactStacked(forceTwoRows);
     };
@@ -1380,7 +1387,9 @@ export default function DailyPuzzleScreen({
   }
 
   return (
-    <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
+    <>
+      <RotateOverlay />
+      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
       <canvas
         ref={confettiCanvasRef}
         style={{
@@ -1580,5 +1589,6 @@ export default function DailyPuzzleScreen({
         </div>
       )}
     </div>
+    </>
   );
 }
