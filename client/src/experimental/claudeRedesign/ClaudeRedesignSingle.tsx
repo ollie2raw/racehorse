@@ -23,12 +23,6 @@ const singleModes = [
     status: 'Mock card only',
   },
   {
-    id: 'league',
-    title: 'Your League',
-    description: 'One match a day. Climb the table and survive promotion.',
-    status: 'Visual reference',
-  },
-  {
     id: 'lab',
     title: 'No Brainer Lab',
     description: 'Practice one-turn clear runs with curated hands.',

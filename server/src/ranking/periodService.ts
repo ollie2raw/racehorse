@@ -230,8 +230,14 @@ export async function processRatingPeriod(
   let newRD = profile.glicko_rd;
   let totalDelta = 0;
 
+  const opponentIds = [...new Set(games.map((g) => g.opponent_id))];
+  const opponentSnapshots = await Promise.all(
+    opponentIds.map((id) => getOpponentSnapshot(id)),
+  );
+  const opponentMap = new Map(opponentIds.map((id, i) => [id, opponentSnapshots[i]!]));
+
   for (const game of games) {
-    const opponent = await getOpponentSnapshot(game.opponent_id);
+    const opponent = opponentMap.get(game.opponent_id)!;
     const processed = await commitProcessedGame(profile, game, opponent, new Date().toISOString());
     profile = processed.profile;
     newRating = processed.newRating;

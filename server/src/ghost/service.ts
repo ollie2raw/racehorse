@@ -826,17 +826,19 @@ export async function completeGhostGame(params: {
     userId: params.userId,
     opponentUserId: params.opponentUserId,
   });
-  const profile = await ensureGhostProfile(params.userId);
-  const opponentProfile =
-    params.opponentUserId && params.opponentUserId !== params.userId
-      ? await fetchGhostProfile(params.opponentUserId)
-      : null;
+
   const isFritz = Boolean(params.opponentUserId && isFritzId(params.opponentUserId));
   const trainingMoveLog = normalizeMoveLog(
     isFritz && Array.isArray(params.playerMoveLog) && params.playerMoveLog.length > 0
       ? params.playerMoveLog
       : params.moveLog,
   );
+
+  const profile = await ensureGhostProfile(params.userId);
+  const opponentProfile =
+    params.opponentUserId && params.opponentUserId !== params.userId
+      ? await fetchGhostProfile(params.opponentUserId)
+      : null;
 
   const { isNewGame } = await insertGhostGameRow({
     userId: params.userId,

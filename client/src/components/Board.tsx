@@ -314,7 +314,6 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
       lane: 'horizontal',
       key: 'zone-left',
     });
-    minX = Math.min(minX, leftX - TILE_UNIT);
   }
 
   if (validPositions.includes('right')) {
@@ -330,7 +329,6 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
       lane: 'horizontal',
       key: 'zone-right',
     });
-    maxX = Math.max(maxX, rightX + TILE_UNIT);
   }
 
   return {
@@ -461,10 +459,6 @@ function layoutBranches(
           lane: verticalArms ? 'vertical' : 'horizontal',
           key: `zone-branch-${hubId}-${armIdx}`,
         });
-        minX = Math.min(minX, zoneX - (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
-        maxX = Math.max(maxX, zoneX + (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
-        minY = Math.min(minY, zoneY - (verticalArms ? TILE_UNIT : TILE_UNIT / 2));
-        maxY = Math.max(maxY, zoneY + (verticalArms ? TILE_UNIT : TILE_UNIT / 2));
       }
     } else {
       // No branch yet - show placement zone if valid
@@ -483,10 +477,6 @@ function layoutBranches(
           lane: verticalArms ? 'vertical' : 'horizontal',
           key: `zone-branch-${hubId}-${armIdx}`,
         });
-        minX = Math.min(minX, zoneX - (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
-        maxX = Math.max(maxX, zoneX + (verticalArms ? TILE_UNIT / 2 : TILE_UNIT));
-        minY = Math.min(minY, zoneY - (verticalArms ? TILE_UNIT : TILE_UNIT / 2));
-        maxY = Math.max(maxY, zoneY + (verticalArms ? TILE_UNIT : TILE_UNIT / 2));
       }
     }
   }

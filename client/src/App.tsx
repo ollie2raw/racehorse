@@ -3000,17 +3000,10 @@ export default function App() {
         action: () => setAppMode('ghostSetup'),
       },
       {
-        id: 'league',
-        title: 'Your League',
-        meta: 'One match a day. Climb the table, survive promotion and relegation',
-        accent: '#00f0c8',
-        action: () => setAppMode('league'),
-      },
-      {
         id: 'nobrainer',
         title: 'No Brainer Lab',
         meta: 'Practice one-turn clear runs with curated hands',
-        accent: '#60a5fa',
+        accent: '#34d399',
         action: () => setAppMode('noBrainer'),
       },
     ];
@@ -3022,7 +3015,7 @@ export default function App() {
             accent="#3d8eff"
             eyebrow="Choose your mode"
             title={'SINGLE\nPLAYER'}
-            description="Play vs Fritz, train against your ghost, climb your league, or drill one-turn clears."
+            description="Play vs Fritz, train against your ghost, or drill one-turn clears."
             decor="S"
             backLabel="Back to Home"
             onBack={() => setAppMode('home')}
@@ -3030,7 +3023,6 @@ export default function App() {
               <div className="claude-mode-chip-row">
                 <span className="claude-mode-chip">Fritz</span>
                 <span className="claude-mode-chip">Ghost</span>
-                <span className="claude-mode-chip">League</span>
                 <span className="claude-mode-chip">Lab</span>
               </div>
             }
@@ -3639,7 +3631,7 @@ export default function App() {
               <div className="claude-accordion-home__body">
                 {[
                   { id: 'multiplayer', short: 'MULTI', label: 'Multiplayer Online', desc: 'Create a private room and play head to head in real time', accent: '#38bdf8', live: true, action: () => setAppMode('multiplayer') },
-                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz, Ghost Mode, Your League & No Brainer Lab', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
+                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz, Ghost Mode & No Brainer Lab', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
                   { id: 'dailyFritz', short: 'FRITZ', label: 'Daily Fritz Match', desc: 'One fixed live Fritz match per day. Same deals for everyone.', accent: '#e05c6a', action: () => setAppMode('dailyFritz') },
                   { id: 'daily', short: 'PUZZLE', label: 'Daily Puzzle', desc: 'Solve today’s featured scenario and compare leaderboard results', accent: '#f0c040', action: () => setAppMode('daily') },
                   { id: 'tournament', short: 'TOURN', label: 'Tournament Mode', desc: 'Round robin (4+ players), matches to 30, play everyone once', accent: '#fb923c', action: () => { setError(''); setAppMode('tournament'); } },

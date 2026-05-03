@@ -2595,9 +2595,9 @@ export default function BotMatchScreen({
       return;
     }
     if (!verifiedMatchId) {
+      setGhostResultLoading(false);
       if (isStandaloneFritzMatch) {
-        setGhostResultLoading(true);
-        setGhostResultError(null);
+        setGhostResultError('Rating session was not verified. Match result saved locally.');
       } else if (isGhostMode) {
         setGhostResultError('Could not start rating session.');
       }
@@ -5449,6 +5449,11 @@ export default function BotMatchScreen({
       ? `${opponentLabel} thinking`
       : 'Your move';
 
+  const showTurnStatusCluster =
+    handActive &&
+    !handReveal &&
+    !isTransitioningRef.current;
+
   if (isGuidedMode && !isAuthoringMode) {
     console.log('[guided-move] rendered match player hand =', match.players.you.hand.map(toTileKey));
     console.log('[guided-move] rendered match board mainLine length =', match.board?.mainLine.length);
@@ -6242,7 +6247,9 @@ export default function BotMatchScreen({
               <span>Rating</span>
               <strong>
                 {ghostResultLoading
-                  ? 'Updating...'
+                  ? (currentGlickoRating ?? matchStartGlickoRating) != null
+                    ? `${Math.round(Number(currentGlickoRating ?? matchStartGlickoRating))}  •  syncing...`
+                    : 'Syncing...'
                   : fritzGlickoDelta != null && fritzNewGlickoRating != null
                     ? `${formatRatingDelta(fritzGlickoDelta)}  •  ${fritzNewGlickoRating}`
                   : fritzNewGlickoRating != null
@@ -6449,40 +6456,40 @@ export default function BotMatchScreen({
           </div>
         </div>
 
-        <div className="bot-hud-center-cluster" style={{ 
-          position: 'relative', 
-          display: handActive ? 'flex' : 'none', 
-          alignItems: 'center', 
-          justifyContent: 'center' 
-        }}>
-          {turnLabel ? (
-            <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`} style={{ transform: 'none' }}>
-              {turnLabel}
-            </span>
-          ) : null}
-          <div
-            className="open-ends-pill"
-            style={{
-              width: 'auto',
-              minWidth: 'unset',
-              height: '45px',
-              padding: '0 18px',
-              gap: '8px',
-              borderRadius: '999px',
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-              position: 'absolute',
-              left: 'calc(100% + 12px)',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              boxShadow: 'none',
-              lineHeight: 1,
-            }}
-          >
-            <span style={{ fontSize: '1.6rem', fontWeight: 800 }}>{openEndsSum}</span>
-            <span style={{ fontSize: '1.0rem', opacity: 0.7, letterSpacing: '0.02em', textTransform: 'uppercase' }}>OPEN</span>
-          </div>
+        <div className="bot-hud-center-cluster" style={{ position: 'relative' }}>
+          {showTurnStatusCluster && (
+            <>
+              {turnLabel && (
+                <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`} style={{ transform: 'none' }}>
+                  {turnLabel}
+                </span>
+              )}
+              <div
+                className="open-ends-pill"
+                data-has-turn-label={!!turnLabel}
+                style={{
+                  width: 'auto',
+                  minWidth: 'unset',
+                  height: '45px',
+                  padding: '0 18px',
+                  gap: '8px',
+                  borderRadius: '999px',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  position: 'absolute',
+                  left: 'calc(100% + 12px)',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  boxShadow: 'none',
+                  lineHeight: 1,
+                }}
+              >
+                <span style={{ fontSize: '1.6rem', fontWeight: 800 }}>{openEndsSum}</span>
+                <span style={{ fontSize: '1.0rem', opacity: 0.7, letterSpacing: '0.02em', textTransform: 'uppercase' }}>OPEN</span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="bot-hud-right-cluster">

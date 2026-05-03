@@ -22,7 +22,7 @@
 }
 
 .bot-match-screen .bot-hud-center-cluster {
-  display: flex !important;
+  display: flex;
   align-items: center !important;
   gap: 10px !important;
   justify-self: center !important;

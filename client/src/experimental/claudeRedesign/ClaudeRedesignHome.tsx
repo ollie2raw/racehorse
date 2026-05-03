@@ -34,7 +34,7 @@ const modes: Array<{
     id: 'single',
     short: 'SOLO',
     label: 'Single Player',
-    description: 'Explore Fritz, Ghost, League, and practice mode directions.',
+    description: 'Explore Fritz, Ghost, and practice mode directions.',
     accent: claudeTokens.blue,
   },
   {

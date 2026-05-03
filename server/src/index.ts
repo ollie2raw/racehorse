@@ -2121,12 +2121,17 @@ app.post('/api/bot-matches/local/start', async (req, res) => {
   const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : '';
   const fritzTier = typeof req.body?.fritzTier === 'string' ? req.body.fritzTier.trim().toLowerCase() : 'elite';
   const localMatchId = typeof req.body?.localMatchId === 'string' ? req.body.localMatchId.trim() : '';
+  
+  console.log('[Local Fritz Start] Received request:', { userId, fritzTier, localMatchId });
+
   if (!userId || !localMatchId) {
     res.status(400).json({ error: 'userId and localMatchId are required.' });
     return;
   }
   try {
     const authenticatedUserId = await getAuthenticatedUserId(req);
+    console.log('[Local Fritz Start] Authenticated user:', authenticatedUserId);
+
     if (!authenticatedUserId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
@@ -2136,18 +2141,26 @@ app.post('/api/bot-matches/local/start', async (req, res) => {
       return;
     }
     const roomCode = `local:${localMatchId}`;
+    
+    const fritzIdentity = getFritzIdentityForTier(fritzTier);
+    console.log('[Local Fritz Start] Fritz identity:', fritzIdentity);
+
     const verifiedMatch = await startVerifiedSinglePlayerMatch({
       userId,
       localMatchId,
       mode: 'fritz',
-      opponentUserId: getFritzIdentityForTier(fritzTier).fritzId,
+      opponentUserId: fritzIdentity.fritzId,
       fritzTier,
     });
+    console.log('[Local Fritz Start] Verified match created:', verifiedMatch);
+
     const existing = await supabaseFetch<any[]>(
       `/rest/v1/bot_match_pending?select=id&room_code=eq.${encodeURIComponent(roomCode)}&user_id=eq.${encodeURIComponent(userId)}&resolved=eq.false&limit=1`,
     );
+    console.log('[Local Fritz Start] Existing pending match:', existing?.[0]);
+
     if (!existing?.[0]?.id) {
-      await supabaseFetch('/rest/v1/bot_match_pending', {
+      const pendingResponse = await supabaseFetch('/rest/v1/bot_match_pending', {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
@@ -2157,9 +2170,14 @@ app.post('/api/bot-matches/local/start', async (req, res) => {
           resolved: false,
         }),
       });
+      console.log('[Local Fritz Start] Pending match inserted:', pendingResponse);
     }
     res.json({ ok: true, roomCode, matchId: verifiedMatch.matchId });
   } catch (error) {
+    console.error('[Local Fritz Start] FAILED:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to start pending bot match.',
     });
