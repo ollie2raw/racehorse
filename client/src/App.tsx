@@ -4200,6 +4200,8 @@ export default function App() {
                       display: 'inline-flex',
                       alignItems: 'center',
                       pointerEvents: 'none',
+                      transform: 'scale(0.82)',
+                      transformOrigin: 'top left',
                     }}
                   >
                     <ScoreBoard
