@@ -1864,11 +1864,11 @@ export default function BotMatchScreen({
   }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine, match.handOver, match.gameOver, isMuted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const lastUserMoveNumber = moveLog.reduce(
-      (max, entry) => (entry.player === 'you' ? Math.max(max, entry.moveNumber ?? 0) : max),
+    const lastMoveNumber = moveLog.reduce(
+      (max, entry) => Math.max(max, entry.moveNumber ?? 0),
       0,
     );
-    moveCounterRef.current = Math.max(1, lastUserMoveNumber + 1);
+    moveCounterRef.current = Math.max(1, lastMoveNumber + 1);
   }, [moveLog]);
 
   useEffect(() => {
@@ -2066,8 +2066,7 @@ export default function BotMatchScreen({
   }, []);
 
   const appendMove = useCallback((entry: Omit<MoveEntry, 'moveNumber'>) => {
-    const moveNumber =
-      entry.player === 'you' ? moveCounterRef.current++ : moveCounterRef.current;
+    const moveNumber = moveCounterRef.current++;
     setMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
   }, []);
 
@@ -3814,7 +3813,7 @@ export default function BotMatchScreen({
         window.setTimeout(() => setGhostBoardPulse(false), 520);
       }
       appendGhostMove({
-        turn: (match.turnIndex ?? 0) + 1,
+        turn: moveCounterRef.current,
         hand_number: match.handNumber,
         actor: 'you',
         board_state: boardStateKey,
@@ -4424,7 +4423,7 @@ export default function BotMatchScreen({
             if (drawPass.drew) {
               if (isGhostMode) {
                 appendGhostMove({
-                  turn: (match.turnIndex ?? 0) + 1,
+                  turn: moveCounterRef.current,
                   hand_number: match.handNumber,
                   actor: 'ghost',
                   board_state: ghostBoardStateKey,
@@ -4452,7 +4451,7 @@ export default function BotMatchScreen({
             if (drawPass.passed) {
               if (isGhostMode) {
                 appendGhostMove({
-                  turn: (working.turnIndex ?? 0) + 1,
+                  turn: moveCounterRef.current,
                   hand_number: working.handNumber,
                   actor: 'ghost',
                   board_state: ghostBoardStateKey,
@@ -4537,7 +4536,7 @@ export default function BotMatchScreen({
             setSelectedTile(null);
             if (isGhostMode && ghostChosen) {
               appendGhostMove({
-                turn: (working.turnIndex ?? 0) + 1,
+                turn: moveCounterRef.current,
                 hand_number: working.handNumber,
                 actor: 'ghost',
                 board_state: ghostBoardStateKey,
@@ -5220,7 +5219,7 @@ export default function BotMatchScreen({
           if (fastResult.passed) {
             if (isGhostMode) {
               appendGhostMove({
-                turn: (match.turnIndex ?? 0) + 1,
+                turn: moveCounterRef.current,
                 hand_number: match.handNumber,
                 actor: 'you',
                 board_state: serializeGhostBoardState(match.board),
@@ -5255,7 +5254,7 @@ export default function BotMatchScreen({
         if (result.drew) {
           if (isGhostMode) {
             appendGhostMove({
-              turn: (match.turnIndex ?? 0) + 1,
+              turn: moveCounterRef.current,
               hand_number: match.handNumber,
               actor: 'you',
               board_state: serializeGhostBoardState(match.board),
@@ -5316,7 +5315,7 @@ export default function BotMatchScreen({
           }
           if (isGhostMode) {
             appendGhostMove({
-              turn: (match.turnIndex ?? 0) + 1,
+              turn: moveCounterRef.current,
               hand_number: match.handNumber,
               actor: 'you',
               board_state: serializeGhostBoardState(match.board),
