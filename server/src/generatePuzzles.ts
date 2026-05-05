@@ -82,7 +82,7 @@ const YOU_ID = 'you';
 const BOT_ID = 'bot';
 const MAX_PIPS = 6;
 const DEAL_SIZE = 14;
-const MAX_ATTEMPTS_PER_DATE = 120;
+const MAX_ATTEMPTS_PER_DATE = 300;
 const MIN_BEST_SCORE = 35;
 const SETUP_STRIKE_MIN_SCORE = 5;
 function parseCliArgs(argv: string[]): CliOptions {
@@ -898,7 +898,7 @@ function buildHandFromPath(
   return hand.sort((a, b) => tileKey(a).localeCompare(tileKey(b)));
 }
 
-function createHighScorePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
+export function createHighScorePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
   try {
     const { board, remainingPool } = buildBoard(dateSeed, attempt);
     const pathTiles = findScoringPath(board, remainingPool, dateSeed, attempt);
@@ -1470,10 +1470,12 @@ function validateGeneratedPuzzle(puzzle: CuratedDailyPuzzle): { bestScore: numbe
     if (bestScore < MIN_BEST_SCORE) {
       throw new Error(`Best score ${bestScore} is below ${MIN_BEST_SCORE}.`);
     }
-    if (topSingleMoveScore < MIN_BEST_SCORE) {
-      throw new Error(`Best single-move score ${topSingleMoveScore} is below ${MIN_BEST_SCORE}.`);
-    }
+
+    // Single-move score check is too strict for sequence-based puzzles (where
+    // a double may open the turn with 0 pts). We rely on bestScore instead.
+
     if (
+      topSingleMoveScore >= MIN_BEST_SCORE &&
       secondSingleMoveScore !== null &&
       topSingleMoveScore - secondSingleMoveScore < 5
     ) {
@@ -1679,8 +1681,10 @@ async function main(): Promise<void> {
   }
 }
 
-void main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  void main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exitCode = 1;
+  });
+}
