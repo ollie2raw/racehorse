@@ -26,6 +26,8 @@ jobs:
         run: |
           # Daily Puzzle resets at midnight Pacific; generate using PT calendar days.
           export TZ=America/Los_Angeles
-          FROM=$(date -d "-1 day" +%Y-%m-%d 2>/dev/null || date -v-1d +%Y-%m-%d)
-          # 45-day rolling window keeps today + near-future pre-generated.
-          bash scripts/gen-puzzles.sh --from "$FROM" --days 45 --overwrite-existing
+          # Get current date in PT, then calculate back 2 days for safe backfill.
+          FROM=$(date -d "-2 days" +%Y-%m-%d 2>/dev/null || date -v-2d +%Y-%m-%d)
+          echo "Generating puzzles from $FROM for 365 days..."
+          # 365-day rolling window keeps today + one year of future puzzles pre-generated.
+          bash scripts/gen-puzzles.sh --from "$FROM" --days 365 --overwrite-existing

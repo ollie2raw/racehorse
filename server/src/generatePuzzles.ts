@@ -484,11 +484,11 @@ function buildBoard(dateSeed: string, attempt: number): { board: BoardState; rem
   const pool = buildFullDoubleSixSet();
   removeTileOnce(pool, spinner);
 
-  const mainLineSize = randInt(prng, 3, 4);
-  const extraMainLineTileOnLeft = mainLineSize === 4 ? prng() < 0.5 : false;
-  const leftSteps = extraMainLineTileOnLeft ? 2 : 1;
+  const mainLineSize = randInt(prng, 4, 6);
+  const extraMainLineTileOnLeft = mainLineSize >= 5 ? prng() < 0.5 : false;
+  const leftSteps = Math.floor(mainLineSize / 2) + (extraMainLineTileOnLeft ? 1 : 0);
   const rightSteps = mainLineSize - 1 - leftSteps;
-  const branchLengths = [randInt(prng, 1, 2), randInt(prng, 1, 2)];
+  const branchLengths = [randInt(prng, 1, 3), randInt(prng, 1, 3)];
   const pipProfile = getBoardPipProfile(dateSeed);
 
   let board = createSpinnerBoard(spinner);
@@ -546,7 +546,7 @@ function buildBoard(dateSeed: string, attempt: number): { board: BoardState; rem
 
   const tileCount = countBoardTiles(board);
   const openEnds = getOpenEnds(board);
-  if (tileCount < 4 || tileCount > 8) {
+  if (tileCount < 7 || tileCount > 15) {
     throw new Error(`Board tile count out of range: ${tileCount}`);
   }
   if (openEnds.length < 3 || openEnds.length > 6) {
@@ -1637,6 +1637,7 @@ async function main(): Promise<void> {
       build: (seed: string, attempt: number) => CuratedDailyPuzzle;
     }> = [
       { puzzleType: 'one_turn_high_score', build: createHighScorePuzzle },
+      { puzzleType: 'setup_and_strike', build: generateSetupAndStrikePuzzle },
     ];
 
     for (const generator of generators) {
@@ -1657,6 +1658,12 @@ async function main(): Promise<void> {
           const validation = validateGeneratedPuzzle(generated);
           bestScore = validation.bestScore;
           openEnds = validation.openEnds;
+
+          // Update targetScore for setup_and_strike based on validated bestScore
+          if (generated.puzzleType === 'setup_and_strike') {
+            generated.targetScore = bestScore;
+          }
+
           break;
         } catch {
           generated = null;
