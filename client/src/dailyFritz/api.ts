@@ -140,6 +140,7 @@ export interface DailyFritzTodayResponse {
   winning_score: number;
   attempt_status: 'none' | 'started' | 'completed' | 'abandoned';
   current_game_number: DailyFritzSetGameNumber | null;
+  needs_completion?: boolean;
   streak: number;
   result: Record<string, unknown> | null;
   set_result: DailyFritzSetResult | null;
@@ -154,6 +155,7 @@ export interface DailyFritzStartResponse {
   run_date: string;
   current_hand_index: number;
   current_game_number?: DailyFritzSetGameNumber | null;
+  needs_completion?: boolean;
   set_result: DailyFritzSetResult | null;
   fritz_tier: FritzTier;
   deal_size: BotDealSize;

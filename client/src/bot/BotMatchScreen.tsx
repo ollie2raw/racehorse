@@ -165,7 +165,9 @@ interface BotMatchScreenProps {
     nextLabel: string | null;
     primaryLabel: string;
     primaryTone: 'default' | 'decider' | 'success';
+    primaryDisabled?: boolean;
     secondaryLabel: string | null;
+    errorMessage?: string | null;
     gameScoreLabel: string;
     gameScoreValue: string;
     setScoreValue: string;
@@ -761,6 +763,8 @@ export default function BotMatchScreen({
   };
   const initialPersistedDailyFritzMatch = loadPersistedDailyFritzMatch();
   const DRAW_STEP_MS = 700;
+  const DAILY_FRITZ_REVEAL_DELAY_MS = 1400;
+  const DAILY_FRITZ_AUTO_ADVANCE_MS = 3500;
 
   console.log('[mode-debug]', { mode, isGuidedModeProp, isGuidedMode, isLearnAcademyMode });
 
@@ -981,6 +985,7 @@ export default function BotMatchScreen({
     promise: Promise<DailyFritzNextHandResponse>;
     result: DailyFritzNextHandResponse | null;
     error: unknown;
+    startedAt: number;
   } | null>(null);
   const botChainPauseRef = useRef(false);
   const lifecycleVersionRef = useRef(0);
@@ -2332,8 +2337,15 @@ export default function BotMatchScreen({
         clearTimeout(dailyFritzStorageTimerRef.current);
         dailyFritzStorageTimerRef.current = null;
       }
-      dailyFritzStoragePendingRef.current = null;
-      window.sessionStorage.removeItem(dailyFritzStorageKey);
+      const finalSnapshot = {
+        attemptId: dailyFritzPackage?.attempt_id ?? null,
+        currentHandIndex: dailyFritzHandIndex,
+        match,
+        movesUsed,
+        moveLog,
+      };
+      dailyFritzStoragePendingRef.current = { key: dailyFritzStorageKey, payload: finalSnapshot };
+      window.sessionStorage.setItem(dailyFritzStorageKey, JSON.stringify(finalSnapshot));
       return;
     }
     if (dailyFritzStorageTimerRef.current) clearTimeout(dailyFritzStorageTimerRef.current);
@@ -3231,10 +3243,12 @@ export default function BotMatchScreen({
           yourScore: result.state.players.you.score,
           fritzScore: result.state.players.bot.score,
         });
+        const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
         const cache: {
           promise: Promise<DailyFritzNextHandResponse>;
           result: DailyFritzNextHandResponse | null;
           error: unknown;
+          startedAt: number;
         } = {
           promise: nextDailyFritzHand({
             attemptId: dailyFritzPackage.attempt_id,
@@ -3249,23 +3263,28 @@ export default function BotMatchScreen({
           }),
           result: null,
           error: null,
+          startedAt: requestStartedAt,
         };
         cache.promise
           .then((r) => {
+            const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
             console.log('[daily-fritz-hand] next hand response', {
               source: 'prefetch',
               gameNumber: r.game_number ?? gameNumber,
               currentHandIndex: r.current_hand_index,
               replayed: Boolean(r.replayed),
               ignored: Boolean(r.ignored),
+              durationMs: Number((requestEndedAt - requestStartedAt).toFixed(1)),
             });
             cache.result = r;
           })
           .catch((e) => {
+            const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
             console.warn('[daily-fritz-hand] next hand error', {
               source: 'prefetch',
               gameNumber,
               error: e instanceof Error ? e.message : String(e),
+              durationMs: Number((requestEndedAt - requestStartedAt).toFixed(1)),
             });
             cache.error = e;
           });
@@ -3295,7 +3314,7 @@ export default function BotMatchScreen({
           botRemainingTiles,
         });
         handRevealTimerRef.current = null;
-      }, 1400);
+      }, DAILY_FRITZ_REVEAL_DELAY_MS);
       if (result.handEnded.reason === 'blocked') {
         queueSound(() => playBlockedSound(isMuted), 0);
       }
@@ -3329,24 +3348,7 @@ export default function BotMatchScreen({
   ]);
 
   const applyAndNotify = useCallback((result: BotActionResult) => {
-    const adjustedState =
-      isDailyFritzMode &&
-      result.handEnded &&
-      !result.state.gameOver &&
-      result.state.handNumber >= 12
-        ? {
-            ...result.state,
-            handOver: true,
-            gameOver: true,
-            winnerId: (
-              result.state.players.you.score > result.state.players.bot.score
-                ? 'you'
-                : result.state.players.bot.score > result.state.players.you.score
-                  ? 'bot'
-                  : null
-            ) as BotPlayerId | null,
-          }
-        : result.state;
+    const adjustedState = result.state;
 
     setMatch((prev) => {
       const trackedDraw = result.drew?.player === 'you' ? 1 : 0;
@@ -5063,17 +5065,24 @@ export default function BotMatchScreen({
               yourScore: match.players.you.score,
               fritzScore: match.players.bot.score,
             });
-            return nextDailyFritzHand({
-              attemptId: dailyFritzPackage.attempt_id,
-              verifiedMatchId: dailyFritzPackage.verified_match_id,
-              runDate: dailyFritzPackage.run_date,
-              gameNumber,
-              completedHandIndex: dailyFritzHandIndex,
-              completedHandScores: {
-                you: match.players.you.score,
-                fritz: match.players.bot.score,
-              },
-            });
+            const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            dailyFritzNextHandRef.current = {
+              promise: Promise.resolve().then(() => nextDailyFritzHand({
+                attemptId: dailyFritzPackage.attempt_id,
+                verifiedMatchId: dailyFritzPackage.verified_match_id,
+                runDate: dailyFritzPackage.run_date,
+                gameNumber,
+                completedHandIndex: dailyFritzHandIndex,
+                completedHandScores: {
+                  you: match.players.you.score,
+                  fritz: match.players.bot.score,
+                },
+              })),
+              result: null,
+              error: null,
+              startedAt: requestStartedAt,
+            };
+            return dailyFritzNextHandRef.current.promise;
           })();
         console.log('[daily-flow] next hand start (awaiting fetch)', {
           hadCachedPromise: cache?.promise != null,
@@ -5081,12 +5090,17 @@ export default function BotMatchScreen({
         void handPromise
           .then((response) => {
             lastDailyFlowLabelRef.current = 'next-hand-start';
+            const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            if (!cache?.promise && dailyFritzNextHandRef.current) {
+              dailyFritzNextHandRef.current.result = response;
+            }
             console.log('[daily-fritz-hand] next hand response', {
               source: cache?.promise ? 'cached-promise' : 'advance',
               gameNumber: response.game_number ?? dailyFritzPackage.current_game_number ?? 1,
               currentHandIndex: response.current_hand_index,
               replayed: Boolean(response.replayed),
               ignored: Boolean(response.ignored),
+              durationMs: Number((requestEndedAt - (cache?.startedAt ?? dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
             });
             console.log('[daily-fritz-hand] applying next hand', {
               source: cache?.promise ? 'cached-promise' : 'advance',
@@ -5117,12 +5131,17 @@ export default function BotMatchScreen({
             // Retryable network/server error — reset guard and surface to UI.
             // The watchdog will retry after 10 s if still stuck.
             const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
+            const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            if (!cache?.promise && dailyFritzNextHandRef.current) {
+              dailyFritzNextHandRef.current.error = err;
+            }
             handTransitionInFlightRef.current = false;
             console.warn('[daily-fritz-hand] next hand error', {
               source: cache?.promise ? 'cached-promise' : 'advance',
               gameNumber: dailyFritzPackage.current_game_number ?? 1,
               error: errMsg,
               handNumber: matchRef.current.handNumber,
+              durationMs: Number((requestEndedAt - (cache?.startedAt ?? dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
             });
             setGhostResultError(errMsg);
             // handReveal intentionally NOT cleared here — keep the reveal visible
@@ -5192,8 +5211,9 @@ export default function BotMatchScreen({
     // In guided / V2 guided modes the player taps "Next Hand →" manually
     if (isGuidedMode || isGuidedV2Mode) return;
     if (isDailyFritzMode) {
-      console.log('[daily-flow] reveal countdown started (5s)', {
+      console.log('[daily-flow] reveal countdown started', {
         handNumber: match.handNumber,
+        autoAdvanceMs: DAILY_FRITZ_AUTO_ADVANCE_MS,
         handTransitionInFlight: handTransitionInFlightRef.current,
         prefetchReady: dailyFritzNextHandRef.current?.result != null,
       });
@@ -5201,7 +5221,7 @@ export default function BotMatchScreen({
     const rafId = requestAnimationFrame(() => setHandRevealProgress(0));
     const timer = setTimeout(() => {
       advanceHand();
-    }, 5000);
+    }, DAILY_FRITZ_AUTO_ADVANCE_MS);
     return () => {
       cancelAnimationFrame(rafId);
       clearTimeout(timer);
@@ -6321,11 +6341,13 @@ export default function BotMatchScreen({
                   : winner === 'bot'
                     ? handReveal.yourRemainingTiles
                     : [...handReveal.yourRemainingTiles, ...handReveal.botRemainingTiles];
+
+              const scoredPips = sumTilePips(scoredTiles);
               const summarySentence = youWentOut
-                ? `You cleared your hand. ${handReveal.botRemainingTiles.length} remaining pips rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`
+                ? `You cleared your hand. ${scoredPips} remaining pip${scoredPips === 1 ? '' : 's'} rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`
                 : oppWentOut
-                  ? `${opponentLabel} cleared their hand. ${handReveal.yourRemainingTiles.length} remaining pips rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`
-                  : `Hand ended blocked. ${handRevealScoredPips} remaining pips rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`;
+                  ? `${opponentLabel} cleared their hand. ${scoredPips} remaining pip${scoredPips === 1 ? '' : 's'} rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`
+                  : `Hand ended blocked. ${scoredPips} remaining pip${scoredPips === 1 ? '' : 's'} rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`;
 
               return (
                 <>
@@ -6389,8 +6411,23 @@ export default function BotMatchScreen({
             {isGuidedMode && coach.handSummary && <LearningHandRecap summary={coach.handSummary} />}
 
             <div className="hand-over-premium-footer">
-              <span className="hand-over-premium-next-label">Next hand starting...</span>
-              {isGuidedMode || isGuidedV2Mode ? (
+              {ghostResultError ? (
+                <div className="hand-over-error-zone">
+                  <span className="hand-over-error-text" title={ghostResultError}>
+                    {ghostResultError}
+                  </span>
+                  <button
+                    type="button"
+                    className="mode-inline-btn"
+                    onClick={() => {
+                      setGhostResultError(null);
+                      advanceHand();
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : isGuidedMode || isGuidedV2Mode ? (
                 <button
                   className="mode-inline-btn guided-next-hand-btn"
                   onClick={advanceHand}
@@ -6399,16 +6436,19 @@ export default function BotMatchScreen({
                   Next Hand →
                 </button>
               ) : (
+                <>
+                  <span className="hand-over-premium-next-label">Next hand starting...</span>
                   <div className="hand-over-premium-progress-track">
                     <div
                       className="hand-over-premium-progress-fill"
                       style={{
                         width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%`,
-                        transition: 'width 5000ms linear',
+                        transition: `width ${DAILY_FRITZ_AUTO_ADVANCE_MS}ms linear`,
                       }}
                     />
                   </div>
-                )}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -6470,11 +6510,20 @@ export default function BotMatchScreen({
               </div>
             ) : null}
 
+            {dailyFritzSetOverlay.errorMessage ? (
+              <div className="hand-over-error-zone">
+                <span className="hand-over-error-text" title={dailyFritzSetOverlay.errorMessage}>
+                  {dailyFritzSetOverlay.errorMessage}
+                </span>
+              </div>
+            ) : null}
+
             <div className="daily-fritz-set-overlay-actions">
               <button
                 type="button"
                 className={`daily-fritz-set-overlay-primary is-${dailyFritzSetOverlay.primaryTone}`}
                 onClick={dailyFritzSetOverlay.onPrimary}
+                disabled={dailyFritzSetOverlay.primaryDisabled}
               >
                 {dailyFritzSetOverlay.primaryLabel}
               </button>

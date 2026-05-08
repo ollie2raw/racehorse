@@ -2519,6 +2519,8 @@ app.get('/api/daily-fritz/today', async (req, res) => {
       }),
     ]);
     mark('userStateCombined', userStateStartedAt, { runDate });
+    const attemptSetResult = attempt ? normalizeDailyFritzSetResult(attempt.result) : null;
+    const needsCompletion = attempt?.status === 'started' && Boolean(attemptSetResult?.setWinner);
     let ownRank: number | null = null;
     if (attempt?.status === 'completed') {
       const leaderboardStartedAt = Date.now();
@@ -2538,10 +2540,14 @@ app.get('/api/daily-fritz/today', async (req, res) => {
       deal_size: run.dealSize,
       winning_score: run.winningScore,
       attempt_status: attempt?.status ?? 'none',
-      current_game_number: attempt?.status === 'started' ? getCurrentDailyFritzGameNumber(attempt.result) : null,
+      current_game_number:
+        attempt?.status === 'started' && !needsCompletion
+          ? getCurrentDailyFritzGameNumber(attempt.result)
+          : null,
+      needs_completion: needsCompletion,
       streak,
       result: attempt?.status === 'completed' ? attempt.result : null,
-      set_result: attempt ? normalizeDailyFritzSetResult(attempt.result) : null,
+      set_result: attemptSetResult,
       rank: ownRank,
       leaderboard_preview: [],
     };
@@ -2610,8 +2616,10 @@ app.post('/api/daily-fritz/start', async (req, res) => {
       attempt = await upsertDailyFritzAttempt(attempt);
     }
 
-    const currentGameNumber = getCurrentDailyFritzGameNumber(attempt.result);
-    const handDeal = getDailyFritzHandForGame(run, currentGameNumber, attempt.currentHandIndex);
+    const currentSetResult = normalizeDailyFritzSetResult(attempt.result);
+    const needsCompletion = Boolean(currentSetResult?.setWinner);
+    const currentGameNumber = needsCompletion ? null : getCurrentDailyFritzGameNumber(attempt.result);
+    const handDeal = getDailyFritzHandForGame(run, currentGameNumber ?? 1, attempt.currentHandIndex);
     res.json({
       ok: true,
       attempt_id: attempt.id,
@@ -2619,7 +2627,8 @@ app.post('/api/daily-fritz/start', async (req, res) => {
       run_date: run.runDate,
       current_hand_index: attempt.currentHandIndex,
       current_game_number: currentGameNumber,
-      set_result: normalizeDailyFritzSetResult(attempt.result),
+      needs_completion: needsCompletion,
+      set_result: currentSetResult,
       fritz_tier: run.fritzTier,
       deal_size: run.dealSize,
       winning_score: run.winningScore,

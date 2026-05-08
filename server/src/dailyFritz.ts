@@ -228,7 +228,6 @@ export function sortDailyFritzLeaderboard<T extends DailyFritzLeaderboardEntry>(
     if (a.finalScore !== b.finalScore) return b.finalScore - a.finalScore;
     if (a.opponentScore !== b.opponentScore) return a.opponentScore - b.opponentScore;
     if (a.pointDiff !== b.pointDiff) return b.pointDiff - a.pointDiff;
-    if (a.movesUsed !== b.movesUsed) return a.movesUsed - b.movesUsed;
     return new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime();
   });
 }

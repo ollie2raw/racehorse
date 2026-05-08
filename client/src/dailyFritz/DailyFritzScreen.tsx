@@ -44,10 +44,36 @@ interface DailyFritzScreenProps {
 
 type DailyFritzOverlayState =
   | {
+      kind: 'saving';
+      completedGame: DailyFritzSetGameResult;
+      message: string;
+    }
+  | {
+      kind: 'record-error';
+      completedGame: DailyFritzSetGameResult;
+      message: string;
+      error: string;
+      game: DailyFritzGameCompletionPayload;
+    }
+  | {
       kind: 'between';
       completedGame: DailyFritzSetGameResult;
       setResult: DailyFritzSetResult;
       nextGameNumber: DailyFritzSetGameNumber;
+    }
+  | {
+      kind: 'finalizing';
+      completedGame: DailyFritzSetGameResult;
+      setResult: DailyFritzSetResult;
+      message: string;
+      currentHandIndex: number;
+    }
+  | {
+      kind: 'final-error';
+      completedGame: DailyFritzSetGameResult;
+      setResult: DailyFritzSetResult;
+      error: string;
+      currentHandIndex: number;
     }
   | {
       kind: 'final';
@@ -56,6 +82,16 @@ type DailyFritzOverlayState =
       rank: number | null;
       canViewLeaderboard: boolean;
     };
+
+interface DailyFritzGameCompletionPayload {
+  winner: 'you' | 'bot' | null;
+  yourScore: number;
+  botScore: number;
+  movesUsed: number;
+  handsPlayed: number;
+  currentHandIndex: number;
+  moveLog: unknown;
+}
 
 type BetweenGameTrackerTone = 'win' | 'loss' | 'next' | 'idle';
 
@@ -165,8 +201,10 @@ function normalizeStartResponse(
   fallbackSetResult: DailyFritzSetResult | null,
 ): DailyFritzStartResponse {
   const setResult = normalizeSetResult(response.set_result) ?? fallbackSetResult;
-  const fallbackGameNumber = getNextGameNumberFromSetResult(setResult);
-  const currentGameNumber = normalizeGameNumber(response.current_game_number, fallbackGameNumber);
+  const currentGameNumber =
+    response.needs_completion && setResult?.setWinner
+      ? null
+      : normalizeGameNumber(response.current_game_number, getNextGameNumberFromSetResult(setResult));
   const normalized = {
     ...response,
     current_game_number: currentGameNumber,
@@ -285,6 +323,9 @@ function getFinalOverlaySubheadline(setResult: DailyFritzSetResult): string {
 function getSetStatusLabel(today: DailyFritzTodayResponse | null): string {
   if (!today || today.attempt_status === 'none') return 'Not started';
   const setResult = normalizeSetResult(today.set_result ?? today.result);
+  if (today.needs_completion && setResult?.setWinner) {
+    return `Finalize pending: ${formatSetResultLabel(setResult)}`;
+  }
   if (today.attempt_status === 'completed') {
     return `Complete: ${formatSetResultLabel(setResult, Boolean(today.result?.won))}`;
   }
@@ -299,8 +340,11 @@ function getPrimaryActionCopy(today: DailyFritzTodayResponse | null): { title: s
   if (!today || today.attempt_status === 'none') {
     return { title: 'Start Set', meta: 'Begin today’s best-of-3' };
   }
+  const setResult = normalizeSetResult(today.set_result ?? today.result);
+  if (today.needs_completion && setResult?.setWinner) {
+    return { title: 'Finalize Set', meta: 'Retry posting today’s result' };
+  }
   if (today.attempt_status === 'started') {
-    const setResult = normalizeSetResult(today.set_result ?? today.result);
     const nextGame = Math.min((setResult?.games.length ?? 0) + 1, 3);
     if ((setResult?.games.length ?? 0) > 0) {
       return {
@@ -395,16 +439,22 @@ export default function DailyFritzScreen({
   );
   const [setOverlay, setSetOverlay] = useState<DailyFritzOverlayState | null>(null);
   const [setSubmitError, setSetSubmitError] = useState<string | null>(null);
+  const [startActionPending, setStartActionPending] = useState(false);
 
   const cacheKey = useMemo(
     () => (user?.id ? `${DAILY_FRITZ_TODAY_CACHE_PREFIX}${user.id}` : null),
     [user?.id],
   );
   const todayRef = useRef<DailyFritzTodayResponse | null>(today);
+  const activeRunRef = useRef<DailyFritzStartResponse | null>(activeRun);
 
   useEffect(() => {
     todayRef.current = today;
   }, [today]);
+
+  useEffect(() => {
+    activeRunRef.current = activeRun;
+  }, [activeRun]);
 
   useEffect(() => {
     if (!cacheKey || typeof window === 'undefined') return;
@@ -485,115 +535,97 @@ export default function DailyFritzScreen({
     }
   }, []);
 
-  const beginRun = useCallback(async () => {
-    setError(null);
-    setSetSubmitError(null);
-    setSetOverlay(null);
-    try {
-      const started = await startDailyFritz();
-      const normalized = normalizeStartResponse(started, normalizeSetResult(today?.set_result ?? today?.result));
-      console.debug('[daily-fritz-set] active run game number', normalized.current_game_number);
-      setActiveRun(normalized);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start Daily Fritz.');
-    }
-  }, [today]);
+  const buildCompletedGame = useCallback((
+    run: DailyFritzStartResponse,
+    game: DailyFritzGameCompletionPayload,
+    gameNumber: DailyFritzSetGameNumber,
+  ): DailyFritzSetGameResult => ({
+    gameNumber,
+    seed: getDailyFritzGameSeed(run.run_date, gameNumber),
+    playerWon: game.yourScore > game.botScore,
+    playerScore: game.yourScore,
+    fritzScore: game.botScore,
+    pointDiff: game.yourScore - game.botScore,
+    movesUsed: game.movesUsed,
+    handsPlayed: game.handsPlayed,
+    completedAt: new Date().toISOString(),
+  }), []);
 
-  const finishEmbeddedRun = useCallback(async () => {
-    setActiveRun(null);
-    await loadToday();
-  }, [loadToday]);
-
-  const continueSet = useCallback(async () => {
-    setError(null);
-    setSetSubmitError(null);
-    const fallbackSetResult = setOverlay?.setResult ?? normalizeSetResult(today?.set_result ?? today?.result);
-    try {
-      const started = await startDailyFritz();
-      const normalized = normalizeStartResponse(started, fallbackSetResult);
-      console.debug('[daily-fritz-set] active run game number', normalized.current_game_number);
-      setSetOverlay(null);
-      setActiveRun(normalized);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to continue Daily Fritz.');
-    }
-  }, [setOverlay?.setResult, today]);
-
-  const handleDailyFritzGameComplete = useCallback(async (game: {
-    winner: 'you' | 'bot' | null;
-    yourScore: number;
-    botScore: number;
-    movesUsed: number;
-    handsPlayed: number;
+  const submitSetCompletion = useCallback(async ({
+    run,
+    setResult,
+    completedGame,
+    currentHandIndex,
+    boardContext,
+  }: {
+    run: DailyFritzStartResponse;
+    setResult: DailyFritzSetResult;
+    completedGame: DailyFritzSetGameResult;
     currentHandIndex: number;
-    moveLog: unknown;
+    boardContext: boolean;
   }) => {
-    if (!activeRun) return;
-    if (game.yourScore === game.botScore) {
-      setSetSubmitError('Daily Fritz games cannot finish tied.');
-      setError('Daily Fritz games cannot finish tied.');
-      setActiveRun(null);
-      await loadToday();
-      return;
-    }
-    const gameNumber = normalizeGameNumber(activeRun.current_game_number);
-    setSetSubmitError(null);
-    try {
-      const recorded = await recordDailyFritzGame({
-        attemptId: activeRun.attempt_id,
-        verifiedMatchId: activeRun.verified_match_id,
-        runDate: activeRun.run_date,
-        gameNumber,
-        playerScore: game.yourScore,
-        fritzScore: game.botScore,
-        movesUsed: game.movesUsed,
-        handsPlayed: game.handsPlayed,
-      });
-      console.debug('[daily-fritz-set] record game response', recorded);
-      const setResult = normalizeSetResult(recorded.set_result) ?? recorded.set_result;
-      console.debug('[daily-fritz-set] normalized set result', setResult);
-      const completedGame =
-        setResult.games.find((entry) => entry.gameNumber === gameNumber) ??
-        {
-          gameNumber,
-          seed: getDailyFritzGameSeed(activeRun.run_date, gameNumber),
-          playerWon: game.yourScore > game.botScore,
-          playerScore: game.yourScore,
-          fritzScore: game.botScore,
-          pointDiff: game.yourScore - game.botScore,
-          movesUsed: game.movesUsed,
-          handsPlayed: game.handsPlayed,
-          completedAt: new Date().toISOString(),
-        };
+    const totalMoves = setResult.games.reduce((sum, entry) => sum + Number(entry.movesUsed ?? 0), 0);
+    const totalHands = setResult.games.reduce((sum, entry) => sum + Number(entry.handsPlayed ?? 0), 0);
+    const completionStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
-      if (setResult.setWinner) {
-        const totalMoves = setResult.games.reduce((sum, entry) => sum + Number(entry.movesUsed ?? 0), 0);
-        const totalHands = setResult.games.reduce((sum, entry) => sum + Number(entry.handsPlayed ?? 0), 0);
-        const completionHash = await buildDailyFritzCompletionHash({
-          runDate: activeRun.run_date,
-          attemptId: activeRun.attempt_id,
-          verifiedMatchId: activeRun.verified_match_id,
-          currentHandIndex: game.currentHandIndex,
-          finalScore: setResult.playerGamesWon,
-          opponentScore: setResult.fritzGamesWon,
-          won: setResult.setWinner === 'player',
-          movesUsed: totalMoves,
-          handsPlayed: totalHands,
-          moveLog: setResult,
-        });
-        const completion = await completeDailyFritz({
-          attemptId: activeRun.attempt_id,
-          verifiedMatchId: activeRun.verified_match_id,
-          runDate: activeRun.run_date,
-          completionHash,
-          finalScore: setResult.playerGamesWon,
-          opponentScore: setResult.fritzGamesWon,
-          won: setResult.setWinner === 'player',
-          movesUsed: totalMoves,
-          handsPlayed: totalHands,
-          moveLog: setResult,
+      if (boardContext) {
+        setSetOverlay({
+          kind: 'finalizing',
+          completedGame,
           setResult,
+          message: 'Posting your completed set…',
+          currentHandIndex,
         });
+      }
+
+    console.log('[daily-fritz-set] complete start', {
+      attemptId: run.attempt_id,
+      runDate: run.run_date,
+      gameNumber: completedGame.gameNumber,
+      handIndex: currentHandIndex,
+      yourScore: setResult.playerGamesWon,
+      fritzScore: setResult.fritzGamesWon,
+    });
+
+    try {
+      const completionHash = await buildDailyFritzCompletionHash({
+        runDate: run.run_date,
+        attemptId: run.attempt_id,
+        verifiedMatchId: run.verified_match_id,
+        currentHandIndex,
+        finalScore: setResult.playerGamesWon,
+        opponentScore: setResult.fritzGamesWon,
+        won: setResult.setWinner === 'player',
+        movesUsed: totalMoves,
+        handsPlayed: totalHands,
+        moveLog: setResult,
+      });
+      const completion = await completeDailyFritz({
+        attemptId: run.attempt_id,
+        verifiedMatchId: run.verified_match_id,
+        runDate: run.run_date,
+        completionHash,
+        finalScore: setResult.playerGamesWon,
+        opponentScore: setResult.fritzGamesWon,
+        won: setResult.setWinner === 'player',
+        movesUsed: totalMoves,
+        handsPlayed: totalHands,
+        moveLog: setResult,
+        setResult,
+      });
+      const completionEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      console.log('[daily-fritz-set] complete success', {
+        attemptId: run.attempt_id,
+        runDate: run.run_date,
+        gameNumber: completedGame.gameNumber,
+        handIndex: currentHandIndex,
+        yourScore: setResult.playerGamesWon,
+        fritzScore: setResult.fritzGamesWon,
+        durationMs: Number((completionEndedAt - completionStartedAt).toFixed(1)),
+      });
+
+      setSetSubmitError(null);
+      if (boardContext) {
         setSetOverlay({
           kind: 'final',
           completedGame,
@@ -601,14 +633,206 @@ export default function DailyFritzScreen({
           rank: completion.rank ?? null,
           canViewLeaderboard: completion.leaderboard_preview.length > 0,
         });
-        setActiveRun((current) =>
-          current
-            ? {
-                ...current,
-                set_result: setResult,
-              }
-            : current,
-        );
+      } else {
+        setSetOverlay(null);
+        await loadToday();
+      }
+      setActiveRun((current) =>
+        current
+          ? {
+              ...current,
+              set_result: setResult,
+            }
+          : current,
+      );
+      setError(null);
+      return completion;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to finalize Daily Fritz set.';
+      const completionEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      console.log('[daily-fritz-set] complete error', {
+        attemptId: run.attempt_id,
+        runDate: run.run_date,
+        gameNumber: completedGame.gameNumber,
+        handIndex: currentHandIndex,
+        yourScore: setResult.playerGamesWon,
+        fritzScore: setResult.fritzGamesWon,
+        durationMs: Number((completionEndedAt - completionStartedAt).toFixed(1)),
+        error: message,
+      });
+      setSetSubmitError(message);
+      if (boardContext) {
+        setSetOverlay({
+          kind: 'final-error',
+          completedGame,
+          setResult,
+          error: message,
+          currentHandIndex,
+        });
+      } else {
+        setSetSubmitError(message);
+      }
+      throw err;
+    }
+  }, [loadToday]);
+
+  const finishEmbeddedRun = useCallback(async () => {
+    setActiveRun(null);
+    await loadToday();
+  }, [loadToday]);
+
+  const handleStartResponse = useCallback(async (
+    started: DailyFritzStartResponse,
+    fallbackSetResult: DailyFritzSetResult | null,
+  ) => {
+    const normalized = normalizeStartResponse(started, fallbackSetResult);
+    console.debug('[daily-fritz-set] active run game number', normalized.current_game_number);
+    if (normalized.needs_completion && normalized.set_result?.setWinner) {
+      const completedGame =
+        normalized.set_result.games[normalized.set_result.games.length - 1] ??
+        buildCompletedGame(normalized, {
+          winner: normalized.set_result.setWinner === 'player' ? 'you' : 'bot',
+          yourScore: normalized.set_result.playerGamesWon,
+          botScore: normalized.set_result.fritzGamesWon,
+          movesUsed: Number(normalized.set_result.moves_used ?? 0),
+          handsPlayed: Number(normalized.set_result.hands_played ?? 0),
+          currentHandIndex: normalized.current_hand_index,
+          moveLog: normalized.set_result,
+        }, 1);
+      try {
+        await submitSetCompletion({
+          run: normalized,
+          setResult: normalized.set_result,
+          completedGame,
+          currentHandIndex: normalized.current_hand_index,
+          boardContext: false,
+        });
+      } catch {
+        // Leave the hub visible so the user can retry finalization safely.
+      }
+      return;
+    }
+    setActiveRun(normalized);
+  }, [buildCompletedGame, submitSetCompletion]);
+
+  const beginRun = useCallback(async () => {
+    if (startActionPending) return;
+    setStartActionPending(true);
+    setError(null);
+    setSetSubmitError(null);
+    setSetOverlay(null);
+    try {
+      const started = await startDailyFritz();
+      await handleStartResponse(started, normalizeSetResult(today?.set_result ?? today?.result));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start Daily Fritz.');
+    } finally {
+      setStartActionPending(false);
+    }
+  }, [handleStartResponse, startActionPending, today]);
+
+  const continueSet = useCallback(async () => {
+    if (startActionPending) return;
+    setStartActionPending(true);
+    setError(null);
+    setSetSubmitError(null);
+    const fallbackSetResult =
+      setOverlay != null && 'setResult' in setOverlay
+        ? setOverlay.setResult
+        : normalizeSetResult(today?.set_result ?? today?.result);
+    try {
+      const started = await startDailyFritz();
+      setSetOverlay(null);
+      await handleStartResponse(started, fallbackSetResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to continue Daily Fritz.');
+    } finally {
+      setStartActionPending(false);
+    }
+  }, [handleStartResponse, setOverlay, startActionPending, today]);
+
+  const submitCompletedGame = useCallback(async (game: DailyFritzGameCompletionPayload) => {
+    const run = activeRunRef.current;
+    if (!run) return;
+    if (game.yourScore === game.botScore) {
+      const tieMessage = 'Daily Fritz games cannot finish tied.';
+      setSetSubmitError(tieMessage);
+      setSetOverlay({
+        kind: 'record-error',
+        completedGame: buildCompletedGame(run, game, normalizeGameNumber(run.current_game_number)),
+        message: 'Game result could not be saved.',
+        error: tieMessage,
+        game,
+      });
+      return;
+    }
+
+    const gameNumber = normalizeGameNumber(run.current_game_number);
+    const fallbackCompletedGame = buildCompletedGame(run, game, gameNumber);
+    setSetSubmitError(null);
+    setError(null);
+    setSetOverlay({
+      kind: 'saving',
+      completedGame: fallbackCompletedGame,
+      message: `Saving Game ${gameNumber}…`,
+    });
+
+    const recordStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    console.log('[daily-fritz-game] record-game start', {
+      attemptId: run.attempt_id,
+      runDate: run.run_date,
+      gameNumber,
+      handIndex: game.currentHandIndex,
+      yourScore: game.yourScore,
+      fritzScore: game.botScore,
+    });
+
+    try {
+      const recorded = await recordDailyFritzGame({
+        attemptId: run.attempt_id,
+        verifiedMatchId: run.verified_match_id,
+        runDate: run.run_date,
+        gameNumber,
+        playerScore: game.yourScore,
+        fritzScore: game.botScore,
+        movesUsed: game.movesUsed,
+        handsPlayed: game.handsPlayed,
+      });
+      const recordEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      console.log('[daily-fritz-game] record-game complete', {
+        attemptId: run.attempt_id,
+        runDate: run.run_date,
+        gameNumber,
+        handIndex: game.currentHandIndex,
+        yourScore: game.yourScore,
+        fritzScore: game.botScore,
+        durationMs: Number((recordEndedAt - recordStartedAt).toFixed(1)),
+        replayed: Boolean(recorded.replayed),
+      });
+
+      console.debug('[daily-fritz-set] record game response', recorded);
+      const setResult = normalizeSetResult(recorded.set_result) ?? recorded.set_result;
+      console.debug('[daily-fritz-set] normalized set result', setResult);
+      const completedGame =
+        setResult.games.find((entry) => entry.gameNumber === gameNumber) ?? fallbackCompletedGame;
+
+      setActiveRun((current) =>
+        current
+          ? {
+              ...current,
+              set_result: setResult,
+            }
+          : current,
+      );
+
+      if (setResult.setWinner) {
+        await submitSetCompletion({
+          run,
+          setResult,
+          completedGame,
+          currentHandIndex: game.currentHandIndex,
+          boardContext: true,
+        });
         return;
       }
 
@@ -622,24 +846,25 @@ export default function DailyFritzScreen({
         };
         console.debug('[daily-fritz-set] between game state', nextBetweenGame);
         setSetOverlay(nextBetweenGame);
-        setActiveRun((current) =>
-          current
-            ? {
-                ...current,
-                set_result: setResult,
-              }
-            : current,
-        );
-        void loadToday();
+        return;
       }
+      throw new Error('Daily Fritz next game number was missing after a completed game.');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save Daily Fritz set progress.';
       setSetSubmitError(message);
-      setError(message);
-      setActiveRun(null);
-      await loadToday();
+      setSetOverlay({
+        kind: 'record-error',
+        completedGame: fallbackCompletedGame,
+        message: `Game ${gameNumber} is finished, but the result has not been saved yet.`,
+        error: message,
+        game,
+      });
     }
-  }, [activeRun, loadToday]);
+  }, [buildCompletedGame, submitSetCompletion]);
+
+  const handleDailyFritzGameComplete = useCallback(async (game: DailyFritzGameCompletionPayload) => {
+    await submitCompletedGame(game);
+  }, [submitCompletedGame]);
 
   const currentUsername = profile?.username?.trim() ?? null;
   const todaySetResult = useMemo(
@@ -740,13 +965,73 @@ export default function DailyFritzScreen({
   const setOverlayMarginTone: 'win' | 'loss' | 'idle' =
     setOverlay == null
       ? 'idle'
-      : setOverlay.setResult.totalPointDiff > 0
+      : 'setResult' in setOverlay && setOverlay.setResult.totalPointDiff > 0
         ? 'win'
-        : setOverlay.setResult.totalPointDiff < 0
+        : 'setResult' in setOverlay && setOverlay.setResult.totalPointDiff < 0
           ? 'loss'
           : 'idle';
   const setOverlayConfig = setOverlay
-    ? setOverlay.kind === 'between'
+    ? setOverlay.kind === 'saving'
+      ? {
+          kind: 'between' as const,
+          eyebrow: 'Daily Fritz Set',
+          headline: 'Saving Game Result',
+          subheadline: setOverlay.message,
+          objective: null,
+          nextLabel: null,
+          primaryLabel: 'Saving…',
+          primaryTone: 'default' as const,
+          primaryDisabled: true,
+          secondaryLabel: null,
+          errorMessage: null,
+          gameScoreLabel: `Game ${setOverlay.completedGame.gameNumber} Score`,
+          gameScoreValue: `You ${setOverlay.completedGame.playerScore} — Fritz ${setOverlay.completedGame.fritzScore}`,
+          setScoreValue: 'Waiting for server…',
+          marginValue: formatMargin(setOverlay.completedGame.pointDiff),
+          marginTone: (setOverlay.completedGame.pointDiff > 0 ? 'win' : 'loss') as 'win' | 'loss',
+          resultValue: null,
+          rankValue: null,
+          tracker: ([1, 2, 3] as DailyFritzSetGameNumber[]).map((trackerGame) => ({
+            gameNumber: trackerGame,
+            label: trackerGame === setOverlay.completedGame.gameNumber ? 'Saving result' : trackerGame < setOverlay.completedGame.gameNumber ? 'Complete' : 'Pending',
+            tone: (trackerGame === setOverlay.completedGame.gameNumber ? 'next' : trackerGame < setOverlay.completedGame.gameNumber ? 'win' : 'idle') as 'next' | 'win' | 'idle',
+          })),
+          games: [],
+          onPrimary: () => undefined,
+          onSecondary: () => undefined,
+        }
+      : setOverlay.kind === 'record-error'
+        ? {
+            kind: 'between' as const,
+            eyebrow: 'Daily Fritz Set',
+            headline: 'Save Failed',
+            subheadline: setOverlay.message,
+            objective: null,
+            nextLabel: null,
+            primaryLabel: 'Retry Save',
+            primaryTone: 'default' as const,
+            primaryDisabled: false,
+            secondaryLabel: null,
+            errorMessage: setOverlay.error,
+            gameScoreLabel: `Game ${setOverlay.completedGame.gameNumber} Score`,
+            gameScoreValue: `You ${setOverlay.completedGame.playerScore} — Fritz ${setOverlay.completedGame.fritzScore}`,
+            setScoreValue: 'Result not yet recorded',
+            marginValue: formatMargin(setOverlay.completedGame.pointDiff),
+          marginTone: (setOverlay.completedGame.pointDiff > 0 ? 'win' : 'loss') as 'win' | 'loss',
+            resultValue: null,
+            rankValue: null,
+            tracker: ([1, 2, 3] as DailyFritzSetGameNumber[]).map((trackerGame) => ({
+              gameNumber: trackerGame,
+              label: trackerGame === setOverlay.completedGame.gameNumber ? 'Retry required' : trackerGame < setOverlay.completedGame.gameNumber ? 'Complete' : 'Pending',
+              tone: (trackerGame === setOverlay.completedGame.gameNumber ? 'loss' : trackerGame < setOverlay.completedGame.gameNumber ? 'win' : 'idle') as 'loss' | 'win' | 'idle',
+            })),
+            games: [],
+            onPrimary: () => void submitCompletedGame({
+              ...setOverlay.game,
+            }),
+            onSecondary: () => undefined,
+          }
+      : setOverlay.kind === 'between'
       ? {
           kind: 'between' as const,
           eyebrow: 'Daily Fritz Set',
@@ -759,7 +1044,9 @@ export default function DailyFritzScreen({
               : `Game ${setOverlay.nextGameNumber} is up next`,
           primaryLabel: setOverlay.nextGameNumber === 3 ? 'Start Game 3' : `Start Game ${setOverlay.nextGameNumber}`,
           primaryTone: setOverlay.nextGameNumber === 3 ? 'decider' as const : 'default' as const,
+          primaryDisabled: startActionPending,
           secondaryLabel: 'Return to Daily Fritz',
+          errorMessage: null,
           onPrimary: () => void continueSet(),
           onSecondary: () => {
             setSetOverlay(null);
@@ -779,6 +1066,80 @@ export default function DailyFritzScreen({
           })),
           games: [],
         }
+      : setOverlay.kind === 'finalizing'
+      ? {
+          kind: 'final' as const,
+          eyebrow: 'Daily Fritz Complete',
+          headline: 'Posting Final Result',
+          subheadline: setOverlay.message,
+          objective: null,
+          nextLabel: null,
+          primaryLabel: 'Posting…',
+          primaryTone: 'default' as const,
+          primaryDisabled: true,
+          secondaryLabel: null,
+          errorMessage: null,
+          gameScoreLabel: 'Set Score',
+          gameScoreValue: `You ${setOverlay.setResult.playerGamesWon} — Fritz ${setOverlay.setResult.fritzGamesWon}`,
+          setScoreValue: `You ${setOverlay.setResult.playerGamesWon} — Fritz ${setOverlay.setResult.fritzGamesWon}`,
+          marginValue: formatMargin(setOverlay.setResult.totalPointDiff),
+          marginTone: setOverlayMarginTone,
+          resultValue: formatSetResultLabel(setOverlay.setResult),
+          rankValue: null,
+          tracker: ([1, 2, 3] as DailyFritzSetGameNumber[]).map((trackerGame) => ({
+            gameNumber: trackerGame,
+            ...getSetTrackerStatus(setOverlay.setResult, trackerGame, null),
+          })),
+          games: setOverlay.setResult.games.map((game) => ({
+            gameNumber: game.gameNumber,
+            value: `You ${game.playerScore} — Fritz ${game.fritzScore}`,
+            tone: (game.playerWon ? 'win' : 'loss') as 'win' | 'loss',
+          })),
+          onPrimary: () => undefined,
+          onSecondary: () => undefined,
+        }
+      : setOverlay.kind === 'final-error'
+      ? {
+          kind: 'final' as const,
+          eyebrow: 'Daily Fritz Complete',
+          headline: getFinalOverlayHeadline(setOverlay.setResult),
+          subheadline: 'Your set is finished, but posting the final result failed.',
+          objective: null,
+          nextLabel: null,
+          primaryLabel: 'Retry Complete',
+          primaryTone: setOverlay.setResult.setWinner === 'player' ? 'success' as const : 'default' as const,
+          primaryDisabled: false,
+          secondaryLabel: 'Back to Daily Fritz',
+          errorMessage: setOverlay.error,
+          gameScoreLabel: 'Set Score',
+          gameScoreValue: `You ${setOverlay.setResult.playerGamesWon} — Fritz ${setOverlay.setResult.fritzGamesWon}`,
+          setScoreValue: `You ${setOverlay.setResult.playerGamesWon} — Fritz ${setOverlay.setResult.fritzGamesWon}`,
+          marginValue: formatMargin(setOverlay.setResult.totalPointDiff),
+          marginTone: setOverlayMarginTone,
+          resultValue: formatSetResultLabel(setOverlay.setResult),
+          rankValue: null,
+          tracker: ([1, 2, 3] as DailyFritzSetGameNumber[]).map((trackerGame) => ({
+            gameNumber: trackerGame,
+            ...getSetTrackerStatus(setOverlay.setResult, trackerGame, null),
+          })),
+          games: setOverlay.setResult.games.map((game) => ({
+            gameNumber: game.gameNumber,
+            value: `You ${game.playerScore} — Fritz ${game.fritzScore}`,
+            tone: (game.playerWon ? 'win' : 'loss') as 'win' | 'loss',
+          })),
+          onPrimary: () => void submitSetCompletion({
+            run: activeRunRef.current ?? activeRun!,
+            setResult: setOverlay.setResult,
+            completedGame: setOverlay.completedGame,
+            currentHandIndex: setOverlay.currentHandIndex,
+            boardContext: true,
+          }),
+          onSecondary: () => {
+            setSetOverlay(null);
+            setActiveRun(null);
+            void loadToday();
+          },
+        }
       : {
           kind: 'final' as const,
           eyebrow: 'Daily Fritz Complete',
@@ -788,7 +1149,9 @@ export default function DailyFritzScreen({
           nextLabel: null,
           primaryLabel: 'Return to Daily Fritz',
           primaryTone: setOverlay.setResult.setWinner === 'player' ? 'success' as const : 'default' as const,
+          primaryDisabled: false,
           secondaryLabel: setOverlay.canViewLeaderboard ? 'View Leaderboard' : null,
+          errorMessage: null,
           onPrimary: () => {
             setSetOverlay(null);
             setActiveRun(null);
@@ -924,6 +1287,9 @@ export default function DailyFritzScreen({
           ) : today ? (
             <div className="daily-dash-body daily-fritz-home-body">
               <div className="daily-dash-details daily-fritz-home-primary">
+                {setSubmitError ? (
+                  <div className="daily-fritz-empty claude-mode-card">{setSubmitError}</div>
+                ) : null}
                 <div className="claude-mode-info-card">
                   <ClaudeSectionLabel color="#e05c6a">Match Details</ClaudeSectionLabel>
                   <ClaudeStatLine label="Date" value={formatDateLabel(today.run_date)} />
@@ -943,8 +1309,8 @@ export default function DailyFritzScreen({
                 {today.attempt_status === 'started' && (
                   <div className="daily-fritz-status-card is-active claude-mode-card">
                     <span className="daily-fritz-status-label">In Progress</span>
-                    <strong>Resume your run.</strong>
-                    <p>Your spot is saved.</p>
+                    <strong>{today.needs_completion ? 'Final result needs posting.' : 'Resume your run.'}</strong>
+                    <p>{today.needs_completion ? 'Your set is finished. Retry finalizing the result.' : 'Your spot is saved.'}</p>
                   </div>
                 )}
 
@@ -970,6 +1336,7 @@ export default function DailyFritzScreen({
                     onClick={() => void beginRun()}
                     title={getPrimaryActionCopy(today).title}
                     meta={getPrimaryActionCopy(today).meta}
+                    disabled={startActionPending}
                   />
                 ) : null}
 

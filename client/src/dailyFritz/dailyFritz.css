@@ -1736,9 +1736,9 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  padding-bottom: 12px;
+  padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   flex-shrink: 0;
 }
 
@@ -1783,7 +1783,7 @@
 .daily-fritz-global-results-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -2188,11 +2188,11 @@
 }
 
 .leaderboard-screen--fritz .leaderboard-screen-stats {
-  margin-bottom: 28px;
+  margin-bottom: 14px;
 }
 
 .leaderboard-screen--fritz .leaderboard-screen-statvalue {
-  font-size: clamp(2.4rem, 3.2vw, 3.6rem);
+  font-size: clamp(1.95rem, 2.8vw, 3.15rem);
   letter-spacing: 0.01em;
   color: rgba(255, 255, 255, 0.86);
 }
@@ -2202,7 +2202,7 @@
 }
 
 .leaderboard-screen--fritz .leaderboard-screen-statsub {
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.38);
 }
 
@@ -2330,15 +2330,15 @@
 .daily-fritz-standings-head {
   grid-template-columns: 96px minmax(230px, 1.25fr) 156px 128px 128px 108px minmax(320px, 1.35fr);
   gap: 18px;
-  padding-bottom: 8px;
+  padding: 0 18px 6px 22px;
   color: rgba(255, 255, 255, 0.4);
 }
 
 .daily-fritz-global-row {
   grid-template-columns: 96px minmax(230px, 1.25fr) 156px 128px 128px 108px minmax(320px, 1.35fr);
   gap: 18px;
-  min-height: 116px;
-  padding: 20px 22px 20px 26px;
+  min-height: 98px;
+  padding: 14px 18px 14px 22px;
   align-items: center;
   background:
     linear-gradient(180deg, rgba(11, 19, 36, 0.96), rgba(7, 13, 25, 0.98));
@@ -2346,45 +2346,45 @@
 }
 
 .daily-fritz-rank-value {
-  font-size: 3.05rem;
+  font-size: 2.56rem;
 }
 
 .daily-fritz-player-name {
-  font-size: 2.04rem;
+  font-size: 1.76rem;
   line-height: 1;
 }
 
 .daily-fritz-avatar {
-  width: 52px;
-  height: 52px;
-  font-size: 1.18rem;
+  width: 46px;
+  height: 46px;
+  font-size: 1.08rem;
 }
 
 .daily-fritz-global-cell-result {
-  font-size: 1.26rem;
-  padding: 10px 18px;
+  font-size: 1.08rem;
+  padding: 8px 14px;
   justify-self: start;
 }
 
 .daily-fritz-global-cell {
-  font-size: 1.52rem;
+  font-size: 1.38rem;
   font-weight: 800;
 }
 
 .daily-fritz-global-cell[data-label="Set Score"] {
-  font-size: 2.8rem;
+  font-size: 2.28rem;
   font-weight: 900;
   letter-spacing: -0.02em;
 }
 
 .daily-fritz-global-cell[data-label="Set Margin"] {
-  font-size: 2.22rem;
+  font-size: 1.78rem;
   font-weight: 900;
 }
 
 .daily-fritz-global-cell[data-label="Finished"] {
   font-family: 'Barlow Condensed', system-ui, sans-serif;
-  font-size: 1.24rem;
+  font-size: 1.04rem;
   font-weight: 800;
   color: rgba(242, 246, 244, 0.82);
   letter-spacing: 0.02em;
@@ -2395,13 +2395,13 @@
 }
 
 .daily-fritz-game-chip-row {
-  gap: 14px;
+  gap: 10px;
 }
 
 .daily-fritz-game-chip {
-  min-height: 50px;
-  padding: 0 19px;
-  font-size: 1.32rem;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 1.08rem;
   font-weight: 900;
   letter-spacing: 0.03em;
   border-color: rgba(255, 255, 255, 0.12);
@@ -2409,7 +2409,7 @@
 }
 
 .daily-fritz-breakdown-empty {
-  font-size: 1.04rem;
+  font-size: 0.94rem;
   color: rgba(210, 223, 220, 0.62);
 }
 
@@ -2421,41 +2421,41 @@
   }
 
   .daily-fritz-global-row {
-    min-height: 108px;
-    padding: 18px 18px 18px 22px;
+    min-height: 92px;
+    padding: 14px 16px 14px 20px;
   }
 
   .daily-fritz-rank-value {
-    font-size: 2.6rem;
+    font-size: 2.28rem;
   }
 
   .daily-fritz-player-name {
-    font-size: 1.82rem;
+    font-size: 1.58rem;
   }
 
   .daily-fritz-avatar {
-    width: 48px;
-    height: 48px;
-    font-size: 1.08rem;
+    width: 42px;
+    height: 42px;
+    font-size: 1rem;
   }
 
   .daily-fritz-global-cell[data-label="Set Score"] {
-    font-size: 2.4rem;
+    font-size: 2.04rem;
   }
 
   .daily-fritz-global-cell[data-label="Set Margin"] {
-    font-size: 1.94rem;
+    font-size: 1.62rem;
   }
 
   .daily-fritz-global-cell-result {
-    font-size: 1.1rem;
-    padding: 8px 14px;
+    font-size: 1rem;
+    padding: 7px 12px;
   }
 
   .daily-fritz-game-chip {
-    min-height: 46px;
-    font-size: 1.12rem;
-    padding: 0 16px;
+    min-height: 38px;
+    font-size: 0.98rem;
+    padding: 0 12px;
   }
 }
 
@@ -2467,45 +2467,45 @@
   }
 
   .daily-fritz-global-row {
-    min-height: 100px;
-    padding: 16px 16px 16px 20px;
+    min-height: 88px;
+    padding: 13px 14px 13px 18px;
   }
 
   .daily-fritz-rank-value {
-    font-size: 2.28rem;
+    font-size: 2.02rem;
   }
 
   .daily-fritz-player-name {
-    font-size: 1.64rem;
+    font-size: 1.42rem;
   }
 
   .daily-fritz-avatar {
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     font-size: 1rem;
   }
 
   .daily-fritz-global-cell-result {
-    font-size: 1.04rem;
-    padding: 8px 13px;
+    font-size: 0.96rem;
+    padding: 7px 11px;
   }
 
   .daily-fritz-global-cell[data-label="Set Score"] {
-    font-size: 2.02rem;
+    font-size: 1.82rem;
   }
 
   .daily-fritz-global-cell[data-label="Set Margin"] {
-    font-size: 1.76rem;
+    font-size: 1.5rem;
   }
 
   .daily-fritz-global-cell[data-label="Finished"] {
-    font-size: 1.08rem;
+    font-size: 0.96rem;
   }
 
   .daily-fritz-game-chip {
-    min-height: 44px;
-    font-size: 1.08rem;
-    padding: 0 15px;
+    min-height: 36px;
+    font-size: 0.94rem;
+    padding: 0 11px;
   }
 }
 
