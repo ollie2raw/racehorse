@@ -85,7 +85,9 @@ export default function DailyFritzLeaderboard({
                   row.username
                 )}
               </span>
-              <span className={`daily-fritz-result-cell ${row.won ? 'is-win' : 'is-loss'}`}>{row.won ? 'W' : 'L'}</span>
+              <span className={`daily-fritz-result-cell ${row.won ? 'is-win' : 'is-loss'}`}>
+                {row.won ? 'Won set' : 'Lost set'}
+              </span>
               <span className="daily-fritz-score-cell">
                 <span>{row.finalScore}-{row.opponentScore}</span>
               </span>

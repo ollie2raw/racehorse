@@ -156,6 +156,16 @@ interface BotMatchScreenProps {
   }) => void) | null;
   dailyFritzPackage?: DailyFritzStartResponse | null;
   onDailyFritzComplete?: (() => void) | null;
+  dailyFritzSetProgressLabel?: string | null;
+  onDailyFritzGameComplete?: ((result: {
+    winner: 'you' | 'bot' | null;
+    yourScore: number;
+    botScore: number;
+    movesUsed: number;
+    handsPlayed: number;
+    currentHandIndex: number;
+    moveLog: MoveEntry[];
+  }) => void) | null;
   isGuidedMode?: boolean;
   /** Admin-only: replace CoachPanel with an editable textarea on each player turn */
   isAuthoringMode?: boolean;
@@ -632,6 +642,8 @@ export default function BotMatchScreen({
   onMatchComplete = null,
   dailyFritzPackage = null,
   onDailyFritzComplete = null,
+  dailyFritzSetProgressLabel = null,
+  onDailyFritzGameComplete = null,
   isGuidedMode: isGuidedModeProp = false,
   isAuthoringMode: isAuthoringModeProp = false,
   isAuthoringV2Mode: isAuthoringV2ModeProp = false,
@@ -640,7 +652,9 @@ export default function BotMatchScreen({
   const LEAGUE_MATCH_META_KEY = 'racehorse:league-match-meta';
   const leagueResumeStorageKey = resumeKey ? `racehorse:league-match:${resumeKey}` : null;
   const dailyFritzStorageKey =
-    mode === 'daily-fritz' && dailyFritzPackage ? `racehorse:daily-fritz:${dailyFritzPackage.attempt_id}` : null;
+    mode === 'daily-fritz' && dailyFritzPackage
+      ? `racehorse:daily-fritz:v2:${dailyFritzPackage.attempt_id}:game:${dailyFritzPackage.current_game_number ?? 1}`
+      : null;
 
   const isGuidedMode = isGuidedModeProp && mode === 'bot';
   const isAuthoringMode = isAuthoringModeProp && mode === 'bot';
@@ -913,6 +927,7 @@ export default function BotMatchScreen({
   const matchCompleteKeyRef = useRef('');
   const ghostCompleteKeyRef = useRef('');
   const dailyFritzCompleteKeyRef = useRef('');
+  const dailyFritzGameCompleteKeyRef = useRef('');
   const dailyFritzSubmitSucceededRef = useRef(false);
   const dailyFritzAutoSubmitBlockedRef = useRef(false);
   // One-way guard: set to true when advanceHand starts, reset on success or fatal error.
@@ -2447,8 +2462,49 @@ export default function BotMatchScreen({
     });
   }, [match.gameOver, match.handNumber, match.winnerId, match.players.you.score, match.players.bot.score, onMatchComplete]);
 
+  useEffect(() => {
+    if (!isDailyFritzMode || !onDailyFritzGameComplete) return;
+    if (!match.gameOver) {
+      dailyFritzGameCompleteKeyRef.current = '';
+      return;
+    }
+    const key = [
+      dailyFritzPackage?.attempt_id ?? 'daily',
+      dailyFritzPackage?.current_game_number ?? 1,
+      match.handNumber,
+      match.winnerId,
+      match.players.you.score,
+      match.players.bot.score,
+      movesUsed,
+    ].join(':');
+    if (dailyFritzGameCompleteKeyRef.current === key) return;
+    dailyFritzGameCompleteKeyRef.current = key;
+    onDailyFritzGameComplete({
+      winner: match.winnerId,
+      yourScore: match.players.you.score,
+      botScore: match.players.bot.score,
+      movesUsed,
+      handsPlayed: match.handNumber,
+      currentHandIndex: dailyFritzHandIndex,
+      moveLog: JSON.parse(JSON.stringify(moveLog)),
+    });
+  }, [
+    dailyFritzHandIndex,
+    dailyFritzPackage?.attempt_id,
+    dailyFritzPackage?.current_game_number,
+    isDailyFritzMode,
+    match.gameOver,
+    match.handNumber,
+    match.players.bot.score,
+    match.players.you.score,
+    match.winnerId,
+    moveLog,
+    movesUsed,
+    onDailyFritzGameComplete,
+  ]);
+
   const submitDailyFritzCompletion = useCallback(() => {
-    if (!isDailyFritzMode || !dailyFritzPackage || !userId || !match.gameOver) return;
+    if (!isDailyFritzMode || onDailyFritzGameComplete || !dailyFritzPackage || !userId || !match.gameOver) return;
     if (dailyFritzSubmitSucceededRef.current || dailyFritzAutoSubmitBlockedRef.current) return;
 
     console.log('[daily-complete] game over reached');
@@ -2537,6 +2593,7 @@ export default function BotMatchScreen({
     match.winnerId,
     movesUsed,
     moveLog,
+    onDailyFritzGameComplete,
     userId,
   ]);
 
@@ -2548,7 +2605,7 @@ export default function BotMatchScreen({
   }, [ghostResultError, ghostResultLoading]);
 
   useEffect(() => {
-    if (!isDailyFritzMode || !dailyFritzPackage || !userId) return;
+    if (!isDailyFritzMode || onDailyFritzGameComplete || !dailyFritzPackage || !userId) return;
 
     if (!match.gameOver) {
       console.log('[daily-complete] modal state = not-game-over');
@@ -2577,6 +2634,7 @@ export default function BotMatchScreen({
     dailyFritzSubmitRetryNonce,
     isDailyFritzMode,
     match.gameOver,
+    onDailyFritzGameComplete,
     submitDailyFritzCompletion,
     userId,
   ]);
@@ -3133,6 +3191,7 @@ export default function BotMatchScreen({
             attemptId: dailyFritzPackage.attempt_id,
             verifiedMatchId: dailyFritzPackage.verified_match_id,
             runDate: dailyFritzPackage.run_date,
+            gameNumber: dailyFritzPackage.current_game_number,
             completedHandIndex: dailyFritzHandIndex,
             completedHandScores: {
               you: result.state.players.you.score,
@@ -4929,6 +4988,7 @@ export default function BotMatchScreen({
             attemptId: dailyFritzPackage.attempt_id,
             verifiedMatchId: dailyFritzPackage.verified_match_id,
             runDate: dailyFritzPackage.run_date,
+            gameNumber: dailyFritzPackage.current_game_number,
             completedHandIndex: dailyFritzHandIndex,
             completedHandScores: {
               you: match.players.you.score,
@@ -6154,6 +6214,11 @@ export default function BotMatchScreen({
           { label: 'You', score: match.players.you.score, tone: 'you' },
         ]}
       />
+      {isDailyFritzMode && dailyFritzSetProgressLabel && (
+        <div className="daily-fritz-set-hud" aria-label="Daily Fritz set progress">
+          {dailyFritzSetProgressLabel}
+        </div>
+      )}
       {false && toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
         <div className="game-over-overlay hand-over-upgraded-overlay">
@@ -6261,7 +6326,7 @@ export default function BotMatchScreen({
           </div>
         </div>
       )}
-      {match.gameOver && (
+      {match.gameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
         <GameOverModal
           open
           ariaLabel={`${opponentLabel} match over`}

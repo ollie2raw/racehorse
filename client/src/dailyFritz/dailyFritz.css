@@ -293,6 +293,41 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.daily-fritz-game-list {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.daily-fritz-game-list-row {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(231, 241, 237, 0.76);
+  font-weight: 700;
+}
+
+.daily-fritz-game-list-row:first-child {
+  border-top: 0;
+}
+
+.daily-fritz-game-list-row strong {
+  color: rgba(248, 250, 249, 0.98);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-fritz-game-list-row strong.is-win {
+  color: #34d399;
+}
+
+.daily-fritz-game-list-row strong.is-loss {
+  color: #ef4444;
+}
+
 .daily-fritz-summary-item {
   min-height: 116px;
   padding: 18px 20px;
@@ -336,6 +371,77 @@
 .daily-fritz-secondary-panel {
   display: grid;
   gap: 12px;
+}
+
+.daily-fritz-between-main {
+  display: grid;
+  place-items: center;
+}
+
+.daily-fritz-between-card {
+  width: min(100%, 560px);
+  display: grid;
+  gap: 18px;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(12, 16, 24, 0.98), rgba(9, 12, 18, 0.98));
+}
+
+.daily-fritz-between-card h1 {
+  margin: 0;
+  color: rgba(248, 250, 249, 0.98);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4.2rem);
+  font-weight: 850;
+  line-height: 0.95;
+}
+
+.daily-fritz-between-card > strong {
+  display: block;
+  color: rgba(248, 250, 249, 0.98);
+  font-size: clamp(1.45rem, 2.4vw, 2rem);
+  font-weight: 850;
+}
+
+.daily-fritz-between-card > strong.is-win {
+  color: #34d399;
+}
+
+.daily-fritz-between-card > strong.is-loss {
+  color: #ef4444;
+}
+
+.daily-fritz-between-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 60px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.daily-fritz-between-score span {
+  color: rgba(205, 223, 217, 0.62);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-between-score b {
+  color: rgba(248, 250, 249, 0.98);
+  font-size: 1.24rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-fritz-between-card p {
+  margin: 0;
+  color: rgba(221, 232, 228, 0.84);
+  font-size: 1.04rem;
+  font-weight: 700;
 }
 
 .daily-fritz-secondary-copy {

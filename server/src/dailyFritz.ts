@@ -37,6 +37,30 @@ export interface DailyFritzLeaderboardEntry {
   rank?: number;
 }
 
+export type DailyFritzSetGameNumber = 1 | 2 | 3;
+
+export interface DailyFritzSetGameResult {
+  gameNumber: DailyFritzSetGameNumber;
+  seed: string;
+  playerWon: boolean;
+  playerScore: number;
+  fritzScore: number;
+  pointDiff: number;
+  movesUsed?: number;
+  handsPlayed?: number;
+  completedAt: string;
+}
+
+export interface DailyFritzSetResult {
+  version: 2;
+  format: 'best_of_3';
+  playerGamesWon: number;
+  fritzGamesWon: number;
+  totalPointDiff: number;
+  games: DailyFritzSetGameResult[];
+  setWinner?: 'player' | 'fritz';
+}
+
 function hashSeedToUint32(seed: string): number {
   let hash = 2166136261;
   for (let i = 0; i < seed.length; i += 1) {
@@ -81,6 +105,10 @@ export function getDailyFritzSeed(runDate: string): string {
   return `daily-fritz-${runDate}`;
 }
 
+export function getDailyFritzGameSeed(runDate: string, gameNumber: DailyFritzSetGameNumber): string {
+  return `${getDailyFritzSeed(runDate)}:game:${gameNumber}`;
+}
+
 /**
  * Generate a single hand for a given seed + hand index.
  * Uses the same deterministic formula as generateDailyFritzRun so that any
@@ -102,6 +130,15 @@ export function generateSingleDailyFritzHand(
   return { player_tiles: playerTiles, fritz_tiles: fritzTiles, boneyard, locked };
 }
 
+export function generateSingleDailyFritzGameHand(
+  runDate: string,
+  gameNumber: DailyFritzSetGameNumber,
+  handIndex: number,
+  dealSize: 7 | 14,
+): DailyFritzHandDeal {
+  return generateSingleDailyFritzHand(getDailyFritzGameSeed(runDate, gameNumber), handIndex, dealSize);
+}
+
 export function generateDailyFritzRun(
   runDate: string,
   fritzTier: DailyFritzTier,
@@ -110,9 +147,10 @@ export function generateDailyFritzRun(
 ): GeneratedDailyFritzRun {
   const seed = getDailyFritzSeed(runDate);
   const handDeals: DailyFritzHandDeal[] = [];
+  const gameOneSeed = getDailyFritzGameSeed(runDate, 1);
 
   for (let handIndex = 0; handIndex < 12; handIndex += 1) {
-    const prng = createSeededPrng(`${seed}:hand:${handIndex}`);
+    const prng = createSeededPrng(`${gameOneSeed}:hand:${handIndex}`);
     const shuffled = shuffleWithPrng(buildDoubleSixSet(), prng).map(cloneTile);
     const playerTiles = shuffled.slice(0, dealSize);
     const fritzTiles = shuffled.slice(dealSize, dealSize * 2);
@@ -137,7 +175,13 @@ export function generateDailyFritzRun(
     handDeals,
     generatedAt: new Date().toISOString(),
     invalidatedAt: null,
-    metadata: null,
+    metadata: {
+      version: 2,
+      format: 'best_of_3',
+      game_seeds: [1, 2, 3].map((gameNumber) =>
+        getDailyFritzGameSeed(runDate, gameNumber as DailyFritzSetGameNumber),
+      ),
+    },
   };
 }
 
@@ -174,10 +218,10 @@ export function buildDailyFritzCompletionHash(params: {
 export function sortDailyFritzLeaderboard<T extends DailyFritzLeaderboardEntry>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => {
     if (a.won !== b.won) return a.won ? -1 : 1;
-    if (a.pointDiff !== b.pointDiff) return b.pointDiff - a.pointDiff;
     if (a.finalScore !== b.finalScore) return b.finalScore - a.finalScore;
+    if (a.opponentScore !== b.opponentScore) return a.opponentScore - b.opponentScore;
+    if (a.pointDiff !== b.pointDiff) return b.pointDiff - a.pointDiff;
     if (a.movesUsed !== b.movesUsed) return a.movesUsed - b.movesUsed;
     return new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime();
   });
 }
-

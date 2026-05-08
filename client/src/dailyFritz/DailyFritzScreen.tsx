@@ -12,16 +12,23 @@ import {
   ClaudeStatLine,
 } from '../ui/claudeMode';
 import {
+  buildDailyFritzCompletionHash,
+  completeDailyFritz,
   fetchDailyFritzLeaderboard,
   getTodayDailyFritz,
+  recordDailyFritzGame,
   startDailyFritz,
   type DailyFritzLeaderboardRow,
+  type DailyFritzSetGameNumber,
+  type DailyFritzSetGameResult,
+  type DailyFritzSetResult,
   type DailyFritzStartResponse,
   type DailyFritzTodayResponse,
 } from './api';
 import './dailyFritz.css';
 
 const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
+const DAILY_FRITZ_SET_VERSION = 2;
 
 interface DailyFritzScreenProps {
   user: User | null;
@@ -33,6 +40,12 @@ interface DailyFritzScreenProps {
   onOpenAuth: () => void;
   onBack: () => void;
 }
+
+type BetweenGameState = {
+  completedGame: DailyFritzSetGameResult;
+  setResult: DailyFritzSetResult;
+  nextGameNumber: DailyFritzSetGameNumber;
+};
 
 function formatDateLabel(dateText: string): string {
   const parsed = new Date(`${dateText}T00:00:00`);
@@ -63,6 +76,109 @@ function tierDisplayLabel(tier: string): string {
   return titleCaseTier(tier);
 }
 
+function getDailyFritzGameSeed(runDate: string, gameNumber: DailyFritzSetGameNumber): string {
+  return `daily-fritz-${runDate}:game:${gameNumber}`;
+}
+
+function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
+  if (!value || typeof value !== 'object') return null;
+  const rec = value as Record<string, unknown>;
+  if (rec.version !== DAILY_FRITZ_SET_VERSION || rec.format !== 'best_of_3' || !Array.isArray(rec.games)) {
+    return null;
+  }
+  const games = rec.games
+    .map((game): DailyFritzSetGameResult | null => {
+      if (!game || typeof game !== 'object') return null;
+      const g = game as Record<string, unknown>;
+      const gameNumber = Number(g.gameNumber) as DailyFritzSetGameNumber;
+      if (gameNumber !== 1 && gameNumber !== 2 && gameNumber !== 3) return null;
+      const seed = typeof g.seed === 'string' ? g.seed : '';
+      const playerScore = Number(g.playerScore);
+      const fritzScore = Number(g.fritzScore);
+      const pointDiff = Number(g.pointDiff);
+      const completedAt = typeof g.completedAt === 'string' ? g.completedAt : '';
+      if (!seed || typeof g.playerWon !== 'boolean' || !Number.isFinite(playerScore) || !Number.isFinite(fritzScore) || !completedAt) {
+        return null;
+      }
+      const movesUsed = g.movesUsed == null ? undefined : Number(g.movesUsed);
+      const handsPlayed = g.handsPlayed == null ? undefined : Number(g.handsPlayed);
+      return {
+        gameNumber,
+        seed,
+        playerWon: g.playerWon,
+        playerScore,
+        fritzScore,
+        pointDiff: Number.isFinite(pointDiff) ? pointDiff : playerScore - fritzScore,
+        ...(Number.isFinite(movesUsed) ? { movesUsed } : {}),
+        ...(Number.isFinite(handsPlayed) ? { handsPlayed } : {}),
+        completedAt,
+      };
+    })
+    .filter((game): game is DailyFritzSetGameResult => Boolean(game))
+    .sort((a, b) => a.gameNumber - b.gameNumber);
+  const playerGamesWon = games.filter((game) => game.playerWon).length;
+  const fritzGamesWon = games.length - playerGamesWon;
+  const totalPointDiff = games.reduce((sum, game) => sum + game.pointDiff, 0);
+  const setWinner = playerGamesWon >= 2 ? 'player' : fritzGamesWon >= 2 ? 'fritz' : undefined;
+  return {
+    version: 2,
+    format: 'best_of_3',
+    playerGamesWon,
+    fritzGamesWon,
+    totalPointDiff,
+    games,
+    ...(setWinner ? { setWinner } : {}),
+    ...(typeof rec.run_date === 'string' ? { run_date: rec.run_date } : {}),
+    ...(typeof rec.won === 'boolean' ? { won: rec.won } : {}),
+    ...(Number.isFinite(Number(rec.final_score)) ? { final_score: Number(rec.final_score) } : {}),
+    ...(Number.isFinite(Number(rec.opponent_score)) ? { opponent_score: Number(rec.opponent_score) } : {}),
+    ...(Number.isFinite(Number(rec.point_diff)) ? { point_diff: Number(rec.point_diff) } : {}),
+    ...(Number.isFinite(Number(rec.moves_used)) ? { moves_used: Number(rec.moves_used) } : {}),
+    ...(Number.isFinite(Number(rec.hands_played)) ? { hands_played: Number(rec.hands_played) } : {}),
+  };
+}
+
+function formatSetResultLabel(setResult: DailyFritzSetResult | null, legacyWon?: boolean | null): string {
+  if (setResult?.setWinner) {
+    const prefix = setResult.setWinner === 'player' ? 'Won set' : 'Lost set';
+    return `${prefix} ${setResult.playerGamesWon}-${setResult.fritzGamesWon}`;
+  }
+  if (legacyWon != null) return legacyWon ? 'Win' : 'Loss';
+  return '—';
+}
+
+function getSetStatusLabel(today: DailyFritzTodayResponse | null): string {
+  if (!today || today.attempt_status === 'none') return 'Not started';
+  const setResult = normalizeSetResult(today.set_result ?? today.result);
+  if (today.attempt_status === 'completed') {
+    return `Complete: ${formatSetResultLabel(setResult, Boolean(today.result?.won))}`;
+  }
+  if (today.attempt_status === 'abandoned') return 'Attempt spent';
+  if (!setResult || setResult.games.length === 0) return 'Game 1 in progress';
+  if (setResult.playerGamesWon === setResult.fritzGamesWon) return `Tied ${setResult.playerGamesWon}-${setResult.fritzGamesWon}`;
+  if (setResult.playerGamesWon > setResult.fritzGamesWon) return `You lead ${setResult.playerGamesWon}-${setResult.fritzGamesWon}`;
+  return `Fritz leads ${setResult.fritzGamesWon}-${setResult.playerGamesWon}`;
+}
+
+function getPrimaryActionCopy(today: DailyFritzTodayResponse | null): { title: string; meta: string } {
+  if (!today || today.attempt_status === 'none') {
+    return { title: 'Start Set', meta: 'Begin today’s best-of-3' };
+  }
+  if (today.attempt_status === 'started') {
+    const setResult = normalizeSetResult(today.set_result ?? today.result);
+    const nextGame = Math.min((setResult?.games.length ?? 0) + 1, 3);
+    if ((setResult?.games.length ?? 0) > 0) {
+      return {
+        title: nextGame === 3 ? 'Continue to Game 3' : `Continue to Game ${nextGame}`,
+        meta: nextGame === 3 ? 'Play today’s decider' : 'Continue the set',
+      };
+    }
+    return { title: 'Resume Set', meta: 'Pick up today’s best-of-3' };
+  }
+  if (today.attempt_status === 'completed') return { title: 'View Result', meta: 'Today’s set is complete' };
+  return { title: 'Attempt Spent', meta: 'Come back tomorrow' };
+}
+
 function createMockDailyFritzRun(): DailyFritzStartResponse {
   return {
     ok: true,
@@ -70,6 +186,8 @@ function createMockDailyFritzRun(): DailyFritzStartResponse {
     verified_match_id: 'dev-match',
     run_date: '2026-04-17',
     current_hand_index: 0,
+    current_game_number: 1,
+    set_result: null,
     fritz_tier: 'standard',
     deal_size: 7,
     winning_score: 60,
@@ -140,6 +258,8 @@ export default function DailyFritzScreen({
   const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(() =>
     mockDailyFritzEnabled ? createMockDailyFritzRun() : null,
   );
+  const [betweenGame, setBetweenGame] = useState<BetweenGameState | null>(null);
+  const [setSubmitError, setSetSubmitError] = useState<string | null>(null);
 
   const cacheKey = useMemo(
     () => (user?.id ? `${DAILY_FRITZ_TODAY_CACHE_PREFIX}${user.id}` : null),
@@ -211,6 +331,8 @@ export default function DailyFritzScreen({
 
   const beginRun = useCallback(async () => {
     setError(null);
+    setSetSubmitError(null);
+    setBetweenGame(null);
     try {
       const started = await startDailyFritz();
       setActiveRun(started);
@@ -224,13 +346,111 @@ export default function DailyFritzScreen({
     await loadToday();
   }, [loadToday]);
 
-  const primaryLabel = useMemo(() => {
-    if (!today) return 'Start Today’s Run';
-    if (today.attempt_status === 'started') return 'Resume';
-    if (today.attempt_status === 'completed') return 'Completed';
-    if (today.attempt_status === 'abandoned') return 'Attempt Spent';
-    return 'Start Today’s Run';
-  }, [today]);
+  const continueSet = useCallback(async () => {
+    setError(null);
+    setSetSubmitError(null);
+    setBetweenGame(null);
+    try {
+      const started = await startDailyFritz();
+      setActiveRun(started);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to continue Daily Fritz.');
+    }
+  }, []);
+
+  const handleDailyFritzGameComplete = useCallback(async (game: {
+    winner: 'you' | 'bot' | null;
+    yourScore: number;
+    botScore: number;
+    movesUsed: number;
+    handsPlayed: number;
+    currentHandIndex: number;
+    moveLog: unknown;
+  }) => {
+    if (!activeRun) return;
+    if (game.yourScore === game.botScore) {
+      setSetSubmitError('Daily Fritz games cannot finish tied.');
+      setError('Daily Fritz games cannot finish tied.');
+      setActiveRun(null);
+      await loadToday();
+      return;
+    }
+    const gameNumber = activeRun.current_game_number;
+    setSetSubmitError(null);
+    try {
+      const recorded = await recordDailyFritzGame({
+        attemptId: activeRun.attempt_id,
+        verifiedMatchId: activeRun.verified_match_id,
+        runDate: activeRun.run_date,
+        gameNumber,
+        playerScore: game.yourScore,
+        fritzScore: game.botScore,
+        movesUsed: game.movesUsed,
+        handsPlayed: game.handsPlayed,
+      });
+      const setResult = normalizeSetResult(recorded.set_result) ?? recorded.set_result;
+      const completedGame =
+        setResult.games.find((entry) => entry.gameNumber === gameNumber) ??
+        {
+          gameNumber,
+          seed: getDailyFritzGameSeed(activeRun.run_date, gameNumber),
+          playerWon: game.yourScore > game.botScore,
+          playerScore: game.yourScore,
+          fritzScore: game.botScore,
+          pointDiff: game.yourScore - game.botScore,
+          movesUsed: game.movesUsed,
+          handsPlayed: game.handsPlayed,
+          completedAt: new Date().toISOString(),
+        };
+
+      if (setResult.setWinner) {
+        const totalMoves = setResult.games.reduce((sum, entry) => sum + Number(entry.movesUsed ?? 0), 0);
+        const totalHands = setResult.games.reduce((sum, entry) => sum + Number(entry.handsPlayed ?? 0), 0);
+        const completionHash = await buildDailyFritzCompletionHash({
+          runDate: activeRun.run_date,
+          attemptId: activeRun.attempt_id,
+          verifiedMatchId: activeRun.verified_match_id,
+          currentHandIndex: game.currentHandIndex,
+          finalScore: setResult.playerGamesWon,
+          opponentScore: setResult.fritzGamesWon,
+          won: setResult.setWinner === 'player',
+          movesUsed: totalMoves,
+          handsPlayed: totalHands,
+          moveLog: setResult,
+        });
+        await completeDailyFritz({
+          attemptId: activeRun.attempt_id,
+          verifiedMatchId: activeRun.verified_match_id,
+          runDate: activeRun.run_date,
+          completionHash,
+          finalScore: setResult.playerGamesWon,
+          opponentScore: setResult.fritzGamesWon,
+          won: setResult.setWinner === 'player',
+          movesUsed: totalMoves,
+          handsPlayed: totalHands,
+          moveLog: setResult,
+          setResult,
+        });
+        setActiveRun(null);
+        setBetweenGame(null);
+        await loadToday();
+        return;
+      }
+
+      const nextGameNumber = recorded.next_game_number;
+      if (nextGameNumber) {
+        setBetweenGame({ completedGame, setResult, nextGameNumber });
+        setActiveRun(null);
+        await loadToday();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save Daily Fritz set progress.';
+      setSetSubmitError(message);
+      setError(message);
+      setActiveRun(null);
+      await loadToday();
+    }
+  }, [activeRun, loadToday]);
 
   const currentUsername = profile?.username?.trim() ?? null;
   const currentLeaderboardRow = useMemo(
@@ -250,8 +470,11 @@ export default function DailyFritzScreen({
         : today?.rank != null
           ? `#${today.rank}`
           : '—';
+    const todaySetResult = normalizeSetResult(today?.set_result ?? today?.result);
     const scoreValue = currentLeaderboardRow
       ? `${currentLeaderboardRow.finalScore}-${currentLeaderboardRow.opponentScore}`
+      : todaySetResult
+        ? `${todaySetResult.playerGamesWon}-${todaySetResult.fritzGamesWon}`
       : today?.result
         ? `${Number(today.result.final_score ?? 0)}-${Number(today.result.opponent_score ?? 0)}`
         : '—';
@@ -260,6 +483,8 @@ export default function DailyFritzScreen({
       : '—';
     const resultValue = currentLeaderboardRow
       ? currentLeaderboardRow.won ? 'Win' : 'Loss'
+      : todaySetResult?.setWinner
+        ? formatSetResultLabel(todaySetResult)
       : today?.result
         ? Boolean(today.result.won) ? 'Win' : 'Loss'
         : '—';
@@ -294,10 +519,15 @@ export default function DailyFritzScreen({
         (error.toLowerCase() === 'unauthorized' ||
           error.toLowerCase().includes('unauthorized')),
     );
+  const activeSetResult = normalizeSetResult(activeRun?.set_result ?? null);
+  const activeProgressLabel = activeRun
+    ? `Daily Fritz Set · Game ${activeRun.current_game_number} of 3 · You ${activeSetResult?.playerGamesWon ?? 0} - Fritz ${activeSetResult?.fritzGamesWon ?? 0}`
+    : null;
 
   if (activeRun) {
     return (
       <BotMatchScreen
+        key={`${activeRun.attempt_id}:${activeRun.current_game_number}`}
         onBack={() => {
           setActiveRun(null);
           void loadToday();
@@ -314,10 +544,59 @@ export default function DailyFritzScreen({
         onProfileRefresh={onProfileRefresh}
         onProfilePatch={onProfilePatch}
         dailyFritzPackage={activeRun}
+        dailyFritzSetProgressLabel={activeProgressLabel}
+        onDailyFritzGameComplete={(result) => {
+          void handleDailyFritzGameComplete(result);
+        }}
         onDailyFritzComplete={() => {
           void finishEmbeddedRun();
         }}
       />
+    );
+  }
+
+  if (betweenGame) {
+    const game = betweenGame.completedGame;
+    const winnerLabel = game.playerWon ? 'You' : 'Fritz';
+    const nextLabel =
+      betweenGame.nextGameNumber === 3
+        ? 'Game 3 decides today’s Fritz'
+        : `Game ${betweenGame.nextGameNumber} is up next`;
+    return (
+      <div className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz">
+        <div className="daily-dash" style={{ ['--dash-accent' as string]: '#e05c6a' }}>
+          <header className="daily-dash-topbar">
+            <div className="daily-dash-brand">RACEHORSE</div>
+            <button type="button" className="daily-dash-back" onClick={onBack}>
+              <svg viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M7.5 2L3 6l4.5 4" />
+              </svg>
+              Back to Home
+            </button>
+          </header>
+          <main className="daily-dash-main daily-fritz-between-main">
+            <section className="daily-fritz-between-card claude-mode-card" aria-label="Daily Fritz game summary">
+              <span className="daily-fritz-status-label">Daily Fritz Set</span>
+              <h1>Game {game.gameNumber} Complete</h1>
+              <strong className={game.playerWon ? 'is-win' : 'is-loss'}>
+                {winnerLabel} won {game.playerScore}-{game.fritzScore}
+              </strong>
+              <div className="daily-fritz-between-score">
+                <span>Set score</span>
+                <b>You {betweenGame.setResult.playerGamesWon} - Fritz {betweenGame.setResult.fritzGamesWon}</b>
+              </div>
+              <p>{nextLabel}</p>
+              {setSubmitError ? <div className="daily-fritz-empty">{setSubmitError}</div> : null}
+              <ClaudePrimaryAction
+                accent="#e05c6a"
+                title={betweenGame.nextGameNumber === 3 ? 'Play Decider' : `Continue to Game ${betweenGame.nextGameNumber}`}
+                meta="Continue today’s set"
+                onClick={() => void continueSet()}
+              />
+            </section>
+          </main>
+        </div>
+      </div>
     );
   }
 
@@ -366,8 +645,8 @@ export default function DailyFritzScreen({
           {/* Header */}
           <div className="daily-dash-header">
             <p className="daily-dash-eyebrow">Daily Fritz</p>
-            <h1 className="daily-dash-title">Daily Fritz Match</h1>
-            <p className="daily-dash-subtitle">Same deal for everyone. One run only.</p>
+            <h1 className="daily-dash-title">Daily Fritz</h1>
+            <p className="daily-dash-subtitle">Best-of-3 set. Same deals for everyone.</p>
           </div>
 
           <div className="daily-dash-separator" aria-hidden="true" />
@@ -395,7 +674,8 @@ export default function DailyFritzScreen({
                   <ClaudeSectionLabel color="#e05c6a">Match Details</ClaudeSectionLabel>
                   <ClaudeStatLine label="Date" value={formatDateLabel(today.run_date)} />
                   <ClaudeStatLine label="Tier" value={tierDisplayLabel(today.fritz_tier)} accent={today.fritz_tier === 'elite' ? '#ff7070' : undefined} />
-                  <ClaudeStatLine label="Mode" value={`${today.deal_size}-tile`} />
+                  <ClaudeStatLine label="Mode" value={`Best-of-3 · ${today.deal_size}-tile`} />
+                  <ClaudeStatLine label="Set Status" value={getSetStatusLabel(today)} accent="#e05c6a" />
                   <ClaudeStatLine
                     label="Streak"
                     value={`${today.streak} day${today.streak === 1 ? '' : 's'}`}
@@ -411,21 +691,23 @@ export default function DailyFritzScreen({
                     <div className="daily-fritz-summary-strip-grid">
                       <div className="daily-fritz-summary-item">
                         <span className="daily-fritz-summary-label">Result</span>
-                        <strong className={`daily-fritz-summary-value ${Boolean(today.result?.won) ? 'is-win' : 'is-loss'}`}>
-                          {Boolean(today.result?.won) ? 'Win' : 'Loss'}
+                        <strong className={`daily-fritz-summary-value ${Boolean((normalizeSetResult(today.set_result ?? today.result)?.setWinner === 'player') || today.result?.won) ? 'is-win' : 'is-loss'}`}>
+                          {formatSetResultLabel(normalizeSetResult(today.set_result ?? today.result), Boolean(today.result?.won))}
                         </strong>
                       </div>
                       <div className="daily-fritz-summary-item">
-                        <span className="daily-fritz-summary-label">Score</span>
+                        <span className="daily-fritz-summary-label">Set Score</span>
                         <strong className="daily-fritz-summary-value">
-                          {Number(today.result?.final_score ?? 0)}-{Number(today.result?.opponent_score ?? 0)}
+                          {normalizeSetResult(today.set_result ?? today.result)
+                            ? `${normalizeSetResult(today.set_result ?? today.result)?.playerGamesWon}-${normalizeSetResult(today.set_result ?? today.result)?.fritzGamesWon}`
+                            : `${Number(today.result?.final_score ?? 0)}-${Number(today.result?.opponent_score ?? 0)}`}
                         </strong>
                       </div>
                       <div className="daily-fritz-summary-item">
-                        <span className="daily-fritz-summary-label">Point Diff</span>
+                        <span className="daily-fritz-summary-label">Total Margin</span>
                         <strong className="daily-fritz-summary-value">
-                          {Number(today.result?.point_diff ?? 0) >= 0 ? '+' : ''}
-                          {Number(today.result?.point_diff ?? 0)}
+                          {Number(normalizeSetResult(today.set_result ?? today.result)?.totalPointDiff ?? today.result?.point_diff ?? 0) >= 0 ? '+' : ''}
+                          {Number(normalizeSetResult(today.set_result ?? today.result)?.totalPointDiff ?? today.result?.point_diff ?? 0)}
                         </strong>
                       </div>
                       <div className="daily-fritz-summary-item">
@@ -433,6 +715,18 @@ export default function DailyFritzScreen({
                         <strong className="daily-fritz-summary-value">{today.rank ? `#${today.rank}` : '—'}</strong>
                       </div>
                     </div>
+                    {normalizeSetResult(today.set_result ?? today.result)?.games.length ? (
+                      <div className="daily-fritz-game-list">
+                        {normalizeSetResult(today.set_result ?? today.result)?.games.map((game) => (
+                          <div className="daily-fritz-game-list-row" key={game.gameNumber}>
+                            <span>Game {game.gameNumber}</span>
+                            <strong className={game.playerWon ? 'is-win' : 'is-loss'}>
+                              {game.playerWon ? 'You' : 'Fritz'} {game.playerScore}-{game.fritzScore}
+                            </strong>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </section>
                 )}
               </div>
@@ -449,8 +743,8 @@ export default function DailyFritzScreen({
                 {today.attempt_status === 'completed' && (
                   <div className="daily-fritz-status-card is-complete-panel claude-mode-card">
                     <span className="daily-fritz-status-label">Completed</span>
-                    <strong>Today’s run is locked.</strong>
-                    <p>Your result is posted. Leaderboard remains available as a secondary view.</p>
+                    <strong>{formatSetResultLabel(normalizeSetResult(today.set_result ?? today.result), Boolean(today.result?.won))}</strong>
+                    <p>Your set result is posted. Leaderboard remains available as a secondary view.</p>
                   </div>
                 )}
 
@@ -466,12 +760,8 @@ export default function DailyFritzScreen({
                   <ClaudePrimaryAction
                     accent="#e05c6a"
                     onClick={() => void beginRun()}
-                    title={today.attempt_status === 'started' ? 'Resume Match' : 'Start Daily Fritz Match'}
-                    meta={
-                      today.attempt_status === 'started'
-                        ? 'Pick up where you left off'
-                        : 'Play today’s fixed Fritz match'
-                    }
+                    title={getPrimaryActionCopy(today).title}
+                    meta={getPrimaryActionCopy(today).meta}
                   />
                 ) : null}
 

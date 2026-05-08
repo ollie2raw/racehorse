@@ -94,6 +94,37 @@ export interface DailyFritzLeaderboardRow {
   is_current_user?: boolean;
 }
 
+export type DailyFritzSetGameNumber = 1 | 2 | 3;
+
+export interface DailyFritzSetGameResult {
+  gameNumber: DailyFritzSetGameNumber;
+  seed: string;
+  playerWon: boolean;
+  playerScore: number;
+  fritzScore: number;
+  pointDiff: number;
+  movesUsed?: number;
+  handsPlayed?: number;
+  completedAt: string;
+}
+
+export interface DailyFritzSetResult {
+  version: 2;
+  format: 'best_of_3';
+  playerGamesWon: number;
+  fritzGamesWon: number;
+  totalPointDiff: number;
+  games: DailyFritzSetGameResult[];
+  setWinner?: 'player' | 'fritz';
+  run_date?: string;
+  final_score?: number;
+  opponent_score?: number;
+  point_diff?: number;
+  won?: boolean;
+  moves_used?: number;
+  hands_played?: number;
+}
+
 export interface DailyFritzTodayResponse {
   ok: true;
   run_date: string;
@@ -101,8 +132,10 @@ export interface DailyFritzTodayResponse {
   deal_size: BotDealSize;
   winning_score: number;
   attempt_status: 'none' | 'started' | 'completed' | 'abandoned';
+  current_game_number: DailyFritzSetGameNumber | null;
   streak: number;
   result: Record<string, unknown> | null;
+  set_result: DailyFritzSetResult | null;
   rank: number | null;
   leaderboard_preview: DailyFritzLeaderboardRow[];
 }
@@ -113,6 +146,8 @@ export interface DailyFritzStartResponse {
   verified_match_id: string;
   run_date: string;
   current_hand_index: number;
+  current_game_number: DailyFritzSetGameNumber;
+  set_result: DailyFritzSetResult | null;
   fritz_tier: FritzTier;
   deal_size: BotDealSize;
   winning_score: number;
@@ -122,6 +157,7 @@ export interface DailyFritzStartResponse {
 export interface DailyFritzNextHandResponse {
   ok: true;
   run_date: string;
+  game_number?: DailyFritzSetGameNumber;
   current_hand_index: number;
   hand: BotHandDeal;
   replayed?: boolean;
@@ -133,6 +169,13 @@ export interface DailyFritzCompleteResponse {
   replayed?: boolean;
   rank: number | null;
   leaderboard_preview: DailyFritzLeaderboardRow[];
+}
+
+export interface DailyFritzRecordGameResponse {
+  ok: true;
+  replayed?: boolean;
+  set_result: DailyFritzSetResult;
+  next_game_number: DailyFritzSetGameNumber | null;
 }
 
 export interface DailyFritzLeaderboardResponse {
@@ -176,6 +219,7 @@ export async function nextDailyFritzHand(input: {
   attemptId: string;
   verifiedMatchId: string;
   runDate: string;
+  gameNumber?: DailyFritzSetGameNumber;
   completedHandIndex: number;
   completedHandScores: { you: number; fritz: number };
 }): Promise<DailyFritzNextHandResponse> {
@@ -193,6 +237,7 @@ export async function nextDailyFritzHand(input: {
         attempt_id: input.attemptId,
         verified_match_id: input.verifiedMatchId,
         run_date: input.runDate,
+        game_number: input.gameNumber ?? 1,
         completed_hand_index: input.completedHandIndex,
         completed_hand_scores: input.completedHandScores,
       }),
@@ -268,6 +313,7 @@ export async function completeDailyFritz(input: {
   movesUsed: number;
   handsPlayed: number;
   moveLog: unknown;
+  setResult?: DailyFritzSetResult | null;
 }): Promise<DailyFritzCompleteResponse> {
   return requestJson<DailyFritzCompleteResponse>('/api/daily-fritz/complete', {
     method: 'POST',
@@ -282,6 +328,32 @@ export async function completeDailyFritz(input: {
       moves_used: input.movesUsed,
       hands_played: input.handsPlayed,
       move_log: input.moveLog,
+      set_result: input.setResult ?? null,
+    }),
+  });
+}
+
+export async function recordDailyFritzGame(input: {
+  attemptId: string;
+  verifiedMatchId: string;
+  runDate: string;
+  gameNumber: DailyFritzSetGameNumber;
+  playerScore: number;
+  fritzScore: number;
+  movesUsed: number;
+  handsPlayed: number;
+}): Promise<DailyFritzRecordGameResponse> {
+  return requestJson<DailyFritzRecordGameResponse>('/api/daily-fritz/record-game', {
+    method: 'POST',
+    body: JSON.stringify({
+      attempt_id: input.attemptId,
+      verified_match_id: input.verifiedMatchId,
+      run_date: input.runDate,
+      game_number: input.gameNumber,
+      player_score: input.playerScore,
+      fritz_score: input.fritzScore,
+      moves_used: input.movesUsed,
+      hands_played: input.handsPlayed,
     }),
   });
 }
