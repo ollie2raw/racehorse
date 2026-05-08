@@ -4,6 +4,7 @@ import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './compon
 import type { Socket } from 'socket.io-client';
 import './App.css';
 import { Board, BoneyardStackIcon, DominoTile, ScoreBoard, ScoreTrackOverlay, RotateOverlay } from './components';
+import LeaveGameModal from './components/LeaveGameModal';
 import TileRack from './components/TileRack';
 import {
   playDrawSound,
@@ -4418,104 +4419,13 @@ export default function App() {
         />
       </Suspense>
       {showLeaveConfirm && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Leave game confirmation"
-          onClick={() => setShowLeaveConfirm(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1900,
-            display: 'grid',
-            placeItems: 'center',
-            background: 'rgba(5, 8, 14, 0.62)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-            padding: 12,
+        <LeaveGameModal
+          onCancel={() => setShowLeaveConfirm(false)}
+          onLeave={() => {
+            setShowLeaveConfirm(false);
+            disconnect('user leave game');
           }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '480px',
-              borderRadius: 20,
-              border: '1px solid rgba(255,255,255,0.10)',
-              background: 'rgb(18, 22, 32)',
-              boxShadow: '0 32px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-              padding: '48px 44px',
-              color: 'rgba(235, 245, 242, 0.96)',
-            }}
-          >
-            <h2
-              style={{
-                margin: '0 0 20px',
-                fontSize: '2rem',
-                fontWeight: 700,
-                color: 'white',
-              }}
-            >
-              Leave game?
-            </h2>
-            <p
-              style={{
-                margin: '0 0 36px',
-                color: 'rgba(200,220,215,0.65)',
-                fontSize: '0.95rem',
-                lineHeight: 1.45,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <span aria-hidden="true">⚠️</span>
-              <span>Your progress in this hand will be lost.</span>
-            </p>
-            <div
-              style={{
-                display: 'flex',
-                gap: 10,
-                width: '100%',
-              }}
-            >
-              <button
-                onClick={() => setShowLeaveConfirm(false)}
-                style={{
-                  flex: 1,
-                  background: 'rgba(45,160,120,0.85)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 14,
-                  padding: '16px 0',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowLeaveConfirm(false);
-                  disconnect('user leave game');
-                }}
-                style={{
-                  flex: 1,
-                  background: 'rgba(180,40,40,0.25)',
-                  border: '1px solid rgba(220,80,80,0.5)',
-                  color: 'rgba(240,140,140,0.9)',
-                  borderRadius: 14,
-                  padding: '16px 0',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Leave
-              </button>
-            </div>
-          </div>
-        </div>
+        />
       )}
     </div>
   );

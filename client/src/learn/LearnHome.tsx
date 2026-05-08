@@ -13,6 +13,13 @@ import {
   type LessonV2AuthoringSession,
 } from './lessonV2';
 import { GUIDED_LESSON_COACHING_BY_VISIBLE_STEP } from './guidedLessonNotes';
+import {
+  ClaudeModeScreen,
+  ClaudePrimaryAction,
+  ClaudeSecondaryAction,
+  ClaudeSectionLabel,
+  ClaudeStatLine,
+} from '../ui/claudeMode';
 
 const GUEST_LEARN_PREVIEW_BOARD: BoardState = {
   mainLine: [
@@ -147,96 +154,76 @@ export default function LearnHome({
 
   if (!isAdmin || !showAdminView) {
     return (
-      <LayoutScreen
-        className="ghost-setup-screen mode-subpage-screen mode-accent-ghost learn-home-guest-screen"
-        title="Learn Racehorse"
-        subtitle="One guided match that teaches how strong players think, one move at a time."
-        contentClassName="multiplayer-menu-card screen-shell learn-home-guest-content"
-      >
-        <div className="learn-guest-shell">
-          <section className="learn-guest-feature-card">
-            <div className="learn-guest-feature-rail">
-              <span className="learn-guest-feature-label">Featured Lesson</span>
-              <span className="learn-guest-mode-pill">Guided Match</span>
+      <div className="screen learn-home-screen mode-subpage-screen mode-accent-learn claude-mode-screen-shell">
+        <ClaudeModeScreen
+          accent="#22d3ee"
+          eyebrow="Learn"
+          title={'GUIDED\nMATCH'}
+          description="One coached match that teaches strong play one move at a time. Coach Oliver narrates every turn — from opening tempo to closing the board."
+          decor="L"
+          backLabel="Back to Home"
+          onBack={onBack}
+          heroFooter={
+            <div className="claude-mode-chip-row">
+              <span className="claude-mode-chip">60 Turns</span>
+              <span className="claude-mode-chip">Coaching Every Move</span>
+              <span className="claude-mode-chip">Fixed Lesson</span>
             </div>
+          }
+          panel={
+            <div className="claude-mode-panel-stack">
+              <ClaudeSectionLabel>Lesson Brief</ClaudeSectionLabel>
+              <ClaudeStatLine label="Format" value="Single Guided Game" />
+              <ClaudeStatLine label="Coach" value="Oliver · Master" accent="#22d3ee" />
+              <ClaudeStatLine label="Length" value="~22 minutes" />
+              <ClaudeStatLine label="Last Played" value={guestPreviewMoment.turnLabel} />
 
-            <div className="learn-guest-feature-layout">
-              <div className="learn-guest-feature-main">
-                <div className="learn-guest-feature-copy">
-                  <h2 className="learn-guest-feature-title">Fixed Guided Match</h2>
-                  <p className="learn-guest-feature-text">
-                    Play through one fully coached game from start to finish, with a teaching note on every move.
-                  </p>
+              <div className="learn-landing-preview">
+                <div className="learn-landing-preview__head">
+                  <ClaudeSectionLabel>Preview</ClaudeSectionLabel>
+                  <span className="learn-landing-preview__turn-label">{guestPreviewMoment.turnLabel}</span>
                 </div>
 
-                <div className="learn-guest-chip-row">
-                  <span className="learn-guest-chip">60 guided turns</span>
-                  <span className="learn-guest-chip">Coach on every move</span>
-                  <span className="learn-guest-chip">Learn at your own pace</span>
+                <div className="learn-landing-preview__rail">
+                  <div
+                    className="learn-landing-preview__fill"
+                    style={{ width: `${guestPreviewMoment.progress * 100}%` }}
+                  />
                 </div>
 
-                <div className="learn-guest-action-row">
-                  {onStartGuidedV2Game ? (
-                    <button className="learn-start-guided-btn learn-guest-primary-cta" onClick={onStartGuidedV2Game}>
-                      Start Guided Game
-                    </button>
-                  ) : (
-                    <button className="learn-start-guided-btn learn-guest-primary-cta" disabled>
-                      Guided Lesson Unavailable
-                    </button>
-                  )}
-                  <button className="mode-option mode-option-secondary learn-guest-back-action" onClick={onBack}>
-                    <span className="mode-option-title">Back</span>
-                    <span className="mode-option-meta">Return to game mode menu</span>
-                  </button>
+                <div className="learn-landing-preview__board">
+                  <Board
+                    board={guestPreviewMoment.board}
+                    legalMoves={[]}
+                    selectedTile={null}
+                    onPositionClick={() => {}}
+                    tileSize={64}
+                    showOpenEndGlow={false}
+                  />
+                </div>
+
+                <div className="learn-landing-preview__note">
+                  <div className="learn-landing-preview__note-mark">Coach Note · {guestPreviewMoment.turnLabel.split(' / ')[0]}</div>
+                  <div className="learn-landing-preview__note-text">{guestPreviewMoment.coachingText}</div>
                 </div>
               </div>
 
-              <aside className="learn-guest-preview-panel" aria-hidden="true">
-                <div className="learn-guest-preview-head">
-                  <span className="learn-guest-preview-title">Preview</span>
-                </div>
-
-                <div className="learn-guest-preview-progress">
-                  <span className="learn-guest-preview-turn">{guestPreviewMoment.turnLabel}</span>
-                  <div className="learn-guest-preview-progressbar">
-                    <span
-                      className="learn-guest-preview-progressfill"
-                      style={{ width: `${Math.max(16, guestPreviewMoment.progress * 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="learn-guest-preview-board">
-                  <div className="learn-guest-preview-board-shell">
-                    <Board
-                      board={guestPreviewMoment.board}
-                      legalMoves={[]}
-                      selectedTile={null}
-                      onPositionClick={() => {}}
-                      tileSize={68}
-                      showOpenEndGlow={false}
-                    />
-                  </div>
-                </div>
-
-                <div className="learn-guest-preview-coach">
-                  <span className="learn-guest-preview-coach-label">Coach Oliver</span>
-                  <p className="learn-guest-preview-coach-line">
-                    {guestPreviewMoment.coachingText}
-                  </p>
-                </div>
-              </aside>
+              <ClaudePrimaryAction
+                accent="#22d3ee"
+                title="Start Guided Game"
+                meta={`Resume from ${guestPreviewMoment.turnLabel} — Coach Oliver`}
+                onClick={onStartGuidedV2Game}
+                disabled={!onStartGuidedV2Game}
+              />
+              <ClaudeSecondaryAction
+                title="Back"
+                meta="Return to game mode menu"
+                onClick={onBack}
+              />
             </div>
-
-            {onStartGuidedV2Game ? (
-              <p className="learn-guest-helper">Start whenever you want and move through it at your own pace.</p>
-            ) : (
-              <p className="learn-guest-helper">The guided lesson is not published yet.</p>
-            )}
-          </section>
-        </div>
-      </LayoutScreen>
+          }
+        />
+      </div>
     );
   }
 
@@ -245,71 +232,19 @@ export default function LearnHome({
       className="ghost-setup-screen mode-subpage-screen mode-accent-ghost"
       title="Learn Racehorse"
       subtitle="Build one fixed coached match cleanly."
-      contentClassName="screen-shell ghost-setup-content"
+      contentClassName="multiplayer-menu-card screen-shell"
     >
-      <div className="ghost-setup-grid learn-columns">
-        <div className="ghost-setup-left-col learn-col">
-          <div className="learn-home-top">
-            <button className="mode-inline-btn" onClick={onBack}>
-              ← Back
-            </button>
-          </div>
-
-          <h3 className="learn-col-heading">FIXED LESSON</h3>
-          <p className="learn-score-note" style={{ marginBottom: 18 }}>
-            One authored match. One coaching tip on every player move. No fallback runtime.
+      <div className="learn-columns">
+        <div className="learn-col">
+          <h3 className="learn-col-heading">AUTHOR</h3>
+          <button className="learn-start-guided-btn" onClick={onStartAuthoringV2}>
+            Start V2 Authoring Session
+          </button>
+          <p className="learn-cta-sub">
+            Build the event timeline for the new guided match system.
           </p>
-
-          {onStartGuidedV2Game ? (
-            <>
-              <button className="learn-start-guided-btn" onClick={onStartGuidedV2Game}>
-                Start Guided Game
-              </button>
-              <p className="learn-cta-sub">Plays the fixed event timeline only</p>
-            </>
-          ) : (
-            <p className="learn-cta-sub">No fixed lesson published yet.</p>
-          )}
         </div>
-
-        <div className="ghost-setup-middle-col learn-col">
-          <h3 className="learn-col-heading">AUTHORING</h3>
-          <p className="learn-score-note" style={{ marginBottom: 14 }}>
-            Build the lesson move by move, then freeze it when the full timeline is correct.
-          </p>
-
-          {isAdmin && onStartAuthoringV2 ? (
-            <button
-              className="learn-start-guided-btn"
-              onClick={onStartAuthoringV2}
-              style={{
-                background: 'rgba(255,200,60,0.13)',
-                border: '1.5px solid rgba(255,200,60,0.32)',
-                color: 'rgba(255,220,100,0.92)',
-                marginBottom: 8,
-              }}
-            >
-              ✏️ Author Fixed Lesson
-            </button>
-          ) : null}
-
-          <div style={{ fontSize: '0.78rem', color: 'rgba(200,230,210,0.72)', lineHeight: 1.7 }}>
-            <div>
-              Authored events:{' '}
-              <strong style={{ color: 'rgba(255,220,100,0.92)' }}>
-                {v2AuthoringSession ? v2AuthoringSession.events.length : '—'}
-              </strong>
-            </div>
-            <div>
-              Published events:{' '}
-              <strong style={{ color: v2FrozenLesson ? 'rgba(100,240,160,0.92)' : 'rgba(255,120,80,0.84)' }}>
-                {v2FrozenLesson ? v2FrozenLesson.events.length : 'none'}
-              </strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="ghost-setup-right-col learn-col learn-col-cta">
+        <div className="learn-col">
           {isAdmin ? (
             <>
               <h3 className="learn-col-heading">PUBLISH</h3>

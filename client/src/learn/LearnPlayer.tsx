@@ -654,417 +654,194 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
         : null;
 
   return (
-    <LayoutScreen
-      className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-learn learn-player-screen"
-      title={lesson.title}
-      subtitle={lesson.description}
-      contentClassName="screen-shell"
-    >
-      <div className="learn-player-wrap">
-        <div className="learn-player-topbar">
-          <button className="mode-inline-btn" onClick={onExit}>
-            ← Back to Learn
-          </button>
-          <div className="learn-player-topbar-right">
-            <div className="learn-step-dots" aria-hidden="true">
-              {lesson.steps.map((_, i) => (
-                <div
-                  key={i}
-                  className={`learn-step-dot ${i < stepIndex ? 'is-done' : i === stepIndex ? 'is-current' : ''}`}
-                />
-              ))}
+    <div className="screen learn-match-screen mode-subpage-screen mode-accent-learn claude-mode-screen-shell">
+      <header className="claude-mode-topbar learn-match-topbar">
+        <div className="claude-mode-topbar__brand">RACEHORSE · GUIDED MATCH</div>
+        <div className="learn-match-topbar__center">
+          <span>Turn <strong>{stepIndex + 1} / {totalSteps}</strong></span>
+        </div>
+        <button type="button" className="claude-mode-topbar__back" onClick={onExit}>
+          <span aria-hidden="true">⏻</span><span>Leave</span>
+        </button>
+      </header>
+
+      <section className="learn-match-grid">
+        <aside className="learn-match-coach">
+          <div className="rh-coach">
+            <div className="rh-coach__avatar">
+              <div className="rh-coach__avatar-mark">O</div>
+              <div className="rh-coach__avatar-meta">
+                <div className="rh-coach__avatar-name">OLIVER · MASTER</div>
+                <div className="rh-coach__avatar-sub">COACH</div>
+              </div>
             </div>
-            <div className="learn-player-hud-meta">
-            <span className="learn-player-step-label">
-              Step {Math.min(stepIndex + 1, totalSteps)} / {totalSteps}
-            </span>
-            <span className="learn-player-status">{lesson.title}</span>
+
+            <div className="rh-progress">
+              <div className="rh-progress__head">
+                <span>Lesson Progress</span>
+                <strong>{stepIndex + 1} / {totalSteps}</strong>
+              </div>
+              <div className="rh-progress__rail">
+                <div
+                  className="rh-progress__fill"
+                  style={{ width: `${((stepIndex + 1) / totalSteps) * 100}%` }}
+                />
+              </div>
+              <div className="rh-tickrail">
+                {Array.from({ length: Math.min(60, totalSteps) }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`rh-tickrail__tick ${
+                      i < stepIndex ? 'is-played' : i === stepIndex ? 'is-current' : ''
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="rh-coach__content">
+              <div className="claude-mode-hero__eyebrow">YOUR MOVE</div>
+              <h2 className="rh-coach__heading">
+                {currentStep?.type === 'explain' ? 'EXPLAIN' : 'YOUR MOVE'}
+              </h2>
+              <div className="rh-coach__body">
+                {currentStep?.type === 'explain' || currentStep?.type === 'summary'
+                  ? currentStep.body
+                  : currentStep?.type === 'guided_play'
+                    ? currentStep.coachText
+                    : currentStep?.type === 'quiz_tile' ||
+                      currentStep?.type === 'quiz_place' ||
+                      currentStep?.type === 'quiz_score_sum' ||
+                      currentStep?.type === 'drill_tile_speed'
+                      ? currentStep.prompt
+                      : currentStep?.type === 'prediction'
+                        ? currentStep.question
+                        : ''}
+              </div>
+            </div>
+
+            {isGuidedPlayStep && (
+              <div className="rh-coach__rec">
+                <div className="rh-coach__rec-head">
+                  <div className="claude-mode-section-label">RECOMMENDED</div>
+                </div>
+                <div className="rh-coach__rec-tile">
+                  <DominoTile tile={toTile(tupleToLearnTile(currentStep.targetTile))} size={22} />
+                  <button
+                    type="button"
+                    className="claude-mode-primary"
+                    style={{ padding: '8px 12px', minHeight: 0 }}
+                    onClick={() => handleGuidedPlayClick(currentStep, currentStep.targetTile)}
+                  >
+                    <span className="claude-mode-primary__title" style={{ fontSize: '13px' }}>Show Move</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <main className="learn-match-board">
+          <div className="rh-match__board-head">
+            <div className="claude-mode-section-label">BOARD · TURN {stepIndex + 1}</div>
+            {openEnds.length > 0 && (
+              <div className="claude-mode-chip-row">
+                <span className="claude-mode-chip">LEFT END: {openEnds[0]}</span>
+                {openEnds.length > 1 && <span className="claude-mode-chip">RIGHT END: {openEnds[1]}</span>}
+              </div>
+            )}
+          </div>
+
+          <div className="learn-match-board-frame">
+            <div className="rh-board__corner rh-board__corner--tl" />
+            <div className="rh-board__corner rh-board__corner--tr" />
+            <div className="rh-board__corner rh-board__corner--bl" />
+            <div className="rh-board__corner rh-board__corner--br" />
+            <div className="rh-board__decor">L</div>
+            
+            <div className="learn-player-board-wrap">
+              {currentBoardData && <LearnBoard board={currentBoardData} highlightOpenEnds />}
+            </div>
+
+            {showScoreFlash !== null && (
+              <div className="score-flash-badge">+{showScoreFlash}</div>
+            )}
+          </div>
+
+          <div className="rh-match__hand-head">
+            <div className="claude-mode-section-label">YOUR HAND</div>
+          </div>
+
+          <div className="learn-match-rack rh-rack">
+            {isQuizTileStep && currentQuizHand.map((tile, idx) => (
+              <div
+                key={idx}
+                className={`rh-rack__tile-wrap ${lastClickedTileResult?.idx === idx ? (lastClickedTileResult.correct ? 'is-correct' : 'is-wrong') : ''}`}
+                onClick={() => handleQuizTileClick(currentStep, tile, idx)}
+              >
+                <DominoTile tile={toTile(tile)} size={30} />
+              </div>
+            ))}
+            {isGuidedPlayStep && currentStep.hand.map((tile, idx) => {
+              const isTarget = tupleEquals(tile, currentStep.targetTile);
+              return (
+                <div
+                  key={idx}
+                  className={`rh-rack__tile-wrap ${isTarget ? 'is-recommended' : ''} ${guidedHasPlaced && isTarget ? 'is-placed' : ''}`}
+                  onClick={() => handleGuidedPlayClick(currentStep, tile)}
+                >
+                  <DominoTile tile={toTile(tupleToLearnTile(tile))} size={30} />
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="learn-board-nav" style={{ position: 'relative', bottom: 'auto', right: 'auto', marginTop: '14px', justifyContent: 'flex-end' }}>
+            <button className="claude-mode-topbar__back" onClick={handleBack} disabled={stepIndex === 0}>
+              ← Back
+            </button>
+            <button
+              className={`claude-mode-primary ${quizSolved ? 'is-next-ready' : ''}`}
+              style={{ padding: '10px 24px', width: 'auto', minHeight: 0 }}
+              onClick={handleNext}
+              disabled={nextDisabled}
+            >
+              <span className="claude-mode-primary__title">{isLastStep ? 'Finish' : 'Next Step'}</span>
+            </button>
+          </div>
+        </main>
+      </section>
+
+      {showIntroCard && (
+        <div className="learn-intro-card" onClick={() => setShowIntroCard(false)}>
+          <div className="learn-intro-inner">
+            <div className="learn-intro-badge">LEVEL 1 · LESSON {lessonIndex + 1}</div>
+            <h1 className="learn-intro-title">{lesson.title}</h1>
+            <p className="learn-intro-hook">{introHook}</p>
+            <button type="button" className="learn-intro-start" onClick={() => setShowIntroCard(false)}>
+              Start Lesson →
+            </button>
+          </div>
+          <div className="learn-intro-watermark">L</div>
+        </div>
+      )}
+
+      {showCompletedState && (
+        <div className="rh-modal-overlay">
+          <div className="rh-modal">
+            <div className="rh-modal__decor">✓</div>
+            <p className="rh-modal__eyebrow">Lesson Complete</p>
+            <h2 className="rh-modal__title">WELL DONE!</h2>
+            <p className="rh-modal__copy">
+              You've got {lesson.title} locked in. Keep going — the next lesson is waiting.
+            </p>
+            <div className="rh-modal__buttons" style={{ gridTemplateColumns: '1fr' }}>
+              <button type="button" className="rh-btn-cancel" onClick={onExit}>Finish</button>
             </div>
           </div>
         </div>
-
-        <div className="learn-player-body">
-          {showIntroCard ? (
-            <div className="learn-intro-card" onClick={() => setShowIntroCard(false)}>
-              <div className="learn-intro-inner">
-                <div className="learn-intro-badge">LEVEL 1 · LESSON {lessonIndex + 1}</div>
-                <h1 className="learn-intro-title">{lesson.title}</h1>
-                <p className="learn-intro-hook">{introHook}</p>
-                <button
-                  type="button"
-                  className="learn-intro-start"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowIntroCard(false);
-                  }}
-                >
-                  Start Lesson →
-                </button>
-              </div>
-              <div className="learn-intro-watermark" aria-hidden="true">
-                {lesson.title}
-              </div>
-            </div>
-          ) : showCompletedState ? (
-            <div key={stepIndex} className="learn-slide learn-slide-complete">
-              <div className="learn-slide-inner">
-                <span className="learn-slide-eyebrow">Lesson Complete</span>
-                <p className="learn-slide-heading">Nice work.</p>
-                <p className="learn-slide-subtext">You've got {lesson.title} locked in. Keep going — the next lesson is waiting.</p>
-                <div className="learn-slide-nav">
-                  <button className="mode-inline-btn" onClick={onExit}>
-                    Back to Learn
-                  </button>
-                </div>
-              </div>
-              <div className="learn-slide-ambient" aria-hidden="true">
-                <span className="learn-slide-bg-word">{lesson.title}</span>
-              </div>
-            </div>
-          ) : currentStep?.type === 'explain' ? (
-            <div key={stepIndex} className="learn-slide learn-slide-explain">
-              <div className="learn-slide-inner">
-                <span className="learn-slide-eyebrow">{stepTitle}</span>
-                <p className="learn-slide-heading">{currentStep.body}</p>
-                <div className="learn-slide-nav">
-                  <button className="mode-inline-btn" onClick={handleBack} disabled={stepIndex === 0}>
-                    Back
-                  </button>
-                  <button className="mode-inline-btn" onClick={handleNext}>
-                    Next
-                  </button>
-                </div>
-              </div>
-              <div className="learn-slide-ambient" aria-hidden="true">
-                <span className="learn-slide-bg-word">{lesson.title}</span>
-              </div>
-            </div>
-          ) : currentStep?.type === 'summary' ? (
-            <div key={stepIndex} className="learn-slide learn-slide-summary">
-              <div className="learn-slide-inner">
-                <span className="learn-slide-eyebrow">{stepTitle}</span>
-                <p className="learn-slide-heading">{currentStep.body}</p>
-                <div className="learn-slide-nav">
-                  <button className="mode-inline-btn" onClick={handleBack} disabled={stepIndex === 0}>
-                    Back
-                  </button>
-                  <button className="mode-inline-btn" onClick={handleNext}>
-                    Finish
-                  </button>
-                </div>
-              </div>
-              <div className="learn-slide-ambient" aria-hidden="true">
-                <span className="learn-slide-bg-word">✓</span>
-              </div>
-            </div>
-          ) : (
-            <div key={stepIndex} className="learn-board-first-layout">
-              <div className="learn-board-hero">
-                {currentBoardData ? (
-                  <div
-                    className={`learn-player-board-wrap ${quizWrongAttempts >= 2 && currentStep?.type === 'quiz_score_sum' && currentStep.hints?.level2 === 'highlightOpenEnds' ? 'learn-board-emphasis' : ''}`}
-                  >
-                    <LearnBoard board={currentBoardData} highlightOpenEnds />
-                  </div>
-                ) : (
-                  <div className="learn-player-board-wrap learn-player-board-placeholder" />
-                )}
-                {showScoreFlash !== null ? (
-                  <div className="score-flash-badge">
-                    +{showScoreFlash} pt{showScoreFlash === 1 ? '' : 's'}
-                  </div>
-                ) : null}
-                {chainCount >= 2 ? <div className="chain-counter">🔥 {chainCount} in a row</div> : null}
-              </div>
-
-              <div className={`learn-instruction-card ${guidedHasPlaced ? 'success-state' : ''}`}>
-                <p className="learn-instruction-eyebrow">{stepTitle}</p>
-                <p className="learn-instruction-prompt">
-                  {currentStep?.type === 'quiz_tile' ||
-                  currentStep?.type === 'quiz_score_sum' ||
-                  currentStep?.type === 'quiz_place' ||
-                  currentStep?.type === 'drill_tile_speed'
-                    ? currentStep.prompt
-                    : currentStep?.type === 'guided_play'
-                      ? guidedHasPlaced
-                        ? (
-                            <>
-                              <span className="success-check">✓</span>
-                              {currentStep.successText}
-                            </>
-                          )
-                        : currentStep.coachText
-                      : currentStep?.type === 'prediction'
-                        ? currentStep.question
-                    : currentStep?.type === 'demo'
-                      ? currentStep.body
-                    : ''}
-                </p>
-
-                {currentStep?.type === 'guided_play' ? (
-                  <>
-                    <div className="guided-hand-row" role="group" aria-label="Guided play hand">
-                      {currentStep.hand.map((tile, idx) => {
-                        const isTarget = tupleEquals(tile, currentStep.targetTile);
-                        return (
-                          <button
-                            key={`${idx}-${tile[0]}-${tile[1]}`}
-                            type="button"
-                            className={`guided-hand-tile ${isTarget ? 'is-target' : ''} ${
-                              guidedSlidingTile && isTarget ? `is-sliding-${currentStep.targetEnd}` : ''
-                            } ${guidedHasPlaced && isTarget ? 'is-placed' : ''}`}
-                            onClick={() => handleGuidedPlayClick(currentStep, tile)}
-                            disabled={!isTarget || guidedHasPlaced || guidedSlidingTile}
-                            aria-label={`Tile ${tile[0]}|${tile[1]}`}
-                          >
-                            <span className="pip-top">{tile[0]}</span>
-                            <span className="pip-divider" />
-                            <span className="pip-bottom">{tile[1]}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {!guidedHasPlaced ? <div className="guided-play-hint-arrow">↑ tap the glowing tile</div> : null}
-                    {guidedHasPlaced && currentStep.chainContinues ? (
-                      <div className="chain-continues-banner">🔥 Chain continues — keep playing</div>
-                    ) : null}
-                  </>
-                ) : null}
-
-                <div className="learn-instruction-answers">
-                  {currentStep?.type === 'prediction' ? (
-                    <>
-                      <div className="prediction-tile-display">
-                        <span className="prediction-tile-label">You're considering playing this tile</span>
-                        <div className="guided-hand-tile is-target prediction-tile-static" aria-hidden="true">
-                          <span className="pip-top">{currentStep.tileToConsider[0]}</span>
-                          <span className="pip-divider" />
-                          <span className="pip-bottom">{currentStep.tileToConsider[1]}</span>
-                        </div>
-                      </div>
-                      <div className="prediction-buttons">
-                        {(['yes', 'no'] as const).map((answer) => {
-                          const selected = predictionSelected === answer;
-                          const revealedCorrect = predictionSelected !== null && currentStep.correctAnswer === answer;
-                          return (
-                            <button
-                              key={answer}
-                              type="button"
-                              className={`prediction-btn ${
-                                selected
-                                  ? answer === currentStep.correctAnswer
-                                    ? 'is-correct'
-                                    : 'is-wrong'
-                                  : revealedCorrect
-                                    ? 'is-correct'
-                                    : ''
-                              }`}
-                              onClick={() => handlePredictionChoice(currentStep, answer)}
-                              disabled={predictionSelected !== null}
-                            >
-                              {answer === 'yes' ? 'YES, it scores' : "NO, it doesn't"}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {predictionRevealVisible && currentStep.revealText ? (
-                        <div className="prediction-reveal-board">
-                          <p className="learn-player-body-text">{currentStep.revealText}</p>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
-
-                  {currentStep?.type === 'quiz_tile' ? (
-                    <div className="learn-hand-row" role="group" aria-label="Lesson hand tiles">
-                      {currentQuizHand.map((tile, idx) => {
-                        const playable = isTilePlayable(toTile(tile), quizBoard);
-                        const showPlayableHint = quizWrongAttempts >= 2 && playable;
-                        const revealEnabled = currentStep.hints?.level3 === 'revealAnswer' || !currentStep.hints?.level3;
-                        const revealTile =
-                          quizWrongAttempts >= 3 &&
-                          revealEnabled &&
-                          getCorrectTiles(currentStep).some((correct) => tileEquals(correct, tile));
-                        return (
-                          <button
-                            key={`${idx}-${tile.low}-${tile.high}`}
-                            type="button"
-                            className={`learn-hand-tile ${showPlayableHint ? 'is-playable-hint' : ''} ${revealTile ? 'is-revealed' : ''} ${
-                              lastClickedTileResult?.idx === idx
-                                ? lastClickedTileResult.correct
-                                  ? 'is-correct-answer'
-                                  : 'is-wrong-answer'
-                                : ''
-                            }`}
-                            onClick={() => handleQuizTileClick(currentStep, tile, idx)}
-                            disabled={quizSolved}
-                            aria-label={`Tile ${tile.low}|${tile.high}`}
-                          >
-                            <DominoTile tile={toTile(tile)} size={30} className="learn-hand-domino" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-
-                  {currentStep?.type === 'quiz_place' ? (
-                    <>
-                      <div className="learn-place-tile-wrap">
-                        <DominoTile tile={toTile(currentStep.tile)} size={30} className="learn-hand-domino" />
-                      </div>
-                      <div className="learn-place-options">
-                        {(['left', 'right'] as const).map((placement) => {
-                          const hintEnabled = currentStep.hints?.level2 === 'highlightPlayable';
-                          const revealEnabled =
-                            currentStep.hints?.level3 === 'revealAnswer' || !currentStep.hints?.level3;
-                          const isCorrect = placement === currentStep.correctPlacement;
-                          const showHint = quizWrongAttempts >= 2 && hintEnabled && isCorrect;
-                          const showReveal = quizWrongAttempts >= 3 && revealEnabled && isCorrect;
-
-                          return (
-                            <button
-                              key={placement}
-                              type="button"
-                              className={`learn-place-btn ${showHint ? 'is-place-hint' : ''} ${showReveal ? 'is-place-reveal' : ''}`}
-                              onClick={() => handleQuizPlaceClick(currentStep, placement)}
-                              disabled={quizSolved}
-                            >
-                              {placement === 'left' ? 'Place on Left' : 'Place on Right'}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
-                  ) : null}
-
-                  {currentStep?.type === 'quiz_score_sum' ? (
-                    <div className="learn-score-choices">
-                      {currentStep.choices.map((choice) => {
-                        const correct = getScoreSumCorrect(currentStep);
-                        const revealEnabled = currentStep.hints?.level3 === 'revealAnswer';
-                        const revealChoice = quizWrongAttempts >= 3 && revealEnabled && choice === correct;
-                        return (
-                          <button
-                            key={choice}
-                            type="button"
-                            className={`learn-score-choice-btn ${revealChoice ? 'is-choice-reveal' : ''} ${
-                              lastClickedScoreChoice === choice && lastAnswerCorrect === false ? 'is-wrong-answer' : ''
-                            }`}
-                            onClick={() => handleQuizScoreChoice(currentStep, choice)}
-                            disabled={quizSolved}
-                          >
-                            {choice}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-
-                  {currentStep?.type === 'drill_tile_speed' ? (
-                    <>
-                      {drillCompleted ? (
-                        <div className="learn-drill-results">
-                          <p className="learn-drill-results-title">Drill complete</p>
-                          <p className="mode-option-meta">Accuracy: {drillCorrectCount}/{currentStep.rounds}</p>
-                          <p className="mode-option-meta">
-                            Avg time: {drillAverageMs !== null ? `${(drillAverageMs / 1000).toFixed(2)}s` : 'n/a'}
-                          </p>
-                          <p className="mode-option-meta">
-                            Best time: {drillBestMs !== null ? `${(drillBestMs / 1000).toFixed(2)}s` : 'n/a'}
-                          </p>
-                          <button type="button" className="mode-inline-btn" onClick={handleRetryDrill}>
-                            Retry Drill
-                          </button>
-                        </div>
-                      ) : !drillStarted ? (
-                        <div className="learn-drill-start-gate">
-                          <p className="learn-drill-start-label">
-                            Round 1 of {currentStep.rounds} — {currentStep.secondsPerRound}s per round
-                          </p>
-                          <button
-                            type="button"
-                            className="mode-inline-btn learn-drill-start-btn"
-                            onClick={() => setDrillStarted(true)}
-                          >
-                            Start Drill
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="learn-drill-timer">
-                            <span className="learn-drill-round-label">
-                              Round {Math.min(drillRoundIndex + 1, currentStep.rounds)} / {currentStep.rounds}
-                            </span>
-                            <span className="learn-drill-countdown">{(drillTimeLeftMs / 1000).toFixed(1)}s</span>
-                          </div>
-                          <div className="learn-drill-timer-bar" aria-hidden="true">
-                            <div className="learn-drill-timer-fill" style={{ width: `${drillProgressPct}%` }} />
-                          </div>
-                          <div className="learn-hand-row" role="group" aria-label="Drill hand tiles">
-                            {currentDrillHand.map((tile, idx) => (
-                              <button
-                                key={`${idx}-${tile.low}-${tile.high}`}
-                                type="button"
-                                className="learn-hand-tile"
-                                onClick={() => handleDrillTileClick(currentStep, tile)}
-                                disabled={drillRoundResolved}
-                                aria-label={`Tile ${tile.low}|${tile.high}`}
-                              >
-                                <DominoTile tile={toTile(tile)} size={30} className="learn-hand-domino" />
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </>
-                  ) : null}
-
-                  {currentStep &&
-                  ![
-                    'explain',
-                    'demo',
-                    'summary',
-                    'quiz_tile',
-                    'quiz_place',
-                    'quiz_score_sum',
-                    'drill_tile_speed',
-                    'guided_play',
-                    'prediction',
-                  ].includes(currentStep.type) ? (
-                    <div className="learn-player-coming-soon">
-                      <strong>{currentStep.type}</strong> step is coming soon in the interactive runner.
-                    </div>
-                  ) : null}
-                </div>
-
-                {quizFeedback ? (
-                  <p
-                    className={`learn-quiz-feedback ${
-                      lastAnswerCorrect === true ? 'is-correct' : lastAnswerCorrect === false ? 'is-wrong' : ''
-                    }`}
-                  >
-                    {quizFeedback}
-                  </p>
-                ) : null}
-                {drillFeedback ? <p className="learn-drill-feedback">{drillFeedback}</p> : null}
-              </div>
-
-              <div className="learn-board-nav">
-                <button className="mode-inline-btn" onClick={handleBack} disabled={stepIndex === 0}>
-                  Back
-                </button>
-                <button
-                  className={`mode-inline-btn ${quizSolved ? 'is-next-ready' : ''}`}
-                  onClick={handleNext}
-                  disabled={nextDisabled}
-                >
-                  {isLastStep ? 'Finish' : 'Next'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </LayoutScreen>
+      )}
+    </div>
   );
 }
+

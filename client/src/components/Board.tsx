@@ -500,6 +500,7 @@ interface BoardProps {
   tileSize?: number;
   showOpenEndGlow?: boolean;
   profileDailyFritz?: boolean;
+  fitMode?: 'default' | 'guided';
 }
 
 function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean {
@@ -526,6 +527,7 @@ function BoardComponent({
   tileSize = 72,
   showOpenEndGlow = false,
   profileDailyFritz = false,
+  fitMode = 'default',
 }: BoardProps) {
   useRenderProfiler('Board');
   if (profileDailyFritz) {
@@ -731,10 +733,45 @@ function BoardComponent({
 
     // Calculate scale to fit
     const layoutSpanUnits = Math.max(layout.maxX - layout.minX, layout.maxY - layout.minY);
-    const targetFill = layoutSpanUnits >= 10 ? 0.93 : 0.9;
+    const targetFill =
+      fitMode === 'guided'
+        ? layoutSpanUnits <= 3
+          ? 1.08
+          : layoutSpanUnits <= 5
+            ? 0.94
+            : layoutSpanUnits <= 8
+              ? 0.88
+              : layoutSpanUnits >= 10
+                ? 0.93
+                : 0.9
+        : layoutSpanUnits <= 3
+          ? 0.56
+          : layoutSpanUnits <= 5
+            ? 0.7
+            : layoutSpanUnits <= 8
+              ? 0.84
+              : layoutSpanUnits >= 10
+                ? 0.93
+                : 0.9;
     const scaleX = (containerWidth * targetFill) / layoutWidth;
     const scaleY = (containerHeight * targetFill) / layoutHeight;
-    const fitScale = Math.min(1.45, Math.max(0.22, Math.min(scaleX, scaleY)));
+    const maxFitScale =
+      fitMode === 'guided'
+        ? boardTileCount <= 1
+          ? 4.4
+          : boardTileCount <= 4
+            ? 3.2
+            : boardTileCount <= 8
+              ? 2.2
+              : 1.6
+        : boardTileCount <= 1
+          ? 2.4
+          : boardTileCount <= 4
+            ? 2.1
+            : boardTileCount <= 8
+              ? 1.8
+              : 1.45;
+    const fitScale = Math.min(maxFitScale, Math.max(0.22, Math.min(scaleX, scaleY)));
 
     traceCameraDebug('[camera-debug] setCamera', {
       reason,
@@ -1157,7 +1194,8 @@ function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
     prev.onPositionClick === next.onPositionClick &&
     prev.tileSize === next.tileSize &&
     prev.showOpenEndGlow === next.showOpenEndGlow &&
-    prev.profileDailyFritz === next.profileDailyFritz
+    prev.profileDailyFritz === next.profileDailyFritz &&
+    prev.fitMode === next.fitMode
   );
 }
 

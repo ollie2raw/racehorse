@@ -494,6 +494,21 @@
   align-items: center;
 }
 
+.guided-tile-wrap.is-recommended::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1.5px dashed rgba(34, 211, 238, 0.78);
+  border-radius: 6px;
+  pointer-events: none;
+  animation: guidedRecommendedPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes guidedRecommendedPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
 .guided-score-badge {
   position: absolute;
   top: -18px;

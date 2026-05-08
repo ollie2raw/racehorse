@@ -21,6 +21,44 @@ interface LessonCoachPanelProps {
   isOffAuthoredLine?: boolean;
 }
 
+function deriveCoachHeadline(text: string, firstSentence: string): string {
+  const normalized = text.toLowerCase();
+
+  if (normalized.includes('good openings') || normalized.includes('opening was')) {
+    return normalized.includes('draw') ? 'DRAW FOR POWER' : 'OPENING CHOICE';
+  }
+  if (normalized.includes('scoring choices') || normalized.includes('score the same')) {
+    return 'SCORING CHOICES';
+  }
+  if (
+    (normalized.includes('draw') && normalized.includes('still fine')) ||
+    normalized.includes('increase our options') ||
+    normalized.includes('future chain opportunities')
+  ) {
+    return 'BUILD OPTIONS';
+  }
+  if (normalized.includes('go out')) {
+    return 'GO OUT';
+  }
+  if (normalized.includes('only one move')) {
+    return 'ONLY MOVE';
+  }
+  if (normalized.includes('double') && normalized.includes('keep the turn')) {
+    return 'USE THE DOUBLE';
+  }
+  if (normalized.includes('no scoring move')) {
+    return 'NO SCORE HERE';
+  }
+
+  const compactSentence = firstSentence.replace(/[.!?]+$/, '').trim();
+  const compactWordCount = compactSentence.split(/\s+/).filter(Boolean).length;
+  if (compactSentence.length <= 34 && compactWordCount <= 5) {
+    return compactSentence.toUpperCase();
+  }
+
+  return 'YOUR MOVE';
+}
+
 function splitCoachingCopy(text: string): { title: string; body: string[]; callout: string | null } {
   let callout: string | null = null;
   let remainingText = text.trim();
@@ -46,10 +84,15 @@ function splitCoachingCopy(text: string): { title: string; body: string[]; callo
   const body: string[] = [];
 
   if (firstSentenceMatch) {
-    title = firstSentenceMatch[1].trim();
+    const firstSentence = firstSentenceMatch[1].trim();
+    title = deriveCoachHeadline(remainingText, firstSentence);
     const restOfFirst = firstSentenceMatch[3].trim();
-    if (restOfFirst) {
-      body.push(restOfFirst);
+    if (title === firstSentence.replace(/[.!?]+$/, '').trim().toUpperCase()) {
+      if (restOfFirst) {
+        body.push(restOfFirst);
+      }
+    } else {
+      body.push(firstParagraph);
     }
   }
 
@@ -85,65 +128,93 @@ export default function LessonCoachPanel({
 }: LessonCoachPanelProps) {
   const { title, body, callout } = splitCoachingCopy(coachingText);
   const chips = deriveCoachChips(coachingText);
+  
   return (
-    <div className="coach-panel lesson-coach-panel">
-      <div className="coach-panel-header lesson-coach-panel-header">
-        <div className="lesson-coach-meta">
-          <span className="coach-label lesson-coach-label">Coach Oliver</span>
-          {!isOffAuthoredLine && totalSteps > 0 && (
-            <span className="lesson-coach-turn-chip">
-              Turn {stepIndex + 1}{totalSteps > 0 ? ` / ${totalSteps}` : ''}
-            </span>
-          )}
+    <div className="rh-coach">
+      <div className="rh-coach__avatar">
+        <div className="rh-coach__avatar-mark">O</div>
+        <div className="rh-coach__avatar-meta">
+          <div className="rh-coach__avatar-sub">COACH</div>
+          <div className="rh-coach__avatar-name">OLIVER · MASTER</div>
         </div>
       </div>
 
-      <div className="lesson-coach-scroll-area">
+      <div className="rh-progress">
+        <div className="rh-progress__head">
+          <span>LESSON PROGRESS</span>
+          <strong>{stepIndex + 1} / {totalSteps}</strong>
+        </div>
+        <div className="rh-progress__rail">
+          <div
+            className="rh-progress__fill"
+            style={{ width: `${((stepIndex + 1) / totalSteps) * 100}%` }}
+          />
+        </div>
+        <div className="rh-tickrail">
+          {Array.from({ length: 60 }).map((_, i) => (
+            <div
+              key={i}
+              className={`rh-tickrail__tick ${
+                i < stepIndex ? 'is-played' : i === stepIndex ? 'is-current' : ''
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="rh-coach__content">
+        <div className="claude-mode-hero__eyebrow">YOUR MOVE</div>
         {isOffAuthoredLine ? (
-          <div className="lesson-coach-copy-wrap">
-            <p className="lesson-coach-offline-title">Offline fallback active</p>
-            <p className="lesson-coach-offline-copy">
+          <>
+            <h2 className="rh-coach__heading">OFFLINE FALLBACK</h2>
+            <div className="rh-coach__body">
               You went off the authored line, so this hand will continue live from here.
-            </p>
-          </div>
-        ) : coachingText ? (
-          <div className="lesson-coach-copy-wrap">
-            <p className="lesson-coach-title">{title || coachingText}</p>
-            {body.length > 0 ? (
-              <div className="lesson-coach-body-paragraphs">
-                {body.map((p, i) => (
-                  <p key={i} className="lesson-coach-copy">{p}</p>
-                ))}
-              </div>
-            ) : null}
-            {chips.length > 0 ? (
-              <div className="lesson-coach-chips">
-                {chips.map((chip) => (
-                  <span key={chip} className="lesson-coach-chip">{chip}</span>
-                ))}
-              </div>
-            ) : null}
-          </div>
+            </div>
+          </>
         ) : (
-          <p className="lesson-coach-empty">No coaching note for this turn.</p>
+          <>
+            <h2 className="rh-coach__heading">{title || 'COACHING'}</h2>
+            <div className="rh-coach__body">
+              {body.length > 0 ? (
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  {body.map((p, i) => (
+                    <p key={i} style={{ margin: 0 }}>{p}</p>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ margin: 0 }}>{coachingText || 'No coaching note for this turn.'}</p>
+              )}
+              {chips.length > 0 && (
+                <div className="claude-mode-chip-row" style={{ marginTop: '14px' }}>
+                  {chips.map((chip) => (
+                    <span key={chip} className="claude-mode-chip">{chip}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
       {!isOffAuthoredLine && callout && (
-        <div className="lesson-coach-callout">
-          <span className="lesson-coach-callout-label">BEST MOVE</span>
-          <span className="lesson-coach-callout-text">{callout}</span>
-        </div>
-      )}
-
-      {!isOffAuthoredLine && (
-        <div className="lesson-coach-actions">
+        <div className="rh-coach__rec">
+          <div className="rh-coach__rec-head">
+            <div className="claude-mode-section-label">RECOMMENDED</div>
+            <div className="rh-stat__value" style={{ color: '#22d3ee', fontSize: '11px', letterSpacing: '0.04em' }}>+5 CONFIDENCE</div>
+          </div>
+          <div className="rh-coach__rec-tile">
+             <div className="rh-preview__note-text" style={{ fontSize: '14px', fontWeight: 600, color: '#fff', letterSpacing: '0.02em' }}>
+              {callout}
+            </div>
+          </div>
           <button
-            onClick={onBestMove}
+            type="button"
+            className="claude-mode-primary"
+            style={{ padding: '10px 16px', minHeight: 0, alignSelf: 'flex-start', background: '#22d3ee', color: '#000', boxShadow: '0 8px 22px rgba(34, 211, 238, 0.28)' }}
             disabled={!canBestMove}
-            className="lesson-coach-bestmove-btn"
+            onClick={onBestMove}
           >
-            Show Best Move →
+            <span className="claude-mode-primary__title" style={{ fontSize: '13px' }}>SHOW BEST MOVE</span>
           </button>
         </div>
       )}

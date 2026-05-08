@@ -84,12 +84,14 @@ import {
   type DailyFritzStartResponse,
 } from '../dailyFritz/api';
 import './botMatch.css';
+import '../learn/learnPlayer.css';
 import { useLearningCoach } from '../learning/useLearningCoach';
 import CoachPanel from '../learning/CoachPanel';
 import LearningHandRecap from '../learning/LearningHandRecap';
 import '../learning/coach.css';
 import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
 import LessonCoachPanel from '../learn/LessonCoachPanel';
+import LeaveGameModal from '../components/LeaveGameModal';
 import {
   AUTHORING_GAME_ID,
   AUTHORING_LESSON_ID,
@@ -897,6 +899,7 @@ export default function BotMatchScreen({
   const [verifiedMatchId, setVerifiedMatchId] = useState<string | null>(
     dailyFritzPackage?.verified_match_id ?? null,
   );
+  const [showRecommendation, setShowRecommendation] = useState(true);
   const [dailyFritzLeaderboard, setDailyFritzLeaderboard] = useState<DailyFritzLeaderboardRow[]>([]);
   const [dailyFritzRank, setDailyFritzRank] = useState<number | null>(null);
   const dailyResultSyncKeyRef = useRef('');
@@ -1066,6 +1069,7 @@ export default function BotMatchScreen({
   const isGuidedTranscriptMode = isGuidedMode && !isAuthoringMode && !isGuidedV2Mode && guidedTranscript !== null;
   const isGuidedV1MinimalMode = false;
   const isGuidedV1OnlineMode = false;
+  const lessonLayoutMode = isGuidedTranscriptMode || wantsOriginalGuidedRecordMode || isGuidedV2Mode;
 
   useEffect(() => {
     if (!isGuidedV2Mode || !frozenV2Lesson) return;
@@ -5405,6 +5409,17 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     const updateHandTileSize = () => {
+      if (lessonLayoutMode) {
+        const viewportWidth = window.innerWidth;
+        const mobile = viewportWidth <= 768;
+        const tablet = viewportWidth <= 1180;
+        const lessonSize = mobile ? 32 : tablet ? 38 : 44;
+        document.documentElement.style.setProperty('--tray-height', mobile ? '84px' : '74px');
+        setHandTileSize(lessonSize);
+        setHandCompactStacked(false);
+        return;
+      }
+
       const tileCount = Math.max(1, match.players.you.hand.length);
       const isLandscape = window.innerWidth > window.innerHeight;
       const isMobileWidth = window.innerWidth <= 900;
@@ -5434,7 +5449,7 @@ export default function BotMatchScreen({
     updateHandTileSize();
     window.addEventListener('resize', updateHandTileSize);
     return () => window.removeEventListener('resize', updateHandTileSize);
-  }, [match.players.you.hand.length]);
+  }, [lessonLayoutMode, match.players.you.hand.length]);
 
   const handActive = !match.handOver && !match.gameOver;
   const botTurn = match.currentPlayer === 'bot' && handActive;
@@ -5578,14 +5593,38 @@ export default function BotMatchScreen({
   const handRevealScoredPips = sumTilePips(handRevealScoredTiles);
 
   const isFullscreenReady = true;
-  const isLessonLayoutMode =
-    isGuidedTranscriptMode || wantsOriginalGuidedRecordMode || isGuidedV2Mode;
+  const isLessonLayoutMode = lessonLayoutMode;
+
+  const currentLessonStepIndex = isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson
+    ? frozenV2Lesson.events
+        .slice(0, guidedV2EventIndex)
+        .filter((e) => e.actor === 'player' && e.action === 'play').length
+    : isGuidedTranscriptMode && guidedTranscript
+    ? lessonStepIndex
+    : 0;
+
+  const totalLessonSteps = isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson
+    ? frozenV2Lesson.events
+        .filter((e) => e.actor === 'player' && e.action === 'play').length
+    : isGuidedTranscriptMode && guidedTranscript
+    ? guidedTranscript.turns.length
+    : 0;
+  const lessonRecommendedTileKey = isGuidedV2Mode && !isGuidedV2OffLine
+    ? currentExpectedV2PlayerEvent?.tile ?? null
+    : isGuidedTranscriptMode
+      ? currentTranscriptTurn?.expectedPlayerMove.type === 'play' && currentTranscriptTurn.expectedPlayerMove.tile
+        ? currentTranscriptTurn.expectedPlayerMove.tile
+        : null
+      : null;
+
   const showLessonCoachPanel =
     isLessonLayoutMode &&
     match.currentPlayer === 'you' &&
     !match.handOver &&
     !match.gameOver;
-  const normalHandRows = handCompactStacked
+  const normalHandRows = isLessonLayoutMode
+    ? [match.players.you.hand]
+    : handCompactStacked
     ? (() => {
         const tiles = match.players.you.hand;
         const isMobile = typeof window !== 'undefined' && window.innerWidth <= 600;
@@ -5599,50 +5638,67 @@ export default function BotMatchScreen({
 
   const lessonCoachPanel = showLessonCoachPanel ? (
     <div className="lesson-coach-slot">
-      {isGuidedTranscriptMode && guidedTranscript && (
-        <LessonCoachPanel
-          stepIndex={lessonStepIndex}
-          totalSteps={guidedTranscript.turns.length}
-          coachingText={currentTranscriptTurn?.coachingText ?? ''}
-          onBestMove={playLessonBestMove}
-          canBestMove={
-            !isOffAuthoredLine &&
-            currentTranscriptTurn?.expectedPlayerMove.type === 'play' &&
-            userPlayMoves.length > 0
-          }
-          isOffAuthoredLine={isOffAuthoredLine}
-        />
-      )}
-      {wantsOriginalGuidedRecordMode && guidedTranscript && (
-        <LessonCoachPanel
-          stepIndex={guidedTranscript.turns.findIndex((turn) => turn.stepIndex === lessonStepIndex)}
-          totalSteps={guidedTranscript.turns.length}
-          coachingText={currentTranscriptTurn?.coachingText ?? ''}
-          onBestMove={() => {}}
-          canBestMove={false}
-          isOffAuthoredLine={false}
-        />
-      )}
-      {isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson && (
-        <LessonCoachPanel
-          stepIndex={frozenV2Lesson.events
-            .slice(0, guidedV2EventIndex)
-            .filter((e) => e.actor === 'player' && e.action === 'play').length}
-          totalSteps={frozenV2Lesson.events
-            .filter((e) => e.actor === 'player' && e.action === 'play').length}
-          coachingText={currentV2CoachingText}
-          onBestMove={playLessonBestMove}
-          canBestMove={Boolean(
-            currentExpectedV2PlayerEvent &&
-            currentExpectedV2PlayerEvent.actor === 'player' &&
-            currentExpectedV2PlayerEvent.action === 'play' &&
-            currentExpectedV2PlayerEvent.tile &&
-            userPlayMoves.some(
-              (m) => m.tile && toTileKey(m.tile) === currentExpectedV2PlayerEvent.tile,
-            )
+      {!showRecommendation ? (
+        <div className="rh-coach">
+          <div className="rh-coach__header">
+            <div className="rh-coach__avatar rh-coach__avatar--small" />
+            <div className="rh-coach__progress">
+              TURN {currentLessonStepIndex + 1} OF {totalLessonSteps}
+            </div>
+          </div>
+          <div className="rh-coach__body">
+            <div className="rh-coach__heading">RECOMMENDATION HIDDEN</div>
+            <div className="rh-coach__text">Toggle below to reveal the coach's recommendation.</div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {isGuidedTranscriptMode && guidedTranscript && (
+            <LessonCoachPanel
+              stepIndex={lessonStepIndex}
+              totalSteps={guidedTranscript.turns.length}
+              coachingText={currentTranscriptTurn?.coachingText ?? ''}
+              onBestMove={playLessonBestMove}
+              canBestMove={
+                !isOffAuthoredLine &&
+                currentTranscriptTurn?.expectedPlayerMove.type === 'play' &&
+                userPlayMoves.length > 0
+              }
+              isOffAuthoredLine={isOffAuthoredLine}
+            />
           )}
-          isOffAuthoredLine={false}
-        />
+          {wantsOriginalGuidedRecordMode && guidedTranscript && (
+            <LessonCoachPanel
+              stepIndex={guidedTranscript.turns.findIndex((turn) => turn.stepIndex === lessonStepIndex)}
+              totalSteps={guidedTranscript.turns.length}
+              coachingText={currentTranscriptTurn?.coachingText ?? ''}
+              onBestMove={() => {}}
+              canBestMove={false}
+              isOffAuthoredLine={false}
+            />
+          )}
+          {isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson && (
+            <LessonCoachPanel
+              stepIndex={frozenV2Lesson.events
+                .slice(0, guidedV2EventIndex)
+                .filter((e) => e.actor === 'player' && e.action === 'play').length}
+              totalSteps={frozenV2Lesson.events
+                .filter((e) => e.actor === 'player' && e.action === 'play').length}
+              coachingText={currentV2CoachingText}
+              onBestMove={playLessonBestMove}
+              canBestMove={Boolean(
+                currentExpectedV2PlayerEvent &&
+                currentExpectedV2PlayerEvent.actor === 'player' &&
+                currentExpectedV2PlayerEvent.action === 'play' &&
+                currentExpectedV2PlayerEvent.tile &&
+                userPlayMoves.some(
+                  (m) => m.tile && toTileKey(m.tile) === currentExpectedV2PlayerEvent.tile,
+                )
+              )}
+              isOffAuthoredLine={false}
+            />
+          )}
+        </>
       )}
     </div>
   ) : null;
@@ -5657,7 +5713,7 @@ export default function BotMatchScreen({
           <div className="tray-center" ref={handAreaRef}>
             <div
               className={`hand-container ${
-                handCompactStacked ? 'is-stacked' : ''
+                (handCompactStacked || isLessonLayoutMode) ? 'is-stacked' : ''
               }`}
             >
               {normalHandRows.map((row, rowIdx) => (
@@ -5671,11 +5727,16 @@ export default function BotMatchScreen({
                     const guidedClass = isGuidedMode && playable
                       ? guidedPts > 0 ? 'guided-scoring' : 'guided-legal'
                       : '';
+                    const isRecommendedLessonTile =
+                      isLessonLayoutMode &&
+                      showRecommendation &&
+                      lessonRecommendedTileKey != null &&
+                      lessonRecommendedTileKey === toTileKey(tile);
                     const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
                     return (
                       <div
                         key={`bot-hand-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
-                        className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}`}
+                        className={`guided-tile-wrap${isGuidedMode && playable && guidedPts > 0 ? ' has-badge' : ''}${isRecommendedLessonTile ? ' is-recommended' : ''}`}
                       >
                         {isGuidedMode && playable && guidedPts > 0 && (
                           <span className="guided-score-badge">+{guidedPts}</span>
@@ -5722,7 +5783,7 @@ export default function BotMatchScreen({
         className={`board-area wl-board-area ${ghostBoardPulse ? 'ghost-board-pulse' : ''} ${isLessonLayoutMode ? 'learn-lesson-board-area' : ''}`}
         data-ui="board"
       >
-        {!match.gameOver && (
+        {!match.gameOver && !isLessonLayoutMode && (
           <div
             style={{
               position: 'absolute',
@@ -5784,7 +5845,7 @@ export default function BotMatchScreen({
             {renderScoreToastMessage(scoreToast.message)}
           </div>
         )}
-        {!match.gameOver && (
+        {!match.gameOver && !isLessonLayoutMode && (
           <div
             ref={boneyardRef}
             className="boneyard-pill"
@@ -5986,89 +6047,92 @@ export default function BotMatchScreen({
           gameOver={match.gameOver}
           lastPlayedTile={lastPlayedTile}
           onPositionClick={onPositionClick}
-          tileSize={72}
+          tileSize={isLessonLayoutMode ? 54 : 72}
           profileDailyFritz={enableDailyFritzProfiling}
+          fitMode={isLessonLayoutMode ? 'guided' : 'default'}
         />
-        <div
-          className="wl-controls-tray"
-          style={{
-            position: 'absolute',
-            bottom: 12,
-            right: 12,
-            zIndex: 20,
-            display: 'flex',
-            gap: 4,
-            alignItems: 'center',
-            background: 'rgba(255,255,255,0.08)',
-            borderRadius: 999,
-            padding: '6px 10px',
-            border: '1.5px solid rgba(255,255,255,0.12)',
-            backdropFilter: 'blur(20px)',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-          }}
-        >
-          <button
-            onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
-            title="Toggle table color"
-            className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
-            style={{ width: 22, height: 22 }}
-          >
-            <span className="table-theme-dot" aria-hidden="true" style={{ width: 10, height: 10 }} />
-          </button>
-          <button
-            className="btn text icon-btn volume-btn"
-            onClick={() => setIsMuted((prev) => !prev)}
-            title={isMuted ? 'Unmute' : 'Mute'}
+        {!isLessonLayoutMode && (
+          <div
+            className="wl-controls-tray"
             style={{
-              padding: '6px 8px',
-              color: 'rgba(232,245,240,0.9)',
-              background: 'none',
-              border: 'none',
-            }}
-          >
-            <VolumeIcon isMuted={isMuted} style={{ width: 20, height: 20 }} />
-          </button>
-          <button
-            className="btn text icon-btn fullscreen-btn"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            style={{
-              padding: '6px 8px',
-              color: 'rgba(232,245,240,0.9)',
-              background: 'none',
-              border: 'none',
-            }}
-          >
-            <FullscreenIcon isFullscreen={isFullscreen} style={{ width: 20, height: 20 }} />
-          </button>
-          <button
-            onClick={() => setShowLeaveConfirm(true)}
-            title="Leave game"
-            style={{
-              padding: '6px 8px',
-              color: 'rgba(232,245,240,0.8)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
+              position: 'absolute',
+              bottom: 12,
+              right: 12,
+              zIndex: 20,
               display: 'flex',
+              gap: 4,
               alignItems: 'center',
+              background: 'rgba(255,255,255,0.08)',
+              borderRadius: 999,
+              padding: '6px 10px',
+              border: '1.5px solid rgba(255,255,255,0.12)',
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
             }}
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <button
+              onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
+              title="Toggle table color"
+              className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
+              style={{ width: 22, height: 22 }}
             >
-              <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
-              <polyline points="9 21 9 12 15 12 15 21" />
-            </svg>
-          </button>
-        </div>
+              <span className="table-theme-dot" aria-hidden="true" style={{ width: 10, height: 10 }} />
+            </button>
+            <button
+              className="btn text icon-btn volume-btn"
+              onClick={() => setIsMuted((prev) => !prev)}
+              title={isMuted ? 'Unmute' : 'Mute'}
+              style={{
+                padding: '6px 8px',
+                color: 'rgba(232,245,240,0.9)',
+                background: 'none',
+                border: 'none',
+              }}
+            >
+              <VolumeIcon isMuted={isMuted} style={{ width: 20, height: 20 }} />
+            </button>
+            <button
+              className="btn text icon-btn fullscreen-btn"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              style={{
+                padding: '6px 8px',
+                color: 'rgba(232,245,240,0.9)',
+                background: 'none',
+                border: 'none',
+              }}
+            >
+              <FullscreenIcon isFullscreen={isFullscreen} style={{ width: 20, height: 20 }} />
+            </button>
+            <button
+              onClick={() => setShowLeaveConfirm(true)}
+              title="Leave game"
+              style={{
+                padding: '6px 8px',
+                color: 'rgba(232,245,240,0.8)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
+                <polyline points="9 21 9 12 15 12 15 21" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -6078,7 +6142,7 @@ export default function BotMatchScreen({
       <RotateOverlay />
       <div
         ref={rootRef}
-        className={`screen game-screen walnut-live theme-${uiTheme} bot-match-screen ${isLessonLayoutMode ? 'learn-lesson-screen' : ''}`}
+        className={`screen game-screen walnut-live theme-${isLessonLayoutMode ? 'green' : uiTheme} bot-match-screen ${isLessonLayoutMode ? 'learn-lesson-screen claude-mode-screen-shell' : ''}`}
       >
 
       <ScoreTrackOverlay
@@ -6402,126 +6466,191 @@ export default function BotMatchScreen({
         </GameOverModal>
       )}
 
-      <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
-        <div className="bot-hud-left-cluster">
-          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <button
-              type="button"
-              className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
-              ref={opponentPillRef}
-              onClick={() => setScoreTrackOpen(true)}
-              aria-label="Open score track"
-              style={{ width: 'auto', minWidth: ghostSubLabel ? 'min(140px, 32vw)' : 'min(110px, 25vw)', padding: '0 12px' }}
-            >
-              <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-                {ghostSubLabel && (
-                  <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
-                    {formatGhostName(ghostSubLabel)}
+      {isLessonLayoutMode ? (
+        <header className="claude-mode-topbar learn-match-topbar">
+          <div className="claude-mode-topbar__brand">
+            <span className="rh-brand__dot" />
+            RACEHORSE
+            <span className="rh-topbar__center-divider" style={{ height: 14, margin: '0 12px' }} />
+            GUIDED MATCH
+          </div>
+          <div className="learn-match-topbar__center">
+            <span>Turn <strong>{currentLessonStepIndex + 1} / {totalLessonSteps}</strong></span>
+            <div className="rh-topbar__center-divider" />
+            <span>Score <strong>{match.players.you.score}</strong></span>
+            <div className="rh-topbar__center-divider" />
+            <span>Open <strong>{openEnds.join(' · ') || 'NONE'}</strong></span>
+          </div>
+          <button type="button" className="claude-mode-topbar__back" onClick={() => setShowLeaveConfirm(true)}>
+            <span aria-hidden="true">⏻</span><span>Leave</span>
+          </button>
+        </header>
+      ) : (
+        <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
+          <div className="bot-hud-left-cluster">
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
+                ref={opponentPillRef}
+                onClick={() => setScoreTrackOpen(true)}
+                aria-label="Open score track"
+                style={{ width: 'auto', minWidth: ghostSubLabel ? 'min(140px, 32vw)' : 'min(110px, 25vw)', padding: '0 12px' }}
+              >
+                <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
+                  {ghostSubLabel && (
+                    <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
+                      {formatGhostName(ghostSubLabel)}
+                    </span>
+                  )}
+                  <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
+                </div>
+                <span className="wl-player-score">{match.players.bot.score}</span>
+              </button>
+              {wantsOriginalGuidedRecordMode ? (
+                <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'min(420px, 40vw)' }}>
+                  {guidedRecordFritzPalette.map((tile, idx) => {
+                    const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
+                    return (
+                    <DominoTile
+                      key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
+                      tile={tile}
+                      size={28}
+                      rotation={0}
+                      selected={selectedController === 'bot' && !!selectedTile && tileEquals(selectedTile, tile)}
+                      highlight={playable}
+                      disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
+                      onClick={() => {
+                        if (!handActive || match.currentPlayer !== 'bot') return;
+                        if (!playable) return;
+                        setSelectedTile(tile);
+                        setSelectedController('bot');
+                      }}
+                    />
+                  )})}
+                </div>
+              ) : (
+                <TileRack
+                  count={match.players.bot.hand.length}
+                  isActive={botTurn}
+                  variant="default"
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="bot-hud-center-cluster" style={{ position: 'relative' }}>
+            {showTurnStatusCluster && (
+              <>
+                {turnLabel && (
+                  <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`} style={{ transform: 'none' }}>
+                    {turnLabel}
                   </span>
                 )}
-                <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
-              </div>
-              <span className="wl-player-score">{match.players.bot.score}</span>
-            </button>
-            {wantsOriginalGuidedRecordMode ? (
-              <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'min(420px, 40vw)' }}>
-                {guidedRecordFritzPalette.map((tile, idx) => {
-                  const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
-                  return (
-                  <DominoTile
-                    key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
-                    tile={tile}
-                    size={28}
-                    rotation={0}
-                    selected={selectedController === 'bot' && !!selectedTile && tileEquals(selectedTile, tile)}
-                    highlight={playable}
-                    disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
-                    onClick={() => {
-                      if (!handActive || match.currentPlayer !== 'bot') return;
-                      if (!playable) return;
-                      setSelectedTile(tile);
-                      setSelectedController('bot');
-                    }}
-                  />
-                )})}
-              </div>
-            ) : (
-              <TileRack
-                count={match.players.bot.hand.length}
-                isActive={botTurn}
-                variant="default"
-              />
+                <div
+                  className="open-ends-pill"
+                  data-has-turn-label={!!turnLabel}
+                  style={{
+                    width: 'auto',
+                    minWidth: 'unset',
+                    height: '45px',
+                    padding: '0 18px',
+                    gap: '8px',
+                    borderRadius: '999px',
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    position: 'absolute',
+                    left: 'calc(100% + 12px)',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    boxShadow: 'none',
+                    lineHeight: 1,
+                  }}
+                >
+                  <span style={{ fontSize: '1.6rem', fontWeight: 800 }}>{openEndsSum}</span>
+                  <span style={{ fontSize: '1.0rem', opacity: 0.7, letterSpacing: '0.02em', textTransform: 'uppercase' }}>OPEN</span>
+                </div>
+              </>
             )}
           </div>
-        </div>
 
-        <div className="bot-hud-center-cluster" style={{ position: 'relative' }}>
-          {showTurnStatusCluster && (
-            <>
-              {turnLabel && (
-                <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`} style={{ transform: 'none' }}>
-                  {turnLabel}
-                </span>
-              )}
-              <div
-                className="open-ends-pill"
-                data-has-turn-label={!!turnLabel}
-                style={{
-                  width: 'auto',
-                  minWidth: 'unset',
-                  height: '45px',
-                  padding: '0 18px',
-                  gap: '8px',
-                  borderRadius: '999px',
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  position: 'absolute',
-                  left: 'calc(100% + 12px)',
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  boxShadow: 'none',
-                  lineHeight: 1,
-                }}
-              >
-                <span style={{ fontSize: '1.6rem', fontWeight: 800 }}>{openEndsSum}</span>
-                <span style={{ fontSize: '1.0rem', opacity: 0.7, letterSpacing: '0.02em', textTransform: 'uppercase' }}>OPEN</span>
-              </div>
-            </>
-          )}
+          <div className="bot-hud-right-cluster">
+            <button
+              type="button"
+              className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
+              onClick={() => setScoreTrackOpen(true)}
+              aria-label="Open score track"
+              style={{ width: 'auto', minWidth: 'min(130px, 30vw)' }}
+            >
+              <span className="wl-player-label">You</span>
+              <span className="wl-player-score">{match.players.you.score}</span>
+            </button>
+          </div>
         </div>
+      )}
 
-        <div className="bot-hud-right-cluster">
-          <button
-            type="button"
-            className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
-            onClick={() => setScoreTrackOpen(true)}
-            aria-label="Open score track"
-            style={{ width: 'auto', minWidth: 'min(130px, 30vw)' }}
-          >
-            <span className="wl-player-label">You</span>
-            <span className="wl-player-score">{match.players.you.score}</span>
-          </button>
-        </div>
-      </div>
 
       {isLessonLayoutMode ? (
-        <div className="learn-lesson-main">
-          <div className="learn-lesson-sidebar">
+        <section className="learn-match-grid">
+          <aside className="learn-match-coach">
             {lessonCoachPanel}
-          </div>
-          <div className="learn-lesson-board-column">
-            {boardStage}
-            {handTray}
-          </div>
-        </div>
+            <button
+              type="button"
+              className="claude-mode-secondary"
+              style={{ marginTop: 'auto', width: '100%', padding: '16px' }}
+              onClick={() => setShowRecommendation(!showRecommendation)}
+            >
+              <span className="claude-mode-secondary__title">{showRecommendation ? 'HIDE RECOMMENDATION' : 'SHOW RECOMMENDATION'}</span>
+              <span className="claude-mode-secondary__meta">Toggle coach's suggested move</span>
+            </button>
+          </aside>
+          <main className="learn-match-board">
+             <div className="rh-match__board-head">
+                <div className="claude-mode-section-label">BOARD · TURN {currentLessonStepIndex + 1}</div>
+                <div className="claude-mode-chip-row">
+                  {openEnds.map((val, idx) => (
+                    <span key={idx} className="claude-mode-chip">{idx === 0 ? 'LEFT' : 'RIGHT'} END: {val}</span>
+                  ))}
+                </div>
+             </div>
+             
+             <div className="learn-match-board-frame">
+                <div className="rh-board__corner rh-board__corner--tl" />
+                <div className="rh-board__corner rh-board__corner--tr" />
+                <div className="rh-board__corner rh-board__corner--bl" />
+                <div className="rh-board__corner rh-board__corner--br" />
+                <div className="rh-board__decor">L</div>
+                {openEnds[0] != null && (
+                  <div className="rh-board__open-end rh-board__open-end--left">↤ {openEnds[0]}</div>
+                )}
+                {openEnds[1] != null && (
+                  <div className="rh-board__open-end rh-board__open-end--right">{openEnds[1]} ↦</div>
+                )}
+                {boardStage}
+             </div>
+
+             <div className="rh-match__hand-head">
+                <div className="claude-mode-section-label">YOUR HAND</div>
+                <div className="claude-mode-chip-row">
+                   <span className="claude-mode-chip">{match.players.you.hand.length} TILES</span>
+                   <span className="claude-mode-chip">{userPlayMoves.length} PLAYABLE</span>
+                </div>
+             </div>
+             
+             <div className="learn-match-rack rh-rack">
+                {handTray}
+             </div>
+          </main>
+        </section>
       ) : (
         <>
           {boardStage}
-          {lessonCoachPanel}
           {handTray}
         </>
       )}
+
+
 
       {flyingTiles.map((ft) => (
         <div
@@ -6565,115 +6694,24 @@ export default function BotMatchScreen({
       )}
 
       {showLeaveConfirm && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Leave game confirmation"
-          onClick={() => setShowLeaveConfirm(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1900,
-            display: 'grid',
-            placeItems: 'center',
-            background: 'rgba(5, 8, 14, 0.62)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-            padding: 12,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(480px, calc(100vw - 32px))',
-              borderRadius: 20,
-              border: '1px solid rgba(255,255,255,0.10)',
-              background: 'rgb(18, 22, 32)',
-              boxShadow: '0 32px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-              padding: 'clamp(24px, 6vw, 44px) clamp(20px, 5vw, 40px)',
-              color: 'rgba(235, 245, 242, 0.96)',
-            }}
-          >
-            <h2
-              style={{
-                margin: '0 0 20px',
-                fontSize: '2rem',
-                fontWeight: 700,
-                color: 'white',
-              }}
-            >
-              Leave game?
-            </h2>
-            <p
-              style={{
-                margin: '0 0 36px',
-                color: 'rgba(200,220,215,0.65)',
-                fontSize: '0.95rem',
-                lineHeight: 1.45,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <span aria-hidden="true">⚠️</span>
-              <span>Your progress in this hand will be lost.</span>
-            </p>
-            <div
-              style={{
-                display: 'flex',
-                gap: 10,
-                width: '100%',
-              }}
-            >
-              <button
-                onClick={() => setShowLeaveConfirm(false)}
-                style={{
-                  flex: 1,
-                  background: 'rgba(45,160,120,0.85)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 14,
-                  padding: '16px 0',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  clearPersistedLeagueMatch();
-                  if (isStandaloneFritzMatch && !match.gameOver) {
-                    void abandonStandaloneFritzMatch()
-                      .catch((err) => {
-                        console.warn('[Fritz Pending] abandon failed', err);
-                      })
-                      .finally(() => {
-                        void Promise.resolve(onProfileRefresh?.()).catch(() => {});
-                        exitMatch();
-                      });
-                    return;
-                  }
+        <LeaveGameModal
+          onCancel={() => setShowLeaveConfirm(false)}
+          onLeave={() => {
+            clearPersistedLeagueMatch();
+            if (isStandaloneFritzMatch && !match.gameOver) {
+              void abandonStandaloneFritzMatch()
+                .catch((err) => {
+                  console.warn('[Fritz Pending] abandon failed', err);
+                })
+                .finally(() => {
+                  void Promise.resolve(onProfileRefresh?.()).catch(() => {});
                   exitMatch();
-                }}
-                style={{
-                  flex: 1,
-                  background: 'rgba(180,40,40,0.25)',
-                  border: '1px solid rgba(220,80,80,0.5)',
-                  color: 'rgba(240,140,140,0.9)',
-                  borderRadius: 14,
-                  padding: '16px 0',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Leave
-              </button>
-            </div>
-          </div>
-        </div>
+                });
+            } else {
+              exitMatch();
+            }
+          }}
+        />
       )}
     </div>
     </>

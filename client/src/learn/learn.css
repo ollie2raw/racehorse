@@ -572,90 +572,108 @@
   line-height: 1.4;
 }
 
-@media (max-width: 768px) {
-  .learn-home-guest-screen {
-    height: auto;
-    min-height: 100vh;
-    padding: 0 16px 18px !important;
-  }
+/* ─── Learn Landing Preview Card ─── */
+.learn-landing-preview {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    radial-gradient(ellipse at top right, rgba(34, 211, 238, 0.06), transparent 60%),
+    linear-gradient(180deg, rgba(6, 10, 20, 0.94), rgba(10, 14, 26, 0.94));
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-  .learn-home-guest-content {
-    min-height: auto;
-  }
+.learn-landing-preview__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
 
-  .learn-home-guest-screen .layout-screen-inner {
-    gap: 10px;
-  }
+.learn-landing-preview__head .claude-mode-section-label {
+  margin-bottom: 0;
+}
 
-  .learn-home-guest-screen .layout-screen-title {
-    font-size: 2.45rem;
-  }
+.learn-landing-preview__turn-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #22d3ee;
+  text-transform: uppercase;
+}
 
-  .learn-home-guest-screen .layout-screen-subtitle {
-    font-size: 1rem;
-  }
+.learn-landing-preview__rail {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  position: relative;
+  overflow: hidden;
+}
 
-  .learn-guest-shell {
-    min-height: auto;
-  }
+.learn-landing-preview__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #22d3ee, rgba(34, 211, 238, 0.4));
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
+  transition: width 320ms ease;
+}
 
-  .learn-guest-feature-card {
-    padding: 20px 18px 18px;
-    gap: 16px;
-    border-radius: 20px;
-    min-height: auto;
-  }
+.learn-landing-preview__board {
+  position: relative;
+  background:
+    radial-gradient(ellipse at center, rgba(34, 211, 238, 0.04), transparent 70%),
+    linear-gradient(180deg, #050b1a 0%, #020610 100%);
+  padding: 16px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  overflow: hidden;
+}
 
-  .learn-guest-feature-rail {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
+.learn-landing-preview__board::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.05), transparent 18%),
+    radial-gradient(circle at 68% 62%, rgba(255, 255, 255, 0.03), transparent 16%);
+  pointer-events: none;
+}
 
-  .learn-guest-feature-layout {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
+.learn-landing-preview__board .board-container,
+.learn-landing-preview__board .board-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
 
-  .learn-guest-preview-panel {
-    min-height: auto;
-  }
+.learn-landing-preview__board .board-zoom-tray,
+.learn-landing-preview__board .placement-zone {
+  display: none !important;
+}
 
-  .learn-guest-preview-board {
-    min-height: 220px;
-  }
+.learn-landing-preview__note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 12px 12px 14px;
+  border-left: 2px solid #22d3ee;
+  background: rgba(34, 211, 238, 0.04);
+}
 
-  .learn-guest-subtitle,
-  .learn-guest-feature-text {
-    font-size: 0.96rem;
-  }
+.learn-landing-preview__note-mark {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #22d3ee;
+}
 
-  .learn-guest-action-row {
-    width: 100%;
-  }
-
-  .learn-guest-primary-cta {
-    width: 100%;
-    max-width: none;
-    min-height: 72px;
-  }
-
-  .learn-guest-back-action {
-    width: 100%;
-  }
-
-  .learn-guest-helper {
-    text-align: left;
-    margin-left: 0;
-    margin-right: 0;
-  }
-
-  .learn-columns {
-    grid-template-columns: 1fr;
-    height: auto;
-    gap: 16px;
-  }
-
-  .learn-col {
-    height: auto;
-  }
+.learn-landing-preview__note-text {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.74);
 }

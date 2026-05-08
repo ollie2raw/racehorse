@@ -1515,79 +1515,83 @@ export default function DailyPuzzleScreen({
       </div>
 
       {status !== 'IN_PROGRESS' && (
-        <div className="daily-puzzle-overlay" role="dialog" aria-modal="true">
-          <div className="daily-puzzle-modal">
-            {isOneTurnHighScore ? (
-              <>
-                <h3>Final score: {finalScore ?? 0}</h3>
-                <p>High Score — One turn</p>
-              </>
-            ) : (
-              <>
-                <h3>
-                  {status === 'SOLVED'
-                    ? `Solved in ${movesUsed} moves`
-                    : 'No legal moves remaining'}
-                </h3>
-                <p>
-                  Score {runtimeState.players.you.score}/{puzzle.targetScore} · Max moves{' '}
-                  {puzzle.maxMoves}
-                </p>
-              </>
-            )}
-            {status === 'SOLVED' && <p>Streak: {streakDays} days 🔥</p>}
-            <div
-              style={{
-                borderRadius: 14,
-                border: '1px solid rgba(236,252,245,0.16)',
-                background: 'rgba(15, 25, 20, 0.72)',
-                backdropFilter: 'blur(16px)',
-                padding: '12px 14px',
-                display: 'grid',
-                gap: 6,
-              }}
-            >
-              <p style={{ margin: 0, color: 'rgba(232,245,240,0.95)', fontWeight: 700 }}>
-                Your score: {completedScore} pts
-              </p>
-              <p style={{ margin: 0, color: 'rgba(232,245,240,0.86)' }}>
-                Best possible: {bestPossibleScore} pts
-              </p>
-              <p style={{ margin: 0, color: completionMessage.color, fontWeight: 700 }}>
-                {completionMessage.text}
-              </p>
-            </div>
-            {!user && <p className="lobby-server">Sign in to submit to leaderboard.</p>}
-            <div className="daily-leaderboard-panel daily-leaderboard-panel-modal">
-              <h3>Today&apos;s Top Scores</h3>
-              <div className="daily-leaderboard-head" aria-hidden="true">
-                <span>Rank</span>
-                <span>Player</span>
-                <span>Score</span>
-                <span>Moves</span>
+        <div className="rh-modal-overlay" role="dialog" aria-modal="true" style={{ ['--rh-accent-rgb' as string]: '240, 192, 64' }}>
+          <div className="rh-result">
+            <header className="rh-result__head">
+              <div className="claude-mode-hero__eyebrow" style={{ color: '#f0c040' }}>PUZZLE COMPLETE</div>
+              <div className="rh-result__score">
+                <span>{completedScore}</span>
+                <span className="rh-result__score-suffix">PTS</span>
               </div>
-              {leaderboardLoading && (
-                <p className="daily-leaderboard-loading">
-                  <span className="daily-inline-spinner" aria-hidden="true" />
-                  Loading leaderboard...
-                </p>
-              )}
-              {!leaderboardLoading && modalLeaderboard.length === 0 && (
-                <p className="lobby-server">No solved submissions yet.</p>
-              )}
-              {!leaderboardLoading && modalLeaderboard.length > 0 && renderLeaderboardRows(modalLeaderboard)}
+              <div className="rh-result__feedback" style={{ color: completionMessage.color }}>
+                {completionMessage.text}
+              </div>
+            </header>
+
+            <div className="rh-result__summary">
+              <div>
+                <span className="rh-result__summary-label">Best Possible</span>
+                <span className="rh-result__summary-value">{bestPossibleScore}</span>
+              </div>
+              <div>
+                <span className="rh-result__summary-label">Moves Used</span>
+                <span className="rh-result__summary-value">{movesUsed}</span>
+              </div>
+              <div>
+                <span className="rh-result__summary-label">Current Streak</span>
+                <span className="rh-result__summary-value" style={{ color: '#f0c040' }}>{streakDays} DAYS</span>
+              </div>
             </div>
-            <div className="daily-puzzle-modal-actions">
-              <button className="mode-inline-btn" onClick={resetAttempt}>
-                Play Again
-              </button>
-              <button className="mode-inline-btn" onClick={onBack}>
-                Back to Home
-              </button>
+
+            <div className="rh-result__board">
+              <div className="rh-result__board-head">
+                <div className="claude-mode-section-label">GLOBAL LEADERBOARD</div>
+                <div className="claude-mode-topbar__brand" style={{ fontSize: '10px', opacity: 0.4 }}>TODAY</div>
+              </div>
+
+              <div className="rh-result__lb">
+                <div className="rh-result__lb-head">
+                  <span>#</span>
+                  <span>PLAYER</span>
+                  <span style={{ textAlign: 'right' }}>SCORE</span>
+                  <span style={{ textAlign: 'right' }}>MOVES</span>
+                  <span style={{ textAlign: 'right' }}>TIME</span>
+                </div>
+                {modalLeaderboard.map((row, idx) => {
+                  const isYou = Boolean(currentUserId) && row.userId === currentUserId;
+                  const initials = getDisplayName(row.username).replace(/^@/, '').slice(0, 2).toUpperCase() || 'P';
+                  return (
+                    <div key={idx} className={`rh-result__lb-row ${isYou ? 'is-you' : ''}`}>
+                      <span className={`rh-result__lb-rank ${idx < 3 ? 'is-top-3' : ''}`}>{idx + 1}</span>
+                      <span className="rh-result__lb-name">
+                        <div className="rh-result__avatar">{initials}</div>
+                        <span>@{getDisplayName(row.username)}</span>
+                        {isYou && <span className="rh-result-you-pill">YOU</span>}
+                      </span>
+                      <span className="rh-result__lb-num">{row.bestScore}</span>
+                      <span className="rh-result__lb-num">{row.bestMovesUsed}</span>
+                      <span className="rh-result__lb-num">{formatPuzzleElapsed(row.bestSeconds)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
+            <footer className="rh-result__actions">
+              <button type="button" className="rh-btn-leave" onClick={resetAttempt}>Play Again</button>
+              <button
+                type="button"
+                className="rh-btn-cancel"
+                style={{ background: '#f0c040', color: '#000', boxShadow: '0 8px 22px rgba(240, 192, 64, 0.28)' }}
+                onClick={onBack}
+              >
+                Return Home
+              </button>
+            </footer>
           </div>
         </div>
       )}
+
     </div>
     </>
   );

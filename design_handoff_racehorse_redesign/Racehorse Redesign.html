@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Racehorse — Redesign Pass</title>
+  <link rel="stylesheet" href="styles/racehorse-tokens.css" />
+  <link rel="stylesheet" href="styles/racehorse-screens.css" />
+  <style>
+    html, body, #root { height: 100%; }
+    body { overflow: hidden; }
+
+    /* Canvas-style frames so the four screens sit side-by-side */
+    .stage {
+      position: fixed;
+      inset: 0;
+      overflow: auto;
+      background:
+        radial-gradient(1200px 600px at 20% 10%, rgba(61,142,255,0.05), transparent 60%),
+        radial-gradient(900px 500px at 80% 90%, rgba(0,240,200,0.04), transparent 60%),
+        #050610;
+      padding: 28px;
+    }
+    .stage__inner {
+      display: grid;
+      grid-template-columns: repeat(2, 1280px);
+      gap: 28px;
+      width: max-content;
+      margin: 0 auto;
+    }
+    .frame {
+      width: 1280px;
+      height: 820px;
+      position: relative;
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+      overflow: hidden;
+      background: #01010a;
+    }
+    .frame__label {
+      position: absolute;
+      top: -24px;
+      left: 0;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+    }
+    .frame__label span {
+      color: rgba(255,255,255,0.32);
+      margin-left: 10px;
+    }
+    .frame--with-modal::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at top left, rgba(61,142,255,0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(0,240,200,0.07), transparent 30%),
+        linear-gradient(180deg, #01010a 0%, #04050d 35%, #080912 100%);
+    }
+    .frame__behind {
+      position: absolute;
+      inset: 0;
+      filter: blur(2px) brightness(0.4) saturate(0.8);
+      pointer-events: none;
+    }
+    .frame > .rh-modal-overlay {
+      position: absolute;
+    }
+
+    .stage-header {
+      max-width: 2588px;
+      margin: 0 auto 28px;
+      padding: 4px 4px 0;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .stage-header h1 {
+      margin: 0;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 900;
+      font-size: 28px;
+      letter-spacing: -0.03em;
+      color: #fff;
+    }
+    .stage-header p {
+      margin: 0;
+      max-width: 720px;
+      color: rgba(255,255,255,0.55);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .legend {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+    }
+    .legend span::before {
+      content: '';
+      display: inline-block;
+      width: 8px; height: 8px;
+      margin-right: 8px;
+      vertical-align: 1px;
+      background: var(--c, #fff);
+      box-shadow: 0 0 10px var(--c);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="scripts/Tile.jsx"></script>
+  <script type="text/babel" src="scripts/Screens.jsx"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function App() {
+      const [showLeave, setShowLeave] = useState(true);
+      const [showResult, setShowResult] = useState(true);
+
+      return (
+        <div className="stage">
+          <div className="stage-header">
+            <div>
+              <h1>Racehorse · Redesign Pass</h1>
+              <p>Four screens redesigned to match the existing redesigned home + Play vs Fritz visual system. Reuses <code>claudeMode.css</code> tokens (Outfit / Barlow Condensed / Rajdhani / Space Grotesk, dark navy/black surfaces, thin translucent borders, faded oversized decor letters, accent-driven gradients).</p>
+            </div>
+            <div className="legend">
+              <span style={{ ['--c']: '#22d3ee' }}>Learn · Cyan</span>
+              <span style={{ ['--c']: '#f0c040' }}>Daily · Amber</span>
+              <span style={{ ['--c']: '#ff6f5e' }}>Danger · Coral</span>
+              <span style={{ ['--c']: '#2dd4a8' }}>Safe · Green</span>
+            </div>
+          </div>
+
+          <div className="stage__inner">
+            <div className="frame" data-screen-label="01 Learn Landing">
+              <span className="frame__label">Screen 1 <span>Learn Landing</span></span>
+              <LearnLanding onStart={() => {}} onBack={() => {}} />
+            </div>
+
+            <div className="frame" data-screen-label="02 Guided Match">
+              <span className="frame__label">Screen 2 <span>Guided Learn Match</span></span>
+              <LearnMatch onLeave={() => setShowLeave(true)} onBack={() => {}} />
+            </div>
+
+            <div className="frame frame--with-modal" data-screen-label="03 Leave Modal">
+              <span className="frame__label">Screen 3 <span>Leave Game Modal</span></span>
+              <div className="frame__behind">
+                <LearnMatch onLeave={() => {}} onBack={() => {}} />
+              </div>
+              {showLeave ? (
+                <LeaveModal
+                  onCancel={() => setShowLeave(false)}
+                  onLeave={() => setShowLeave(false)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="rh-btn-secondary-sm"
+                  style={{ position: 'absolute', top: 16, right: 16, zIndex: 5 }}
+                  onClick={() => setShowLeave(true)}
+                >Reopen Modal</button>
+              )}
+            </div>
+
+            <div className="frame frame--with-modal" data-screen-label="04 Daily Result">
+              <span className="frame__label">Screen 4 <span>Daily Puzzle Complete</span></span>
+              <div className="frame__behind">
+                <LearnMatch onLeave={() => {}} onBack={() => {}} />
+              </div>
+              {showResult ? (
+                <DailyResultModal
+                  onPlayAgain={() => setShowResult(false)}
+                  onHome={() => setShowResult(false)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="rh-btn-secondary-sm"
+                  style={{ position: 'absolute', top: 16, right: 16, zIndex: 5 }}
+                  onClick={() => setShowResult(true)}
+                >Reopen Modal</button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
