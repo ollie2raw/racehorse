@@ -91,6 +91,13 @@ export interface DailyFritzLeaderboardRow {
   pointDiff: number;
   movesUsed: number;
   completedAt: string;
+  games?: Array<{
+    gameNumber: DailyFritzSetGameNumber;
+    playerScore: number;
+    fritzScore: number;
+    playerWon: boolean;
+    pointDiff: number;
+  }>;
   is_current_user?: boolean;
 }
 
@@ -158,6 +165,8 @@ export interface DailyFritzNextHandResponse {
   ok: true;
   run_date: string;
   game_number?: DailyFritzSetGameNumber;
+  current_game_number?: DailyFritzSetGameNumber | null;
+  set_result?: DailyFritzSetResult | null;
   current_hand_index: number;
   hand: BotHandDeal;
   replayed?: boolean;
@@ -250,10 +259,15 @@ export async function nextDailyFritzHand(input: {
     try { parsed = JSON.parse(text); } catch { /* fall through */ }
   }
 
-  // 409 = server's signal that the run is complete — not a retryable error.
+  // Only the terminal no-hands-remain 409 means the game is complete. Other
+  // conflicts are real hand-transition errors and must not auto-complete a set.
   if (response.status === 409) {
+    const message = parsed?.error ?? 'No hands remain in this Daily Fritz run.';
+    if (!String(message).toLowerCase().includes('no hands remain')) {
+      throw new Error(message);
+    }
     throw new DailyFritzEndOfRunError(
-      parsed?.error ?? 'No hands remain in this Daily Fritz run.',
+      message,
     );
   }
 

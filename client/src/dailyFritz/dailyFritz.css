@@ -283,6 +283,20 @@
   overflow: hidden;
 }
 
+.daily-fritz-summary-strip.is-final-set {
+  display: grid;
+  gap: 0;
+  border-color: rgba(224, 92, 106, 0.18);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(224, 92, 106, 0.14), transparent 36%),
+    linear-gradient(180deg, rgba(15, 22, 36, 0.98), rgba(8, 12, 20, 0.98));
+}
+
+.daily-fritz-final-hero {
+  padding: clamp(22px, 3vw, 34px) clamp(20px, 3vw, 30px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
 .daily-fritz-summary-strip-header {
   padding: 14px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -296,6 +310,11 @@
 .daily-fritz-game-list {
   display: grid;
   gap: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.daily-fritz-set-tracker.is-final {
+  padding: 18px 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -376,72 +395,242 @@
 .daily-fritz-between-main {
   display: grid;
   place-items: center;
+  padding-block: clamp(18px, 4vh, 42px);
 }
 
 .daily-fritz-between-card {
-  width: min(100%, 560px);
+  position: relative;
+  overflow: hidden;
+  width: min(100%, 820px);
   display: grid;
-  gap: 18px;
-  padding: clamp(24px, 4vw, 42px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(12, 16, 24, 0.98), rgba(9, 12, 18, 0.98));
+  gap: clamp(18px, 2.6vw, 26px);
+  padding: clamp(24px, 4vw, 46px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(circle at 16% 0%, rgba(224, 92, 106, 0.2), transparent 34%),
+    radial-gradient(circle at 96% 12%, rgba(96, 165, 250, 0.12), transparent 32%),
+    linear-gradient(180deg, rgba(17, 24, 38, 0.98), rgba(7, 11, 18, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 30px 70px rgba(0, 0, 0, 0.36);
 }
 
-.daily-fritz-between-card h1 {
+.daily-fritz-between-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 70%);
+  opacity: 0.32;
+}
+
+.daily-fritz-between-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.daily-fritz-kicker {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 214, 219, 0.88);
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-kicker::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #e05c6a;
+  box-shadow: 0 0 22px rgba(224, 92, 106, 0.82);
+}
+
+.daily-fritz-between-hero,
+.daily-fritz-final-hero {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-fritz-between-hero h1,
+.daily-fritz-final-hero h2 {
   margin: 0;
   color: rgba(248, 250, 249, 0.98);
   font-family: 'Barlow Condensed', system-ui, sans-serif;
-  font-size: clamp(2.5rem, 5vw, 4.2rem);
+  font-size: clamp(3rem, 7vw, 5.8rem);
+  font-weight: 850;
+  line-height: 0.88;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.daily-fritz-final-hero h2 {
+  font-size: clamp(2.8rem, 5.6vw, 4.8rem);
+}
+
+.daily-fritz-between-hero p,
+.daily-fritz-final-hero p {
+  max-width: 640px;
+  margin: 0;
+  color: rgba(230, 239, 236, 0.84);
+  font-size: clamp(1.05rem, 1.6vw, 1.24rem);
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.daily-fritz-between-score-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.72fr);
+  gap: 10px;
+}
+
+.daily-fritz-between-score-card {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  min-height: 104px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.daily-fritz-between-score-card span {
+  color: rgba(205, 223, 217, 0.62);
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-between-score-card strong {
+  color: rgba(248, 250, 249, 0.98);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: clamp(1.86rem, 3vw, 2.55rem);
   font-weight: 850;
   line-height: 0.95;
+  font-variant-numeric: tabular-nums;
 }
 
-.daily-fritz-between-card > strong {
-  display: block;
-  color: rgba(248, 250, 249, 0.98);
-  font-size: clamp(1.45rem, 2.4vw, 2rem);
-  font-weight: 850;
-}
-
-.daily-fritz-between-card > strong.is-win {
+.daily-fritz-between-score-card strong.is-win,
+.daily-fritz-summary-value.is-win {
   color: #34d399;
 }
 
-.daily-fritz-between-card > strong.is-loss {
-  color: #ef4444;
+.daily-fritz-between-score-card strong.is-loss,
+.daily-fritz-summary-value.is-loss {
+  color: #f87171;
 }
 
-.daily-fritz-between-score {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 60px;
-  padding: 14px 16px;
-  border-radius: 14px;
+.daily-fritz-set-tracker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.daily-fritz-set-step {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  min-height: 82px;
+  padding: 15px 16px;
+  border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(8, 13, 22, 0.72);
 }
 
-.daily-fritz-between-score span {
-  color: rgba(205, 223, 217, 0.62);
+.daily-fritz-set-step::after {
+  content: '';
+  position: absolute;
+  inset: auto 16px 12px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.daily-fritz-set-step span {
+  color: rgba(205, 223, 217, 0.56);
+  font-family: 'Rajdhani', system-ui, sans-serif;
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
-.daily-fritz-between-score b {
-  color: rgba(248, 250, 249, 0.98);
-  font-size: 1.24rem;
-  font-variant-numeric: tabular-nums;
+.daily-fritz-set-step strong {
+  color: rgba(248, 250, 249, 0.94);
+  font-size: 1.05rem;
+  font-weight: 850;
 }
 
-.daily-fritz-between-card p {
+.daily-fritz-set-step.is-win {
+  border-color: rgba(52, 211, 153, 0.25);
+  background: linear-gradient(180deg, rgba(16, 62, 44, 0.56), rgba(8, 16, 18, 0.72));
+}
+
+.daily-fritz-set-step.is-win::after {
+  background: #34d399;
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.4);
+}
+
+.daily-fritz-set-step.is-loss {
+  border-color: rgba(248, 113, 113, 0.25);
+  background: linear-gradient(180deg, rgba(78, 24, 29, 0.58), rgba(18, 10, 14, 0.76));
+}
+
+.daily-fritz-set-step.is-loss::after {
+  background: #f87171;
+  box-shadow: 0 0 16px rgba(248, 113, 113, 0.38);
+}
+
+.daily-fritz-set-step.is-next {
+  border-color: rgba(224, 92, 106, 0.48);
+  background: linear-gradient(180deg, rgba(72, 18, 26, 0.66), rgba(20, 12, 17, 0.76));
+}
+
+.daily-fritz-set-step.is-next::after {
+  background: #e05c6a;
+  box-shadow: 0 0 18px rgba(224, 92, 106, 0.52);
+}
+
+.daily-fritz-between-next {
+  display: grid;
+  gap: 5px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(224, 92, 106, 0.22);
+  background: linear-gradient(90deg, rgba(224, 92, 106, 0.14), rgba(255, 255, 255, 0.035));
+}
+
+.daily-fritz-between-next span {
+  color: rgba(248, 250, 249, 0.98);
+  font-size: 1.12rem;
+  font-weight: 850;
+}
+
+.daily-fritz-between-next p {
   margin: 0;
-  color: rgba(221, 232, 228, 0.84);
-  font-size: 1.04rem;
-  font-weight: 700;
+  color: rgba(221, 232, 228, 0.72);
+  font-size: 0.98rem;
+  font-weight: 650;
+}
+
+.daily-fritz-between-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr);
+  gap: 12px;
 }
 
 .daily-fritz-secondary-copy {
@@ -702,11 +891,11 @@
 .daily-fritz-rank-value {
   min-width: 18px;
   text-align: right;
-  font-size: 1.3rem;
+  font-size: 1.65rem;
   font-weight: 800;
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .daily-fritz-rank-value.rank-1 {
@@ -730,8 +919,8 @@
 }
 
 .daily-fritz-avatar {
-  width: 44px;
-  height: 44px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   flex: 0 0 auto;
   display: inline-flex;
@@ -739,8 +928,8 @@
   justify-content: center;
   background: rgba(36, 53, 74, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.98rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.1rem;
   font-weight: 700;
 }
 
@@ -756,7 +945,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: rgba(255, 255, 255, 0.9);
-  font-size: 1.32rem;
+  font-size: 1.45rem;
   font-weight: 700;
 }
 
@@ -766,11 +955,11 @@
 }
 
 .daily-fritz-you-pill {
-  margin-left: 7px;
-  font-size: 0.76rem;
+  margin-left: 8px;
+  font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: rgba(149, 240, 202, 0.65);
+  color: rgba(149, 240, 202, 0.72);
 }
 
 .daily-fritz-result-cell,
@@ -906,6 +1095,275 @@
   color: rgba(221, 232, 228, 0.82);
 }
 
+.daily-fritz-results-hub {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-fritz-results-kicker,
+.daily-fritz-ranking-hint-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(225, 198, 133, 0.86);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-results-kicker::before,
+.daily-fritz-ranking-hint-label::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(229, 198, 124, 1), rgba(137, 210, 255, 0.7));
+  box-shadow: 0 0 16px rgba(229, 198, 124, 0.35);
+}
+
+.daily-fritz-results-stat {
+  min-width: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.daily-fritz-results-stat span {
+  color: rgba(210, 223, 220, 0.7);
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-results-stat strong {
+  color: rgba(249, 244, 235, 0.98);
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-fritz-results-stat.is-rank strong {
+  color: #e5c67c;
+}
+
+.daily-fritz-results-stat.is-win strong {
+  color: #96f0ca;
+}
+
+.daily-fritz-results-stat.is-loss strong {
+  color: #ffb1bc;
+}
+
+.daily-fritz-results-breakdown,
+.daily-fritz-global-breakdown {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-fritz-results-breakdown-label {
+  color: rgba(210, 223, 220, 0.66);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-game-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.daily-fritz-game-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 54px;
+  padding: 0 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.98);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+}
+
+.daily-fritz-game-chip.is-win {
+  color: #00f0b5;
+  border-color: rgba(0, 212, 160, 0.35);
+  background: rgba(0, 212, 160, 0.12);
+}
+
+.daily-fritz-game-chip.is-loss {
+  color: #ff5c75;
+  border-color: rgba(255, 69, 96, 0.3);
+  background: rgba(255, 69, 96, 0.1);
+}
+
+.daily-fritz-breakdown-empty {
+  color: rgba(210, 223, 220, 0.56);
+  font-size: 1rem;
+}
+
+.daily-fritz-global-results {
+  position: relative;
+  padding: 12px 18px 16px;
+  display: grid;
+  gap: 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    radial-gradient(circle at top right, rgba(72, 132, 255, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(9, 16, 28, 0.94), rgba(7, 12, 21, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.daily-fritz-global-results-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.daily-fritz-global-results-count {
+  margin: 0;
+  font-weight: 700;
+  white-space: nowrap;
+  color: rgba(223, 233, 231, 0.7);
+  font-size: 1rem;
+}
+
+.daily-fritz-global-results-list {
+  display: grid;
+  gap: 12px;
+}
+
+.daily-fritz-global-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 84px minmax(220px, 1.2fr) 130px 110px 120px 88px 96px minmax(220px, 1fr);
+  gap: 20px;
+  align-items: center;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(4, 9, 17, 0.5);
+}
+
+.daily-fritz-global-row.is-current-user {
+  border-color: rgba(149, 240, 202, 0.2);
+  background:
+    radial-gradient(circle at top left, rgba(149, 240, 202, 0.06), transparent 30%),
+    rgba(4, 9, 17, 0.6);
+}
+
+.daily-fritz-global-row.is-legacy {
+  border-color: rgba(116, 148, 177, 0.14);
+  background: rgba(7, 12, 21, 0.62);
+}
+
+.daily-fritz-global-rank {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.daily-fritz-global-player {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.daily-fritz-global-player-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.daily-fritz-global-breakdown {
+  min-width: 0;
+}
+
+.daily-fritz-standings-head {
+  display: grid;
+  grid-template-columns: 84px minmax(220px, 1.2fr) 130px 110px 120px 88px 96px minmax(220px, 1fr);
+  gap: 20px;
+  padding: 0 20px 8px;
+  color: rgba(216, 230, 226, 0.62);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-global-cell {
+  color: rgba(242, 246, 244, 0.9);
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Primary stat cells — large and bold */
+.daily-fritz-global-cell[data-label="Set Score"],
+.daily-fritz-global-cell[data-label="Set Margin"] {
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+/* Secondary stat cells — readable but de-emphasised */
+.daily-fritz-global-cell[data-label="Total Moves"],
+.daily-fritz-global-cell[data-label="Finished"] {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 600;
+}
+
+.daily-fritz-global-cell.is-win {
+  color: #96f0ca;
+}
+
+.daily-fritz-global-cell.is-loss {
+  color: #ffb1bc;
+}
+
+.daily-fritz-global-cell-result {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.daily-fritz-standings-note {
+  margin: 6px 0 0;
+  color: rgba(216, 230, 226, 0.62);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.daily-fritz-legacy-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(128, 161, 192, 0.18);
+  color: rgba(177, 203, 226, 0.82);
+  background: rgba(30, 47, 67, 0.36);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .daily-fritz-overlay {
   position: fixed;
   inset: 0;
@@ -971,13 +1429,13 @@
 }
 
 .leaderboard-screen--fritz .leaderboard-screen-statvalue {
-  font-size: clamp(2.65rem, 3vw, 3.05rem);
+  font-size: clamp(2.8rem, 3.4vw, 3.8rem);
   letter-spacing: 0.01em;
 }
 
 .leaderboard-screen--fritz .leaderboard-screen-statsub {
   font-size: 1rem;
-  color: rgba(233, 240, 237, 0.62);
+  color: rgba(233, 240, 237, 0.7);
 }
 
 @media (max-width: 1024px) {
@@ -997,12 +1455,24 @@
     grid-template-columns: 1fr;
   }
 
+  .daily-fritz-between-score-grid,
+  .daily-fritz-between-actions {
+    grid-template-columns: 1fr;
+  }
+
   .daily-fritz-summary-strip-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .daily-fritz-summary-item:nth-child(3) {
     border-left: 0;
+  }
+
+  .daily-fritz-standings-head,
+  .daily-fritz-global-row {
+    grid-template-columns: 72px minmax(160px, 1fr) 110px 90px 100px 72px 82px minmax(160px, 1fr);
+    gap: 14px;
+    padding: 16px 16px;
   }
 
   .daily-fritz-panel-shell {
@@ -1048,6 +1518,24 @@
 }
 
 @media (max-width: 640px) {
+  .daily-fritz-between-main {
+    place-items: stretch;
+    padding-block: 12px;
+  }
+
+  .daily-fritz-between-card {
+    border-radius: 24px;
+    padding: 22px 16px;
+  }
+
+  .daily-fritz-set-tracker {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-fritz-set-step {
+    min-height: 68px;
+  }
+
   .daily-fritz-meta-row {
     flex-direction: column;
   }
@@ -1082,49 +1570,73 @@
     flex-direction: column;
   }
 
-  .daily-fritz-leaderboard-head.is-page {
+  .daily-fritz-results-hero {
+    padding: 18px;
+  }
+
+  .daily-fritz-results-hero-copy h2 {
+    font-size: 2rem;
+  }
+
+  .daily-fritz-ranking-hint,
+  .daily-fritz-global-results-head {
+    grid-template-columns: 1fr;
+    display: grid;
+    align-items: start;
+  }
+
+  .daily-fritz-ranking-hint {
+    justify-content: initial;
+  }
+
+  .daily-fritz-global-results {
+    padding: 16px;
+  }
+
+  .daily-fritz-global-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .daily-fritz-global-player {
+    align-items: flex-start;
+  }
+
+  .daily-fritz-standings-head {
     display: none;
   }
 
-  .daily-fritz-leaderboard-row.is-page {
-    grid-template-columns: minmax(0, 1fr) repeat(3, auto);
-    grid-template-areas:
-      "player player player player"
-      "rank result score diff"
-      "meta meta meta meta";
-    gap: 10px;
-    height: auto;
-    min-height: 92px;
-    padding: 16px 16px 18px;
+  .daily-fritz-global-cell,
+  .daily-fritz-global-breakdown,
+  .daily-fritz-global-rank,
+  .daily-fritz-global-player {
+    grid-column: 1 / -1;
   }
 
-  .daily-fritz-leaderboard-row.is-page .daily-fritz-rank-cell {
-    grid-area: rank;
+  .daily-fritz-global-cell::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: rgba(210, 223, 220, 0.62);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
 
-  .daily-fritz-leaderboard-row.is-page .daily-fritz-player-cell {
-    grid-area: player;
+  .daily-fritz-game-chip-row {
+    gap: 8px;
+  }
+
+  .daily-fritz-game-chip {
     font-size: 0.95rem;
+    min-height: 38px;
+    padding: 0 14px;
   }
 
-  .daily-fritz-leaderboard-row.is-page .daily-fritz-result-cell {
-    grid-area: result;
-  }
-
-  .daily-fritz-leaderboard-row.is-page .daily-fritz-score-cell {
-    grid-area: score;
-  }
-
-  .daily-fritz-leaderboard-row.is-page .daily-fritz-diff-cell {
-    grid-area: diff;
-  }
-
-  .daily-fritz-meta-cell {
-    grid-area: meta;
-    justify-self: start;
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 16px;
+  .daily-fritz-leaderboard-head.is-page {
+    display: none;
   }
 
   .daily-fritz-actions {
@@ -1149,5 +1661,876 @@
 
   .daily-fritz-summary-item:first-child {
     border-top: 0;
+  }
+
+  .daily-fritz-results-statline {
+    gap: 12px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LEADERBOARD PAGE — CHAMPIONSHIP REDESIGN
+   Global / page-variant styles. Overrides earlier declarations
+   in this file. All .daily-fritz-global-* and related classes
+   used exclusively by the DailyFritzLeaderboard page variant.
+   ═══════════════════════════════════════════════════════════ */
+
+@keyframes lb-row-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Results hub wrapper ── */
+.daily-fritz-results-hub {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 0;
+}
+
+/* ── Results section kicker (section title) ── */
+.daily-fritz-results-kicker {
+  display: block;
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 4px;
+  gap: 0;
+}
+
+.daily-fritz-results-kicker::before {
+  display: none;
+}
+
+/* ── Standings note ── */
+.daily-fritz-standings-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 12px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+/* ── Global results section ── */
+.daily-fritz-global-results {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ── Results section header ── */
+.daily-fritz-global-results-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Player count — subtle indicator ── */
+.daily-fritz-global-results-count {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.22);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+/* ── Column header row ── */
+.daily-fritz-standings-head {
+  display: grid;
+  grid-template-columns: 84px minmax(200px, 1.2fr) 140px 110px 100px 88px minmax(220px, 1fr);
+  gap: 16px;
+  padding: 0 20px 12px 24px;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-standings-head > span {
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Results list ── */
+.daily-fritz-global-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* ── Player row card ── */
+.daily-fritz-global-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 84px minmax(200px, 1.2fr) 140px 110px 100px 88px minmax(220px, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 20px 20px 20px 24px;
+  background: #07091c;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 4px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: background 160ms ease;
+  animation: lb-row-in 0.28s ease both;
+}
+
+.daily-fritz-global-row:hover {
+  background: #090c22;
+}
+
+/* Win / loss left stripe — requires is-won/is-lost on the row (added in TSX) */
+.daily-fritz-global-row.is-won  { border-left-color: #00d4a0; }
+.daily-fritz-global-row.is-lost { border-left-color: #ff4560; }
+
+/* Current user */
+.daily-fritz-global-row.is-current-user {
+  background: #070d1a;
+  border-color: rgba(149, 240, 202, 0.15);
+  border-left-color: #95f0ca;
+}
+
+.daily-fritz-global-row.is-current-user:hover {
+  background: #080f1e;
+}
+
+/* Legacy row — slightly muted */
+.daily-fritz-global-row.is-legacy {
+  opacity: 0.8;
+}
+
+/* Top accent bar replaced by left stripe — hide it */
+.daily-fritz-top-accent {
+  display: none;
+}
+
+/* ── Rank column ── */
+.daily-fritz-global-rank {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.daily-fritz-rank-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.daily-fritz-rank-dot.rank-1 { background: #ffc930; }
+.daily-fritz-rank-dot.rank-2 { background: #aab8cc; }
+.daily-fritz-rank-dot.rank-3 { background: #d4843c; }
+
+.daily-fritz-rank-value {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 2.25rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.44);
+  min-width: 18px;
+  text-align: right;
+  line-height: 1;
+}
+
+.daily-fritz-rank-value.rank-0 { color: rgba(255, 255, 255, 0.44); }
+.daily-fritz-rank-value.rank-1 { color: #ffc930; }
+.daily-fritz-rank-value.rank-2 { color: #aab8cc; }
+.daily-fritz-rank-value.rank-3 { color: #d4843c; }
+
+/* ── Player column ── */
+.daily-fritz-global-player {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.daily-fritz-global-player-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daily-fritz-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.54);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.daily-fritz-avatar.is-current-user {
+  background: rgba(149, 240, 202, 0.11);
+  border-color: rgba(149, 240, 202, 0.3);
+  color: #95f0ca;
+}
+
+.daily-fritz-player-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.96);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.1;
+}
+
+.daily-fritz-global-row.is-current-user .daily-fritz-player-name {
+  color: #95f0ca;
+}
+
+.daily-fritz-you-pill {
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgba(149, 240, 202, 0.7);
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.daily-fritz-legacy-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(128, 161, 192, 0.16);
+  color: rgba(177, 203, 226, 0.64);
+  background: rgba(30, 47, 67, 0.26);
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* ── Set Result cell (badge pill) ── */
+.daily-fritz-global-cell-result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.74);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.daily-fritz-global-cell-result.is-win {
+  background: rgba(0, 80, 58, 0.22);
+  border-color: rgba(0, 212, 160, 0.22);
+  color: #00d4a0;
+}
+
+.daily-fritz-global-cell-result.is-loss {
+  background: rgba(110, 20, 32, 0.22);
+  border-color: rgba(255, 69, 96, 0.22);
+  color: #ff4560;
+}
+
+/* ── Generic stat cell ── */
+.daily-fritz-global-cell {
+  color: rgba(242, 246, 244, 0.86);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Set Score — most prominent */
+.daily-fritz-global-cell[data-label="Set Score"] {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.98);
+}
+
+/* Set Margin — large, color-coded */
+.daily-fritz-global-cell[data-label="Set Margin"] {
+  font-size: 1.45rem;
+  font-weight: 800;
+}
+
+/* Total Moves + Finished — quiet, secondary */
+.daily-fritz-global-cell[data-label="Total Moves"],
+.daily-fritz-global-cell[data-label="Finished"] {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(242, 246, 244, 0.38);
+  letter-spacing: 0;
+}
+
+/* Win / loss colour on cells (e.g., margin column) */
+.daily-fritz-global-cell.is-win  { color: #00d4a0; }
+.daily-fritz-global-cell.is-loss { color: #ff4560; }
+
+/* ── Game breakdown ── */
+.daily-fritz-global-breakdown {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.daily-fritz-game-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.daily-fritz-game-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(244, 247, 245, 0.86);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-fritz-game-chip.is-win {
+  color: #00d4a0;
+  border-color: rgba(0, 212, 160, 0.2);
+  background: rgba(0, 80, 58, 0.18);
+}
+
+.daily-fritz-game-chip.is-loss {
+  color: #ff4560;
+  border-color: rgba(255, 69, 96, 0.18);
+  background: rgba(110, 20, 32, 0.18);
+}
+
+.daily-fritz-breakdown-empty {
+  color: rgba(210, 223, 220, 0.36);
+  font-size: 0.86rem;
+}
+
+/* ── Responsive: large-medium ── */
+@media (max-width: 1100px) {
+  .daily-fritz-standings-head,
+  .daily-fritz-global-row {
+    grid-template-columns: 72px minmax(160px, 1.1fr) 130px 100px 90px 80px 86px minmax(150px, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .daily-fritz-standings-head,
+  .daily-fritz-global-row {
+    grid-template-columns: 64px minmax(130px, 1fr) 118px 88px 78px 74px 78px minmax(130px, 1fr);
+    gap: 10px;
+    padding-left: 18px;
+  }
+
+  .daily-fritz-global-row {
+    padding: 14px 14px 14px 18px;
+  }
+
+  .daily-fritz-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 0.98rem;
+  }
+
+  .daily-fritz-rank-value {
+    font-size: 1.62rem;
+  }
+
+  .daily-fritz-player-name {
+    font-size: 1.28rem;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Score"] {
+    font-size: 1.48rem;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Margin"] {
+    font-size: 1.28rem;
+  }
+
+  .daily-fritz-game-chip {
+    font-size: 0.9rem;
+    min-height: 30px;
+    padding: 0 9px;
+  }
+}
+
+/* ── Responsive: mobile — single column stacked ── */
+@media (max-width: 640px) {
+  .daily-fritz-standings-head {
+    display: none;
+  }
+
+  .daily-fritz-global-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 16px 18px 16px 22px;
+  }
+
+  .daily-fritz-global-rank,
+  .daily-fritz-global-player,
+  .daily-fritz-global-cell,
+  .daily-fritz-global-breakdown {
+    grid-column: 1 / -1;
+  }
+
+  .daily-fritz-global-cell::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(210, 223, 220, 0.44);
+  }
+
+  .daily-fritz-global-cell[data-label="Set Score"]  { font-size: 1.55rem; }
+  .daily-fritz-global-cell[data-label="Set Margin"] { font-size: 1.38rem; }
+
+  .daily-fritz-global-cell[data-label="Total Moves"],
+  .daily-fritz-global-cell[data-label="Finished"] {
+    font-size: 1rem;
+    color: rgba(242, 246, 244, 0.5);
+  }
+
+  .daily-fritz-game-chip {
+    font-size: 0.9rem;
+    min-height: 30px;
+    padding: 0 9px;
+  }
+}
+
+/* ── Reset old fritz leaderboard-screen overrides to match new design ── */
+.leaderboard-screen--fritz .leaderboard-screen-statlabel {
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-main {
+  padding-top: 0;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-titleblock {
+  margin-bottom: 0;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-subtitle {
+  margin-top: 16px;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-stats {
+  margin-bottom: 28px;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-statvalue {
+  font-size: clamp(2.4rem, 3.2vw, 3.6rem);
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-statcard--accent .leaderboard-screen-statvalue {
+  color: #e05c6a;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-statsub {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LEADERBOARD REFINEMENT PASS
+   Bigger hierarchy, better readability (65+ audience),
+   stronger current-user treatment, cleaner primary/secondary
+   column contrast. Overrides the Championship Redesign block.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Row sizing — more breathing room ── */
+.daily-fritz-global-row {
+  padding: 20px 22px 20px 26px;
+  border-left-width: 5px;
+  gap: 14px;
+}
+
+/* ── Rank numeral — dominant and instantly readable ── */
+.daily-fritz-rank-value {
+  font-size: 2.3rem;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.daily-fritz-rank-value.rank-1 { color: #ffc930; }
+.daily-fritz-rank-value.rank-2 { color: #aab8cc; }
+.daily-fritz-rank-value.rank-3 { color: #d4843c; }
+
+/* ── Player name — large and clearly legible ── */
+.daily-fritz-player-name {
+  font-size: 1.62rem;
+}
+
+/* ── Set Score — the most important number on the row ── */
+.daily-fritz-global-cell[data-label="Set Score"] {
+  font-size: 2.1rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+/* ── Set Margin — secondary primary stat ── */
+.daily-fritz-global-cell[data-label="Set Margin"] {
+  font-size: 1.72rem;
+  font-weight: 800;
+}
+
+/* ── Result pill — prominent badge ── */
+.daily-fritz-global-cell-result {
+  font-size: 1.02rem;
+  padding: 6px 14px;
+  letter-spacing: 0.07em;
+}
+
+/* ── Secondary cells — clearly demoted, not competing ── */
+.daily-fritz-global-cell[data-label="Total Moves"],
+.daily-fritz-global-cell[data-label="Finished"] {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: rgba(242, 246, 244, 0.28);
+  letter-spacing: 0;
+}
+
+/* ── Current-user row — subtle highlight, special without gaudy ── */
+.daily-fritz-global-row.is-current-user {
+  box-shadow:
+    0 0 0 1px rgba(149, 240, 202, 0.14),
+    0 4px 28px rgba(0, 0, 0, 0.46);
+}
+
+/* ── Avatar — slightly larger for the bigger rows ── */
+.daily-fritz-avatar {
+  width: 48px;
+  height: 48px;
+}
+
+/* ── Game chips — compact but cleanly readable ── */
+.daily-fritz-game-chip {
+  font-size: 0.9rem;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 3px;
+}
+
+/* ── Responsive: medium ── */
+@media (max-width: 900px) {
+  .daily-fritz-global-row {
+    padding: 16px 16px 16px 20px;
+  }
+
+  .daily-fritz-rank-value       { font-size: 1.95rem; }
+  .daily-fritz-player-name      { font-size: 1.38rem; }
+
+  .daily-fritz-global-cell[data-label="Set Score"]  { font-size: 1.72rem; }
+  .daily-fritz-global-cell[data-label="Set Margin"] { font-size: 1.42rem; }
+
+  .daily-fritz-global-cell-result {
+    font-size: 0.94rem;
+    padding: 5px 11px;
+  }
+
+  .daily-fritz-avatar { width: 42px; height: 42px; }
+}
+
+/* ── Responsive: mobile stacked ── */
+@media (max-width: 640px) {
+  .daily-fritz-global-row {
+    padding: 18px 18px 18px 22px;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Score"]  { font-size: 1.9rem; }
+  .daily-fritz-global-cell[data-label="Set Margin"] { font-size: 1.55rem; }
+
+  .daily-fritz-global-cell[data-label="Total Moves"],
+  .daily-fritz-global-cell[data-label="Finished"] {
+    font-size: 0.9rem;
+    color: rgba(242, 246, 244, 0.4);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   READABILITY REFINEMENT PASS
+   Remove Total Moves, enlarge primary results, make breakdown
+   readable at distance, keep current premium identity.
+   ═══════════════════════════════════════════════════════════ */
+
+.daily-fritz-standings-head {
+  grid-template-columns: 96px minmax(230px, 1.25fr) 156px 128px 128px 108px minmax(320px, 1.35fr);
+  gap: 18px;
+  padding-bottom: 8px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.daily-fritz-global-row {
+  grid-template-columns: 96px minmax(230px, 1.25fr) 156px 128px 128px 108px minmax(320px, 1.35fr);
+  gap: 18px;
+  min-height: 116px;
+  padding: 20px 22px 20px 26px;
+  align-items: center;
+  background:
+    linear-gradient(180deg, rgba(11, 19, 36, 0.96), rgba(7, 13, 25, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.daily-fritz-rank-value {
+  font-size: 3.05rem;
+}
+
+.daily-fritz-player-name {
+  font-size: 2.04rem;
+  line-height: 1;
+}
+
+.daily-fritz-avatar {
+  width: 52px;
+  height: 52px;
+  font-size: 1.18rem;
+}
+
+.daily-fritz-global-cell-result {
+  font-size: 1.26rem;
+  padding: 10px 18px;
+  justify-self: start;
+}
+
+.daily-fritz-global-cell {
+  font-size: 1.52rem;
+  font-weight: 800;
+}
+
+.daily-fritz-global-cell[data-label="Set Score"] {
+  font-size: 2.8rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.daily-fritz-global-cell[data-label="Set Margin"] {
+  font-size: 2.22rem;
+  font-weight: 900;
+}
+
+.daily-fritz-global-cell[data-label="Finished"] {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: 1.24rem;
+  font-weight: 800;
+  color: rgba(242, 246, 244, 0.82);
+  letter-spacing: 0.02em;
+}
+
+.daily-fritz-global-breakdown {
+  justify-self: stretch;
+}
+
+.daily-fritz-game-chip-row {
+  gap: 14px;
+}
+
+.daily-fritz-game-chip {
+  min-height: 50px;
+  padding: 0 19px;
+  font-size: 1.32rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.daily-fritz-breakdown-empty {
+  font-size: 1.04rem;
+  color: rgba(210, 223, 220, 0.62);
+}
+
+@media (max-width: 1100px) {
+  .daily-fritz-standings-head,
+  .daily-fritz-global-row {
+    grid-template-columns: 82px minmax(180px, 1.1fr) 142px 112px 112px 96px minmax(240px, 1.2fr);
+    gap: 14px;
+  }
+
+  .daily-fritz-global-row {
+    min-height: 108px;
+    padding: 18px 18px 18px 22px;
+  }
+
+  .daily-fritz-rank-value {
+    font-size: 2.6rem;
+  }
+
+  .daily-fritz-player-name {
+    font-size: 1.82rem;
+  }
+
+  .daily-fritz-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 1.08rem;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Score"] {
+    font-size: 2.4rem;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Margin"] {
+    font-size: 1.94rem;
+  }
+
+  .daily-fritz-global-cell-result {
+    font-size: 1.1rem;
+    padding: 8px 14px;
+  }
+
+  .daily-fritz-game-chip {
+    min-height: 46px;
+    font-size: 1.12rem;
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 900px) {
+  .daily-fritz-standings-head,
+  .daily-fritz-global-row {
+    grid-template-columns: 72px minmax(160px, 1fr) 132px 104px 104px 86px minmax(220px, 1.1fr);
+    gap: 12px;
+  }
+
+  .daily-fritz-global-row {
+    min-height: 100px;
+    padding: 16px 16px 16px 20px;
+  }
+
+  .daily-fritz-rank-value {
+    font-size: 2.28rem;
+  }
+
+  .daily-fritz-player-name {
+    font-size: 1.64rem;
+  }
+
+  .daily-fritz-avatar {
+    width: 44px;
+    height: 44px;
+    font-size: 1rem;
+  }
+
+  .daily-fritz-global-cell-result {
+    font-size: 1.04rem;
+    padding: 8px 13px;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Score"] {
+    font-size: 2.02rem;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Margin"] {
+    font-size: 1.76rem;
+  }
+
+  .daily-fritz-global-cell[data-label="Finished"] {
+    font-size: 1.08rem;
+  }
+
+  .daily-fritz-game-chip {
+    min-height: 44px;
+    font-size: 1.08rem;
+    padding: 0 15px;
+  }
+}
+
+@media (max-width: 640px) {
+  .daily-fritz-global-row {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    gap: 12px;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Score"] {
+    font-size: 2.1rem;
+  }
+
+  .daily-fritz-global-cell[data-label="Set Margin"] {
+    font-size: 1.76rem;
+  }
+
+  .daily-fritz-global-cell[data-label="Finished"] {
+    font-size: 1.1rem;
+  }
+
+  .daily-fritz-game-chip {
+    min-height: 42px;
+    font-size: 1.06rem;
+    padding: 0 14px;
   }
 }

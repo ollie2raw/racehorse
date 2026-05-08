@@ -1660,6 +1660,18 @@ function normalizeDailyFritzSetResult(value: unknown): DailyFritzSetResult | nul
   };
 }
 
+function getDailyFritzSetPointDiff(setResult: DailyFritzSetResult | null): number | null {
+  if (!setResult || setResult.version !== 2 || setResult.format !== 'best_of_3') return null;
+  if (Number.isFinite(setResult.totalPointDiff)) return Math.round(setResult.totalPointDiff);
+  if (setResult.games.length === 0) return 0;
+  return Math.round(
+    setResult.games.reduce(
+      (sum, game) => sum + (Number.isFinite(game.pointDiff) ? Number(game.pointDiff) : Number(game.playerScore) - Number(game.fritzScore)),
+      0,
+    ),
+  );
+}
+
 function getCurrentDailyFritzGameNumber(result: Record<string, unknown> | null): DailyFritzSetGameNumber {
   const setResult = normalizeDailyFritzSetResult(result);
   if (!setResult || setResult.setWinner) return 1;
@@ -1942,32 +1954,42 @@ async function buildDailyFritzLeaderboard(
   const names = await fetchProfileNames(attempts.map((attempt) => attempt.userId));
   const sorted = sortDailyFritzLeaderboard(
     attempts
-      .filter(
-        (attempt): attempt is DailyFritzAttemptRecord & {
-          won: boolean;
-          finalScore: number;
-          opponentScore: number;
-          pointDiff: number;
-          movesUsed: number;
-          completedAt: string;
-        } =>
-          typeof attempt.won === 'boolean' &&
-          typeof attempt.finalScore === 'number' &&
-          typeof attempt.opponentScore === 'number' &&
-          typeof attempt.pointDiff === 'number' &&
-          typeof attempt.movesUsed === 'number' &&
-          typeof attempt.completedAt === 'string',
-      )
-      .map((attempt) => ({
-        userId: attempt.userId,
-        username: names.get(attempt.userId) ?? `user_${attempt.userId.slice(0, 8)}`,
-        won: attempt.won,
-        finalScore: attempt.finalScore,
-        opponentScore: attempt.opponentScore,
-        pointDiff: attempt.pointDiff,
-        movesUsed: attempt.movesUsed,
-        completedAt: attempt.completedAt,
-      })),
+      .map((attempt) => {
+        const setResult = normalizeDailyFritzSetResult(attempt.result);
+        const pointDiff = getDailyFritzSetPointDiff(setResult) ?? attempt.pointDiff;
+        if (
+          typeof attempt.won !== 'boolean' ||
+          typeof attempt.finalScore !== 'number' ||
+          typeof attempt.opponentScore !== 'number' ||
+          typeof pointDiff !== 'number' ||
+          typeof attempt.movesUsed !== 'number' ||
+          typeof attempt.completedAt !== 'string'
+        ) {
+          return null;
+        }
+        return {
+          userId: attempt.userId,
+          username: names.get(attempt.userId) ?? `user_${attempt.userId.slice(0, 8)}`,
+          won: attempt.won,
+          finalScore: attempt.finalScore,
+          opponentScore: attempt.opponentScore,
+          pointDiff,
+          movesUsed: attempt.movesUsed,
+          completedAt: attempt.completedAt,
+          ...(setResult?.games.length
+            ? {
+                games: setResult.games.map((game) => ({
+                  gameNumber: game.gameNumber,
+                  playerScore: game.playerScore,
+                  fritzScore: game.fritzScore,
+                  playerWon: game.playerWon,
+                  pointDiff: game.pointDiff,
+                })),
+              }
+            : {}),
+        };
+      })
+      .filter((attempt): attempt is DailyFritzLeaderboardEntry & { userId: string } => Boolean(attempt)),
   );
   return sorted.map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
@@ -2617,9 +2639,17 @@ app.post('/api/daily-fritz/next-hand', async (req, res) => {
   const runDateFromClient =
     typeof req.body?.run_date === 'string' ? req.body.run_date.trim() : '';
   const completedHandIndex = Number(req.body?.completed_hand_index);
-  const gameNumber = normalizeDailyFritzSetGameNumber(Number(req.body?.game_number ?? 1));
-  if (!attemptId || !verifiedMatchId || !gameNumber || !Number.isInteger(completedHandIndex) || completedHandIndex < 0) {
-    res.status(400).json({ error: 'attempt_id, verified_match_id, game_number, and completed_hand_index are required.' });
+  const rawGameNumber = req.body?.game_number;
+  const requestedGameNumber =
+    rawGameNumber == null ? null : normalizeDailyFritzSetGameNumber(Number(rawGameNumber));
+  console.log('[daily-fritz-next-hand] request', {
+    attemptId,
+    runDateFromClient,
+    rawGameNumber,
+    completedHandIndex,
+  });
+  if (!attemptId || !verifiedMatchId || (rawGameNumber != null && !requestedGameNumber) || !Number.isInteger(completedHandIndex) || completedHandIndex < 0) {
+    res.status(400).json({ error: 'attempt_id, verified_match_id, valid game_number, and completed_hand_index are required.' });
     return;
   }
 
@@ -2642,7 +2672,16 @@ app.post('/api/daily-fritz/next-hand', async (req, res) => {
       res.status(409).json({ error: 'Daily Fritz attempt is not active.' });
       return;
     }
-    if (gameNumber !== getCurrentDailyFritzGameNumber(attempt.result)) {
+    const currentGameNumber = getCurrentDailyFritzGameNumber(attempt.result);
+    const gameNumber = requestedGameNumber ?? currentGameNumber;
+    console.log('[daily-fritz-next-hand] current game', {
+      attemptId,
+      requestedGameNumber,
+      currentGameNumber,
+      resolvedGameNumber: gameNumber,
+      currentHandIndex: attempt.currentHandIndex,
+    });
+    if (gameNumber !== currentGameNumber) {
       res.status(409).json({ error: 'Daily Fritz game is no longer current.' });
       return;
     }
@@ -2665,10 +2704,19 @@ app.post('/api/daily-fritz/next-hand', async (req, res) => {
       options: { replayed?: boolean; ignored?: boolean } = {},
     ) => {
       const hand = getDailyFritzHandForGame(run, gameNumber, currentHandIndex);
+      console.log('[daily-fritz-next-hand] returning hand', {
+        attemptId,
+        gameNumber,
+        currentHandIndex,
+        replayed: Boolean(options.replayed),
+        ignored: Boolean(options.ignored),
+      });
       res.json({
         ok: true,
         run_date: run.runDate,
         game_number: gameNumber,
+        current_game_number: gameNumber,
+        set_result: attempt.result ?? null,
         current_hand_index: currentHandIndex,
         hand,
         replayed: Boolean(options.replayed),
@@ -2692,6 +2740,10 @@ app.post('/api/daily-fritz/next-hand', async (req, res) => {
     const saved = await upsertDailyFritzAttempt(attempt);
     respondWithCurrentHand(saved.currentHandIndex);
   } catch (error) {
+    console.warn('[daily-fritz-next-hand] error', {
+      attemptId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to advance Daily Fritz hand.',
     });
@@ -2916,12 +2968,12 @@ app.post('/api/daily-fritz/complete', async (req, res) => {
       return;
     }
 
-    const pointDiff = finalScore - opponentScore;
     const setResult = submittedSetResult ?? normalizeDailyFritzSetResult(attempt.result);
     if (setResult && !setResult.setWinner) {
       res.status(400).json({ error: 'Daily Fritz set is not complete.' });
       return;
     }
+    const pointDiff = getDailyFritzSetPointDiff(setResult) ?? (finalScore - opponentScore);
     attempt.status = 'completed';
     attempt.completedAt = new Date().toISOString();
     attempt.completionHash = completionHash;

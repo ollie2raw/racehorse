@@ -34,6 +34,13 @@ export interface DailyFritzLeaderboardEntry {
   pointDiff: number;
   movesUsed: number;
   completedAt: string;
+  games?: Array<{
+    gameNumber: DailyFritzSetGameNumber;
+    playerScore: number;
+    fritzScore: number;
+    playerWon: boolean;
+    pointDiff: number;
+  }>;
   rank?: number;
 }
 

@@ -156,7 +156,36 @@ interface BotMatchScreenProps {
   }) => void) | null;
   dailyFritzPackage?: DailyFritzStartResponse | null;
   onDailyFritzComplete?: (() => void) | null;
-  dailyFritzSetProgressLabel?: string | null;
+  dailyFritzSetOverlay?: {
+    kind: 'between' | 'final';
+    eyebrow: string;
+    headline: string;
+    subheadline: string;
+    objective: string | null;
+    nextLabel: string | null;
+    primaryLabel: string;
+    primaryTone: 'default' | 'decider' | 'success';
+    secondaryLabel: string | null;
+    gameScoreLabel: string;
+    gameScoreValue: string;
+    setScoreValue: string;
+    marginValue: string;
+    marginTone: 'win' | 'loss' | 'idle';
+    resultValue: string | null;
+    rankValue: string | null;
+    tracker: Array<{
+      gameNumber: 1 | 2 | 3;
+      label: string;
+      tone: 'win' | 'loss' | 'next' | 'idle';
+    }>;
+    games: Array<{
+      gameNumber: 1 | 2 | 3;
+      value: string;
+      tone: 'win' | 'loss';
+    }>;
+    onPrimary: () => void;
+    onSecondary: () => void;
+  } | null;
   onDailyFritzGameComplete?: ((result: {
     winner: 'you' | 'bot' | null;
     yourScore: number;
@@ -642,7 +671,7 @@ export default function BotMatchScreen({
   onMatchComplete = null,
   dailyFritzPackage = null,
   onDailyFritzComplete = null,
-  dailyFritzSetProgressLabel = null,
+  dailyFritzSetOverlay = null,
   onDailyFritzGameComplete = null,
   isGuidedMode: isGuidedModeProp = false,
   isAuthoringMode: isAuthoringModeProp = false,
@@ -709,11 +738,22 @@ export default function BotMatchScreen({
       if (!raw) return null;
       const parsed = JSON.parse(raw) as {
         attemptId?: string;
+        currentHandIndex?: number;
         match?: BotMatchState;
         movesUsed?: number;
         moveLog?: MoveEntry[];
       };
       if (parsed.attemptId !== dailyFritzPackage?.attempt_id || !parsed.match) return null;
+      const persistedHandIndex = Number(parsed.currentHandIndex);
+      const serverHandIndex = Number(dailyFritzPackage?.current_hand_index ?? 0);
+      if (!Number.isFinite(persistedHandIndex) || persistedHandIndex !== serverHandIndex) {
+        return null;
+      }
+      // Never resume from a transient hand-over snapshot. Those states are
+      // derived UI transitions, not authoritative game positions.
+      if (parsed.match.handOver && !parsed.match.gameOver) {
+        return null;
+      }
       return parsed;
     } catch {
       return null;
@@ -2302,6 +2342,7 @@ export default function BotMatchScreen({
     // serialize on every move.
     const snapshot = {
       attemptId: dailyFritzPackage?.attempt_id ?? null,
+      currentHandIndex: dailyFritzHandIndex,
       match,
       movesUsed,
       moveLog,
@@ -2320,7 +2361,7 @@ export default function BotMatchScreen({
         dailyFritzStorageTimerRef.current = null;
       }
     };
-  }, [dailyFritzPackage?.attempt_id, dailyFritzStorageKey, isDailyFritzMode, match, moveLog, movesUsed]);
+  }, [dailyFritzHandIndex, dailyFritzPackage?.attempt_id, dailyFritzStorageKey, isDailyFritzMode, match, moveLog, movesUsed]);
 
   // Flush any pending debounced Daily Fritz state write on page unload so the
   // player resumes from the latest move rather than up to 1 s behind.
@@ -3182,6 +3223,14 @@ export default function BotMatchScreen({
       // 5-second reveal window closes.  Store both the promise and its settled
       // result so advanceHand can transition instantly if already resolved.
       if (isDailyFritzMode && dailyFritzPackage && !result.state.gameOver) {
+        const gameNumber = dailyFritzPackage.current_game_number ?? 1;
+        console.log('[daily-fritz-hand] requesting next hand', {
+          source: 'prefetch',
+          gameNumber,
+          completedHandIndex: dailyFritzHandIndex,
+          yourScore: result.state.players.you.score,
+          fritzScore: result.state.players.bot.score,
+        });
         const cache: {
           promise: Promise<DailyFritzNextHandResponse>;
           result: DailyFritzNextHandResponse | null;
@@ -3191,7 +3240,7 @@ export default function BotMatchScreen({
             attemptId: dailyFritzPackage.attempt_id,
             verifiedMatchId: dailyFritzPackage.verified_match_id,
             runDate: dailyFritzPackage.run_date,
-            gameNumber: dailyFritzPackage.current_game_number ?? 1,
+            gameNumber,
             completedHandIndex: dailyFritzHandIndex,
             completedHandScores: {
               you: result.state.players.you.score,
@@ -3201,7 +3250,25 @@ export default function BotMatchScreen({
           result: null,
           error: null,
         };
-        cache.promise.then((r) => { cache.result = r; }).catch((e) => { cache.error = e; });
+        cache.promise
+          .then((r) => {
+            console.log('[daily-fritz-hand] next hand response', {
+              source: 'prefetch',
+              gameNumber: r.game_number ?? gameNumber,
+              currentHandIndex: r.current_hand_index,
+              replayed: Boolean(r.replayed),
+              ignored: Boolean(r.ignored),
+            });
+            cache.result = r;
+          })
+          .catch((e) => {
+            console.warn('[daily-fritz-hand] next hand error', {
+              source: 'prefetch',
+              gameNumber,
+              error: e instanceof Error ? e.message : String(e),
+            });
+            cache.error = e;
+          });
         dailyFritzNextHandRef.current = cache;
       }
       flashLastPlayed(null);
@@ -4958,7 +5025,10 @@ export default function BotMatchScreen({
       if (cache?.result) {
         // Prefetch already settled — instant hand transition, no network wait needed.
         lastDailyFlowLabelRef.current = 'next-hand-start';
-        console.log('[daily-flow] next hand start (prefetch hit)', {
+        console.log('[daily-fritz-hand] applying next hand', {
+          source: 'prefetch-hit',
+          gameNumber: cache.result.game_number ?? dailyFritzPackage.current_game_number ?? 1,
+          currentHandIndex: cache.result.current_hand_index,
           nextHandNumber: matchRef.current.handNumber + 1,
         });
         setDailyFritzHandIndex(cache.result.current_hand_index);
@@ -4984,24 +5054,44 @@ export default function BotMatchScreen({
         // a spurious "Submitting..." flash in the completion overlay.
         const handPromise =
           cache?.promise ??
-          nextDailyFritzHand({
-            attemptId: dailyFritzPackage.attempt_id,
-            verifiedMatchId: dailyFritzPackage.verified_match_id,
-            runDate: dailyFritzPackage.run_date,
-            gameNumber: dailyFritzPackage.current_game_number ?? 1,
-            completedHandIndex: dailyFritzHandIndex,
-            completedHandScores: {
-              you: match.players.you.score,
-              fritz: match.players.bot.score,
-            },
-          });
+          (() => {
+            const gameNumber = dailyFritzPackage.current_game_number ?? 1;
+            console.log('[daily-fritz-hand] requesting next hand', {
+              source: 'advance',
+              gameNumber,
+              completedHandIndex: dailyFritzHandIndex,
+              yourScore: match.players.you.score,
+              fritzScore: match.players.bot.score,
+            });
+            return nextDailyFritzHand({
+              attemptId: dailyFritzPackage.attempt_id,
+              verifiedMatchId: dailyFritzPackage.verified_match_id,
+              runDate: dailyFritzPackage.run_date,
+              gameNumber,
+              completedHandIndex: dailyFritzHandIndex,
+              completedHandScores: {
+                you: match.players.you.score,
+                fritz: match.players.bot.score,
+              },
+            });
+          })();
         console.log('[daily-flow] next hand start (awaiting fetch)', {
           hadCachedPromise: cache?.promise != null,
         });
         void handPromise
           .then((response) => {
             lastDailyFlowLabelRef.current = 'next-hand-start';
-            console.log('[daily-flow] next hand start (fetch resolved)', {
+            console.log('[daily-fritz-hand] next hand response', {
+              source: cache?.promise ? 'cached-promise' : 'advance',
+              gameNumber: response.game_number ?? dailyFritzPackage.current_game_number ?? 1,
+              currentHandIndex: response.current_hand_index,
+              replayed: Boolean(response.replayed),
+              ignored: Boolean(response.ignored),
+            });
+            console.log('[daily-fritz-hand] applying next hand', {
+              source: cache?.promise ? 'cached-promise' : 'advance',
+              gameNumber: response.game_number ?? dailyFritzPackage.current_game_number ?? 1,
+              currentHandIndex: response.current_hand_index,
               nextHandNumber: matchRef.current.handNumber + 1,
             });
             setDailyFritzHandIndex(response.current_hand_index);
@@ -5028,7 +5118,9 @@ export default function BotMatchScreen({
             // The watchdog will retry after 10 s if still stuck.
             const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
             handTransitionInFlightRef.current = false;
-            console.log('[daily-flow] next hand fetch error — guard reset, watchdog will retry', {
+            console.warn('[daily-fritz-hand] next hand error', {
+              source: cache?.promise ? 'cached-promise' : 'advance',
+              gameNumber: dailyFritzPackage.current_game_number ?? 1,
               error: errMsg,
               handNumber: matchRef.current.handNumber,
             });
@@ -5166,22 +5258,22 @@ export default function BotMatchScreen({
   }, [match.handOver, match.gameOver, handReveal, advanceHand, isGuidedV1MinimalMode, isGuidedV1OnlineMode]);
 
   // ── Daily Fritz watchdog ──────────────────────────────────────────────────
-  // If the game gets stuck in hand-over (no reveal shown, no transition fired),
-  // this watchdog resets the in-flight guard after 10 s and forces advanceHand.
-  // Covers: network error in advanceHand catch, timer never firing, race conditions.
+  // If the game gets stuck in hand-over, recover whether the reveal is still
+  // hidden or already visible. This covers retryable next-hand fetch errors,
+  // hung prefetches, timer misses, and guard races.
   useEffect(() => {
     if (!isDailyFritzMode) return;
     if (!match.handOver || match.gameOver) return;
-    if (handReveal !== null) return; // reveal is visible — 5s timer will handle it
 
-    const watchdogMs = 10_000;
+    const watchdogMs = handReveal !== null ? 12_000 : 10_000;
     const id = window.setTimeout(() => {
-      // Still stuck after 10s — attempt recovery
-      if (!match.handOver || match.gameOver || handReveal !== null) return;
+      // Still stuck after the buffer window — attempt recovery.
+      if (!matchRef.current.handOver || matchRef.current.gameOver) return;
       console.log('[daily-flow] watchdog fired — resetting guard and calling advanceHand', {
         handNumber: match.handNumber,
         handTransitionInFlight: handTransitionInFlightRef.current,
         lastLabel: lastDailyFlowLabelRef.current,
+        revealVisible: handReveal !== null,
       });
       handTransitionInFlightRef.current = false;
       advanceHand();
@@ -6214,11 +6306,6 @@ export default function BotMatchScreen({
           { label: 'You', score: match.players.you.score, tone: 'you' },
         ]}
       />
-      {isDailyFritzMode && dailyFritzSetProgressLabel && (
-        <div className="daily-fritz-set-hud" aria-label="Daily Fritz set progress">
-          {dailyFritzSetProgressLabel}
-        </div>
-      )}
       {false && toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
         <div className="game-over-overlay hand-over-upgraded-overlay">
@@ -6322,6 +6409,84 @@ export default function BotMatchScreen({
                     />
                   </div>
                 )}
+            </div>
+          </div>
+        </div>
+      )}
+      {match.gameOver && isDailyFritzMode && dailyFritzSetOverlay && (
+        <div className="game-over-overlay daily-fritz-set-overlay" role="dialog" aria-label="Daily Fritz set interstitial">
+          <div className="game-over-card daily-fritz-set-overlay-card" onClick={(event) => event.stopPropagation()}>
+            <div className="daily-fritz-set-overlay-hero">
+              <span className="daily-fritz-set-overlay-kicker">{dailyFritzSetOverlay.eyebrow}</span>
+              <h2 className="daily-fritz-set-overlay-title">{dailyFritzSetOverlay.headline}</h2>
+              <p className="daily-fritz-set-overlay-copy">{dailyFritzSetOverlay.subheadline}</p>
+            </div>
+
+            <div className="daily-fritz-set-overlay-stats" aria-label="Daily Fritz set summary">
+              <div className="daily-fritz-set-overlay-stat">
+                <span>{dailyFritzSetOverlay.kind === 'final' ? 'Result' : dailyFritzSetOverlay.gameScoreLabel}</span>
+                <strong className={dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.marginTone === 'loss' ? 'is-loss' : dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.marginTone === 'win' ? 'is-win' : ''}>
+                  {dailyFritzSetOverlay.kind === 'final' ? dailyFritzSetOverlay.resultValue : dailyFritzSetOverlay.gameScoreValue}
+                </strong>
+              </div>
+              <div className="daily-fritz-set-overlay-stat">
+                <span>Set Score</span>
+                <strong>{dailyFritzSetOverlay.setScoreValue}</strong>
+              </div>
+              <div className="daily-fritz-set-overlay-stat">
+                <span>{dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue ? 'Rank' : 'Set Margin'}</span>
+                <strong className={dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue ? '' : `is-${dailyFritzSetOverlay.marginTone}`}>
+                  {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue
+                    ? dailyFritzSetOverlay.rankValue
+                    : dailyFritzSetOverlay.marginValue}
+                </strong>
+              </div>
+            </div>
+
+            <div className="daily-fritz-set-overlay-tracker" aria-label="Best of three tracker">
+              {dailyFritzSetOverlay.tracker.map((item) => (
+                <div key={item.gameNumber} className={`daily-fritz-set-overlay-step is-${item.tone}`}>
+                  <span>Game {item.gameNumber}</span>
+                  <strong>{item.label}</strong>
+                </div>
+              ))}
+            </div>
+
+            {dailyFritzSetOverlay.objective ? (
+              <div className="daily-fritz-set-overlay-objective">
+                {dailyFritzSetOverlay.nextLabel ? <span>{dailyFritzSetOverlay.nextLabel}</span> : null}
+                <p>{dailyFritzSetOverlay.objective}</p>
+              </div>
+            ) : null}
+
+            {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.games.length > 0 ? (
+              <div className="daily-fritz-set-overlay-game-list" aria-label="Per-game scores">
+                {dailyFritzSetOverlay.games.map((game) => (
+                  <div key={game.gameNumber} className="daily-fritz-set-overlay-game-row">
+                    <span>Game {game.gameNumber}</span>
+                    <strong className={`is-${game.tone}`}>{game.value}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="daily-fritz-set-overlay-actions">
+              <button
+                type="button"
+                className={`daily-fritz-set-overlay-primary is-${dailyFritzSetOverlay.primaryTone}`}
+                onClick={dailyFritzSetOverlay.onPrimary}
+              >
+                {dailyFritzSetOverlay.primaryLabel}
+              </button>
+              {dailyFritzSetOverlay.secondaryLabel ? (
+                <button
+                  type="button"
+                  className="daily-fritz-set-overlay-secondary"
+                  onClick={dailyFritzSetOverlay.onSecondary}
+                >
+                  {dailyFritzSetOverlay.secondaryLabel}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

@@ -1,3 +1,18 @@
+/* ═══════════════════════════════════════════════════════════
+   LEADERBOARD PAGE  —  Championship Edition
+   Production-quality, high-impact visual identity.
+   Shared shell for all leaderboard pages (fritz, puzzle).
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Animations ─────────────────────────────────────────── */
+
+@keyframes lb-live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(0.65); }
+}
+
+/* ── Root shell ─────────────────────────────────────────── */
+
 .leaderboard-screen {
   position: relative;
   min-height: 100dvh;
@@ -6,80 +21,110 @@
   flex-direction: column;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.97);
-  background: #040507;
+  background: #010208;
 }
 
-.leaderboard-screen--puzzle {
-  background: #040507;
-}
+.leaderboard-screen--puzzle { background: #010208; }
+.leaderboard-screen--fritz  { background: #010208; }
 
-.leaderboard-screen--fritz {
-  background: #040507;
-}
+/* ── Topbar ─────────────────────────────────────────────── */
 
 .leaderboard-screen-topbar {
   position: relative;
-  z-index: 1;
-  height: 46px;
+  z-index: 10;
+  height: 54px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 clamp(16px, 2.4vw, 24px) clamp(8px, 1.4vh, 12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 clamp(16px, 2.4vw, 28px);
+  background: rgba(1, 2, 10, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   flex-shrink: 0;
+  gap: 20px;
 }
 
 .leaderboard-screen-wordmark {
   font-family: 'Barlow Condensed', system-ui, sans-serif;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.34em;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.38em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.92);
+  color: #fff;
+  flex-shrink: 0;
 }
 
+/* Pulsing LIVE badge — centered in topbar */
+.leaderboard-screen-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: #00d4a0;
+  margin: 0 auto;
+  user-select: none;
+}
+
+.leaderboard-screen-live::before {
+  content: '';
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00d4a0;
+  box-shadow: 0 0 10px rgba(0, 212, 160, 0.65);
+  animation: lb-live-pulse 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+/* Back button */
 .leaderboard-screen-backlink {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.74);
+  color: rgba(255, 255, 255, 0.72);
   font-family: 'Barlow Condensed', system-ui, sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   cursor: pointer;
-  padding: 6px 12px;
+  padding: 6px 14px 6px 10px;
   border-radius: 4px;
-  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .leaderboard-screen-backlink:hover {
-  color: rgba(255, 255, 255, 0.92);
-  border-color: rgba(255, 255, 255, 0.24);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.26);
   background: rgba(255, 255, 255, 0.08);
 }
 
 .leaderboard-screen-backlink:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.78);
+  outline: 2px solid rgba(255, 255, 255, 0.72);
   outline-offset: 3px;
-  box-shadow:
-    0 0 0 1px rgba(61, 142, 255, 0.38),
-    0 0 0 6px rgba(61, 142, 255, 0.16),
-    0 10px 28px rgba(0, 0, 0, 0.24);
 }
 
 .leaderboard-screen-backlink svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   stroke: currentColor;
-  stroke-width: 1.9;
+  stroke-width: 2.2;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* ── Main scroll area ───────────────────────────────────── */
 
 .leaderboard-screen-main {
   position: relative;
@@ -89,195 +134,324 @@
   display: flex;
   flex-direction: column;
   overflow: auto;
-  padding: clamp(10px, 1.8vh, 16px) clamp(16px, 2vw, 28px) clamp(16px, 2vh, 24px);
   gap: 0;
 }
+
+/* ── Hero ───────────────────────────────────────────────── */
 
 .leaderboard-screen-hero {
   position: relative;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: clamp(20px, 2.4vw, 30px) clamp(18px, 2vw, 28px);
-  background: #090b10;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-bottom: 0;
+  justify-content: space-between;
+  padding: clamp(28px, 4.2vh, 52px) clamp(20px, 2.8vw, 44px);
+  background: #060916;
+  overflow: hidden;
+  min-height: 148px;
 }
 
+/* Ambient radial glow from top-left — mode-tinted */
+.leaderboard-screen-hero::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  left: -80px;
+  width: 520px;
+  height: 400px;
+  background: radial-gradient(ellipse at 28% 28%, rgba(45, 212, 191, 0.13) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.leaderboard-screen--fritz .leaderboard-screen-hero::before {
+  background: radial-gradient(ellipse at 28% 28%, rgba(224, 92, 106, 0.16) 0%, transparent 65%);
+}
+
+.leaderboard-screen--puzzle .leaderboard-screen-hero::before {
+  background: radial-gradient(ellipse at 28% 28%, rgba(240, 192, 64, 0.14) 0%, transparent 65%);
+}
+
+/* Bottom edge accent gradient line */
 .leaderboard-screen-hero::after {
   content: '';
   position: absolute;
-  inset: auto 0 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
   height: 1px;
-  background: linear-gradient(90deg, #2dd4bf, rgba(45, 212, 191, 0.28), transparent 60%);
-}
-
-.leaderboard-screen--puzzle .leaderboard-screen-hero::after {
-  background: linear-gradient(90deg, #f0c040, rgba(240, 192, 64, 0.22), transparent);
+  background: linear-gradient(90deg, #2dd4bf 0%, rgba(45, 212, 191, 0.2) 48%, transparent 74%);
+  z-index: 1;
 }
 
 .leaderboard-screen--fritz .leaderboard-screen-hero::after {
-  background: linear-gradient(90deg, #e05c6a, rgba(224, 92, 106, 0.22), transparent);
+  background: linear-gradient(90deg, #e05c6a 0%, rgba(224, 92, 106, 0.2) 48%, transparent 74%);
 }
 
+.leaderboard-screen--puzzle .leaderboard-screen-hero::after {
+  background: linear-gradient(90deg, #f0c040 0%, rgba(240, 192, 64, 0.2) 48%, transparent 74%);
+}
+
+/* Decorative ghost text — title word, huge and barely visible */
+.leaderboard-screen-hero-graphic {
+  position: absolute;
+  right: clamp(10px, 1.5vw, 36px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-size: clamp(88px, 13vw, 196px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.016);
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 0;
+}
+
+.leaderboard-screen--fritz  .leaderboard-screen-hero-graphic { color: rgba(224, 92, 106, 0.036); }
+.leaderboard-screen--puzzle .leaderboard-screen-hero-graphic { color: rgba(240, 192, 64, 0.036); }
+
+/* Title block */
 .leaderboard-screen-titleblock {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  max-width: 900px;
+  max-width: min(560px, 68%);
 }
 
+/* Eyebrow container — pill badge */
 .leaderboard-screen-accentbar {
-  width: 44px;
-  height: 2px;
-  background: #2dd4bf;
-  margin-bottom: 14px;
-}
-
-.leaderboard-screen--puzzle .leaderboard-screen-accentbar {
-  background: #f0c040;
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  width: auto;
+  height: auto;
+  padding: 4px 11px;
+  border-radius: 3px;
+  background: rgba(45, 212, 191, 0.11);
+  border: 1px solid rgba(45, 212, 191, 0.26);
+  margin-bottom: 18px;
 }
 
 .leaderboard-screen--fritz .leaderboard-screen-accentbar {
-  background: #e05c6a;
+  background: rgba(224, 92, 106, 0.11);
+  border-color: rgba(224, 92, 106, 0.26);
 }
 
+.leaderboard-screen--puzzle .leaderboard-screen-accentbar {
+  background: rgba(240, 192, 64, 0.09);
+  border-color: rgba(240, 192, 64, 0.24);
+}
+
+/* Eyebrow text inside the pill */
 .leaderboard-screen-eyebrow {
-  margin: 0 0 14px;
+  margin: 0;
   font-family: 'Rajdhani', system-ui, sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.26em;
   text-transform: uppercase;
   color: #2dd4bf;
 }
 
-.leaderboard-screen--puzzle .leaderboard-screen-eyebrow {
-  color: #f0c040;
-}
+.leaderboard-screen--fritz  .leaderboard-screen-eyebrow { color: #e05c6a; }
+.leaderboard-screen--puzzle .leaderboard-screen-eyebrow { color: #f0c040; }
 
-.leaderboard-screen--fritz .leaderboard-screen-eyebrow {
-  color: #e05c6a;
-}
-
+/* Giant title */
 .leaderboard-screen-title {
   margin: 0;
   color: #fff;
   font-family: 'Barlow Condensed', system-ui, sans-serif;
-  font-size: clamp(28px, 3.6vw, 52px);
-  font-weight: 800;
-  line-height: 0.95;
-  letter-spacing: 0.02em;
+  font-size: clamp(38px, 5.5vw, 78px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: 0.01em;
   text-transform: uppercase;
 }
 
 .leaderboard-screen-subtitle {
   margin: 16px 0 0;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.46);
   font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.52;
 }
 
+/* ── Panel (below hero) ─────────────────────────────────── */
+
 .leaderboard-screen-panel {
-  padding: clamp(18px, 2vw, 28px);
-  background: #090b10;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: clamp(18px, 2.2vw, 30px) clamp(18px, 2.6vw, 36px) clamp(16px, 2.2vh, 26px);
+  background: #010208;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
 }
 
+/* ── Summary stat strip ─────────────────────────────────── */
+
 .leaderboard-screen-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1px;
-  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
   margin-bottom: 20px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #07091c;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .leaderboard-screen-statcard {
-  min-height: 0;
-  padding: 14px 16px;
-  background: #0d0f1c;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 14px 20px 12px;
+  background: linear-gradient(180deg, rgba(13, 22, 42, 0.94), rgba(9, 16, 30, 0.98));
   border: none;
-  border-top: 2px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  align-items: flex-start;
+  justify-content: center;
   gap: 4px;
+  position: relative;
 }
 
-.leaderboard-screen-statcard--accent {
-  border-top-color: #2dd4bf;
+.leaderboard-screen-statcard:last-child {
+  border-right: none;
 }
 
-.leaderboard-screen--puzzle .leaderboard-screen-statcard--accent {
-  border-top-color: #f0c040;
+/* Left stripe accent — remains as subtle indicator */
+.leaderboard-screen-statcard::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.leaderboard-screen--fritz .leaderboard-screen-statcard--accent {
-  border-top-color: #e05c6a;
+.leaderboard-screen-statcard--accent::before {
+  background: #2dd4bf;
 }
+
+.leaderboard-screen--fritz .leaderboard-screen-statcard--accent::before {
+  background: #e05c6a;
+}
+
+.leaderboard-screen--puzzle .leaderboard-screen-statcard--accent::before {
+  background: #f0c040;
+}
+
+.leaderboard-screen-statcard--success::before { background: #00d4a0; }
+.leaderboard-screen-statcard--danger::before  { background: #ff4560; }
 
 .leaderboard-screen-statlabel {
-  margin: 0 0 6px;
+  margin: 0;
   font-family: 'Rajdhani', system-ui, sans-serif;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.38);
+  color: rgba(255, 255, 255, 0.44);
 }
 
 .leaderboard-screen-statvalue {
-  margin: 0 0 4px;
+  margin: 2px 0 0;
   font-family: 'Barlow Condensed', system-ui, sans-serif;
-  font-size: clamp(1.9rem, 2.4vw, 2.4rem);
-  font-weight: 800;
+  font-size: clamp(2.4rem, 3.8vw, 4.4rem);
+  font-weight: 900;
   line-height: 1;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.98);
 }
 
 .leaderboard-screen-statcard--accent .leaderboard-screen-statvalue {
   color: #2dd4bf;
 }
 
-.leaderboard-screen--puzzle .leaderboard-screen-statcard--accent .leaderboard-screen-statvalue {
-  color: #f0c040;
-}
-
 .leaderboard-screen--fritz .leaderboard-screen-statcard--accent .leaderboard-screen-statvalue {
   color: #e05c6a;
 }
 
-.leaderboard-screen-statcard--success .leaderboard-screen-statvalue {
-  color: #34d399;
+.leaderboard-screen--puzzle .leaderboard-screen-statcard--accent .leaderboard-screen-statvalue {
+  color: #f0c040;
 }
 
-.leaderboard-screen-statcard--danger .leaderboard-screen-statvalue {
-  color: #ef4444;
-}
+.leaderboard-screen-statcard--success .leaderboard-screen-statvalue { color: #00d4a0; }
+.leaderboard-screen-statcard--danger  .leaderboard-screen-statvalue { color: #ff4560; }
 
 .leaderboard-screen-statsub {
-  margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.42);
+  margin: 4px 0 0;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.38);
 }
+
+.leaderboard-screen-statbody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.leaderboard-screen-staticon {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.15);
+  box-shadow: none;
+}
+
+.leaderboard-screen-staticon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  fill: none;
+}
+
+.leaderboard-screen-staticon--accent {
+  color: #e05c6a;
+  opacity: 0.4;
+}
+
+.leaderboard-screen-staticon--neutral {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.leaderboard-screen-staticon--success {
+  color: #00d4a0;
+  opacity: 0.4;
+}
+
+.leaderboard-screen-staticon--danger {
+  color: #ff4560;
+  opacity: 0.4;
+}
+
+/* ── Divider label ──────────────────────────────────────── */
 
 .leaderboard-screen-divider {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .leaderboard-screen-dividerline {
@@ -288,62 +462,156 @@
 
 .leaderboard-screen-dividertext {
   font-family: 'Rajdhani', system-ui, sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.32);
+  white-space: nowrap;
 }
+
+@media (max-width: 980px) {
+  .leaderboard-screen-statcard {
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 14px;
+    padding: 16px 18px 14px;
+  }
+
+  .leaderboard-screen-staticon {
+    width: 62px;
+    height: 62px;
+  }
+
+  .leaderboard-screen-staticon svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .leaderboard-screen-statvalue {
+    font-size: clamp(2.9rem, 4vw, 4.1rem);
+  }
+}
+
+@media (max-width: 700px) {
+  .leaderboard-screen-stats {
+    flex-direction: column;
+  }
+
+  .leaderboard-screen-statcard {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .leaderboard-screen-statcard:last-child {
+    border-bottom: none;
+  }
+}
+
+/* ── List frame ─────────────────────────────────────────── */
 
 .leaderboard-screen-listframe {
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #05070b;
   flex: 1;
   min-height: 0;
+  gap: 0;
 }
 
+/* ── Footer note ────────────────────────────────────────── */
+
 .leaderboard-screen-footnote {
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   flex-shrink: 0;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   line-height: 1.45;
-  color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.2);
   text-align: center;
 }
 
+/* ── Responsive ─────────────────────────────────────────── */
+
 @media (max-width: 980px) {
   .leaderboard-screen-stats {
-    grid-template-columns: repeat(2, 1fr);
+    flex-wrap: wrap;
+  }
+
+  .leaderboard-screen-statcard {
+    flex: 1 1 calc(50% - 1px);
+    min-width: 0;
   }
 }
 
 @media (max-width: 900px) {
-  .leaderboard-screen-main {
-    padding: 8px 12px 12px;
-  }
-
   .leaderboard-screen-stats {
-    grid-template-columns: 1fr;
+    margin-bottom: 22px;
   }
 
   .leaderboard-screen-statcard {
-    min-height: 0;
-    padding: 12px 14px;
+    padding: 20px 20px;
   }
 
   .leaderboard-screen-statvalue {
-    font-size: 1.8rem;
+    font-size: clamp(2.4rem, 6vw, 3.6rem);
   }
 }
 
 @media (max-width: 640px) {
   .leaderboard-screen-topbar {
     padding: 0 16px;
+    height: 48px;
+    gap: 12px;
+  }
+
+  .leaderboard-screen-live {
+    display: none;
+  }
+
+  .leaderboard-screen-hero {
+    padding: 22px 16px;
+    min-height: auto;
+  }
+
+  .leaderboard-screen-titleblock {
+    max-width: 100%;
+  }
+
+  .leaderboard-screen-title {
+    font-size: clamp(32px, 9vw, 52px);
+  }
+
+  .leaderboard-screen-hero-graphic {
+    display: none;
   }
 
   .leaderboard-screen-panel {
-    padding: 16px;
+    padding: 14px 12px;
+  }
+
+  .leaderboard-screen-stats {
+    margin-bottom: 18px;
+  }
+
+  .leaderboard-screen-statcard {
+    padding: 18px 16px;
+  }
+
+  .leaderboard-screen-statvalue {
+    font-size: clamp(2.2rem, 8vw, 3.2rem);
+  }
+}
+
+@media (max-width: 420px) {
+  .leaderboard-screen-stats {
+    flex-direction: column;
+  }
+
+  .leaderboard-screen-statcard {
+    flex: none;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .leaderboard-screen-statcard:last-child {
+    border-bottom: none;
   }
 }

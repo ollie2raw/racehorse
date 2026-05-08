@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRef } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import type { GhostProfileSummary } from '../ghost/api';
@@ -41,11 +42,22 @@ interface DailyFritzScreenProps {
   onBack: () => void;
 }
 
-type BetweenGameState = {
-  completedGame: DailyFritzSetGameResult;
-  setResult: DailyFritzSetResult;
-  nextGameNumber: DailyFritzSetGameNumber;
-};
+type DailyFritzOverlayState =
+  | {
+      kind: 'between';
+      completedGame: DailyFritzSetGameResult;
+      setResult: DailyFritzSetResult;
+      nextGameNumber: DailyFritzSetGameNumber;
+    }
+  | {
+      kind: 'final';
+      completedGame: DailyFritzSetGameResult;
+      setResult: DailyFritzSetResult;
+      rank: number | null;
+      canViewLeaderboard: boolean;
+    };
+
+type BetweenGameTrackerTone = 'win' | 'loss' | 'next' | 'idle';
 
 function formatDateLabel(dateText: string): string {
   const parsed = new Date(`${dateText}T00:00:00`);
@@ -171,10 +183,103 @@ function normalizeStartResponse(
 function formatSetResultLabel(setResult: DailyFritzSetResult | null, legacyWon?: boolean | null): string {
   if (setResult?.setWinner) {
     const prefix = setResult.setWinner === 'player' ? 'Won set' : 'Lost set';
-    return `${prefix} ${setResult.playerGamesWon}-${setResult.fritzGamesWon}`;
+    return `${prefix} ${setResult.playerGamesWon}–${setResult.fritzGamesWon}`;
   }
   if (legacyWon != null) return legacyWon ? 'Win' : 'Loss';
   return '—';
+}
+
+function formatMargin(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value}`;
+}
+
+function getBetweenGameSubheadline(setResult: DailyFritzSetResult, nextGameNumber: DailyFritzSetGameNumber): string {
+  if (setResult.playerGamesWon === 1 && setResult.fritzGamesWon === 0) {
+    return 'You lead the set 1-0. Win Game 2 to close the set.';
+  }
+  if (setResult.playerGamesWon === 0 && setResult.fritzGamesWon === 1) {
+    return 'Fritz leads the set 1-0. Win Game 2 to force a decider.';
+  }
+  if (setResult.playerGamesWon === 1 && setResult.fritzGamesWon === 1 && nextGameNumber === 3) {
+    return 'The set is tied 1-1. One game decides today’s Fritz.';
+  }
+  if (setResult.playerGamesWon > setResult.fritzGamesWon) {
+    return `You lead the set ${setResult.playerGamesWon}-${setResult.fritzGamesWon}.`;
+  }
+  if (setResult.fritzGamesWon > setResult.playerGamesWon) {
+    return `Fritz leads the set ${setResult.fritzGamesWon}-${setResult.playerGamesWon}.`;
+  }
+  return `The set is tied ${setResult.playerGamesWon}-${setResult.fritzGamesWon}.`;
+}
+
+function getSetTrackerStatus(
+  setResult: DailyFritzSetResult,
+  gameNumber: DailyFritzSetGameNumber,
+  nextGameNumber?: DailyFritzSetGameNumber | null,
+): { label: string; tone: BetweenGameTrackerTone } {
+  const completedGame = setResult.games.find((game) => game.gameNumber === gameNumber);
+  if (completedGame) {
+    return {
+      label: completedGame.playerWon ? 'You won' : 'Fritz won',
+      tone: completedGame.playerWon ? 'win' : 'loss',
+    };
+  }
+  if (nextGameNumber === gameNumber) {
+    return {
+      label: gameNumber === 3 ? 'Decider' : 'Up next',
+      tone: 'next',
+    };
+  }
+  return {
+    label: gameNumber === 3 && !setResult.setWinner ? 'If needed' : 'Not played',
+    tone: 'idle',
+  };
+}
+
+function getBetweenGameHeadline(
+  completedGame: DailyFritzSetGameResult,
+  setResult: DailyFritzSetResult,
+  nextGameNumber: DailyFritzSetGameNumber,
+): string {
+  if (setResult.playerGamesWon === 1 && setResult.fritzGamesWon === 1 && nextGameNumber === 3) {
+    return 'Game 3 Decides It';
+  }
+  return `${completedGame.playerWon ? 'You' : 'Fritz'} take${completedGame.playerWon ? '' : 's'} Game ${completedGame.gameNumber}`;
+}
+
+function getBetweenGameObjective(
+  setResult: DailyFritzSetResult,
+  nextGameNumber: DailyFritzSetGameNumber,
+): string {
+  if (setResult.playerGamesWon === 1 && setResult.fritzGamesWon === 0 && nextGameNumber === 2) {
+    return 'Win Game 2 to finish the set.';
+  }
+  if (setResult.playerGamesWon === 0 && setResult.fritzGamesWon === 1 && nextGameNumber === 2) {
+    return 'Win Game 2 to stay alive.';
+  }
+  if (setResult.playerGamesWon === 1 && setResult.fritzGamesWon === 1 && nextGameNumber === 3) {
+    return 'Win the decider to claim today’s Fritz.';
+  }
+  return `Start Game ${nextGameNumber} when you are ready.`;
+}
+
+function getFinalOverlayHeadline(setResult: DailyFritzSetResult): string {
+  if (setResult.setWinner === 'player') {
+    return `You win the set ${setResult.playerGamesWon}-${setResult.fritzGamesWon}`;
+  }
+  return `Fritz wins the set ${setResult.fritzGamesWon}-${setResult.playerGamesWon}`;
+}
+
+function getFinalOverlaySubheadline(setResult: DailyFritzSetResult): string {
+  const decidedInThree = setResult.games.length === 3;
+  if (setResult.setWinner === 'player') {
+    return decidedInThree
+      ? 'You claimed the decider and beat Fritz today.'
+      : 'Daily Fritz complete. You took today’s best-of-3.';
+  }
+  return decidedInThree
+    ? 'Today’s best-of-3 is complete. You pushed it to a decider, but Fritz takes today’s set.'
+    : 'Today’s best-of-3 is complete. Fritz takes the set.';
 }
 
 function getSetStatusLabel(today: DailyFritzTodayResponse | null): string {
@@ -288,13 +393,18 @@ export default function DailyFritzScreen({
   const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(() =>
     mockDailyFritzEnabled ? createMockDailyFritzRun() : null,
   );
-  const [betweenGame, setBetweenGame] = useState<BetweenGameState | null>(null);
+  const [setOverlay, setSetOverlay] = useState<DailyFritzOverlayState | null>(null);
   const [setSubmitError, setSetSubmitError] = useState<string | null>(null);
 
   const cacheKey = useMemo(
     () => (user?.id ? `${DAILY_FRITZ_TODAY_CACHE_PREFIX}${user.id}` : null),
     [user?.id],
   );
+  const todayRef = useRef<DailyFritzTodayResponse | null>(today);
+
+  useEffect(() => {
+    todayRef.current = today;
+  }, [today]);
 
   useEffect(() => {
     if (!cacheKey || typeof window === 'undefined') return;
@@ -312,7 +422,8 @@ export default function DailyFritzScreen({
 
   const loadToday = useCallback(async () => {
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    setLoading((prev) => !today && prev !== false ? true : !today);
+    const hadCachedToday = Boolean(todayRef.current);
+    setLoading((prev) => !hadCachedToday && prev !== false ? true : !hadCachedToday);
     setError(null);
     try {
       const response = await getTodayDailyFritz();
@@ -325,13 +436,13 @@ export default function DailyFritzScreen({
     } finally {
       const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
       console.log('[daily-fritz-client] loadToday', {
-        hadCachedToday: Boolean(today),
+        hadCachedToday,
         userId: user?.id ?? null,
         totalMs: Number((endedAt - startedAt).toFixed(1)),
       });
       setLoading(false);
     }
-  }, [cacheKey, today, user?.id]);
+  }, [cacheKey, user?.id]);
 
   useEffect(() => {
     if (!user) {
@@ -359,10 +470,25 @@ export default function DailyFritzScreen({
     }
   }, [today?.run_date]);
 
+  const openLeaderboardForRunDate = useCallback(async (runDate: string) => {
+    setLeaderboardOpen(true);
+    setLeaderboardLoading(true);
+    setLeaderboardError(null);
+    try {
+      const rows = await fetchDailyFritzLeaderboard(runDate);
+      setLeaderboard(rows);
+    } catch (err) {
+      setLeaderboardError(err instanceof Error ? err.message : 'Failed to load leaderboard.');
+      setLeaderboard([]);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, []);
+
   const beginRun = useCallback(async () => {
     setError(null);
     setSetSubmitError(null);
-    setBetweenGame(null);
+    setSetOverlay(null);
     try {
       const started = await startDailyFritz();
       const normalized = normalizeStartResponse(started, normalizeSetResult(today?.set_result ?? today?.result));
@@ -381,17 +507,17 @@ export default function DailyFritzScreen({
   const continueSet = useCallback(async () => {
     setError(null);
     setSetSubmitError(null);
-    const fallbackSetResult = betweenGame?.setResult ?? normalizeSetResult(today?.set_result ?? today?.result);
+    const fallbackSetResult = setOverlay?.setResult ?? normalizeSetResult(today?.set_result ?? today?.result);
     try {
       const started = await startDailyFritz();
       const normalized = normalizeStartResponse(started, fallbackSetResult);
       console.debug('[daily-fritz-set] active run game number', normalized.current_game_number);
-      setBetweenGame(null);
+      setSetOverlay(null);
       setActiveRun(normalized);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to continue Daily Fritz.');
     }
-  }, [betweenGame?.setResult, today]);
+  }, [setOverlay?.setResult, today]);
 
   const handleDailyFritzGameComplete = useCallback(async (game: {
     winner: 'you' | 'bot' | null;
@@ -455,7 +581,7 @@ export default function DailyFritzScreen({
           handsPlayed: totalHands,
           moveLog: setResult,
         });
-        await completeDailyFritz({
+        const completion = await completeDailyFritz({
           attemptId: activeRun.attempt_id,
           verifiedMatchId: activeRun.verified_match_id,
           runDate: activeRun.run_date,
@@ -468,22 +594,42 @@ export default function DailyFritzScreen({
           moveLog: setResult,
           setResult,
         });
-        setActiveRun(null);
-        setBetweenGame(null);
-        await loadToday();
+        setSetOverlay({
+          kind: 'final',
+          completedGame,
+          setResult,
+          rank: completion.rank ?? null,
+          canViewLeaderboard: completion.leaderboard_preview.length > 0,
+        });
+        setActiveRun((current) =>
+          current
+            ? {
+                ...current,
+                set_result: setResult,
+              }
+            : current,
+        );
         return;
       }
 
       const nextGameNumber = recorded.next_game_number;
       if (nextGameNumber) {
-        const nextBetweenGame = {
+        const nextBetweenGame: DailyFritzOverlayState = {
+          kind: 'between',
           completedGame,
           setResult,
           nextGameNumber: normalizeGameNumber(nextGameNumber, 2),
         };
         console.debug('[daily-fritz-set] between game state', nextBetweenGame);
-        setBetweenGame(nextBetweenGame);
-        setActiveRun(null);
+        setSetOverlay(nextBetweenGame);
+        setActiveRun((current) =>
+          current
+            ? {
+                ...current,
+                set_result: setResult,
+              }
+            : current,
+        );
         void loadToday();
       }
     } catch (err) {
@@ -496,15 +642,34 @@ export default function DailyFritzScreen({
   }, [activeRun, loadToday]);
 
   const currentUsername = profile?.username?.trim() ?? null;
+  const todaySetResult = useMemo(
+    () => normalizeSetResult(today?.set_result ?? today?.result),
+    [today],
+  );
   const currentLeaderboardRow = useMemo(
-    () =>
-      leaderboard.find((row) =>
+    () => {
+      const explicitRow = leaderboard.find((row) =>
         Boolean(row.is_current_user) ||
         (currentUsername != null &&
           currentUsername.trim().length > 0 &&
           row.username.trim().toLowerCase() === currentUsername.trim().toLowerCase()),
-      ) ?? null,
-    [currentUsername, leaderboard],
+      );
+      if (explicitRow) return explicitRow;
+      if (today?.rank != null) {
+        const rankMatchedRow = leaderboard.find((row) => row.rank === today.rank);
+        if (rankMatchedRow) return rankMatchedRow;
+      }
+      if (todaySetResult) {
+        const scoreMatchedRow = leaderboard.find((row) =>
+          row.finalScore === todaySetResult.playerGamesWon &&
+          row.opponentScore === todaySetResult.fritzGamesWon &&
+          row.pointDiff === todaySetResult.totalPointDiff,
+        );
+        if (scoreMatchedRow) return scoreMatchedRow;
+      }
+      return null;
+    },
+    [currentUsername, leaderboard, today?.rank, todaySetResult],
   );
   const leaderboardSummaryCards = useMemo<LeaderboardSummaryCard[]>(() => {
     const rankValue =
@@ -513,19 +678,27 @@ export default function DailyFritzScreen({
         : today?.rank != null
           ? `#${today.rank}`
           : '—';
-    const todaySetResult = normalizeSetResult(today?.set_result ?? today?.result);
+
+    // If we don't have a rank, we haven't finished the run or it's not yet posted.
+    // Per requirements, hide the summary strip if unavailable.
+    if (rankValue === '—') return [];
+
     const scoreValue = currentLeaderboardRow
-      ? `${currentLeaderboardRow.finalScore}-${currentLeaderboardRow.opponentScore}`
+      ? `${currentLeaderboardRow.finalScore}–${currentLeaderboardRow.opponentScore}`
       : todaySetResult
-        ? `${todaySetResult.playerGamesWon}-${todaySetResult.fritzGamesWon}`
+        ? `${todaySetResult.playerGamesWon}–${todaySetResult.fritzGamesWon}`
       : today?.result
-        ? `${Number(today.result.final_score ?? 0)}-${Number(today.result.opponent_score ?? 0)}`
+        ? `${Number(today.result.final_score ?? 0)}–${Number(today.result.opponent_score ?? 0)}`
         : '—';
     const diffValue = currentLeaderboardRow
       ? `${currentLeaderboardRow.pointDiff >= 0 ? '+' : ''}${currentLeaderboardRow.pointDiff}`
-      : '—';
+      : todaySetResult
+        ? formatMargin(todaySetResult.totalPointDiff)
+        : '—';
     const resultValue = currentLeaderboardRow
-      ? currentLeaderboardRow.won ? 'Win' : 'Loss'
+      ? currentLeaderboardRow.won
+        ? `Won ${currentLeaderboardRow.finalScore}–${currentLeaderboardRow.opponentScore}`
+        : `Lost ${currentLeaderboardRow.finalScore}–${currentLeaderboardRow.opponentScore}`
       : todaySetResult?.setWinner
         ? formatSetResultLabel(todaySetResult)
       : today?.result
@@ -549,12 +722,12 @@ export default function DailyFritzScreen({
             : 'danger';
 
     return [
-      { label: 'Your Rank', value: rankValue, sublabel: 'Where you finished today', tone: 'accent' },
-      { label: 'Score', value: scoreValue, sublabel: 'Your score against Fritz', tone: 'neutral' },
-      { label: 'Diff', value: diffValue, sublabel: 'Final point margin', tone: diffTone },
-      { label: 'Result', value: resultValue, sublabel: 'Win or loss today', tone: resultTone },
+      { label: 'Your Rank', value: rankValue, sublabel: 'Where you finished today', tone: 'accent', icon: 'rank' },
+      { label: 'Set Score', value: scoreValue, sublabel: 'Games won in the set', tone: 'neutral', icon: 'score' },
+      { label: 'Set Margin', value: diffValue, sublabel: 'Total point margin', tone: diffTone, icon: 'margin' },
+      { label: 'Set Result', value: resultValue, sublabel: 'How your set finished', tone: resultTone, icon: 'result' },
     ];
-  }, [currentLeaderboardRow, today]);
+  }, [currentLeaderboardRow, today, todaySetResult]);
   const showAuthPrompt =
     !loading &&
     Boolean(
@@ -564,8 +737,89 @@ export default function DailyFritzScreen({
     );
   const activeSetResult = normalizeSetResult(activeRun?.set_result ?? null);
   const activeGameNumber = normalizeGameNumber(activeRun?.current_game_number, getNextGameNumberFromSetResult(activeSetResult));
-  const activeProgressLabel = activeRun
-    ? `Daily Fritz Set · Game ${activeGameNumber} of 3 · You ${activeSetResult?.playerGamesWon ?? 0} - Fritz ${activeSetResult?.fritzGamesWon ?? 0}`
+  const setOverlayMarginTone: 'win' | 'loss' | 'idle' =
+    setOverlay == null
+      ? 'idle'
+      : setOverlay.setResult.totalPointDiff > 0
+        ? 'win'
+        : setOverlay.setResult.totalPointDiff < 0
+          ? 'loss'
+          : 'idle';
+  const setOverlayConfig = setOverlay
+    ? setOverlay.kind === 'between'
+      ? {
+          kind: 'between' as const,
+          eyebrow: 'Daily Fritz Set',
+          headline: getBetweenGameHeadline(setOverlay.completedGame, setOverlay.setResult, setOverlay.nextGameNumber),
+          subheadline: getBetweenGameSubheadline(setOverlay.setResult, setOverlay.nextGameNumber),
+          objective: getBetweenGameObjective(setOverlay.setResult, setOverlay.nextGameNumber),
+          nextLabel:
+            setOverlay.nextGameNumber === 3
+              ? null
+              : `Game ${setOverlay.nextGameNumber} is up next`,
+          primaryLabel: setOverlay.nextGameNumber === 3 ? 'Start Game 3' : `Start Game ${setOverlay.nextGameNumber}`,
+          primaryTone: setOverlay.nextGameNumber === 3 ? 'decider' as const : 'default' as const,
+          secondaryLabel: 'Return to Daily Fritz',
+          onPrimary: () => void continueSet(),
+          onSecondary: () => {
+            setSetOverlay(null);
+            setActiveRun(null);
+            void loadToday();
+          },
+          gameScoreLabel: `Game ${setOverlay.completedGame.gameNumber} Score`,
+          gameScoreValue: `You ${setOverlay.completedGame.playerScore} — Fritz ${setOverlay.completedGame.fritzScore}`,
+          setScoreValue: `You ${setOverlay.setResult.playerGamesWon} — Fritz ${setOverlay.setResult.fritzGamesWon}`,
+          marginValue: formatMargin(setOverlay.setResult.totalPointDiff),
+          marginTone: setOverlayMarginTone,
+          resultValue: null,
+          rankValue: null,
+          tracker: ([1, 2, 3] as DailyFritzSetGameNumber[]).map((trackerGame) => ({
+            gameNumber: trackerGame,
+            ...getSetTrackerStatus(setOverlay.setResult, trackerGame, setOverlay.nextGameNumber),
+          })),
+          games: [],
+        }
+      : {
+          kind: 'final' as const,
+          eyebrow: 'Daily Fritz Complete',
+          headline: getFinalOverlayHeadline(setOverlay.setResult),
+          subheadline: getFinalOverlaySubheadline(setOverlay.setResult),
+          objective: null,
+          nextLabel: null,
+          primaryLabel: 'Return to Daily Fritz',
+          primaryTone: setOverlay.setResult.setWinner === 'player' ? 'success' as const : 'default' as const,
+          secondaryLabel: setOverlay.canViewLeaderboard ? 'View Leaderboard' : null,
+          onPrimary: () => {
+            setSetOverlay(null);
+            setActiveRun(null);
+            void loadToday();
+          },
+          onSecondary: () => {
+            setSetOverlay(null);
+            setActiveRun(null);
+            void loadToday();
+            const runDate = activeRun?.run_date ?? setOverlay.setResult.run_date ?? today?.run_date ?? '';
+            if (runDate) {
+              void openLeaderboardForRunDate(runDate);
+            }
+          },
+          gameScoreLabel: 'Set Score',
+          gameScoreValue: `You ${setOverlay.setResult.playerGamesWon} — Fritz ${setOverlay.setResult.fritzGamesWon}`,
+          setScoreValue: `You ${setOverlay.setResult.playerGamesWon} — Fritz ${setOverlay.setResult.fritzGamesWon}`,
+          marginValue: formatMargin(setOverlay.setResult.totalPointDiff),
+          marginTone: setOverlayMarginTone,
+          resultValue: formatSetResultLabel(setOverlay.setResult),
+          rankValue: null,
+          tracker: ([1, 2, 3] as DailyFritzSetGameNumber[]).map((trackerGame) => ({
+            gameNumber: trackerGame,
+            ...getSetTrackerStatus(setOverlay.setResult, trackerGame, null),
+          })),
+          games: setOverlay.setResult.games.map((game) => ({
+            gameNumber: game.gameNumber,
+            value: `You ${game.playerScore} — Fritz ${game.fritzScore}`,
+            tone: (game.playerWon ? 'win' : 'loss') as 'win' | 'loss',
+          })),
+        }
     : null;
 
   if (activeRun) {
@@ -588,7 +842,7 @@ export default function DailyFritzScreen({
         onProfileRefresh={onProfileRefresh}
         onProfilePatch={onProfilePatch}
         dailyFritzPackage={{ ...activeRun, current_game_number: activeGameNumber, set_result: activeSetResult }}
-        dailyFritzSetProgressLabel={activeProgressLabel}
+        dailyFritzSetOverlay={setOverlayConfig}
         onDailyFritzGameComplete={(result) => {
           void handleDailyFritzGameComplete(result);
         }}
@@ -596,51 +850,6 @@ export default function DailyFritzScreen({
           void finishEmbeddedRun();
         }}
       />
-    );
-  }
-
-  if (betweenGame) {
-    const game = betweenGame.completedGame;
-    const winnerLabel = game.playerWon ? 'You' : 'Fritz';
-    const nextLabel =
-      betweenGame.nextGameNumber === 3
-        ? 'Game 3 decides today’s Fritz'
-        : `Game ${betweenGame.nextGameNumber} is up next`;
-    return (
-      <div className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz">
-        <div className="daily-dash" style={{ ['--dash-accent' as string]: '#e05c6a' }}>
-          <header className="daily-dash-topbar">
-            <div className="daily-dash-brand">RACEHORSE</div>
-            <button type="button" className="daily-dash-back" onClick={onBack}>
-              <svg viewBox="0 0 12 12" aria-hidden="true">
-                <path d="M7.5 2L3 6l4.5 4" />
-              </svg>
-              Back to Home
-            </button>
-          </header>
-          <main className="daily-dash-main daily-fritz-between-main">
-            <section className="daily-fritz-between-card claude-mode-card" aria-label="Daily Fritz game summary">
-              <span className="daily-fritz-status-label">Daily Fritz Set</span>
-              <h1>Game {game.gameNumber} Complete</h1>
-              <strong className={game.playerWon ? 'is-win' : 'is-loss'}>
-                {winnerLabel} won {game.playerScore}-{game.fritzScore}
-              </strong>
-              <div className="daily-fritz-between-score">
-                <span>Set score</span>
-                <b>You {betweenGame.setResult.playerGamesWon} - Fritz {betweenGame.setResult.fritzGamesWon}</b>
-              </div>
-              <p>{nextLabel}</p>
-              {setSubmitError ? <div className="daily-fritz-empty">{setSubmitError}</div> : null}
-              <ClaudePrimaryAction
-                accent="#e05c6a"
-                title={betweenGame.nextGameNumber === 3 ? 'Play Decider' : `Continue to Game ${betweenGame.nextGameNumber}`}
-                meta="Continue today’s set"
-                onClick={() => void continueSet()}
-              />
-            </section>
-          </main>
-        </div>
-      </div>
     );
   }
 
@@ -653,6 +862,7 @@ export default function DailyFritzScreen({
         title="Leaderboard"
         subtitle={`${today ? formatLeaderboardDateLabel(today.run_date) : 'Today'} · Global ranking`}
         backLabel="Back to Daily Fritz"
+        showLiveBadge={false}
         summaryCards={leaderboardSummaryCards}
         resultsLabel={`Global Results · ${leaderboard.length} ${leaderboard.length === 1 ? 'player' : 'players'}`}
         onClose={() => setLeaderboardOpen(false)}
@@ -727,52 +937,6 @@ export default function DailyFritzScreen({
                   />
                 </div>
 
-                {today.attempt_status === 'completed' && (
-                  <section className="daily-fritz-summary-strip claude-mode-card" aria-label="Daily Fritz result summary">
-                    <div className="daily-fritz-summary-strip-header">
-                      <span className="daily-fritz-status-label">Result Summary</span>
-                    </div>
-                    <div className="daily-fritz-summary-strip-grid">
-                      <div className="daily-fritz-summary-item">
-                        <span className="daily-fritz-summary-label">Result</span>
-                        <strong className={`daily-fritz-summary-value ${Boolean((normalizeSetResult(today.set_result ?? today.result)?.setWinner === 'player') || today.result?.won) ? 'is-win' : 'is-loss'}`}>
-                          {formatSetResultLabel(normalizeSetResult(today.set_result ?? today.result), Boolean(today.result?.won))}
-                        </strong>
-                      </div>
-                      <div className="daily-fritz-summary-item">
-                        <span className="daily-fritz-summary-label">Set Score</span>
-                        <strong className="daily-fritz-summary-value">
-                          {normalizeSetResult(today.set_result ?? today.result)
-                            ? `${normalizeSetResult(today.set_result ?? today.result)?.playerGamesWon}-${normalizeSetResult(today.set_result ?? today.result)?.fritzGamesWon}`
-                            : `${Number(today.result?.final_score ?? 0)}-${Number(today.result?.opponent_score ?? 0)}`}
-                        </strong>
-                      </div>
-                      <div className="daily-fritz-summary-item">
-                        <span className="daily-fritz-summary-label">Total Margin</span>
-                        <strong className="daily-fritz-summary-value">
-                          {Number(normalizeSetResult(today.set_result ?? today.result)?.totalPointDiff ?? today.result?.point_diff ?? 0) >= 0 ? '+' : ''}
-                          {Number(normalizeSetResult(today.set_result ?? today.result)?.totalPointDiff ?? today.result?.point_diff ?? 0)}
-                        </strong>
-                      </div>
-                      <div className="daily-fritz-summary-item">
-                        <span className="daily-fritz-summary-label">Rank</span>
-                        <strong className="daily-fritz-summary-value">{today.rank ? `#${today.rank}` : '—'}</strong>
-                      </div>
-                    </div>
-                    {normalizeSetResult(today.set_result ?? today.result)?.games.length ? (
-                      <div className="daily-fritz-game-list">
-                        {normalizeSetResult(today.set_result ?? today.result)?.games.map((game) => (
-                          <div className="daily-fritz-game-list-row" key={game.gameNumber}>
-                            <span>Game {game.gameNumber}</span>
-                            <strong className={game.playerWon ? 'is-win' : 'is-loss'}>
-                              {game.playerWon ? 'You' : 'Fritz'} {game.playerScore}-{game.fritzScore}
-                            </strong>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </section>
-                )}
               </div>
 
               <div className="daily-dash-actions daily-fritz-home-secondary">
