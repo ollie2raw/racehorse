@@ -93,37 +93,76 @@
   }
 }
 
+.bot-match-screen .daily-fritz-progress-pill,
 .bot-match-screen .open-ends-pill {
-  position: absolute;
-  left: calc(100% + 6px);
+  width: auto;
+  min-width: unset;
+  height: 48px;
+  padding: 0 20px;
+  gap: 10px;
+  border-radius: 999px;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 0.72rem;
-  color: rgba(232, 245, 240, 0.85);
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  color: #fff;
   z-index: 10;
   white-space: nowrap;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
-.bot-match-screen .open-ends-pill[data-has-turn-label='true'] {
-  left: calc(100% + 6px);
-  transform: none;
+.bot-match-screen .daily-fritz-progress-pill {
+  right: calc(100% + 10px);
+}
+
+.bot-match-screen .open-ends-pill {
+  left: calc(100% + 10px);
+}
+
+.bot-match-screen .hud-pill-value {
+  font-family: 'Barlow Condensed', sans-serif !important;
+  font-size: 1.7rem;
+  font-weight: 850;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.bot-match-screen .hud-pill-label {
+  font-family: 'Rajdhani', sans-serif !important;
+  font-size: 1.0rem;
+  font-weight: 700;
+  opacity: 0.75;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 600px) {
+  .bot-match-screen .daily-fritz-progress-pill,
   .bot-match-screen .open-ends-pill {
     position: relative !important;
     left: auto !important;
+    right: auto !important;
     transform: none !important;
-    margin-left: 12px;
+    height: 32px;
+    padding: 0 10px;
+    gap: 6px;
+    top: auto;
+    background: rgba(15, 12, 10, 0.95);
   }
+  .bot-match-screen .daily-fritz-progress-pill { margin-right: 12px; }
+  .bot-match-screen .open-ends-pill { margin-left: 12px; }
+  
+  .bot-match-screen .hud-pill-value { font-size: 1.15rem; }
+  .bot-match-screen .hud-pill-label { font-size: 0.75rem; }
 }
 
 .bot-match-screen .bot-chip-control {

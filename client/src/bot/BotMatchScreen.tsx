@@ -6772,34 +6772,20 @@ export default function BotMatchScreen({
           <div className="bot-hud-center-cluster" style={{ position: 'relative' }}>
             {showTurnStatusCluster && (
               <>
+                {isDailyFritzMode && dailyFritzPackage && (
+                  <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
+                    <span className="hud-pill-label">GAME</span>
+                    <span className="hud-pill-value">{dailyFritzPackage.current_game_number ?? 1}</span>
+                  </div>
+                )}
                 {turnLabel && (
                   <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`} style={{ transform: 'none' }}>
                     {turnLabel}
                   </span>
                 )}
-                <div
-                  className="open-ends-pill"
-                  data-has-turn-label={!!turnLabel}
-                  style={{
-                    width: 'auto',
-                    minWidth: 'unset',
-                    height: '45px',
-                    padding: '0 18px',
-                    gap: '8px',
-                    borderRadius: '999px',
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    position: 'absolute',
-                    left: 'calc(100% + 12px)',
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    boxShadow: 'none',
-                    lineHeight: 1,
-                  }}
-                >
-                  <span style={{ fontSize: '1.6rem', fontWeight: 800 }}>{openEndsSum}</span>
-                  <span style={{ fontSize: '1.0rem', opacity: 0.7, letterSpacing: '0.02em', textTransform: 'uppercase' }}>OPEN</span>
+                <div className="open-ends-pill" data-has-turn-label={!!turnLabel}>
+                  <span className="hud-pill-value">{openEndsSum}</span>
+                  <span className="hud-pill-label">OPEN</span>
                 </div>
               </>
             )}
