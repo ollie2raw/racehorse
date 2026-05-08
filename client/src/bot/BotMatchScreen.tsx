@@ -3191,7 +3191,7 @@ export default function BotMatchScreen({
             attemptId: dailyFritzPackage.attempt_id,
             verifiedMatchId: dailyFritzPackage.verified_match_id,
             runDate: dailyFritzPackage.run_date,
-            gameNumber: dailyFritzPackage.current_game_number,
+            gameNumber: dailyFritzPackage.current_game_number ?? 1,
             completedHandIndex: dailyFritzHandIndex,
             completedHandScores: {
               you: result.state.players.you.score,
@@ -4988,7 +4988,7 @@ export default function BotMatchScreen({
             attemptId: dailyFritzPackage.attempt_id,
             verifiedMatchId: dailyFritzPackage.verified_match_id,
             runDate: dailyFritzPackage.run_date,
-            gameNumber: dailyFritzPackage.current_game_number,
+            gameNumber: dailyFritzPackage.current_game_number ?? 1,
             completedHandIndex: dailyFritzHandIndex,
             completedHandScores: {
               you: match.players.you.score,

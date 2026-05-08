@@ -146,7 +146,7 @@ export interface DailyFritzStartResponse {
   verified_match_id: string;
   run_date: string;
   current_hand_index: number;
-  current_game_number: DailyFritzSetGameNumber;
+  current_game_number?: DailyFritzSetGameNumber | null;
   set_result: DailyFritzSetResult | null;
   fritz_tier: FritzTier;
   deal_size: BotDealSize;

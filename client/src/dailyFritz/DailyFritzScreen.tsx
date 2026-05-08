@@ -80,6 +80,11 @@ function getDailyFritzGameSeed(runDate: string, gameNumber: DailyFritzSetGameNum
   return `daily-fritz-${runDate}:game:${gameNumber}`;
 }
 
+function normalizeGameNumber(value: unknown, fallback: DailyFritzSetGameNumber = 1): DailyFritzSetGameNumber {
+  const parsed = Number(value);
+  return parsed === 1 || parsed === 2 || parsed === 3 ? parsed : fallback;
+}
+
 function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
   if (!value || typeof value !== 'object') return null;
   const rec = value as Record<string, unknown>;
@@ -136,6 +141,31 @@ function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
     ...(Number.isFinite(Number(rec.moves_used)) ? { moves_used: Number(rec.moves_used) } : {}),
     ...(Number.isFinite(Number(rec.hands_played)) ? { hands_played: Number(rec.hands_played) } : {}),
   };
+}
+
+function getNextGameNumberFromSetResult(setResult: DailyFritzSetResult | null): DailyFritzSetGameNumber {
+  if (!setResult || setResult.setWinner) return 1;
+  return normalizeGameNumber(setResult.games.length + 1, 3);
+}
+
+function normalizeStartResponse(
+  response: DailyFritzStartResponse,
+  fallbackSetResult: DailyFritzSetResult | null,
+): DailyFritzStartResponse {
+  const setResult = normalizeSetResult(response.set_result) ?? fallbackSetResult;
+  const fallbackGameNumber = getNextGameNumberFromSetResult(setResult);
+  const currentGameNumber = normalizeGameNumber(response.current_game_number, fallbackGameNumber);
+  const normalized = {
+    ...response,
+    current_game_number: currentGameNumber,
+    set_result: setResult,
+  };
+  console.debug('[daily-fritz-set] start response', {
+    rawGameNumber: response.current_game_number ?? null,
+    currentGameNumber,
+    setResult,
+  });
+  return normalized;
 }
 
 function formatSetResultLabel(setResult: DailyFritzSetResult | null, legacyWon?: boolean | null): string {
@@ -335,11 +365,13 @@ export default function DailyFritzScreen({
     setBetweenGame(null);
     try {
       const started = await startDailyFritz();
-      setActiveRun(started);
+      const normalized = normalizeStartResponse(started, normalizeSetResult(today?.set_result ?? today?.result));
+      console.debug('[daily-fritz-set] active run game number', normalized.current_game_number);
+      setActiveRun(normalized);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start Daily Fritz.');
     }
-  }, []);
+  }, [today]);
 
   const finishEmbeddedRun = useCallback(async () => {
     setActiveRun(null);
@@ -349,14 +381,17 @@ export default function DailyFritzScreen({
   const continueSet = useCallback(async () => {
     setError(null);
     setSetSubmitError(null);
-    setBetweenGame(null);
+    const fallbackSetResult = betweenGame?.setResult ?? normalizeSetResult(today?.set_result ?? today?.result);
     try {
       const started = await startDailyFritz();
-      setActiveRun(started);
+      const normalized = normalizeStartResponse(started, fallbackSetResult);
+      console.debug('[daily-fritz-set] active run game number', normalized.current_game_number);
+      setBetweenGame(null);
+      setActiveRun(normalized);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to continue Daily Fritz.');
     }
-  }, []);
+  }, [betweenGame?.setResult, today]);
 
   const handleDailyFritzGameComplete = useCallback(async (game: {
     winner: 'you' | 'bot' | null;
@@ -375,7 +410,7 @@ export default function DailyFritzScreen({
       await loadToday();
       return;
     }
-    const gameNumber = activeRun.current_game_number;
+    const gameNumber = normalizeGameNumber(activeRun.current_game_number);
     setSetSubmitError(null);
     try {
       const recorded = await recordDailyFritzGame({
@@ -388,7 +423,9 @@ export default function DailyFritzScreen({
         movesUsed: game.movesUsed,
         handsPlayed: game.handsPlayed,
       });
+      console.debug('[daily-fritz-set] record game response', recorded);
       const setResult = normalizeSetResult(recorded.set_result) ?? recorded.set_result;
+      console.debug('[daily-fritz-set] normalized set result', setResult);
       const completedGame =
         setResult.games.find((entry) => entry.gameNumber === gameNumber) ??
         {
@@ -439,9 +476,15 @@ export default function DailyFritzScreen({
 
       const nextGameNumber = recorded.next_game_number;
       if (nextGameNumber) {
-        setBetweenGame({ completedGame, setResult, nextGameNumber });
+        const nextBetweenGame = {
+          completedGame,
+          setResult,
+          nextGameNumber: normalizeGameNumber(nextGameNumber, 2),
+        };
+        console.debug('[daily-fritz-set] between game state', nextBetweenGame);
+        setBetweenGame(nextBetweenGame);
         setActiveRun(null);
-        await loadToday();
+        void loadToday();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save Daily Fritz set progress.';
@@ -520,14 +563,15 @@ export default function DailyFritzScreen({
           error.toLowerCase().includes('unauthorized')),
     );
   const activeSetResult = normalizeSetResult(activeRun?.set_result ?? null);
+  const activeGameNumber = normalizeGameNumber(activeRun?.current_game_number, getNextGameNumberFromSetResult(activeSetResult));
   const activeProgressLabel = activeRun
-    ? `Daily Fritz Set · Game ${activeRun.current_game_number} of 3 · You ${activeSetResult?.playerGamesWon ?? 0} - Fritz ${activeSetResult?.fritzGamesWon ?? 0}`
+    ? `Daily Fritz Set · Game ${activeGameNumber} of 3 · You ${activeSetResult?.playerGamesWon ?? 0} - Fritz ${activeSetResult?.fritzGamesWon ?? 0}`
     : null;
 
   if (activeRun) {
     return (
       <BotMatchScreen
-        key={`${activeRun.attempt_id}:${activeRun.current_game_number}`}
+        key={`${activeRun.attempt_id}:${activeGameNumber}`}
         onBack={() => {
           setActiveRun(null);
           void loadToday();
@@ -543,7 +587,7 @@ export default function DailyFritzScreen({
         onGhostProfileChange={onGhostProfileChange}
         onProfileRefresh={onProfileRefresh}
         onProfilePatch={onProfilePatch}
-        dailyFritzPackage={activeRun}
+        dailyFritzPackage={{ ...activeRun, current_game_number: activeGameNumber, set_result: activeSetResult }}
         dailyFritzSetProgressLabel={activeProgressLabel}
         onDailyFritzGameComplete={(result) => {
           void handleDailyFritzGameComplete(result);
