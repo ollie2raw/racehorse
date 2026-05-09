@@ -50,6 +50,23 @@ import {
   type DailyFritzTier,
 } from './dailyFritz';
 import {
+  buildDailyPuzzleLeaderboard,
+  calculateDailyPuzzleAwardedPoints,
+  isDailyPuzzleLadderReady,
+  normalizeDailyPuzzleAttempt,
+  normalizeDailyPuzzleSlot,
+  normalizeDailyPuzzleSlotResult,
+  sortDailyPuzzleSlots,
+  type DailyPuzzleAttempt,
+  type DailyPuzzleAttemptRow,
+  type DailyPuzzleLeaderboardEntry,
+  type DailyPuzzleSlot,
+  type DailyPuzzleSlotIndex,
+  type DailyPuzzleSlotResult,
+  type DailyPuzzleSlotResultRow,
+  type DailyPuzzleSlotRow,
+} from './dailyPuzzle';
+import {
   DEFAULT_RATING,
   DEFAULT_RD,
   FRITZ_ELITE_ID,
@@ -1994,6 +2011,198 @@ async function buildDailyFritzLeaderboard(
   return sorted.map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
 
+async function listDailyPuzzleSlotsForDate(runDate: string): Promise<DailyPuzzleSlot[]> {
+  const rows = await supabaseFetch<DailyPuzzleSlotRow[]>(
+    `/rest/v1/daily_puzzles?select=id,puzzle_date,title,starting_board,starting_hand,max_moves,target_score,puzzle_type,deal_size,slot_index,slot_title,tier,slot_max_points,objective_type,objective_payload,set_version,published&published=eq.true&puzzle_date=eq.${encodeURIComponent(runDate)}&order=set_version.asc,slot_index.asc,id.asc`,
+    { method: 'GET' },
+  );
+  return sortDailyPuzzleSlots(rows.map(normalizeDailyPuzzleSlot));
+}
+
+async function getDailyPuzzleAttempt(runDate: string, userId: string): Promise<DailyPuzzleAttempt | null> {
+  const rows = await supabaseFetch<DailyPuzzleAttemptRow[]>(
+    `/rest/v1/daily_puzzle_attempts?select=id,puzzle_date,user_id,username,status,set_version,current_slot_index,puzzles_completed,total_score,master_chain_score,completed_at,started_at,updated_at,review_unlocked,result&puzzle_date=eq.${encodeURIComponent(runDate)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: 'GET' },
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const slotResults = await listDailyPuzzleSlotResults(row.id);
+  return normalizeDailyPuzzleAttempt(row, slotResults);
+}
+
+async function getDailyPuzzleAttemptById(
+  attemptId: string,
+  userId: string,
+): Promise<DailyPuzzleAttempt | null> {
+  const rows = await supabaseFetch<DailyPuzzleAttemptRow[]>(
+    `/rest/v1/daily_puzzle_attempts?select=id,puzzle_date,user_id,username,status,set_version,current_slot_index,puzzles_completed,total_score,master_chain_score,completed_at,started_at,updated_at,review_unlocked,result&id=eq.${encodeURIComponent(attemptId)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: 'GET' },
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const slotResults = await listDailyPuzzleSlotResults(row.id);
+  return normalizeDailyPuzzleAttempt(row, slotResults);
+}
+
+async function listDailyPuzzleSlotResults(attemptId: string): Promise<DailyPuzzleSlotResult[]> {
+  const rows = await supabaseFetch<DailyPuzzleSlotResultRow[]>(
+    `/rest/v1/daily_puzzle_slot_results?select=id,attempt_id,puzzle_id,puzzle_date,user_id,slot_index,tier,slot_title,puzzle_type,raw_score,awarded_points,best_possible_score,slot_max_points,solved,perfect,moves_used,elapsed_seconds,submitted_line,result,completed_at&attempt_id=eq.${encodeURIComponent(attemptId)}&order=slot_index.asc,completed_at.asc,id.asc`,
+    { method: 'GET' },
+  );
+  return rows.map(normalizeDailyPuzzleSlotResult);
+}
+
+async function createDailyPuzzleAttempt(params: {
+  runDate: string;
+  userId: string;
+  username: string | null;
+  setVersion: number;
+}): Promise<DailyPuzzleAttempt> {
+  const rows = await supabaseFetch<DailyPuzzleAttemptRow[]>(
+    '/rest/v1/daily_puzzle_attempts',
+    {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify([{
+        puzzle_date: params.runDate,
+        user_id: params.userId,
+        username: params.username,
+        status: 'started',
+        set_version: params.setVersion,
+        current_slot_index: 1,
+        puzzles_completed: 0,
+        total_score: 0,
+        master_chain_score: 0,
+        review_unlocked: false,
+        result: {},
+      }]),
+    },
+  );
+  const row = rows[0];
+  if (!row) throw new Error('Failed to create daily puzzle attempt.');
+  return normalizeDailyPuzzleAttempt(row, []);
+}
+
+async function persistDailyPuzzleAttempt(attempt: DailyPuzzleAttempt): Promise<DailyPuzzleAttempt> {
+  const rows = await supabaseFetch<DailyPuzzleAttemptRow[]>(
+    '/rest/v1/daily_puzzle_attempts?on_conflict=id',
+    {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation,resolution=merge-duplicates',
+      },
+      body: JSON.stringify([{
+        id: attempt.id,
+        puzzle_date: attempt.puzzleDate,
+        user_id: attempt.userId,
+        username: attempt.username,
+        status: attempt.status,
+        set_version: attempt.setVersion,
+        current_slot_index: attempt.currentSlotIndex,
+        puzzles_completed: attempt.puzzlesCompleted,
+        total_score: attempt.totalScore,
+        master_chain_score: attempt.masterChainScore,
+        completed_at: attempt.completedAt,
+        started_at: attempt.startedAt,
+        updated_at: new Date().toISOString(),
+        review_unlocked: attempt.reviewUnlocked,
+        result: {
+          slots: attempt.result.slots,
+          ...(attempt.result.final ? { final: attempt.result.final } : {}),
+        },
+      }]),
+    },
+  );
+  const row = rows[0];
+  if (!row) throw new Error('Failed to persist daily puzzle attempt.');
+  const slotResults = await listDailyPuzzleSlotResults(row.id);
+  return normalizeDailyPuzzleAttempt(row, slotResults);
+}
+
+async function createDailyPuzzleSlotResult(input: {
+  attempt: DailyPuzzleAttempt;
+  slot: DailyPuzzleSlot;
+  rawScore: number;
+  awardedPoints: number;
+  solved: boolean;
+  perfect: boolean;
+  movesUsed: number;
+  elapsedSeconds: number;
+  submittedLine: Array<Record<string, unknown>>;
+  result: Record<string, unknown>;
+}): Promise<DailyPuzzleSlotResult> {
+  const rows = await supabaseFetch<DailyPuzzleSlotResultRow[]>(
+    '/rest/v1/daily_puzzle_slot_results',
+    {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify([{
+        attempt_id: input.attempt.id,
+        puzzle_id: input.slot.id,
+        puzzle_date: input.attempt.puzzleDate,
+        user_id: input.attempt.userId,
+        slot_index: input.slot.slotIndex,
+        tier: input.slot.tier,
+        slot_title: input.slot.slotTitle,
+        puzzle_type: input.slot.puzzleType,
+        raw_score: input.rawScore,
+        awarded_points: input.awardedPoints,
+        best_possible_score: input.slot.bestPossibleScore ?? 0,
+        slot_max_points: input.slot.slotMaxPoints,
+        solved: input.solved,
+        perfect: input.perfect,
+        moves_used: input.movesUsed,
+        elapsed_seconds: input.elapsedSeconds,
+        submitted_line: input.submittedLine,
+        result: input.result,
+      }]),
+    },
+  );
+  const row = rows[0];
+  if (!row) throw new Error('Failed to persist daily puzzle slot result.');
+  return normalizeDailyPuzzleSlotResult(row);
+}
+
+async function listDailyPuzzleAttemptsForDate(runDate: string): Promise<DailyPuzzleAttempt[]> {
+  const rows = await supabaseFetch<DailyPuzzleAttemptRow[]>(
+    `/rest/v1/daily_puzzle_attempts?select=id,puzzle_date,user_id,username,status,set_version,current_slot_index,puzzles_completed,total_score,master_chain_score,completed_at,started_at,updated_at,review_unlocked,result&puzzle_date=eq.${encodeURIComponent(runDate)}&order=completed_at.asc.nullslast,id.asc`,
+    { method: 'GET' },
+  );
+  if (rows.length === 0) return [];
+  const attemptIds = rows.map((row) => row.id);
+  const idClause = attemptIds.map((id) => `"${id}"`).join(',');
+  const resultRows = await supabaseFetch<DailyPuzzleSlotResultRow[]>(
+    `/rest/v1/daily_puzzle_slot_results?select=id,attempt_id,puzzle_id,puzzle_date,user_id,slot_index,tier,slot_title,puzzle_type,raw_score,awarded_points,best_possible_score,slot_max_points,solved,perfect,moves_used,elapsed_seconds,submitted_line,result,completed_at&attempt_id=in.(${encodeURIComponent(idClause)})&order=slot_index.asc,completed_at.asc,id.asc`,
+    { method: 'GET' },
+  );
+  const resultsByAttempt = new Map<string, DailyPuzzleSlotResult[]>();
+  for (const row of resultRows) {
+    const result = normalizeDailyPuzzleSlotResult(row);
+    const list = resultsByAttempt.get(result.attemptId);
+    if (list) list.push(result);
+    else resultsByAttempt.set(result.attemptId, [result]);
+  }
+  return rows.map((row) => normalizeDailyPuzzleAttempt(row, resultsByAttempt.get(row.id) ?? []));
+}
+
+async function buildDailyPuzzleLeaderboardForDate(runDate: string): Promise<DailyPuzzleLeaderboardEntry[]> {
+  const attempts = await listDailyPuzzleAttemptsForDate(runDate);
+  return buildDailyPuzzleLeaderboard(attempts);
+}
+
+async function getUsernameForUserId(userId: string): Promise<string | null> {
+  const profileRows = await supabaseFetch<Array<{ id: string; username: string | null }>>(
+    `/rest/v1/profiles?select=id,username&id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: 'GET' },
+  );
+  const username = profileRows[0]?.username?.trim();
+  return username || null;
+}
+
 async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
   const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(
     `/rest/v1/daily_fritz_attempts?select=run_date,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=365`,
@@ -2396,6 +2605,304 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to abandon bot match.',
+    });
+  }
+});
+
+app.get('/api/daily-puzzle/today', async (req, res) => {
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    const runDate = getPacificDateKey();
+    const slots = await listDailyPuzzleSlotsForDate(runDate);
+    const leaderboard = await buildDailyPuzzleLeaderboardForDate(runDate);
+    const ready = isDailyPuzzleLadderReady(slots);
+    const attempt = authenticatedUserId ? await getDailyPuzzleAttempt(runDate, authenticatedUserId) : null;
+    const nextAvailableSlotIndex = attempt
+      ? attempt.status === 'completed'
+        ? null
+        : attempt.currentSlotIndex
+      : ready
+        ? 1
+        : null;
+    res.json({
+      ok: true,
+      runDate,
+      setVersion: slots[0]?.setVersion ?? 1,
+      slots,
+      attemptStatus: attempt?.status ?? 'none',
+      attempt,
+      nextAvailableSlotIndex,
+      leaderboardPreview: leaderboard.slice(0, 10),
+      legacySinglePuzzleDay: !ready,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load today’s Daily Puzzle ladder.',
+    });
+  }
+});
+
+app.post('/api/daily-puzzle/start', async (req, res) => {
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const runDate =
+      typeof req.body?.runDate === 'string' && req.body.runDate.trim()
+        ? req.body.runDate.trim()
+        : getPacificDateKey();
+    const slots = await listDailyPuzzleSlotsForDate(runDate);
+    if (!isDailyPuzzleLadderReady(slots)) {
+      res.status(409).json({ error: 'Daily Puzzle ladder is not published for this date yet.', runDate });
+      return;
+    }
+    let attempt = await getDailyPuzzleAttempt(runDate, authenticatedUserId);
+    const username = await getUsernameForUserId(authenticatedUserId);
+    const replayed = Boolean(attempt);
+    if (!attempt) {
+      attempt = await createDailyPuzzleAttempt({
+        runDate,
+        userId: authenticatedUserId,
+        username,
+        setVersion: slots[0].setVersion,
+      });
+    }
+    const activeSlotIndex = attempt.status === 'completed'
+      ? (Math.min(Math.max(attempt.result.slots.length, 1), 3) as DailyPuzzleSlotIndex)
+      : attempt.currentSlotIndex;
+    const activeSlot = slots.find((slot) => slot.slotIndex === activeSlotIndex) ?? slots[slots.length - 1];
+    if (!activeSlot) {
+      res.status(409).json({ error: 'Daily Puzzle ladder content is incomplete.', runDate });
+      return;
+    }
+    res.json({
+      ok: true,
+      runDate,
+      attempt,
+      activeSlot,
+      nextAvailableSlotIndex: attempt.status === 'completed' ? activeSlotIndex : attempt.currentSlotIndex,
+      practiceMode: attempt.reviewUnlocked ? 'review' : 'none',
+      replayed,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to start Daily Puzzle ladder.',
+    });
+  }
+});
+
+app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
+  const attemptId = typeof req.body?.attemptId === 'string' ? req.body.attemptId.trim() : '';
+  const puzzleDate = typeof req.body?.puzzleDate === 'string' ? req.body.puzzleDate.trim() : '';
+  const puzzleId = typeof req.body?.puzzleId === 'string' ? req.body.puzzleId.trim() : '';
+  const slotIndexRaw = Number(req.body?.slotIndex);
+  const rawScore = Number(req.body?.rawScore);
+  const movesUsed = Number(req.body?.movesUsed);
+  const elapsedSeconds = Number(req.body?.elapsedSeconds);
+  const submittedLine = Array.isArray(req.body?.submittedLine)
+    ? (req.body.submittedLine as Array<Record<string, unknown>>)
+    : [];
+  const clientResult =
+    req.body?.clientResult && typeof req.body.clientResult === 'object'
+      ? (req.body.clientResult as Record<string, unknown>)
+      : {};
+
+  if (!attemptId || !puzzleDate || !puzzleId || !Number.isInteger(slotIndexRaw)) {
+    res.status(400).json({ error: 'attemptId, puzzleDate, puzzleId, and slotIndex are required.' });
+    return;
+  }
+  if (!Number.isFinite(rawScore) || !Number.isFinite(movesUsed) || !Number.isFinite(elapsedSeconds)) {
+    res.status(400).json({ error: 'rawScore, movesUsed, and elapsedSeconds are required.' });
+    return;
+  }
+
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const attempt = await getDailyPuzzleAttemptById(attemptId, authenticatedUserId);
+    if (!attempt) {
+      res.status(404).json({ error: 'Daily Puzzle attempt not found.' });
+      return;
+    }
+    if (attempt.puzzleDate !== puzzleDate) {
+      res.status(400).json({ error: 'Daily Puzzle run date does not match this attempt.' });
+      return;
+    }
+    if (attempt.status === 'completed') {
+      res.status(409).json({ error: 'Daily Puzzle attempt is already completed.' });
+      return;
+    }
+    const slotIndex = slotIndexRaw === 2 || slotIndexRaw === 3 ? slotIndexRaw : 1;
+    const existing = attempt.result.slots.find((slot) => slot.slotIndex === slotIndex);
+    if (existing) {
+      const slots = await listDailyPuzzleSlotsForDate(attempt.puzzleDate);
+      const ladderCompleted = attempt.result.slots.length >= 3;
+      const nextSlot = slots.find((slot) => slot.slotIndex === attempt.currentSlotIndex) ?? null;
+      res.json({
+        ok: true,
+        runDate: attempt.puzzleDate,
+        attempt,
+        slotResult: existing,
+        nextAvailableSlotIndex: ladderCompleted ? null : (attempt.currentSlotIndex as 2 | 3 | null),
+        nextSlot,
+        ladderCompleted,
+        requiresCompleteCall: ladderCompleted,
+        replayed: true,
+      });
+      return;
+    }
+    if (slotIndex !== attempt.currentSlotIndex) {
+      res.status(409).json({ error: 'Daily Puzzle slot order is invalid.' });
+      return;
+    }
+    const slots = await listDailyPuzzleSlotsForDate(attempt.puzzleDate);
+    if (!isDailyPuzzleLadderReady(slots)) {
+      res.status(409).json({ error: 'Daily Puzzle ladder is not published for this date yet.' });
+      return;
+    }
+    const slot = slots.find((entry) => entry.slotIndex === slotIndex && entry.id === puzzleId);
+    if (!slot) {
+      res.status(404).json({ error: 'Daily Puzzle slot not found for this date.' });
+      return;
+    }
+    const bestPossibleScore = slot.bestPossibleScore ?? 0;
+    const awardedPoints = calculateDailyPuzzleAwardedPoints(rawScore, bestPossibleScore, slot.slotMaxPoints);
+    const solved = rawScore > 0;
+    const perfect = bestPossibleScore > 0 && rawScore >= bestPossibleScore;
+    const slotResult = await createDailyPuzzleSlotResult({
+      attempt,
+      slot,
+      rawScore: Math.max(0, Math.round(rawScore)),
+      awardedPoints,
+      solved,
+      perfect,
+      movesUsed: Math.max(0, Math.round(movesUsed)),
+      elapsedSeconds: Math.max(0, Math.round(elapsedSeconds)),
+      submittedLine,
+      result: clientResult,
+    });
+    const nextCurrentSlotIndex = Math.min(3, slot.slotIndex + 1) as DailyPuzzleSlotIndex;
+    const nextAttempt: DailyPuzzleAttempt = {
+      ...attempt,
+      currentSlotIndex: nextCurrentSlotIndex,
+      puzzlesCompleted: Math.min(3, attempt.puzzlesCompleted + 1),
+      totalScore: attempt.totalScore + slotResult.awardedPoints,
+      masterChainScore:
+        slot.slotIndex === 3 ? slotResult.awardedPoints : attempt.masterChainScore,
+      updatedAt: new Date().toISOString(),
+      result: {
+        ...attempt.result,
+        slots: [...attempt.result.slots, slotResult].sort((a, b) => a.slotIndex - b.slotIndex),
+      },
+    };
+    const saved = await persistDailyPuzzleAttempt(nextAttempt);
+    const ladderCompleted = saved.result.slots.length >= 3;
+    const nextSlot = ladderCompleted
+      ? null
+      : slots.find((entry) => entry.slotIndex === saved.currentSlotIndex) ?? null;
+    res.json({
+      ok: true,
+      runDate: saved.puzzleDate,
+      attempt: saved,
+      slotResult,
+      nextAvailableSlotIndex: ladderCompleted ? null : saved.currentSlotIndex,
+      nextSlot,
+      ladderCompleted,
+      requiresCompleteCall: ladderCompleted,
+      replayed: false,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to submit Daily Puzzle slot.',
+    });
+  }
+});
+
+app.post('/api/daily-puzzle/complete', async (req, res) => {
+  const attemptId = typeof req.body?.attemptId === 'string' ? req.body.attemptId.trim() : '';
+  const puzzleDate = typeof req.body?.puzzleDate === 'string' ? req.body.puzzleDate.trim() : '';
+  if (!attemptId || !puzzleDate) {
+    res.status(400).json({ error: 'attemptId and puzzleDate are required.' });
+    return;
+  }
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const attempt = await getDailyPuzzleAttemptById(attemptId, authenticatedUserId);
+    if (!attempt) {
+      res.status(404).json({ error: 'Daily Puzzle attempt not found.' });
+      return;
+    }
+    if (attempt.puzzleDate !== puzzleDate) {
+      res.status(400).json({ error: 'Daily Puzzle run date does not match this attempt.' });
+      return;
+    }
+    if (attempt.result.slots.length < 3) {
+      res.status(409).json({ error: 'Daily Puzzle ladder is not complete yet.' });
+      return;
+    }
+    let saved = attempt;
+    let replayed = false;
+    if (attempt.status === 'completed') {
+      replayed = true;
+    } else {
+      saved = await persistDailyPuzzleAttempt({
+        ...attempt,
+        status: 'completed',
+        completedAt: new Date().toISOString(),
+        reviewUnlocked: true,
+        updatedAt: new Date().toISOString(),
+        result: {
+          ...attempt.result,
+          final: {
+            puzzlesCompleted: attempt.puzzlesCompleted,
+            totalScore: attempt.totalScore,
+            masterChainScore: attempt.masterChainScore,
+            completedAt: new Date().toISOString(),
+          },
+        },
+      });
+    }
+    const leaderboard = await buildDailyPuzzleLeaderboardForDate(saved.puzzleDate);
+    const leaderboardRank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
+    res.json({
+      ok: true,
+      runDate: saved.puzzleDate,
+      attempt: saved,
+      leaderboardRank,
+      leaderboardPreview: leaderboard.slice(0, 10),
+      replayed,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to complete Daily Puzzle ladder.',
+    });
+  }
+});
+
+app.get('/api/daily-puzzle/leaderboard', async (req, res) => {
+  const runDate =
+    typeof req.query.date === 'string' && req.query.date.trim()
+      ? req.query.date.trim()
+      : getPacificDateKey();
+  try {
+    const rows = await buildDailyPuzzleLeaderboardForDate(runDate);
+    res.json({
+      ok: true,
+      runDate,
+      rows,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load Daily Puzzle leaderboard.',
     });
   }
 });

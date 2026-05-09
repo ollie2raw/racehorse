@@ -1,0 +1,276 @@
+import './loadEnv';
+import {
+  computeBestPossiblePuzzleScore,
+  createHighScorePuzzle,
+  generateSetupAndStrikePuzzle,
+  validateSetupAndStrikeGeneratedPuzzle,
+} from './generatePuzzles';
+
+type LadderSlotGenerationProfile = {
+  slotIndex: 1 | 2 | 3;
+  tier: 'quick_line' | 'tactical_setup' | 'master_chain';
+  slotTitle: string;
+  slotMaxPoints: number;
+  targetHandSizeRange: [number, number];
+  targetBestScoreRange?: [number, number];
+  preferredPuzzleTypes: ('one_turn_high_score' | 'setup_and_strike')[];
+};
+
+const LADDER_PROFILES: LadderSlotGenerationProfile[] = [
+  {
+    slotIndex: 1,
+    tier: 'quick_line',
+    slotTitle: 'Quick Line',
+    slotMaxPoints: 150,
+    targetHandSizeRange: [3, 4],
+    targetBestScoreRange: [25, 50],
+    preferredPuzzleTypes: ['one_turn_high_score'],
+  },
+  {
+    slotIndex: 2,
+    tier: 'tactical_setup',
+    slotTitle: 'Tactical Setup',
+    slotMaxPoints: 250,
+    targetHandSizeRange: [5, 6],
+    targetBestScoreRange: [35, 75],
+    preferredPuzzleTypes: ['setup_and_strike', 'one_turn_high_score'],
+  },
+  {
+    slotIndex: 3,
+    tier: 'master_chain',
+    slotTitle: 'Master Chain',
+    slotMaxPoints: 400,
+    targetHandSizeRange: [8, 10],
+    preferredPuzzleTypes: ['one_turn_high_score'],
+  },
+];
+
+type CuratedDailyPuzzle = ReturnType<typeof createHighScorePuzzle>;
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function getPacificDateKey(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function parseCliArgs(argv: string[]): { date: string } {
+  const dateArgIndex = argv.findIndex((value) => value === '--date');
+  const date =
+    dateArgIndex >= 0 && typeof argv[dateArgIndex + 1] === 'string'
+      ? argv[dateArgIndex + 1]
+      : getPacificDateKey();
+  if (!isIsoDate(date)) {
+    throw new Error(`Invalid --date value: ${date}`);
+  }
+  return { date };
+}
+
+function clonePuzzleForDate(
+  puzzle: CuratedDailyPuzzle,
+  date: string,
+  title: string,
+): CuratedDailyPuzzle {
+  return {
+    ...puzzle,
+    id: `${puzzle.id}-${title.toLowerCase().replace(/\s+/g, '-')}`,
+    puzzleDate: date,
+    title,
+  };
+}
+
+function summarizeErrors(errors: string[]): string {
+  const counts = new Map<string, number>();
+  for (const error of errors) {
+    counts.set(error, (counts.get(error) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([message, count]) => `${count}x ${message}`)
+    .join(' | ');
+}
+
+function choosePuzzleForSlot(
+  date: string,
+  profile: LadderSlotGenerationProfile,
+): {
+  puzzle: CuratedDailyPuzzle;
+  bestPossibleScore: number;
+  attemptsTried: number;
+  strategy: string;
+} {
+  const errors: string[] = [];
+  let attemptsTried = 0;
+
+  for (const puzzleType of profile.preferredPuzzleTypes) {
+    const maxAttempts = puzzleType === 'setup_and_strike' ? 100 : 2000;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      attemptsTried += 1;
+      try {
+        let puzzle: CuratedDailyPuzzle;
+
+        // Ladder-specific score targets
+        let minScore = 35; // Default global MIN_BEST_SCORE
+        if (profile.slotIndex === 1) minScore = 15;
+        else if (profile.slotIndex === 2) minScore = 25;
+
+        if (puzzleType === 'setup_and_strike') {
+          puzzle = generateSetupAndStrikePuzzle(
+            `${date}:slot${profile.slotIndex}`,
+            attempt,
+            profile.targetHandSizeRange[0],
+            profile.targetHandSizeRange[1],
+            minScore,
+          );
+        } else {
+          puzzle = createHighScorePuzzle(
+            `${date}:slot${profile.slotIndex}`,
+            attempt,
+            profile.targetHandSizeRange[0],
+            profile.targetHandSizeRange[1],
+            minScore,
+          );
+        }
+
+        const bestPossibleScore = computeBestPossiblePuzzleScore(puzzle);
+
+        // Ladder-specific validation (moved from global generator)
+        const handSize = puzzle.startingHand.length;
+        const [minH, maxH] = profile.targetHandSizeRange;
+        if (handSize < minH || handSize > maxH) continue;
+
+        // If specific target range is defined in profile, try to stay within it
+        if (profile.targetBestScoreRange) {
+          const [min, max] = profile.targetBestScoreRange;
+          if (bestPossibleScore < min || bestPossibleScore > max) {
+            // Keep trying if we have attempts left
+            if (attempt < maxAttempts - 20) {
+              continue;
+            }
+          }
+        }
+
+        return {
+          puzzle: clonePuzzleForDate(puzzle, date, profile.slotTitle),
+          bestPossibleScore,
+          attemptsTried,
+          strategy: puzzleType,
+        };
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  throw new Error(
+    `Unable to generate ${profile.slotTitle} candidate after ${attemptsTried} attempts. ${summarizeErrors(errors)}`,
+  );
+}
+
+async function postgrestFetch(path: string, init?: RequestInit): Promise<Response> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!supabaseUrl) throw new Error('SUPABASE_URL is required.');
+  if (!serviceKey) throw new Error('SUPABASE_SERVICE_KEY is required.');
+  return fetch(new URL(path, supabaseUrl), {
+    ...init,
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=representation',
+      ...(init?.headers ?? {}),
+    },
+  });
+}
+
+async function upsertSlot(
+  date: string,
+  config: {
+    slotIndex: number;
+    slotTitle: string;
+    tier: string;
+    slotMaxPoints: number;
+    puzzleType: string;
+  },
+  puzzle: CuratedDailyPuzzle,
+  bestPossibleScore: number,
+): Promise<void> {
+  const response = await postgrestFetch(
+    '/rest/v1/daily_puzzles?on_conflict=puzzle_date,slot_index,set_version',
+    {
+      method: 'POST',
+      body: JSON.stringify([{
+        puzzle_date: date,
+        title: config.slotTitle,
+        starting_board: puzzle.startingBoard,
+        starting_hand: puzzle.startingHand,
+        max_moves: puzzle.maxMoves,
+        target_score: puzzle.targetScore,
+        puzzle_type: puzzle.puzzleType,
+        deal_size: puzzle.dealSize,
+        slot_index: config.slotIndex,
+        slot_title: config.slotTitle,
+        tier: config.tier,
+        slot_max_points: config.slotMaxPoints,
+        objective_type: puzzle.puzzleType,
+        objective_payload: {
+          best_possible_score: bestPossibleScore,
+        },
+        set_version: 1,
+        published: true,
+      }]),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to upsert slot ${config.slotIndex}: ${response.status} ${await response.text()}`);
+  }
+}
+
+async function main(): Promise<void> {
+  const { date } = parseCliArgs(process.argv.slice(2));
+  const results = [];
+
+  for (const profile of LADDER_PROFILES) {
+    const result = choosePuzzleForSlot(date, profile);
+    await upsertSlot(
+      date,
+      {
+        slotIndex: profile.slotIndex,
+        slotTitle: profile.slotTitle as any,
+        tier: profile.tier,
+        slotMaxPoints: profile.slotMaxPoints,
+        puzzleType: result.puzzle.puzzleType,
+      },
+      result.puzzle,
+      result.bestPossibleScore,
+    );
+    results.push({
+      ...result,
+      profile,
+    });
+  }
+
+  console.log(`Daily Puzzle Ladder seeded for ${date}`);
+  for (const res of results) {
+    const handSize = res.puzzle.startingHand.length;
+    console.log(
+      `slot ${res.profile.slotIndex} | ${res.profile.slotTitle} | ${res.puzzle.puzzleType} | hand=${handSize} | best=${res.bestPossibleScore} | attempts=${res.attemptsTried} | strategy=${res.strategy}`,
+    );
+  }
+}
+
+if (require.main === module) {
+  void main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exitCode = 1;
+  });
+}

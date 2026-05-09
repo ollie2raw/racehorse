@@ -15,12 +15,13 @@ import {
   getDailyPuzzleByDateSeed,
   getDailyPuzzleForDate,
   getLocalDateKey,
+  getTodayDailyPuzzleLadder,
   normalizeDateInputToLocalKey,
   type DailyPuzzleLeaderboardEntry,
   upsertDailyPuzzleCompletion,
   upsertDailyPuzzleBestScore,
 } from './api';
-import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
+import type { CuratedDailyPuzzle, DailyPuzzleTodayResponse, PuzzleValidationResult } from './types';
 import LayoutScreen from '../ui/LayoutScreen';
 import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import {
@@ -29,6 +30,7 @@ import {
   ClaudeSectionLabel,
   ClaudeStatLine,
 } from '../ui/claudeMode';
+import DailyPuzzleLadderScreen from './DailyPuzzleLadderScreen';
 import './dailyPuzzle.css';
 
 interface DailyPuzzleScreenProps {
@@ -288,6 +290,10 @@ export default function DailyPuzzleScreen({
   const [selectedDateSeed, setSelectedDateSeed] = useState(localDateKey);
   const [archiveDateInput, setArchiveDateInput] = useState(localDateKey);
   const [puzzle, setPuzzle] = useState<CuratedDailyPuzzle | null>(null);
+  const [ladderToday, setLadderToday] = useState<DailyPuzzleTodayResponse | null>(null);
+  const [entryMode, setEntryMode] = useState<'checking' | 'legacy' | 'ladder'>(
+    selectedDateSeed === localDateKey ? 'checking' : 'legacy',
+  );
   const [validation, setValidation] = useState<PuzzleValidationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -338,6 +344,37 @@ export default function DailyPuzzleScreen({
   const displayDateSeed = puzzle?.puzzleDate ?? (showLobby ? archiveTargetDate : selectedDateSeed);
   const formattedDisplayDate = formatPuzzleDateLabel(displayDateSeed);
   const selectedPuzzleReady = puzzle?.puzzleDate === selectedDateSeed;
+
+  useEffect(() => {
+    if (selectedDateSeed !== localDateKey) {
+      setEntryMode('legacy');
+      setLadderToday(null);
+      return;
+    }
+    let cancelled = false;
+    setEntryMode('checking');
+    void (async () => {
+      try {
+        const todayResponse = await getTodayDailyPuzzleLadder();
+        if (cancelled) return;
+        if (!todayResponse.legacySinglePuzzleDay && todayResponse.slots.length === 3) {
+          setLadderToday(todayResponse);
+          setEntryMode('ladder');
+          return;
+        }
+        setLadderToday(todayResponse);
+        setEntryMode('legacy');
+      } catch {
+        if (!cancelled) {
+          setLadderToday(null);
+          setEntryMode('legacy');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [localDateKey, selectedDateSeed]);
 
   const flashLastPlayed = useCallback((tile: Tile | null) => {
     if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
@@ -531,6 +568,11 @@ export default function DailyPuzzleScreen({
   }, []);
 
   useEffect(() => {
+    if (entryMode === 'checking') return;
+    if (entryMode === 'ladder' && selectedDateSeed === localDateKey) {
+      setLoading(false);
+      return;
+    }
     const loadKey = selectedDateSeed;
     if (loadInFlightKeyRef.current === loadKey) {
       if (import.meta.env.DEV) {
@@ -658,7 +700,7 @@ export default function DailyPuzzleScreen({
         loadInFlightKeyRef.current = null;
       }
     };
-  }, [selectedDateSeed, localDateKey, timezone, refreshLeaderboard, isArchiveMode]);
+  }, [entryMode, selectedDateSeed, localDateKey, timezone, refreshLeaderboard, isArchiveMode]);
 
   useEffect(() => {
     if (!puzzle) return;
@@ -1017,6 +1059,28 @@ export default function DailyPuzzleScreen({
       },
     ];
   }, [currentLeaderboardRow, leaderboard]);
+
+  if (entryMode === 'checking' && selectedDateSeed === localDateKey) {
+    return (
+      <LayoutScreen
+        className="screen lobby-screen mode-home-screen"
+        title={stableDailyTitle}
+        subtitle="Loading today’s puzzle mode..."
+        contentClassName="screen-shell"
+      />
+    );
+  }
+
+  if (entryMode === 'ladder' && ladderToday && selectedDateSeed === localDateKey) {
+    return (
+      <DailyPuzzleLadderScreen
+        user={user}
+        profile={profile}
+        initialToday={ladderToday}
+        onBack={onBack}
+      />
+    );
+  }
 
   if (loading) {
     return (

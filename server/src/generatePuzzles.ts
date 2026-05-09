@@ -697,18 +697,21 @@ function pickTacticalMove(state: GameState, dateSeed: string, attempt: number): 
 function buildMidHandPuzzleState(
   dateSeed: string,
   attempt: number,
+  targetMinHandSize: number = 8,
 ): { board: BoardState; hand: Tile[] } {
   const minTurns = 12;
-  const maxTurns = 140;
+  const maxTurns = 200;
   const minBoardTiles = 8;
   const minOptions = 4;
-  const minHandSize = 8;
+  const minHandSize = targetMinHandSize;
 
   let state = makeSimState(dateSeed, attempt);
 
   for (let turn = 0; turn < maxTurns; turn += 1) {
     if (state.handOver || state.gameOver) {
-      throw new Error('Simulation ended before finding a tactical state.');
+      // Re-start sim if it ended too early
+      state = makeSimState(`${dateSeed}:retry`, attempt + turn);
+      continue;
     }
 
     const currentId = state.playerIds[state.currentPlayerIndex];
@@ -730,23 +733,25 @@ function buildMidHandPuzzleState(
     };
   }
 
-  throw new Error('Could not synthesize tactical mid-hand puzzle state.');
+  throw new Error(`Could not synthesize tactical mid-hand puzzle state (target hand ${targetMinHandSize}).`);
 }
 
 function buildSetupMidHandPuzzleState(
   dateSeed: string,
   attempt: number,
+  targetMinHandSize: number = 6,
 ): { board: BoardState; hand: Tile[]; setupTile: Tile; strikeTile: Tile } {
   const minTurns = 8;
   const maxTurns = 220;
   const minBoardTiles = 6;
-  const minHandSize = 6;
+  const minHandSize = targetMinHandSize;
 
   let state = makeSimState(dateSeed, attempt);
 
   for (let turn = 0; turn < maxTurns; turn += 1) {
     if (state.handOver || state.gameOver) {
-      throw new Error('Simulation ended before finding a setup state.');
+      state = makeSimState(`${dateSeed}:retry-setup`, attempt + turn);
+      continue;
     }
 
     const currentId = state.playerIds[state.currentPlayerIndex];
@@ -775,18 +780,25 @@ function buildSetupMidHandPuzzleState(
     };
   }
 
-  throw new Error('Could not synthesize setup-and-strike mid-hand puzzle state.');
+  throw new Error(`Could not synthesize setup-and-strike mid-hand puzzle state (target hand ${targetMinHandSize}).`);
 }
 
-function findScoringPath(board: BoardState, remainingPool: Tile[], dateSeed: string, attempt: number): Tile[] | null {
+function findScoringPath(
+  board: BoardState,
+  remainingPool: Tile[],
+  dateSeed: string,
+  attempt: number,
+  maxDepth: number = 5,
+  minBestScore: number = MIN_BEST_SCORE,
+): Tile[] | null {
   const searchState = createSearchState(board, remainingPool);
   const memo = new Set<string>();
   const prng = mulberry32(hashString(`${dateSeed}:${attempt}:path`));
 
   const dfs = (state: GameState, doublesUsed: number, depth: number): Tile[] | null => {
     const score = state.players[YOU_ID].score;
-    if (score >= MIN_BEST_SCORE) return [];
-    if (depth >= 5 || state.currentPlayerIndex !== 0) return null;
+    if (score >= minBestScore) return [];
+    if (depth >= maxDepth || state.currentPlayerIndex !== 0) return null;
 
     const key = `${stateKey(state)}:${doublesUsed}:${depth}`;
     if (memo.has(key)) return null;
@@ -824,6 +836,8 @@ function buildHandFromPath(
   pathTiles: Tile[],
   dateSeed: string,
   attempt: number,
+  minHandSize: number = 8,
+  maxHandSize: number = DEAL_SIZE,
 ): Tile[] {
   const prng = mulberry32(hashString(`${dateSeed}:${attempt}:hand`));
   const handPool = remainingPool.map(cloneTile);
@@ -841,15 +855,17 @@ function buildHandFromPath(
   }
 
   const currentDoubles = hand.filter(isDouble).length;
-  const targetHandSize = Math.max(hand.length + 1, randInt(prng, 8, DEAL_SIZE));
-  const desiredDoubleCount = Math.max(1, Math.min(4, Math.max(currentDoubles, randInt(prng, 1, 4))));
+  const targetHandSize = Math.max(hand.length, randInt(prng, minHandSize, maxHandSize));
+  const desiredDoubleCount = Math.max(
+    targetHandSize >= 6 ? 1 : 0,
+    Math.min(4, Math.max(currentDoubles, randInt(prng, targetHandSize >= 6 ? 1 : 0, 4))),
+  );
 
   if (currentDoubles > 4) {
     throw new Error('Path uses too many doubles for the final hand.');
   }
 
   const availableDoubles = handPool.filter(isDouble);
-  const availableNonDoubles = handPool.filter((tile) => !isDouble(tile));
   const doublesNeeded = Math.max(0, desiredDoubleCount - currentDoubles);
 
   if (availableDoubles.length < doublesNeeded) {
@@ -886,26 +902,39 @@ function buildHandFromPath(
   }
   hand.push(...fillers.map(cloneTile));
 
-  if (hand.length < 8 || hand.length > DEAL_SIZE) {
-    throw new Error(`Hand size out of range: ${hand.length}`);
+  if (hand.length < minHandSize || hand.length > maxHandSize) {
+    throw new Error(`Hand size out of range: ${hand.length} (target ${minHandSize}-${maxHandSize})`);
   }
 
   const doubles = hand.filter(isDouble).length;
-  if (doubles < 1 || doubles > 4) {
+  if (hand.length >= 6 && (doubles < 1 || doubles > 4)) {
     throw new Error(`Hand double count out of range: ${doubles}`);
   }
 
   return hand.sort((a, b) => tileKey(a).localeCompare(tileKey(b)));
 }
 
-export function createHighScorePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
+export function createHighScorePuzzle(
+  dateSeed: string,
+  attempt: number,
+  minHandSize?: number,
+  maxHandSize?: number,
+  minBestScore?: number,
+): CuratedDailyPuzzle {
   try {
     const { board, remainingPool } = buildBoard(dateSeed, attempt);
-    const pathTiles = findScoringPath(board, remainingPool, dateSeed, attempt);
+    const pathTiles = findScoringPath(board, remainingPool, dateSeed, attempt, maxHandSize, minBestScore);
     if (!pathTiles) {
       throw new Error('Unable to find high-score path.');
     }
-    const hand = buildHandFromPath(remainingPool, pathTiles, dateSeed, attempt);
+    const hand = buildHandFromPath(
+      remainingPool,
+      pathTiles,
+      dateSeed,
+      attempt,
+      minHandSize,
+      maxHandSize,
+    );
     const puzzle: CuratedDailyPuzzle = {
       id: `generated-${dateSeed}`,
       puzzleDate: dateSeed,
@@ -918,23 +947,48 @@ export function createHighScorePuzzle(dateSeed: string, attempt: number): Curate
       dealSize: DEAL_SIZE,
     };
 
-    validateGeneratedPuzzle(puzzle);
+    validateGeneratedPuzzle(puzzle, minHandSize, maxHandSize, minBestScore);
     return puzzle;
-  } catch {
-    const fallback = buildMidHandPuzzleState(dateSeed, attempt);
+  } catch (err) {
+    const fallback = buildMidHandPuzzleState(dateSeed, attempt, minHandSize);
+
+    // Attempt to slice the fallback hand if minHandSize is small
+    let finalHand = fallback.hand;
+    if (minHandSize !== undefined && maxHandSize !== undefined && fallback.hand.length > maxHandSize) {
+      const prng = mulberry32(hashString(`${dateSeed}:${attempt}:fallback-slice`));
+      const playableIndices = getLegalMoves(createSearchState(fallback.board, fallback.hand), YOU_ID)
+        .filter((m): m is PlayMove => m.type === 'play')
+        .map((m) => fallback.hand.findIndex((t) => tileKey(t) === tileKey(m.tile)))
+        .filter((idx) => idx >= 0);
+
+      const mustKeepIdx =
+        playableIndices.length > 0
+          ? playableIndices[randInt(prng, 0, playableIndices.length - 1)]
+          : 0;
+      const otherIndices = Array.from({ length: fallback.hand.length }, (_, i) => i).filter(
+        (i) => i !== mustKeepIdx,
+      );
+      const shuffledOthers = sampleWithoutReplacement(otherIndices, otherIndices.length, prng);
+      const keepCount = randInt(prng, minHandSize, maxHandSize);
+      const indicesToKeep = [mustKeepIdx, ...shuffledOthers.slice(0, keepCount - 1)].sort(
+        (a, b) => a - b,
+      );
+      finalHand = indicesToKeep.map((i) => fallback.hand[i]);
+    }
+
     const puzzle: CuratedDailyPuzzle = {
       id: `generated-${dateSeed}`,
       puzzleDate: dateSeed,
       title: null,
       startingBoard: fallback.board,
-      startingHand: fallback.hand,
+      startingHand: finalHand,
       maxMoves: 1,
       targetScore: 999,
       puzzleType: 'one_turn_high_score',
       dealSize: DEAL_SIZE,
     };
 
-    validateGeneratedPuzzle(puzzle);
+    validateGeneratedPuzzle(puzzle, minHandSize, maxHandSize, minBestScore);
     return puzzle;
   }
 }
@@ -953,6 +1007,8 @@ function buildSetupHand(
   strikeTile: Tile,
   dateSeed: string,
   attempt: number,
+  minHandSize: number = 6,
+  maxHandSize: number = 10,
 ): Tile[] {
   const prng = mulberry32(hashString(`${dateSeed}:${attempt}:setup-hand`));
   const pool = remainingPool.map(cloneTile);
@@ -966,7 +1022,7 @@ function buildSetupHand(
   }
 
   const currentDoubles = hand.filter(isDouble).length;
-  const targetHandSize = randInt(prng, 6, 10);
+  const targetHandSize = randInt(prng, minHandSize, maxHandSize);
   const desiredDoubleCount = Math.max(1, Math.min(2, Math.max(currentDoubles, randInt(prng, 1, 2))));
   const doublesNeeded = Math.max(0, desiredDoubleCount - currentDoubles);
   const availableDoubles = pool.filter(isDouble);
@@ -989,8 +1045,10 @@ function buildSetupHand(
   hand.push(...fillers.map(cloneTile));
 
   const doubles = hand.filter(isDouble).length;
-  if (hand.length < 6 || hand.length > 10) {
-    throw new Error(`Setup hand size out of range: ${hand.length}`);
+  if (hand.length < minHandSize || hand.length > maxHandSize) {
+    throw new Error(
+      `Setup hand size out of range: ${hand.length} (target ${minHandSize}-${maxHandSize})`,
+    );
   }
   if (doubles < 1 || doubles > 2) {
     throw new Error(`Setup hand double count out of range: ${doubles}`);
@@ -1253,6 +1311,8 @@ function buildSetupHandFromExistingHand(
   strikeTile: Tile,
   dateSeed: string,
   attempt: number,
+  minHandSize: number = 6,
+  maxHandSize: number = 10,
 ): Tile[] {
   const prng = mulberry32(hashString(`${dateSeed}:${attempt}:setup-existing-hand`));
   const pool = existingHand.map(cloneTile);
@@ -1270,7 +1330,7 @@ function buildSetupHandFromExistingHand(
     throw new Error('Setup pair uses too many doubles.');
   }
 
-  const targetHandSize = Math.min(pool.length + hand.length, randInt(prng, 6, 10));
+  const targetHandSize = Math.min(pool.length + hand.length, randInt(prng, minHandSize, maxHandSize));
   const desiredDoubleCount = Math.max(1, Math.min(2, Math.max(currentDoubles, randInt(prng, 1, 2))));
   const doublesNeeded = Math.max(0, desiredDoubleCount - currentDoubles);
   const availableDoubles = pool.filter(isDouble);
@@ -1293,8 +1353,10 @@ function buildSetupHandFromExistingHand(
   hand.push(...fillers.map(cloneTile));
 
   const doubles = hand.filter(isDouble).length;
-  if (hand.length < 6 || hand.length > 10) {
-    throw new Error(`Setup hand size out of range: ${hand.length}`);
+  if (hand.length < minHandSize || hand.length > maxHandSize) {
+    throw new Error(
+      `Setup hand size out of range: ${hand.length} (target ${minHandSize}-${maxHandSize})`,
+    );
   }
   if (doubles < 1 || doubles > 2) {
     throw new Error(`Setup hand double count out of range: ${doubles}`);
@@ -1303,7 +1365,13 @@ function buildSetupHandFromExistingHand(
   return hand.sort((a, b) => tileKey(a).localeCompare(tileKey(b)));
 }
 
-function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): CuratedDailyPuzzle {
+export function generateSetupAndStrikePuzzle(
+  dateSeed: string,
+  attempt: number,
+  minHandSize?: number,
+  maxHandSize?: number,
+  minBestScore?: number,
+): CuratedDailyPuzzle {
   try {
     const constructed = buildConstructiveSetupAndStrikeState(dateSeed, attempt);
     const hand = buildSetupHand(
@@ -1312,6 +1380,8 @@ function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): Curate
       constructed.strikeTile,
       dateSeed,
       attempt,
+      minHandSize,
+      maxHandSize,
     );
 
     const puzzle: CuratedDailyPuzzle = {
@@ -1326,7 +1396,7 @@ function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): Curate
       dealSize: DEAL_SIZE,
     };
 
-    validateGeneratedPuzzle(puzzle);
+    validateGeneratedPuzzle(puzzle, minHandSize, maxHandSize, minBestScore);
     return puzzle;
   } catch (error) {
     if (process.env.DEBUG_SETUP_STRIKE === '1' && attempt === 0) {
@@ -1348,6 +1418,8 @@ function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): Curate
       sequence.strikeTile,
       dateSeed,
       attempt,
+      minHandSize,
+      maxHandSize,
     );
 
     const puzzle: CuratedDailyPuzzle = {
@@ -1362,19 +1434,21 @@ function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): Curate
       dealSize: DEAL_SIZE,
     };
 
-    validateGeneratedPuzzle(puzzle);
+    validateGeneratedPuzzle(puzzle, minHandSize, maxHandSize, minBestScore);
     return puzzle;
   } catch (error) {
     if (process.env.DEBUG_SETUP_STRIKE === '1' && attempt === 0) {
       console.error('[setup_and_strike][direct-board] failed:', error);
     }
-    const fallback = buildSetupMidHandPuzzleState(dateSeed, attempt);
+    const fallback = buildSetupMidHandPuzzleState(dateSeed, attempt, minHandSize);
     const hand = buildSetupHandFromExistingHand(
       fallback.hand,
       fallback.setupTile,
       fallback.strikeTile,
       dateSeed,
       attempt,
+      minHandSize,
+      maxHandSize,
     );
 
     const puzzle: CuratedDailyPuzzle = {
@@ -1389,12 +1463,12 @@ function generateSetupAndStrikePuzzle(dateSeed: string, attempt: number): Curate
       dealSize: DEAL_SIZE,
     };
 
-    validateGeneratedPuzzle(puzzle);
+    validateGeneratedPuzzle(puzzle, minHandSize, maxHandSize, minBestScore);
     return puzzle;
   }
 }
 
-function computeBestPossiblePuzzleScore(puzzle: CuratedDailyPuzzle): number {
+export function computeBestPossiblePuzzleScore(puzzle: CuratedDailyPuzzle): number {
   const initialState = createSearchState(puzzle.startingBoard, puzzle.startingHand);
   const memo = new Map<string, number>();
 
@@ -1427,7 +1501,12 @@ function computeBestPossiblePuzzleScore(puzzle: CuratedDailyPuzzle): number {
   return dfs(initialState);
 }
 
-function validateGeneratedPuzzle(puzzle: CuratedDailyPuzzle): { bestScore: number; openEnds: number[] } {
+function validateGeneratedPuzzle(
+  puzzle: CuratedDailyPuzzle,
+  minHandSize: number = 8,
+  maxHandSize: number = DEAL_SIZE,
+  minBestScore: number = MIN_BEST_SCORE,
+): { bestScore: number; openEnds: number[] } {
   const openEnds = getOpenEnds(puzzle.startingBoard).map((end) => end.value);
   const tileCount = countBoardTiles(puzzle.startingBoard);
   const handSize = puzzle.startingHand.length;
@@ -1458,34 +1537,35 @@ function validateGeneratedPuzzle(puzzle: CuratedDailyPuzzle): { bestScore: numbe
     throw new Error(`Board tile count must be 7-24, got ${tileCount}.`);
   }
   if (puzzle.puzzleType === 'one_turn_high_score') {
-    if (handSize < 8 || handSize > DEAL_SIZE) {
-      throw new Error(`Hand size must be 8-${DEAL_SIZE}, got ${handSize}.`);
+    if (handSize < minHandSize || handSize > maxHandSize) {
+      throw new Error(`Hand size must be ${minHandSize}-${maxHandSize}, got ${handSize}.`);
     }
-    if (handDoubles < 1 || handDoubles > 6) {
+    if (handSize >= 6 && (handDoubles < 1 || handDoubles > 6)) {
       throw new Error(`Hand double count must be 1-6, got ${handDoubles}.`);
     }
-    if (optionsAtStart < 4) {
-      throw new Error(`Playable options at start must be >= 4, got ${optionsAtStart}.`);
-    }
-    if (bestScore < MIN_BEST_SCORE) {
-      throw new Error(`Best score ${bestScore} is below ${MIN_BEST_SCORE}.`);
+    if (optionsAtStart < Math.min(4, handSize)) {
+      throw new Error(
+        `Playable options at start must be >= ${Math.min(4, handSize)}, got ${optionsAtStart}.`,
+      );
     }
 
-    // Single-move score check is too strict for sequence-based puzzles (where
-    // a double may open the turn with 0 pts). We rely on bestScore instead.
+    if (bestScore < minBestScore) {
+      throw new Error(`Best score ${bestScore} is below ${minBestScore}.`);
+    }
 
     if (
-      topSingleMoveScore >= MIN_BEST_SCORE &&
+      topSingleMoveScore >= minBestScore &&
       secondSingleMoveScore !== null &&
-      topSingleMoveScore - secondSingleMoveScore < 5
+      topSingleMoveScore - secondSingleMoveScore < 5 &&
+      handSize >= 8
     ) {
       throw new Error(
         `Puzzle is too obvious: top two single-move scores are ${topSingleMoveScore} and ${secondSingleMoveScore}.`,
       );
     }
   } else if (puzzle.puzzleType === 'setup_and_strike') {
-    if (handSize < 6 || handSize > 10) {
-      throw new Error(`Hand size must be 6-10, got ${handSize}.`);
+    if (handSize < minHandSize || handSize > maxHandSize) {
+      throw new Error(`Hand size must be ${minHandSize}-${maxHandSize}, got ${handSize}.`);
     }
     if (handDoubles < 1 || handDoubles > 2) {
       throw new Error(`Hand double count must be 1-2, got ${handDoubles}.`);
@@ -1504,7 +1584,7 @@ function validateGeneratedPuzzle(puzzle: CuratedDailyPuzzle): { bestScore: numbe
   return { bestScore, openEnds };
 }
 
-function validateSetupAndStrikeGeneratedPuzzle(
+export function validateSetupAndStrikeGeneratedPuzzle(
   puzzle: CuratedDailyPuzzle,
 ): { valid: boolean; reason: string; bestScore: number } {
   const initialState = createSearchState(puzzle.startingBoard, puzzle.startingHand);

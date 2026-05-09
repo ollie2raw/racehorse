@@ -13,59 +13,293 @@
   pointer-events: none;
 }
 
+.daily-ladder-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.daily-ladder-slot-card {
+  position: relative;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(18, 26, 40, 0.94), rgba(12, 17, 28, 0.98));
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  min-height: 200px;
+}
+
+.daily-ladder-slot-card.is-available {
+  border-color: rgba(240, 192, 64, 0.35);
+  background: linear-gradient(180deg, rgba(28, 36, 54, 0.94), rgba(16, 22, 36, 0.98));
+  box-shadow: 0 16px 40px rgba(240, 192, 64, 0.1);
+  transform: translateY(-2px);
+}
+
+.daily-ladder-slot-card.is-available::after {
+  content: 'ACTIVE';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(240, 192, 64, 0.15);
+  color: #f0c040;
+  border: 1px solid rgba(240, 192, 64, 0.2);
+}
+
+.daily-ladder-slot-card.is-complete {
+  border-color: rgba(104, 226, 166, 0.2);
+  background: linear-gradient(180deg, rgba(14, 28, 22, 0.94), rgba(9, 18, 14, 0.98));
+}
+
+.daily-ladder-slot-card.is-locked {
+  opacity: 0.5;
+  filter: grayscale(0.4);
+}
+
+.daily-ladder-slot-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.daily-ladder-slot-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.daily-ladder-slot-points {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f0c040;
+}
+
+.daily-ladder-slot-status {
+  margin-top: auto;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.is-complete .daily-ladder-slot-status {
+  color: #68e2a6;
+}
+
+.daily-ladder-slot-card strong {
+  color: #fff;
+  font-family: "Barlow Condensed", system-ui, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.daily-ladder-slot-card p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 1024px) {
+  .daily-ladder-card-grid {
+    grid-template-columns: 1fr;
+  }
+  .daily-ladder-slot-card {
+    min-height: auto;
+  }
+}
+
+.daily-ladder-practice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.daily-ladder-summary-card {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 24px;
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.daily-ladder-summary-card .claude-mode-stat-line {
+  padding: 12px 0;
+}
+
+.daily-ladder-summary-card .claude-mode-stat-line:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.daily-ladder-summary-card .claude-mode-stat-line span:last-child {
+  font-size: 20px;
+}
+
+.daily-dash-header {
+  max-width: 800px;
+}
+
+.daily-dash-title {
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.daily-dash-subtitle {
+  font-size: 18px;
+  opacity: 0.7;
+}
+
+.daily-ladder-board {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-ladder-board-head,
+.daily-ladder-board-row {
+  display: grid;
+  grid-template-columns: 56px minmax(150px, 1fr) 90px 90px 100px minmax(180px, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.daily-ladder-board-head {
+  color: rgba(197, 214, 225, 0.75);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 12px 8px;
+}
+
+.daily-ladder-board-row {
+  min-height: 56px;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(236, 252, 245, 0.09);
+  background: rgba(9, 15, 25, 0.6);
+}
+
+.daily-ladder-board-row.is-current-user {
+  border-color: rgba(240, 192, 64, 0.42);
+  box-shadow: 0 10px 30px rgba(240, 192, 64, 0.12);
+}
+
+.daily-ladder-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.daily-ladder-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(236, 252, 245, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(235, 245, 242, 0.92);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+
 .daily-puzzle-screen .daily-top-rail {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 12px;
-  padding: 0 8px;
+  gap: 20px;
+  padding: 12px 24px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .daily-puzzle-screen .daily-hud-pill {
-  width: min(220px, calc(100vw - 20px));
-  min-height: 64px;
-  border-radius: 18px;
-  padding: 8px 14px 7px;
+  width: auto;
+  min-width: 160px;
+  min-height: 58px;
+  border-radius: 14px;
+  padding: 8px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.daily-puzzle-screen .daily-hud-pill .wl-player-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 2px;
 }
 
 .daily-puzzle-screen .daily-hud-pill .wl-player-score {
-  font-size: 2rem;
-  line-height: 1.1;
-  letter-spacing: 0.04em;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 2.2rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
   font-weight: 800;
+  color: #fff;
 }
 
 .daily-puzzle-screen .daily-top-rail > .daily-hud-pill:first-child {
   justify-self: start;
 }
 
-.daily-puzzle-screen .daily-right-cluster {
-  justify-self: end;
+.daily-puzzle-screen .daily-center-zone {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  width: auto;
+  gap: 4px;
 }
 
-.daily-puzzle-screen .wl-center-status {
-  position: relative;
-  text-align: center;
-  justify-self: center;
+.daily-puzzle-screen .wl-turn-label.your-turn {
+  background: #f0c040;
+  color: #000;
+  font-weight: 850;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
 }
 
-.daily-runtime-instruction {
-  display: block;
-  margin-top: 4px;
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: rgba(223, 236, 244, 0.74);
-}
-
-.daily-puzzle-screen .daily-controls-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.daily-puzzle-screen .wl-room-code {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
 }
 
 .daily-puzzle-screen .daily-top-actions-pill {
@@ -73,59 +307,53 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
   border-radius: 12px;
-  padding: 8px 12px;
+  padding: 6px 12px;
 }
 
 .daily-puzzle-screen .daily-chip-control {
-  height: 28px;
-  min-height: 28px;
-  padding: 4px 8px;
-  border-radius: 10px;
-  font-size: 0.6rem;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.daily-puzzle-screen .daily-chip-control:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.daily-puzzle-screen .wl-stage-shell {
+  padding-top: 20px;
+}
+
+.daily-puzzle-screen .wl-hand-area {
+  padding-bottom: 24px;
 }
 
 @media (max-width: 900px) {
   .daily-puzzle-screen .daily-top-rail {
     grid-template-columns: 1fr;
-    gap: 6px;
+    gap: 12px;
+    padding: 12px;
   }
-
-  .daily-puzzle-screen .daily-right-cluster {
+  
+  .daily-puzzle-screen .daily-hud-pill:first-child {
     justify-self: center;
-    flex-wrap: wrap;
-    justify-content: center;
   }
 
-  .daily-puzzle-screen .daily-controls-right {
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-
-  .daily-leaderboard-head-page,
-  .daily-leaderboard-row.is-page {
-    grid-template-columns: 56px minmax(180px, 1fr) 100px 84px 84px;
-    gap: 14px;
-  }
-
-  .daily-leaderboard-row.is-page {
-    height: 58px;
-    min-height: 58px;
-    padding: 0 18px;
-  }
-
-  .daily-leaderboard-avatar {
-    width: 30px;
-    height: 30px;
-  }
-
-  .daily-leaderboard-name-text {
-    font-size: 0.96rem;
+  .daily-puzzle-screen .daily-top-actions-pill {
+    justify-self: center;
   }
 }
 
@@ -1804,4 +2032,3 @@
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-
