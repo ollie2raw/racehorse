@@ -47,6 +47,7 @@ import {
   saveFrozenLesson,
   loadFrozenLesson,
 } from './learn/guidedAuthoring';
+import RacehorseHomeScreen from './experimental/RacehorseHomeScreen';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -2725,6 +2726,10 @@ export default function App() {
       return false;
     }
   })();
+
+  if (typeof window !== 'undefined' && (window.location.pathname === '/redesign' || window.location.pathname === '/') && appMode === 'home') {
+    return <RacehorseHomeScreen setAppMode={setAppMode} onOpenAuth={() => setAuthModalOpen(true)} />;
+  }
 
   if (appMode === 'noBrainer') {
     return (
