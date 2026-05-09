@@ -6,6 +6,8 @@ import { useAuth } from '../auth/useAuth';
 import { fetchFriends } from '../friends/friendsApi';
 import { getTodayDailyFritz } from '../dailyFritz/api';
 import { getTodayDailyPuzzleLadder } from '../dailyPuzzle/api';
+import { supabase } from '../lib/supabase';
+import './RacehorseHomeArt.css';
 
 type AppMode =
   | 'home'
@@ -26,63 +28,68 @@ type AppMode =
   | 'tournament';
 
 const WEEK_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
-function computeStreakDays() {
-  const dow = new Date().getDay(); // 0=Sun
-  const todayIdx = dow === 0 ? 6 : dow - 1; // 0=Mon..6=Sun
-  return WEEK_LABELS.map((label, i) => ({
-    label,
-    state: i < todayIdx ? ('done' as const) : i === todayIdx ? ('today' as const) : ('future' as const),
-  }));
+
+/** Returns a local YYYY-MM-DD string (avoids UTC-shift bugs from toISOString). */
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const tabs: { label: string; color: string; icon: 'horse' | 'users' | 'ghost' | 'cap' | 'trophy'; mode: AppMode }[] = [
-  { label: 'Play vs Fritz', color: '#C8922A', icon: 'horse', mode: 'botSetup' },
+/**
+ * Builds the 7-day week strip from actual Supabase play dates.
+ * Days not in `playedDates` show as empty — no fake checkmarks.
+ */
+function computeStreakDays(playedDates: Set<string>) {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun
+  const todayIdx = dow === 0 ? 6 : dow - 1; // 0=Mon … 6=Sun
+
+  return WEEK_LABELS.map((label, i) => {
+    if (i > todayIdx) return { label, state: 'future' as const };
+    if (i === todayIdx) return { label, state: 'today' as const };
+
+    // Past day this week — check if actually played
+    const d = new Date(today);
+    d.setDate(today.getDate() - (todayIdx - i));
+    return {
+      label,
+      state: playedDates.has(localDateStr(d)) ? ('done' as const) : ('future' as const),
+    };
+  });
+}
+
+const tabs: { label: string; color: string; icon: 'robot' | 'users' | 'ghost' | 'cap' | 'trophy'; mode: AppMode }[] = [
+  { label: 'Play vs Fritz', color: '#C8922A', icon: 'robot', mode: 'botSetup' },
   { label: 'Multiplayer', color: '#4A8FD4', icon: 'users', mode: 'multiplayer' },
   { label: 'Ghost Mode', color: '#8B5CF6', icon: 'ghost', mode: 'ghostSetup' },
   { label: 'Learn', color: '#10B981', icon: 'cap', mode: 'learn' },
   { label: 'Tournament', color: '#F59E0B', icon: 'trophy', mode: 'tournament' },
 ];
 
-function KnightIcon({
-  color,
-  className = '',
-  size = 24,
-}: {
-  color: string;
-  className?: string;
-  size?: number;
-}) {
-  return (
-    <svg
-      className={className}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M8 21h8M12 21v-3M7 9c0-2.8 2.2-5 5-5s5 2.2 5 5c0 1.8-.9 3.3-2.2 4.3L16 14H8l1.2-.7C7.9 12.3 7 10.8 7 9zM9 17h6M9 14.5h6"
-        stroke={color}
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function TabIcon({ icon, color }: { icon: (typeof tabs)[number]['icon']; color: string }) {
+function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon']; color: string; size?: number }) {
   const common = {
-    width: 22,
-    height: 22,
+    width: size,
+    height: size,
     viewBox: '0 0 24 24',
     fill: 'none',
     xmlns: 'http://www.w3.org/2000/svg',
   } as const;
 
-  if (icon === 'horse') {
-    return <KnightIcon color={color} size={22} />;
+  if (icon === 'robot') {
+    return (
+      <svg {...common}>
+        {/* Head */}
+        <rect x="4" y="7.5" width="16" height="11.5" rx="2.5" stroke={color} strokeWidth="1.7" />
+        {/* Eyes */}
+        <circle cx="9" cy="12.5" r="1.6" fill={color} />
+        <circle cx="15" cy="12.5" r="1.6" fill={color} />
+        {/* Mouth */}
+        <path d="M9.5 16h5" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+        {/* Antenna stem */}
+        <path d="M12 7.5V5" stroke={color} strokeWidth="1.7" strokeLinecap="round" />
+        {/* Antenna tip */}
+        <circle cx="12" cy="4.2" r="1.2" fill={color} />
+      </svg>
+    );
   }
 
   if (icon === 'users') {
@@ -169,215 +176,6 @@ function StatusRow({ status, text }: { status: 'completed' | 'started' | 'none';
   );
 }
 
-// ─── CUSTOM TILE COMPONENT FOR CINEMATIC MOCKUP ─────────────────
-
-const pipLayouts: Record<number, [number, number][]> = {
-  0: [],
-  1: [[1, 1]],
-  2: [[0, 0], [2, 2]],
-  3: [[0, 0], [1, 1], [2, 2]],
-  4: [[0, 0], [0, 2], [2, 0], [2, 2]],
-  5: [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]],
-  6: [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2]],
-};
-
-function HeroTile({
-  tile,
-  size,
-  rotation = 0,
-  flipped = false,
-  tone = 'fritz',
-  style,
-}: {
-  tile: Tile;
-  size: number;
-  rotation?: number;
-  flipped?: boolean;
-  tone?: 'fritz' | 'puzzle';
-  style?: CSSProperties;
-}) {
-  const first = flipped ? tile.high : tile.low;
-  const second = flipped ? tile.low : tile.high;
-
-  // Cinematic palette matching the mockup:
-  // Fritz: Charcoal/Black face with Brass pips
-  // Puzzle: Navy/Black face with White pips
-  const pipColor = tone === 'fritz' ? '#D7A64A' : '#FFFFFF';
-  const borderColor = tone === 'fritz' ? 'rgba(215,166,74,0.35)' : 'rgba(255,255,255,0.2)';
-  const dividerColor = tone === 'fritz' ? '#3B2C15' : 'rgba(255,255,255,0.1)';
-  const faceGradient =
-    tone === 'fritz'
-      ? 'linear-gradient(145deg,#1A1B1F 0%,#050608 100%)'
-      : 'linear-gradient(145deg,#0D1525 0%,#020408 100%)';
-  const gloss =
-    tone === 'fritz'
-      ? 'linear-gradient(135deg,rgba(255,255,255,0.08)_0%,transparent 40%)'
-      : 'linear-gradient(135deg,rgba(255,255,255,0.06)_0%,transparent 40%)';
-
-  const pipSize = Math.max(6, Math.round(size * 0.18));
-  const cellSize = size / 3;
-
-  const renderHalf = (value: number, left: number) =>
-    (pipLayouts[value] ?? []).map(([row, col], idx) => (
-      <div
-        key={`${left}-${value}-${row}-${col}-${idx}`}
-        className="absolute rounded-full"
-        style={{
-          width: pipSize,
-          height: pipSize,
-          left: left + col * cellSize + cellSize / 2 - pipSize / 2,
-          top: row * cellSize + cellSize / 2 - pipSize / 2 + 2,
-          background: pipColor,
-          boxShadow: tone === 'puzzle' ? '0 0 6px rgba(255,255,255,0.4)' : 'none',
-        }}
-      />
-    ));
-
-  return (
-    <div className="relative" style={style}>
-      <div
-        className="relative overflow-hidden rounded-[11px]"
-        style={{
-          width: size * 2 + 4,
-          height: size + 4,
-          transform: `rotate(${rotation}deg)`,
-          background: faceGradient,
-          border: `2px solid ${borderColor}`,
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 18px rgba(0,0,0,0.30)',
-        }}
-      >
-        <div className="absolute inset-0" style={{ background: gloss }} />
-        <div
-          className="absolute left-1/2 top-[6px] bottom-[6px] w-[2px] -translate-x-1/2"
-          style={{ background: dividerColor }}
-        />
-        {renderHalf(first, 0)}
-        {renderHalf(second, size + 2)}
-      </div>
-    </div>
-  );
-}
-
-function FritzIllustration() {
-  return (
-    <div className="relative h-[252px] w-[420px] overflow-hidden">
-      {/* Background Fritz Robot Silhouette */}
-      <div className="absolute right-0 top-0 h-full w-[200px] opacity-[0.12] mix-blend-screen pointer-events-none">
-        <svg viewBox="0 0 200 252" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full">
-           <path d="M180 126C180 180 144 230 100 230C56 230 20 180 20 126C20 72 56 30 100 30C144 30 180 72 180 126Z" fill="#D7A64A" />
-           <circle cx="100" cy="126" r="30" stroke="#D7A64A" strokeWidth="2" strokeDasharray="4 4" />
-           <path d="M100 10L100 50M100 242L100 202M10 126L50 126M190 126L150 126" stroke="#D7A64A" strokeOpacity="0.4" />
-        </svg>
-      </div>
-
-      {/* AI Analysis Panel */}
-      <div className="absolute right-12 top-8 w-[140px] rounded-lg border border-[#D7A64A]/20 bg-black/40 p-3 backdrop-blur-sm shadow-[0_8px_20px_rgba(0,0,0,0.4)]">
-        <div className="text-[9px] font-bold tracking-[0.15em] text-[#D7A64A]/60 uppercase mb-2">AI Analysis</div>
-        <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[11px] text-[#F2EEE8]/60">WIN PROB</div>
-          <div className="text-[18px] font-black text-[#EDC468]">68%</div>
-        </div>
-        <div className="h-[24px] w-full border-b border-[#D7A64A]/10 relative overflow-hidden">
-           <svg width="100%" height="100%" preserveAspectRatio="none">
-             <path d="M0 24 L20 18 L40 20 L60 12 L80 15 L100 5 L120 10 L140 8" stroke="#EDC468" strokeWidth="1.5" fill="none" />
-             <path d="M0 24 L20 18 L40 20 L60 12 L80 15 L100 5 L120 10 L140 8 L140 24 L0 24" fill="url(#fritzGraph)" opacity="0.1" />
-             <defs>
-               <linearGradient id="fritzGraph" x1="0" y1="0" x2="0" y2="1">
-                 <stop offset="0%" stopColor="#EDC468" />
-                 <stop offset="100%" stopColor="transparent" />
-               </linearGradient>
-             </defs>
-           </svg>
-        </div>
-        <div className="mt-2 text-[9px] text-[#D7A64A]/40 font-mono tracking-tighter">BEST LINE DETECTED...</div>
-      </div>
-
-      {/* Seeded Match Tiles */}
-      <div className="absolute left-[40px] top-[140px] [filter:drop-shadow(0_12px_24px_rgba(0,0,0,0.6))] rotate-[-5deg]">
-        <div className="relative">
-           {/* The T-bone layout */}
-           <div className="absolute left-[62px] top-[-34px] rotate-[90deg]">
-             <HeroTile tile={{ low: 4, high: 4 }} size={32} tone="fritz" />
-           </div>
-           <div className="absolute left-0 top-0">
-             <HeroTile tile={{ low: 2, high: 4 }} size={32} tone="fritz" />
-           </div>
-           <div className="absolute left-[98px] top-0">
-             <HeroTile tile={{ low: 4, high: 6 }} size={32} tone="fritz" />
-           </div>
-           <div className="absolute left-[46px] top-[80px] rotate-[15deg]">
-             <HeroTile tile={{ low: 0, high: 2 }} size={32} tone="fritz" />
-           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PuzzleIllustration() {
-  return (
-    <div className="relative h-[252px] w-[420px] overflow-hidden">
-      {/* Background Logic Grid */}
-      <div className="absolute inset-0 opacity-[0.05] pointer-events-none">
-        <svg width="100%" height="100%">
-          <defs>
-            <pattern id="logicGrid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#3D8FE8" strokeWidth="1"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#logicGrid)" />
-        </svg>
-      </div>
-
-      {/* Logic Path Panel */}
-      <div className="absolute right-12 top-8 w-[150px] rounded-lg border border-[#3D8FE8]/20 bg-black/40 p-3 backdrop-blur-sm shadow-[0_8px_20px_rgba(0,0,0,0.4)]">
-        <div className="text-[9px] font-bold tracking-[0.15em] text-[#3D8FE8]/60 uppercase mb-2">Logic Path</div>
-        <div className="flex items-center gap-2 mb-3">
-           <div className="flex h-1.5 w-1.5 rounded-full bg-[#3D8FE8]" />
-           <div className="h-[1px] flex-1 bg-[#3D8FE8]/20" />
-           <div className="flex h-1.5 w-1.5 rounded-full bg-[#3D8FE8]" />
-           <div className="h-[1px] flex-1 bg-[#3D8FE8]/20" />
-           <div className="flex h-1.5 w-1.5 rounded-full border border-[#3D8FE8] animate-pulse" />
-        </div>
-        <div className="flex items-baseline justify-between">
-          <div className="text-[11px] text-[#F2EEE8]/60 uppercase tracking-tighter">Exp. Score</div>
-          <div className="text-[18px] font-black text-[#5BAAF8]">+18</div>
-        </div>
-      </div>
-
-      {/* Puzzle Match Layout */}
-      <div className="absolute left-[20px] top-[145px] [filter:drop-shadow(0_12px_24px_rgba(0,0,0,0.6))]">
-        <div className="relative">
-           {/* Complex Chain */}
-           <div className="absolute left-0 top-0">
-             <HeroTile tile={{ low: 5, high: 6 }} size={28} tone="puzzle" />
-           </div>
-           <div className="absolute left-[62px] top-0">
-             <HeroTile tile={{ low: 6, high: 0 }} size={28} tone="puzzle" />
-           </div>
-           <div className="absolute left-[124px] top-0">
-             <HeroTile tile={{ low: 0, high: 2 }} size={28} tone="puzzle" />
-           </div>
-           <div className="absolute left-[120px] top-[-60px] rotate-[90deg]">
-             <HeroTile tile={{ low: 2, high: 2 }} size={28} tone="puzzle" />
-           </div>
-
-           {/* Best Move Arrow */}
-           <svg className="absolute left-[195px] top-[15px] w-[50px] h-[30px]" viewBox="0 0 50 30">
-              <path d="M0 15 H35 M30 5 L40 15 L30 25" stroke="#3D8FE8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" className="animate-pulse" />
-           </svg>
-
-           {/* Targeted Best Move Tile */}
-           <div className="absolute left-[250px] top-[-10px] [filter:drop-shadow(0_0_12px_rgba(61,143,232,0.4))]">
-             <HeroTile tile={{ low: 2, high: 4 }} size={32} tone="puzzle" style={{ border: '2px solid rgba(91,170,248,0.8)' }} />
-             <div className="mt-2 text-center text-[10px] font-bold text-[#5BAAF8] uppercase tracking-widest">Best Move</div>
-           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function RacehorseHomeScreen({
   setAppMode,
   onOpenAuth,
@@ -394,6 +192,7 @@ export default function RacehorseHomeScreen({
   const [fritzStatus, setFritzStatus] = useState<'completed' | 'started' | 'none'>('none');
   const [puzzleStatus, setPuzzleStatus] = useState<'completed' | 'started' | 'none'>('none');
   const [puzzleScore, setPuzzleScore] = useState<number | null>(null);
+  const [weekPlayDates, setWeekPlayDates] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authUser?.id) { setFriendCount(null); return; }
@@ -401,6 +200,31 @@ export default function RacehorseHomeScreen({
       .then(({ friends }) => setFriendCount(friends.length))
       .catch(() => setFriendCount(0));
   }, [authUser?.id]);
+
+  // Fetch which days of THIS week the user actually completed Daily Fritz.
+  // Queries Supabase directly — no backend changes needed.
+  useEffect(() => {
+    if (!authUser?.id || !supabase) { setWeekPlayDates(new Set()); return; }
+
+    // Monday of the current week (local time)
+    const today = new Date();
+    const dow = today.getDay();
+    const daysFromMon = dow === 0 ? 6 : dow - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - daysFromMon);
+    const mondayStr = localDateStr(monday);
+
+    supabase
+      .from('daily_fritz_attempts')
+      .select('run_date')
+      .eq('user_id', authUser.id)
+      .eq('status', 'completed')
+      .gte('run_date', mondayStr)
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        setWeekPlayDates(new Set(data.map((r: { run_date: string }) => r.run_date)));
+      });
+  }, [authUser?.id, fritzStatus]); // re-fetch when fritzStatus changes (just finished a game)
 
   useEffect(() => {
     getTodayDailyFritz()
@@ -442,7 +266,9 @@ export default function RacehorseHomeScreen({
     month: 'short', day: 'numeric', year: 'numeric',
   }).toUpperCase();
 
-  const streakDays = computeStreakDays().map((d) =>
+  // Build the real week strip from Supabase data.
+  // If user just completed today, mark today as done too.
+  const streakDays = computeStreakDays(weekPlayDates).map((d) =>
     d.state === 'today' && fritzStatus === 'completed' ? { ...d, state: 'done' as const } : d,
   );
 
@@ -462,66 +288,28 @@ export default function RacehorseHomeScreen({
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden bg-[#020408] text-[var(--rh-text)]"
+      className="relative min-h-screen overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root"
       style={themeVars}
     >
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,#020408_0%,#040812_45%,#010205_100%)]" />
-        
-        {/* Cinematic atmospheric glows */}
-        <div className="absolute right-[-10%] top-[-5%] h-[65vw] w-[65vw] rounded-full bg-[radial-gradient(circle,rgba(37,99,235,0.18)_0%,rgba(29,78,216,0.08)_35%,transparent_70%)] blur-[40px]" />
-        <div className="absolute left-[-12%] top-[10%] h-[60vw] w-[60vw] rounded-full bg-[radial-gradient(circle,rgba(30,58,138,0.14)_0%,rgba(23,37,84,0.05)_40%,transparent_75%)] blur-[40px]" />
-        <div className="absolute left-1/2 top-[-10%] h-[50vw] w-[50vw] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.1)_0%,rgba(37,99,235,0.03)_45%,transparent_75%)] blur-[50px]" />
-        
-        {/* Subtle grid or diagonal texture */}
-        <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(132deg,transparent_0%,#3b82f6_46%,transparent_47%)]" />
-        
-        {/* Vertical light rays */}
-        <div className="absolute left-[8%] top-0 h-full w-px bg-[linear-gradient(180deg,transparent,rgba(59,130,246,0.08),transparent)]" />
-        <div className="absolute right-[12%] top-0 h-full w-px bg-[linear-gradient(180deg,transparent,rgba(59,130,246,0.08),transparent)]" />
-        <div className="absolute left-[-3%] top-[12%] rotate-[-35deg] opacity-[0.11]">
-          <svg width="196" height="154" viewBox="0 0 196 154" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="8" y="8" width="84" height="126" rx="12" fill="#08111F" stroke="#173453" />
-            <line x1="50" y1="18" x2="50" y2="124" stroke="#173453" />
-            <circle cx="29" cy="33" r="6" fill="#27374C" />
-            <circle cx="71" cy="33" r="6" fill="#27374C" />
-            <circle cx="29" cy="70" r="6" fill="#27374C" />
-            <g transform="translate(94 22)">
-              <rect x="0" y="0" width="84" height="126" rx="12" fill="#08111F" stroke="#173453" />
-              <line x1="42" y1="10" x2="42" y2="116" stroke="#173453" />
-              <circle cx="21" cy="33" r="6" fill="#27374C" />
-              <circle cx="63" cy="70" r="6" fill="#27374C" />
-              <circle cx="21" cy="107" r="6" fill="#27374C" />
-            </g>
-          </svg>
-        </div>
-        <div className="absolute right-[-2%] top-[10%] rotate-[24deg] opacity-[0.10]">
-          <svg width="170" height="142" viewBox="0 0 170 142" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="10" y="8" width="64" height="118" rx="12" fill="#08111F" stroke="#173453" />
-            <line x1="42" y1="18" x2="42" y2="116" stroke="#173453" />
-            <circle cx="26" cy="32" r="5" fill="#23456F" />
-            <circle cx="58" cy="64" r="5" fill="#23456F" />
-            <circle cx="26" cy="96" r="5" fill="#23456F" />
-            <g transform="translate(80 0)">
-              <rect x="10" y="8" width="64" height="118" rx="12" fill="#08111F" stroke="#173453" />
-              <line x1="42" y1="18" x2="42" y2="116" stroke="#173453" />
-              <circle cx="26" cy="32" r="5" fill="#23456F" />
-              <circle cx="58" cy="32" r="5" fill="#23456F" />
-              <circle cx="26" cy="96" r="5" fill="#23456F" />
-            </g>
-          </svg>
-        </div>
+      <div className="home-bg" aria-hidden="true">
+        <div className="home-bg__halo" />
+        <div className="home-bg__domino home-bg__domino--tl" />
+        <div className="home-bg__domino home-bg__domino--tr" />
+        <div className="home-bg__line home-bg__line--1" />
+        <div className="home-bg__line home-bg__line--2" />
+        <div className="home-bg__line home-bg__line--3" />
+        <div className="home-bg__texture" />
       </div>
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1580px] flex-col">
-        <nav className="relative flex h-[78px] shrink-0 items-center justify-between border-b border-white/[0.055] bg-[linear-gradient(180deg,rgba(4,7,12,0.985)_0%,rgba(4,7,12,0.94)_62%,rgba(4,7,12,0.80)_100%)] px-9 backdrop-blur-md">
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[28px] bg-[linear-gradient(180deg,transparent_0%,rgba(7,10,17,0.28)_100%)]" />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[1580px] flex-col home-shell">
+        <nav className="relative flex h-[78px] shrink-0 items-center justify-between px-9 home-nav">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[28px] bg-[linear-gradient(180deg,transparent_0%,rgba(7,10,17,0.18)_100%)]" />
           <div className="flex items-center">
             <BrandLogo iconSize={44} />
           </div>
 
           <div className="flex items-center">
-            <div className="flex items-center gap-3 px-6 py-2.5">
+            <div className="flex items-center gap-3 px-5 py-2.5">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="#F2C35E" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
               </svg>
@@ -534,7 +322,7 @@ export default function RacehorseHomeScreen({
             <button
               type="button"
               onClick={() => navigate('friends')}
-              className="flex items-center gap-3 px-6 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
+              className="flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="9" cy="8.7" r="2.2" fill="#4A8FD4" />
@@ -547,18 +335,6 @@ export default function RacehorseHomeScreen({
                 <div className="text-[12px] text-[#8A879B]">Friends</div>
               </div>
             </button>
-            <div className="h-8 w-px bg-white/10" />
-            <div className="flex items-center gap-3 px-6 py-2.5">
-              <img 
-                src="/daystreak.png" 
-                alt="Streak" 
-                style={{ width: 22, height: 22, objectFit: 'contain' }}
-              />
-              <div className="leading-tight">
-                <div className="text-[20px] font-bold text-[#F0EDE8]">{fritzStreak !== null ? fritzStreak : '…'}</div>
-                <div className="text-[12px] text-[#8A879B]">Day Streak</div>
-              </div>
-            </div>
           </div>
 
           <button
@@ -584,53 +360,38 @@ export default function RacehorseHomeScreen({
           </button>
         </nav>
 
-        <main className="relative flex-1 px-0 pb-5 pt-10">
+        <main className="relative flex-1 px-0 pb-5 pt-10 home-main">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]" />
           <div className="text-center">
             <div className="text-[14px] uppercase tracking-[0.32em] text-[#35A5FF] opacity-80">{todayLabel}</div>
-            <h1 className="mt-4 text-[72px] font-black leading-[0.9] tracking-[-0.05em] text-[#F3F0E8]">Today&apos;s Challenge</h1>
+            <h1 className="mt-4 text-[72px] font-black leading-[0.9] tracking-[-0.05em] text-white" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Challenge</h1>
             <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">Two ways to test your strategy. One daily tradition.</p>
           </div>
 
           <div className="mt-8 grid grid-cols-2 gap-5 px-14">
-            <section className="relative overflow-hidden rounded-[20px] rounded-tl-[5px] border border-[rgba(255,255,255,0.05)] bg-[linear-gradient(180deg,rgba(10,12,18,0.98)_0%,rgba(6,8,12,0.99)_100%)] px-7 py-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),inset_0_-40px_80px_rgba(0,0,0,0.45),0_30px_60px_rgba(0,0,0,0.6)]">
-              <div className="absolute inset-0 rounded-[20px] rounded-tl-[5px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]" />
-              <div className="pointer-events-none absolute left-0 top-0 h-[34px] w-[34px] bg-[linear-gradient(180deg,rgba(10,12,18,0.98)_0%,rgba(8,10,14,0.99)_100%)]" />
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_0%_55%,rgba(200,146,42,0.15)_0%,rgba(200,146,42,0.03)_45%,transparent_70%)]" />
-              <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,214,126,0.03)_0%,transparent_24%)]" />
-              <div className="pointer-events-none absolute -left-[44px] -top-[44px] h-[170px] w-[170px] rounded-full bg-[radial-gradient(circle,rgba(233,180,77,0.22)_0%,rgba(233,180,77,0.08)_30%,transparent_70%)] blur-[15px]" />
-              <div className="pointer-events-none absolute left-[8px] top-[8px] h-[2px] w-[118px] bg-[linear-gradient(90deg,rgba(233,180,77,0.95),rgba(233,180,77,0.4),transparent)]" />
-              <div className="pointer-events-none absolute left-[8px] top-[8px] h-[118px] w-[2px] bg-[linear-gradient(180deg,rgba(233,180,77,0.7),rgba(233,180,77,0.2),transparent)]" />
-              <div className="pointer-events-none absolute bottom-[8px] left-[86px] h-[2px] w-[92px] bg-[linear-gradient(90deg,transparent,rgba(233,180,77,0.2),rgba(233,180,77,0.6),transparent)]" />
-              <div className="relative flex h-[252px] items-center">
-                <div className="pointer-events-none absolute -left-[8px] top-1/2 -translate-y-1/2">
-                  <FritzIllustration />
-                </div>
-                <div className="ml-[196px] flex flex-1 flex-col justify-center">
+            <section className="daily-fritz-card-container relative overflow-hidden rounded-[20px] rounded-tl-[5px] px-7 py-7">
+              <div className="home-card-art home-card-art--fritz" aria-hidden="true" />
+              <div className="home-card-scrim" aria-hidden="true" />
+              <div className="home-card-content relative flex h-[252px] items-center">
+                <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#EDC468]">Daily Fritz</h2>
                   <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">One seeded match. Same deal for everyone.</p>
                   <StatusRow
                     status={fritzStatus}
                     text={fritzStatus === 'completed' && fritzStreak ? `${fritzStreak} Day Streak` : undefined}
                   />
-                  <button onClick={() => navigate('dailyFritz')} className="mt-7 flex h-[48px] w-[180px] items-center justify-center gap-4 rounded-[12px] border border-[#C8922A]/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0))] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_12px_rgba(200,146,42,0.12),inset_0_1px_0_rgba(255,255,255,0.05)] transition-all hover:brightness-110 active:scale-[0.98]">
+                  <button onClick={() => navigate('dailyFritz')} className="mt-7 flex h-[50px] w-[188px] items-center justify-between px-5 rounded-[12px] border border-[#C8922A]/68 bg-[linear-gradient(180deg,rgba(200,146,42,0.12)_0%,rgba(200,146,42,0.04)_100%)] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_20px_rgba(200,146,42,0.18),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_0_1px_rgba(200,146,42,0.10)] transition-all hover:shadow-[0_0_30px_rgba(200,146,42,0.30),inset_0_1px_0_rgba(255,255,255,0.12)] hover:border-[#C8922A]/85 active:scale-[0.97]">
                     <span>{fritzStatus === 'completed' ? 'View Result' : fritzStatus === 'started' ? 'Continue' : 'Play Today'}</span>
-                    <span className="text-[24px] leading-none text-[#E8B840]">›</span>
+                    <span className="text-[22px] leading-none text-[#E8B840] opacity-90">›</span>
                   </button>
                 </div>
               </div>
             </section>
 
-            <section className="relative overflow-hidden rounded-[20px] rounded-tr-[5px] border border-[rgba(88,142,219,0.2)] bg-[linear-gradient(180deg,rgba(9,12,20,0.98)_0%,rgba(5,7,12,0.99)_100%)] px-7 py-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),inset_0_-40px_80px_rgba(0,0,0,0.45),0_30px_60px_rgba(0,0,0,0.6)]">
-              <div className="absolute inset-0 rounded-[20px] rounded-tr-[5px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]" />
-              <div className="pointer-events-none absolute right-0 top-0 h-[34px] w-[34px] bg-[linear-gradient(180deg,rgba(9,12,20,0.98)_0%,rgba(6,8,13,0.99)_100%)]" />
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_100%_50%,rgba(74,143,212,0.15)_0%,rgba(74,143,212,0.035)_45%,transparent_70%)]" />
-              <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(94,160,244,0.03)_100%)]" />
-              <div className="pointer-events-none absolute -right-[44px] -top-[44px] h-[180px] w-[180px] rounded-full bg-[radial-gradient(circle,rgba(74,162,255,0.22)_0%,rgba(74,162,255,0.1)_30%,transparent_70%)] blur-[15px]" />
-              <div className="pointer-events-none absolute right-[8px] top-[8px] h-[2px] w-[128px] bg-[linear-gradient(90deg,transparent,rgba(74,162,255,0.4),rgba(74,162,255,0.98))]" />
-              <div className="pointer-events-none absolute right-[8px] top-[8px] h-[126px] w-[2px] bg-[linear-gradient(180deg,rgba(74,162,255,0.75),rgba(74,162,255,0.25),transparent)]" />
-              <div className="pointer-events-none absolute bottom-[8px] right-[92px] h-[2px] w-[104px] bg-[linear-gradient(90deg,transparent,rgba(74,162,255,0.25),rgba(74,162,255,0.6),transparent)]" />
-              <div className="relative flex h-[252px] items-center">
+            <section className="daily-puzzle-card-container relative overflow-hidden rounded-[20px] rounded-tr-[5px] px-7 py-7">
+              <div className="home-card-art home-card-art--puzzle" aria-hidden="true" />
+              <div className="home-card-scrim" aria-hidden="true" />
+              <div className="home-card-content relative flex h-[252px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#5A9EEF]">Daily Puzzle</h2>
                   <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Find the best scoring play.</p>
@@ -638,13 +399,10 @@ export default function RacehorseHomeScreen({
                     status={puzzleStatus}
                     text={puzzleStatus === 'completed' && puzzleScore != null ? `Score: ${puzzleScore}` : undefined}
                   />
-                  <button onClick={() => navigate('daily')} className="mt-7 flex h-[48px] w-[180px] items-center justify-center gap-4 rounded-[12px] border border-[#3D8FE8]/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0))] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_12px_rgba(74,143,212,0.12),inset_0_1px_0_rgba(255,255,255,0.05)] transition-all hover:brightness-110 active:scale-[0.98]">
+                  <button onClick={() => navigate('daily')} className="mt-7 flex h-[50px] w-[188px] items-center justify-between px-5 rounded-[12px] border border-[#3D8FE8]/68 bg-[linear-gradient(180deg,rgba(74,143,212,0.12)_0%,rgba(74,143,212,0.04)_100%)] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_20px_rgba(74,143,212,0.18),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_0_1px_rgba(74,143,212,0.10)] transition-all hover:shadow-[0_0_30px_rgba(74,143,212,0.30),inset_0_1px_0_rgba(255,255,255,0.12)] hover:border-[#3D8FE8]/85 active:scale-[0.97]">
                     <span>{puzzleStatus === 'completed' ? 'Review Puzzle' : puzzleStatus === 'started' ? 'Continue' : 'Play Today'}</span>
-                    <span className="text-[24px] leading-none text-[#5BAAF8]">›</span>
+                    <span className="text-[22px] leading-none text-[#5BAAF8] opacity-90">›</span>
                   </button>
-                </div>
-                <div className="pointer-events-none absolute right-[-2px] top-1/2 -translate-y-1/2">
-                  <PuzzleIllustration />
                 </div>
               </div>
             </section>
@@ -705,38 +463,34 @@ export default function RacehorseHomeScreen({
             </div>
           </section>
 
-          <section className="mx-14 mt-4 overflow-hidden rounded-[16px] border border-white/[0.055] bg-[linear-gradient(180deg,rgba(7,9,16,0.90)_0%,rgba(6,8,14,0.96)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.024)]">
+          <section className="mx-14 mt-4 overflow-hidden rounded-[18px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(10,13,22,0.96)_0%,rgba(6,8,14,0.98)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_8px_20px_rgba(0,0,0,0.22)]">
             <div className="flex">
               {tabs.map((tab) => (
                 <button
                   key={tab.label}
                   onClick={() => navigate(tab.mode)}
-                  className="relative flex h-[64px] flex-1 items-center justify-center gap-3 border-r border-white/[0.08] last:border-r-0 cursor-pointer transition-opacity hover:opacity-90 active:opacity-75"
+                  className="group relative flex h-[76px] flex-1 items-center justify-center gap-[13px] border-r border-white/[0.05] last:border-r-0 cursor-pointer transition-all hover:bg-white/[0.025] active:bg-white/[0.04]"
                   type="button"
                   style={{ ['--tab-color' as string]: tab.color } as CSSProperties}
                 >
-                  {tab.mode === 'botSetup' ? <div className="absolute inset-y-0 left-0 right-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.008),rgba(255,255,255,0))]" /> : null}
-                  <span
-                    className="relative z-10"
-                    style={{ color: tab.color }}
-                  >
-                    <TabIcon icon={tab.icon} color={tab.color} />
+                  {/* subtle top-to-bottom sheen on each cell */}
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.015)_0%,rgba(255,255,255,0)_48%)]" />
+                  <span className="relative z-10 flex-shrink-0" style={{ color: tab.color }}>
+                    <TabIcon icon={tab.icon} color={tab.color} size={26} />
                   </span>
                   <span
-                    className="relative z-10 text-[16px] font-medium"
+                    className="relative z-10 text-[17px] font-semibold tracking-[-0.01em]"
                     style={{ color: tab.color }}
                   >
                     {tab.label}
                   </span>
+                  {/* glow bar — 4px, 50% width, centered, soft bloom */}
                   <div
-                    className="absolute bottom-[2px] left-[20%] h-[3px] w-[60%] rounded-full"
+                    className="absolute bottom-0 left-1/2 h-[4px] w-[50%] -translate-x-1/2 rounded-full transition-all duration-200 group-hover:opacity-100"
                     style={{
                       backgroundColor: tab.color,
-                      opacity: tab.mode === 'botSetup' ? 1 : 0.4,
-                      boxShadow: tab.mode === 'botSetup' 
-                        ? `0 0 14px ${tab.color}, 0 0 4px white` 
-                        : `0 0 8px ${tab.color}`,
-                      transition: 'all 240ms ease',
+                      opacity: 0.92,
+                      boxShadow: `0 0 10px ${tab.color}, 0 0 24px ${tab.color}66`,
                     }}
                   />
                 </button>

@@ -1,0 +1,304 @@
+/* client/src/experimental/RacehorseHomeArt.css */
+
+.home-page-root {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    /* Subtle upper atmosphere — muted, not heavy blue */
+    radial-gradient(
+      ellipse 72% 44% at 50% 0%,
+      rgba(28, 72, 160, 0.22) 0%,
+      rgba(16, 44, 100, 0.09) 38%,
+      transparent 65%
+    ),
+    /* Very faint off-centre secondary */
+    radial-gradient(
+      ellipse 40% 30% at 72% 32%,
+      rgba(22, 60, 130, 0.07) 0%,
+      transparent 54%
+    ),
+    /* Dark navy-black base — close to reference */
+    linear-gradient(
+      180deg,
+      #040b17 0%,
+      #050c18 24%,
+      #040912 56%,
+      #03080f 100%
+    );
+}
+
+.home-page-root::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 50% 48%,
+      transparent 42%,
+      rgba(0,0,0,0.12) 72%,
+      rgba(0,0,0,0.30) 100%
+    );
+}
+
+.home-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.home-bg__halo {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 62% 38% at 50% 5%,
+      rgba(45, 105, 210, 0.18) 0%,
+      rgba(26, 68, 155, 0.08) 30%,
+      transparent 58%
+    );
+  opacity: 1;
+}
+
+.home-bg__domino {
+  position: absolute;
+  width: 112px;
+  height: 210px;
+  border-radius: 20px;
+  border: 1px solid rgba(105, 160, 240, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  opacity: 0.38;
+  transform-origin: center;
+}
+
+.home-bg__domino--tl {
+  top: 125px;
+  left: -18px;
+  transform: rotate(-34deg);
+}
+
+.home-bg__domino--tr {
+  top: 122px;
+  right: -4px;
+  transform: rotate(25deg);
+}
+
+.home-bg__line {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(75, 140, 240, 0.28),
+    transparent
+  );
+  opacity: 0.6;
+}
+
+.home-bg__line--1 {
+  width: 760px;
+  top: 126px;
+  left: -120px;
+  transform: rotate(31deg);
+}
+
+.home-bg__line--2 {
+  width: 720px;
+  top: 235px;
+  right: -160px;
+  transform: rotate(-27deg);
+}
+
+.home-bg__line--3 {
+  width: 560px;
+  top: 515px;
+  left: 110px;
+  transform: rotate(-18deg);
+  opacity: 0.34;
+}
+
+.home-bg__texture {
+  position: absolute;
+  inset: 0;
+  opacity: 0.12;
+  background-image:
+    radial-gradient(circle, rgba(90, 148, 240, 0.7) 1px, transparent 1px);
+  background-size: 56px 56px;
+  /* Concentrate dots to upper portion only */
+  mask-image: radial-gradient(
+    ellipse 80% 50% at 50% 6%,
+    black 0%,
+    rgba(0,0,0,0.3) 50%,
+    transparent 72%
+  );
+}
+
+/* ─── Integrated Top Nav ─────────────────────── */
+
+.home-nav {
+  /* Mostly transparent so page background bleeds through — matches reference */
+  background: rgba(3, 7, 14, 0.42) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,0.04);
+  border-bottom: none !important;
+  position: relative;
+  z-index: 10;
+}
+
+.home-shell,
+.home-main {
+  position: relative;
+  z-index: 2;
+}
+
+/* ─── Hero Cards ─────────────────────────────── */
+
+.home-card-art {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: cover;
+  transition: opacity 180ms ease;
+}
+
+.home-card-art--fritz {
+  background-image: url("../assets/home/daily-fritz-art.webp");
+  opacity: 0.68;
+  filter: brightness(0.88) contrast(0.94) saturate(0.90);
+  background-position: 78% center;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0,0,0,0.02) 18%,
+    rgba(0,0,0,0.18) 30%,
+    rgba(0,0,0,0.58) 46%,
+    rgba(0,0,0,0.90) 62%,
+    black 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0,0,0,0.02) 18%,
+    rgba(0,0,0,0.18) 30%,
+    rgba(0,0,0,0.58) 46%,
+    rgba(0,0,0,0.90) 62%,
+    black 100%
+  );
+}
+
+.home-card-art--puzzle {
+  background-image: url("../assets/home/daily-puzzle-art.webp");
+  opacity: 0.76;
+  filter: brightness(0.96) contrast(0.95) saturate(0.94);
+  background-position: 82% center;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0,0,0,0.03) 20%,
+    rgba(0,0,0,0.20) 34%,
+    rgba(0,0,0,0.60) 50%,
+    rgba(0,0,0,0.92) 66%,
+    black 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0,0,0,0.03) 20%,
+    rgba(0,0,0,0.20) 34%,
+    rgba(0,0,0,0.60) 50%,
+    rgba(0,0,0,0.92) 66%,
+    black 100%
+  );
+}
+
+/* Glaze / Scrim / Text Protection layer */
+.home-card-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(4, 7, 12, 0.96) 0%,
+      rgba(4, 7, 12, 0.92) 18%,
+      rgba(4, 7, 12, 0.82) 34%,
+      rgba(4, 7, 12, 0.56) 52%,
+      rgba(4, 7, 12, 0.34) 72%,
+      rgba(4, 7, 12, 0.22) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0,0,0,0.22) 0%,
+      rgba(0,0,0,0.28) 100%
+    );
+}
+
+/* ─── Ambient Atmospheric corner glows ────────────────────────────── */
+
+.daily-fritz-card-container,
+.daily-puzzle-card-container {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Card pseudo-elements: no glow — clean borders only */
+.daily-fritz-card-container::before,
+.daily-fritz-card-container::after,
+.daily-puzzle-card-container::before,
+.daily-puzzle-card-container::after {
+  content: none;
+}
+
+.daily-fritz-card-container {
+  border: 1px solid rgba(214, 162, 58, 0.26) !important;
+  /* inset top + left pixel highlights simulate caught warm light on the edge */
+  box-shadow:
+    inset 0 1px 0 rgba(214, 162, 58, 0.40),
+    inset 1px 0 0 rgba(214, 162, 58, 0.18),
+    inset 0 -40px 70px rgba(0,0,0,0.32),
+    0 18px 38px rgba(0,0,0,0.30) !important;
+  transition: box-shadow 200ms ease, filter 200ms ease;
+}
+
+.daily-fritz-card-container:hover {
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(214, 162, 58, 0.58),
+    inset 1px 0 0 rgba(214, 162, 58, 0.26),
+    inset 0 -40px 70px rgba(0,0,0,0.28),
+    0 22px 46px rgba(0,0,0,0.36) !important;
+}
+
+.daily-puzzle-card-container {
+  border: 1px solid rgba(72, 154, 255, 0.28) !important;
+  /* inset top + right pixel highlights simulate caught cool light on the edge */
+  box-shadow:
+    inset 0 1px 0 rgba(72, 154, 255, 0.40),
+    inset -1px 0 0 rgba(72, 154, 255, 0.18),
+    inset 0 -40px 70px rgba(0,0,0,0.32),
+    0 18px 38px rgba(0,0,0,0.30) !important;
+  transition: box-shadow 200ms ease, filter 200ms ease;
+}
+
+.daily-puzzle-card-container:hover {
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(72, 154, 255, 0.58),
+    inset -1px 0 0 rgba(72, 154, 255, 0.26),
+    inset 0 -40px 70px rgba(0,0,0,0.28),
+    0 22px 46px rgba(0,0,0,0.36) !important;
+}
+
+.home-card-content {
+  position: relative;
+  z-index: 5;
+}

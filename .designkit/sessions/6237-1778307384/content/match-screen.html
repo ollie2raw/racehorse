@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Racehorse Dominoes — Match vs Fritz</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-static@latest/font/lucide.min.css">
+<style>
+:root {
+  /* Colors */
+  --color-bg-deep: #080c14;
+  --color-bg-mid: #0e1525;
+  --color-bg-surface: #131d30;
+  --color-bg-raised: #1a2640;
+  --color-bg-tile: #1e2d45;
+
+  --color-primary: #22d3ee;
+  --color-primary-dim: #0ea5c9;
+  --color-primary-glow: rgba(34, 211, 238, 0.18);
+  --color-primary-border: rgba(34, 211, 238, 0.3);
+
+  --color-brass: #c9a84c;
+  --color-brass-dim: #a88630;
+  --color-brass-glow: rgba(201, 168, 76, 0.15);
+
+  --color-text: #f0ece0;
+  --color-text-secondary: #94a3b8;
+  --color-text-dim: #4a5568;
+
+  --color-border: rgba(255, 255, 255, 0.07);
+  --color-border-mid: rgba(255, 255, 255, 0.12);
+
+  --color-success: #10b981;
+  --color-danger: #ef4444;
+
+  /* Domino tile */
+  --color-tile-bg: #f4f0e8;
+  --color-tile-border: #e8e2d4;
+  --color-tile-pip: #1a1a2e;
+  --color-tile-divider: #ccc5b5;
+  --color-tile-back: #1a2640;
+  --color-tile-back-pattern: #203050;
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* Typography */
+  --font-xs: 0.688rem;
+  --font-sm: 0.813rem;
+  --font-base: 1rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.375rem;
+  --font-2xl: 1.75rem;
+
+  /* Shape */
+  --radius-sm: 5px;
+  --radius-md: 9px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --shadow-tile: 0 2px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-glow-cyan: 0 0 16px rgba(34, 211, 238, 0.25);
+  --shadow-glow-brass: 0 0 12px rgba(201, 168, 76, 0.2);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: 'SF Pro Display', -apple-system, 'Inter', system-ui, sans-serif;
+  background: var(--color-bg-deep);
+  color: var(--color-text);
+  overflow: hidden;
+}
+
+.match-layout {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto;
+  height: 100vh;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-md) var(--space-lg);
+  gap: var(--space-sm);
+}
+
+/* ─── HEADER ─── */
+.match-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) 0;
+}
+
+.match-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.match-title {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.match-subtitle {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.match-timer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-mid);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs) var(--space-md);
+}
+
+.timer-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-glow-cyan);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.timer-value {
+  font-size: var(--font-base);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: 0.02em;
+}
+
+.match-actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-raised);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.action-btn:hover {
+  border-color: var(--color-border-mid);
+  color: var(--color-text);
+}
+
+/* ─── OPPONENT AREA ─── */
+.opponent-area {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.player-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 140px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.avatar-fritz {
+  background: linear-gradient(135deg, #1e3a5f, #0f2040);
+  border: 1.5px solid var(--color-border-mid);
+  color: var(--color-text-secondary);
+}
+
+.avatar-you {
+  background: linear-gradient(135deg, var(--color-primary-dim), #0369a1);
+  border: 1.5px solid var(--color-primary);
+  color: white;
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.player-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.player-name {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.player-rating {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.opponent-hand {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.tile-back {
+  width: 22px;
+  height: 40px;
+  border-radius: 4px;
+  background: var(--color-tile-back);
+  border: 1px solid var(--color-tile-back-pattern);
+  box-shadow: var(--shadow-tile);
+  position: relative;
+  overflow: hidden;
+}
+
+.tile-back::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 2px;
+  border: 1px solid var(--color-tile-back-pattern);
+  opacity: 0.6;
+}
+
+.tile-count-badge {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  margin-left: var(--space-xs);
+}
+
+/* ─── SCORE RACETRACK ─── */
+.racetrack-section {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.racetrack-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.racetrack-label {
+  font-size: var(--font-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.racetrack-scores {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+.score-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.score-name {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.score-value {
+  font-size: var(--font-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-value.score-you {
+  color: var(--color-primary);
+}
+
+.score-value.score-fritz {
+  color: var(--color-brass);
+}
+
+.score-target {
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
+}
+
+.racetrack-track {
+  position: relative;
+  height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.track-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--color-bg-raised);
+  border-radius: 2px;
+  overflow: visible;
+}
+
+.track-fill-you {
+  position: absolute;
+  left: 0;
+  width: 62%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary-dim), var(--color-primary));
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+}
+
+.track-fill-fritz {
+  position: absolute;
+  left: 0;
+  width: 48%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-brass-dim), var(--color-brass));
+  border-radius: 2px;
+  top: 0;
+  opacity: 0;
+}
+
+.track-markers {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.track-marker {
+  width: 1px;
+  height: 8px;
+  background: var(--color-border-mid);
+  position: relative;
+}
+
+.track-marker-label {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--color-text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.track-position {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.track-position-you {
+  left: 62%;
+}
+
+.track-position-fritz {
+  left: 48%;
+}
+
+.position-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg-deep);
+  position: relative;
+}
+
+.position-marker-you {
+  background: var(--color-primary);
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.position-marker-fritz {
+  background: var(--color-brass);
+  box-shadow: var(--shadow-glow-brass);
+}
+
+.position-label {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 4px;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.position-label-you {
+  color: var(--color-primary);
+}
+
+.position-label-fritz {
+  color: var(--color-brass);
+}
+
+/* Dual track layout */
+.track-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.track-row-label {
+  font-size: var(--font-xs);
+  font-weight: 600;
+  min-width: 38px;
+  text-align: right;
+}
+
+.track-row-label.you {
+  color: var(--color-primary);
+}
+
+.track-row-label.fritz {
+  color: var(--color-brass);
+}
+
+.track-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: var(--color-bg-raised);
+  border-radius: 4px;
+  position: relative;
+  overflow: visible;
+}
+
+.track-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  position: absolute;
+  left: 0;
+  transition: width 0.4s ease;
+}
+
+.track-bar-fill.you {
+  width: 62%;
+  background: linear-gradient(90deg, var(--color-primary-dim), var(--color-primary));
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.35);
+}
+
+.track-bar-fill.fritz {
+  width: 48%;
+  background: linear-gradient(90deg, var(--color-brass-dim), var(--color-brass));
+  box-shadow: 0 0 8px rgba(201, 168, 76, 0.25);
+}
+
+.track-bar-head {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg-deep);
+  z-index: 2;
+}
+
+.track-bar-head.you {
+  left: 62%;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.track-bar-head.fritz {
+  left: 48%;
+  background: var(--color-brass);
+  box-shadow: var(--shadow-glow-brass);
+}
+
+.track-score-right {
+  font-size: var(--font-sm);
+  font-weight: 700;
+  min-width: 36px;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-score-right.you { color: var(--color-primary); }
+.track-score-right.fritz { color: var(--color-brass); }
+
+/* ─── BOARD ─── */
+.board-section {
+  background: var(--color-bg-mid);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.board-inner {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  overflow: hidden;
+  position: relative;
+}
+
+.board-inner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(34, 211, 238, 0.025) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.domino-chain {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: nowrap;
+}
+
+/* Individual domino tile */
+.domino {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-tile-bg);
+  border: 1px solid var(--color-tile-border);
+  border-radius: 5px;
+  box-shadow: var(--shadow-tile);
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.domino-h {
+  flex-direction: row;
+  width: 52px;
+  height: 28px;
+}
+
+.domino-v {
+  flex-direction: column;
+  width: 28px;
+  height: 52px;
+}
+
+.domino-half {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.domino-h .domino-divider {
+  width: 1px;
+  background: var(--color-tile-divider);
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+.domino-v .domino-divider {
+  height: 1px;
+  background: var(--color-tile-divider);
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+.pips {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  padding: 3px;
+}
+
+/* pip counts → grid configs */
+.pips-0 { grid-template: repeat(3, 1fr) / repeat(3, 1fr); }
+.pips-1 { grid-template: repeat(3, 1fr) / repeat(3, 1fr); }
+.pips-2 { grid-template: repeat(3, 1fr) / repeat(3, 1fr); }
+.pips-3 { grid-template: repeat(3, 1fr) / repeat(3, 1fr); }
+.pips-4 { grid-template: repeat(3, 1fr) / repeat(2, 1fr); }
+.pips-5 { grid-template: repeat(3, 1fr) / repeat(3, 1fr); }
+.pips-6 { grid-template: repeat(3, 1fr) / repeat(2, 1fr); }
+
+.pip {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-tile-pip);
+  justify-self: center;
+  align-self: center;
+  opacity: 0;
+}
+
+.pip.show { opacity: 1; }
+
+/* Chain connector arrows */
+.chain-connector {
+  color: var(--color-text-dim);
+  font-size: 10px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.board-ends {
+  position: absolute;
+  bottom: var(--space-sm);
+  left: var(--space-md);
+  right: var(--space-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.board-end-label {
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.board-end-value {
+  font-size: var(--font-sm);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 1px 7px;
+}
+
+.board-pip-total {
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.board-pip-total-value {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* ─── TURN INDICATOR ─── */
+.turn-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.turn-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.turn-badge {
+  font-size: var(--font-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.turn-badge.your-turn {
+  background: var(--color-primary-glow);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary-border);
+}
+
+.turn-badge.fritz-turn {
+  background: var(--color-brass-glow);
+  color: var(--color-brass);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+}
+
+.turn-hint {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+
+.boneyard-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+
+.boneyard-count {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* ─── PLAYER HAND ─── */
+.player-area {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.player-identity-bottom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 120px;
+}
+
+.player-hand {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  justify-content: center;
+  flex: 1;
+}
+
+.domino-hand {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-tile-bg);
+  border: 1px solid var(--color-tile-border);
+  border-radius: 5px;
+  box-shadow: var(--shadow-tile);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+  width: 28px;
+  height: 52px;
+}
+
+.domino-hand:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-tile), 0 0 14px var(--color-primary-glow);
+  border-color: var(--color-primary);
+}
+
+.domino-hand.playable {
+  border-color: rgba(34, 211, 238, 0.4);
+}
+
+.domino-hand.selected {
+  transform: translateY(-8px);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-tile), 0 0 18px rgba(34, 211, 238, 0.35);
+}
+
+.domino-hand .domino-half {
+  flex: 1;
+}
+
+.hand-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  align-items: flex-end;
+  min-width: 120px;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+  padding: var(--space-sm) var(--space-md);
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #080c14;
+  box-shadow: 0 2px 12px rgba(34, 211, 238, 0.3);
+}
+
+.btn-primary:hover {
+  background: #38e5ff;
+  box-shadow: 0 2px 18px rgba(34, 211, 238, 0.45);
+}
+
+.btn-secondary {
+  background: var(--color-bg-raised);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-mid);
+}
+
+.btn-secondary:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-mid);
+}
+
+.btn-disabled {
+  background: var(--color-bg-raised);
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ─── ROUND BADGE ─── */
+.round-badge {
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-mid);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+</style>
+</head>
+<body>
+<div class="match-layout">
+
+  <!-- HEADER -->
+  <header class="match-header">
+    <div class="match-meta">
+      <span class="match-title">Daily Challenge</span>
+      <span class="match-subtitle">May 8, 2026 · Round 2 of 3</span>
+    </div>
+
+    <div class="match-timer">
+      <span class="timer-dot"></span>
+      <span class="timer-value">1:47</span>
+    </div>
+
+    <div class="match-actions">
+      <button class="action-btn" title="Settings"><i class="lucide-settings-2"></i></button>
+      <button class="action-btn" title="Resign"><i class="lucide-flag"></i></button>
+    </div>
+  </header>
+
+  <!-- OPPONENT AREA -->
+  <div class="opponent-area">
+    <div class="player-identity">
+      <div class="avatar avatar-fritz">FR</div>
+      <div class="player-info">
+        <span class="player-name">Fritz</span>
+        <span class="player-rating">ELO 1840</span>
+      </div>
+    </div>
+
+    <div class="opponent-hand">
+      <div class="tile-back"></div>
+      <div class="tile-back"></div>
+      <div class="tile-back"></div>
+      <div class="tile-back"></div>
+      <div class="tile-back"></div>
+      <div class="tile-back"></div>
+      <span class="tile-count-badge">6</span>
+    </div>
+
+    <span class="round-badge">Game 2 · 0–1</span>
+  </div>
+
+  <!-- SCORE RACETRACK -->
+  <div class="racetrack-section">
+    <div class="racetrack-header">
+      <span class="racetrack-label">Race to 100</span>
+      <div class="racetrack-scores">
+        <div class="score-entry">
+          <span class="score-name">You</span>
+          <span class="score-value score-you">62</span>
+          <span class="score-target">/ 100</span>
+        </div>
+        <div class="score-entry">
+          <span class="score-name">Fritz</span>
+          <span class="score-value score-fritz">48</span>
+          <span class="score-target">/ 100</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="track-rows">
+      <div class="track-row">
+        <span class="track-row-label you">You</span>
+        <div class="track-bar-wrap">
+          <!-- tick marks -->
+          <div style="position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;pointer-events:none;">
+            <div style="width:1px;height:5px;background:var(--color-border);margin-left:25%;"></div>
+            <div style="width:1px;height:5px;background:var(--color-border);margin-right:25%;"></div>
+          </div>
+          <div class="track-bar-fill you"></div>
+          <div class="track-bar-head you"></div>
+        </div>
+        <span class="track-score-right you">62</span>
+      </div>
+
+      <div class="track-row">
+        <span class="track-row-label fritz">Fritz</span>
+        <div class="track-bar-wrap">
+          <div class="track-bar-fill fritz"></div>
+          <div class="track-bar-head fritz"></div>
+        </div>
+        <span class="track-score-right fritz">48</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOARD -->
+  <div class="board-section">
+    <div class="board-inner">
+      <div class="domino-chain">
+
+        <!-- 6|6 horizontal -->
+        <div class="domino domino-h">
+          <div class="domino-half">
+            <div class="pips pips-6">
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+            </div>
+          </div>
+          <div class="domino-divider"></div>
+          <div class="domino-half">
+            <div class="pips pips-6">
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chain-connector"><i class="lucide-chevron-right"></i></div>
+
+        <!-- 6|4 -->
+        <div class="domino domino-h">
+          <div class="domino-half">
+            <div class="pips pips-6">
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+            </div>
+          </div>
+          <div class="domino-divider"></div>
+          <div class="domino-half">
+            <div class="pips pips-4">
+              <div class="pip show"></div><div class="pip show"></div>
+              <div class="pip"></div><div class="pip"></div>
+              <div class="pip show"></div><div class="pip show"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chain-connector"><i class="lucide-chevron-right"></i></div>
+
+        <!-- 4|5 -->
+        <div class="domino domino-h">
+          <div class="domino-half">
+            <div class="pips pips-4">
+              <div class="pip show"></div><div class="pip show"></div>
+              <div class="pip"></div><div class="pip"></div>
+              <div class="pip show"></div><div class="pip show"></div>
+            </div>
+          </div>
+          <div class="domino-divider"></div>
+          <div class="domino-half">
+            <div class="pips pips-5">
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+              <div class="pip"></div><div class="pip show"></div><div class="pip"></div>
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chain-connector"><i class="lucide-chevron-right"></i></div>
+
+        <!-- 5|2 -->
+        <div class="domino domino-h">
+          <div class="domino-half">
+            <div class="pips pips-5">
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+              <div class="pip"></div><div class="pip show"></div><div class="pip"></div>
+              <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+            </div>
+          </div>
+          <div class="domino-divider"></div>
+          <div class="domino-half">
+            <div class="pips pips-2">
+              <div class="pip show"></div><div class="pip"></div><div class="pip"></div>
+              <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+              <div class="pip"></div><div class="pip"></div><div class="pip show"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chain-connector"><i class="lucide-chevron-right"></i></div>
+
+        <!-- 2|3 -->
+        <div class="domino domino-h">
+          <div class="domino-half">
+            <div class="pips pips-2">
+              <div class="pip show"></div><div class="pip"></div><div class="pip"></div>
+              <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+              <div class="pip"></div><div class="pip"></div><div class="pip show"></div>
+            </div>
+          </div>
+          <div class="domino-divider"></div>
+          <div class="domino-half">
+            <div class="pips pips-3">
+              <div class="pip show"></div><div class="pip"></div><div class="pip"></div>
+              <div class="pip"></div><div class="pip show"></div><div class="pip"></div>
+              <div class="pip"></div><div class="pip"></div><div class="pip show"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="board-ends">
+      <div class="board-end-label">
+        <i class="lucide-arrow-left" style="font-size:10px;"></i>
+        Left end <span class="board-end-value">6</span>
+      </div>
+      <div class="board-pip-total">
+        Open ends sum <span class="board-pip-total-value">9</span>
+      </div>
+      <div class="board-end-label">
+        Right end <span class="board-end-value">3</span>
+        <i class="lucide-arrow-right" style="font-size:10px;"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- TURN BAR -->
+  <div class="turn-bar">
+    <div class="turn-indicator">
+      <span class="turn-badge your-turn">Your Turn</span>
+      <span class="turn-hint">Play a 6 or 3, or draw</span>
+    </div>
+    <div class="boneyard-info">
+      <i class="lucide-layers" style="font-size:13px;"></i>
+      Boneyard <span class="boneyard-count">14</span>
+    </div>
+  </div>
+
+  <!-- PLAYER HAND -->
+  <div class="player-area">
+    <div class="player-identity-bottom">
+      <div class="avatar avatar-you">OL</div>
+      <div class="player-info">
+        <span class="player-name">You</span>
+        <span class="player-rating">ELO 1762</span>
+      </div>
+    </div>
+
+    <div class="player-hand">
+      <!-- 6|3 playable+selected -->
+      <div class="domino-hand playable selected">
+        <div class="domino-half">
+          <div class="pips pips-6">
+            <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+            <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+            <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+          </div>
+        </div>
+        <div class="domino-divider"></div>
+        <div class="domino-half">
+          <div class="pips pips-3">
+            <div class="pip show"></div><div class="pip"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip show"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip show"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3|5 playable -->
+      <div class="domino-hand playable">
+        <div class="domino-half">
+          <div class="pips pips-3">
+            <div class="pip show"></div><div class="pip"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip show"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip show"></div>
+          </div>
+        </div>
+        <div class="domino-divider"></div>
+        <div class="domino-half">
+          <div class="pips pips-5">
+            <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+            <div class="pip"></div><div class="pip show"></div><div class="pip"></div>
+            <div class="pip show"></div><div class="pip"></div><div class="pip show"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1|4 -->
+      <div class="domino-hand">
+        <div class="domino-half">
+          <div class="pips pips-1">
+            <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip show"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+          </div>
+        </div>
+        <div class="domino-divider"></div>
+        <div class="domino-half">
+          <div class="pips pips-4">
+            <div class="pip show"></div><div class="pip show"></div>
+            <div class="pip"></div><div class="pip"></div>
+            <div class="pip show"></div><div class="pip show"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2|2 -->
+      <div class="domino-hand">
+        <div class="domino-half">
+          <div class="pips pips-2">
+            <div class="pip show"></div><div class="pip"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip show"></div>
+          </div>
+        </div>
+        <div class="domino-divider"></div>
+        <div class="domino-half">
+          <div class="pips pips-2">
+            <div class="pip show"></div><div class="pip"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip show"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 0|1 -->
+      <div class="domino-hand">
+        <div class="domino-half">
+          <div class="pips pips-0"></div>
+        </div>
+        <div class="domino-divider"></div>
+        <div class="domino-half">
+          <div class="pips pips-1">
+            <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip show"></div><div class="pip"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4|4 -->
+      <div class="domino-hand">
+        <div class="domino-half">
+          <div class="pips pips-4">
+            <div class="pip show"></div><div class="pip show"></div>
+            <div class="pip"></div><div class="pip"></div>
+            <div class="pip show"></div><div class="pip show"></div>
+          </div>
+        </div>
+        <div class="domino-divider"></div>
+        <div class="domino-half">
+          <div class="pips pips-4">
+            <div class="pip show"></div><div class="pip show"></div>
+            <div class="pip"></div><div class="pip"></div>
+            <div class="pip show"></div><div class="pip show"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hand-actions">
+      <button class="btn btn-primary">
+        <i class="lucide-play" style="font-size:12px;"></i>
+        Play
+      </button>
+      <button class="btn btn-secondary">
+        <i class="lucide-plus" style="font-size:12px;"></i>
+        Draw
+      </button>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

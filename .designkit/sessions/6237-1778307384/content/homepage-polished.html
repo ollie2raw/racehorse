@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Racehorse Dominoes — Home</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Core palette */
+  --color-bg: #06080D;
+  --color-surface: #090A0F;
+  --color-raised: #0D1018;
+  --color-border: rgba(255,255,255,0.07);
+  --color-border-mid: rgba(255,255,255,0.11);
+
+  /* Text */
+  --color-text: #F0EDE8;
+  --color-text-secondary: #B4B0BC;
+  --color-text-dim: #6A6780;
+  --color-text-stat: #8A879B;
+
+  /* Brass / Fritz */
+  --color-brass: #C8922A;
+  --color-brass-bright: #EDC468;
+  --color-brass-dim: #A8761E;
+  --color-brass-glow: rgba(200,146,42,0.14);
+  --color-brass-pip: #D4982E;
+
+  /* Blue / Puzzle */
+  --color-blue: #4A8FD4;
+  --color-blue-bright: #5BAAF8;
+  --color-blue-dim: #2F6BAA;
+  --color-blue-glow: rgba(74,143,212,0.14);
+
+  /* Green / Streak */
+  --color-green: #7EE24E;
+  --color-green-dim: #3A7422;
+
+  /* Mode colors */
+  --color-multiplayer: #4A8FD4;
+  --color-ghost: #8B5CF6;
+  --color-learn: #10B981;
+  --color-tournament: #F59E0B;
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* Type */
+  --font-xs: 0.688rem;
+  --font-sm: 0.813rem;
+  --font-base: 1rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.375rem;
+  --font-2xl: 1.75rem;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-card: 12px;
+}
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ══════════════════════════════════════════
+   BACKGROUND / AMBIENT LAYER
+══════════════════════════════════════════ */
+
+.screen {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #06080D;
+}
+
+.ambient-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ambient-blob {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.ambient-blob-1 {
+  left: -14%; top: -16%;
+  width: 56vw; height: 56vw;
+  background: radial-gradient(circle, rgba(30,64,150,0.2) 0%, rgba(30,64,150,0.07) 36%, transparent 70%);
+}
+
+.ambient-blob-2 {
+  right: -10%; top: -10%;
+  width: 40vw; height: 40vw;
+  background: radial-gradient(circle, rgba(24,44,92,0.1) 0%, rgba(24,44,92,0.04) 36%, transparent 70%);
+}
+
+.ambient-blob-3 {
+  left: 50%; top: -16%;
+  transform: translateX(-50%);
+  width: 62vw; height: 62vw;
+  background: radial-gradient(circle, rgba(26,84,190,0.14) 0%, rgba(26,84,190,0.05) 38%, transparent 66%);
+}
+
+.ambient-noise {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, transparent 0%, rgba(48,105,185,0.02) 49%, transparent 50%),
+    linear-gradient(90deg, rgba(255,255,255,0.012) 0%, transparent 22%, transparent 78%, rgba(255,255,255,0.012) 100%);
+}
+
+/* Decorative background tiles */
+.bg-tile-left {
+  position: absolute;
+  left: -3%; top: 12%;
+  transform: rotate(-35deg);
+  opacity: 0.07;
+}
+
+.bg-tile-right {
+  position: absolute;
+  right: -2%; top: 10%;
+  transform: rotate(24deg);
+  opacity: 0.065;
+}
+
+/* ══════════════════════════════════════════
+   LAYOUT SHELL
+══════════════════════════════════════════ */
+
+.content-shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1680px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ══════════════════════════════════════════
+   NAVIGATION
+══════════════════════════════════════════ */
+
+.nav {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 44px;
+  flex-shrink: 0;
+  position: relative;
+  background: linear-gradient(180deg, rgba(6,8,13,0.97) 0%, rgba(6,8,13,0.8) 60%, rgba(6,8,13,0.2) 100%);
+  backdrop-filter: blur(4px);
+}
+
+.nav::after {
+  content: '';
+  position: absolute;
+  inset-x: 0;
+  bottom: 0;
+  height: 20px;
+  background: linear-gradient(180deg, transparent, rgba(6,8,13,0.3));
+  pointer-events: none;
+}
+
+/* Logo */
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-icon {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  border: 1px solid rgba(200,146,42,0.6);
+  background: linear-gradient(155deg, #121317 0%, #08090D 100%);
+  box-shadow: 0 0 14px rgba(200,146,42,0.1), inset 0 1px 0 rgba(255,255,255,0.04);
+  flex-shrink: 0;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.brand-name {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: #F5F2EC;
+}
+
+.brand-sub {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--color-brass);
+}
+
+/* Stats cluster */
+.nav-stats {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: 0 4px;
+  height: 46px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-border-mid);
+  flex-shrink: 0;
+}
+
+.stat-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--color-text-stat);
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.stat-text {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Profile */
+.nav-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.nav-profile:hover {
+  border-color: var(--color-border-mid);
+  background: rgba(255,255,255,0.02);
+}
+
+.profile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(200,146,42,0.62);
+  background: radial-gradient(circle at 45% 32%, #8E5E2A 0%, #4E2C18 48%, #1A120D 100%);
+  box-shadow: 0 0 12px rgba(200,146,42,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.profile-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.profile-level {
+  font-size: 12px;
+  color: var(--color-text-stat);
+}
+
+.profile-caret {
+  color: rgba(231,225,213,0.6);
+}
+
+/* ══════════════════════════════════════════
+   MAIN CONTENT
+══════════════════════════════════════════ */
+
+.main {
+  flex: 1;
+  padding: 32px 0 20px;
+  position: relative;
+}
+
+.main::before {
+  content: '';
+  position: absolute;
+  inset-x: 0;
+  top: 0;
+  height: 160px;
+  background: linear-gradient(180deg, rgba(7,10,18,0.18) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Page header */
+.page-header {
+  text-align: center;
+  padding: 0 44px;
+}
+
+.page-date {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #35A5FF;
+  margin-bottom: 10px;
+}
+
+.page-title {
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 0.97;
+  letter-spacing: -0.045em;
+  color: #F2EFE8;
+}
+
+.page-subtitle {
+  margin-top: 10px;
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--color-text-dim);
+  letter-spacing: -0.01em;
+}
+
+/* ══════════════════════════════════════════
+   HERO CARDS
+══════════════════════════════════════════ */
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 22px;
+  padding: 0 44px;
+}
+
+/* Base card */
+.hero-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  padding: 28px 32px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.045),
+    inset 0 -50px 90px rgba(0,0,0,0.32),
+    0 28px 64px rgba(0,0,0,0.52),
+    0 4px 16px rgba(0,0,0,0.4);
+}
+
+/* Gradient border via pseudo */
+.hero-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+  padding: 1px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.card-inner {
+  position: relative;
+  display: flex;
+  height: 264px;
+  align-items: center;
+  z-index: 2;
+}
+
+/* Fritz card */
+.card-fritz {
+  background: linear-gradient(170deg, #0C0D10 0%, #080809 55%, #050506 100%);
+}
+
+.card-fritz::before {
+  background: linear-gradient(145deg, rgba(200,146,42,0.32) 0%, rgba(200,146,42,0.08) 40%, transparent 65%, rgba(200,146,42,0.06) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.card-fritz-glow {
+  position: absolute;
+  left: -50px; top: -50px;
+  width: 180px; height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(233,180,77,0.22) 0%, rgba(233,180,77,0.08) 30%, transparent 65%);
+  filter: blur(16px);
+  pointer-events: none;
+}
+
+/* Corner accent lines — Fritz */
+.fritz-corner-tl-h { position: absolute; left: 10px; top: 10px; width: 100px; height: 1.5px; background: linear-gradient(90deg, rgba(233,180,77,0.85), rgba(233,180,77,0.28), transparent); }
+.fritz-corner-tl-v { position: absolute; left: 10px; top: 10px; width: 1.5px; height: 100px; background: linear-gradient(180deg, rgba(233,180,77,0.65), rgba(233,180,77,0.16), transparent); }
+.fritz-corner-bl-h { position: absolute; left: 82px; bottom: 10px; width: 80px; height: 1.5px; background: linear-gradient(90deg, transparent, rgba(233,180,77,0.16), rgba(233,180,77,0.44), transparent); }
+
+/* Fritz content */
+.fritz-illustration {
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.fritz-content {
+  margin-left: 210px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.card-title-fritz {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  color: #EDC468;
+  line-height: 1;
+}
+
+.card-desc {
+  margin-top: 10px;
+  font-size: 17px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+/* Puzzle card */
+.card-puzzle {
+  background: linear-gradient(170deg, #0B0D12 0%, #070910 55%, #050709 100%);
+}
+
+.card-puzzle::before {
+  background: linear-gradient(135deg, transparent 0%, rgba(74,143,212,0.06) 40%, rgba(74,143,212,0.28) 80%, rgba(74,143,212,0.14) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.card-puzzle-glow {
+  position: absolute;
+  right: -50px; top: -50px;
+  width: 190px; height: 190px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(74,162,255,0.26) 0%, rgba(74,162,255,0.1) 30%, transparent 65%);
+  filter: blur(16px);
+  pointer-events: none;
+}
+
+/* Corner accent lines — Puzzle */
+.puzzle-corner-tr-h { position: absolute; right: 10px; top: 10px; width: 116px; height: 1.5px; background: linear-gradient(90deg, transparent, rgba(74,162,255,0.3), rgba(74,162,255,0.88)); }
+.puzzle-corner-tr-v { position: absolute; right: 10px; top: 10px; width: 1.5px; height: 116px; background: linear-gradient(180deg, rgba(74,162,255,0.68), rgba(74,162,255,0.2), transparent); }
+.puzzle-corner-br-h { position: absolute; right: 88px; bottom: 10px; width: 96px; height: 1.5px; background: linear-gradient(90deg, transparent, rgba(74,162,255,0.2), rgba(74,162,255,0.5), transparent); }
+
+.puzzle-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.puzzle-illustration {
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.card-title-puzzle {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  color: #5A9EEF;
+  line-height: 1;
+}
+
+/* Status row — shared */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.status-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(34,197,94,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.status-complete-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #3BE26F;
+}
+
+.status-dot {
+  font-size: 14px;
+  color: #6A6780;
+}
+
+.status-detail {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+/* Card CTA button */
+.card-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 22px;
+  height: 46px;
+  width: 168px;
+  border-radius: 11px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #F2EEE7;
+  cursor: pointer;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.card-btn:hover {
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.01) 100%);
+}
+
+.card-btn-fritz {
+  border: 1px solid rgba(200,146,42,0.48);
+  box-shadow: 0 0 10px rgba(200,146,42,0.07), inset 0 1px 0 rgba(255,255,255,0.045);
+}
+
+.card-btn-fritz:hover {
+  box-shadow: 0 0 16px rgba(200,146,42,0.14), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.card-btn-fritz .btn-arrow {
+  font-size: 24px;
+  line-height: 1;
+  color: #E8B840;
+}
+
+.card-btn-puzzle {
+  border: 1px solid rgba(61,143,232,0.48);
+  box-shadow: 0 0 10px rgba(74,143,212,0.07), inset 0 1px 0 rgba(255,255,255,0.045);
+}
+
+.card-btn-puzzle:hover {
+  box-shadow: 0 0 16px rgba(74,143,212,0.14), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.card-btn-puzzle .btn-arrow {
+  font-size: 24px;
+  line-height: 1;
+  color: #5BAAF8;
+}
+
+/* ══════════════════════════════════════════
+   STREAK STRIP
+══════════════════════════════════════════ */
+
+.streak-strip {
+  display: flex;
+  align-items: center;
+  margin: 14px 44px 0;
+  padding: 14px 22px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: rgba(7,9,16,0.82);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 6px 20px rgba(0,0,0,0.22);
+  gap: 0;
+}
+
+.streak-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  min-width: 200px;
+}
+
+.streak-flame-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid #24541F;
+  background: #0E1B0D;
+  box-shadow: 0 0 16px rgba(78,218,74,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.streak-label {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-green);
+  line-height: 1;
+}
+
+.streak-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #9D98A9;
+}
+
+/* Day dots */
+.streak-days {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  flex: 1;
+}
+
+.streak-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.day-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: #9090A0;
+}
+
+.day-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.day-dot-done {
+  border: 1px solid #2E5223;
+  background: #172E14;
+  box-shadow: 0 0 12px rgba(126,226,78,0.13);
+}
+
+.day-dot-today {
+  border: 1.5px solid var(--color-brass);
+}
+
+.day-dot-future {
+  border: 1px solid #2A3144;
+}
+
+/* Weekly goal */
+.streak-goal {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border-left: 1px solid rgba(255,255,255,0.08);
+  padding-left: 22px;
+  flex-shrink: 0;
+  min-width: 260px;
+}
+
+.goal-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 72px;
+}
+
+.goal-label {
+  font-size: 12px;
+  color: #B6B1BF;
+}
+
+.goal-value {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.goal-value strong {
+  font-weight: 700;
+  color: var(--color-green);
+}
+
+.goal-value span {
+  color: #B6B1BF;
+}
+
+.goal-bar-track {
+  width: 148px;
+  height: 6px;
+  border-radius: 3px;
+  background: #161E2C;
+  flex-shrink: 0;
+}
+
+.goal-bar-fill {
+  height: 100%;
+  width: 43%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #7EE24E, #89D830);
+  box-shadow: 0 0 8px rgba(126,226,78,0.22);
+}
+
+/* ══════════════════════════════════════════
+   MODE DOCK
+══════════════════════════════════════════ */
+
+.mode-dock {
+  margin: 12px 44px 0;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: rgba(7,9,16,0.82);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  overflow: hidden;
+  display: flex;
+}
+
+.dock-tab {
+  flex: 1;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-right: 1px solid rgba(255,255,255,0.07);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s;
+}
+
+.dock-tab:last-child {
+  border-right: none;
+}
+
+.dock-tab:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.dock-tab.active {
+  background: rgba(255,255,255,0.025);
+}
+
+.dock-tab-label {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+/* Underline indicator */
+.dock-tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  width: 60%;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+
+/* SVG icon sizing */
+.dock-tab svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+/* Inactive state — desaturated labels */
+.dock-tab:not(.active) .dock-tab-label {
+  opacity: 0.75;
+}
+
+.dock-tab:not(.active) svg {
+  opacity: 0.7;
+}
+
+/* ══════════════════════════════════════════
+   STATUS ROW INSIDE MAIN (date/badge row)
+══════════════════════════════════════════ */
+
+.game-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <!-- ── Ambient background ── -->
+  <div class="ambient-layer">
+    <div class="ambient-blob ambient-blob-1"></div>
+    <div class="ambient-blob ambient-blob-2"></div>
+    <div class="ambient-blob ambient-blob-3"></div>
+    <div class="ambient-noise"></div>
+
+    <!-- Decorative tiles left -->
+    <div class="bg-tile-left">
+      <svg width="196" height="154" viewBox="0 0 196 154" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="8" y="8" width="84" height="126" rx="12" fill="#08111F" stroke="#173453"/>
+        <line x1="50" y1="18" x2="50" y2="124" stroke="#173453"/>
+        <circle cx="29" cy="33" r="6" fill="#27374C"/><circle cx="71" cy="33" r="6" fill="#27374C"/>
+        <circle cx="29" cy="70" r="6" fill="#27374C"/>
+        <g transform="translate(94 22)">
+          <rect x="0" y="0" width="84" height="126" rx="12" fill="#08111F" stroke="#173453"/>
+          <line x1="42" y1="10" x2="42" y2="116" stroke="#173453"/>
+          <circle cx="21" cy="33" r="6" fill="#27374C"/><circle cx="63" cy="70" r="6" fill="#27374C"/>
+          <circle cx="21" cy="107" r="6" fill="#27374C"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Decorative tiles right -->
+    <div class="bg-tile-right">
+      <svg width="170" height="142" viewBox="0 0 170 142" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="8" width="64" height="118" rx="12" fill="#08111F" stroke="#173453"/>
+        <line x1="42" y1="18" x2="42" y2="116" stroke="#173453"/>
+        <circle cx="26" cy="32" r="5" fill="#23456F"/><circle cx="58" cy="64" r="5" fill="#23456F"/>
+        <circle cx="26" cy="96" r="5" fill="#23456F"/>
+        <g transform="translate(80 0)">
+          <rect x="10" y="8" width="64" height="118" rx="12" fill="#08111F" stroke="#173453"/>
+          <line x1="42" y1="18" x2="42" y2="116" stroke="#173453"/>
+          <circle cx="26" cy="32" r="5" fill="#23456F"/><circle cx="58" cy="32" r="5" fill="#23456F"/>
+          <circle cx="26" cy="96" r="5" fill="#23456F"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="content-shell">
+
+    <!-- ══ NAV ══ -->
+    <nav class="nav">
+      <!-- Brand -->
+      <div class="nav-brand">
+        <div class="brand-icon">
+          <svg width="44" height="44" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="logoGold" x1="12" y1="8" x2="44" y2="50" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#F1D08C"/><stop offset="0.45" stop-color="#D5A247"/><stop offset="1" stop-color="#8B5A16"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 49H42.5C41.5 40.8 38.7 34.6 34.3 30.2C31.9 27.8 30.5 24.9 30.1 21.6L34.2 17.8L31.6 10.8L24.8 8.9L18.7 12.8L22 17.2L15.2 23.8L18 49Z" fill="url(#logoGold)"/>
+            <path d="M24.4 13.5L28.5 16.8L31.7 16.8" stroke="#FFF3D4" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="28.9" cy="14.3" r="1.6" fill="#2A1705"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">RACEHORSE</div>
+          <div class="brand-sub">DOMINOES</div>
+        </div>
+      </div>
+
+      <!-- Stats cluster -->
+      <div class="nav-stats">
+        <div class="stat-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#F2C35E" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z"/>
+          </svg>
+          <div class="stat-text">
+            <span class="stat-value">1842</span>
+            <span class="stat-label">Rating</span>
+          </div>
+        </div>
+
+        <div class="stat-divider"></div>
+
+        <div class="stat-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="9" cy="8.7" r="2.2" fill="#4A8FD4"/>
+            <circle cx="15.4" cy="9.5" r="1.9" fill="#4A8FD4"/>
+            <path d="M4.5 17.6C5.4 15.4 7.2 14.1 9.8 14.1C12 14.1 13.7 14.9 14.7 16.8" stroke="#4A8FD4" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M14.7 14.8C16.3 14.8 17.7 15.5 18.8 16.9" stroke="#4A8FD4" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          <div class="stat-text">
+            <span class="stat-value">24</span>
+            <span class="stat-label">Friends</span>
+          </div>
+        </div>
+
+        <div class="stat-divider"></div>
+
+        <div class="stat-item">
+          <svg width="16" height="20" viewBox="0 0 24 24" fill="#F2C35E" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 2.8L6.8 12H10.9L10.8 21.2L17.2 12H13.1L13 2.8Z"/>
+          </svg>
+          <div class="stat-text">
+            <span class="stat-value">3</span>
+            <span class="stat-label">Day Streak</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Profile -->
+      <div class="nav-profile">
+        <div class="profile-avatar">
+          <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="avatarHorse" x1="14" y1="10" x2="43" y2="50" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#F0D5A7"/><stop offset="0.52" stop-color="#D2A05C"/><stop offset="1" stop-color="#8B4F1E"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 49H42.5C41.5 40.8 38.7 34.6 34.3 30.2C31.9 27.8 30.5 24.9 30.1 21.6L34.2 17.8L31.6 10.8L24.8 8.9L18.7 12.8L22 17.2L15.2 23.8L18 49Z" fill="url(#avatarHorse)"/>
+            <path d="M24.4 13.5L28.5 16.8L31.7 16.8" stroke="#FFF0CC" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="28.9" cy="14.3" r="1.6" fill="#4D2A10"/>
+          </svg>
+        </div>
+        <div class="profile-text">
+          <span class="profile-name">TrackMaster</span>
+          <span class="profile-level">Level 36</span>
+        </div>
+        <svg class="profile-caret" width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </nav>
+
+    <!-- ══ MAIN ══ -->
+    <main class="main">
+
+      <!-- Page title -->
+      <div class="page-header">
+        <div class="page-date">May 8, 2026</div>
+        <h1 class="page-title">Today's Challenge</h1>
+        <p class="page-subtitle">Two ways to test your strategy. One daily tradition.</p>
+      </div>
+
+      <!-- ── Hero Cards ── -->
+      <div class="cards-grid">
+
+        <!-- FRITZ card -->
+        <section class="hero-card card-fritz">
+          <div class="card-fritz-glow"></div>
+          <div class="fritz-corner-tl-h"></div>
+          <div class="fritz-corner-tl-v"></div>
+          <div class="fritz-corner-bl-h"></div>
+
+          <div class="card-inner">
+            <!-- Fritz illustration -->
+            <div class="fritz-illustration">
+              <svg width="248" height="222" viewBox="0 0 210 188" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <filter id="fritzShadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+                    <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.55"/>
+                  </filter>
+                  <linearGradient id="fritzTileFace2" x1="18" y1="0" x2="70" y2="126" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#2B241C"/><stop offset="0.45" stop-color="#14110D"/><stop offset="1" stop-color="#09090B"/>
+                  </linearGradient>
+                  <linearGradient id="fritzTileGloss2" x1="8" y1="10" x2="54" y2="78" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="rgba(255,255,255,0.18)"/><stop offset="0.35" stop-color="rgba(255,255,255,0.04)"/><stop offset="1" stop-color="rgba(255,255,255,0)"/>
+                  </linearGradient>
+                </defs>
+                <g filter="url(#fritzShadow)">
+                  <g transform="translate(62 4) rotate(22 42 56)">
+                    <rect x="0" y="0" width="84" height="126" rx="10" fill="url(#fritzTileFace2)" stroke="rgba(200,146,42,0.36)" stroke-width="1.8"/>
+                    <rect x="1" y="1" width="82" height="124" rx="9" stroke="rgba(255,255,255,0.055)"/>
+                    <path d="M8 8H54L20 118H8V8Z" fill="url(#fritzTileGloss2)" opacity="0.5"/>
+                    <line x1="42" y1="10" x2="42" y2="116" stroke="#4C3920" stroke-width="2"/>
+                    <circle cx="21" cy="26" r="7" fill="#D4982E"/>
+                    <circle cx="63" cy="26" r="7" fill="#D4982E"/>
+                    <circle cx="21" cy="63" r="7" fill="#D4982E"/>
+                    <circle cx="63" cy="63" r="7" fill="#D4982E"/>
+                    <circle cx="21" cy="100" r="7" fill="#D4982E"/>
+                  </g>
+                  <g transform="translate(8 42) rotate(-18 42 56)">
+                    <rect x="0" y="0" width="84" height="126" rx="10" fill="url(#fritzTileFace2)" stroke="rgba(200,146,42,0.36)" stroke-width="1.8"/>
+                    <rect x="1" y="1" width="82" height="124" rx="9" stroke="rgba(255,255,255,0.055)"/>
+                    <path d="M8 8H54L20 118H8V8Z" fill="url(#fritzTileGloss2)" opacity="0.5"/>
+                    <line x1="42" y1="10" x2="42" y2="116" stroke="#4C3920" stroke-width="2"/>
+                    <circle cx="21" cy="26" r="7" fill="#D4982E"/>
+                    <circle cx="63" cy="26" r="7" fill="#D4982E"/>
+                    <circle cx="21" cy="63" r="7" fill="#D4982E"/>
+                    <circle cx="63" cy="63" r="7" fill="#D4982E"/>
+                    <circle cx="21" cy="100" r="7" fill="#D4982E"/>
+                  </g>
+                </g>
+              </svg>
+            </div>
+
+            <!-- Fritz text content -->
+            <div class="fritz-content">
+              <h2 class="card-title-fritz">Daily Fritz</h2>
+              <p class="card-desc">One seeded match. Same deal for everyone.</p>
+              <div class="status-row">
+                <div class="status-check">
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 8.5L6.1 11.6L13 4.7" stroke="#22C55E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+                <span class="status-complete-label">Complete</span>
+                <span class="status-dot">·</span>
+                <span class="status-detail">60–44 · 3 Day Streak</span>
+              </div>
+              <button class="card-btn card-btn-fritz">
+                <span>View Result</span>
+                <span class="btn-arrow">›</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- PUZZLE card -->
+        <section class="hero-card card-puzzle">
+          <div class="card-puzzle-glow"></div>
+          <div class="puzzle-corner-tr-h"></div>
+          <div class="puzzle-corner-tr-v"></div>
+          <div class="puzzle-corner-br-h"></div>
+
+          <div class="card-inner">
+            <!-- Puzzle text content -->
+            <div class="puzzle-content">
+              <h2 class="card-title-puzzle">Daily Puzzle</h2>
+              <p class="card-desc">Find the best scoring play.</p>
+              <div class="status-row">
+                <div class="status-check">
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 8.5L6.1 11.6L13 4.7" stroke="#22C55E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+                <span class="status-complete-label">Complete</span>
+                <span class="status-dot">·</span>
+                <span class="status-detail">2 Moves Best · 2 Day Streak</span>
+              </div>
+              <button class="card-btn card-btn-puzzle">
+                <span>Review Puzzle</span>
+                <span class="btn-arrow">›</span>
+              </button>
+            </div>
+
+            <!-- Puzzle illustration -->
+            <div class="puzzle-illustration">
+              <svg width="340" height="240" viewBox="0 0 340 238" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="puzzleFace2" x1="6" y1="0" x2="52" y2="104" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#18263D"/><stop offset="0.5" stop-color="#0C1524"/><stop offset="1" stop-color="#08111D"/>
+                  </linearGradient>
+                </defs>
+                <g opacity="0.3" stroke="#2F65AB">
+                  <path d="M0 34H340" stroke-dasharray="3 9"/>
+                  <path d="M0 88H340" stroke-dasharray="3 9"/>
+                  <path d="M0 142H340" stroke-dasharray="3 9"/>
+                  <path d="M0 196H340" stroke-dasharray="3 9"/>
+                  <path d="M42 0V238" stroke-dasharray="3 9"/>
+                  <path d="M98 0V238" stroke-dasharray="3 9"/>
+                  <path d="M154 0V238" stroke-dasharray="3 9"/>
+                  <path d="M210 0V238" stroke-dasharray="3 9"/>
+                </g>
+                <g transform="translate(146 18) rotate(-8 30 56)">
+                  <rect x="0" y="0" width="58" height="104" rx="10" fill="url(#puzzleFace2)" stroke="rgba(116,181,255,0.68)" stroke-width="1.9"/>
+                  <rect x="1" y="1" width="56" height="102" rx="9" stroke="rgba(255,255,255,0.04)"/>
+                  <line x1="29" y1="10" x2="29" y2="94" stroke="rgba(74,143,212,0.55)" stroke-width="2"/>
+                  <circle cx="15" cy="22" r="4.8" fill="#B5D8FF"/>
+                  <circle cx="43" cy="22" r="4.8" fill="#B5D8FF"/>
+                  <circle cx="15" cy="48" r="4.8" fill="#B5D8FF"/>
+                  <circle cx="43" cy="48" r="4.8" fill="#B5D8FF"/>
+                  <circle cx="15" cy="74" r="4.8" fill="#B5D8FF"/>
+                </g>
+                <g transform="translate(68 104) rotate(90 30 56)">
+                  <rect x="0" y="0" width="58" height="104" rx="10" fill="url(#puzzleFace2)" stroke="rgba(116,181,255,0.68)" stroke-width="1.9"/>
+                  <rect x="1" y="1" width="56" height="102" rx="9" stroke="rgba(255,255,255,0.04)"/>
+                  <line x1="29" y1="10" x2="29" y2="94" stroke="rgba(74,143,212,0.55)" stroke-width="2"/>
+                  <circle cx="15" cy="22" r="4.8" fill="#163D72"/>
+                  <circle cx="43" cy="22" r="4.8" fill="#163D72"/>
+                  <circle cx="15" cy="48" r="4.8" fill="#163D72"/>
+                  <circle cx="43" cy="48" r="4.8" fill="#163D72"/>
+                  <circle cx="15" cy="74" r="4.8" fill="#163D72"/>
+                </g>
+                <g transform="translate(190 104) rotate(90 30 56)">
+                  <rect x="0" y="0" width="58" height="104" rx="10" fill="url(#puzzleFace2)" stroke="rgba(116,181,255,0.68)" stroke-width="1.9"/>
+                  <rect x="1" y="1" width="56" height="102" rx="9" stroke="rgba(255,255,255,0.04)"/>
+                  <line x1="29" y1="10" x2="29" y2="94" stroke="rgba(74,143,212,0.55)" stroke-width="2"/>
+                  <circle cx="15" cy="22" r="4.8" fill="#B5D8FF"/>
+                  <circle cx="43" cy="22" r="4.8" fill="#B5D8FF"/>
+                  <circle cx="15" cy="48" r="4.8" fill="#B5D8FF"/>
+                  <circle cx="43" cy="48" r="4.8" fill="#B5D8FF"/>
+                  <circle cx="15" cy="74" r="4.8" fill="#B5D8FF"/>
+                </g>
+                <g transform="translate(146 120) rotate(-8 30 56)">
+                  <rect x="0" y="0" width="58" height="104" rx="10" fill="none" stroke="#1EA4FF" stroke-width="2" stroke-dasharray="7 6"/>
+                </g>
+              </svg>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ── Streak Strip ── -->
+      <div class="streak-strip">
+
+        <div class="streak-identity">
+          <div class="streak-flame-wrap">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#7EE24E" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12.5 2.7C8.7 5 6.9 8 6.9 11.4C6.9 15.1 9.1 18.2 12.5 19.8C15.6 18.3 17.7 15.5 17.7 12.1C17.7 9.2 16.2 6.3 12.5 2.7Z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="streak-label">3 Day Streak</div>
+            <div class="streak-sub">Keep it going!</div>
+          </div>
+        </div>
+
+        <div class="streak-days">
+          <!-- MON done -->
+          <div class="streak-day">
+            <span class="day-label">MON</span>
+            <div class="day-dot day-dot-done">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 8.5L6.1 11.6L13 4.7" stroke="#7EE24E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+          <!-- TUE done -->
+          <div class="streak-day">
+            <span class="day-label">TUE</span>
+            <div class="day-dot day-dot-done">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 8.5L6.1 11.6L13 4.7" stroke="#7EE24E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+          <!-- WED done -->
+          <div class="streak-day">
+            <span class="day-label">WED</span>
+            <div class="day-dot day-dot-done">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 8.5L6.1 11.6L13 4.7" stroke="#7EE24E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+          <!-- THU today -->
+          <div class="streak-day">
+            <span class="day-label" style="color: var(--color-brass);">THU</span>
+            <div class="day-dot day-dot-today">
+              <div style="width:8px;height:8px;border-radius:50%;background:#E8BF66;"></div>
+            </div>
+          </div>
+          <!-- FRI -->
+          <div class="streak-day">
+            <span class="day-label">FRI</span>
+            <div class="day-dot day-dot-future"></div>
+          </div>
+          <!-- SAT -->
+          <div class="streak-day">
+            <span class="day-label">SAT</span>
+            <div class="day-dot day-dot-future"></div>
+          </div>
+          <!-- SUN -->
+          <div class="streak-day">
+            <span class="day-label">SUN</span>
+            <div class="day-dot day-dot-future"></div>
+          </div>
+        </div>
+
+        <div class="streak-goal">
+          <div class="goal-text">
+            <span class="goal-label">Weekly Goal</span>
+            <div class="goal-value">
+              <strong>3</strong><span> / 7 Days</span>
+            </div>
+          </div>
+          <div class="goal-bar-track">
+            <div class="goal-bar-fill"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Mode Dock ── -->
+      <div class="mode-dock">
+
+        <!-- Play vs Fritz — active -->
+        <button class="dock-tab active" type="button">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 21h8M12 21v-3M7 9c0-2.8 2.2-5 5-5s5 2.2 5 5c0 1.8-.9 3.3-2.2 4.3L16 14H8l1.2-.7C7.9 12.3 7 10.8 7 9zM9 17h6M9 14.5h6" stroke="#C8922A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="dock-tab-label" style="color:#C8922A;">Play vs Fritz</span>
+          <div class="dock-tab-indicator" style="background:#C8922A;box-shadow:0 0 8px rgba(200,146,42,0.55);"></div>
+        </button>
+
+        <!-- Multiplayer -->
+        <button class="dock-tab" type="button">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="9" cy="9" r="2.4" stroke="#4A8FD4" stroke-width="1.8"/>
+            <circle cx="15.5" cy="10" r="2.1" stroke="#4A8FD4" stroke-width="1.8"/>
+            <path d="M4.7 18c1-2.4 3-3.8 5.9-3.8 2.4 0 4.1.9 5.2 2.8" stroke="#4A8FD4" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M14.7 14.8c1.8 0 3.3.8 4.3 2.4" stroke="#4A8FD4" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <span class="dock-tab-label" style="color:#4A8FD4;">Multiplayer</span>
+          <div class="dock-tab-indicator" style="background:#4A8FD4;opacity:0.4;"></div>
+        </button>
+
+        <!-- Ghost Mode -->
+        <button class="dock-tab" type="button">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M7 18v-7c0-3 2.2-5 5-5s5 2 5 5v7l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5z" stroke="#8B5CF6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="10" cy="11" r="0.9" fill="#8B5CF6"/>
+            <circle cx="14" cy="11" r="0.9" fill="#8B5CF6"/>
+          </svg>
+          <span class="dock-tab-label" style="color:#8B5CF6;">Ghost Mode</span>
+          <div class="dock-tab-indicator" style="background:#8B5CF6;opacity:0.4;"></div>
+        </button>
+
+        <!-- Learn -->
+        <button class="dock-tab" type="button">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3.5 9.5L12 5.5L20.5 9.5L12 13.5L3.5 9.5Z" stroke="#10B981" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M7 11.5v3.1L12 17l5-2.4v-3.1" stroke="#10B981" stroke-width="1.8" stroke-linejoin="round"/>
+          </svg>
+          <span class="dock-tab-label" style="color:#10B981;">Learn</span>
+          <div class="dock-tab-indicator" style="background:#10B981;opacity:0.4;"></div>
+        </button>
+
+        <!-- Tournament -->
+        <button class="dock-tab" type="button">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 7h8v2.5c0 3-1.7 5.2-4 5.2s-4-2.2-4-5.2V7zM6 7h2M16 7h2M9.3 14.7v1.6c0 1.4 1.2 2.7 2.7 2.7s2.7-1.3 2.7-2.7v-1.6M8.8 19h6.4" stroke="#F59E0B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="dock-tab-label" style="color:#F59E0B;">Tournament</span>
+          <div class="dock-tab-indicator" style="background:#F59E0B;opacity:0.4;"></div>
+        </button>
+
+      </div>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>
