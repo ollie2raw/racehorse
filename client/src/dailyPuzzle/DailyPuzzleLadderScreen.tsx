@@ -631,6 +631,9 @@ export default function DailyPuzzleLadderScreen({
                 </div>
               </div>
               <footer className="rh-result__actions">
+                <button type="button" className="rh-btn-home" onClick={onBack}>
+                  Home
+                </button>
                 <button type="button" className="rh-btn-leave" onClick={() => setFinalOverlay(null)}>
                   Review / Practice
                 </button>

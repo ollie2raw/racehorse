@@ -67,6 +67,10 @@ import {
   type DailyPuzzleSlotRow,
 } from './dailyPuzzle';
 import {
+  buildHomeDailySummary,
+  createHomeDailyCompletionMap,
+} from './homeDailySummary';
+import {
   DEFAULT_RATING,
   DEFAULT_RD,
   FRITZ_ELITE_ID,
@@ -184,6 +188,39 @@ async function getAuthenticatedUserIdFromToken(token: string | null): Promise<st
 
 app.get('/health', (_, res) => {
   res.json({ ok: true });
+});
+
+app.get('/api/home/daily-summary', async (req, res) => {
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    const today = getPacificDateKey();
+
+    if (!authenticatedUserId) {
+      res.json({
+        ok: true,
+        ...buildHomeDailySummary(today, {}, new Date()),
+      });
+      return;
+    }
+
+    const [fritzDates, ladderPuzzleDates, legacyPuzzleDates] = await Promise.all([
+      listCompletedDailyFritzDatesForUser(authenticatedUserId),
+      listCompletedDailyPuzzleLadderDatesForUser(authenticatedUserId),
+      listCompletedLegacyDailyPuzzleDatesForUser(authenticatedUserId),
+    ]);
+
+    const puzzleDates = Array.from(new Set([...ladderPuzzleDates, ...legacyPuzzleDates]));
+    const completionMap = createHomeDailyCompletionMap(fritzDates, puzzleDates);
+
+    res.json({
+      ok: true,
+      ...buildHomeDailySummary(today, completionMap, new Date()),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load homepage daily summary.',
+    });
+  }
 });
 
 app.get('/api/ranking/profile/:userId', async (req, res) => {
@@ -2225,6 +2262,58 @@ async function getDailyFritzStreak(userId: string, todayRunDate: string): Promis
     cursor = new Date(cursor.getTime() - 86400000);
   }
   return streak;
+}
+
+function isMissingRelationError(error: unknown, relationName: string): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes(relationName.toLowerCase()) && (message.includes('does not exist') || message.includes('could not find'));
+}
+
+async function listCompletedDailyFritzDatesForUser(userId: string): Promise<string[]> {
+  const rows = await supabaseFetch<Array<{ run_date: string | null }>>(
+    `/rest/v1/daily_fritz_attempts?select=run_date&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=365`,
+    { method: 'GET' },
+  );
+  return Array.from(
+    new Set(
+      rows
+        .map((row) => row.run_date)
+        .filter((value): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)),
+    ),
+  );
+}
+
+async function listCompletedDailyPuzzleLadderDatesForUser(userId: string): Promise<string[]> {
+  const rows = await supabaseFetch<Array<{ puzzle_date: string | null }>>(
+    `/rest/v1/daily_puzzle_attempts?select=puzzle_date&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=puzzle_date.desc&limit=365`,
+    { method: 'GET' },
+  );
+  return Array.from(
+    new Set(
+      rows
+        .map((row) => row.puzzle_date)
+        .filter((value): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)),
+    ),
+  );
+}
+
+async function listCompletedLegacyDailyPuzzleDatesForUser(userId: string): Promise<string[]> {
+  try {
+    const rows = await supabaseFetch<Array<{ puzzle_date: string | null }>>(
+      `/rest/v1/daily_puzzle_completions?select=puzzle_date&user_id=eq.${encodeURIComponent(userId)}&order=puzzle_date.desc&limit=365`,
+      { method: 'GET' },
+    );
+    return Array.from(
+      new Set(
+        rows
+          .map((row) => row.puzzle_date)
+          .filter((value): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)),
+      ),
+    );
+  } catch (error) {
+    if (isMissingRelationError(error, 'daily_puzzle_completions')) return [];
+    throw error;
+  }
 }
 
 function isMissingRoomMatchLogsTable(error: unknown): boolean {
@@ -5491,7 +5580,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
   });
 });
 
-const PORT = 3001;
+const PORT = Number.parseInt(process.env.PORT ?? '3001', 10) || 3001;
 
 void warmDailyFritzRuns('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]);
 scheduleDailyFritzWarmup();

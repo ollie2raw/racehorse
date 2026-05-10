@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { Board, DominoTile, RotateOverlay } from '../components';
+import { Board, BrandLogo, DominoTile, RotateOverlay } from '../components';
 import {
   applyPlayMove,
   getDisplayOpenEnds,
@@ -32,6 +32,57 @@ import {
 } from '../ui/claudeMode';
 import DailyPuzzleLadderScreen from './DailyPuzzleLadderScreen';
 import './dailyPuzzle.css';
+
+function DailyPuzzleLoadingScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="daily-puzzle-loading-root">
+      <div className="home-bg" aria-hidden="true">
+        <div className="home-bg__halo" />
+        <div className="home-bg__texture" />
+      </div>
+
+      <div className="daily-puzzle-loading-shell">
+        <nav className="daily-puzzle-loading-nav">
+          <div className="daily-puzzle-loading-brand">
+            <BrandLogo iconSize={32} showWordmark={true} />
+          </div>
+          <button type="button" className="loading-back-btn" onClick={onBack}>
+            <span className="loading-back-icon">←</span>
+            <span>Back to Home</span>
+          </button>
+        </nav>
+
+        <main className="daily-puzzle-loading-main">
+          <div className="loading-lockup">
+            <div className="loading-eyebrow">
+              <span className="blue-dot" />
+              DAILY PUZZLE
+            </div>
+            <h1 className="loading-title">Preparing today’s ladder</h1>
+            <p className="loading-subtitle">Three fixed puzzles. Same board for everyone.</p>
+
+            <div className="loading-steps">
+              <div className="loading-step">
+                <div className="loading-step-chip is-active" />
+                <span className="loading-step-label">1 Quick Line</span>
+              </div>
+              <div className="loading-step-connector" />
+              <div className="loading-step">
+                <div className="loading-step-chip" />
+                <span className="loading-step-label">2 Tactical Setup</span>
+              </div>
+              <div className="loading-step-connector" />
+              <div className="loading-step">
+                <div className="loading-step-chip" />
+                <span className="loading-step-label">3 Master Chain</span>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
 
 interface DailyPuzzleScreenProps {
   user: User | null;
@@ -1061,14 +1112,7 @@ export default function DailyPuzzleScreen({
   }, [currentLeaderboardRow, leaderboard]);
 
   if (entryMode === 'checking' && selectedDateSeed === localDateKey) {
-    return (
-      <LayoutScreen
-        className="screen lobby-screen mode-home-screen"
-        title={stableDailyTitle}
-        subtitle="Loading today’s puzzle mode..."
-        contentClassName="screen-shell"
-      />
-    );
+    return <DailyPuzzleLoadingScreen onBack={handleBackHome} />;
   }
 
   if (entryMode === 'ladder' && ladderToday && selectedDateSeed === localDateKey) {
@@ -1083,14 +1127,7 @@ export default function DailyPuzzleScreen({
   }
 
   if (loading) {
-    return (
-      <LayoutScreen
-        className="screen lobby-screen mode-home-screen"
-        title={stableDailyTitle}
-        subtitle="Loading today's curated puzzle..."
-        contentClassName="screen-shell"
-      />
-    );
+    return <DailyPuzzleLoadingScreen onBack={handleBackHome} />;
   }
 
   if (loadError && !showLobby) {

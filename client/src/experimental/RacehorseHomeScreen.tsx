@@ -6,7 +6,11 @@ import { useAuth } from '../auth/useAuth';
 import { fetchFriends } from '../friends/friendsApi';
 import { getTodayDailyFritz } from '../dailyFritz/api';
 import { getTodayDailyPuzzleLadder } from '../dailyPuzzle/api';
-import { supabase } from '../lib/supabase';
+import {
+  getHomeDailySummary,
+  type HomeDailySummaryResponse,
+  type HomeDailySummaryWeekDay,
+} from './homeDailySummaryApi';
 import './RacehorseHomeArt.css';
 
 type AppMode =
@@ -27,34 +31,13 @@ type AppMode =
   | 'singlePlayerHub'
   | 'tournament';
 
-const WEEK_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
+type DailyStripVisualState = 'done' | 'today' | 'future' | 'missed';
 
-/** Returns a local YYYY-MM-DD string (avoids UTC-shift bugs from toISOString). */
-function localDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/**
- * Builds the 7-day week strip from actual Supabase play dates.
- * Days not in `playedDates` show as empty — no fake checkmarks.
- */
-function computeStreakDays(playedDates: Set<string>) {
-  const today = new Date();
-  const dow = today.getDay(); // 0=Sun
-  const todayIdx = dow === 0 ? 6 : dow - 1; // 0=Mon … 6=Sun
-
-  return WEEK_LABELS.map((label, i) => {
-    if (i > todayIdx) return { label, state: 'future' as const };
-    if (i === todayIdx) return { label, state: 'today' as const };
-
-    // Past day this week — check if actually played
-    const d = new Date(today);
-    d.setDate(today.getDate() - (todayIdx - i));
-    return {
-      label,
-      state: playedDates.has(localDateStr(d)) ? ('done' as const) : ('future' as const),
-    };
-  });
+function getDayVisualState(day: HomeDailySummaryWeekDay): DailyStripVisualState {
+  if (day.complete) return 'done';
+  if (day.isToday) return 'today';
+  if (day.isFuture) return 'future';
+  return 'missed';
 }
 
 const tabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 'trophy' | 'medal'; mode: AppMode }[] = [
@@ -187,7 +170,7 @@ export default function RacehorseHomeScreen({
   const [fritzStatus, setFritzStatus] = useState<'completed' | 'started' | 'none'>('none');
   const [puzzleStatus, setPuzzleStatus] = useState<'completed' | 'started' | 'none'>('none');
   const [puzzleScore, setPuzzleScore] = useState<number | null>(null);
-  const [weekPlayDates, setWeekPlayDates] = useState<Set<string>>(new Set());
+  const [homeDailySummary, setHomeDailySummary] = useState<HomeDailySummaryResponse | null>(null);
 
   useEffect(() => {
     if (!authUser?.id) { setFriendCount(null); return; }
@@ -196,30 +179,19 @@ export default function RacehorseHomeScreen({
       .catch(() => setFriendCount(0));
   }, [authUser?.id]);
 
-  // Fetch which days of THIS week the user actually completed Daily Fritz.
-  // Queries Supabase directly — no backend changes needed.
   useEffect(() => {
-    if (!authUser?.id || !supabase) { setWeekPlayDates(new Set()); return; }
-
-    // Monday of the current week (local time)
-    const today = new Date();
-    const dow = today.getDay();
-    const daysFromMon = dow === 0 ? 6 : dow - 1;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - daysFromMon);
-    const mondayStr = localDateStr(monday);
-
-    supabase
-      .from('daily_fritz_attempts')
-      .select('run_date')
-      .eq('user_id', authUser.id)
-      .eq('status', 'completed')
-      .gte('run_date', mondayStr)
-      .then(({ data, error }) => {
-        if (error || !data) return;
-        setWeekPlayDates(new Set(data.map((r: { run_date: string }) => r.run_date)));
+    let cancelled = false;
+    getHomeDailySummary()
+      .then((data) => {
+        if (!cancelled) setHomeDailySummary(data);
+      })
+      .catch(() => {
+        if (!cancelled) setHomeDailySummary(null);
       });
-  }, [authUser?.id, fritzStatus]); // re-fetch when fritzStatus changes (just finished a game)
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id, fritzStatus, puzzleStatus]);
 
   useEffect(() => {
     getTodayDailyFritz()
@@ -261,11 +233,19 @@ export default function RacehorseHomeScreen({
     month: 'short', day: 'numeric', year: 'numeric',
   }).toUpperCase();
 
-  // Build the real week strip from Supabase data.
-  // If user just completed today, mark today as done too.
-  const streakDays = computeStreakDays(weekPlayDates).map((d) =>
-    d.state === 'today' && fritzStatus === 'completed' ? { ...d, state: 'done' as const } : d,
-  );
+  const streakDays = homeDailySummary?.week ?? [];
+  const weeklyCompletedCount = homeDailySummary?.weeklyCompletedCount ?? 0;
+  const currentStreakCount = homeDailySummary?.currentStreakCount ?? 0;
+  const todayComplete = homeDailySummary?.todayComplete ?? false;
+  const weeklyGoalComplete = weeklyCompletedCount >= 7;
+  const streakTitle = currentStreakCount > 0 ? `${currentStreakCount} Day Streak` : 'Start your streak';
+  const streakSubtitle = weeklyGoalComplete
+    ? 'Weekly goal complete.'
+    : todayComplete
+      ? 'Nice — today is complete.'
+      : currentStreakCount > 0
+        ? 'Play Fritz or Puzzle today to keep it going.'
+        : 'Play Fritz or Puzzle today.';
 
   const themeVars = {
     '--rh-bg': '#050911',
@@ -407,7 +387,7 @@ export default function RacehorseHomeScreen({
               <div className="home-card-content relative flex h-[252px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzle</h2>
-                  <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Find the best scoring play.</p>
+                  <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Three daily puzzles. Rising difficulty.</p>
                   <StatusRow
                     status={puzzleStatus}
                     text={puzzleStatus === 'completed' && puzzleScore != null ? `Score: ${puzzleScore}` : undefined}
@@ -433,10 +413,8 @@ export default function RacehorseHomeScreen({
                 />
               </div>
               <div>
-                <div className="text-[18px] font-semibold text-[#7EE24E]">{fritzStreak !== null ? `${fritzStreak} Day Streak` : '…'}</div>
-                <div className="mt-1 text-[13px] text-[#9D98A9]">
-                  {fritzStatus === 'completed' ? 'Keep it going!' : fritzStreak ? 'Play today to extend it!' : 'Play today to start!'}
-                </div>
+                <div className="text-[18px] font-semibold text-[#7EE24E]">{streakTitle}</div>
+                <div className="mt-1 text-[13px] text-[#9D98A9]">{streakSubtitle}</div>
               </div>
             </div>
 
@@ -444,18 +422,20 @@ export default function RacehorseHomeScreen({
               {streakDays.map((day) => (
                 <div key={day.label} className="flex flex-col items-center">
                   <div className="mb-2.5 text-[12px] text-[#B6B1BF]">{day.label}</div>
-                  {day.state === 'done' ? (
+                  {getDayVisualState(day) === 'done' ? (
                     <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#345B26] bg-[#1C3518] shadow-[0_0_16px_rgba(126,226,78,0.15)]">
                       <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M3 8.5L6.1 11.6L13 4.7" stroke="#7EE24E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </div>
-                  ) : day.state === 'today' ? (
+                  ) : getDayVisualState(day) === 'today' ? (
                     <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#9B6CFF]">
                       <div className="h-[9px] w-[9px] rounded-full bg-[#A77CFF]" />
                     </div>
-                  ) : (
+                  ) : getDayVisualState(day) === 'future' ? (
                     <div className="h-[38px] w-[38px] rounded-full border border-[#32394A]" />
+                  ) : (
+                    <div className="h-[38px] w-[38px] rounded-full border border-[#262D3A] opacity-70" />
                   )}
                 </div>
               ))}
@@ -465,14 +445,14 @@ export default function RacehorseHomeScreen({
               <div>
                 <div className="text-[13px] text-[#B6B1BF]">Weekly Goal</div>
                 <div className="mt-1.5 text-[16px]">
-                  <span className="font-semibold text-[#7EE24E]">{Math.min(fritzStreak ?? 0, 7)}</span>
+                  <span className="font-semibold text-[#7EE24E]">{weeklyCompletedCount}</span>
                   <span className="text-[#B6B1BF]"> / 7 Days</span>
                 </div>
               </div>
               <div className="h-[7px] w-[160px] rounded-full bg-[#1B2432]">
                 <div
                   className="h-full rounded-full bg-[linear-gradient(90deg,#7EE24E,#89D830)] shadow-[0_0_10px_rgba(126,226,78,0.22)]"
-                  style={{ width: `${Math.round(Math.min((fritzStreak ?? 0) / 7, 1) * 100)}%` }}
+                  style={{ width: `${Math.round(Math.min(weeklyCompletedCount / 7, 1) * 100)}%` }}
                 />
               </div>
             </div>
