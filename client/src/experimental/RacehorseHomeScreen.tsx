@@ -117,7 +117,19 @@ function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon
   );
 }
 
-function StatusRow({ status, text, color = '#22C55E', accentColor = '#3BE26F' }: { status: 'completed' | 'started' | 'none'; text?: string; color?: string; accentColor?: string }) {
+function StatusRow({
+  status,
+  text,
+  color = '#22C55E',
+  accentColor = '#3BE26F',
+  textColor,
+}: {
+  status: 'completed' | 'started' | 'none';
+  text?: string;
+  color?: string;
+  accentColor?: string;
+  textColor?: string;
+}) {
   if (status === 'completed') {
     return (
       <div className="mt-6 flex items-center gap-3 text-[15px]">
@@ -127,7 +139,7 @@ function StatusRow({ status, text, color = '#22C55E', accentColor = '#3BE26F' }:
           </svg>
         </span>
         <span className="font-medium" style={{ color: accentColor }}>Complete</span>
-        {text && <><span className="text-[#777287]">·</span><span className="text-[#B7B2C0]">{text}</span></>}
+        {text && <><span className="text-[#777287]">·</span><span style={{ color: textColor ?? '#B7B2C0' }}>{text}</span></>}
       </div>
     );
   }
@@ -168,6 +180,7 @@ export default function RacehorseHomeScreen({
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [fritzStreak, setFritzStreak] = useState<number | null>(null);
   const [fritzStatus, setFritzStatus] = useState<'completed' | 'started' | 'none'>('none');
+  const [fritzOutcome, setFritzOutcome] = useState<'win' | 'loss' | null>(null);
   const [puzzleStatus, setPuzzleStatus] = useState<'completed' | 'started' | 'none'>('none');
   const [puzzleScore, setPuzzleScore] = useState<number | null>(null);
   const [homeDailySummary, setHomeDailySummary] = useState<HomeDailySummaryResponse | null>(null);
@@ -199,8 +212,11 @@ export default function RacehorseHomeScreen({
         setFritzStreak(data.streak ?? 0);
         const s = data.attempt_status;
         setFritzStatus(s === 'completed' ? 'completed' : s === 'started' ? 'started' : 'none');
+        const won = data.set_result?.setWinner === 'player' || data.set_result?.won === true;
+        const lost = data.set_result?.setWinner === 'fritz' || (data.set_result?.won === false && s === 'completed');
+        setFritzOutcome(s === 'completed' ? (won ? 'win' : lost ? 'loss' : null) : null);
       })
-      .catch(() => { setFritzStreak(0); setFritzStatus('none'); });
+      .catch(() => { setFritzStreak(0); setFritzStatus('none'); setFritzOutcome(null); });
   }, []);
 
   useEffect(() => {
@@ -369,9 +385,10 @@ export default function RacehorseHomeScreen({
                   <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Best of 3 series. Same deal for everyone.</p>
                   <StatusRow
                     status={fritzStatus}
-                    text={fritzStatus === 'completed' && fritzStreak ? `${fritzStreak} Day Streak` : undefined}
+                    text={fritzStatus === 'completed' ? (fritzOutcome === 'win' ? 'Win' : fritzOutcome === 'loss' ? 'Loss' : undefined) : undefined}
                     color="#E7B64A"
                     accentColor="#FFD76A"
+                    textColor={fritzOutcome === 'win' ? '#7EE24E' : fritzOutcome === 'loss' ? '#F87171' : undefined}
                   />
                   <button onClick={() => navigate('dailyFritz')} className="mt-7 flex h-[50px] w-[188px] items-center justify-between px-5 rounded-[12px] border border-[#E7B64A]/68 bg-[linear-gradient(180deg,rgba(231,182,74,0.12)_0%,rgba(231,182,74,0.04)_100%)] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_20px,rgba(231,182,74,0.18),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_0_1px_rgba(231,182,74,0.10)] transition-all hover:shadow-[0_0_30px_rgba(231,182,74,0.30),inset_0_1px_0_rgba(255,255,255,0.12)] hover:border-[#E7B64A]/85 active:scale-[0.97]">
                     <span>{fritzStatus === 'completed' ? 'View Result' : fritzStatus === 'started' ? 'Continue' : 'Play Today'}</span>
