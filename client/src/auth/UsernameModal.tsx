@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import './authModal.css';
 
 interface UsernameModalProps {
   open: boolean;
   currentUsername: string | null;
+  /** True when the user manually opened this from their profile button (vs onboarding). */
+  isProfileEdit?: boolean;
   onSave: (username: string) => Promise<{ error: string | null }>;
   onClose?: () => void;
   onSignOut?: () => void | Promise<void>;
@@ -12,6 +15,7 @@ interface UsernameModalProps {
 export default function UsernameModal({
   open,
   currentUsername,
+  isProfileEdit = false,
   onSave,
   onClose,
   onSignOut,
@@ -46,119 +50,99 @@ export default function UsernameModal({
     }
   };
 
+  const canSave = username.trim().length > 0 && !saving && !signingOut;
+
+  // Copy branches: profile edit vs first-time handle onboarding
+  const title = isProfileEdit ? 'Your profile' : 'Choose your handle';
+  const subtitle = isProfileEdit
+    ? 'Manage your Racehorse handle and account settings.'
+    : 'This name appears on leaderboards, friends lists, and match results.';
+
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Choose username"
+      aria-label={title}
+      className="rh-modal-overlay"
       onClick={() => {
         if (!saving) onClose?.();
       }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1900,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'rgba(6, 10, 18, 0.62)',
-        backdropFilter: 'blur(4px)',
-        pointerEvents: 'auto',
-      }}
     >
       <div
+        className="rh-modal-panel"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          position: 'relative',
-          zIndex: 1901,
-          pointerEvents: 'auto',
-          width: 'min(500px, calc(100vw - 24px))',
-          borderRadius: '16px',
-          border: '1px solid rgba(236,252,245,0.2)',
-          background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '18px',
-          color: 'rgba(235,245,242,0.96)',
-          display: 'grid',
-          gap: '12px',
-        }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-          }}
-        >
-          <h3 style={{ margin: 0 }}>Pick your username</h3>
-          {onClose && (
-            <button type="button" className="mode-inline-btn" onClick={onClose} disabled={saving || signingOut}>
+        {/* Head row */}
+        <div className="rh-modal-head">
+          <p className="rh-modal-eyebrow">Profile</p>
+          {/* Only show "Not now" during onboarding, not in profile-edit mode */}
+          {onClose && !isProfileEdit && (
+            <button
+              type="button"
+              className="rh-modal-ghost-btn"
+              onClick={onClose}
+              disabled={saving || signingOut}
+            >
               Not now
+            </button>
+          )}
+          {/* Show a close ✕ button in profile-edit mode */}
+          {onClose && isProfileEdit && (
+            <button
+              type="button"
+              className="rh-modal-close"
+              onClick={onClose}
+              disabled={saving || signingOut}
+              aria-label="Close"
+            >
+              ×
             </button>
           )}
         </div>
 
-        <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
-          This username is shown in your profile and stats.
-        </p>
+        <h3 className="rh-modal-title">{title}</h3>
+        <p className="rh-modal-subtitle">{subtitle}</p>
 
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span style={{ fontSize: '0.9rem', color: 'rgba(223,236,244,0.9)' }}>Username</span>
+        {/* Username field */}
+        <label className="rh-modal-field">
+          <span className="rh-modal-field-label">Username</span>
           <input
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && canSave) void submit(); }}
             placeholder="racehorse_ace"
-            disabled={saving}
-            style={{
-              borderRadius: '10px',
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(11,18,30,0.7)',
-              color: 'rgba(238,248,243,0.96)',
-              padding: '10px',
-            }}
+            disabled={saving || signingOut}
+            autoComplete="username"
+            className="rh-modal-input"
           />
         </label>
 
         {error && <p className="auth-inline-error">{error}</p>}
 
+        {/* Save button */}
         <button
           type="button"
-          className="mode-option mode-option-primary auth-submit"
-          onClick={submit}
-          disabled={saving || signingOut}
+          className="rh-modal-submit"
+          onClick={() => void submit()}
+          disabled={!canSave}
         >
-          <span className="mode-option-title">{saving ? 'Saving...' : 'Save username'}</span>
+          {saving ? 'Saving…' : 'Save username'}
         </button>
 
-        {onSignOut ? (
-          <div
-            style={{
-              marginTop: 4,
-              paddingTop: 12,
-              borderTop: '1px solid rgba(255,255,255,0.08)',
-              display: 'grid',
-              gap: 10,
-            }}
-          >
+        {/* Sign out row */}
+        {onSignOut && (
+          <div className="rh-modal-signout-row">
             <button
               type="button"
-              className="mode-inline-btn"
-              onClick={() => {
-                void onSignOut();
-              }}
+              className="rh-modal-signout-btn"
+              onClick={() => { void onSignOut(); }}
               disabled={saving || signingOut}
-              style={{
-                justifySelf: 'start',
-                color: 'rgba(255, 228, 228, 0.88)',
-                borderColor: 'rgba(248, 113, 113, 0.22)',
-                background: 'linear-gradient(180deg, rgba(40,18,24,0.72), rgba(18,10,14,0.86))',
-              }}
             >
-              {signingOut ? 'Signing out...' : 'Sign out'}
+              {signingOut ? 'Signing out…' : 'Sign out'}
             </button>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

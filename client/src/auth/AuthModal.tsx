@@ -122,7 +122,9 @@ export default function AuthModal({
         <p className="auth-modal-subtitle">
           {mode === 'verify'
             ? 'Finish account setup from your inbox.'
-            : 'Track your profile, stats, and leaderboard position.'}
+            : mode === 'signin'
+              ? 'Track your rating, friends, streaks, and leaderboard results.'
+              : 'Create a free account to track your stats and compete on the leaderboard.'}
         </p>
 
         {!supabaseEnabled && (

@@ -179,9 +179,11 @@ function StatusRow({ status, text }: { status: 'completed' | 'started' | 'none';
 export default function RacehorseHomeScreen({
   setAppMode,
   onOpenAuth,
+  onOpenAccount,
 }: {
   setAppMode?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
+  onOpenAccount?: () => void;
 }) {
   const navigate = (mode: AppMode) => setAppMode?.(mode);
 
@@ -308,7 +310,12 @@ export default function RacehorseHomeScreen({
             <BrandLogo iconSize={44} />
           </div>
 
+          <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[13px] font-medium uppercase tracking-[0.28em] text-[#52AFFF] opacity-85">
+            {todayLabel}
+          </div>
+
           <div className="flex items-center">
+            {/* Rating */}
             <div className="flex items-center gap-3 px-5 py-2.5">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="#F2C35E" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
@@ -335,36 +342,47 @@ export default function RacehorseHomeScreen({
                 <div className="text-[12px] text-[#8A879B]">Friends</div>
               </div>
             </button>
-          </div>
 
-          <button
-            type="button"
-            onClick={() => authUser ? navigate('stats') : onOpenAuth?.()}
-            className="flex items-center gap-4 cursor-pointer transition-opacity hover:opacity-80"
-          >
-            <div className="flex h-[54px] w-[54px] items-center justify-center rounded-full border border-[#C8922A]/60 bg-[radial-gradient(circle_at_45%_30%,#8A5A2B_0%,#4A2D18_44%,#140F0D_100%)] shadow-[0_0_14px_rgba(200,146,42,0.12)] select-none">
-              <span className="text-[17px] font-bold tracking-tight text-[#E1BE82]">{initials}</span>
+            <div className="mx-4 h-8 w-px bg-white/10" />
+
+            <div className="flex items-center gap-4">
+              {/* Big "O" / Avatar -> Stats */}
+              <button
+                type="button"
+                onClick={() => navigate('stats')}
+                className="flex h-[54px] w-[54px] items-center justify-center rounded-full border border-[#C8922A]/60 bg-[radial-gradient(circle_at_45%_30%,#8A5A2B_0%,#4A2D18_44%,#140F0D_100%)] shadow-[0_0_14px_rgba(200,146,42,0.12)] select-none cursor-pointer transition-opacity hover:opacity-80 active:scale-95"
+                aria-label="View Stats"
+              >
+                <span className="text-[17px] font-bold tracking-tight text-[#E1BE82]">{initials}</span>
+              </button>
+
+              {/* Username / Details -> Account/Auth */}
+              <button
+                type="button"
+                onClick={() => (authUser ? onOpenAccount?.() : onOpenAuth?.())}
+                className="flex items-center gap-4 cursor-pointer transition-opacity hover:opacity-80"
+              >
+                <div className="leading-tight text-left">
+                  <div className="text-[16px] font-semibold text-[#F0EDE8]">{displayName}</div>
+                  {authUser && authProfile?.ranked_games_played != null && (
+                    <div className="mt-1 text-[13px] text-[#8A879B]">{authProfile.ranked_games_played} ranked games</div>
+                  )}
+                  {!authUser && (
+                    <div className="mt-1 text-[13px] text-[#5BAAF8]">Sign in to track progress</div>
+                  )}
+                </div>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5 7.5L10 12.5L15 7.5" stroke="#E7E1D5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
             </div>
-            <div className="leading-tight text-left">
-              <div className="text-[16px] font-semibold text-[#F0EDE8]">{displayName}</div>
-              {authUser && authProfile?.ranked_games_played != null && (
-                <div className="mt-1 text-[13px] text-[#8A879B]">{authProfile.ranked_games_played} ranked games</div>
-              )}
-              {!authUser && (
-                <div className="mt-1 text-[13px] text-[#5BAAF8]">Sign in to track progress</div>
-              )}
-            </div>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 7.5L10 12.5L15 7.5" stroke="#E7E1D5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          </div>
         </nav>
 
         <main className="relative flex-1 px-0 pb-5 pt-10 home-main">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]" />
           <div className="text-center">
-            <div className="text-[14px] uppercase tracking-[0.32em] text-[#35A5FF] opacity-80">{todayLabel}</div>
-            <h1 className="mt-4 text-[72px] font-black leading-[0.9] tracking-[-0.05em] text-white" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Challenge</h1>
+            <h1 className="text-[72px] font-black leading-[0.9] tracking-[-0.05em] text-white" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Challenge</h1>
             <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">Two ways to test your strategy. One daily tradition.</p>
           </div>
 

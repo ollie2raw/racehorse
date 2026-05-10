@@ -2728,7 +2728,64 @@ export default function App() {
   })();
 
   if (typeof window !== 'undefined' && (window.location.pathname === '/redesign' || window.location.pathname === '/') && appMode === 'home') {
-    return <RacehorseHomeScreen setAppMode={setAppMode} onOpenAuth={() => setAuthModalOpen(true)} />;
+    return (
+      <>
+        <RacehorseHomeScreen
+          setAppMode={setAppMode}
+          onOpenAuth={() => setAuthModalOpen(true)}
+          onOpenAccount={() => setUsernameModalOpen(true)}
+        />
+        <Suspense fallback={null}>
+          <AuthModal
+            open={authModalOpen}
+            supabaseEnabled={supabaseEnabled}
+            supabaseConfigError={supabaseConfigError}
+            onClose={() => setAuthModalOpen(false)}
+            onSignIn={signIn}
+            onSignUp={signUp}
+            onResetPassword={resetPassword}
+          />
+          <UsernameModal
+            open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
+            currentUsername={authProfile?.username ?? null}
+            isProfileEdit={usernameModalOpen}
+            onSave={async (username) => {
+              const result = await updateUsername(username);
+              if (!result.error) {
+                window.localStorage.removeItem('username_onboarding_dismissed');
+                setOnboardingDismissed(false);
+                setUsernameModalOpen(false);
+              }
+              return result;
+            }}
+            onClose={() => {
+              window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
+              setOnboardingDismissed(true);
+              setUsernameModalOpen(false);
+            }}
+            onSignOut={async () => {
+              resetRoomRecoveryState();
+              setSigningOut(true);
+              setAppMode('home');
+              resetMultiplayerRoomState();
+              setError('');
+              setActionError('');
+              try {
+                void signOut().catch(() => {});
+              } catch {
+                // no-op
+              } finally {
+                setSigningOut(false);
+                setUsernameModalOpen(false);
+                setOnboardingDismissed(false);
+                setAuthModalOpen(true);
+              }
+            }}
+            signingOut={signingOut}
+          />
+        </Suspense>
+      </>
+    );
   }
 
   if (appMode === 'noBrainer') {
@@ -3694,6 +3751,7 @@ export default function App() {
           <UsernameModal
             open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
             currentUsername={authProfile?.username ?? null}
+            isProfileEdit={usernameModalOpen}
             onSave={async (username) => {
               const result = await updateUsername(username);
               if (!result.error) {
@@ -3721,6 +3779,9 @@ export default function App() {
                 // no-op
               } finally {
                 setSigningOut(false);
+                setUsernameModalOpen(false);
+                setOnboardingDismissed(false);
+                setAuthModalOpen(true);
               }
             }}
             signingOut={signingOut}
