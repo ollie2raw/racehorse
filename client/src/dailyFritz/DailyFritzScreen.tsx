@@ -6,12 +6,66 @@ import type { GhostProfileSummary } from '../ghost/api';
 import BotMatchScreen from '../bot/BotMatchScreen';
 import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import DailyFritzLeaderboard from './DailyFritzLeaderboard';
+import { BrandLogo } from '../components/BrandLogo';
 import {
   ClaudePrimaryAction,
   ClaudeSecondaryAction,
   ClaudeSectionLabel,
   ClaudeStatLine,
+  claudeRgb,
 } from '../ui/claudeMode';
+
+function DailyFritzLoadingScreen({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="daily-fritz-loading-root">
+      <div className="home-bg" aria-hidden="true">
+        <div className="home-bg__halo" />
+        <div className="home-bg__texture" />
+      </div>
+
+      <div className="daily-fritz-loading-shell">
+        <nav className="daily-fritz-loading-nav">
+          <div className="daily-fritz-loading-brand">
+            <BrandLogo iconSize={32} showWordmark={true} />
+          </div>
+          <button type="button" className="loading-back-btn" onClick={onBack}>
+            <span className="loading-back-icon">←</span>
+            <span>Back to Home</span>
+          </button>
+        </nav>
+
+        <main className="daily-fritz-loading-main">
+          <div className="loading-lockup">
+            <div className="loading-eyebrow brass-theme">
+              <span className="brass-dot" />
+              DAILY FRITZ
+            </div>
+            <h1 className="loading-title">Preparing today’s series</h1>
+            <p className="loading-subtitle">Best of 3 games. Same deals for everyone.</p>
+
+            <div className="loading-steps">
+              <div className="loading-step">
+                <div className="loading-step-chip brass-theme is-active" />
+                <span className="loading-step-label">Game 1</span>
+              </div>
+              <div className="loading-step-connector" />
+              <div className="loading-step">
+                <div className="loading-step-chip brass-theme" />
+                <span className="loading-step-label">Game 2</span>
+              </div>
+              <div className="loading-step-connector" />
+              <div className="loading-step">
+                <div className="loading-step-chip brass-theme" />
+                <span className="loading-step-label">Game 3</span>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
 import {
   buildDailyFritzCompletionHash,
   completeDailyFritz,
@@ -1241,6 +1295,10 @@ export default function DailyFritzScreen({
     );
   }
 
+  if (loading) {
+    return <DailyFritzLoadingScreen onBack={onBack} />;
+  }
+
   return (
     <div className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz">
       <div className="daily-dash" style={{ ['--dash-accent' as string]: '#e05c6a' }}>
@@ -1269,9 +1327,7 @@ export default function DailyFritzScreen({
           <div className="daily-dash-separator" aria-hidden="true" />
 
           {/* Body — varies by load/auth/data state */}
-          {loading ? (
-            <div className="daily-fritz-empty claude-mode-card">Loading today’s run…</div>
-          ) : showAuthPrompt ? (
+          {showAuthPrompt ? (
             <div className="daily-dash-body daily-fritz-home-body">
               <div className="daily-dash-details daily-fritz-home-primary">
                 <div className="daily-fritz-empty claude-mode-card">
