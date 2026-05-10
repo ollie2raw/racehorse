@@ -57,12 +57,12 @@ function computeStreakDays(playedDates: Set<string>) {
   });
 }
 
-const tabs: { label: string; color: string; icon: 'robot' | 'users' | 'ghost' | 'cap' | 'trophy'; mode: AppMode }[] = [
-  { label: 'Play vs Fritz', color: '#C8922A', icon: 'robot', mode: 'botSetup' },
-  { label: 'Multiplayer', color: '#4A8FD4', icon: 'users', mode: 'multiplayer' },
-  { label: 'Ghost Mode', color: '#8B5CF6', icon: 'ghost', mode: 'ghostSetup' },
-  { label: 'Learn', color: '#10B981', icon: 'cap', mode: 'learn' },
-  { label: 'Tournament', color: '#F59E0B', icon: 'trophy', mode: 'tournament' },
+const tabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 'trophy' | 'medal'; mode: AppMode }[] = [
+  { label: 'Single Player', color: '#9B6CFF', icon: 'robot', mode: 'singlePlayerHub' },
+  { label: 'Multiplayer', color: '#3FA7FF', icon: 'users', mode: 'multiplayer' },
+  { label: 'Learn', color: '#19D8A2', icon: 'cap', mode: 'learn' },
+  { label: 'Tournament', color: '#F5A524', icon: 'trophy', mode: 'tournament' },
+  { label: 'Leaderboard', color: '#B8C7DA', icon: 'medal', mode: 'stats' },
 ];
 
 function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon']; color: string; size?: number }) {
@@ -103,22 +103,6 @@ function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon
     );
   }
 
-  if (icon === 'ghost') {
-    return (
-      <svg {...common}>
-        <path
-          d="M7 18v-7c0-3 2.2-5 5-5s5 2 5 5v7l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5z"
-          stroke={color}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="10" cy="11" r="0.9" fill={color} />
-        <circle cx="14" cy="11" r="0.9" fill={color} />
-      </svg>
-    );
-  }
-
   if (icon === 'cap') {
     return (
       <svg {...common}>
@@ -128,29 +112,38 @@ function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon
     );
   }
 
+  if (icon === 'trophy') {
+    return (
+      <svg {...common}>
+        <path
+          d="M8 7h8v2.5c0 3-1.7 5.2-4 5.2s-4-2.2-4-5.2V7zM6 7h2M16 7h2M9.3 14.7v1.6c0 1.4 1.2 2.7 2.7 2.7s2.7-1.3 2.7-2.7v-1.6M8.8 19h6.4"
+          stroke={color}
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
   return (
     <svg {...common}>
-      <path
-        d="M8 7h8v2.5c0 3-1.7 5.2-4 5.2s-4-2.2-4-5.2V7zM6 7h2M16 7h2M9.3 14.7v1.6c0 1.4 1.2 2.7 2.7 2.7s2.7-1.3 2.7-2.7v-1.6M8.8 19h6.4"
-        stroke={color}
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M12 15C15.3137 15 18 12.3137 18 9C18 5.68629 15.3137 3 12 3C8.68629 3 6 5.68629 6 9C6 12.3137 8.68629 15 12 15Z" stroke={color} strokeWidth="1.8"/>
+      <path d="M8.21 13.89L7 21L12 19L17 21L15.79 13.88" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
 
-function StatusRow({ status, text }: { status: 'completed' | 'started' | 'none'; text?: string }) {
+function StatusRow({ status, text, color = '#22C55E', accentColor = '#3BE26F' }: { status: 'completed' | 'started' | 'none'; text?: string; color?: string; accentColor?: string }) {
   if (status === 'completed') {
     return (
       <div className="mt-6 flex items-center gap-3 text-[15px]">
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#22C55E]/65">
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border" style={{ borderColor: `${color}a6` }}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3 8.5L6.1 11.6L13 4.7" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M3 8.5L6.1 11.6L13 4.7" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
-        <span className="font-medium text-[#3BE26F]">Complete</span>
+        <span className="font-medium" style={{ color: accentColor }}>Complete</span>
         {text && <><span className="text-[#777287]">·</span><span className="text-[#B7B2C0]">{text}</span></>}
       </div>
     );
@@ -158,10 +151,10 @@ function StatusRow({ status, text }: { status: 'completed' | 'started' | 'none';
   if (status === 'started') {
     return (
       <div className="mt-6 flex items-center gap-3 text-[15px]">
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#C8922A]/65">
-          <div className="h-2 w-2 rounded-full bg-[#E8BF66]" />
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border" style={{ borderColor: `${color}a6` }}>
+          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: accentColor }} />
         </span>
-        <span className="font-medium text-[#E8BF66]">In Progress</span>
+        <span className="font-medium" style={{ color: accentColor }}>In Progress</span>
         {text && <><span className="text-[#777287]">·</span><span className="text-[#B7B2C0]">{text}</span></>}
       </div>
     );
@@ -392,15 +385,17 @@ export default function RacehorseHomeScreen({
               <div className="home-card-scrim" aria-hidden="true" />
               <div className="home-card-content relative flex h-[252px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
-                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#EDC468]">Daily Fritz</h2>
-                  <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">One seeded match. Same deal for everyone.</p>
+                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#E7B64A]">Daily Fritz</h2>
+                  <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Best of 3 series. Same deal for everyone.</p>
                   <StatusRow
                     status={fritzStatus}
                     text={fritzStatus === 'completed' && fritzStreak ? `${fritzStreak} Day Streak` : undefined}
+                    color="#E7B64A"
+                    accentColor="#FFD76A"
                   />
-                  <button onClick={() => navigate('dailyFritz')} className="mt-7 flex h-[50px] w-[188px] items-center justify-between px-5 rounded-[12px] border border-[#C8922A]/68 bg-[linear-gradient(180deg,rgba(200,146,42,0.12)_0%,rgba(200,146,42,0.04)_100%)] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_20px_rgba(200,146,42,0.18),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_0_1px_rgba(200,146,42,0.10)] transition-all hover:shadow-[0_0_30px_rgba(200,146,42,0.30),inset_0_1px_0_rgba(255,255,255,0.12)] hover:border-[#C8922A]/85 active:scale-[0.97]">
+                  <button onClick={() => navigate('dailyFritz')} className="mt-7 flex h-[50px] w-[188px] items-center justify-between px-5 rounded-[12px] border border-[#E7B64A]/68 bg-[linear-gradient(180deg,rgba(231,182,74,0.12)_0%,rgba(231,182,74,0.04)_100%)] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_20px,rgba(231,182,74,0.18),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_0_1px_rgba(231,182,74,0.10)] transition-all hover:shadow-[0_0_30px_rgba(231,182,74,0.30),inset_0_1px_0_rgba(255,255,255,0.12)] hover:border-[#E7B64A]/85 active:scale-[0.97]">
                     <span>{fritzStatus === 'completed' ? 'View Result' : fritzStatus === 'started' ? 'Continue' : 'Play Today'}</span>
-                    <span className="text-[22px] leading-none text-[#E8B840] opacity-90">›</span>
+                    <span className="text-[22px] leading-none text-[#FFD76A] opacity-90">›</span>
                   </button>
                 </div>
               </div>
@@ -411,15 +406,17 @@ export default function RacehorseHomeScreen({
               <div className="home-card-scrim" aria-hidden="true" />
               <div className="home-card-content relative flex h-[252px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
-                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#5A9EEF]">Daily Puzzle</h2>
+                  <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzle</h2>
                   <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Find the best scoring play.</p>
                   <StatusRow
                     status={puzzleStatus}
                     text={puzzleStatus === 'completed' && puzzleScore != null ? `Score: ${puzzleScore}` : undefined}
+                    color="#58A6FF"
+                    accentColor="#68B3FF"
                   />
-                  <button onClick={() => navigate('daily')} className="mt-7 flex h-[50px] w-[188px] items-center justify-between px-5 rounded-[12px] border border-[#3D8FE8]/68 bg-[linear-gradient(180deg,rgba(74,143,212,0.12)_0%,rgba(74,143,212,0.04)_100%)] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_20px_rgba(74,143,212,0.18),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_0_1px_rgba(74,143,212,0.10)] transition-all hover:shadow-[0_0_30px_rgba(74,143,212,0.30),inset_0_1px_0_rgba(255,255,255,0.12)] hover:border-[#3D8FE8]/85 active:scale-[0.97]">
+                  <button onClick={() => navigate('daily')} className="mt-7 flex h-[50px] w-[188px] items-center justify-between px-5 rounded-[12px] border border-[#58A6FF]/68 bg-[linear-gradient(180deg,rgba(88,166,255,0.12)_0%,rgba(88,166,255,0.04)_100%)] text-[16px] font-semibold text-[#F2EEE7] shadow-[0_0_20px_rgba(88,166,255,0.18),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_0_1px_rgba(88,166,255,0.10)] transition-all hover:shadow-[0_0_30px_rgba(88,166,255,0.30),inset_0_1px_0_rgba(255,255,255,0.12)] hover:border-[#58A6FF]/85 active:scale-[0.97]">
                     <span>{puzzleStatus === 'completed' ? 'Review Puzzle' : puzzleStatus === 'started' ? 'Continue' : 'Play Today'}</span>
-                    <span className="text-[22px] leading-none text-[#5BAAF8] opacity-90">›</span>
+                    <span className="text-[22px] leading-none text-[#68B3FF] opacity-90">›</span>
                   </button>
                 </div>
               </div>
@@ -454,8 +451,8 @@ export default function RacehorseHomeScreen({
                       </svg>
                     </div>
                   ) : day.state === 'today' ? (
-                    <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#C8922A]">
-                      <div className="h-[9px] w-[9px] rounded-full bg-[#E8BF66]" />
+                    <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#9B6CFF]">
+                      <div className="h-[9px] w-[9px] rounded-full bg-[#A77CFF]" />
                     </div>
                   ) : (
                     <div className="h-[38px] w-[38px] rounded-full border border-[#32394A]" />

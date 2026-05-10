@@ -1,4 +1,5 @@
 import './loadEnv';
+import { spawnSync } from 'child_process';
 import {
   computeBestPossiblePuzzleScore,
   createHighScorePuzzle,
@@ -174,21 +175,90 @@ function choosePuzzleForSlot(
   );
 }
 
-async function postgrestFetch(path: string, init?: RequestInit): Promise<Response> {
+type PostgrestResponseLike = {
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+  json(): Promise<unknown>;
+};
+
+function curlPostgrestFallback(
+  url: string,
+  serviceKey: string,
+  init?: RequestInit,
+): PostgrestResponseLike {
+  const args = [
+    '-sS',
+    '-X',
+    init?.method ?? 'GET',
+    '-H',
+    `apikey: ${serviceKey}`,
+    '-H',
+    `Authorization: Bearer ${serviceKey}`,
+    '-H',
+    'Content-Type: application/json',
+  ];
+  const preferHeader =
+    init?.headers && typeof init.headers === 'object' && 'Prefer' in init.headers
+      ? (init.headers as Record<string, string>).Prefer
+      : undefined;
+  if (preferHeader) {
+    args.push('-H', `Prefer: ${preferHeader}`);
+  }
+  if (typeof init?.body === 'string') {
+    args.push('--data', init.body);
+  }
+  args.push(url, '-w', '\n__STATUS__:%{http_code}');
+
+  const result = spawnSync('curl', args, { encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error(result.stderr?.trim() || result.stdout?.trim() || 'curl fallback failed');
+  }
+
+  const stdout = result.stdout ?? '';
+  const markerIndex = stdout.lastIndexOf('\n__STATUS__:');
+  const bodyText = markerIndex >= 0 ? stdout.slice(0, markerIndex) : stdout;
+  const statusText = markerIndex >= 0 ? stdout.slice(markerIndex + '\n__STATUS__:'.length).trim() : '0';
+  const status = Number.parseInt(statusText, 10) || 0;
+
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async text() {
+      return bodyText;
+    },
+    async json() {
+      return bodyText ? JSON.parse(bodyText) : null;
+    },
+  };
+}
+
+async function postgrestFetch(path: string, init?: RequestInit): Promise<PostgrestResponseLike> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supabaseUrl) throw new Error('SUPABASE_URL is required.');
   if (!serviceKey) throw new Error('SUPABASE_SERVICE_KEY is required.');
-  return fetch(new URL(path, supabaseUrl), {
-    ...init,
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates,return=representation',
-      ...(init?.headers ?? {}),
-    },
-  });
+  const url = new URL(path, supabaseUrl);
+  try {
+    return await fetch(url, {
+      ...init,
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=representation',
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    return curlPostgrestFallback(url.toString(), serviceKey, {
+      ...init,
+      headers: {
+        Prefer: 'resolution=merge-duplicates,return=representation',
+        ...(init?.headers ?? {}),
+      },
+    });
+  }
 }
 
 async function upsertSlot(

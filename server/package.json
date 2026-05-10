@@ -9,9 +9,11 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "check:daily-ladder": "node dist/checkDailyPuzzleLadder.js",
+    "gen:puzzles": "bash ../scripts/gen-puzzles.sh",
     "nobrainer:validate": "node -e \"require('ts-node/register/transpile-only'); require('./scripts/validateNoBrainers.ts')\"",
     "nobrainer:generate": "node -e \"require('ts-node/register/transpile-only'); require('./scripts/generateNoBrainers.ts')\"",
-    "gen:puzzles": "tsx src/generatePuzzles.ts"
+    "gen:puzzles:legacy": "tsx src/generatePuzzles.ts"
   },
   "keywords": [],
   "author": "",

@@ -48,6 +48,7 @@ import {
   loadFrozenLesson,
 } from './learn/guidedAuthoring';
 import RacehorseHomeScreen from './experimental/RacehorseHomeScreen';
+import SinglePlayerHubScreen from './experimental/SinglePlayerHubScreen';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -3047,84 +3048,15 @@ export default function App() {
   }
 
   if (appMode === 'singlePlayerHub') {
-    const singlePlayerModes = [
-      {
-        id: 'fritz',
-        title: 'Play vs Fritz',
-        meta: 'Test yourself against the toughest opponent in the room',
-        accent: '#3d8eff',
-        action: () => setAppMode('botSetup'),
-      },
-      {
-        id: 'ghost',
-        title: 'Ghost Mode',
-        meta: 'Play against a ghost trained on your own playstyle',
-        accent: '#c040ff',
-        action: () => setAppMode('ghostSetup'),
-      },
-      {
-        id: 'nobrainer',
-        title: 'No Brainer Lab',
-        meta: 'Practice one-turn clear runs with curated hands',
-        accent: '#34d399',
-        action: () => setAppMode('noBrainer'),
-      },
-    ];
-
     return (
       <div className={appRootClassName}>
-        <div className="screen lobby-screen mode-home-screen mode-subpage-screen claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
-          <ClaudeModeScreen
-            accent="#3d8eff"
-            eyebrow="Choose your mode"
-            title={'SINGLE\nPLAYER'}
-            description="Play vs Fritz, train against your ghost, or drill one-turn clears."
-            decor="S"
-            backLabel="Back to Home"
-            onBack={() => setAppMode('home')}
-            heroFooter={
-              <div className="claude-mode-chip-row">
-                <span className="claude-mode-chip">Fritz</span>
-                <span className="claude-mode-chip">Ghost</span>
-                <span className="claude-mode-chip">Lab</span>
-              </div>
-            }
-            panel={
-              <div className="claude-mode-panel-stack">
-                <ClaudeSectionLabel>Select Mode</ClaudeSectionLabel>
-                {singlePlayerModes.map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    className="claude-mode-choice-row"
-                    style={{
-                      ['--row-accent' as string]: mode.accent,
-                      ['--row-accent-rgb' as string]: claudeRgb(mode.accent),
-                    }}
-                    onClick={mode.action}
-                  >
-                    <span className="claude-mode-choice-row__content">
-                      <span className="claude-mode-choice-row__title">{mode.title}</span>
-                      <span className="claude-mode-choice-row__meta">{mode.meta}</span>
-                    </span>
-                    <svg className="claude-mode-choice-row__arrow" viewBox="0 0 14 14" aria-hidden="true">
-                      <path d="M3.5 7h7M7.5 3.5l3.5 3.5-3.5 3.5" />
-                    </svg>
-                  </button>
-                ))}
-                <ClaudeSecondaryAction
-                  title="Back to Home"
-                  meta="Return to the full mode selector"
-                  onClick={() => setAppMode('home')}
-                />
-              </div>
-            }
-          />
-        </div>
+        <SinglePlayerHubScreen
+          onBack={() => setAppMode('home')}
+          onNavigate={(mode) => setAppMode(mode as any)}
+        />
       </div>
     );
-    }
-
+  }
     if (appMode === 'tournament') {
     const players: TournamentPlayer[] = Array.isArray(tournamentState?.players)
       ? tournamentState.players.filter(

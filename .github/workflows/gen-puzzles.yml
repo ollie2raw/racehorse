@@ -1,4 +1,4 @@
-name: Generate Daily Puzzles
+name: Generate Daily Puzzle Ladders
 
 on:
   schedule:
@@ -19,15 +19,15 @@ jobs:
       - name: Install tsx
         run: npm install -g tsx
 
-      - name: Generate puzzles (backfill + lookahead)
+      - name: Generate ladders (backfill + lookahead)
         env:
           SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
-          # Daily Puzzle resets at midnight Pacific; generate using PT calendar days.
+          # Daily Puzzle resets at midnight Pacific; seed ladder slots using PT calendar days.
           export TZ=America/Los_Angeles
           # Get current date in PT, then calculate back 2 days for safe backfill.
           FROM=$(date -d "-2 days" +%Y-%m-%d 2>/dev/null || date -v-2d +%Y-%m-%d)
-          echo "Generating puzzles from $FROM for 365 days..."
-          # 365-day rolling window keeps today + one year of future puzzles pre-generated.
+          echo "Generating ladder slots from $FROM for 365 days..."
+          # 365-day rolling window keeps today + one year of future ladders pre-generated.
           bash scripts/gen-puzzles.sh --from "$FROM" --days 365 --overwrite-existing
