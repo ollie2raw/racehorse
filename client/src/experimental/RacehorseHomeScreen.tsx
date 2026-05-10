@@ -355,15 +355,15 @@ export default function RacehorseHomeScreen({
         <main className="relative flex-1 px-0 pb-5 pt-10 home-main">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]" />
           <div className="text-center">
-            <h1 className="text-[72px] font-black leading-[0.9] tracking-[-0.05em] text-white" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Challenge</h1>
+            <h1 className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-white" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Challenge</h1>
             <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">Two ways to test your strategy. One daily tradition.</p>
           </div>
 
           <div className="mt-8 grid grid-cols-2 gap-5 px-14">
-            <section className="daily-fritz-card-container relative overflow-hidden rounded-[20px] rounded-tl-[5px] px-7 py-7">
+            <section className="daily-fritz-card-container relative overflow-hidden rounded-[20px] rounded-tl-[5px] px-7 py-8">
               <div className="home-card-art home-card-art--fritz" aria-hidden="true" />
               <div className="home-card-scrim" aria-hidden="true" />
-              <div className="home-card-content relative flex h-[252px] items-center">
+              <div className="home-card-content relative flex h-[268px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#E7B64A]">Daily Fritz</h2>
                   <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Best of 3 series. Same deal for everyone.</p>
@@ -381,10 +381,10 @@ export default function RacehorseHomeScreen({
               </div>
             </section>
 
-            <section className="daily-puzzle-card-container relative overflow-hidden rounded-[20px] rounded-tr-[5px] px-7 py-7">
+            <section className="daily-puzzle-card-container relative overflow-hidden rounded-[20px] rounded-tr-[5px] px-7 py-8">
               <div className="home-card-art home-card-art--puzzle" aria-hidden="true" />
               <div className="home-card-scrim" aria-hidden="true" />
-              <div className="home-card-content relative flex h-[252px] items-center">
+              <div className="home-card-content relative flex h-[268px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzle</h2>
                   <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Three daily puzzles. Rising difficulty.</p>
