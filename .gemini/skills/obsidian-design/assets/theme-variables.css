@@ -1,0 +1,9 @@
+:root {
+  --color-obsidian: #04070c;
+  --color-rookie: #4ADE80;
+  --color-standard: #3B82F6;
+  --color-elite: #E7B64A;
+  --color-master: #A855F7;
+  --card-radius: 24px;
+  --hud-lift: 20px;
+}
