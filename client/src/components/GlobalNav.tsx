@@ -61,7 +61,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
 
   return (
     <nav 
-      className="relative flex h-[78px] shrink-0 items-center justify-between px-9 w-full z-50"
+      className="relative h-[78px] shrink-0 w-full z-50"
       style={{ 
         boxSizing: 'border-box', 
         overflow: 'visible',
@@ -72,151 +72,157 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
         fontFamily: "'Outfit', system-ui, sans-serif"
       }}
     >
-      {/* Left: Brand & Identity */}
-      <div className="flex items-center cursor-pointer min-w-[280px]" onClick={() => onNavigate?.('home')}>
-        <BrandLogo iconSize={44} showWordmark={false} />
-        <div 
-          className="uppercase text-white"
-          style={{ 
-            marginLeft: '14px',
-            fontSize: '22px',
-            fontWeight: 900,
-            letterSpacing: '0.05em',
-            fontFamily: "'Montserrat', sans-serif"
-          }}
-        >
-          RACEHORSE
-        </div>
-      </div>
-
-      {/* Center Content Logic (The Switch) */}
-      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-8">
-        {isHome ? (
+      <div className="relative flex h-full items-center justify-between px-9 max-w-[1440px] mx-auto w-full">
+        {/* Left: Brand & Identity */}
+        <div className="flex items-center cursor-pointer min-w-[280px]" onClick={() => onNavigate?.('home')}>
+          <BrandLogo 
+            iconSize={44} 
+            showWordmark={false} 
+            borderColor={activeColor ? `${activeColor}99` : undefined} 
+          />
           <div 
-            className="uppercase"
+            className="uppercase text-white"
             style={{ 
-              fontSize: '13px', 
-              fontWeight: 800, 
-              letterSpacing: '0.2em', 
-              color: '#8A879B' 
+              marginLeft: '14px',
+              fontSize: '22px',
+              fontWeight: 900,
+              letterSpacing: '0.05em',
+              fontFamily: "'Montserrat', sans-serif"
             }}
           >
-            {todayLabel}
-          </div>
-        ) : (
-          <div className="flex items-center gap-8">
-            {TABS.map((tab) => {
-              const isActive = tab.activeModes.includes(currentMode as AppMode);
-              const color = (isActive && activeColor) || TAB_COLORS[tab.label] || '#E7B64A';
-
-              return (
-                <button
-                  key={tab.label}
-                  onClick={() => onNavigate?.(tab.mode)}
-                  className="relative py-2 transition-all"
-                  style={{ 
-                    fontSize: '17px',
-                    fontWeight: 600,
-                    color: isActive ? color : '#8A879B',
-                    opacity: isActive ? 1 : 0.7
-                  }}
-                >
-                  {tab.label}
-                  {isActive && (
-                    <div 
-                      className="absolute -bottom-1 left-0 h-[3px] w-full rounded-full" 
-                      style={{ 
-                        backgroundColor: color, 
-                        boxShadow: `0 0 10px ${color}66` 
-                      }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Right Side: Player Statistics */}
-      <div className="flex items-center min-w-[280px] justify-end">
-        {/* Rating */}
-        <div className="flex items-center gap-3 px-5 py-2.5">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="#F2C35E" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
-          </svg>
-          <div className="leading-tight">
-            <div 
-              style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
-            >
-              {rating}
-            </div>
-            <div 
-              style={{ fontSize: '12px', fontWeight: 500, color: '#8891A0' }}
-            >
-              Rating
-            </div>
+            RACEHORSE
           </div>
         </div>
 
-        <div className="mx-1 h-[28px] w-px bg-white/5" />
-
-        {/* Friends Count */}
-        <button
-          type="button"
-          onClick={() => onNavigate?.('friends')}
-          className="flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="#8A879B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="#8A879B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <div className="leading-tight text-left">
+        {/* Center Content Logic (The Switch) */}
+        <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-8">
+          {isHome ? (
             <div 
-              style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
+              className="uppercase"
+              style={{ 
+                fontSize: '13px', 
+                fontWeight: 800, 
+                letterSpacing: '0.2em', 
+                color: '#8A879B' 
+              }}
             >
-              {friendCount !== null ? friendCount : authUser ? '…' : '—'}
+              {todayLabel}
             </div>
-            <div 
-              style={{ fontSize: '12px', fontWeight: 500, color: '#8891A0' }}
-            >
-              Friends
+          ) : (
+            <div className="flex items-center gap-8">
+              {TABS.map((tab) => {
+                const isActive = tab.activeModes.includes(currentMode as AppMode);
+                const color = (isActive && activeColor) || TAB_COLORS[tab.label] || '#E7B64A';
+
+                return (
+                  <button
+                    key={tab.label}
+                    onClick={() => onNavigate?.(tab.mode)}
+                    className="relative py-2 transition-all"
+                    style={{ 
+                      fontSize: '17px',
+                      fontWeight: 600,
+                      color: isActive ? color : '#8A879B',
+                      opacity: isActive ? 1 : 0.7
+                    }}
+                  >
+                    {tab.label}
+                    {isActive && (
+                      <div 
+                        className="absolute -bottom-1 left-0 h-[3px] w-full rounded-full" 
+                        style={{ 
+                          backgroundColor: color, 
+                          boxShadow: `0 0 10px ${color}66` 
+                        }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right Side: Player Statistics */}
+        <div className="flex items-center min-w-[280px] justify-end">
+          {/* Rating */}
+          <div className="flex items-center gap-3 px-5 py-2.5">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="#F2C35E" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
+            </svg>
+            <div className="leading-tight">
+              <div 
+                style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
+              >
+                {rating}
+              </div>
+              <div 
+                style={{ fontSize: '12px', fontWeight: 500, color: '#8891A0' }}
+              >
+                Rating
+              </div>
             </div>
           </div>
-        </button>
 
-        <div className="mx-1 h-[28px] w-px bg-white/5" />
+          <div className="mx-1 h-[28px] w-px bg-white/5" />
 
-        <div className="flex items-center gap-4 pl-5">
-          {/* Avatar */}
+          {/* Friends Count */}
           <button
             type="button"
-            onClick={() => onNavigate?.('stats')}
-            className="flex h-[42px] w-[42px] items-center justify-center rounded-full border border-[#C8922A]/60 bg-[radial-gradient(circle_at_45%_30%,#8A5A2B_0%,#4A2D18_44%,#140F0D_100%)] shadow-[0_0_14px_rgba(200,146,42,0.12)] select-none cursor-pointer transition-opacity hover:opacity-80 active:scale-95 overflow-hidden flex-shrink-0"
-            aria-label="View Stats"
+            onClick={() => onNavigate?.('friends')}
+            className="flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
           >
-            <span 
-              style={{ fontSize: '15px', fontWeight: 700, color: '#E1BE82', letterSpacing: '-0.02em' }}
-            >
-              {initials}
-            </span>
-          </button>
-
-          {/* Username */}
-          <button
-            type="button"
-            onClick={() => (authUser ? onOpenAccount?.() : onOpenAuth?.())}
-            className="flex items-center gap-3 cursor-pointer transition-opacity hover:opacity-80"
-          >
-            <div 
-              style={{ fontSize: '15px', fontWeight: 600, color: 'white' }}
-            >
-              {displayName}
-            </div>
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 7.5L10 12.5L15 7.5" stroke="#E7E1D5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="#8A879B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="#8A879B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
+            <div className="leading-tight text-left">
+              <div 
+                style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
+              >
+                {friendCount !== null ? friendCount : authUser ? '…' : '—'}
+              </div>
+              <div 
+                style={{ fontSize: '12px', fontWeight: 500, color: '#8891A0' }}
+              >
+                Friends
+              </div>
+            </div>
           </button>
+
+          <div className="mx-1 h-[28px] w-px bg-white/5" />
+
+          <div className="flex items-center gap-4 pl-5">
+            {/* Avatar */}
+            <button
+              type="button"
+              onClick={() => onNavigate?.('stats')}
+              className="flex h-[42px] w-[42px] items-center justify-center rounded-full border border-[#C8922A]/60 bg-[radial-gradient(circle_at_45%_30%,#8A5A2B_0%,#4A2D18_44%,#140F0D_100%)] shadow-[0_0_14px_rgba(200,146,42,0.12)] select-none cursor-pointer transition-opacity hover:opacity-80 active:scale-95 overflow-hidden flex-shrink-0"
+              aria-label="View Stats"
+            >
+              <span 
+                style={{ fontSize: '15px', fontWeight: 700, color: '#E1BE82', letterSpacing: '-0.02em' }}
+              >
+                {initials}
+              </span>
+            </button>
+
+            {/* Username */}
+            <button
+              type="button"
+              onClick={() => (authUser ? onOpenAccount?.() : onOpenAuth?.())}
+              className="flex items-center gap-3 cursor-pointer transition-opacity hover:opacity-80"
+            >
+              <div 
+                style={{ fontSize: '15px', fontWeight: 600, color: 'white' }}
+              >
+                {displayName}
+              </div>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 7.5L10 12.5L15 7.5" stroke="#E7E1D5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </nav>

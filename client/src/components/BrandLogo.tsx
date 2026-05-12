@@ -4,12 +4,14 @@ interface BrandLogoProps {
   className?: string;
   iconSize?: number;
   showWordmark?: boolean;
+  borderColor?: string;
 }
 
 export function BrandLogo({
   className = '',
   iconSize = 44,
   showWordmark = true,
+  borderColor,
 }: BrandLogoProps) {
   // Reference sizes from the high-fidelity design
   const refIconSize = 44;
@@ -23,15 +25,20 @@ export function BrandLogo({
   const mainFontSize = refMainFont * ratio;
   const gap = refGap * ratio;
 
+  const finalBorderColor = borderColor || '#C8922A99'; // default to 60% opacity brass
+  const shadowColor = borderColor ? `${borderColor}22` : 'rgba(200,146,42,0.1)';
+
   return (
     <div className={`flex items-center ${className}`} style={{ gap }}>
       {/* Icon Container */}
       <div 
-        className="flex items-center justify-center rounded-[13px] border border-[#C8922A]/60 bg-[linear-gradient(155deg,#121317_0%,#08090D_100%)] shadow-[0_0_14px_rgba(200,146,42,0.1),inset_0_1px_0_rgba(255,255,255,0.04)]"
+        className="flex items-center justify-center rounded-[13px] bg-[linear-gradient(155deg,#121317_0%,#08090D_100%)]"
         style={{ 
           width: boxSize, 
           height: boxSize,
-          borderRadius: Math.round(13 * ratio)
+          borderRadius: Math.round(13 * ratio),
+          border: `1px solid ${finalBorderColor}`,
+          boxShadow: `0 0 14px ${shadowColor}, inset 0 1px 0 rgba(255,255,255,0.04)`
         }}
       >
         <img 

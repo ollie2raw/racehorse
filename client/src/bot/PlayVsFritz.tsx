@@ -122,60 +122,61 @@ export default function PlayVsFritz({ onBack, onStart }: PlayVsFritzProps) {
       />
       
       <div className="pvf-layout">
-        {/* ===== HEADER ===== */}
-        <button className="pvf-back-btn" onClick={onBack}>
-          <span>←</span> Back to Single Player
-        </button>
+        {/* ===== LEFT COLUMN (Title + Fritz Card) ===== */}
+        <div className="pvf-left-col">
+          <button className="pvf-back-btn" onClick={onBack}>
+            <span>←</span> BACK TO SINGLE PLAYER
+          </button>
 
-        <div className="pvf-header">
-          <div className="pvf-label">SINGLE PLAYER</div>
-          <h1 className="pvf-title">Play vs Fritz</h1>
-          <p className="pvf-subtitle">Choose your tier and format, then start a match against Fritz.</p>
+          <div className="pvf-header">
+            <div className="pvf-label">SINGLE PLAYER</div>
+            <h1 className="pvf-title">Play vs Fritz</h1>
+            <p className="pvf-subtitle">Choose your tier and format, then start a match against Fritz.</p>
+          </div>
+
+          <div className="pvf-opponent-card">
+            <div className="pvf-robot-scene">
+              <img src="/fritz2.png" className="pvf-robot-img" alt="Fritz Robot" />
+            </div>
+            
+            <div className="pvf-opponent-info">
+              <div className="pvf-opponent-eyebrow">YOUR OPPONENT</div>
+              <h2 className="pvf-opponent-name" style={{ color: dynamicColor }}>Fritz</h2>
+              <p className="pvf-opponent-desc">
+                Fritz is a world-class AI built to sharpen your strategy.
+              </p>
+            </div>
+
+            <div className="pvf-badges">
+              <div className="pvf-badge">
+                <div className="pvf-badge-icon-wrap"><IconStar color="var(--pvf-dynamic-color)" /></div>
+                <div className="pvf-badge-content">
+                  <div className="pvf-badge-title">Rated Practice</div>
+                  <div className="pvf-badge-sub">Matches affect your practice rating.</div>
+                </div>
+              </div>
+
+              <div className="pvf-badge">
+                <div className="pvf-badge-icon-wrap"><IconLightning color="var(--pvf-dynamic-color)" /></div>
+                <div className="pvf-badge-content">
+                  <div className="pvf-badge-title">Instant Match</div>
+                  <div className="pvf-badge-sub">Jump in and play right away.</div>
+                </div>
+              </div>
+
+              <div className="pvf-badge">
+                <div className="pvf-badge-icon-wrap"><IconRobotNav color="var(--pvf-dynamic-color)" /></div>
+                <div className="pvf-badge-content">
+                  <div className="pvf-badge-title">Bot Opponent</div>
+                  <div className="pvf-badge-sub">Consistent. Fair. Always improving.</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* ===== LEFT COLUMN (Fritz Card) ===== */}
-        <div className="pvf-opponent-card">
-          <div className="pvf-robot-scene">
-            <img src="/fritz2.png" className="pvf-robot-img" alt="Fritz Robot" />
-          </div>
-          
-          <div className="pvf-opponent-info">
-            <div className="pvf-opponent-eyebrow">YOUR OPPONENT</div>
-            <h2 className="pvf-opponent-name" style={{ color: dynamicColor }}>Fritz</h2>
-            <p className="pvf-opponent-desc">
-              Fritz is a world-class AI built to sharpen your strategy.
-            </p>
-          </div>
-
-          <div className="pvf-badges">
-            <div className="pvf-badge">
-              <div className="pvf-badge-icon-wrap"><IconStar color="var(--pvf-dynamic-color)" /></div>
-              <div className="pvf-badge-content">
-                <div className="pvf-badge-title">Rated Practice</div>
-                <div className="pvf-badge-sub">Matches affect your practice rating.</div>
-              </div>
-            </div>
-
-            <div className="pvf-badge">
-              <div className="pvf-badge-icon-wrap"><IconLightning color="var(--pvf-dynamic-color)" /></div>
-              <div className="pvf-badge-content">
-                <div className="pvf-badge-title">Instant Match</div>
-                <div className="pvf-badge-sub">Jump in and play right away.</div>
-              </div>
-            </div>
-
-            <div className="pvf-badge">
-              <div className="pvf-badge-icon-wrap"><IconRobotNav color="var(--pvf-dynamic-color)" /></div>
-              <div className="pvf-badge-content">
-                <div className="pvf-badge-title">Bot Opponent</div>
-                <div className="pvf-badge-sub">Consistent. Fair. Always improving.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ===== RIGHT COLUMN (Config Panel) ===== */}
-        <div className="pvf-right">
+        {/* ===== RIGHT COLUMN (Control Panel) ===== */}
+        <div className="pvf-control-panel">
           {/* Section 1: Difficulty */}
           <div className="pvf-section">
             <div className="pvf-section-label">1. CHOOSE DIFFICULTY</div>
