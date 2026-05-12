@@ -1,16 +1,11 @@
 import React, { useState } from "react";
 import type { FritzTier } from "./fritzConfig";
 import type { BotDealSize } from "./botEngine";
+import type { AppMode } from "../types";
 import { DominoTile, GlobalNav } from "../components";
 import "./PlayVsFritz.css";
 
 /* ---- High-Fidelity Home Icons ---- */
-const IconStar = ({ color = "currentColor" }: { color?: string }) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" fill={color} />
-  </svg>
-);
-
 const IconLightning = ({ color = "currentColor" }: { color?: string }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M13 3L5 14H12L11 21L19 10H12L13 3Z" fill={color} />
@@ -44,9 +39,9 @@ const IconBars = () => (
   </svg>
 );
 
-const IconCrown = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" />
+const IconCrown = ({ color = "currentColor" }: { color?: string }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" fill={color} />
   </svg>
 );
 
@@ -78,10 +73,10 @@ const IconSummaryBars = ({ color = "currentColor" }: { color?: string }) => (
 
 /* ---- Data ---- */
 const TIER_COLORS: Record<FritzTier, string> = {
-  rookie: "#19D8A2",   // Neon Green
-  standard: "#3FA7FF", // Electric Blue
-  elite: "#F5A524",    // Gold
-  master: "#9B6CFF",   // Purple
+  rookie: "#4ADE80",   // Rookie Green
+  standard: "#3B82F6", // Standard Blue
+  elite: "#E7B64A",    // Elite Gold
+  master: "#A855F7",   // Master Purple
 };
 
 const DIFFICULTIES: Array<{
@@ -94,7 +89,7 @@ const DIFFICULTIES: Array<{
   { id: "rookie", label: "Rookie", elo: 600, desc: "Learning the game. Good for beginners.", Icon: IconLeaf },
   { id: "standard", label: "Standard", elo: 1000, desc: "Solid fundamentals. A real challenge.", Icon: IconBars },
   { id: "elite", label: "Elite", elo: 1800, desc: "Maximum strength. Unforgiving.", Icon: IconCrown },
-  { id: "master", label: "Master", elo: 2400, desc: "Sampled endgame search. No mercy.", Icon: IconShield },
+  { id: "master", label: "Master", elo: 2400, desc: "Sampled endgame search. No mercy.", Icon: IconCrown },
 ];
 
 const DEAL_SIZES: Array<{ id: BotDealSize; label: string; sublabel: string; high: number; low: number }> = [
@@ -105,19 +100,39 @@ const DEAL_SIZES: Array<{ id: BotDealSize; label: string; sublabel: string; high
 interface PlayVsFritzProps {
   onBack: () => void;
   onStart: (params: { difficulty: FritzTier; dealSize: BotDealSize }) => void;
+  onNavigate?: (mode: AppMode) => void;
+  onOpenAuth?: () => void;
+  onOpenAccount?: () => void;
 }
 
-export default function PlayVsFritz({ onBack, onStart }: PlayVsFritzProps) {
+export default function PlayVsFritz({ 
+  onBack, 
+  onStart, 
+  onNavigate, 
+  onOpenAuth, 
+  onOpenAccount 
+}: PlayVsFritzProps) {
   const [difficulty, setDifficulty] = useState<FritzTier>("elite");
   const [dealSize, setDealSize] = useState<BotDealSize>(7);
   const selectedDiff = DIFFICULTIES.find((d) => d.id === difficulty) || DIFFICULTIES[2];
   const dynamicColor = TIER_COLORS[difficulty];
 
   return (
-    <div className="pvf-root" style={{ "--pvf-dynamic-color": dynamicColor } as React.CSSProperties}>
+    <div className={`pvf-root tier-${difficulty}`} style={{ "--pvf-dynamic-color": dynamicColor } as React.CSSProperties}>
+      <div className="home-bg" aria-hidden="true">
+        <div className="home-bg__halo" />
+        <div className="home-bg__domino home-bg__domino--tl" />
+        <div className="home-bg__domino home-bg__domino--tr" />
+        <div className="home-bg__line home-bg__line--1" />
+        <div className="home-bg__line home-bg__line--2" />
+        <div className="home-bg__line home-bg__line--3" />
+        <div className="home-bg__texture" />
+      </div>
       <GlobalNav 
         currentMode="botSetup"
-        onNavigate={(mode) => mode === 'home' ? onBack() : undefined} 
+        onNavigate={onNavigate || ((mode) => mode === 'home' ? onBack() : undefined)} 
+        onOpenAuth={onOpenAuth}
+        onOpenAccount={onOpenAccount}
         activeColor={dynamicColor}
       />
       
@@ -135,40 +150,48 @@ export default function PlayVsFritz({ onBack, onStart }: PlayVsFritzProps) {
           </div>
 
           <div className="pvf-opponent-card">
-            <div className="pvf-robot-scene">
-              <img src="/fritz2.png" className="pvf-robot-img" alt="Fritz Robot" />
-            </div>
+            {/* 1. Background Image */}
+            <img src="/fritz2.png" className="pvf-card-bg-img" alt="Fritz Robot" />
             
-            <div className="pvf-opponent-info">
-              <div className="pvf-opponent-eyebrow">YOUR OPPONENT</div>
-              <h2 className="pvf-opponent-name" style={{ color: dynamicColor }}>Fritz</h2>
-              <p className="pvf-opponent-desc">
-                Fritz is a world-class AI built to sharpen your strategy.
-              </p>
-            </div>
+            {/* 2. Gradient Overlay */}
+            <div className="pvf-card-overlay" />
 
-            <div className="pvf-badges">
-              <div className="pvf-badge">
-                <div className="pvf-badge-icon-wrap"><IconStar color="var(--pvf-dynamic-color)" /></div>
-                <div className="pvf-badge-content">
-                  <div className="pvf-badge-title">Rated Practice</div>
-                  <div className="pvf-badge-sub">Matches affect your practice rating.</div>
-                </div>
+            {/* 3. Content Layer */}
+            <div className="pvf-card-content">
+              {/* Top: Header */}
+              <div className="pvf-card-header">
+                <div className="pvf-card-eyebrow">YOUR OPPONENT</div>
+                <h2 className="pvf-card-name">Fritz</h2>
+                <p className="pvf-card-description">
+                  Fritz is a world-class dominoes bot built to challenge and sharpen your strategy.
+                  Pick a difficulty, choose your format, and test your skills.
+                </p>
               </div>
 
-              <div className="pvf-badge">
-                <div className="pvf-badge-icon-wrap"><IconLightning color="var(--pvf-dynamic-color)" /></div>
-                <div className="pvf-badge-content">
-                  <div className="pvf-badge-title">Instant Match</div>
-                  <div className="pvf-badge-sub">Jump in and play right away.</div>
+              {/* Bottom: Badges Row */}
+              <div className="pvf-card-badges">
+                <div className="pvf-card-badge">
+                  <div className="pvf-card-badge-header">
+                    <IconCrown color="var(--pvf-dynamic-color)" />
+                    <span className="pvf-card-badge-title">Rated Practice</span>
+                  </div>
+                  <div className="pvf-card-badge-desc">Matches affect practice rating.</div>
                 </div>
-              </div>
 
-              <div className="pvf-badge">
-                <div className="pvf-badge-icon-wrap"><IconRobotNav color="var(--pvf-dynamic-color)" /></div>
-                <div className="pvf-badge-content">
-                  <div className="pvf-badge-title">Bot Opponent</div>
-                  <div className="pvf-badge-sub">Consistent. Fair. Always improving.</div>
+                <div className="pvf-card-badge">
+                  <div className="pvf-card-badge-header">
+                    <IconLightning color="var(--pvf-dynamic-color)" />
+                    <span className="pvf-card-badge-title">Instant Match</span>
+                  </div>
+                  <div className="pvf-card-badge-desc">Jump in and play right away.</div>
+                </div>
+
+                <div className="pvf-card-badge">
+                  <div className="pvf-card-badge-header">
+                    <IconRobotNav color="var(--pvf-dynamic-color)" />
+                    <span className="pvf-card-badge-title">Bot Opponent</span>
+                  </div>
+                  <div className="pvf-card-badge-desc">Consistent. Fair. Improving.</div>
                 </div>
               </div>
             </div>

@@ -2872,6 +2872,9 @@ export default function App() {
               setAppMode('bot');
             }}
             onBack={() => setAppMode('home')}
+            onNavigate={setAppMode}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAccount={() => setUsernameModalOpen(true)}
           />
         </Suspense>
       </div>
