@@ -130,7 +130,7 @@ const EMPTY_MOVES: Move[] = [];
 
 const NoBrainerLabScreen = React.lazy(() => import('./practice/NoBrainerLabScreen'));
 const BotMatchScreen = React.lazy(() => import('./bot/BotMatchScreen'));
-const BotSetupScreen = React.lazy(() => import('./bot/BotSetupScreen'));
+const PlayVsFritz = React.lazy(() => import('./bot/PlayVsFritz'));
 const GhostSetupScreen = React.lazy(() => import('./ghost/GhostSetupScreen'));
 const DailyPuzzleScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleScreen'));
 const DailyFritzScreen = React.lazy(() => import('./dailyFritz/DailyFritzScreen'));
@@ -2865,12 +2865,12 @@ export default function App() {
     return (
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Fritz Setup…" />}>
-          <BotSetupScreen
-            dealSize={botDealSize}
-            fritzTier={botFritzTier}
-            onDealSizeChange={setBotDealSize}
-            onFritzTierChange={setBotFritzTier}
-            onStart={() => setAppMode('bot')}
+          <PlayVsFritz
+            onStart={({ difficulty, dealSize }) => {
+              setBotFritzTier(difficulty);
+              setBotDealSize(dealSize);
+              setAppMode('bot');
+            }}
             onBack={() => setAppMode('home')}
           />
         </Suspense>

@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Fritz Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Outfit:wght@400;500;700;800;900&family=Rajdhani:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --color-bg:        #040b17;
+  --color-surface:   rgba(255,255,255,0.03);
+  --color-border:    rgba(255,255,255,0.08);
+  --color-border-hi: rgba(255,255,255,0.13);
+  --color-text:      rgba(255,255,255,0.97);
+  --color-muted:     rgba(255,255,255,0.48);
+  --color-dim:       rgba(255,255,255,0.28);
+
+  --brass:           #C8922A;
+  --brass-light:     #e0a83c;
+  --brass-glow:      rgba(200,146,42,0.22);
+
+  --accent-fritz:    #e05c6a;
+  --accent-fritz-bg: rgba(224,92,106,0.12);
+
+  --color-win:       #34d399;
+  --color-win-bg:    rgba(52,211,153,0.12);
+  --color-loss:      #f87171;
+  --color-loss-bg:   rgba(248,113,113,0.12);
+
+  --font-rajdhani:   'Rajdhani', system-ui, sans-serif;
+  --font-barlow:     'Barlow Condensed', system-ui, sans-serif;
+  --font-outfit:     'Outfit', system-ui, sans-serif;
+  --font-space:      'Space Grotesk', system-ui, sans-serif;
+
+  --radius-sm:  8px;
+  --radius-md:  16px;
+  --radius-lg:  22px;
+  --radius-xl:  28px;
+
+  --shadow-panel: 0 24px 60px rgba(0,0,0,0.38);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; }
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-space);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─────────────────────────────────────────────
+   Background art
+───────────────────────────────────────────── */
+.screen-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.screen-bg__halo {
+  position: absolute;
+  top: -18%;
+  left: 38%;
+  width: 72%;
+  height: 72%;
+  background: radial-gradient(circle at center, rgba(45,105,210,0.18) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(2px);
+}
+.screen-bg__texture {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.016) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255,255,255,0.01) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 68%);
+  opacity: 0.55;
+}
+
+/* ─────────────────────────────────────────────
+   Layout shell
+───────────────────────────────────────────── */
+.hub-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─────────────────────────────────────────────
+   Topbar
+───────────────────────────────────────────── */
+.hub-topbar {
+  height: 52px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(16px, 2.4vw, 28px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+  z-index: 2;
+  background: rgba(4,11,23,0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Brand logo replica */
+.hub-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.hub-brand__icon {
+  width: 46px;
+  height: 46px;
+  border: 1.5px solid var(--brass);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(200,146,42,0.06);
+  font-family: var(--font-barlow);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--brass-light);
+  text-transform: uppercase;
+  line-height: 1;
+  text-align: center;
+}
+.hub-brand__wordmark {
+  font-family: var(--font-barlow);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.92);
+}
+
+.hub-back {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.62);
+  font-family: var(--font-barlow);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 5px 11px;
+  border-radius: 4px;
+  transition: all 140ms ease;
+}
+.hub-back:hover {
+  color: rgba(255,255,255,0.9);
+  border-color: rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.07);
+}
+.hub-back svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─────────────────────────────────────────────
+   Main content
+───────────────────────────────────────────── */
+.hub-main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(28px, 3.8vh, 48px) clamp(20px, 3vw, 40px);
+  width: 100%;
+}
+
+/* Header block */
+.hub-header {
+  flex-shrink: 0;
+  margin-bottom: clamp(18px, 2.6vh, 30px);
+}
+.hub-eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--font-rajdhani);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent-fritz);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hub-eyebrow::before {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-fritz);
+  box-shadow: 0 0 10px rgba(224,92,106,0.7);
+}
+.hub-title {
+  margin: 0 0 8px;
+  color: #fff;
+  font-family: var(--font-barlow);
+  font-size: clamp(36px, 5.2vw, 68px);
+  font-weight: 800;
+  line-height: 0.94;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.hub-subtitle {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--font-space);
+  font-size: clamp(13px, 1.3vw, 15px);
+  line-height: 1.55;
+}
+
+.hub-separator {
+  width: 100%;
+  height: 1px;
+  background: rgba(255,255,255,0.07);
+  flex-shrink: 0;
+  margin-bottom: clamp(18px, 2.5vh, 28px);
+}
+
+/* ─────────────────────────────────────────────
+   Body grid (2-col)
+───────────────────────────────────────────── */
+.hub-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.75fr);
+  gap: clamp(18px, 2.2vw, 28px);
+  align-items: start;
+}
+
+/* ─────────────────────────────────────────────
+   Info card (left column)
+───────────────────────────────────────────── */
+.info-card {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  display: grid;
+  gap: 0;
+}
+.info-card-label {
+  font-family: var(--font-rajdhani);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent-fritz);
+  margin-bottom: 14px;
+}
+.stat-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.stat-line:last-child {
+  border-bottom: 0;
+}
+.stat-line__key {
+  color: rgba(255,255,255,0.32);
+  font-family: var(--font-rajdhani);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.stat-line__val {
+  color: rgba(255,255,255,0.88);
+  font-family: var(--font-barlow);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.stat-line__val.is-accent {
+  color: var(--accent-fritz);
+}
+
+/* ─────────────────────────────────────────────
+   Right-column action area
+───────────────────────────────────────────── */
+.hub-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Status card */
+.status-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  padding: 16px 18px;
+  background: linear-gradient(180deg, rgba(15,22,36,0.84), rgba(9,15,25,0.92));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 16px 28px rgba(2,8,16,0.2);
+}
+.status-card.is-complete {
+  border-color: rgba(255,255,255,0.08);
+}
+.status-card.is-active {
+  border-color: rgba(52,211,153,0.26);
+  background: linear-gradient(180deg, rgba(14,48,30,0.48), rgba(8,14,18,0.92));
+}
+.status-label {
+  display: block;
+  color: rgba(205,223,217,0.56);
+  font-family: var(--font-rajdhani);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.status-headline {
+  display: block;
+  color: rgba(248,250,249,0.98);
+  font-family: var(--font-barlow);
+  font-size: clamp(1.4rem, 2vw, 1.9rem);
+  font-weight: 850;
+  line-height: 1.05;
+  margin-bottom: 6px;
+}
+.status-sub {
+  color: rgba(221,232,228,0.72);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+/* CTA button — primary (Daily Fritz coral) */
+.cta-primary {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 108px;
+  padding: 22px 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(224,92,106,0.52);
+  background: linear-gradient(180deg, rgba(62,11,16,0.52), rgba(31,8,10,0.72));
+  box-shadow: 0 0 0 1px rgba(224,92,106,0.2), 0 18px 36px rgba(26,6,8,0.36);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 130ms ease, box-shadow 130ms ease;
+  position: relative;
+  overflow: hidden;
+}
+.cta-primary::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(224,92,106,0.9), rgba(224,92,106,0.18));
+  opacity: 0.72;
+}
+.cta-primary:hover {
+  border-color: rgba(224,92,106,0.72);
+  box-shadow: 0 0 0 1px rgba(224,92,106,0.28), 0 20px 44px rgba(26,6,8,0.44);
+}
+.cta-title {
+  display: block;
+  color: rgba(255,255,255,0.98);
+  font-family: var(--font-barlow);
+  font-size: clamp(1.9rem, 2.6vw, 2.5rem);
+  font-weight: 850;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+.cta-meta {
+  display: block;
+  color: rgba(255,255,255,0.52);
+  font-family: var(--font-space);
+  font-size: 1.1rem;
+  font-weight: 500;
+  line-height: 1.52;
+}
+
+/* CTA secondary */
+.cta-secondary-wrap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+.cta-secondary {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 80px;
+  padding: 18px 20px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: background 130ms ease;
+}
+.cta-secondary:hover {
+  background: rgba(255,255,255,0.03);
+}
+.cta-secondary-title {
+  display: block;
+  color: rgba(255,255,255,0.94);
+  font-family: var(--font-barlow);
+  font-size: clamp(1.4rem, 2vw, 1.8rem);
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+.cta-secondary-meta {
+  display: block;
+  color: rgba(255,255,255,0.42);
+  font-size: 0.92rem;
+}
+
+/* ─────────────────────────────────────────────
+   Tab-strip (view selector)
+───────────────────────────────────────────── */
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding-bottom: 0;
+}
+.view-tab {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 8px 14px 10px;
+  cursor: pointer;
+  font-family: var(--font-rajdhani);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.36);
+  position: relative;
+  transition: color 120ms ease;
+}
+.view-tab.is-active {
+  color: var(--accent-fritz);
+}
+.view-tab.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0; right: 0;
+  height: 2px;
+  background: var(--accent-fritz);
+  border-radius: 2px 2px 0 0;
+}
+
+/* ─────────────────────────────────────────────
+   Result summary strip
+───────────────────────────────────────────── */
+.result-strip {
+  border: 1px solid rgba(224,92,106,0.16);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(224,92,106,0.12), transparent 36%),
+    linear-gradient(180deg, rgba(15,22,36,0.98), rgba(8,12,20,0.98));
+}
+.result-strip-hero {
+  padding: clamp(20px, 2.8vw, 32px) clamp(18px, 2.8vw, 28px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.result-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(225,198,133,0.86);
+  font-family: var(--font-rajdhani);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.result-kicker::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(229,198,124,1), rgba(137,210,255,0.7));
+  box-shadow: 0 0 14px rgba(229,198,124,0.35);
+}
+.result-headline {
+  font-family: var(--font-outfit);
+  font-size: clamp(2rem, 3.5vw, 3.2rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.result-headline.is-win { color: #34d399; }
+.result-headline.is-loss { color: #f87171; }
+.result-sub {
+  color: rgba(221,232,228,0.68);
+  font-size: 0.98rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.result-strip-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.result-item {
+  min-height: 108px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  border-left: 1px solid rgba(255,255,255,0.06);
+}
+.result-item:first-child { border-left: 0; }
+.result-item__label {
+  font-family: var(--font-rajdhani);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.38);
+}
+.result-item__value {
+  font-family: var(--font-barlow);
+  font-size: clamp(1.8rem, 2.4vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.result-item__value.is-win { color: #34d399; }
+.result-item__value.is-loss { color: #f87171; }
+
+/* Game breakdown chips */
+.game-breakdown {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.game-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 52px;
+  padding: 0 20px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  font-family: var(--font-barlow);
+  font-size: 1.3rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: rgba(255,255,255,0.96);
+}
+.game-chip.is-win {
+  color: #00f0b5;
+  border-color: rgba(0,212,160,0.32);
+  background: rgba(0,212,160,0.1);
+}
+.game-chip.is-loss {
+  color: #ff5c75;
+  border-color: rgba(255,69,96,0.28);
+  background: rgba(255,69,96,0.09);
+}
+
+/* ─────────────────────────────────────────────
+   Annotation: DEMO TOGGLE
+───────────────────────────────────────────── */
+.demo-toggle {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 100;
+  display: flex;
+  gap: 6px;
+}
+.demo-btn {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(4,11,23,0.9);
+  color: rgba(255,255,255,0.7);
+  font-family: var(--font-rajdhani);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.demo-btn.is-active {
+  border-color: var(--accent-fritz);
+  color: var(--accent-fritz);
+}
+
+/* ─────────────────────────────────────────────
+   Between-game overlay
+───────────────────────────────────────────── */
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4,7,13,0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 40;
+}
+.overlay-card {
+  position: relative;
+  overflow: hidden;
+  width: min(1020px, calc(100vw - 28px));
+  display: grid;
+  gap: clamp(18px, 2.6vw, 24px);
+  padding: clamp(22px, 3.8vw, 44px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 16% 0%, rgba(224,92,106,0.2), transparent 34%),
+    radial-gradient(circle at 96% 12%, rgba(96,165,250,0.12), transparent 32%),
+    linear-gradient(180deg, rgba(17,24,38,0.98), rgba(7,11,18,0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 30px 70px rgba(0,0,0,0.38);
+}
+.overlay-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.042) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 70%);
+  opacity: 0.3;
+}
+.overlay-card > * { position: relative; z-index: 1; }
+
+.overlay-kicker {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255,214,219,0.88);
+  font-family: var(--font-rajdhani);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.overlay-kicker::before {
+  content: '';
+  width: 9px; height: 9px;
+  border-radius: 999px;
+  background: var(--accent-fritz);
+  box-shadow: 0 0 22px rgba(224,92,106,0.82);
+}
+
+.overlay-hero {
+  display: grid;
+  gap: 10px;
+}
+.overlay-hero h1 {
+  margin: 0;
+  color: rgba(248,250,249,0.98);
+  font-family: var(--font-barlow);
+  font-size: clamp(3rem, 7vw, 5.6rem);
+  font-weight: 900;
+  line-height: 0.88;
+  letter-spacing: -0.035em;
+}
+.overlay-hero p {
+  max-width: 640px;
+  margin: 0;
+  color: rgba(230,239,236,0.84);
+  font-size: clamp(1rem, 1.6vw, 1.2rem);
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.72fr);
+  gap: 10px;
+}
+.score-card {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  min-height: 100px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.09);
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.score-card span {
+  color: rgba(205,223,217,0.6);
+  font-family: var(--font-rajdhani);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.score-card strong {
+  color: rgba(248,250,249,0.98);
+  font-family: var(--font-barlow);
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-weight: 850;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+}
+.score-card strong.is-win { color: #34d399; }
+.score-card strong.is-loss { color: #f87171; }
+
+.set-tracker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.set-step {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-height: 78px;
+  padding: 14px 15px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(8,13,22,0.72);
+}
+.set-step::after {
+  content: '';
+  position: absolute;
+  inset: auto 15px 11px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.12);
+}
+.set-step span {
+  color: rgba(205,223,217,0.52);
+  font-family: var(--font-rajdhani);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.set-step strong {
+  color: rgba(248,250,249,0.94);
+  font-size: 1rem;
+  font-weight: 850;
+}
+.set-step.is-win {
+  border-color: rgba(52,211,153,0.25);
+  background: linear-gradient(180deg, rgba(16,62,44,0.56), rgba(8,16,18,0.72));
+}
+.set-step.is-win::after { background: #34d399; box-shadow: 0 0 16px rgba(52,211,153,0.4); }
+.set-step.is-loss {
+  border-color: rgba(248,113,113,0.25);
+  background: linear-gradient(180deg, rgba(78,24,29,0.58), rgba(18,10,14,0.76));
+}
+.set-step.is-loss::after { background: #f87171; box-shadow: 0 0 16px rgba(248,113,113,0.38); }
+.set-step.is-next {
+  border-color: rgba(224,92,106,0.48);
+  background: linear-gradient(180deg, rgba(72,18,26,0.66), rgba(20,12,17,0.76));
+}
+.set-step.is-next::after { background: var(--accent-fritz); box-shadow: 0 0 18px rgba(224,92,106,0.52); }
+
+.next-prompt {
+  padding: 18px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(224,92,106,0.22);
+  background: linear-gradient(90deg, rgba(224,92,106,0.13), rgba(255,255,255,0.03));
+  display: grid;
+  gap: 4px;
+}
+.next-prompt span {
+  color: rgba(248,250,249,0.98);
+  font-size: 1.1rem;
+  font-weight: 850;
+}
+.next-prompt p {
+  margin: 0;
+  color: rgba(221,232,228,0.7);
+  font-size: 0.96rem;
+  font-weight: 550;
+}
+
+.overlay-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(200px, 0.65fr);
+  gap: 12px;
+}
+.btn-continue {
+  appearance: none;
+  min-height: 64px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(224,92,106,0.52);
+  background: linear-gradient(180deg, rgba(62,11,16,0.6), rgba(31,8,10,0.8));
+  box-shadow: 0 0 0 1px rgba(224,92,106,0.2), 0 14px 28px rgba(26,6,8,0.32);
+  cursor: pointer;
+  color: rgba(255,255,255,0.96);
+  font-family: var(--font-barlow);
+  font-size: 1.52rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: center;
+  transition: all 120ms ease;
+  position: relative;
+  overflow: hidden;
+}
+.btn-continue::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(224,92,106,0.9), rgba(224,92,106,0.18));
+}
+.btn-return {
+  appearance: none;
+  min-height: 64px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+  color: rgba(255,255,255,0.6);
+  font-family: var(--font-barlow);
+  font-size: 1.28rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  transition: all 120ms ease;
+}
+.btn-return:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.82); }
+</style>
+</head>
+<body>
+
+<!-- Background -->
+<div class="screen-bg" aria-hidden="true">
+  <div class="screen-bg__halo"></div>
+  <div class="screen-bg__texture"></div>
+</div>
+
+<!-- Demo toggle -->
+<div class="demo-toggle">
+  <button class="demo-btn is-active" onclick="showHub()">Hub View</button>
+  <button class="demo-btn" onclick="showBetween()">Between Games</button>
+  <button class="demo-btn" onclick="showFinal()">Final Result</button>
+</div>
+
+<!-- ── HUB VIEW ── -->
+<div id="view-hub" class="hub-shell">
+  <header class="hub-topbar">
+    <!-- BrandLogo replica -->
+    <div class="hub-brand">
+      <div class="hub-brand__icon">RACE<br>HORSE</div>
+      <span class="hub-brand__wordmark">RACEHORSE</span>
+    </div>
+    <button class="hub-back" type="button">
+      <svg viewBox="0 0 12 12"><path d="M7.5 2L3 6l4.5 4"/></svg>
+      Back to Home
+    </button>
+  </header>
+
+  <main class="hub-main">
+    <div class="hub-header">
+      <p class="hub-eyebrow">Daily Fritz</p>
+      <h1 class="hub-title">Daily Fritz</h1>
+      <p class="hub-subtitle">Best-of-3 set. Same deals for everyone.</p>
+    </div>
+    <div class="hub-separator" aria-hidden="true"></div>
+
+    <div class="hub-body">
+      <!-- Left: Match details -->
+      <div style="display:flex;flex-direction:column;gap:16px;">
+
+        <!-- Match info card -->
+        <div class="info-card">
+          <div class="info-card-label">Match Details</div>
+          <div class="stat-line">
+            <span class="stat-line__key">Date</span>
+            <span class="stat-line__val">May 10, 2026</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-line__key">Tier</span>
+            <span class="stat-line__val is-accent">Elite (1800)</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-line__key">Mode</span>
+            <span class="stat-line__val">Best-of-3 · 7-tile</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-line__key">Set Status</span>
+            <span class="stat-line__val is-accent">Won 2–0</span>
+          </div>
+          <div class="stat-line">
+            <span class="stat-line__key">Streak</span>
+            <span class="stat-line__val is-accent">4 days</span>
+          </div>
+        </div>
+
+        <!-- Result summary strip -->
+        <div class="result-strip">
+          <div class="result-strip-hero">
+            <div class="result-kicker">Final Result</div>
+            <div class="result-headline is-win">Won the Set</div>
+            <p class="result-sub">You defeated Fritz 2–0 today. Set result is posted.</p>
+          </div>
+          <div class="result-strip-grid">
+            <div class="result-item">
+              <span class="result-item__label">Set Score</span>
+              <span class="result-item__value is-win">2–0</span>
+            </div>
+            <div class="result-item">
+              <span class="result-item__label">Point Margin</span>
+              <span class="result-item__value">+34</span>
+            </div>
+            <div class="result-item">
+              <span class="result-item__label">Rank</span>
+              <span class="result-item__value">#7</span>
+            </div>
+            <div class="result-item">
+              <span class="result-item__label">Games</span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px;">
+                <div class="game-chip is-win" style="height:38px;font-size:1.05rem;padding:0 14px;">W · 18-7</div>
+                <div class="game-chip is-win" style="height:38px;font-size:1.05rem;padding:0 14px;">W · 21-5</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right: Actions -->
+      <div class="hub-actions">
+        <div class="status-card is-complete">
+          <span class="status-label">Completed</span>
+          <span class="status-headline">Won set 2–0</span>
+          <p class="status-sub">Your set result is posted. Leaderboard remains available.</p>
+        </div>
+
+        <div class="cta-secondary-wrap">
+          <button class="cta-secondary" type="button">
+            <span class="cta-secondary-title">Leaderboard</span>
+            <span class="cta-secondary-meta">See today's standings</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── BETWEEN-GAME OVERLAY ── -->
+<div id="view-between" class="hub-shell" style="display:none;">
+  <header class="hub-topbar">
+    <div class="hub-brand">
+      <div class="hub-brand__icon">RACE<br>HORSE</div>
+      <span class="hub-brand__wordmark">RACEHORSE</span>
+    </div>
+    <button class="hub-back" type="button">
+      <svg viewBox="0 0 12 12"><path d="M7.5 2L3 6l4.5 4"/></svg>
+      Back to Home
+    </button>
+  </header>
+  <!-- Hub behind overlay (blurred) -->
+  <main class="hub-main" style="filter:blur(2px);opacity:0.4;">
+    <div class="hub-header">
+      <p class="hub-eyebrow">Daily Fritz</p>
+      <h1 class="hub-title">Daily Fritz</h1>
+    </div>
+  </main>
+
+  <!-- Overlay -->
+  <div class="overlay-backdrop">
+    <div class="overlay-card">
+      <div class="overlay-kicker">Daily Fritz Set</div>
+
+      <div class="overlay-hero">
+        <h1>Game 1 Win</h1>
+        <p>You lead the set 1–0. Win Game 2 to close the set.</p>
+      </div>
+
+      <div class="score-grid">
+        <div class="score-card">
+          <span>Game 1 Score</span>
+          <strong>You 18 — Fritz 7</strong>
+        </div>
+        <div class="score-card">
+          <span>Set Score</span>
+          <strong class="is-win">You 1 — Fritz 0</strong>
+        </div>
+        <div class="score-card">
+          <span>Margin</span>
+          <strong>+11</strong>
+        </div>
+      </div>
+
+      <div class="set-tracker">
+        <div class="set-step is-win">
+          <span>Game 1</span>
+          <strong>Win</strong>
+        </div>
+        <div class="set-step is-next">
+          <span>Game 2</span>
+          <strong>Up Next</strong>
+        </div>
+        <div class="set-step">
+          <span>Game 3</span>
+          <strong>Pending</strong>
+        </div>
+      </div>
+
+      <div class="next-prompt">
+        <span>Game 2 is up next</span>
+        <p>Close the set now — one more win finishes Daily Fritz.</p>
+      </div>
+
+      <div class="overlay-actions">
+        <button class="btn-continue" type="button">Start Game 2</button>
+        <button class="btn-return" type="button">Return to Daily Fritz</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FINAL RESULT OVERLAY ── -->
+<div id="view-final" class="hub-shell" style="display:none;">
+  <header class="hub-topbar">
+    <div class="hub-brand">
+      <div class="hub-brand__icon">RACE<br>HORSE</div>
+      <span class="hub-brand__wordmark">RACEHORSE</span>
+    </div>
+    <button class="hub-back" type="button">
+      <svg viewBox="0 0 12 12"><path d="M7.5 2L3 6l4.5 4"/></svg>
+      Back to Home
+    </button>
+  </header>
+  <main class="hub-main" style="filter:blur(2px);opacity:0.4;">
+    <div class="hub-header">
+      <p class="hub-eyebrow">Daily Fritz</p>
+      <h1 class="hub-title">Daily Fritz</h1>
+    </div>
+  </main>
+
+  <div class="overlay-backdrop">
+    <div class="overlay-card">
+      <div class="overlay-kicker">Daily Fritz Complete</div>
+
+      <div class="overlay-hero">
+        <h1 style="font-size:clamp(2.8rem,5.6vw,4.8rem);">Fritz Defeated</h1>
+        <p>You won the set 2–0 today. Result has been posted to the leaderboard.</p>
+      </div>
+
+      <div class="score-grid">
+        <div class="score-card">
+          <span>Set Score</span>
+          <strong class="is-win">You 2 — Fritz 0</strong>
+        </div>
+        <div class="score-card">
+          <span>Total Margin</span>
+          <strong>+34</strong>
+        </div>
+        <div class="score-card">
+          <span>Result</span>
+          <strong class="is-win">Won 2–0</strong>
+        </div>
+      </div>
+
+      <div class="set-tracker">
+        <div class="set-step is-win">
+          <span>Game 1</span>
+          <strong>You 18 — Fritz 7</strong>
+        </div>
+        <div class="set-step is-win">
+          <span>Game 2</span>
+          <strong>You 21 — Fritz 5</strong>
+        </div>
+        <div class="set-step">
+          <span>Game 3</span>
+          <strong>Not Played</strong>
+        </div>
+      </div>
+
+      <div class="overlay-actions">
+        <button class="btn-continue" type="button" style="background:linear-gradient(180deg,rgba(20,62,42,0.56),rgba(8,18,14,0.8));border-color:rgba(52,211,153,0.42);box-shadow:0 0 0 1px rgba(52,211,153,0.18),0 14px 28px rgba(4,16,12,0.32);">Return to Daily Fritz</button>
+        <button class="btn-return" type="button">View Leaderboard</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showHub() {
+  document.getElementById('view-hub').style.display = '';
+  document.getElementById('view-between').style.display = 'none';
+  document.getElementById('view-final').style.display = 'none';
+  document.querySelectorAll('.demo-btn').forEach((b,i) => b.classList.toggle('is-active', i===0));
+}
+function showBetween() {
+  document.getElementById('view-hub').style.display = 'none';
+  document.getElementById('view-between').style.display = '';
+  document.getElementById('view-final').style.display = 'none';
+  document.querySelectorAll('.demo-btn').forEach((b,i) => b.classList.toggle('is-active', i===1));
+}
+function showFinal() {
+  document.getElementById('view-hub').style.display = 'none';
+  document.getElementById('view-between').style.display = 'none';
+  document.getElementById('view-final').style.display = '';
+  document.querySelectorAll('.demo-btn').forEach((b,i) => b.classList.toggle('is-active', i===2));
+}
+</script>
+</body>
+</html>

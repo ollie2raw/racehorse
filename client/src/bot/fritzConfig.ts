@@ -13,7 +13,7 @@ export const FRITZ_TIERS = {
     description: 'Learning the game. Good for beginners.',
     subdescription: undefined as string | undefined,
     difficulty: 'casual' as const,
-    color: '#34d399',
+    color: '#4CAF82',
   },
   standard: {
     id: FRITZ_STANDARD_ID,
@@ -22,7 +22,7 @@ export const FRITZ_TIERS = {
     description: 'Solid fundamentals. A real challenge.',
     subdescription: undefined as string | undefined,
     difficulty: 'standard' as const,
-    color: '#60a5fa',
+    color: '#4A9EE8',
   },
   elite: {
     id: FRITZ_ELITE_ID,
@@ -31,7 +31,7 @@ export const FRITZ_TIERS = {
     description: 'Maximum strength. Unforgiving.',
     subdescription: 'The original Fritz.' as string | undefined,
     difficulty: 'hard' as const,
-    color: '#f87171',
+    color: '#E8A93A',
   },
   master: {
     id: FRITZ_MASTER_ID,
@@ -40,7 +40,7 @@ export const FRITZ_TIERS = {
     description: 'Sampled endgame search. No mercy.',
     subdescription: undefined as string | undefined,
     difficulty: 'master' as const,
-    color: '#f59e0b',
+    color: '#C97FE8',
   },
 } as const;
 

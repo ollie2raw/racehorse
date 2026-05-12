@@ -61,7 +61,7 @@ function getPacificDateKey(date: Date = new Date()): string {
   }).format(date);
 }
 
-function parseCliArgs(argv: string[]): { date: string } {
+function parseCliArgs(argv: string[]): { date: string; force: boolean } {
   const dateArgIndex = argv.findIndex((value) => value === '--date');
   const date =
     dateArgIndex >= 0 && typeof argv[dateArgIndex + 1] === 'string'
@@ -70,7 +70,32 @@ function parseCliArgs(argv: string[]): { date: string } {
   if (!isIsoDate(date)) {
     throw new Error(`Invalid --date value: ${date}`);
   }
-  return { date };
+  const force = argv.includes('--force');
+  return { date, force };
+}
+
+async function isLadderAlreadyReady(date: string): Promise<boolean> {
+  try {
+    const response = await postgrestFetch(
+      `/rest/v1/daily_puzzles?select=slot_index,published,set_version,slot_max_points,objective_payload&puzzle_date=eq.${encodeURIComponent(date)}&published=eq.true&set_version=eq.1`,
+    );
+    if (!response.ok) return false;
+    const rows = (await response.json()) as any[];
+    if (rows.length !== 3) return false;
+
+    // Basic check for ready-ness similar to isDailyPuzzleLadderReady
+    const hasAllSlots = [1, 2, 3].every((idx) => rows.some((r) => r.slot_index === idx));
+    if (!hasAllSlots) return false;
+
+    const allValid = rows.every((r) => {
+      const bestScore = r.objective_payload?.best_possible_score;
+      return r.slot_max_points > 0 && typeof bestScore === 'number' && bestScore > 0;
+    });
+
+    return allValid;
+  } catch {
+    return false;
+  }
 }
 
 function clonePuzzleForDate(
@@ -305,7 +330,16 @@ async function upsertSlot(
 }
 
 async function main(): Promise<void> {
-  const { date } = parseCliArgs(process.argv.slice(2));
+  const { date, force } = parseCliArgs(process.argv.slice(2));
+
+  if (!force) {
+    const ready = await isLadderAlreadyReady(date);
+    if (ready) {
+      console.log(`Daily Puzzle Ladder already ready for ${date}, skipping.`);
+      return;
+    }
+  }
+
   const results = [];
 
   for (const profile of LADDER_PROFILES) {

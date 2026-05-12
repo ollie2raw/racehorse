@@ -55,15 +55,20 @@ date_add_days() {
 
 run_ladder_seed() {
   local date_key="$1"
+  local force_flag=""
+  if [[ "$OVERWRITE_EXISTING" == true ]]; then
+    force_flag="--force"
+  fi
+  
   if command -v tsx >/dev/null 2>&1; then
-    tsx server/src/seedDailyPuzzleLadder.ts --date "$date_key"
+    tsx server/src/seedDailyPuzzleLadder.ts --date "$date_key" $force_flag
     return
   fi
   if command -v npx >/dev/null 2>&1; then
-    npx tsx server/src/seedDailyPuzzleLadder.ts --date "$date_key"
+    npx tsx server/src/seedDailyPuzzleLadder.ts --date "$date_key" $force_flag
     return
   fi
-  node server/dist/seedDailyPuzzleLadder.js --date "$date_key"
+  node server/dist/seedDailyPuzzleLadder.js --date "$date_key" $force_flag
 }
 
 echo "Seeding Daily Puzzle ladders from $FROM for $DAYS day(s)..."

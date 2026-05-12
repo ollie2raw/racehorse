@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play vs Fritz — v3 (Mockup-aligned)</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800;900&family=Barlow+Condensed:wght@500;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --brass:         #C8922A;
+  --brass-mid:     #d4952e;
+  --brass-bright:  #efc14d;
+  --brass-glow:    rgba(200, 146, 42, 0.35);
+  --bg-1:          #020611;
+  --bg-2:          #050916;
+  --bg-3:          #060b14;
+  --topbar-h:      78px;
+  --r-card:        24px;
+  --r-tile:        16px;
+  --r-sm:          10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { font-family: inherit; border: none; background: none; cursor: pointer; }
+p { margin: 0; }
+
+.screen {
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top center, rgba(31,83,168,0.18), transparent 30%),
+    radial-gradient(circle at bottom left, rgba(200,146,42,0.08), transparent 24%),
+    linear-gradient(180deg, var(--bg-1) 0%, var(--bg-2) 46%, var(--bg-3) 100%);
+  color: #f6f1e8;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+.page {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), transparent 14%),
+    linear-gradient(140deg, transparent 0 12%, rgba(61,142,255,0.05) 12.15%, transparent 12.3%),
+    linear-gradient(32deg, transparent 0 75%, rgba(61,142,255,0.04) 75.15%, transparent 75.3%);
+}
+
+/* ── TOPBAR ────────────────────────────────── */
+.topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(111,160,225,0.14);
+  background: linear-gradient(180deg, rgba(6,12,24,0.96), rgba(5,10,19,0.92));
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,0.03);
+}
+
+.brand { display: flex; align-items: center; gap: 11px; }
+.brand-icon {
+  width: 46px; height: 46px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 13px;
+  border: 1px solid rgba(200,146,42,0.6);
+  background: linear-gradient(155deg, #121317 0%, #08090D 100%);
+  box-shadow: 0 0 14px rgba(200,146,42,0.1), inset 0 1px 0 rgba(255,255,255,0.04);
+  color: var(--brass);
+  font: 900 13px/1 'Barlow Condensed', sans-serif;
+}
+.brand-word { font: 900 18px/1 'Space Grotesk', sans-serif; letter-spacing: 0.04em; color: #F5F2EC; text-transform: uppercase; }
+
+.nav { display: flex; align-items: center; justify-content: center; gap: 28px; }
+.nav-tab {
+  position: relative;
+  appearance: none; border: none; background: transparent;
+  color: rgba(239,242,247,0.78);
+  font: 600 14px/1.2 'Space Grotesk', sans-serif;
+  cursor: pointer;
+  padding: 8px 2px 18px;
+  transition: color 120ms ease;
+}
+.nav-tab:hover:not(.active) { color: rgba(239,242,247,0.96); }
+.nav-tab.active { color: var(--brass-bright); }
+.nav-tab.active::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 4px; border-radius: 999px 999px 0 0;
+  background: linear-gradient(90deg, var(--brass), var(--brass-mid));
+  box-shadow: 0 0 16px var(--brass-glow);
+}
+
+.meta { display: flex; align-items: center; gap: 18px; }
+.stat { display: flex; align-items: center; gap: 9px; padding-right: 18px; border-right: 1px solid rgba(255,255,255,0.08); }
+.stat.compact { padding-right: 14px; }
+.stat-icon { color: var(--brass-bright); font-size: 16px; }
+.stat-val { font: 800 18px/1 'Barlow Condensed', sans-serif; color: #f8f6f2; letter-spacing: 0.02em; }
+.stat-lbl { margin-top: 2px; font: 500 11px/1.1 'Space Grotesk', sans-serif; color: rgba(214,223,236,0.6); }
+.pill { display: flex; align-items: center; gap: 12px; }
+.pill-av {
+  width: 44px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(200,146,42,0.56);
+  background: radial-gradient(circle at 50% 35%, rgba(122,88,31,0.9), rgba(32,22,9,0.95));
+  color: #f2cf78; font: 800 18px/1 'Barlow Condensed', sans-serif;
+}
+.pill-name { font: 700 15px/1.1 'Space Grotesk', sans-serif; color: #f6f1e8; }
+.pill-meta { margin-top: 3px; font: 500 11px/1.1 'Space Grotesk', sans-serif; color: rgba(214,223,236,0.58); }
+
+/* ── LAYOUT ────────────────────────────────── */
+.layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(460px, 1.15fr);
+  gap: 28px;
+  padding: 14px 28px 28px;
+  overflow-y: auto;
+}
+.col-left { display: flex; flex-direction: column; gap: 18px; min-height: 0; }
+.col-right { min-width: 0; min-height: 0; }
+
+.back {
+  align-self: flex-start;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(11,18,31,0.72);
+  color: rgba(245,244,239,0.9);
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 11px 18px; border-radius: var(--r-sm);
+  font: 600 13px/1 'Space Grotesk', sans-serif;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.hero { padding: 16px 2px 0; }
+.eyebrow { color: var(--brass-bright); font: 700 12px/1 'Rajdhani', sans-serif; letter-spacing: 0.28em; text-transform: uppercase; }
+.hero-title { margin: 16px 0 10px; color: #fbf8f2; font: 900 clamp(52px, 5vw, 70px)/0.92 'Outfit', sans-serif; letter-spacing: -0.05em; }
+.hero-sub { color: rgba(227,232,240,0.68); font: 500 16px/1.5 'Space Grotesk', sans-serif; max-width: 520px; }
+
+/* CARD SHELL */
+.card {
+  border: 1px solid rgba(108,143,196,0.16);
+  border-radius: var(--r-card);
+  background:
+    linear-gradient(180deg, rgba(9,16,28,0.94), rgba(6,10,19,0.96)),
+    radial-gradient(circle at top right, rgba(61,142,255,0.08), transparent 34%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 26px 56px rgba(0,0,0,0.36);
+}
+
+.opponent-card {
+  flex: 1;
+  display: grid; grid-template-rows: auto 1fr auto;
+  padding: 26px 26px 22px;
+  overflow: hidden; position: relative;
+}
+.opponent-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(61,142,255,0.05) 0%, transparent 32%), linear-gradient(0deg, rgba(215,156,47,0.04), transparent 34%);
+  pointer-events: none;
+}
+.opp-copy { position: relative; z-index: 1; max-width: 300px; }
+.opp-label { color: var(--brass-bright); font: 700 12px/1 'Rajdhani', sans-serif; letter-spacing: 0.28em; text-transform: uppercase; }
+/* FIX: reduced from 72px to 52px — stops competing with hero title */
+.opp-name { margin-top: 8px; color: var(--brass-bright); font: 900 clamp(36px, 3vw, 50px)/0.9 'Outfit', sans-serif; letter-spacing: -0.04em; }
+.opp-copy p { margin: 14px 0 0; color: rgba(231,235,242,0.76); font: 500 14px/1.55 'Space Grotesk', sans-serif; max-width: 300px; }
+
+/* ROBOT ART */
+.art {
+  position: relative; min-height: 300px; margin-top: 16px;
+  border-radius: 20px; overflow: hidden;
+  background: radial-gradient(circle at 52% 48%, rgba(15,40,78,0.35), transparent 34%), linear-gradient(180deg, rgba(4,12,24,0.55), rgba(3,8,15,0.6));
+}
+.art-grid {
+  position: absolute; inset: 0;
+  background: linear-gradient(140deg, transparent 0 30%, rgba(61,142,255,0.08) 30.2%, transparent 30.5%), linear-gradient(35deg, transparent 0 78%, rgba(61,142,255,0.07) 78.2%, transparent 78.5%), radial-gradient(circle, rgba(61,142,255,0.16) 1px, transparent 1px);
+  background-size: auto, auto, 22px 22px; opacity: 0.42;
+}
+.robot { position: absolute; left: 50%; bottom: 14px; width: 220px; height: 248px; transform: translateX(-50%); }
+.robot-halo { position: absolute; left: 50%; top: 30px; width: 160px; height: 160px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(circle, rgba(61,142,255,0.2), transparent 68%); }
+.robot-head {
+  position: absolute; left: 50%; top: 8px; width: 136px; height: 108px; transform: translateX(-50%);
+  border-radius: 30px; border: 2px solid rgba(204,152,61,0.46);
+  background: linear-gradient(160deg, rgba(33,38,48,0.98), rgba(7,11,18,0.98)), radial-gradient(circle at 50% 40%, rgba(67,130,214,0.12), transparent 60%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 34px rgba(0,0,0,0.36);
+}
+.robot-head::before, .robot-head::after { content: ''; position: absolute; top: 24px; width: 14px; height: 64px; border-radius: 8px; border: 2px solid rgba(204,152,61,0.4); background: linear-gradient(180deg, rgba(31,37,46,0.96), rgba(10,12,17,0.96)); }
+.robot-head::before { left: -18px; } .robot-head::after { right: -18px; }
+.robot-eyes { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 22px; }
+.robot-eyes span { width: 30px; height: 16px; border-radius: 0 0 16px 16px; border-bottom: 4px solid #4ce1ff; box-shadow: 0 0 16px rgba(76,225,255,0.5); }
+.robot-body { position: absolute; left: 50%; bottom: 0; width: 130px; height: 130px; transform: translateX(-50%); border-radius: 26px 26px 20px 20px; background: linear-gradient(160deg, rgba(42,46,54,0.98), rgba(11,15,22,0.98)); border: 1px solid rgba(204,152,61,0.22); }
+.robot-arm { position: absolute; bottom: 34px; width: 26px; height: 106px; border-radius: 16px; background: linear-gradient(180deg, rgba(45,49,58,0.98), rgba(10,13,18,0.98)); border: 1px solid rgba(204,152,61,0.18); }
+.arm-l { left: 34px; transform: rotate(18deg); } .arm-r { right: 32px; transform: rotate(-22deg); }
+.domino, .domino-stack span { position: absolute; border-radius: 14px; background: linear-gradient(180deg, #efe7da 0%, #cabba4 100%); box-shadow: 0 12px 22px rgba(0,0,0,0.38); }
+.domino { width: 46px; height: 92px; }
+.domino::before, .domino::after, .domino-stack span::before, .domino-stack span::after { content: ''; position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #10151f; box-shadow: 0 21px 0 #10151f, 0 42px 0 #10151f; }
+.dom-a { right: 48px; bottom: 38px; transform: rotate(18deg); }
+.dom-b { right: 116px; bottom: 10px; transform: rotate(78deg); width: 48px; height: 96px; }
+.dom-c { left: 128px; bottom: 0; transform: rotate(-14deg); width: 44px; height: 86px; }
+.domino::before, .domino-stack span::before { left: 16px; top: 14px; }
+.domino::after, .domino-stack span::after { left: 16px; top: 46px; }
+.domino-stack { position: absolute; left: 20px; bottom: 16px; width: 96px; height: 76px; }
+.domino-stack span { width: 56px; height: 28px; left: 0; bottom: 0; transform: rotate(6deg); }
+.domino-stack span:last-child { left: 18px; bottom: 20px; transform: rotate(-4deg); }
+
+/* BENEFITS */
+.benefits { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.benefit {
+  display: flex; gap: 10px; padding: 14px 14px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(200,146,42,0.22);
+  background: rgba(5,10,19,0.78);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+.benefit-icon {
+  width: 40px; height: 40px; flex: 0 0 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid rgba(200,146,42,0.46);
+  color: var(--brass-bright); background: rgba(20,14,4,0.4);
+  font: 900 16px/1 'Barlow Condensed', sans-serif;
+}
+.benefit-title { color: var(--brass-bright); font: 700 12px/1.15 'Space Grotesk', sans-serif; }
+.benefit-desc { margin-top: 5px; color: rgba(232,236,242,0.72); font: 500 12px/1.45 'Space Grotesk', sans-serif; }
+
+/* ── RIGHT PANEL ───────────────────────────── */
+.config-card {
+  height: 100%;
+  padding: 26px 26px 22px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.config-card h2 { margin: 0; color: #f9f8f3; font: 900 28px/1 'Outfit', sans-serif; letter-spacing: -0.03em; }
+.config-card .sub { margin: 8px 0 0; color: rgba(223,229,237,0.64); font: 500 14px/1.45 'Space Grotesk', sans-serif; }
+.section { display: grid; gap: 14px; }
+.section-label { color: var(--brass-bright); font: 700 12px/1 'Rajdhani', sans-serif; letter-spacing: 0.28em; text-transform: uppercase; }
+
+/* TIER GRID — 4 columns, compact height */
+.tier-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tier-card {
+  position: relative;
+  padding: 16px 12px 14px;
+  border-radius: var(--r-tile);
+  border: 1px solid rgba(91,124,178,0.22);
+  background:
+    radial-gradient(circle at top center, color-mix(in srgb, var(--tc) 10%, transparent), transparent 55%),
+    linear-gradient(180deg, rgba(12,19,33,0.96), rgba(7,11,21,0.98));
+  color: #f7f4ed; text-align: center; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 24px rgba(0,0,0,0.24);
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.tier-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--tc) 44%, rgba(255,255,255,0.18)); }
+.tier-card.active {
+  border-color: color-mix(in srgb, var(--tc) 78%, rgba(255,255,255,0.28));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px color-mix(in srgb, var(--tc) 28%, transparent), 0 0 26px color-mix(in srgb, var(--tc) 18%, transparent), 0 14px 28px rgba(0,0,0,0.3);
+}
+/* check badge — unified #C8922A family */
+.check {
+  position: absolute; top: -11px; right: -9px;
+  width: 34px; height: 34px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #e0a83c, #C8922A);
+  color: #100b02; font: 900 17px/1 'Barlow Condensed', sans-serif;
+  box-shadow: 0 8px 18px rgba(200,146,42,0.42);
+}
+.t-icon {
+  width: 44px; height: 44px; margin: 0 auto 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--tc) 70%, rgba(255,255,255,0.12));
+  color: var(--tc); background: rgba(10,16,28,0.86);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--tc) 16%, transparent);
+  font-size: 18px;
+}
+.t-name { color: #f8f6f2; font: 800 17px/1.05 'Outfit', sans-serif; }
+.t-rating { margin-top: 7px; color: var(--tc); font: 900 19px/1 'Barlow Condensed', sans-serif; letter-spacing: 0.02em; }
+.t-desc { margin-top: 8px; color: rgba(225,232,239,0.72); font: 500 11px/1.45 'Space Grotesk', sans-serif; }
+.t-sub { margin-top: 4px; color: rgba(225,232,239,0.5); font: 500 11px/1.45 'Space Grotesk', sans-serif; }
+
+/* TIER SCALE */
+.tier-scale { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); }
+.scale-stop { display: flex; flex-direction: column; align-items: center; gap: 7px; color: rgba(201,210,224,0.72); font: 700 12px/1 'Rajdhani', sans-serif; }
+.scale-stop.active { color: color-mix(in srgb, var(--tc) 82%, #ffffff); }
+.scale-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(160,171,191,0.36); }
+.scale-stop.active .scale-dot { background: var(--tc); box-shadow: 0 0 12px color-mix(in srgb, var(--tc) 30%, transparent); }
+
+/* FORMAT GRID */
+.format-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.format-card {
+  position: relative;
+  display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 14px;
+  min-height: 96px; padding: 16px 20px;
+  border-radius: var(--r-tile);
+  border: 1px solid rgba(91,124,178,0.22);
+  background: linear-gradient(180deg, rgba(12,19,33,0.96), rgba(7,11,21,0.98));
+  color: #f7f4ed; cursor: pointer; text-align: left;
+  transition: border-color 140ms ease;
+}
+.format-card.active {
+  border-color: rgba(200,146,42,0.72);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(200,146,42,0.18), 0 0 22px rgba(200,146,42,0.08);
+}
+/* CSS domino icon with center divider */
+.format-icon {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 12px;
+  border: 1px solid rgba(200,146,42,0.22);
+  background: rgba(12,9,4,0.5);
+  color: #e8c87a; font: 900 24px/1 'Barlow Condensed', sans-serif;
+  overflow: hidden;
+}
+.format-icon::before {
+  content: ''; position: absolute;
+  top: 10px; bottom: 10px; left: 50%;
+  width: 1px; transform: translateX(-50%);
+  background: rgba(200,146,42,0.3);
+}
+.format-title { font: 800 17px/1.1 'Outfit', sans-serif; color: #f8f6f2; }
+.format-desc { margin-top: 5px; color: rgba(220,228,237,0.66); font: 500 13px/1.35 'Space Grotesk', sans-serif; }
+
+/* SUMMARY STRIP */
+.summary {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-radius: var(--r-tile);
+  border: 1px solid rgba(200,146,42,0.44);
+  background: linear-gradient(180deg, rgba(17,21,28,0.96), rgba(10,14,22,0.98)), radial-gradient(circle at left center, rgba(200,146,42,0.12), transparent 26%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 30px rgba(0,0,0,0.24);
+}
+.sum-item { display: flex; align-items: center; gap: 12px; padding: 18px 16px; }
+.sum-item + .sum-item { border-left: 1px solid rgba(255,255,255,0.08); }
+.sum-icon { color: var(--brass-bright); font-size: 22px; }
+.sum-val { color: #f8f6f2; font: 800 15px/1.1 'Outfit', sans-serif; }
+.sum-lbl { margin-top: 3px; color: rgba(221,229,237,0.6); font: 500 12px/1.2 'Space Grotesk', sans-serif; }
+
+/* START BUTTON — #C8922A family */
+.start-btn {
+  margin-top: 6px;
+  border-radius: 16px; min-height: 70px; padding: 0 28px;
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  background: linear-gradient(180deg, #d4952e, #C8922A);
+  color: #100c02; font: 900 22px/1 'Outfit', sans-serif;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 20px 32px rgba(200,146,42,0.24);
+  cursor: pointer; transition: filter 120ms ease, box-shadow 120ms ease;
+}
+.start-btn:hover { filter: brightness(1.06); box-shadow: inset 0 1px 0 rgba(255,255,255,0.26), 0 22px 36px rgba(200,146,42,0.32); }
+
+.tier-link {
+  align-self: center; color: #5eb2ff; font: 600 14px/1.2 'Space Grotesk', sans-serif;
+  margin-top: -2px; cursor: pointer; background: none; border: none; transition: color 120ms ease;
+}
+.tier-link:hover { color: #8ccbff; }
+
+@media (max-width: 1023px) { .layout { grid-template-columns: 1fr; align-content: start; } }
+</style>
+</head>
+<body>
+<div class="screen">
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">RH</div>
+        <div class="brand-word">Racehorse</div>
+      </div>
+      <nav class="nav">
+        <button class="nav-tab">Home</button>
+        <button class="nav-tab">Daily</button>
+        <button class="nav-tab active">Play</button>
+        <button class="nav-tab">Learn</button>
+        <button class="nav-tab">Leaderboards</button>
+      </nav>
+      <div class="meta">
+        <div class="stat">
+          <span class="stat-icon">★</span>
+          <div><div class="stat-val">1800</div><div class="stat-lbl">Tier Rating</div></div>
+        </div>
+        <div class="stat compact">
+          <span class="stat-icon">⚙</span>
+          <div><div class="stat-val">1</div><div class="stat-lbl">Bot</div></div>
+        </div>
+        <div class="pill">
+          <span class="pill-av">F</span>
+          <div><div class="pill-name">Fritz</div><div class="pill-meta">Practice Arena</div></div>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="col-left">
+        <button class="back">← Back to Single Player</button>
+
+        <div class="hero">
+          <div class="eyebrow">Single Player Mode</div>
+          <h1 class="hero-title">Play vs Fritz</h1>
+          <p class="hero-sub">Choose your tier and format, then start a match against Fritz.</p>
+        </div>
+
+        <div class="card opponent-card">
+          <div class="opp-copy">
+            <div class="opp-label">Your Opponent</div>
+            <div class="opp-name">Fritz</div>
+            <p>Fritz is a world-class dominoes AI built to challenge and sharpen your strategy.</p>
+            <p>Pick a difficulty, choose your format, and test your skills.</p>
+          </div>
+          <div class="art">
+            <div class="art-grid"></div>
+            <div class="robot">
+              <div class="robot-halo"></div>
+              <div class="robot-head"><div class="robot-eyes"><span></span><span></span></div></div>
+              <div class="robot-body"></div>
+              <div class="robot-arm arm-l"></div>
+              <div class="robot-arm arm-r"></div>
+            </div>
+            <div class="domino dom-a"></div>
+            <div class="domino dom-b"></div>
+            <div class="domino dom-c"></div>
+            <div class="domino-stack"><span></span><span></span></div>
+          </div>
+          <div class="benefits">
+            <div class="benefit">
+              <div class="benefit-icon">✦</div>
+              <div><div class="benefit-title">Rated Practice</div><div class="benefit-desc">Matches affect your practice rating.</div></div>
+            </div>
+            <div class="benefit">
+              <div class="benefit-icon">⚡</div>
+              <div><div class="benefit-title">Instant Match</div><div class="benefit-desc">Jump in and play right away.</div></div>
+            </div>
+            <div class="benefit">
+              <div class="benefit-icon">◈</div>
+              <div><div class="benefit-title">Bot Opponent</div><div class="benefit-desc">Consistent. Fair. Always improving.</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="col-right">
+        <div class="card config-card">
+          <div>
+            <h2>Configure Match</h2>
+            <p class="sub">Choose Fritz tier and starting hand size.</p>
+          </div>
+
+          <div class="section">
+            <div class="section-label">1. Choose Difficulty</div>
+            <div class="tier-grid">
+              <button class="tier-card" style="--tc:#34d399">
+                <div class="t-icon">✦</div>
+                <div class="t-name">Rookie</div>
+                <div class="t-rating">600</div>
+                <div class="t-desc">Learning the game. Good for beginners.</div>
+              </button>
+              <button class="tier-card" style="--tc:#60a5fa">
+                <div class="t-icon">⚡</div>
+                <div class="t-name">Standard</div>
+                <div class="t-rating">1000</div>
+                <div class="t-desc">Solid fundamentals. A real challenge.</div>
+              </button>
+              <button class="tier-card active" style="--tc:#f87171">
+                <span class="check">✓</span>
+                <div class="t-icon">◈</div>
+                <div class="t-name">Elite</div>
+                <div class="t-rating">1800</div>
+                <div class="t-desc">Maximum strength. Unforgiving.</div>
+                <div class="t-sub">The original Fritz.</div>
+              </button>
+              <button class="tier-card" style="--tc:#f59e0b">
+                <div class="t-icon">★</div>
+                <div class="t-name">Master</div>
+                <div class="t-rating">2400</div>
+                <div class="t-desc">Sampled endgame search. No mercy.</div>
+              </button>
+            </div>
+            <div class="tier-scale">
+              <div class="scale-stop" style="--tc:#34d399"><span class="scale-dot"></span><span>600</span></div>
+              <div class="scale-stop" style="--tc:#60a5fa"><span class="scale-dot"></span><span>1000</span></div>
+              <div class="scale-stop active" style="--tc:#f87171"><span class="scale-dot"></span><span>1800</span></div>
+              <div class="scale-stop" style="--tc:#f59e0b"><span class="scale-dot"></span><span>2400</span></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">2. Choose Deal Size / Format</div>
+            <div class="format-grid">
+              <button class="format-card active">
+                <span class="check">✓</span>
+                <div class="format-icon">7</div>
+                <div><div class="format-title">7 Tiles</div><div class="format-desc">Classic 7-tile format</div></div>
+              </button>
+              <button class="format-card">
+                <div class="format-icon">14</div>
+                <div><div class="format-title">14 Tiles</div><div class="format-desc">Extended 14-tile format</div></div>
+              </button>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-label">3. Match Summary</div>
+            <div class="summary">
+              <div class="sum-item">
+                <span class="sum-icon">◈</span>
+                <div><div class="sum-val">Fritz Elite</div><div class="sum-lbl">Difficulty</div></div>
+              </div>
+              <div class="sum-item">
+                <span class="sum-icon">◼</span>
+                <div><div class="sum-val">7-Tile Format</div><div class="sum-lbl">Deal Size</div></div>
+              </div>
+              <div class="sum-item">
+                <span class="sum-icon">★</span>
+                <div><div class="sum-val">Practice Match</div><div class="sum-lbl">Mode</div></div>
+              </div>
+            </div>
+          </div>
+
+          <button class="start-btn"><span>Start Match</span><span>›</span></button>
+          <button class="tier-link">View tier details ›</button>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+</body>
+</html>

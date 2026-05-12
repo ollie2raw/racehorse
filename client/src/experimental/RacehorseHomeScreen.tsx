@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { CSSProperties } from 'react';
-import { DominoTile, BrandLogo } from '../components';
+import { DominoTile, BrandLogo, GlobalNav } from '../components';
 import type { Tile } from '../types';
 import { useAuth } from '../auth/useAuth';
 import { fetchFriends } from '../friends/friendsApi';
@@ -177,20 +177,12 @@ export default function RacehorseHomeScreen({
 
   const { user: authUser, profile: authProfile } = useAuth();
 
-  const [friendCount, setFriendCount] = useState<number | null>(null);
   const [fritzStreak, setFritzStreak] = useState<number | null>(null);
   const [fritzStatus, setFritzStatus] = useState<'completed' | 'started' | 'none'>('none');
   const [fritzOutcome, setFritzOutcome] = useState<'win' | 'loss' | null>(null);
   const [puzzleStatus, setPuzzleStatus] = useState<'completed' | 'started' | 'none'>('none');
   const [puzzleScore, setPuzzleScore] = useState<number | null>(null);
   const [homeDailySummary, setHomeDailySummary] = useState<HomeDailySummaryResponse | null>(null);
-
-  useEffect(() => {
-    if (!authUser?.id) { setFriendCount(null); return; }
-    fetchFriends(authUser.id)
-      .then(({ friends }) => setFriendCount(friends.length))
-      .catch(() => setFriendCount(0));
-  }, [authUser?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,24 +222,6 @@ export default function RacehorseHomeScreen({
       })
       .catch(() => setPuzzleStatus('none'));
   }, []);
-
-  const username = authProfile?.username ?? null;
-  const rating = authProfile?.glicko_rating != null
-    ? Math.round(Number(authProfile.glicko_rating)).toLocaleString()
-    : authUser ? '800' : '—';
-
-  const initials = useMemo(() => {
-    if (!username) return authUser ? '?' : '→';
-    const parts = username.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
-    const init = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
-    return init || username.slice(0, 2).toUpperCase();
-  }, [username, authUser]);
-
-  const displayName = username ?? (authUser ? 'Loading…' : 'Sign In');
-
-  const todayLabel = new Date().toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  }).toUpperCase();
 
   const streakDays = homeDailySummary?.week ?? [];
   const weeklyCompletedCount = homeDailySummary?.weeklyCompletedCount ?? 0;
@@ -293,80 +267,11 @@ export default function RacehorseHomeScreen({
       </div>
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-[1580px] flex-col home-shell">
-        <nav className="relative flex h-[78px] shrink-0 items-center justify-between px-9 home-nav">
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[28px] bg-[linear-gradient(180deg,transparent_0%,rgba(7,10,17,0.18)_100%)]" />
-          <div className="flex items-center">
-            <BrandLogo iconSize={44} />
-          </div>
-
-          <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[13px] font-medium uppercase tracking-[0.28em] text-[#52AFFF] opacity-85">
-            {todayLabel}
-          </div>
-
-          <div className="flex items-center">
-            {/* Rating */}
-            <div className="flex items-center gap-3 px-5 py-2.5">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="#F2C35E" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
-              </svg>
-              <div className="leading-tight">
-                <div className="text-[20px] font-bold text-[#F0EDE8]">{rating}</div>
-                <div className="text-[12px] text-[#8A879B]">Rating</div>
-              </div>
-            </div>
-            <div className="h-8 w-px bg-white/10" />
-            <button
-              type="button"
-              onClick={() => navigate('friends')}
-              className="flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="9" cy="8.7" r="2.2" fill="#4A8FD4" />
-                <circle cx="15.4" cy="9.5" r="1.9" fill="#4A8FD4" />
-                <path d="M4.5 17.6C5.4 15.4 7.2 14.1 9.8 14.1C12 14.1 13.7 14.9 14.7 16.8" stroke="#4A8FD4" strokeWidth="1.7" strokeLinecap="round" />
-                <path d="M14.7 14.8C16.3 14.8 17.7 15.5 18.8 16.9" stroke="#4A8FD4" strokeWidth="1.7" strokeLinecap="round" />
-              </svg>
-              <div className="leading-tight text-left">
-                <div className="text-[20px] font-bold text-[#F0EDE8]">{friendCount !== null ? friendCount : authUser ? '…' : '—'}</div>
-                <div className="text-[12px] text-[#8A879B]">Friends</div>
-              </div>
-            </button>
-
-            <div className="mx-4 h-8 w-px bg-white/10" />
-
-            <div className="flex items-center gap-4">
-              {/* Big "O" / Avatar -> Stats */}
-              <button
-                type="button"
-                onClick={() => navigate('stats')}
-                className="flex h-[54px] w-[54px] items-center justify-center rounded-full border border-[#C8922A]/60 bg-[radial-gradient(circle_at_45%_30%,#8A5A2B_0%,#4A2D18_44%,#140F0D_100%)] shadow-[0_0_14px_rgba(200,146,42,0.12)] select-none cursor-pointer transition-opacity hover:opacity-80 active:scale-95"
-                aria-label="View Stats"
-              >
-                <span className="text-[17px] font-bold tracking-tight text-[#E1BE82]">{initials}</span>
-              </button>
-
-              {/* Username / Details -> Account/Auth */}
-              <button
-                type="button"
-                onClick={() => (authUser ? onOpenAccount?.() : onOpenAuth?.())}
-                className="flex items-center gap-4 cursor-pointer transition-opacity hover:opacity-80"
-              >
-                <div className="leading-tight text-left">
-                  <div className="text-[16px] font-semibold text-[#F0EDE8]">{displayName}</div>
-                  {authUser && authProfile?.ranked_games_played != null && (
-                    <div className="mt-1 text-[13px] text-[#8A879B]">{authProfile.ranked_games_played} ranked games</div>
-                  )}
-                  {!authUser && (
-                    <div className="mt-1 text-[13px] text-[#5BAAF8]">Sign in to track progress</div>
-                  )}
-                </div>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M5 7.5L10 12.5L15 7.5" stroke="#E7E1D5" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </nav>
+        <GlobalNav
+          onNavigate={navigate}
+          onOpenAuth={onOpenAuth}
+          onOpenAccount={onOpenAccount}
+        />
 
         <main className="relative flex-1 px-0 pb-5 pt-10 home-main">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]" />

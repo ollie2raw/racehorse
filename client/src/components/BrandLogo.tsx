@@ -46,7 +46,10 @@ export function BrandLogo({
         <div className="flex flex-col justify-center">
           <div 
             className="font-black leading-none tracking-[0.04em] text-[#F5F2EC] uppercase"
-            style={{ fontSize: mainFontSize }}
+            style={{ 
+              fontSize: mainFontSize,
+              fontFamily: "'Outfit', system-ui, sans-serif"
+            }}
           >
             RACEHORSE
           </div>

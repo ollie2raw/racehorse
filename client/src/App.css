@@ -287,8 +287,9 @@ body {
 }
 
 .app {
-  height: auto;
+  height: 100dvh;
   min-height: 100dvh;
+  overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family:
@@ -719,10 +720,10 @@ button:hover:not(:disabled) {
   position: relative;
   justify-content: flex-start;
   align-items: stretch;
-  min-height: 100vh;
-  height: auto;
+  min-height: 99.5dvh;
+  height: 99.5dvh;
   padding: 8px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .mode-home-screen:not(.mode-subpage-screen) {

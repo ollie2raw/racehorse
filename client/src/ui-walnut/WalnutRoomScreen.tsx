@@ -108,7 +108,9 @@ export default function WalnutRoomScreen() {
 
 const styles = `
 .walnut-root {
-  min-height: 100vh;
+  height: 99.5dvh;
+  max-height: 99.5dvh;
+  overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr auto;
   align-items: start;

@@ -220,12 +220,34 @@ export function sortDailyPuzzleSlots(slots: DailyPuzzleSlot[]): DailyPuzzleSlot[
   });
 }
 
+export function findReadyDailyPuzzleLadderSlots(slots: DailyPuzzleSlot[]): DailyPuzzleSlot[] | null {
+  if (slots.length < 3) return null;
+  
+  const byVersion: Record<number, DailyPuzzleSlot[]> = {};
+  for (const slot of slots) {
+    if (!byVersion[slot.setVersion]) byVersion[slot.setVersion] = [];
+    byVersion[slot.setVersion].push(slot);
+  }
+
+  const versions = Object.keys(byVersion).map(Number).sort((a, b) => b - a);
+  
+  for (const version of versions) {
+    const versionSlots = byVersion[version];
+    if (versionSlots.length !== 3) continue;
+    
+    const sorted = sortDailyPuzzleSlots(versionSlots);
+    if (sorted.some((slot) => !slot.published)) continue;
+    if (sorted[0].slotIndex !== 1 || sorted[1].slotIndex !== 2 || sorted[2].slotIndex !== 3) continue;
+    if (sorted.every((slot) => slot.slotMaxPoints > 0 && (slot.bestPossibleScore ?? 0) > 0)) {
+      return sorted;
+    }
+  }
+
+  return null;
+}
+
 export function isDailyPuzzleLadderReady(slots: DailyPuzzleSlot[]): boolean {
-  if (slots.length !== 3) return false;
-  const sorted = sortDailyPuzzleSlots(slots);
-  if (sorted.some((slot) => !slot.published || slot.setVersion !== sorted[0].setVersion)) return false;
-  if (sorted[0].slotIndex !== 1 || sorted[1].slotIndex !== 2 || sorted[2].slotIndex !== 3) return false;
-  return sorted.every((slot) => slot.slotMaxPoints > 0 && (slot.bestPossibleScore ?? 0) > 0);
+  return findReadyDailyPuzzleLadderSlots(slots) !== null;
 }
 
 export function calculateDailyPuzzleAwardedPoints(

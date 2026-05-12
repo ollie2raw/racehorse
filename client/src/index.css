@@ -36,6 +36,12 @@ body {
   overflow: hidden;
 }
 
+body:has(.pvf-root),
+body:has(.pvf-root) #root {
+  overflow-y: auto !important;
+  height: auto !important;
+}
+
 #root {
   height: 100%;
   min-height: 100dvh;

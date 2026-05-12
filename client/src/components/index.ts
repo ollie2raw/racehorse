@@ -8,3 +8,4 @@ export { ScoreTrackOverlay } from './ScoreTrackOverlay';
 export { BoneyardStackIcon } from './BoneyardStackIcon';
 export { RotateOverlay } from './RotateOverlay';
 export { BrandLogo } from './BrandLogo';
+export { GlobalNav } from './GlobalNav';

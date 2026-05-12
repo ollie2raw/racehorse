@@ -17,24 +17,29 @@ import {
 
 function DailyFritzLoadingScreen({ onBack }: { onBack: () => void }) {
   return (
-    <div className="daily-fritz-loading-root">
+    <div className="home-page-root daily-fritz-loading-root">
       <div className="home-bg" aria-hidden="true">
         <div className="home-bg__halo" />
+        <div className="home-bg__domino home-bg__domino--tl" />
+        <div className="home-bg__domino home-bg__domino--tr" />
+        <div className="home-bg__line home-bg__line--1" />
+        <div className="home-bg__line home-bg__line--2" />
+        <div className="home-bg__line home-bg__line--3" />
         <div className="home-bg__texture" />
       </div>
 
-      <div className="daily-fritz-loading-shell">
-        <nav className="daily-fritz-loading-nav">
-          <div className="daily-fritz-loading-brand">
+      <div className="home-shell">
+        <nav className="home-nav daily-fritz-loading-nav">
+          <div className="home-nav__brand">
             <BrandLogo iconSize={32} showWordmark={true} />
           </div>
-          <button type="button" className="loading-back-btn" onClick={onBack}>
-            <span className="loading-back-icon">←</span>
+          <button type="button" className="home-nav__back" onClick={onBack}>
+            <span className="home-nav__back-icon">←</span>
             <span>Back to Home</span>
           </button>
         </nav>
 
-        <main className="daily-fritz-loading-main">
+        <main className="home-main daily-fritz-loading-main">
           <div className="loading-lockup">
             <div className="loading-eyebrow brass-theme">
               <span className="brass-dot" />
@@ -1300,70 +1305,87 @@ export default function DailyFritzScreen({
   }
 
   return (
-    <div className="screen daily-fritz-screen mode-subpage-screen mode-accent-daily-fritz">
-      <div className="daily-dash" style={{ ['--dash-accent' as string]: '#e05c6a' }}>
+    <div className="home-page-root daily-fritz-page-root">
+      {/* ── Immersive Background ── */}
+      <div className="home-bg" aria-hidden="true">
+        <div className="home-bg__halo" />
+        <div className="home-bg__domino home-bg__domino--tl" />
+        <div className="home-bg__domino home-bg__domino--tr" />
+        <div className="home-bg__line home-bg__line--1" />
+        <div className="home-bg__line home-bg__line--2" />
+        <div className="home-bg__line home-bg__line--3" />
+        <div className="home-bg__texture" />
+      </div>
 
-        {/* ── Top bar ── */}
-        <header className="daily-dash-topbar">
-          <div className="daily-dash-brand">RACEHORSE</div>
-          <button type="button" className="daily-dash-back" onClick={onBack}>
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M7.5 2L3 6l4.5 4" />
-            </svg>
-            Back to Home
+      <div className="home-shell">
+        {/* ── Top Nav ── */}
+        <nav className="home-nav daily-fritz-nav">
+          <div className="home-nav__brand">
+            <BrandLogo iconSize={32} showWordmark={true} />
+          </div>
+          <button type="button" className="home-nav__back" onClick={onBack}>
+            <span className="home-nav__back-icon">←</span>
+            <span>Back to Home</span>
           </button>
-        </header>
+        </nav>
 
         {/* ── Main content ── */}
-        <main className="daily-dash-main">
-
-          {/* Header */}
-          <div className="daily-dash-header">
-            <p className="daily-dash-eyebrow">Daily Fritz</p>
-            <h1 className="daily-dash-title">Daily Fritz</h1>
-            <p className="daily-dash-subtitle">Best-of-3 set. Same deals for everyone.</p>
+        <main className="home-main daily-fritz-main-content">
+          {/* Editorial Header */}
+          <div className="daily-fritz-header">
+            <p className="daily-fritz-eyebrow brass-theme">
+              <span className="brass-dot" />
+              DAILY FRITZ
+            </p>
+            <h1 className="daily-fritz-title">Daily Fritz</h1>
+            <p className="daily-fritz-subtitle">Best-of-3 set. Same deals for everyone.</p>
           </div>
-
-          <div className="daily-dash-separator" aria-hidden="true" />
 
           {/* Body — varies by load/auth/data state */}
           {showAuthPrompt ? (
-            <div className="daily-dash-body daily-fritz-home-body">
-              <div className="daily-dash-details daily-fritz-home-primary">
-                <div className="daily-fritz-empty claude-mode-card">
-                  <p>Sign in to play Daily Fritz.</p>
+            <div className="daily-fritz-grid">
+              <div className="daily-fritz-details-col">
+                <div className="daily-fritz-glass-card brass-theme">
+                  <div className="daily-fritz-empty">
+                    <p>Sign in to play Daily Fritz.</p>
+                  </div>
                 </div>
               </div>
-              <div className="daily-dash-actions daily-fritz-home-secondary">
-                <ClaudePrimaryAction accent="#e05c6a" title="Sign In" meta="Open account access" onClick={onOpenAuth} />
+              <div className="daily-fritz-actions-col">
+                <ClaudePrimaryAction accent="#E7B64A" title="Sign In" meta="Open account access" onClick={onOpenAuth} />
               </div>
             </div>
           ) : error ? (
-            <div className="daily-fritz-empty claude-mode-card">{error}</div>
+            <div className="daily-fritz-glass-card brass-theme">
+              <div className="daily-fritz-empty">{error}</div>
+            </div>
           ) : today ? (
-            <div className="daily-dash-body daily-fritz-home-body">
-              <div className="daily-dash-details daily-fritz-home-primary">
+            <div className="daily-fritz-grid">
+              {/* Left Column: Match Details */}
+              <div className="daily-fritz-details-col">
                 {setSubmitError ? (
-                  <div className="daily-fritz-empty claude-mode-card">{setSubmitError}</div>
+                  <div className="daily-fritz-glass-card brass-theme error-state">
+                    <div className="daily-fritz-empty">{setSubmitError}</div>
+                  </div>
                 ) : null}
-                <div className="claude-mode-info-card">
-                  <ClaudeSectionLabel color="#e05c6a">Match Details</ClaudeSectionLabel>
+                <div className="daily-fritz-glass-card brass-theme details-card">
+                  <ClaudeSectionLabel color="#E7B64A">Match Details</ClaudeSectionLabel>
                   <ClaudeStatLine label="Date" value={formatDateLabel(today.run_date)} />
-                  <ClaudeStatLine label="Tier" value={tierDisplayLabel(today.fritz_tier)} accent={today.fritz_tier === 'elite' ? '#ff7070' : undefined} />
+                  <ClaudeStatLine label="Tier" value={tierDisplayLabel(today.fritz_tier)} accent={today.fritz_tier === 'elite' ? '#FFD700' : undefined} />
                   <ClaudeStatLine label="Mode" value={`Best-of-3 · ${today.deal_size}-tile`} />
-                  <ClaudeStatLine label="Set Status" value={getSetStatusLabel(today)} accent="#e05c6a" />
+                  <ClaudeStatLine label="Set Status" value={getSetStatusLabel(today)} accent="#E7B64A" />
                   <ClaudeStatLine
                     label="Streak"
                     value={`${today.streak} day${today.streak === 1 ? '' : 's'}`}
-                    accent="#e05c6a"
+                    accent="#E7B64A"
                   />
                 </div>
-
               </div>
 
-              <div className="daily-dash-actions daily-fritz-home-secondary">
+              {/* Right Column: Actions */}
+              <div className="daily-fritz-actions-col">
                 {today.attempt_status === 'started' && (
-                  <div className="daily-fritz-status-card is-active claude-mode-card">
+                  <div className="daily-fritz-status-glass-card brass-theme is-active">
                     <span className="daily-fritz-status-label">In Progress</span>
                     <strong>{today.needs_completion ? 'Final result needs posting.' : 'Resume your run.'}</strong>
                     <p>{today.needs_completion ? 'Your set is finished. Retry finalizing the result.' : 'Your spot is saved.'}</p>
@@ -1371,7 +1393,7 @@ export default function DailyFritzScreen({
                 )}
 
                 {today.attempt_status === 'completed' && (
-                  <div className="daily-fritz-status-card is-complete-panel claude-mode-card">
+                  <div className="daily-fritz-status-glass-card brass-theme is-complete">
                     <span className="daily-fritz-status-label">Completed</span>
                     <strong>{formatSetResultLabel(normalizeSetResult(today.set_result ?? today.result), Boolean(today.result?.won))}</strong>
                     <p>Your set result is posted. Leaderboard remains available as a secondary view.</p>
@@ -1379,7 +1401,7 @@ export default function DailyFritzScreen({
                 )}
 
                 {today.attempt_status === 'abandoned' && (
-                  <div className="daily-fritz-status-card is-muted claude-mode-card">
+                  <div className="daily-fritz-status-glass-card brass-theme is-spent">
                     <span className="daily-fritz-status-label">Spent</span>
                     <strong>Today’s run is spent.</strong>
                     <p>Come back tomorrow for a new one.</p>
@@ -1387,26 +1409,50 @@ export default function DailyFritzScreen({
                 )}
 
                 {today.attempt_status !== 'completed' && today.attempt_status !== 'abandoned' ? (
-                  <ClaudePrimaryAction
-                    accent="#e05c6a"
+                  <button
+                    type="button"
+                    className="daily-fritz-play-card brass-theme"
                     onClick={() => void beginRun()}
-                    title={getPrimaryActionCopy(today).title}
-                    meta={getPrimaryActionCopy(today).meta}
                     disabled={startActionPending}
-                  />
+                  >
+                    <div className="daily-fritz-play-card-content">
+                      <span className="daily-fritz-play-card-label">Set of 3</span>
+                      <strong className="daily-fritz-play-card-title">
+                        {getPrimaryActionCopy(today).title}
+                      </strong>
+                      <p className="daily-fritz-play-card-meta">
+                        {getPrimaryActionCopy(today).meta}
+                      </p>
+                    </div>
+                    <div className="daily-fritz-play-card-icon">
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
+                  </button>
                 ) : null}
 
-                <div className="daily-fritz-secondary-panel claude-mode-card">
-                  <ClaudeSecondaryAction
-                    title="Leaderboard"
-                    meta="See today’s standings"
+                <div className="daily-fritz-action-group">
+                  <button
+                    type="button"
+                    className="daily-fritz-nav-card brass-theme"
                     onClick={() => void openLeaderboard()}
-                  />
+                  >
+                    <div className="daily-fritz-nav-card-content">
+                      <span className="daily-fritz-nav-card-label">Standings</span>
+                      <strong className="daily-fritz-nav-card-title">Leaderboard</strong>
+                      <p className="daily-fritz-nav-card-meta">See today’s global results</p>
+                    </div>
+                    <div className="daily-fritz-nav-card-arrow">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                  </button>
                 </div>
               </div>
             </div>
           ) : null}
-
         </main>
       </div>
     </div>

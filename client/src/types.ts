@@ -77,3 +77,21 @@ export interface StateUpdate {
   legalMoves: Move[];
   canDraw: boolean;
 }
+
+export type AppMode =
+  | 'home'
+  | 'multiplayer'
+  | 'noBrainer'
+  | 'botSetup'
+  | 'bot'
+  | 'ghostSetup'
+  | 'ghost'
+  | 'daily'
+  | 'dailyFritz'
+  | 'league'
+  | 'learn'
+  | 'friends'
+  | 'stats'
+  | 'ratingHistory'
+  | 'singlePlayerHub'
+  | 'tournament';

@@ -52,6 +52,7 @@ import {
 import {
   buildDailyPuzzleLeaderboard,
   calculateDailyPuzzleAwardedPoints,
+  findReadyDailyPuzzleLadderSlots,
   isDailyPuzzleLadderReady,
   normalizeDailyPuzzleAttempt,
   normalizeDailyPuzzleSlot,
@@ -2702,9 +2703,11 @@ app.get('/api/daily-puzzle/today', async (req, res) => {
   try {
     const authenticatedUserId = await getAuthenticatedUserId(req);
     const runDate = getPacificDateKey();
-    const slots = await listDailyPuzzleSlotsForDate(runDate);
+    const allSlots = await listDailyPuzzleSlotsForDate(runDate);
+    const ladderSlots = findReadyDailyPuzzleLadderSlots(allSlots);
+    const ready = ladderSlots !== null;
+    const slots = ladderSlots ?? allSlots;
     const leaderboard = await buildDailyPuzzleLeaderboardForDate(runDate);
-    const ready = isDailyPuzzleLadderReady(slots);
     const attempt = authenticatedUserId ? await getDailyPuzzleAttempt(runDate, authenticatedUserId) : null;
     const nextAvailableSlotIndex = attempt
       ? attempt.status === 'completed'

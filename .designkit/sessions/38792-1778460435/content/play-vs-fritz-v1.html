@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play vs Fritz — Current State</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800;900&family=Barlow+Condensed:wght@500;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ─── DESIGN TOKENS ─────────────────────────────── */
+:root {
+  --bg-base-1:      #020611;
+  --bg-base-2:      #050916;
+  --bg-base-3:      #060b14;
+  --bg-topbar:      rgba(6,12,24,0.96);
+  --bg-card:        rgba(9,16,28,0.94);
+  --bg-card-inner:  rgba(6,10,19,0.96);
+  --bg-tile:        rgba(12,19,33,0.96);
+
+  --brass-primary:  #efc14d;
+  --brass-dark:     #d79c2f;
+  --brass-gold:     #ffda6a;
+  --brass-border:   rgba(215,156,47,0.44);
+  --brass-glow:     rgba(215,156,47,0.18);
+  --brand-brass:    #C8922A;
+
+  --cyan-eye:       #4ce1ff;
+  --blue-link:      #5eb2ff;
+  --blue-halo:      rgba(31,83,168,0.18);
+  --blue-accent:    rgba(61,142,255,0.08);
+
+  --text-primary:   #fbf8f2;
+  --text-ivory:     #f6f1e8;
+  --text-muted:     rgba(214,223,236,0.6);
+  --text-dim:       rgba(225,232,239,0.72);
+  --text-subdim:    rgba(220,228,237,0.66);
+
+  --border-subtle:  rgba(108,143,196,0.16);
+  --border-topbar:  rgba(111,160,225,0.14);
+  --border-inner:   rgba(255,255,255,0.08);
+
+  --radius-card:    24px;
+  --radius-tier:    18px;
+  --radius-sm:      16px;
+  --radius-xs:      10px;
+  --radius-pill:    50%;
+
+  --space-page-h:   28px;
+  --space-page-v:   14px;
+  --space-card:     28px;
+  --topbar-h:       78px;
+
+  /* Active tier = elite */
+  --active-tier:    #f87171;
+}
+
+/* ─── RESET ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { font-family: inherit; border: none; background: none; cursor: pointer; }
+p { margin: 0; }
+
+/* ─── ROOT SCREEN ───────────────────────────────── */
+.bot-setup-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top center, var(--blue-halo), transparent 30%),
+    radial-gradient(circle at bottom left, rgba(200,146,42,0.08), transparent 24%),
+    linear-gradient(180deg, var(--bg-base-1) 0%, var(--bg-base-2) 46%, var(--bg-base-3) 100%);
+  color: var(--text-ivory);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+.bot-setup-page {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), transparent 14%),
+    linear-gradient(140deg, transparent 0 12%, rgba(61,142,255,0.05) 12.15%, transparent 12.3%),
+    linear-gradient(32deg, transparent 0 75%, rgba(61,142,255,0.04) 75.15%, transparent 75.3%);
+}
+
+/* ─── TOPBAR ────────────────────────────────────── */
+.bot-setup-topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-topbar);
+  background: linear-gradient(180deg, rgba(6,12,24,0.96), rgba(5,10,19,0.92));
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,0.03);
+}
+
+.bot-setup-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon-box {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  border: 1px solid rgba(200,146,42,0.6);
+  background: linear-gradient(155deg, #121317 0%, #08090D 100%);
+  box-shadow: 0 0 14px rgba(200,146,42,0.1), inset 0 1px 0 rgba(255,255,255,0.04);
+  color: var(--brand-brass);
+  font: 900 22px/1 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.brand-wordmark {
+  font: 900 18px/1 'Space Grotesk', sans-serif;
+  letter-spacing: 0.04em;
+  color: #F5F2EC;
+  text-transform: uppercase;
+}
+
+.bot-setup-topbar__nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+
+.bot-setup-nav-tab {
+  position: relative;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: rgba(239,242,247,0.78);
+  font: 600 14px/1.2 'Space Grotesk', system-ui, sans-serif;
+  cursor: default;
+  padding: 8px 2px 18px;
+}
+
+.bot-setup-nav-tab.is-active {
+  color: var(--brass-primary);
+}
+
+.bot-setup-nav-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(90deg, var(--brass-dark), var(--brass-gold));
+  box-shadow: 0 0 16px rgba(215,156,47,0.35);
+}
+
+.bot-setup-topbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.bot-setup-meta-stat {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-right: 18px;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+
+.bot-setup-meta-stat.is-compact { padding-right: 14px; }
+
+.bot-setup-meta-stat__icon {
+  color: var(--brass-primary);
+  font-size: 16px;
+}
+
+.bot-setup-meta-stat__value {
+  font: 800 18px/1 'Barlow Condensed', system-ui, sans-serif;
+  color: #f8f6f2;
+  letter-spacing: 0.02em;
+}
+
+.bot-setup-meta-stat__label {
+  margin-top: 2px;
+  font: 500 11px/1.1 'Space Grotesk', system-ui, sans-serif;
+  color: var(--text-muted);
+}
+
+.bot-setup-profile-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bot-setup-profile-pill__avatar {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(215,156,47,0.56);
+  background: radial-gradient(circle at 50% 35%, rgba(122,88,31,0.9), rgba(32,22,9,0.95));
+  color: #f2cf78;
+  font: 800 18px/1 'Barlow Condensed', system-ui, sans-serif;
+}
+
+.bot-setup-profile-pill__name {
+  font: 700 15px/1.1 'Space Grotesk', system-ui, sans-serif;
+  color: var(--text-ivory);
+}
+
+.bot-setup-profile-pill__meta {
+  margin-top: 3px;
+  font: 500 11px/1.1 'Space Grotesk', system-ui, sans-serif;
+  color: rgba(214,223,236,0.58);
+}
+
+/* ─── MAIN LAYOUT ───────────────────────────────── */
+.bot-setup-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(640px, 1.1fr);
+  gap: 30px;
+  padding: 14px 28px 28px;
+}
+
+.bot-setup-left, .bot-setup-right { min-height: 0; }
+
+.bot-setup-left {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ─── BACK BUTTON ───────────────────────────────── */
+.bot-setup-back-button {
+  align-self: flex-start;
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(11,18,31,0.72);
+  color: rgba(245,244,239,0.9);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: var(--radius-xs);
+  font: 600 13px/1 'Space Grotesk', system-ui, sans-serif;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  cursor: pointer;
+}
+
+/* ─── HERO COPY ─────────────────────────────────── */
+.bot-setup-hero-copy { padding: 18px 2px 0; }
+
+.bot-setup-eyebrow {
+  color: var(--brass-primary);
+  font: 700 12px/1 'Rajdhani', system-ui, sans-serif;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.bot-setup-title {
+  margin: 18px 0 10px;
+  color: var(--text-primary);
+  font: 900 clamp(56px, 5vw, 74px)/0.92 'Outfit', system-ui, sans-serif;
+  letter-spacing: -0.05em;
+}
+
+.bot-setup-subtitle {
+  margin: 0;
+  color: rgba(227,232,240,0.68);
+  font: 500 17px/1.5 'Space Grotesk', system-ui, sans-serif;
+  max-width: 560px;
+}
+
+/* ─── OPPONENT CARD ─────────────────────────────── */
+.bot-setup-opponent-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(180deg, rgba(9,16,28,0.94), rgba(6,10,19,0.96)),
+    radial-gradient(circle at top right, var(--blue-accent), transparent 34%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 26px 56px rgba(0,0,0,0.36);
+  flex: 1;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 28px 28px 24px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bot-setup-opponent-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(61,142,255,0.05) 0%, transparent 32%),
+    linear-gradient(0deg, rgba(215,156,47,0.04), transparent 34%);
+  pointer-events: none;
+}
+
+.bot-setup-opponent-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 320px;
+}
+
+.bot-setup-opponent-label {
+  color: var(--brass-primary);
+  font: 700 12px/1 'Rajdhani', system-ui, sans-serif;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.bot-setup-opponent-name {
+  margin-top: 10px;
+  color: var(--brass-primary);
+  font: 900 clamp(56px, 5vw, 72px)/0.9 'Outfit', system-ui, sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.bot-setup-opponent-copy p {
+  margin: 16px 0 0;
+  color: rgba(231,235,242,0.76);
+  font: 500 15px/1.55 'Space Grotesk', system-ui, sans-serif;
+  max-width: 320px;
+}
+
+/* ─── ROBOT ART ─────────────────────────────────── */
+.bot-setup-opponent-art {
+  position: relative;
+  min-height: 340px;
+  margin-top: 18px;
+  border-radius: 22px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 52% 48%, rgba(15,40,78,0.35), transparent 34%),
+    linear-gradient(180deg, rgba(4,12,24,0.55), rgba(3,8,15,0.6));
+}
+
+.bot-setup-opponent-art__grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(140deg, transparent 0 30%, rgba(61,142,255,0.08) 30.2%, transparent 30.5%),
+    linear-gradient(35deg, transparent 0 78%, rgba(61,142,255,0.07) 78.2%, transparent 78.5%),
+    radial-gradient(circle, rgba(61,142,255,0.16) 1px, transparent 1px);
+  background-size: auto, auto, 22px 22px;
+  opacity: 0.42;
+}
+
+.bot-setup-robot {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  width: 250px;
+  height: 282px;
+  transform: translateX(-22%);
+}
+
+.bot-setup-robot__halo {
+  position: absolute;
+  left: 50%;
+  top: 34px;
+  width: 180px;
+  height: 180px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(61,142,255,0.2), transparent 68%);
+}
+
+.bot-setup-robot__head {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  width: 152px;
+  height: 122px;
+  transform: translateX(-50%);
+  border-radius: 34px;
+  border: 2px solid rgba(204,152,61,0.46);
+  background:
+    linear-gradient(160deg, rgba(33,38,48,0.98), rgba(7,11,18,0.98)),
+    radial-gradient(circle at 50% 40%, rgba(67,130,214,0.12), transparent 60%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 18px 34px rgba(0,0,0,0.36);
+}
+
+.bot-setup-robot__head::before,
+.bot-setup-robot__head::after {
+  content: '';
+  position: absolute;
+  top: 28px;
+  width: 16px;
+  height: 74px;
+  border-radius: 10px;
+  border: 2px solid rgba(204,152,61,0.4);
+  background: linear-gradient(180deg, rgba(31,37,46,0.96), rgba(10,12,17,0.96));
+}
+
+.bot-setup-robot__head::before { left: -20px; }
+.bot-setup-robot__head::after  { right: -20px; }
+
+.bot-setup-robot__eyes {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+}
+
+.bot-setup-robot__eyes span {
+  width: 34px;
+  height: 18px;
+  border-radius: 0 0 18px 18px;
+  border-bottom: 4px solid var(--cyan-eye);
+  box-shadow: 0 0 16px rgba(76,225,255,0.5);
+}
+
+.bot-setup-robot__body {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 146px;
+  height: 146px;
+  transform: translateX(-50%);
+  border-radius: 30px 30px 24px 24px;
+  background: linear-gradient(160deg, rgba(42,46,54,0.98), rgba(11,15,22,0.98));
+  border: 1px solid rgba(204,152,61,0.22);
+}
+
+.bot-setup-robot__arm {
+  position: absolute;
+  bottom: 38px;
+  width: 30px;
+  height: 120px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(45,49,58,0.98), rgba(10,13,18,0.98));
+  border: 1px solid rgba(204,152,61,0.18);
+}
+
+.bot-setup-robot__arm--left  { left: 38px;  transform: rotate(18deg); }
+.bot-setup-robot__arm--right { right: 36px; transform: rotate(-22deg); }
+
+.bot-setup-domino,
+.bot-setup-domino-stack span {
+  position: absolute;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #efe7da 0%, #cabba4 100%);
+  box-shadow: 0 14px 24px rgba(0,0,0,0.38);
+}
+
+.bot-setup-domino { width: 52px; height: 104px; }
+
+.bot-setup-domino::before, .bot-setup-domino::after,
+.bot-setup-domino-stack span::before, .bot-setup-domino-stack span::after {
+  content: '';
+  position: absolute;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #10151f;
+  box-shadow: 0 24px 0 #10151f, 0 48px 0 #10151f;
+}
+
+.bot-setup-domino--a { right: 56px; bottom: 44px; transform: rotate(18deg); }
+.bot-setup-domino--b { right: 134px; bottom: 12px; transform: rotate(78deg); width: 54px; height: 108px; }
+.bot-setup-domino--c { left: 150px; bottom: 0; transform: rotate(-14deg); width: 50px; height: 98px; }
+
+.bot-setup-domino--a::before, .bot-setup-domino--b::before, .bot-setup-domino--c::before,
+.bot-setup-domino-stack span::before { left: 18px; top: 16px; }
+
+.bot-setup-domino--a::after, .bot-setup-domino--b::after, .bot-setup-domino--c::after,
+.bot-setup-domino-stack span::after { left: 18px; top: 52px; }
+
+.bot-setup-domino-stack { position: absolute; left: 24px; bottom: 20px; width: 108px; height: 84px; }
+
+.bot-setup-domino-stack span {
+  width: 62px; height: 32px;
+  left: 0; bottom: 0;
+  transform: rotate(6deg);
+}
+.bot-setup-domino-stack span:last-child { left: 22px; bottom: 24px; transform: rotate(-4deg); }
+
+/* ─── BENEFITS ──────────────────────────────────── */
+.bot-setup-benefits {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.bot-setup-benefit-card {
+  display: flex;
+  gap: 12px;
+  padding: 16px 16px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(215,156,47,0.22);
+  background: rgba(5,10,19,0.78);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.bot-setup-benefit-card__icon {
+  width: 42px; height: 42px; flex: 0 0 42px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(215,156,47,0.46);
+  color: var(--brass-primary);
+  background: rgba(20,14,4,0.4);
+  font: 900 18px/1 'Barlow Condensed', sans-serif;
+}
+
+.bot-setup-benefit-card__title {
+  color: var(--brass-primary);
+  font: 700 13px/1.15 'Space Grotesk', system-ui, sans-serif;
+}
+
+.bot-setup-benefit-card__description {
+  margin-top: 6px;
+  color: rgba(232,236,242,0.72);
+  font: 500 11px/1.45 'Space Grotesk', system-ui, sans-serif;
+}
+
+/* ─── RIGHT PANEL ───────────────────────────────── */
+.bot-setup-right { min-width: 0; }
+
+.bot-setup-config-card {
+  height: 100%;
+  padding: var(--space-card) var(--space-card) 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(180deg, rgba(9,16,28,0.94), rgba(6,10,19,0.96)),
+    radial-gradient(circle at top right, var(--blue-accent), transparent 34%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 26px 56px rgba(0,0,0,0.36);
+}
+
+.bot-setup-config-card__header h2 {
+  margin: 0;
+  color: #f9f8f3;
+  font: 900 30px/1 'Outfit', system-ui, sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.bot-setup-config-card__header p {
+  margin: 10px 0 0;
+  color: rgba(223,229,237,0.64);
+  font: 500 15px/1.45 'Space Grotesk', system-ui, sans-serif;
+}
+
+.bot-setup-section { display: grid; gap: 16px; }
+
+.bot-setup-section__label {
+  color: var(--brass-primary);
+  font: 700 12px/1 'Rajdhani', system-ui, sans-serif;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+/* ─── TIER GRID ─────────────────────────────────── */
+.bot-setup-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.bot-setup-tier-card {
+  position: relative;
+  min-height: 246px;
+  padding: 22px 18px 18px;
+  border-radius: var(--radius-tier);
+  border: 1px solid rgba(91,124,178,0.22);
+  background:
+    radial-gradient(circle at top center, color-mix(in srgb, var(--tier-color) 10%, transparent), transparent 55%),
+    linear-gradient(180deg, rgba(12,19,33,0.96), rgba(7,11,21,0.98));
+  color: #f7f4ed;
+  text-align: center;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 18px 28px rgba(0,0,0,0.26);
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.bot-setup-tier-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--tier-color) 44%, rgba(255,255,255,0.18));
+}
+
+.bot-setup-tier-card.is-active {
+  border-color: color-mix(in srgb, var(--tier-color) 78%, rgba(255,255,255,0.28));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 0 0 1px color-mix(in srgb, var(--tier-color) 28%, transparent),
+    0 0 26px color-mix(in srgb, var(--tier-color) 18%, transparent),
+    0 18px 32px rgba(0,0,0,0.3);
+}
+
+.bot-setup-tier-card__check,
+.bot-setup-format-card__check {
+  position: absolute;
+  top: -12px; right: -10px;
+  width: 38px; height: 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffd86d, #efb83f);
+  color: #171208;
+  font: 900 19px/1 'Barlow Condensed', system-ui, sans-serif;
+  box-shadow: 0 10px 22px rgba(215,156,47,0.38);
+}
+
+.bot-setup-tier-card__icon {
+  width: 64px; height: 64px;
+  margin: 0 auto 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--tier-color) 70%, rgba(255,255,255,0.12));
+  color: var(--tier-color);
+  background: rgba(10,16,28,0.86);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--tier-color) 18%, transparent);
+  font: 900 24px/1 'Barlow Condensed', sans-serif;
+}
+
+.bot-setup-tier-card__title {
+  color: #f8f6f2;
+  font: 800 22px/1.05 'Outfit', system-ui, sans-serif;
+}
+
+.bot-setup-tier-card__rating {
+  margin-top: 12px;
+  color: var(--tier-color);
+  font: 900 22px/1 'Barlow Condensed', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.bot-setup-tier-card__description,
+.bot-setup-tier-card__subdescription {
+  margin-top: 14px;
+  color: rgba(225,232,239,0.72);
+  font: 500 12px/1.5 'Space Grotesk', system-ui, sans-serif;
+}
+
+.bot-setup-tier-card__subdescription {
+  margin-top: 8px;
+  color: rgba(225,232,239,0.5);
+}
+
+/* ─── TIER SCALE ────────────────────────────────── */
+.bot-setup-tier-scale {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.bot-setup-tier-scale__stop {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: rgba(201,210,224,0.72);
+  font: 700 12px/1 'Rajdhani', system-ui, sans-serif;
+}
+
+.bot-setup-tier-scale__stop.is-active {
+  color: color-mix(in srgb, var(--tier-color) 82%, #ffffff);
+}
+
+.bot-setup-tier-scale__dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: rgba(160,171,191,0.36);
+}
+
+.bot-setup-tier-scale__stop.is-active .bot-setup-tier-scale__dot {
+  background: var(--tier-color);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tier-color) 32%, transparent);
+}
+
+/* ─── FORMAT GRID ───────────────────────────────── */
+.bot-setup-format-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.bot-setup-format-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  gap: 16px;
+  min-height: 104px;
+  padding: 18px 22px;
+  border-radius: var(--radius-tier);
+  border: 1px solid rgba(91,124,178,0.22);
+  background: linear-gradient(180deg, rgba(12,19,33,0.96), rgba(7,11,21,0.98));
+  color: #f7f4ed;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bot-setup-format-card.is-active {
+  border-color: rgba(215,156,47,0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 0 0 1px rgba(215,156,47,0.18),
+    0 0 24px rgba(215,156,47,0.08);
+}
+
+.bot-setup-format-card__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  color: #efe2bf;
+  font: 900 28px/1 'Barlow Condensed', system-ui, sans-serif;
+}
+
+.bot-setup-format-card__title {
+  font: 800 18px/1.1 'Outfit', system-ui, sans-serif;
+  color: #f8f6f2;
+}
+
+.bot-setup-format-card__description {
+  margin-top: 6px;
+  color: rgba(220,228,237,0.66);
+  font: 500 14px/1.35 'Space Grotesk', system-ui, sans-serif;
+}
+
+/* ─── SUMMARY STRIP ─────────────────────────────── */
+.bot-setup-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-radius: var(--radius-tier);
+  border: 1px solid var(--brass-border);
+  background:
+    linear-gradient(180deg, rgba(17,21,28,0.96), rgba(10,14,22,0.98)),
+    radial-gradient(circle at left center, rgba(215,156,47,0.12), transparent 26%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 18px 34px rgba(0,0,0,0.26);
+}
+
+.bot-setup-summary-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 20px 18px;
+}
+
+.bot-setup-summary-item + .bot-setup-summary-item {
+  border-left: 1px solid rgba(255,255,255,0.08);
+}
+
+.bot-setup-summary-item__icon {
+  color: var(--brass-primary);
+  font-size: 24px;
+}
+
+.bot-setup-summary-item__value {
+  color: #f8f6f2;
+  font: 800 16px/1.1 'Outfit', system-ui, sans-serif;
+}
+
+.bot-setup-summary-item__label {
+  margin-top: 4px;
+  color: rgba(221,229,237,0.6);
+  font: 500 12px/1.2 'Space Grotesk', system-ui, sans-serif;
+}
+
+/* ─── START BUTTON ──────────────────────────────── */
+.bot-setup-start-button {
+  margin-top: auto;
+  appearance: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  min-height: 74px;
+  padding: 0 28px;
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  background: linear-gradient(180deg, #efc24b, #d59d2f);
+  color: #161106;
+  font: 900 24px/1 'Outfit', system-ui, sans-serif;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.28),
+    0 22px 34px rgba(158,109,18,0.24);
+  cursor: pointer;
+}
+
+.bot-setup-start-button:hover { filter: brightness(1.03); }
+
+.bot-setup-tier-details {
+  align-self: center;
+  color: var(--blue-link);
+  font: 600 15px/1.2 'Space Grotesk', system-ui, sans-serif;
+  margin-top: -4px;
+}
+</style>
+</head>
+<body>
+<div class="bot-setup-screen">
+  <div class="bot-setup-page">
+
+    <!-- TOPBAR -->
+    <header class="bot-setup-topbar">
+      <div class="bot-setup-topbar__brand">
+        <div class="brand-icon-box">RH</div>
+        <div class="brand-wordmark">Racehorse</div>
+      </div>
+
+      <nav class="bot-setup-topbar__nav">
+        <button class="bot-setup-nav-tab">Home</button>
+        <button class="bot-setup-nav-tab">Daily</button>
+        <button class="bot-setup-nav-tab is-active">Play</button>
+        <button class="bot-setup-nav-tab">Learn</button>
+        <button class="bot-setup-nav-tab">Leaderboards</button>
+      </nav>
+
+      <div class="bot-setup-topbar__meta">
+        <div class="bot-setup-meta-stat">
+          <span class="bot-setup-meta-stat__icon">★</span>
+          <div>
+            <div class="bot-setup-meta-stat__value">1800</div>
+            <div class="bot-setup-meta-stat__label">Tier Rating</div>
+          </div>
+        </div>
+        <div class="bot-setup-meta-stat is-compact">
+          <span class="bot-setup-meta-stat__icon">⚙</span>
+          <div>
+            <div class="bot-setup-meta-stat__value">1</div>
+            <div class="bot-setup-meta-stat__label">Bot</div>
+          </div>
+        </div>
+        <div class="bot-setup-profile-pill">
+          <span class="bot-setup-profile-pill__avatar">F</span>
+          <div>
+            <div class="bot-setup-profile-pill__name">Fritz</div>
+            <div class="bot-setup-profile-pill__meta">Practice Arena</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="bot-setup-layout">
+
+      <!-- LEFT -->
+      <section class="bot-setup-left">
+        <button class="bot-setup-back-button">
+          <span>←</span>
+          <span>Back to Single Player</span>
+        </button>
+
+        <div class="bot-setup-hero-copy">
+          <div class="bot-setup-eyebrow">Single Player Mode</div>
+          <h1 class="bot-setup-title">Play vs Fritz</h1>
+          <p class="bot-setup-subtitle">Choose your tier and format, then start a match against Fritz.</p>
+        </div>
+
+        <section class="bot-setup-opponent-card">
+          <div class="bot-setup-opponent-copy">
+            <div class="bot-setup-opponent-label">Your Opponent</div>
+            <div class="bot-setup-opponent-name">Fritz</div>
+            <p>Fritz is a world-class dominoes AI built to challenge and sharpen your strategy.</p>
+            <p>Pick a difficulty, choose your format, and test your skills.</p>
+          </div>
+
+          <div class="bot-setup-opponent-art">
+            <div class="bot-setup-opponent-art__grid"></div>
+            <div class="bot-setup-robot">
+              <div class="bot-setup-robot__halo"></div>
+              <div class="bot-setup-robot__head">
+                <div class="bot-setup-robot__eyes"><span></span><span></span></div>
+              </div>
+              <div class="bot-setup-robot__body"></div>
+              <div class="bot-setup-robot__arm bot-setup-robot__arm--left"></div>
+              <div class="bot-setup-robot__arm bot-setup-robot__arm--right"></div>
+            </div>
+            <div class="bot-setup-domino bot-setup-domino--a"></div>
+            <div class="bot-setup-domino bot-setup-domino--b"></div>
+            <div class="bot-setup-domino bot-setup-domino--c"></div>
+            <div class="bot-setup-domino-stack"><span></span><span></span></div>
+          </div>
+
+          <div class="bot-setup-benefits">
+            <div class="bot-setup-benefit-card">
+              <div class="bot-setup-benefit-card__icon">✦</div>
+              <div>
+                <div class="bot-setup-benefit-card__title">Rated Practice</div>
+                <div class="bot-setup-benefit-card__description">Matches affect your practice rating.</div>
+              </div>
+            </div>
+            <div class="bot-setup-benefit-card">
+              <div class="bot-setup-benefit-card__icon">⚡</div>
+              <div>
+                <div class="bot-setup-benefit-card__title">Instant Match</div>
+                <div class="bot-setup-benefit-card__description">Jump in and play right away.</div>
+              </div>
+            </div>
+            <div class="bot-setup-benefit-card">
+              <div class="bot-setup-benefit-card__icon">🤖</div>
+              <div>
+                <div class="bot-setup-benefit-card__title">Bot Opponent</div>
+                <div class="bot-setup-benefit-card__description">Consistent. Fair. Always improving.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <!-- RIGHT -->
+      <section class="bot-setup-right">
+        <div class="bot-setup-config-card">
+          <div class="bot-setup-config-card__header">
+            <h2>Configure Match</h2>
+            <p>Choose Fritz tier and starting hand size.</p>
+          </div>
+
+          <!-- Difficulty -->
+          <div class="bot-setup-section">
+            <div class="bot-setup-section__label">1. Choose Difficulty</div>
+            <div class="bot-setup-tier-grid">
+
+              <button class="bot-setup-tier-card" style="--tier-color: #34d399">
+                <div class="bot-setup-tier-card__icon">✦</div>
+                <div class="bot-setup-tier-card__title">Rookie</div>
+                <div class="bot-setup-tier-card__rating">600</div>
+                <div class="bot-setup-tier-card__description">Learning the game. Good for beginners.</div>
+              </button>
+
+              <button class="bot-setup-tier-card" style="--tier-color: #60a5fa">
+                <div class="bot-setup-tier-card__icon">⚡</div>
+                <div class="bot-setup-tier-card__title">Standard</div>
+                <div class="bot-setup-tier-card__rating">1000</div>
+                <div class="bot-setup-tier-card__description">Solid fundamentals. A real challenge.</div>
+              </button>
+
+              <button class="bot-setup-tier-card is-active" style="--tier-color: #f87171">
+                <span class="bot-setup-tier-card__check">✓</span>
+                <div class="bot-setup-tier-card__icon">🤖</div>
+                <div class="bot-setup-tier-card__title">Elite</div>
+                <div class="bot-setup-tier-card__rating">1800</div>
+                <div class="bot-setup-tier-card__description">Maximum strength. Unforgiving.</div>
+                <div class="bot-setup-tier-card__subdescription">The original Fritz.</div>
+              </button>
+
+              <button class="bot-setup-tier-card" style="--tier-color: #f59e0b">
+                <div class="bot-setup-tier-card__icon">★</div>
+                <div class="bot-setup-tier-card__title">Master</div>
+                <div class="bot-setup-tier-card__rating">2400</div>
+                <div class="bot-setup-tier-card__description">Sampled endgame search. No mercy.</div>
+              </button>
+
+            </div>
+
+            <div class="bot-setup-tier-scale">
+              <div class="bot-setup-tier-scale__stop" style="--tier-color: #34d399">
+                <span class="bot-setup-tier-scale__dot"></span><span>600</span>
+              </div>
+              <div class="bot-setup-tier-scale__stop" style="--tier-color: #60a5fa">
+                <span class="bot-setup-tier-scale__dot"></span><span>1000</span>
+              </div>
+              <div class="bot-setup-tier-scale__stop is-active" style="--tier-color: #f87171">
+                <span class="bot-setup-tier-scale__dot"></span><span>1800</span>
+              </div>
+              <div class="bot-setup-tier-scale__stop" style="--tier-color: #f59e0b">
+                <span class="bot-setup-tier-scale__dot"></span><span>2400</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Format -->
+          <div class="bot-setup-section">
+            <div class="bot-setup-section__label">2. Choose Deal Size / Format</div>
+            <div class="bot-setup-format-grid">
+              <button class="bot-setup-format-card is-active">
+                <span class="bot-setup-format-card__check">✓</span>
+                <div class="bot-setup-format-card__icon">⋮⋮</div>
+                <div class="bot-setup-format-card__content">
+                  <div class="bot-setup-format-card__title">7 Tiles</div>
+                  <div class="bot-setup-format-card__description">Classic 7-tile format</div>
+                </div>
+              </button>
+              <button class="bot-setup-format-card">
+                <div class="bot-setup-format-card__icon">⋮⋮</div>
+                <div class="bot-setup-format-card__content">
+                  <div class="bot-setup-format-card__title">14 Tiles</div>
+                  <div class="bot-setup-format-card__description">Extended 14-tile format</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Summary -->
+          <div class="bot-setup-section">
+            <div class="bot-setup-section__label">3. Match Summary</div>
+            <div class="bot-setup-summary-strip">
+              <div class="bot-setup-summary-item">
+                <span class="bot-setup-summary-item__icon">🤖</span>
+                <div>
+                  <div class="bot-setup-summary-item__value">Fritz Elite</div>
+                  <div class="bot-setup-summary-item__label">Difficulty</div>
+                </div>
+              </div>
+              <div class="bot-setup-summary-item">
+                <span class="bot-setup-summary-item__icon">⋮</span>
+                <div>
+                  <div class="bot-setup-summary-item__value">7-Tile Format</div>
+                  <div class="bot-setup-summary-item__label">Deal Size</div>
+                </div>
+              </div>
+              <div class="bot-setup-summary-item">
+                <span class="bot-setup-summary-item__icon">★</span>
+                <div>
+                  <div class="bot-setup-summary-item__value">Practice Match</div>
+                  <div class="bot-setup-summary-item__label">Mode</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="bot-setup-start-button">
+            <span>Start Match</span>
+            <span>›</span>
+          </button>
+
+          <div class="bot-setup-tier-details">View tier details</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>
