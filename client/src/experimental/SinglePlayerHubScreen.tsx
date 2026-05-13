@@ -1,99 +1,142 @@
-import React from 'react';
-import {
-  ClaudeModeScreen,
-  ClaudeSectionLabel,
-  ClaudeSecondaryAction,
-  claudeRgb,
-} from '../ui/claudeMode';
-
-type AppMode =
-  | 'home'
-  | 'botSetup'
-  | 'ghostSetup'
-  | 'noBrainer';
+import React from "react";
+import "./SinglePlayerModes.css";
+import type { AppMode } from '../types';
 
 interface SinglePlayerHubScreenProps {
-  onBack: () => void;
   onNavigate: (mode: AppMode) => void;
 }
 
-export default function SinglePlayerHubScreen({ onBack, onNavigate }: SinglePlayerHubScreenProps) {
-  const modes = [
-    {
-      id: 'fritz',
-      title: 'Play vs Fritz',
-      meta: 'Bot match',
-      accent: '#C8922A',
-      mode: 'botSetup' as const,
-    },
-    {
-      id: 'ghost',
-      title: 'Ghost Mode',
-      meta: 'replay/ghost challenge',
-      accent: '#8B5CF6',
-      mode: 'ghostSetup' as const,
-    },
-    {
-      id: 'nobrainer',
-      title: 'No Brainer Lab',
-      meta: 'tactical practice / lab mode',
-      accent: '#20D1C7',
-      mode: 'noBrainer' as const,
-    }
-  ];
-
+export default function SinglePlayerHubScreen({ onNavigate }: SinglePlayerHubScreenProps) {
   return (
-    <div className="screen lobby-screen mode-home-screen mode-subpage-screen claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
-      <ClaudeModeScreen
-        accent="#9B6CFF"
-        eyebrow="Single Player"
-        title={'SINGLE\nPLAYER'}
-        description="Choose your training ground. Master the tiles."
-        decor="S"
-        backLabel="Back to Home"
-        onBack={onBack}
-        heroFooter={
-          <div className="claude-mode-chip-row">
-            <span className="claude-mode-chip">Fritz</span>
-            <span className="claude-mode-chip">Ghost</span>
-            <span className="claude-mode-chip">Lab</span>
-          </div>
-        }
-        panel={
-          <div className="claude-mode-panel-stack">
-            <ClaudeSectionLabel>Choose Mode</ClaudeSectionLabel>
-            {modes.map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                className="claude-mode-choice-row"
-                style={{
-                  ['--row-accent' as string]: mode.accent,
-                  ['--row-accent-rgb' as string]: claudeRgb(mode.accent),
-                }}
-                onClick={() => onNavigate(mode.mode)}
-              >
-                <span className="claude-mode-choice-row__content">
-                  <span className="claude-mode-choice-row__title">{mode.title}</span>
-                  <span className="claude-mode-choice-row__meta">{mode.meta}</span>
-                </span>
-                <svg className="claude-mode-choice-row__arrow" viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M3.5 7h7M7.5 3.5l3.5 3.5-3.5 3.5" />
-                </svg>
+    <div className="sp-page">
+      <div className="sp-background-glow" />
+
+      <div className="sp-container">
+        <button className="sp-back-btn" onClick={() => onNavigate('home')}>
+          ← BACK TO HOME
+        </button>
+
+        <div className="sp-header">
+          <p className="sp-kicker">• SINGLE PLAYER</p>
+
+          <h1>Single Player</h1>
+
+          <p className="sp-subtitle">
+            Sharpen your skills. Master the game at your own pace.
+          </p>
+        </div>
+
+        <div className="sp-grid">
+          {/* PLAY VS FRITZ */}
+          <div className="sp-card gold">
+            <div className="sp-card-image">
+              <img src="/fritz2.png" alt="Play vs Fritz" />
+            </div>
+
+            <div className="sp-card-overlay" />
+
+            <div className="sp-card-content">
+              <h2>Play vs Fritz</h2>
+
+              <p>
+                Challenge Fritz, a world-class AI opponent with adaptive
+                difficulty.
+              </p>
+
+              <div className="sp-stats">
+                <div className="sp-stat-box">
+                  <span className="sp-stat-label">TOP RATING</span>
+                  <span className="sp-stat-value">1,742</span>
+                </div>
+
+                <div className="sp-stat-box">
+                  <span className="sp-stat-label">BEST STREAK</span>
+                  <span className="sp-stat-value">12</span>
+                </div>
+              </div>
+
+              <button className="sp-play-btn" onClick={() => onNavigate('botSetup')}>
+                Play Now
+                <span>›</span>
               </button>
-            ))}
-            
-            <div style={{ marginTop: 'auto', paddingTop: '24px' }}>
-              <ClaudeSecondaryAction
-                title="Back to Home"
-                meta="Return to the main dashboard"
-                onClick={onBack}
-              />
             </div>
           </div>
-        }
-      />
+
+          {/* GHOST MODE */}
+          <div className="sp-card blue">
+            <div className="sp-card-image">
+              <img src="/fritzGHOST.png" alt="Ghost Mode" />
+            </div>
+
+            <div className="sp-card-overlay" />
+
+            <div className="sp-card-content">
+              <h2>Ghost Mode</h2>
+
+              <p>
+                Race against your past games. Can you beat your best?
+              </p>
+
+              <div className="sp-stats">
+                <div className="sp-stat-box">
+                  <span className="sp-stat-label">BEST TIME</span>
+                  <span className="sp-stat-value">02:48</span>
+                </div>
+
+                <div className="sp-stat-box">
+                  <span className="sp-stat-label">GAMES PLAYED</span>
+                  <span className="sp-stat-value">24</span>
+                </div>
+              </div>
+
+              <button className="sp-play-btn" onClick={() => onNavigate('ghost')}>
+                Play Now
+                <span>›</span>
+              </button>
+            </div>
+          </div>
+
+          {/* NO BRAINER LAB */}
+          <div className="sp-card purple">
+            <div className="sp-card-image">
+              <img
+                src="/fritzNOBRAINER.png"
+                alt="No Brainer Lab"
+              />
+            </div>
+
+            <div className="sp-card-overlay" />
+
+            <div className="sp-card-content">
+              <h2>No Brainer Lab</h2>
+
+              <p>
+                Solve curated puzzles and expand your dominoes intuition.
+              </p>
+
+              <div className="sp-stats">
+                <div className="sp-stat-box">
+                  <span className="sp-stat-label">PUZZLES SOLVED</span>
+                  <span className="sp-stat-value">156</span>
+                </div>
+
+                <div className="sp-stat-box">
+                  <span className="sp-stat-label">BEST STREAK</span>
+                  <span className="sp-stat-value">18</span>
+                </div>
+              </div>
+
+              <button className="sp-play-btn" onClick={() => onNavigate('practice')}>
+                Play Now
+                <span>›</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* FUTURE MODES */}
+        <p className="sp-coming-soon-note">🔒 More modes coming soon.</p>
+      </div>
     </div>
   );
 }
-

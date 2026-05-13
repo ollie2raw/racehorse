@@ -1,0 +1,281 @@
+/* SinglePlayerModes.css */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  background: #020617;
+}
+
+.sp-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(0, 81, 255, 0.15), transparent 40%),
+    linear-gradient(180deg, #020617 0%, #01030a 100%);
+  position: relative;
+  overflow: hidden;
+  color: white;
+}
+
+.sp-background-glow {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 120px 120px;
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.sp-container {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 0 32px 80px; /* Adjusted top padding */
+}
+
+.sp-back-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.8);
+  padding: 14px 22px;
+  border-radius: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.sp-back-btn:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.sp-header {
+  text-align: center;
+  margin-top: 16px;    /* Adjusted */
+  margin-bottom: 24px; /* Adjusted */
+}
+
+.sp-kicker {
+  color: #f6c453;
+  font-size: 14px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.sp-header h1 {
+  font-size: 56px;     /* Adjusted */
+  line-height: 0.95;
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: -4px;
+}
+
+.sp-subtitle {
+  margin-top: 18px;
+  color: rgba(255,255,255,0.6);
+  font-size: 16px;     /* Adjusted */
+}
+
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;           /* Adjusted */
+}
+
+.sp-card {
+  position: relative;
+  height: 340px;       /* Adjusted */
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(20px);
+  transition: 0.25s ease;
+}
+
+.sp-card:hover {
+  transform: translateY(-6px);
+}
+
+.sp-card.gold {
+  box-shadow: 0 0 40px rgba(246, 196, 83, 0.08);
+}
+
+.sp-card.blue {
+  box-shadow: 0 0 40px rgba(50, 140, 255, 0.08);
+}
+
+.sp-card.purple {
+  box-shadow: 0 0 40px rgba(165, 103, 255, 0.08);
+}
+
+.sp-card-image {
+  position: absolute;
+  inset: 0;
+}
+
+.sp-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sp-card-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to top,
+      rgba(0,0,0,0.96) 12%,
+      rgba(0,0,0,0.75) 45%,
+      rgba(0,0,0,0.1) 100%
+    );
+}
+
+.sp-card-content {
+  position: relative;
+  z-index: 3;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 24px;       /* Adjusted */
+}
+
+.sp-card h2 {
+  margin: 0;
+  font-size: 32px;     /* Adjusted */
+  font-weight: 800;
+  letter-spacing: -2px;
+}
+
+.gold h2 {
+  color: #f6c453;
+}
+
+.blue h2 {
+  color: #4ca0ff;
+}
+
+.purple h2 {
+  color: #ae7cff;
+}
+
+.sp-card p {
+  margin-top: 8px;     /* Adjusted */
+  color: rgba(255,255,255,0.72);
+  font-size: 14px;     /* Adjusted */
+  line-height: 1.6;
+}
+
+.sp-stats {
+  display: flex;
+  gap: 14px;
+  margin-top: 16px;    /* Adjusted */
+}
+
+.sp-stat-box {
+  flex: 1;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-stat-label {
+  color: rgba(255,255,255,0.45);
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.sp-stat-value {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.sp-play-btn {
+  margin-top: 16px;    /* Adjusted */
+  height: 48px;        /* Adjusted */
+  border-radius: 18px;
+  border: none;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  color: white;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: 0.2s ease;
+}
+
+.gold .sp-play-btn:hover {
+  background: #f6c453;
+  color: black;
+}
+
+.blue .sp-play-btn:hover {
+  background: #4ca0ff;
+  color: black;
+}
+
+.purple .sp-play-btn:hover {
+  background: #ae7cff;
+  color: black;
+}
+
+.sp-coming-soon-note {
+  text-align: center;
+  color: rgba(255,255,255,0.25);
+  font-size: 13px;
+  margin-top: 20px;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 1200px) {
+  .sp-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sp-header h1 {
+    font-size: 64px;
+  }
+}
+
+@media (max-width: 700px) {
+  .sp-container {
+    padding: 24px 18px 60px;
+  }
+
+  .sp-header h1 {
+    font-size: 52px;
+  }
+
+  .sp-subtitle {
+    font-size: 18px;
+  }
+
+  .sp-card {
+    height: 460px;
+  }
+
+  .sp-card h2 {
+    font-size: 38px;
+  }
+}

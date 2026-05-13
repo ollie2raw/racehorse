@@ -104,7 +104,6 @@ export interface DominoTileProps {
   className?: string;
   flipped?: boolean;
   rotation?: number;
-  vertical?: boolean;
   style?: React.CSSProperties;
 }
 
@@ -136,7 +135,6 @@ function DominoTileComponent({
   className = '',
   flipped = false,
   rotation = 0,
-  vertical = false,
   style,
 }: DominoTileProps) {
   const isDouble = tile.high === tile.low;
@@ -147,7 +145,6 @@ function DominoTileComponent({
     selected ? 'selected' : '',
     highlight ? 'highlight' : '',
     disabled ? 'disabled' : '',
-    vertical ? 'vertical' : 'horizontal',
     className,
   ]
     .filter(Boolean)
@@ -159,13 +156,8 @@ function DominoTileComponent({
   const firstPip = flipped ? tile.high : tile.low;
   const secondPip = flipped ? tile.low : tile.high;
 
-  // Tile is rendered horizontally or vertically based on 'vertical' flag
+  // Tile is always rendered horizontally (row direction)
   // Rotation is applied via CSS transform
-  const borderWidth = size < 30 ? 1.5 : 3;
-  const dividerSize = size < 30 ? 1.5 : 3;
-  const totalWidth = vertical ? size : (size * 2) + dividerSize;
-  const totalHeight = vertical ? (size * 2) + dividerSize : size;
-
   return (
     <button
       className={tileClass}
@@ -177,9 +169,7 @@ function DominoTileComponent({
         border: 'none',
         background: 'none',
         cursor: disabled ? 'default' : onClick ? 'pointer' : 'default',
-        transform: rotation ? `rotate(${rotation}deg)` : undefined,
-        width: totalWidth,
-        height: totalHeight,
+        transform: `rotate(${rotation}deg)`,
         ...style,
       }}
     >
@@ -187,21 +177,11 @@ function DominoTileComponent({
         className="domino-body"
         style={{
           display: 'flex',
-          flexDirection: vertical ? 'column' : 'row',
-          width: '100%',
-          height: '100%',
-          borderWidth: borderWidth,
-          borderRadius: size < 30 ? 4 : 6,
+          flexDirection: 'row',
         }}
       >
         <PipHalf value={firstPip} size={size} />
-        <div 
-          className={`domino-divider ${vertical ? 'horizontal' : 'vertical'}`} 
-          style={{ 
-            width: vertical ? '100%' : dividerSize,
-            height: vertical ? dividerSize : '100%',
-          }}
-        />
+        <div className="domino-divider vertical" />
         <PipHalf value={secondPip} size={size} />
       </div>
     </button>
@@ -219,7 +199,6 @@ function areDominoTilePropsEqual(prev: DominoTileProps, next: DominoTileProps): 
     prev.className === next.className &&
     prev.flipped === next.flipped &&
     prev.rotation === next.rotation &&
-    prev.vertical === next.vertical &&
     stylesEqual(prev.style, next.style)
   );
 }
