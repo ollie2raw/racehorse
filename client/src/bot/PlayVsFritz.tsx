@@ -23,26 +23,34 @@ const IconRobotNav = ({ color = "currentColor" }: { color?: string }) => (
   </svg>
 );
 
-const IconLeaf = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8a13 13 0 0 1-13 13L8 20z" />
-    <path d="M9 20l-5 3" />
-    <path d="M11 20l2 2" />
-  </svg>
+const IconRookie = ({ size = 26 }: { size?: number }) => (
+  <img 
+    src="/rookieICON.png?v=2" 
+    alt="Rookie Icon" 
+    style={{ width: size, height: size, objectFit: 'contain' }} 
+  />
 );
 
-const IconBars = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+const IconBars = ({ size = 24 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round">
     <line x1="18" y1="20" x2="18" y2="10" />
     <line x1="12" y1="20" x2="12" y2="4" />
     <line x1="6" y1="20" x2="6" y2="14" />
   </svg>
 );
 
-const IconCrown = ({ color = "currentColor" }: { color?: string }) => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const IconCrown = ({ color = "currentColor", size = 30 }: { color?: string; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" fill={color} />
   </svg>
+);
+
+const IconGoat = ({ size = 26 }: { size?: number }) => (
+  <img 
+    src="/GOATicon.png" 
+    alt="Master Icon" 
+    style={{ width: size, height: size, objectFit: 'contain' }} 
+  />
 );
 
 const IconShield = () => (
@@ -71,6 +79,40 @@ const IconSummaryBars = ({ color = "currentColor" }: { color?: string }) => (
   </svg>
 );
 
+const IconDomino7 = ({ color = "rgba(255,255,255,0.85)", size = 32 }: { color?: string; size?: number }) => (
+  <svg width={size * 0.75} height={size} viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="2" width="16" height="28" rx="2" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />
+    <line x1="4" y1="16" x2="20" y2="16" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />
+    {/* Top: 3 pips diagonal */}
+    <circle cx="8" cy="6" r="1.5" fill="rgba(255,255,255,0.9)" />
+    <circle cx="12" cy="9" r="1.5" fill="rgba(255,255,255,0.9)" />
+    <circle cx="16" cy="12" r="1.5" fill="rgba(255,255,255,0.9)" />
+    {/* Bottom: 4 pips corners */}
+    <circle cx="8" cy="20" r="1.5" fill="rgba(255,255,255,0.9)" />
+    <circle cx="16" cy="20" r="1.5" fill="rgba(255,255,255,0.9)" />
+    <circle cx="8" cy="26" r="1.5" fill="rgba(255,255,255,0.9)" />
+    <circle cx="16" cy="26" r="1.5" fill="rgba(255,255,255,0.9)" />
+  </svg>
+);
+
+const IconDomino14 = ({ color = "rgba(255,255,255,0.85)", size = 32 }: { color?: string; size?: number }) => (
+  <svg width={size * 0.95} height={size} viewBox="0 0 30 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Left tile: double-1 — one pip centered in each half */}
+    <rect x="1" y="1" width="12" height="30" rx="2.5" stroke={color} strokeWidth="1.5" />
+    <line x1="1" y1="16" x2="13" y2="16" stroke={color} strokeWidth="1" />
+    <circle cx="7" cy="9.5" r="1.5" fill={color} />
+    <circle cx="7" cy="23.5" r="1.5" fill={color} />
+
+    {/* Right tile: double-2 — diagonal pips in each half */}
+    <rect x="17" y="1" width="12" height="30" rx="2.5" stroke={color} strokeWidth="1.5" />
+    <line x1="17" y1="16" x2="29" y2="16" stroke={color} strokeWidth="1" />
+    <circle cx="20.5" cy="7" r="1.5" fill={color} />
+    <circle cx="25.5" cy="11" r="1.5" fill={color} />
+    <circle cx="20.5" cy="21" r="1.5" fill={color} />
+    <circle cx="25.5" cy="25" r="1.5" fill={color} />
+  </svg>
+);
+
 /* ---- Data ---- */
 const TIER_COLORS: Record<FritzTier, string> = {
   rookie: "#4ADE80",   // Rookie Green
@@ -84,17 +126,17 @@ const DIFFICULTIES: Array<{
   label: string;
   elo: number;
   desc: string;
-  Icon: React.FC;
+  Icon: React.FC<any>;
 }> = [
-  { id: "rookie", label: "Rookie", elo: 600, desc: "Learning the game. Good for beginners.", Icon: IconLeaf },
+  { id: "rookie", label: "Rookie", elo: 600, desc: "Learning the game. Good for beginners.", Icon: IconRookie },
   { id: "standard", label: "Standard", elo: 1000, desc: "Solid fundamentals. A real challenge.", Icon: IconBars },
   { id: "elite", label: "Elite", elo: 1800, desc: "Maximum strength. Unforgiving.", Icon: IconCrown },
-  { id: "master", label: "Master", elo: 2400, desc: "Sampled endgame search. No mercy.", Icon: IconCrown },
+  { id: "master", label: "Master", elo: 2400, desc: "Sampled endgame search. No mercy.", Icon: IconGoat },
 ];
 
-const DEAL_SIZES: Array<{ id: BotDealSize; label: string; sublabel: string; high: number; low: number }> = [
-  { id: 7, label: "7 Tiles", sublabel: "Classic 7-tile format", high: 6, low: 1 },
-  { id: 14, label: "14 Tiles", sublabel: "Extended 14-tile format", high: 6, low: 6 },
+const DEAL_SIZES: Array<{ id: BotDealSize; label: string; sublabel: string; Icon: React.FC<any> }> = [
+  { id: 7, label: "7 Tiles", sublabel: "Classic 7-tile format", Icon: IconDomino7 },
+  { id: 14, label: "14 Tiles", sublabel: "Extended 14-tile format", Icon: IconDomino14 },
 ];
 
 interface PlayVsFritzProps {
@@ -172,7 +214,7 @@ export default function PlayVsFritz({
               <div className="pvf-card-badges">
                 <div className="pvf-card-badge">
                   <div className="pvf-card-badge-header">
-                    <IconCrown color="var(--pvf-dynamic-color)" />
+                    <selectedDiff.Icon color="var(--pvf-dynamic-color)" size={14} />
                     <span className="pvf-card-badge-title">Rated Practice</span>
                   </div>
                   <div className="pvf-card-badge-desc">Matches affect practice rating.</div>
@@ -248,7 +290,7 @@ export default function PlayVsFritz({
           <div className="pvf-section-gap">
             <div className="pvf-section-label">2. CHOOSE DEAL SIZE / FORMAT</div>
             <div className="pvf-deal-grid">
-              {DEAL_SIZES.map(({ id, label, sublabel, high, low }) => (
+              {DEAL_SIZES.map(({ id, label, sublabel, Icon: IconComp }) => (
                 <div
                   key={id}
                   className={`pvf-deal-card${dealSize === id ? " pvf-deal-card--selected" : ""}`}
@@ -262,10 +304,10 @@ export default function PlayVsFritz({
                     <div className="pvf-deal-check" style={{ background: dynamicColor }}>✓</div>
                   )}
                   <div className="pvf-deal-icon">
-                    <DominoTile tile={{ high, low }} size={32} />
+                    <IconComp size={24} />
                   </div>
                   <div className="pvf-deal-content">
-                    <div className="pvf-deal-label">{label}</div>
+                    <div className="pvf-deal-label" style={{ color: dealSize === id ? dynamicColor : '#fff' }}>{label}</div>
                     <div className="pvf-deal-sub">{sublabel}</div>
                   </div>
                 </div>
@@ -278,7 +320,7 @@ export default function PlayVsFritz({
             <div className="pvf-section-label">3. MATCH SUMMARY</div>
             <div className="pvf-summary-container">
               <div className="pvf-summary-item">
-                <div className="pvf-summary-icon pvf-summary-icon--bot" style={{ color: dynamicColor, borderColor: `${dynamicColor}44`, background: `${dynamicColor}11` }}>
+                <div className="pvf-summary-icon pvf-summary-icon--bot" style={{ color: dynamicColor }}>
                   <IconRobotNav />
                 </div>
                 <div>
@@ -289,7 +331,11 @@ export default function PlayVsFritz({
               <div className="pvf-summary-divider" />
               <div className="pvf-summary-item">
                 <div className="pvf-summary-icon pvf-summary-icon--tile">
-                  <IconDominoSummary />
+                  {dealSize === 7 ? (
+                    <IconDomino7 size={20} />
+                  ) : (
+                    <IconDomino14 size={20} />
+                  )}
                 </div>
                 <div>
                   <div className="pvf-summary-value">{dealSize}-Tile Format</div>
@@ -298,7 +344,7 @@ export default function PlayVsFritz({
               </div>
               <div className="pvf-summary-divider" />
               <div className="pvf-summary-item">
-                <div className="pvf-summary-icon pvf-summary-icon--rated">
+                <div className="pvf-summary-icon pvf-summary-icon--rated" style={{ color: dynamicColor }}>
                   <IconSummaryBars />
                 </div>
                 <div>
