@@ -440,10 +440,11 @@
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--pvf-radius-md);
-  padding: 16px 12px; /* Reduced vertical padding from 24/20 to 16px */
+  padding: 16px 12px;
   display: flex; flex-direction: column;
   align-items: center; text-align: center;
-  cursor: pointer; transition: all 0.2s ease;
+  cursor: pointer;
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
 }
 .pvf-tier-card:hover {
@@ -455,6 +456,12 @@
   background: color-mix(in srgb, var(--pvf-dynamic-color) 7%, transparent) !important;
   border: 2px solid var(--pvf-dynamic-color) !important;
   box-shadow: inset 0 0 20px color-mix(in srgb, var(--pvf-dynamic-color) 8%, transparent), 0 0 16px color-mix(in srgb, var(--pvf-dynamic-color) 6%, transparent);
+}
+
+.pvf-difficulty-grid:has(.pvf-tier-card--selected) .pvf-tier-card:not(.pvf-tier-card--selected) {
+  opacity: 0.45;
+  filter: saturate(0.4);
+  transition: opacity 0.2s ease, filter 0.2s ease;
 }
 
 /* colored icon circles */
@@ -556,9 +563,10 @@
   background:rgba(255,255,255,0.03);
   border:1px solid rgba(255,255,255,0.08);
   border-radius:var(--pvf-radius-md);
-  padding: 16px 24px; /* Reduced vertical padding from 24px to 16px */
+  padding: 16px 24px;
   display:flex; align-items:center; gap:16px;
-  cursor:pointer; transition:all 0.2s ease;
+  cursor:pointer; 
+  transition: opacity 0.2s ease, filter 0.2s ease, border-color 0.2s ease, background 0.2s ease;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
 }
 .pvf-deal-card:hover { border-color:rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); }
@@ -566,6 +574,11 @@
   background: color-mix(in srgb, var(--pvf-dynamic-color) 7%, transparent) !important;
   border: 2px solid var(--pvf-dynamic-color) !important;
   box-shadow:inset 0 0 20px color-mix(in srgb, var(--pvf-dynamic-color) 8%, transparent);
+}
+
+.pvf-deal-grid:has(.pvf-deal-card--selected) .pvf-deal-card:not(.pvf-deal-card--selected) {
+  opacity: 0.45;
+  filter: saturate(0.4);
 }
 .pvf-deal-icon {
   flex-shrink: 0;
