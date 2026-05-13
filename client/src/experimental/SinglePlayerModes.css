@@ -18,7 +18,7 @@ body {
     radial-gradient(circle at top, rgba(0, 81, 255, 0.15), transparent 40%),
     linear-gradient(180deg, #020617 0%, #01030a 100%);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
   color: white;
 }
 
@@ -31,15 +31,20 @@ body {
   background-size: 120px 120px;
   opacity: 0.15;
   pointer-events: none;
+  z-index: 0;
 }
 
 .sp-container {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   width: 100%;
   max-width: 1500px;
   margin: 0 auto;
-  padding: 0 32px 80px; /* Adjusted top padding */
+  padding: 8px 32px 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - 78px);
 }
 
 .sp-back-btn {
@@ -52,6 +57,8 @@ body {
   letter-spacing: 1px;
   cursor: pointer;
   transition: 0.2s ease;
+  position: absolute;
+  top: 96px; /* Position below global nav */
 }
 
 .sp-back-btn:hover {
@@ -60,8 +67,8 @@ body {
 
 .sp-header {
   text-align: center;
-  margin-top: 16px;    /* Adjusted */
-  margin-bottom: 24px; /* Adjusted */
+  margin-top: 8px;
+  margin-bottom: 24px;
 }
 
 .sp-kicker {
@@ -73,7 +80,7 @@ body {
 }
 
 .sp-header h1 {
-  font-size: 56px;     /* Adjusted */
+  font-size: 52px;
   line-height: 0.95;
   margin: 0;
   font-weight: 800;
@@ -81,30 +88,32 @@ body {
 }
 
 .sp-subtitle {
-  margin-top: 18px;
+  margin-top: 8px;
   color: rgba(255,255,255,0.6);
-  font-size: 16px;     /* Adjusted */
+  font-size: 16px;
 }
 
 .sp-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;           /* Adjusted */
+  gap: 28px;
 }
 
 .sp-card {
   position: relative;
-  height: 340px;       /* Adjusted */
+  height: 360px;
   border-radius: 28px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.03);
   backdrop-filter: blur(20px);
   transition: 0.25s ease;
+  cursor: pointer;
 }
 
 .sp-card:hover {
   transform: translateY(-6px);
+  border-color: rgba(255,255,255,0.2);
 }
 
 .sp-card.gold {
@@ -121,13 +130,15 @@ body {
 
 .sp-card-image {
   position: absolute;
-  inset: 0;
+  right: 0;
+  bottom: 0;
+  width: 65%;
+  height: 100%;
+  z-index: 0;
 }
 
 .sp-card-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .sp-card-overlay {
@@ -149,12 +160,12 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 24px;       /* Adjusted */
+  padding: 32px;
 }
 
 .sp-card h2 {
   margin: 0;
-  font-size: 32px;     /* Adjusted */
+  font-size: 48px;
   font-weight: 800;
   letter-spacing: -2px;
 }
@@ -172,16 +183,16 @@ body {
 }
 
 .sp-card p {
-  margin-top: 8px;     /* Adjusted */
+  margin-top: 12px;
   color: rgba(255,255,255,0.72);
-  font-size: 14px;     /* Adjusted */
+  font-size: 18px;
   line-height: 1.6;
 }
 
 .sp-stats {
   display: flex;
   gap: 14px;
-  margin-top: 16px;    /* Adjusted */
+  margin-top: 28px;
 }
 
 .sp-stat-box {
@@ -208,8 +219,8 @@ body {
 }
 
 .sp-play-btn {
-  margin-top: 16px;    /* Adjusted */
-  height: 48px;        /* Adjusted */
+  margin-top: 28px;
+  height: 64px;
   border-radius: 18px;
   border: none;
   font-size: 20px;
@@ -224,6 +235,10 @@ body {
   gap: 10px;
   transition: 0.2s ease;
 }
+
+.gold .sp-play-btn { border: 1px solid #F5A623; color: #F5A623; }
+.blue .sp-play-btn { border: 1px solid #4ca0ff; color: #4ca0ff; }
+.purple .sp-play-btn { border: 1px solid #ae7cff; color: #ae7cff; }
 
 .gold .sp-play-btn:hover {
   background: #f6c453;
@@ -244,7 +259,7 @@ body {
   text-align: center;
   color: rgba(255,255,255,0.25);
   font-size: 13px;
-  margin-top: 20px;
+  margin-top: 28px;
   letter-spacing: 0.05em;
 }
 
@@ -260,22 +275,21 @@ body {
 
 @media (max-width: 700px) {
   .sp-container {
-    padding: 24px 18px 60px;
+    padding: 96px 18px 60px;
   }
 
   .sp-header h1 {
     font-size: 52px;
   }
+}
 
-  .sp-subtitle {
-    font-size: 18px;
-  }
-
-  .sp-card {
-    height: 460px;
-  }
-
-  .sp-card h2 {
-    font-size: 38px;
-  }
+.sp-card-img {
+  position: absolute;
+  bottom: 0;
+  left: -15%;
+  height: 95%;
+  width: 75%;
+  object-fit: contain;
+  object-position: bottom center;
+  z-index: 0;
 }
