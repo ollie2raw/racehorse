@@ -79,7 +79,7 @@ const IconSummaryBars = ({ color = "currentColor" }: { color?: string }) => (
   </svg>
 );
 
-const IconDomino7 = ({ color = "rgba(255,255,255,0.85)", size = 32 }: { color?: string; size?: number }) => (
+const IconDomino7 = ({ color: _color = "rgba(255,255,255,0.85)", size = 32 }: { color?: string; size?: number }) => (
   <svg width={size * 0.75} height={size} viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="4" y="2" width="16" height="28" rx="2" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />
     <line x1="4" y1="16" x2="20" y2="16" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />

@@ -3,7 +3,6 @@
    Source of truth: RacehorseHomeScreen + RacehorseHomeArt.css
    ============================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Outfit:wght@700;800;900&family=Rajdhani:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
   --pvf-bg:        #040b17;
@@ -193,9 +192,9 @@
   flex-direction: row !important;
   gap: 32px !important; /* Balanced gap */
   width: 100% !important;
-  max-width: none !important; /* Stretch to full viewport */
+  max-width: 1440px !important; /* Match GlobalNav max-width */
   margin: 0 auto !important;
-  padding: 32px 24px 40px !important; /* Reduced horizontal padding */
+  padding: 32px 36px 40px !important; /* Match GlobalNav px-9 (36px) */
   box-sizing: border-box !important;
   align-items: stretch !important;
 }
@@ -468,18 +467,19 @@
 .pvf-tier-icon {
   width: 48px; height: 48px; border-radius: 50%;
   background: var(--icon-bg, color-mix(in srgb, var(--pvf-dynamic-color) 10%, transparent));
-  border: 1px solid var(--icon-border, color-mix(in srgb, var(--pvf-dynamic-color) 22%, transparent));
+  border: 2px solid var(--icon-border, var(--pvf-dynamic-color));
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 10px;
   color: var(--accent-color, var(--pvf-dynamic-color));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-color, var(--pvf-dynamic-color)) 30%, transparent);
 }
 .pvf-tier-icon svg { width: auto; height: auto; max-width: 32px; max-height: 32px; }
 .pvf-tier-icon img { width: 26px; height: 26px; object-fit: contain; }
 
-.pvf-tier-card[data-tier="rookie"]   { --accent-color: var(--color-rookie);   --icon-bg: color-mix(in srgb, var(--color-rookie) 10%, transparent);   --icon-border: color-mix(in srgb, var(--color-rookie) 25%, transparent); }
-.pvf-tier-card[data-tier="standard"] { --accent-color: var(--color-standard); --icon-bg: color-mix(in srgb, var(--color-standard) 10%, transparent); --icon-border: color-mix(in srgb, var(--color-standard) 25%, transparent); }
-.pvf-tier-card[data-tier="elite"]    { --accent-color: var(--color-elite);    --icon-bg: color-mix(in srgb, var(--color-elite) 10%, transparent);    --icon-border: color-mix(in srgb, var(--color-elite) 25%, transparent); }
-.pvf-tier-card[data-tier="master"]   { --accent-color: var(--color-master);   --icon-bg: color-mix(in srgb, var(--color-master) 10%, transparent);   --icon-border: color-mix(in srgb, var(--color-master) 25%, transparent); }
+.pvf-tier-card[data-tier="rookie"]   { --accent-color: var(--color-rookie);   --icon-bg: color-mix(in srgb, var(--color-rookie) 10%, transparent);   --icon-border: var(--color-rookie); }
+.pvf-tier-card[data-tier="standard"] { --accent-color: var(--color-standard); --icon-bg: color-mix(in srgb, var(--color-standard) 10%, transparent); --icon-border: var(--color-standard); }
+.pvf-tier-card[data-tier="elite"]    { --accent-color: var(--color-elite);    --icon-bg: color-mix(in srgb, var(--color-elite) 10%, transparent);    --icon-border: var(--color-elite); }
+.pvf-tier-card[data-tier="master"]   { --accent-color: var(--color-master);   --icon-bg: color-mix(in srgb, var(--color-master) 10%, transparent);   --icon-border: var(--color-master); }
 
 .pvf-tier-name { font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; color:#fff; margin-bottom:4px; }
 .pvf-tier-elo  { font-family:'Rajdhani',sans-serif; font-size:17px; font-weight:700; color:var(--accent-color); margin-bottom:8px; }
@@ -635,12 +635,16 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  box-shadow: 0 0 15px color-mix(in srgb, currentColor 30%, transparent);
 }
 
 .pvf-summary-icon--bot,
 .pvf-summary-icon--tile,
 .pvf-summary-icon--rated {
-  /* Clean containers for SVGs */
+  /* SVG children inherit color/stroke */
 }
 
 .pvf-summary-value { font-family:'Outfit',sans-serif; font-size:15px; font-weight:700; color:#fff; line-height:1.2; margin-bottom:1px; }

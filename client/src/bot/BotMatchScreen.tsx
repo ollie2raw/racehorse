@@ -84,11 +84,10 @@ import {
   type DailyFritzStartResponse,
 } from '../dailyFritz/api';
 import './botMatch.css';
-import '../learn/learnPlayer.css';
+import '../styles/shared-ui.css';
 import { useLearningCoach } from '../learning/useLearningCoach';
 import CoachPanel from '../learning/CoachPanel';
 import LearningHandRecap from '../learning/LearningHandRecap';
-import '../learning/coach.css';
 import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
 import LessonCoachPanel from '../learn/LessonCoachPanel';
 import LeaveGameModal from '../components/LeaveGameModal';

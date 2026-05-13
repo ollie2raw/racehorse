@@ -1,0 +1,36 @@
+.rh-glass-card {
+  background: rgba(10, 16, 28, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-card);
+  position: relative;
+}
+
+/* Subtle inner-top highlight — implies a light source above */
+.rh-glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.04) 0%,
+    transparent 40%
+  );
+  pointer-events: none;
+}
+
+/* HUD Lift: adds the 20px shadow elevation */
+.rh-glass-card--lifted {
+  box-shadow:
+    0 var(--hud-lift) 48px rgba(0, 0, 0, 0.52),
+    0 4px 12px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Accent border variants */
+.rh-glass-card--accent-blue   { border-color: rgba(59, 130, 246, 0.28); }
+.rh-glass-card--accent-gold   { border-color: rgba(231, 182, 74, 0.28); }
+.rh-glass-card--accent-purple { border-color: rgba(168, 85, 247, 0.28); }
+.rh-glass-card--accent-green  { border-color: rgba(74, 222, 128, 0.28); }

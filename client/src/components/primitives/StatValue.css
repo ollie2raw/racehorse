@@ -1,0 +1,46 @@
+.rh-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rh-stat__label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+  line-height: 1;
+}
+
+.rh-stat__value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: #fff;
+}
+
+/* Size variants */
+.rh-stat--sm .rh-stat__value { font-size: 18px; }
+.rh-stat--sm .rh-stat__label { font-size: 9px; }
+
+.rh-stat--lg .rh-stat__value { font-size: 42px; }
+.rh-stat--lg .rh-stat__label { font-size: 11px; }
+
+/* Inline layout */
+.rh-stat--inline {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rh-stat--inline .rh-stat__label {
+  order: 1;
+}
+
+.rh-stat--inline .rh-stat__value {
+  order: 0;
+}

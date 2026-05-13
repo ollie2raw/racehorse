@@ -1,0 +1,55 @@
+/* Racehorse Design Tokens — Single Source of Truth */
+/* All design values live here. Never hardcode hex or rgba values elsewhere. */
+
+:root {
+  /* ── Backgrounds ─────────────────────────────────── */
+  --bg-obsidian: #04070c;
+  --bg-card:     #0d121f;
+
+  /* ── Tier accent system ──────────────────────────── */
+  --tier-rookie:   #4ADE80;   /* green  — streaks, positive progression */
+  --tier-standard: #3B82F6;   /* blue   — focus, gameplay, strategy     */
+  --tier-elite:    #E7B64A;   /* gold   — prestige, achievement, mastery */
+  --tier-master:   #A855F7;   /* purple — elite competition, premium    */
+
+  /* ── Extended accent palette ────────────────────── */
+  --accent-blue:   #0ea5e9;
+  --accent-teal:   #2dd4bf;
+  --accent-green:  #34d399;
+  --accent-amber:  #f59e0b;
+  --accent-red:    #ef4444;
+
+  /* ── Glass surface (the standard Racehorse panel) ─ */
+  --glass-bg:      rgba(10, 16, 28, 0.6);
+  --glass-blur:    16px;
+
+  /* ── Borders ─────────────────────────────────────── */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-light:  rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.28);
+
+  /* ── Text ────────────────────────────────────────── */
+  --text-primary:   #f8fafc;
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-dim:       rgba(255, 255, 255, 0.35);
+
+  /* ── Shadows ─────────────────────────────────────── */
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.60);
+
+  /* ── Spatial ─────────────────────────────────────── */
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-card: 24px;
+  --radius-pill: 999px;
+  --hud-lift:    20px;
+
+  /* ── Motion ──────────────────────────────────────── */
+  --ease-premium: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 120ms;
+
+  /* ── Typography ──────────────────────────────────── */
+  --font-display: 'Barlow Condensed', sans-serif;
+  --font-body:    'Outfit', sans-serif;
+}
