@@ -137,7 +137,7 @@
 }
 
 .bot-match-screen .hud-pill-label {
-  font-family: 'Rajdhani', sans-serif !important;
+  font-family: var(--font-display) !important;
   font-size: 1.0rem;
   font-weight: 700;
   opacity: 0.75;
@@ -711,7 +711,7 @@
   gap: 9px;
   width: fit-content;
   color: rgba(234, 216, 176, 0.92);
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.2em;
@@ -767,7 +767,7 @@
 
 .daily-fritz-set-overlay-stat span {
   color: rgba(194, 209, 223, 0.64);
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 0.74rem;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -823,7 +823,7 @@
 
 .daily-fritz-set-overlay-step span {
   color: rgba(194, 209, 223, 0.56);
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -1037,7 +1037,7 @@
 }
 
 .hand-over-error-text {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 0.88rem;
   font-weight: 600;
   color: #f87171;
