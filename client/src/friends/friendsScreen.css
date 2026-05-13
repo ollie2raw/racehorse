@@ -43,7 +43,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -117,7 +117,7 @@
 
 .friends-page-hero__eyebrow {
   margin: 0 0 14px;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -160,7 +160,7 @@
 }
 
 .friends-page-hero__stat-label {
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -189,7 +189,7 @@
 
 .friends-page-section-label {
   margin: 0 0 12px;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.20em;
@@ -200,14 +200,14 @@
 .friends-page-auth-note,
 .friends-page-note {
   margin: 0 0 16px;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 14px;
   color: rgba(255, 255, 255, 0.46);
 }
 
 .friends-page-error {
   margin: 0 0 12px;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 13px;
   color: #ef4444;
 }
@@ -299,7 +299,7 @@
 }
 
 .friends-page-row__meta {
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 11px;
   color: rgba(255, 255, 255, 0.30);
   margin-top: 2px;
@@ -317,7 +317,7 @@
   cursor: pointer;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.14em;

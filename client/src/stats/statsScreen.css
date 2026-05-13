@@ -43,7 +43,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -101,7 +101,7 @@
 
 .stats-page-hero-strip__eyebrow {
   margin: 0 0 8px;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -148,7 +148,7 @@
 }
 
 .stats-page-hero-strip__sub-row span {
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 12px;
   color: rgba(255, 255, 255, 0.35);
 }
@@ -177,7 +177,7 @@
 }
 
 .stats-page-hero-strip__bar-labels span {
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -196,7 +196,7 @@
 
 .stats-page-note {
   margin: 0 0 16px;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 14px;
   color: rgba(255, 255, 255, 0.46);
 }
@@ -210,7 +210,7 @@
 
 .stats-page-error {
   margin: 0;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 13px;
   color: #ef4444;
 }
@@ -221,7 +221,7 @@
   border: 1px solid rgba(239, 68, 68, 0.3);
   background: rgba(239, 68, 68, 0.08);
   color: #ef4444;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -236,7 +236,7 @@
 
 .stats-page-section-label {
   margin: 0 0 16px;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.20em;
@@ -270,7 +270,7 @@
 
 .stats-page-statcard__label {
   margin: 0 0 6px;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -305,7 +305,7 @@
 
 .stats-page-tier-games {
   margin: 3px 0 0;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 11px;
   color: rgba(255, 255, 255, 0.28);
 }

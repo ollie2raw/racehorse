@@ -74,7 +74,7 @@
 }
 
 .daily-ladder-slot-label {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.2em;
@@ -83,7 +83,7 @@
 }
 
 .daily-ladder-slot-points {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
   color: #f0c040;
@@ -91,7 +91,7 @@
 
 .daily-ladder-slot-status {
   margin-top: auto;
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -254,7 +254,7 @@
 }
 
 .daily-puzzle-screen .daily-hud-pill .wl-player-label {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -294,7 +294,7 @@
 }
 
 .daily-puzzle-screen .wl-room-code {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -1849,7 +1849,7 @@
 }
 
 .rh-result__score-suffix {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -1886,7 +1886,7 @@
 }
 
 .rh-result__summary-label {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -1926,7 +1926,7 @@
 
 .rh-result__lb-head > span {
   padding: 10px 8px;
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -1942,7 +1942,7 @@
 .rh-result__lb-row > span {
   padding: 14px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   color: rgba(255, 255, 255, 0.78);
   font-size: 14px;
 }
@@ -2010,7 +2010,7 @@
 }
 
 .rh-result-you-pill {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -2115,7 +2115,7 @@
   align-items: center;
   gap: 10px;
   color: #58A6FF;
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: 0.3em;
   font-size: 13px;
@@ -2142,7 +2142,7 @@
 
 .loading-subtitle {
   color: #9A96A8;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: clamp(15px, 1.8vw, 19px);
   margin-bottom: 56px;
   opacity: 0.85;
@@ -2195,7 +2195,7 @@
 }
 
 .loading-step-label {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   color: #6A6778;

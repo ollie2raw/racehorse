@@ -2653,7 +2653,7 @@ button:hover:not(:disabled) {
   padding: 40px;
   text-align: center;
   color: #fff;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
 }
 
 .rotate-phone-content {
@@ -3577,7 +3577,7 @@ button:hover:not(:disabled) {
 .game-over-kicker {
   margin: 0;
   color: rgba(61, 142, 255, 0.82);
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -3589,7 +3589,7 @@ button:hover:not(:disabled) {
   background: none;
   border: none;
   cursor: pointer;
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -3606,7 +3606,7 @@ button:hover:not(:disabled) {
 
 .game-over-meta {
   margin: 0;
-  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 0.96rem;
   line-height: 1.52;
   color: rgba(223, 238, 245, 0.62);
@@ -3782,7 +3782,7 @@ button:hover:not(:disabled) {
 }
 
 .game-over-result-stat span {
-  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -3900,7 +3900,7 @@ button:hover:not(:disabled) {
 }
 
 .hand-over-premium-kicker {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.3em;
@@ -3934,7 +3934,7 @@ button:hover:not(:disabled) {
 }
 
 .hand-over-premium-score-label {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -3943,7 +3943,7 @@ button:hover:not(:disabled) {
 }
 
 .hand-over-premium-sentence {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 16px;
   color: rgba(255, 255, 255, 0.72);
   margin: 0;
@@ -3971,7 +3971,7 @@ button:hover:not(:disabled) {
 }
 
 .hand-over-premium-meta-label {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.22em;
@@ -4000,7 +4000,7 @@ button:hover:not(:disabled) {
 }
 
 .hand-over-premium-meta-handle {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -4024,7 +4024,7 @@ button:hover:not(:disabled) {
 }
 
 .hand-over-premium-next-label {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.22em;
