@@ -24,7 +24,6 @@ type AppMode =
   | 'ghost'
   | 'daily'
   | 'dailyFritz'
-  | 'league'
   | 'learn'
   | 'friends'
   | 'stats'

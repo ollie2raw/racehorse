@@ -61,7 +61,6 @@ type UseMultiplayerRoomActionsParams = {
       | 'ghost'
       | 'daily'
       | 'dailyFritz'
-      | 'league'
       | 'learn'
       | 'friends'
       | 'stats'
@@ -239,53 +238,6 @@ export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParam
     }
   }, [params, roomJoinConfig]);
 
-  const openLeagueLiveRoom = useCallback(
-    async (code: string) => {
-      const normalizedCode = params.normalizeRoomCode(code);
-      if (!normalizedCode) {
-        throw new Error('Live room code is invalid.');
-      }
-
-      params.setRoomCode(normalizedCode);
-      params.setAppMode('multiplayer');
-      params.setError('');
-      params.setActionError('');
-
-      const activeSocket = params.socketRef.current;
-      if (activeSocket?.connected) {
-        const resp = await params.emitWithAck<any>(
-          activeSocket,
-          'room:join',
-          normalizedCode,
-          {
-            username: params.authUsernameRef.current,
-            userId: params.authUserIdRef.current,
-            authToken: params.authTokenRef.current,
-          },
-        );
-        if (!resp?.ok) {
-          throw new Error(resp?.error ?? 'Unable to join live room.');
-        }
-        params.applyJoinedRoomResponse(resp);
-        params.autoJoinAttemptedRef.current = false;
-        params.preventAutoRejoinRef.current = false;
-        return;
-      }
-
-      params.reconnectRoomCodeRef.current = normalizedCode;
-      params.reconnectShouldJoinRef.current = true;
-      params.preventAutoRejoinRef.current = false;
-      params.autoJoinAttemptedRef.current = false;
-      params.setRoomRecoveryState('reconnecting');
-      params.setRoomRecoveryMessage('Joining live room…');
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(params.lastRoomStorageKey, normalizedCode);
-      }
-      params.connectRef.current();
-    },
-    [params],
-  );
-
   const acceptFriendInvite = useCallback(async () => {
     if (!params.socket || !params.friendInvite) return;
     if (params.inviteJoinInFlightRef.current) return;
@@ -390,7 +342,6 @@ export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParam
     copyInviteLink,
     createRoom,
     joinRoom,
-    openLeagueLiveRoom,
     acceptFriendInvite,
   };
 }
