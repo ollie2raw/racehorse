@@ -1,0 +1,119 @@
+.rh-af-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-body);
+  overflow: hidden;
+}
+
+.rh-af-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 12px 0;
+  flex-shrink: 0;
+}
+
+.rh-af-filter-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-premium),
+              color var(--duration-fast) var(--ease-premium),
+              border-color var(--duration-fast) var(--ease-premium);
+}
+
+.rh-af-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.rh-af-filter-btn--active {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.4);
+  color: var(--accent-blue);
+}
+
+.rh-af-list {
+  flex: 1 1 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+}
+
+.rh-af-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  font-size: 14px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.rh-af-state--error {
+  color: var(--accent-red);
+}
+
+.rh-af-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.rh-af-item:last-child {
+  border-bottom: none;
+}
+
+.rh-af-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+  margin-top: 1px;
+}
+
+.rh-af-body {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.rh-af-username {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.rh-af-username:hover {
+  color: var(--accent-blue);
+}
+
+.rh-af-desc {
+  color: var(--text-secondary);
+}
+
+.rh-af-time {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 2px;
+}

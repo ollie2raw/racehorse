@@ -93,4 +93,6 @@ export type AppMode =
   | 'stats'
   | 'ratingHistory'
   | 'singlePlayerHub'
-  | 'tournament';
+  | 'tournament'
+  | 'leaderboard'
+  | 'profile';

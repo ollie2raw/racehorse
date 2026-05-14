@@ -206,8 +206,13 @@ function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
       const completedAt =
         typeof g.completedAt === 'string' ? g.completedAt : typeof g.completed_at === 'string' ? g.completed_at : '';
       const rawWon = g.playerWon ?? g.player_won;
-      const playerWon =
+      const playerWonFromScores =
+        Number.isFinite(playerScore) && Number.isFinite(fritzScore) && playerScore !== fritzScore
+          ? playerScore > fritzScore
+          : null;
+      const playerWonFromFlag =
         typeof rawWon === 'boolean' ? rawWon : rawWon === 'true' || rawWon === 1 || rawWon === '1' ? true : rawWon === 'false' || rawWon === 0 || rawWon === '0' ? false : null;
+      const playerWon = playerWonFromScores ?? playerWonFromFlag;
       if (!seed || playerWon === null || !Number.isFinite(playerScore) || !Number.isFinite(fritzScore) || !completedAt) {
         return null;
       }
@@ -316,9 +321,10 @@ function getSetTrackerStatus(
 ): { label: string; tone: BetweenGameTrackerTone } {
   const completedGame = setResult.games.find((game) => game.gameNumber === gameNumber);
   if (completedGame) {
+    const youWonGame = Number(completedGame.playerScore) > Number(completedGame.fritzScore);
     return {
-      label: completedGame.playerWon ? 'You won' : 'Fritz won',
-      tone: completedGame.playerWon ? 'win' : 'loss',
+      label: youWonGame ? 'You won' : 'Fritz won',
+      tone: youWonGame ? 'win' : 'loss',
     };
   }
   if (nextGameNumber === gameNumber) {
@@ -529,22 +535,24 @@ export default function DailyFritzScreen({
     run: DailyFritzStartResponse,
     game: DailyFritzGameCompletionPayload,
     gameNumber: DailyFritzSetGameNumber,
-  ): DailyFritzSetGameResult => ({
-    gameNumber,
-    seed: getDailyFritzGameSeed(run.run_date, gameNumber),
-    playerWon:
-      game.winner === 'you'
-        ? true
-        : game.winner === 'bot'
-          ? false
-          : game.yourScore > game.botScore,
-    playerScore: game.yourScore,
-    fritzScore: game.botScore,
-    pointDiff: game.yourScore - game.botScore,
-    movesUsed: game.movesUsed,
-    handsPlayed: game.handsPlayed,
-    completedAt: new Date().toISOString(),
-  }), []);
+  ): DailyFritzSetGameResult => {
+    const playerScore = Number(game.yourScore);
+    const fritzScore = Number(game.botScore);
+    // Ground truth is the race-to-N board totals (matches server record-game and botEngine).
+    // Do not trust `winner` alone — some edge paths can leave winnerId out of sync with scores.
+    const playerWon = playerScore > fritzScore;
+    return {
+      gameNumber,
+      seed: getDailyFritzGameSeed(run.run_date, gameNumber),
+      playerWon,
+      playerScore: game.yourScore,
+      fritzScore: game.botScore,
+      pointDiff: game.yourScore - game.botScore,
+      movesUsed: game.movesUsed,
+      handsPlayed: game.handsPlayed,
+      completedAt: new Date().toISOString(),
+    };
+  }, []);
 
   const submitSetCompletion = useCallback(async ({
     run,
@@ -960,9 +968,10 @@ export default function DailyFritzScreen({
       return {
         ...base,
         kind: 'between' as const,
-        headline: g.playerWon
-          ? `You take Game ${g.gameNumber}`
-          : `Fritz takes Game ${g.gameNumber}`,
+        headline:
+          Number(g.playerScore) > Number(g.fritzScore)
+            ? `You take Game ${g.gameNumber}`
+            : `Fritz takes Game ${g.gameNumber}`,
         subheadline: `The set is ${sr.playerGamesWon}-${sr.fritzGamesWon}`,
         gameScoreLabel: `Game ${g.gameNumber}`,
         gameScoreValue: `${Number.isFinite(g.playerScore) ? g.playerScore : 0}–${Number.isFinite(g.fritzScore) ? g.fritzScore : 0}`,
@@ -989,11 +998,14 @@ export default function DailyFritzScreen({
       const margin = formatMargin(sr.totalPointDiff);
       const marginTone: 'win' | 'loss' | 'idle' =
         sr.totalPointDiff > 0 ? 'win' : sr.totalPointDiff < 0 ? 'loss' : 'idle';
-      const games: OverlayGameItem[] = sr.games.map((game) => ({
-        gameNumber: game.gameNumber,
-        value: `${game.playerScore}–${game.fritzScore}`,
-        tone: game.playerWon ? ('win' as const) : ('loss' as const),
-      }));
+      const games: OverlayGameItem[] = sr.games.map((game) => {
+        const youWon = Number(game.playerScore) > Number(game.fritzScore);
+        return {
+          gameNumber: game.gameNumber,
+          value: `${game.playerScore}–${game.fritzScore}`,
+          tone: youWon ? ('win' as const) : ('loss' as const),
+        };
+      });
       return {
         ...base,
         kind: 'final' as const,
@@ -1091,14 +1103,15 @@ export default function DailyFritzScreen({
     const isNext = todaySetResult ? todaySetResult.games.length + 1 === n && !todaySetResult.setWinner : n === 1;
 
     const rowVariant = res ? 'done' : isNext ? 'active' : 'muted';
-    const outcome = res ? (res.playerWon ? ('won' as const) : ('lost' as const)) : null;
+    const youWonRow = res ? Number(res.playerScore) > Number(res.fritzScore) : false;
+    const outcome = res ? (youWonRow ? ('won' as const) : ('lost' as const)) : null;
     const isLocked = rowVariant === 'muted';
 
     let statusSub: string;
     let unlockHint: string | null = null;
     let showPlay = false;
     if (res) {
-      statusSub = res.playerWon ? 'Won' : 'Lost';
+      statusSub = youWonRow ? 'Won' : 'Lost';
     } else if (isNext) {
       statusSub = 'Ready to play';
       showPlay = !isComplete && !startActionPending;

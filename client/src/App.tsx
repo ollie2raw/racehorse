@@ -31,6 +31,7 @@ import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api'
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 import type { BotDealSize } from './bot/botEngine';
 import type { FritzTier } from './bot/fritzConfig';
+import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync } from './multiplayer/useRoomSocketSync';
 import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
@@ -127,7 +128,9 @@ type AppMode =
   | 'stats'
   | 'ratingHistory'
   | 'singlePlayerHub'
-  | 'tournament';
+  | 'tournament'
+  | 'leaderboard'
+  | 'profile';
 
 const EMPTY_MOVES: Move[] = [];
 
@@ -144,6 +147,8 @@ const AuthModal = React.lazy(() => import('./auth/AuthModal'));
 const UsernameModal = React.lazy(() => import('./auth/UsernameModal'));
 const StatsScreen = React.lazy(() => import('./stats/StatsScreen'));
 const FriendsScreen = React.lazy(() => import('./friends/FriendsScreen'));
+const LeaderboardScreen = React.lazy(() => import('./social/LeaderboardScreen'));
+const PublicProfileScreen = React.lazy(() => import('./social/PublicProfileScreen'));
 const LearnHome = React.lazy(() =>
   import('./learn').then((module) => ({ default: module.LearnHome })),
 );
@@ -775,7 +780,7 @@ export default function App() {
   const connectRef = useRef<() => void>(() => {});
   const pendingCreateOnConnectRef = useRef(false);
   const pendingCreateResolversRef = useRef<Array<(code: string | null) => void>>([]);
-  const [serverUrl] = useState(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001');
+  const [serverUrl] = useState(() => resolveGameServerUrl());
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -821,6 +826,8 @@ export default function App() {
   const [ghostProfile, setGhostProfile] = useState<GhostProfileSummary | null>(null);
   const [ghostOpponentName, setGhostOpponentName] = useState<string>('Ghost');
   const [ghostOpponentUserId, setGhostOpponentUserId] = useState<string | null>(null);
+
+  const [profileTarget, setProfileTarget] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState('');
   const [tournamentCode, setTournamentCode] = useState('');
@@ -3226,6 +3233,7 @@ export default function App() {
             onCopyInviteLink={copyInviteLink}
             onCreatePrivateRoom={onCreatePrivateRoom}
             onClose={() => setAppMode('home')}
+            onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
           />
         </Suspense>
       </div>
@@ -3240,6 +3248,35 @@ export default function App() {
             open={true}
             user={authUser}
             profile={authProfile}
+            onClose={() => setAppMode('home')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'leaderboard') {
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Leaderboard…" />}>
+          <LeaderboardScreen
+            user={authUser}
+            onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
+            onClose={() => setAppMode('home')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'profile') {
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Profile…" />}>
+          <PublicProfileScreen
+            username={profileTarget ?? ''}
+            user={authUser}
+            showToast={showToast}
             onClose={() => setAppMode('home')}
           />
         </Suspense>

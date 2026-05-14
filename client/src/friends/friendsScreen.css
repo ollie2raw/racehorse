@@ -351,3 +351,14 @@
     flex-direction: column;
   }
 }
+
+/* Activity feed strip */
+.friends-page-feed-strip {
+  flex-shrink: 0;
+  padding: 16px 32px;
+  max-height: 220px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}

@@ -19,7 +19,7 @@ const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
   { label: 'Multiplayer', mode: 'multiplayer', activeModes: ['multiplayer'] },
   { label: 'Learn', mode: 'learn', activeModes: ['learn'] },
   { label: 'Tournament', mode: 'tournament', activeModes: ['tournament'] },
-  { label: 'Leaderboard', mode: 'stats', activeModes: ['stats'] },
+  { label: 'Leaderboard', mode: 'leaderboard', activeModes: ['leaderboard', 'profile', 'stats'] },
 ];
 
 const TAB_COLORS: Record<string, string> = {
