@@ -120,7 +120,6 @@ type AppMode =
   | 'ghost'
   | 'daily'
   | 'dailyFritz'
-  | 'league'
   | 'learn'
   | 'friends'
   | 'stats'
@@ -137,7 +136,6 @@ const GhostSetupScreen = React.lazy(() => import('./ghost/GhostSetupScreen'));
 const DailyPuzzleScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleScreen'));
 const DailyFritzScreen = React.lazy(() => import('./dailyFritz/DailyFritzScreen'));
 const DailyPuzzleAdminScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleAdminScreen'));
-const LeagueScreen = React.lazy(() => import('./league/LeagueScreen'));
 const RatingHistoryPage = React.lazy(() => import('./ranking/RatingHistoryPage'));
 const GameReviewer = React.lazy(() => import('./analyzer/GameReviewer'));
 const AuthModal = React.lazy(() => import('./auth/AuthModal'));
@@ -754,7 +752,6 @@ const MODE_TO_PATH: Partial<Record<AppMode, string>> = {
   friends: '/friends',
   daily: '/daily',
   dailyFritz: '/daily-fritz',
-  league: '/league',
   ratingHistory: '/rating-history',
   singlePlayerHub: '/solo',
   tournament: '/tournament',
@@ -1601,7 +1598,6 @@ export default function App() {
     copyInviteLink,
     createRoom,
     joinRoom,
-    openLeagueLiveRoom,
     acceptFriendInvite,
   } = useMultiplayerRoomActions({
     socket,
@@ -3016,21 +3012,6 @@ export default function App() {
             onNavigate={setAppMode}
           />
 
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'league') {
-    return (
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading League…" />}>
-          <LeagueScreen
-            user={authUser}
-            profile={authProfile}
-            onBack={() => setAppMode('home')}
-            onOpenLiveMatch={openLeagueLiveRoom}
-          />
         </Suspense>
       </div>
     );
