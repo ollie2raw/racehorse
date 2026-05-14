@@ -147,12 +147,6 @@ interface BotMatchScreenProps {
   onGhostProfileChange?: ((summary: GhostProfileSummary | null) => void) | null;
   onProfileRefresh?: (() => Promise<void> | void) | null;
   onProfilePatch?: ((patch: { glicko_rating?: number | null }) => void) | null;
-  resumeKey?: string | null;
-  onMatchComplete?: ((result: {
-    winner: 'you' | 'bot' | null;
-    yourScore: number;
-    botScore: number;
-  }) => void) | null;
   dailyFritzPackage?: DailyFritzStartResponse | null;
   onDailyFritzComplete?: (() => void) | null;
   dailyFritzSetOverlay?: {
@@ -668,8 +662,6 @@ export default function BotMatchScreen({
   onGhostProfileChange = null,
   onProfileRefresh = null,
   onProfilePatch = null,
-  resumeKey = null,
-  onMatchComplete = null,
   dailyFritzPackage = null,
   onDailyFritzComplete = null,
   dailyFritzSetOverlay = null,
@@ -679,8 +671,6 @@ export default function BotMatchScreen({
   isAuthoringV2Mode: isAuthoringV2ModeProp = false,
   isGuidedV2Mode: isGuidedV2ModeProp = false,
 }: BotMatchScreenProps) {
-  const LEAGUE_MATCH_META_KEY = 'racehorse:league-match-meta';
-  const leagueResumeStorageKey = resumeKey ? `racehorse:league-match:${resumeKey}` : null;
   const dailyFritzStorageKey =
     mode === 'daily-fritz' && dailyFritzPackage
       ? `racehorse:daily-fritz:v2:${dailyFritzPackage.attempt_id}:game:${dailyFritzPackage.current_game_number ?? 1}`
@@ -707,31 +697,6 @@ export default function BotMatchScreen({
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const loadPersistedLeagueMatch = () => {
-    if (!leagueResumeStorageKey || typeof window === 'undefined') return null;
-    try {
-      const raw = window.sessionStorage.getItem(leagueResumeStorageKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as {
-        resumeKey?: string;
-        mode?: 'bot' | 'ghost';
-        opponentName?: string;
-        winningScore?: number;
-        dealSize?: number;
-        match?: BotMatchState;
-        movesUsed?: number;
-        moveLog?: MoveEntry[];
-        ghostMoveLog?: GhostMoveLogEntry[];
-        ghostProfile?: GhostProfileSummary | null;
-        matchStartGlickoRating?: number | null;
-      };
-      if (parsed.resumeKey !== resumeKey || !parsed.match) return null;
-      return parsed;
-    } catch {
-      return null;
-    }
-  };
-  const initialPersistedLeagueMatch = loadPersistedLeagueMatch();
   const loadPersistedDailyFritzMatch = () => {
     if (!dailyFritzStorageKey || typeof window === 'undefined') return null;
     try {
@@ -887,7 +852,6 @@ export default function BotMatchScreen({
 
     return (
       initialPersistedDailyFritzMatch?.match ??
-      initialPersistedLeagueMatch?.match ??
       (mode === 'daily-fritz' && dailyFritzPackage
         ? createFixedBotMatch(dailyFritzPackage.first_hand, winningScore, dealSize)
         : createBotMatch(winningScore, dealSize))
@@ -913,15 +877,15 @@ export default function BotMatchScreen({
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [movesUsed, setMovesUsed] = useState(
-    initialPersistedDailyFritzMatch?.movesUsed ?? initialPersistedLeagueMatch?.movesUsed ?? 0,
+    initialPersistedDailyFritzMatch?.movesUsed ?? 0,
   );
   const [dailyLeaderboard, setDailyLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
   const [dailyLeaderboardError, setDailyLeaderboardError] = useState<string | null>(null);
   const [moveLog, setMoveLog] = useState<MoveEntry[]>(
-    initialPersistedDailyFritzMatch?.moveLog ?? initialPersistedLeagueMatch?.moveLog ?? [],
+    initialPersistedDailyFritzMatch?.moveLog ?? [],
   );
-  const [ghostMoveLog, setGhostMoveLog] = useState<GhostMoveLogEntry[]>(initialPersistedLeagueMatch?.ghostMoveLog ?? []);
+  const [ghostMoveLog, setGhostMoveLog] = useState<GhostMoveLogEntry[]>([]);
   const [handTileSize, setHandTileSize] = useState(56);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
@@ -941,11 +905,9 @@ export default function BotMatchScreen({
   const [ghostResultLoading, setGhostResultLoading] = useState(false);
   const [ghostResultError, setGhostResultError] = useState<string | null>(null);
   const [matchStartGlickoRating, setMatchStartGlickoRating] = useState<number | null>(
-    initialPersistedLeagueMatch?.matchStartGlickoRating != null
-      ? Number(initialPersistedLeagueMatch.matchStartGlickoRating)
-      : currentGlickoRating != null
-        ? Number(currentGlickoRating)
-        : null,
+    currentGlickoRating != null
+      ? Number(currentGlickoRating)
+      : null,
   );
   const [activeLocalMatchId, setActiveLocalMatchId] = useState<string>(
     () =>
@@ -967,7 +929,6 @@ export default function BotMatchScreen({
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
   const gameOverSoundKeyRef = useRef('');
-  const matchCompleteKeyRef = useRef('');
   const ghostCompleteKeyRef = useRef('');
   const dailyFritzCompleteKeyRef = useRef('');
   const dailyFritzGameCompleteKeyRef = useRef('');
@@ -1089,9 +1050,8 @@ export default function BotMatchScreen({
   const isGhostMode = mode === 'ghost';
   const isDailyFritzMode = mode === 'daily-fritz';
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
-  const isLeagueMatch = Boolean(onMatchComplete && resumeKey);
   const isStandaloneFritzMatch = Boolean(
-    userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode && !onMatchComplete
+    userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
   const showDebug =
@@ -1171,12 +1131,6 @@ export default function BotMatchScreen({
     const capitalized = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
     return `@${capitalized}`;
   };
-
-  const clearPersistedLeagueMatch = useCallback(() => {
-    if (!leagueResumeStorageKey || typeof window === 'undefined') return;
-    window.sessionStorage.removeItem(leagueResumeStorageKey);
-    window.sessionStorage.removeItem(LEAGUE_MATCH_META_KEY);
-  }, [leagueResumeStorageKey]);
 
   const postLocalBotMatch = useCallback(
     async (
@@ -2214,7 +2168,6 @@ export default function BotMatchScreen({
       return;
     }
     invalidateLocalRuns();
-    clearPersistedLeagueMatch();
     localPendingRegisteredRef.current = false;
     localPendingResolvedRef.current = false;
     setSelectedTile(null);
@@ -2238,7 +2191,6 @@ export default function BotMatchScreen({
     setAnalyzerOpen(false);
     dailyResultSyncKeyRef.current = '';
     gameWinConfettiKeyRef.current = '';
-    matchCompleteKeyRef.current = '';
     ghostCompleteKeyRef.current = '';
     setMatchStartGlickoRating(
       currentGlickoRating != null
@@ -2262,51 +2214,6 @@ export default function BotMatchScreen({
   useEffect(() => {
     matchRef.current = match;
   }, [match]);
-
-  useEffect(() => {
-    if (!isLeagueMatch || !leagueResumeStorageKey || typeof window === 'undefined') return;
-    if (match.gameOver) {
-      clearPersistedLeagueMatch();
-      return;
-    }
-    const payload = {
-      resumeKey,
-      mode,
-      opponentName,
-      winningScore,
-      dealSize,
-      match,
-      movesUsed,
-      moveLog,
-      ghostMoveLog,
-      ghostProfile,
-      matchStartGlickoRating,
-    };
-    window.sessionStorage.setItem(leagueResumeStorageKey, JSON.stringify(payload));
-    window.sessionStorage.setItem(
-      LEAGUE_MATCH_META_KEY,
-      JSON.stringify({
-        resumeKey,
-        mode,
-        ghostProfile,
-      }),
-    );
-  }, [
-    clearPersistedLeagueMatch,
-    dealSize,
-    ghostMoveLog,
-    ghostProfile,
-    isLeagueMatch,
-    leagueResumeStorageKey,
-    match,
-    matchStartGlickoRating,
-    mode,
-    moveLog,
-    movesUsed,
-    opponentName,
-    resumeKey,
-    winningScore,
-  ]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2430,7 +2337,7 @@ export default function BotMatchScreen({
   }, [activeLocalMatchId, fritzTier, isStandaloneFritzMatch, match.gameOver, postLocalBotMatch, userId]);
 
   useEffect(() => {
-    if (!userId || !isGhostMode || isDailyPuzzleRun || isLeagueMatch) return;
+    if (!userId || !isGhostMode || isDailyPuzzleRun) return;
     if (match.gameOver || verifiedMatchId) return;
     let cancelled = false;
     void startGhostMatchSession({
@@ -2452,7 +2359,6 @@ export default function BotMatchScreen({
     activeLocalMatchId,
     isDailyPuzzleRun,
     isGhostMode,
-    isLeagueMatch,
     match.gameOver,
     opponentUserId,
     userId,
@@ -2497,22 +2403,6 @@ export default function BotMatchScreen({
       queueSound(() => playMatchLoseSound(isMuted), 320);
     }
   }, [match.gameOver, match.winnerId, match.handNumber, match.players.you.score, match.players.bot.score, isMuted]);
-
-  useEffect(() => {
-    if (!onMatchComplete) return;
-    if (!match.gameOver) {
-      matchCompleteKeyRef.current = '';
-      return;
-    }
-    const key = `${match.handNumber}:${match.winnerId}:${match.players.you.score}:${match.players.bot.score}`;
-    if (matchCompleteKeyRef.current === key) return;
-    matchCompleteKeyRef.current = key;
-    onMatchComplete({
-      winner: match.winnerId,
-      yourScore: match.players.you.score,
-      botScore: match.players.bot.score,
-    });
-  }, [match.gameOver, match.handNumber, match.winnerId, match.players.you.score, match.players.bot.score, onMatchComplete]);
 
   useEffect(() => {
     if (!isDailyFritzMode || !onDailyFritzGameComplete) return;
@@ -5150,7 +5040,7 @@ export default function BotMatchScreen({
       return;
     }
 
-    // ── Non-Daily-Fritz modes (authoring, guided, league) ─────────────────────
+    // ── Non-Daily-Fritz modes (authoring, guided) ─────────────────────────────
     setHandReveal(null);
 
     if (isGuidedV1MinimalMode && frozenLesson) {
@@ -6961,7 +6851,6 @@ export default function BotMatchScreen({
         <LeaveGameModal
           onCancel={() => setShowLeaveConfirm(false)}
           onLeave={() => {
-            clearPersistedLeagueMatch();
             if (isStandaloneFritzMatch && !match.gameOver) {
               void abandonStandaloneFritzMatch()
                 .catch((err) => {
