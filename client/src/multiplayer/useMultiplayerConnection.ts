@@ -44,7 +44,6 @@ type UseMultiplayerConnectionParams = {
     | 'ghost'
     | 'daily'
     | 'dailyFritz'
-    | 'league'
     | 'learn'
     | 'friends'
     | 'stats'
