@@ -390,10 +390,14 @@ export default function DailyFritzScreen({
     activeRunRef.current = activeRun;
   }, [activeRun]);
 
+  // Do not tick the lobby countdown while an embedded match is open. A 1 Hz
+  // parent re-render recreates inline props and was resetting Daily Fritz
+  // hand-transition timers in BotMatchScreen (advanceHand identity churn).
   useEffect(() => {
+    if (activeRun) return;
     const id = window.setInterval(() => setCountdownTick((t) => t + 1), 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [activeRun]);
 
   useEffect(() => {
     if (!user?.id || !today) return;
@@ -753,8 +757,20 @@ export default function DailyFritzScreen({
     [countdownTick],
   );
 
-  const activeSetResult = normalizeSetResult(activeRun?.set_result ?? null);
+  const activeSetResult = useMemo(
+    () => normalizeSetResult(activeRun?.set_result ?? null),
+    [activeRun?.set_result],
+  );
   const activeGameNumber = normalizeGameNumber(activeRun?.current_game_number, getNextGameNumberFromSetResult(activeSetResult));
+
+  const dailyFritzPackageForMatch = useMemo((): DailyFritzStartResponse | null => {
+    if (!activeRun) return null;
+    return {
+      ...activeRun,
+      current_game_number: activeGameNumber,
+      set_result: activeSetResult,
+    };
+  }, [activeRun, activeGameNumber, activeSetResult]);
 
   const setOverlayConfig = useMemo(() => {
     if (!setOverlay) return null;
@@ -838,7 +854,7 @@ export default function DailyFritzScreen({
         onGhostProfileChange={onGhostProfileChange}
         onProfileRefresh={onProfileRefresh}
         onProfilePatch={onProfilePatch}
-        dailyFritzPackage={{ ...activeRun, current_game_number: activeGameNumber, set_result: activeSetResult }}
+        dailyFritzPackage={dailyFritzPackageForMatch}
         dailyFritzSetOverlay={setOverlayConfig}
         onDailyFritzGameComplete={(result) => { void handleDailyFritzGameComplete(result); }}
         onDailyFritzComplete={() => { void finishEmbeddedRun(); }}

@@ -715,11 +715,6 @@ export default function BotMatchScreen({
       if (!Number.isFinite(persistedHandIndex) || persistedHandIndex !== serverHandIndex) {
         return null;
       }
-      // Never resume from a transient hand-over snapshot. Those states are
-      // derived UI transitions, not authoritative game positions.
-      if (parsed.match.handOver && !parsed.match.gameOver) {
-        return null;
-      }
       return parsed;
     } catch {
       return null;
@@ -960,9 +955,13 @@ export default function BotMatchScreen({
   const accessTokenRef = useRef<string | null>(null);
   const fritzSessionReplyRef = useRef<Required<AuthoredStep>['fritzReplyEvents']>([]);
   const isTransitioningRef = useRef(false);
-  const [dailyFritzHandIndex, setDailyFritzHandIndex] = useState(
-    () => dailyFritzPackage?.current_hand_index ?? 0,
-  );
+  const [dailyFritzHandIndex, setDailyFritzHandIndex] = useState(() => {
+    const persisted = initialPersistedDailyFritzMatch?.currentHandIndex;
+    if (typeof persisted === 'number' && Number.isFinite(persisted)) {
+      return persisted;
+    }
+    return dailyFritzPackage?.current_hand_index ?? 0;
+  });
   const [dailyFritzSubmitRetryNonce, setDailyFritzSubmitRetryNonce] = useState(0);
 
   // ── Guided Lesson state (player-facing, reads frozenLesson) ──────────────

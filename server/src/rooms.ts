@@ -55,6 +55,10 @@ export type Room = {
   matchmakingIsSim?: boolean;
   /** Socket id of the sim opponent, when matchmakingIsSim is true. */
   matchmakingSimSocketId?: string;
+  /** Set when the room is a scheduled-tournament match; used to advance the bracket on game-end. */
+  scheduledTournamentMatchId?: string;
+  /** Parent tournament id (denormalized for cheap lookups during game-over). */
+  scheduledTournamentId?: string;
 };
 
 export type ManualDrawAnimationStep = {

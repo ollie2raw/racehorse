@@ -106,6 +106,10 @@ import {
 import { appendRoomEvent, resetRoomEventLog } from './roomEvents';
 import { registerMatchmakingHandlers } from './matchmaking';
 import { recordMatchEnd } from './matchmaking/persistence';
+import {
+  initScheduledTournaments,
+  applyMatchResult as applyTournamentMatchResult,
+} from './scheduledTournament';
 import { startSimOpponentLoop } from './matchmaking/simBot';
 import type { GameState } from './game/types';
 import { assertValidGameState } from './game/invariants';
