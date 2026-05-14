@@ -47,7 +47,7 @@
   width: 100%;
   object-fit: cover;
   object-position: left bottom;
-  transform: scale(1.68) translate(1.5%, 20%);
+  transform: scale(1.68) translateX(1.5%);
   transform-origin: left bottom;
   pointer-events: none;
   user-select: none;
@@ -76,7 +76,7 @@
   width: 100%;
   object-fit: cover;
   object-position: 56% 100%;
-  transform: scale(1.26) translate(2.2%, 20%);
+  transform: scale(1.26) translateX(2.2%);
   transform-origin: bottom center;
   pointer-events: none;
   user-select: none;
