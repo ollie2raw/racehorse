@@ -4674,8 +4674,10 @@ export default function BotMatchScreen({
         } finally {
           if (isLocalRunCurrent(runToken)) {
             finishLocalRun(runToken);
-            setDrawSequenceActiveBoth(false);
           }
+          // Always release the draw/pass mutex — if the run was superseded,
+          // skipping this left the bot stuck behind drawSequenceActiveRef.
+          setDrawSequenceActiveBoth(false);
         }
       })();
     }, thinkDelayMs);
@@ -5237,11 +5239,11 @@ export default function BotMatchScreen({
     // draw/pass sequences via the authored timeline.  The live boneyard must not
     // be touched while on-line.
     if (isGuidedV2Mode && !isGuidedV2OffLine) return;
-    const runToken = beginLocalRun('player-draw');
     const beforeEndsRaw = getDisplayOpenEnds(match);
     const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
     const handBefore = match.players.you.hand.map(toTileTuple);
     void (async () => {
+      const runToken = beginLocalRun('player-draw');
       setDrawSequenceActiveBoth(true);
       try {
         // ── Daily Fritz: locked-boneyard / no-move fast path ──────────────────
@@ -5410,14 +5412,43 @@ export default function BotMatchScreen({
       } finally {
         if (isLocalRunCurrent(runToken)) {
           finishLocalRun(runToken);
-          setDrawSequenceActiveBoth(false);
         }
+        // Always clear — superseded runs skipped the inner branch but must not
+        // leave drawSequenceActiveRef stuck true (blocks player + bot effects).
+        setDrawSequenceActiveBoth(false);
       }
     })();
     return () => {
       // Progress renders from this draw sequence should not cancel its final pass/block result.
     };
-  }, [match, userPlayMoves.length, appendGhostMove, appendMove, runDrawSequenceLocal, setDrawSequenceActiveBoth, beginLocalRun, isLocalRunCurrent, finishLocalRun, isGhostMode, isAuthoringMode, recordAuthoringStep, isMuted, getFritzBestMove, isGuidedTranscriptMode, currentTranscriptTurn, acceptGuidedTranscriptTurn, isGuidedV1MinimalMode, isGuidedV1OnlineMode, currentLessonStep, lessonStepIndex, pushToast]);
+  }, [
+    match,
+    userPlayMoves.length,
+    appendGhostMove,
+    appendMove,
+    applyAndNotify,
+    runDrawSequenceLocal,
+    setDrawSequenceActiveBoth,
+    beginLocalRun,
+    isLocalRunCurrent,
+    finishLocalRun,
+    isGhostMode,
+    isAuthoringMode,
+    recordAuthoringStep,
+    isMuted,
+    getFritzBestMove,
+    isGuidedTranscriptMode,
+    currentTranscriptTurn,
+    acceptGuidedTranscriptTurn,
+    isGuidedV1MinimalMode,
+    isGuidedV1OnlineMode,
+    currentLessonStep,
+    lessonStepIndex,
+    pushToast,
+    isDailyFritzMode,
+    isGuidedV2Mode,
+    isGuidedV2OffLine,
+  ]);
 
   useEffect(() => {
     if (!isDailyPuzzleRun || !dailyPuzzleDate || !match.gameOver) return;

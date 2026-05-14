@@ -1,10 +1,13 @@
 import type { Server } from 'socket.io';
 import { fetchTournamentsByStatus } from './persistence';
 import { openRegistration, closeRegistrationAndStart } from './engine';
+import { supabaseFetch } from '../supabaseUtils';
 
 const TICK_INTERVAL_MS = 60_000;
+const SEED_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let seedTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Polls every minute. For each upcoming tournament:
@@ -39,6 +42,11 @@ export function startTournamentScheduler(io: Server): void {
   // Fire one immediate tick so an existing-due tournament catches up at boot.
   void tick();
   timer = setInterval(() => { void tick(); }, TICK_INTERVAL_MS);
+
+  // Fallback for deployments where pg_cron isn't enabled: call the seed RPC
+  // every 24 hours. Safe to run alongside pg_cron — both invocations are
+  // idempotent (ON CONFLICT DO NOTHING) and cheap when the window is full.
+  startSeedFallback();
 }
 
 export function stopTournamentScheduler(): void {
@@ -46,4 +54,31 @@ export function stopTournamentScheduler(): void {
     clearInterval(timer);
     timer = null;
   }
+  if (seedTimer) {
+    clearInterval(seedTimer);
+    seedTimer = null;
+  }
+}
+
+/** Invoke ensure_tournament_seed_window() on Supabase via the REST RPC endpoint. */
+async function callEnsureSeedWindow(): Promise<void> {
+  try {
+    await supabaseFetch('/rest/v1/rpc/ensure_tournament_seed_window', {
+      method: 'POST',
+      body: '{}',
+    });
+  } catch (err) {
+    console.warn(
+      '[tournament:scheduler] auto-reseed RPC failed',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+function startSeedFallback(): void {
+  if (seedTimer) return;
+  // Fire once at boot so a freshly-deployed instance tops up immediately if
+  // the table has drifted below 360 future slots.
+  void callEnsureSeedWindow();
+  seedTimer = setInterval(() => { void callEnsureSeedWindow(); }, SEED_INTERVAL_MS);
 }
