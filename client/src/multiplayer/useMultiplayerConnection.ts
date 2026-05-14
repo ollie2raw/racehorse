@@ -49,7 +49,9 @@ type UseMultiplayerConnectionParams = {
     | 'stats'
     | 'ratingHistory'
     | 'singlePlayerHub'
-    | 'tournament';
+    | 'tournament'
+    | 'leaderboard'
+    | 'profile';
   authUserId?: string | null;
   authEmail?: string | null;
   authProfileUsername?: string | null;

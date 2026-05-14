@@ -29,7 +29,9 @@ type AppMode =
   | 'stats'
   | 'ratingHistory'
   | 'singlePlayerHub'
-  | 'tournament';
+  | 'tournament'
+  | 'leaderboard'
+  | 'profile';
 
 type DailyStripVisualState = 'done' | 'today' | 'future' | 'missed';
 

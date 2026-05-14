@@ -67,6 +67,8 @@ type UseMultiplayerRoomActionsParams = {
       | 'ratingHistory'
       | 'singlePlayerHub'
       | 'tournament'
+      | 'leaderboard'
+      | 'profile'
     >
   >;
   setRoomCode: Dispatch<SetStateAction<string>>;
