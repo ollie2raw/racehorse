@@ -42,6 +42,16 @@
 - Client build: `npm run build --prefix client`
 - Server build: `npm run build --prefix server`
 
+## 4b. Viewport-locked shell (no accidental page scroll)
+
+Primary menu and mode-hub screens must live inside the app chrome contract from `client/src/App.css` (`.app`: `height: 100dvh`, `overflow: hidden`, column flex). The screen’s **root wrapper** must participate in that flex chain so content cannot grow the document and force vertical scrolling:
+
+- Use `flex: 1 1 0`, `min-height: 0`, `max-height: 100%`, and `overflow: hidden` on the screen root (along with `display: flex; flex-direction: column`).
+- **Do not** put `min-height: 100vh` (or unconstrained tall stacks) on the screen root; it breaks the shell and can push `body` scroll past the viewport.
+- Lay out below the nav with a **flex column**: fixed-height or `flex-shrink: 0` regions (hero, toolbars, card rows), `contain: paint` / `overflow: hidden` on cards so art does not bleed past `border-radius`, and **compress** secondary blocks (footers, “more” strips) until everything fits in one view.
+- **References to match:** `HomeScreen.tsx` + `home-shell` / `RacehorseHomeArt.css` daily cards; `PlayVsFritz.tsx` + `PlayVsFritz.css` (`pvf-root`); Single Player hub: `SinglePlayerHubScreen.tsx` + `SinglePlayerModes.css` (`.sp-page`).
+- Long-form or data-heavy surfaces (e.g. full history tables) are the exception: they should be **designed** with an internal scroll region, modal, or separate full-page pattern—not an accidentally tall default layout.
+
 ## 5. UI redesign workflow
 
 - First inspect relevant files.

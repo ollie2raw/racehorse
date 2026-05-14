@@ -36,11 +36,6 @@ import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
 import { useRenderProfiler } from './debug/renderProfiler';
 import {
-  ClaudeModeScreen,
-  ClaudePrimaryAction,
-  ClaudeSecondaryAction,
-  ClaudeSectionLabel,
-  ClaudeStatLine,
   claudeRgb,
 } from './ui/claudeMode';
 import {
@@ -51,6 +46,7 @@ import {
 import RacehorseHomeScreen from './screens/HomeScreen';
 import SinglePlayerHubScreen from './screens/SinglePlayerHubScreen';
 import { TournamentScreen } from './screens/TournamentScreen';
+import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -817,6 +813,7 @@ export default function App() {
   const [multiplayerRatingBaseline, setMultiplayerRatingBaseline] = useState<number | null>(null);
   const [multiplayerRatingPending, setMultiplayerRatingPending] = useState(false);
   const multiplayerRatingRefreshKeyRef = useRef('');
+  const [privateLobbyHostWinStreak, setPrivateLobbyHostWinStreak] = useState<number | null>(null);
 
   // Sync appMode → URL hash (side effect only; appMode is still source of truth)
   useEffect(() => {
@@ -1063,6 +1060,20 @@ export default function App() {
     setToast(msg);
     toastTimeoutRef.current = setTimeout(() => setToast(''), duration);
   }, []);
+
+  const copyRoomCodeToClipboard = useCallback(async () => {
+    const code = normalizeRoomCode(joinedRoom || roomCode);
+    if (!code) {
+      showToast('No room code to copy.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(code);
+      showToast('Room code copied.');
+    } catch {
+      showToast('Could not copy room code.');
+    }
+  }, [joinedRoom, roomCode, showToast]);
 
   const setDrawSequenceActiveBoth = useCallback((val: boolean) => {
     drawSequenceActiveRef.current = val;
@@ -1330,6 +1341,41 @@ export default function App() {
     setRoomRecoveryState('idle');
     setRoomRecoveryMessage('');
   }, []);
+
+  /** Leave the current private room but stay connected and on the multiplayer create-lobby UI. */
+  const leavePrivateLobbyRoom = useCallback(() => {
+    const code = normalizeRoomCode(joinedRoomRef.current);
+    const s = socketRef.current;
+    if (s?.connected && code) {
+      s.emit('room:leave', code);
+    }
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
+    }
+    intentionalDisconnectRef.current = false;
+    reconnectShouldJoinRef.current = false;
+    reconnectRoomCodeRef.current = null;
+    clearReconnectAttemptTimer();
+    reconnectAttemptCountRef.current = 0;
+    rejoinInFlightRef.current = false;
+    preventAutoRejoinRef.current = false;
+    autoJoinAttemptedRef.current = false;
+    setIsRecoveringConnection(false);
+    setRoomRecoveryState('idle');
+    setRoomRecoveryMessage('');
+    setRoomReactions([]);
+    resetMultiplayerRoomState({ clearRoomCode: true });
+    setAppMode('multiplayer');
+  }, [
+    normalizeRoomCode,
+    clearReconnectAttemptTimer,
+    resetMultiplayerRoomState,
+    setAppMode,
+    setIsRecoveringConnection,
+    setRoomRecoveryState,
+    setRoomRecoveryMessage,
+    setRoomReactions,
+  ]);
 
   const applyRoomEventMeta = useCallback((meta?: RoomEventMeta | null) => {
     if (!meta) return;
@@ -2209,6 +2255,33 @@ export default function App() {
     multiplayerRatingRefreshKeyRef.current = '';
     previousMultiplayerGameOverRef.current = false;
   }, [joinedRoom]);
+
+  useEffect(() => {
+    if (appMode !== 'multiplayer' || !authUser?.id) {
+      setPrivateLobbyHostWinStreak(null);
+      return;
+    }
+    const showPrivateMatchLobby =
+      (!isConnected && !isRecoveringConnection) ||
+      (isConnected && !joinedRoom) ||
+      (isConnected && Boolean(joinedRoom) && !state);
+    if (!showPrivateMatchLobby) {
+      setPrivateLobbyHostWinStreak(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchUserStatsByUserId(authUser.id).then((res) => {
+      if (cancelled) return;
+      if (res.error || !res.data) {
+        setPrivateLobbyHostWinStreak(null);
+        return;
+      }
+      setPrivateLobbyHostWinStreak(res.data.currentWinStreak);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [appMode, authUser?.id, isConnected, isRecoveringConnection, joinedRoom, state]);
 
   useEffect(() => {
     if (!joinedRoom || state?.gameOver) return;
@@ -3401,170 +3474,55 @@ export default function App() {
         </div>
       )}
 
-      {/* Disconnected Lobby Screen */}
-      {!isConnected && !isRecoveringConnection && (
-        <div className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
-          <ClaudeModeScreen
-            accent="#3d8eff"
-            eyebrow="Real-time Online"
-            title={'MULTI\nPLAYER'}
-            description="Connect to create a room or join a friend using a room code."
-            decor="M"
-            backLabel="Back to Home"
-            onBack={() => setAppMode('home')}
-            heroFooter={<div className="claude-mode-chip-row"><span className="claude-mode-chip">Server {serverUrl}</span></div>}
-            panel={
-              <div className="claude-mode-panel-stack">
-                <ClaudePrimaryAction
-                  accent="#3d8eff"
-                  title={isConnecting ? 'Connecting...' : 'Connect'}
-                  meta="Enable room creation and room joins"
-                  onClick={connect}
-                  disabled={isConnecting}
-                />
-                <ClaudeSecondaryAction title="Create New Room" meta="Connect first to start hosting" disabled />
-                <div className="claude-mode-join-box">
-                  <input
-                    type="text"
-                    placeholder="ROOM CODE"
-                    value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                    maxLength={6}
-                    disabled
-                  />
-                  <button type="button" onClick={joinRoom} disabled>
-                    Join
-                  </button>
-                </div>
-                {serverWaking ? (
-                  <div className="claude-mode-card" style={{ color: 'rgba(255,255,255,0.72)' }}>
-                    Connecting to server... this may take up to 60 seconds on first load.
-                  </div>
-                ) : null}
-              </div>
-            }
-          />
-        </div>
-      )}
-
-      {/* Lobby Screen */}
-      {isConnected && !joinedRoom && (
-        <div className="screen lobby-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
-          <ClaudeModeScreen
-            accent="#3d8eff"
-            eyebrow="Private Room"
-            title={'JOIN OR\nCREATE'}
-            description="Create a new room or enter a code to join your friend instantly."
-            decor="R"
-            backLabel="Disconnect"
-            onBack={() => disconnect('user disconnect')}
-            heroFooter={<div className="claude-mode-chip-row"><span className="claude-mode-chip">Connected</span></div>}
-            panel={
-              <div className="claude-mode-panel-stack">
-                <ClaudePrimaryAction
-                  accent="#3d8eff"
-                  title={pendingUiAction === 'create' ? 'Creating…' : 'Create New Room'}
-                  meta="Start a room and share the code"
-                  onClick={createRoom}
-                  disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
-                />
-                <div className="claude-mode-join-box">
-                  <input
-                    type="text"
-                    placeholder="ROOM CODE"
-                    value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                    maxLength={6}
-                    disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
-                  />
-                  <button
-                    type="button"
-                    onClick={joinRoom}
-                    disabled={pendingUiAction === 'create' || pendingUiAction === 'join'}
-                  >
-                    {pendingUiAction === 'join' ? 'Joining…' : 'Join'}
-                  </button>
-                </div>
-              </div>
-            }
-          />
-        </div>
-      )}
-
-      {/* Room Screen (waiting for game) */}
-      {isConnected && joinedRoom && !state && (
-        <div className="screen room-screen mode-home-screen mode-subpage-screen mode-accent-multiplayer claude-mode-screen-shell" style={{ padding: 0, overflow: 'hidden' }}>
-          <ClaudeModeScreen
-            accent="#3d8eff"
-            eyebrow="Room Code"
-            title={joinedRoom}
-            description="Waiting for all players to join before starting the hand."
-            decor="R"
-            heroClassName="claude-mode-hero--room-code"
-            panelClassName="claude-mode-panel--room-lobby"
-            backLabel="Leave Room"
-            onBack={() => disconnect('user leave room')}
-            heroFooter={<div className="claude-mode-chip-row"><span className="claude-mode-chip">{players.length}/2 players connected</span></div>}
-            panel={
-              <div className="claude-mode-panel-stack">
-                <ClaudeSectionLabel>Players</ClaudeSectionLabel>
-                {players.map((p) => (
-                  <div key={p.id} className={`claude-mode-player-card ${p.id === players[0]?.id ? 'is-host' : ''}`}>
-                    <div>
-                      <div className="claude-mode-player-card__title">{p.id === you ? 'You' : `@${p.username}`}</div>
-                      <div className="claude-mode-player-card__meta">
-                        {p.id === you ? `@${p.username}` : p.id === players[0]?.id ? 'Room host' : 'Connected'}
-                      </div>
-                    </div>
-                    {p.id === players[0]?.id ? <span className="claude-mode-pill">Host</span> : null}
-                  </div>
-                ))}
-                {players.length < 2 ? (
-                  <div className="claude-mode-player-card is-muted">
-                    <div>
-                      <div className="claude-mode-player-card__title">Waiting for another player…</div>
-                      <div className="claude-mode-player-card__meta">Share the invite link or room code.</div>
-                    </div>
-                  </div>
-                ) : null}
-                {players.length === 2 && isRoomHost ? (
-                  <ClaudePrimaryAction
-                    accent="#3d8eff"
-                    title={pendingUiAction === 'start' ? 'Starting…' : 'Start Game'}
-                    meta="Begin the live multiplayer hand"
-                    onClick={startGame}
-                    disabled={pendingUiAction === 'start'}
-                  />
-                ) : null}
-                {players.length === 2 && !isRoomHost ? (
-                  <div className="claude-mode-card">
-                    <div className="claude-mode-player-card__title">Waiting for Host</div>
-                    <div className="claude-mode-player-card__meta">The room host starts the match.</div>
-                  </div>
-                ) : null}
-                {roomRecoveryState !== 'idle' ? (
-                  <div className="claude-mode-card">
-                    <div className="claude-mode-player-card__title">
-                      {roomRecoveryState === 'reconnecting'
-                        ? 'Reconnecting…'
-                        : roomRecoveryState === 'resyncing'
-                          ? 'Syncing room…'
-                          : 'Reconnect Failed'}
-                    </div>
-                    <div className="claude-mode-player-card__meta">
-                      {roomRecoveryMessage || 'Restoring your room session.'}
-                    </div>
-                  </div>
-                ) : null}
-                {roomRecoveryState === 'failed' ? (
-                  <ClaudePrimaryAction accent="#3d8eff" title="Retry Reconnect" meta="Attempt to restore this room session" onClick={retryRoomRecovery} />
-                ) : null}
-                <ClaudeSecondaryAction title="Copy Invite Link" meta="Share one-tap room join with friends" onClick={copyInviteLink} />
-              </div>
-            }
-          />
-        </div>
-      )}
+      {(!isConnected && !isRecoveringConnection) ||
+      (isConnected && !joinedRoom) ||
+      (isConnected && joinedRoom && !state) ? (
+        <PrivateMatchLobbyScreen
+          phase={
+            !isConnected && !isRecoveringConnection
+              ? 'disconnected'
+              : isConnected && !joinedRoom
+                ? 'lobby'
+                : 'room'
+          }
+          onNavigate={setAppMode}
+          onOpenAuth={() => setAuthModalOpen(true)}
+          onOpenAccount={() => setUsernameModalOpen(true)}
+          onBackHome={() => setAppMode('home')}
+          isConnecting={isConnecting}
+          serverWaking={serverWaking}
+          serverUrl={serverUrl}
+          onConnect={connect}
+          roomCode={roomCode}
+          onRoomCodeChange={setRoomCode}
+          onCreateRoom={createRoom}
+          onJoinRoom={joinRoom}
+          pendingLobbyAction={
+            pendingUiAction === 'create' || pendingUiAction === 'join' ? pendingUiAction : null
+          }
+          onDisconnect={() => disconnect('user disconnect')}
+          joinedRoom={joinedRoom ?? ''}
+          players={players}
+          you={you}
+          isRoomHost={isRoomHost}
+          onLeaveRoom={leavePrivateLobbyRoom}
+          onStartGame={startGame}
+          pendingStart={pendingUiAction === 'start'}
+          onCopyInviteLink={copyInviteLink}
+          onCopyRoomCode={copyRoomCodeToClipboard}
+          myRating={
+            authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : null
+          }
+          myUsername={authProfile?.username ?? null}
+          roomChatFeed={roomReactions}
+          onSendRoomChat={sendRoomChat}
+          winTarget={60}
+          roomRecoveryState={roomRecoveryState}
+          roomRecoveryMessage={roomRecoveryMessage}
+          onRetryRoomRecovery={retryRoomRecovery}
+          hostWinStreak={privateLobbyHostWinStreak}
+        />
+      ) : null}
 
       {/* Game Screen */}
       {(isConnected || isRecoveringConnection) && joinedRoom && state && (
@@ -4064,6 +4022,53 @@ export default function App() {
           onClose={() => setAnalyzerOpen(false)}
           analysis={currentAnalysis}
           title="Game Review"
+        />
+        <AuthModal
+          open={authModalOpen}
+          supabaseEnabled={supabaseEnabled}
+          supabaseConfigError={supabaseConfigError}
+          onClose={() => setAuthModalOpen(false)}
+          onSignIn={signIn}
+          onSignUp={signUp}
+          onResetPassword={resetPassword}
+        />
+        <UsernameModal
+          open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
+          currentUsername={authProfile?.username ?? null}
+          isProfileEdit={usernameModalOpen}
+          onSave={async (username) => {
+            const result = await updateUsername(username);
+            if (!result.error) {
+              window.localStorage.removeItem('username_onboarding_dismissed');
+              setOnboardingDismissed(false);
+              setUsernameModalOpen(false);
+            }
+            return result;
+          }}
+          onClose={() => {
+            window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
+            setOnboardingDismissed(true);
+            setUsernameModalOpen(false);
+          }}
+          onSignOut={async () => {
+            resetRoomRecoveryState();
+            setSigningOut(true);
+            setAppMode('home');
+            resetMultiplayerRoomState();
+            setError('');
+            setActionError('');
+            try {
+              void signOut().catch(() => {});
+            } catch {
+              // no-op
+            } finally {
+              setSigningOut(false);
+              setUsernameModalOpen(false);
+              setOnboardingDismissed(false);
+              setAuthModalOpen(true);
+            }
+          }}
+          signingOut={signingOut}
         />
       </Suspense>
       {showLeaveConfirm && (

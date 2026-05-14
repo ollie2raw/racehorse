@@ -90,11 +90,9 @@ export default function FriendsScreen({
       {/* ── Top bar ── */}
       <header className="friends-page-topbar">
         <div className="friends-page-brand">RACEHORSE</div>
-        <button type="button" className="friends-page-back" onClick={onClose}>
-          <svg viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
-            <path d="M7.5 2L3 6l4.5 4" />
-          </svg>
-          Back to Home
+        <button type="button" className="friends-page-back rh-back-button" onClick={onClose}>
+          <span aria-hidden="true">←</span>
+          <span>Back to Home</span>
         </button>
       </header>
 

@@ -3,6 +3,7 @@
    Source of truth: RacehorseHomeScreen + RacehorseHomeArt.css
    ============================================= */
 
+@import '../styles/_fritz-screen-shell.css';
 
 :root {
   --pvf-bg:        #040b17;
@@ -165,10 +166,10 @@
   gap: 8px;
   color: rgba(255,255,255,0.7);
   font-family: 'Outfit', sans-serif;
-  font-size: 12px !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.12em;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0.01em;
   cursor: pointer;
   background: rgba(11,18,31,0.72);
   border: 1px solid rgba(255,255,255,0.12);
@@ -176,7 +177,7 @@
   border-radius: 8px;
   transition: all 0.2s;
   width: fit-content;
-  margin-bottom: 20px !important; 
+  margin-bottom: 24px !important; 
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .pvf-back-btn:hover { 
@@ -409,12 +410,6 @@
   justify-self: end; 
 }
 
-.pvf-section-label {
-  font-family: var(--font-display);
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.14em;
-  color: var(--pvf-muted); margin-bottom: 8px; /* Reduced from 10px */
-}
 .pvf-section-gap { margin-top: 0; }
 
 /* divider between sections inside right panel */
@@ -601,55 +596,6 @@
 .pvf-deal-label { font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; color:#fff; margin-bottom:2px; }
 .pvf-deal-sub   { font-size:12px; color:var(--pvf-muted); }
 
-/* match summary: unified shared container */
-.pvf-summary-container {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-around;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--pvf-radius-sm);
-  overflow: hidden;
-  margin-bottom: 16px !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.pvf-summary-item {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-}
-
-.pvf-summary-divider {
-  width: 1px;
-  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.08), transparent);
-  flex-shrink: 0;
-}
-
-.pvf-summary-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  box-shadow: 0 0 15px color-mix(in srgb, currentColor 30%, transparent);
-}
-
-.pvf-summary-icon--bot,
-.pvf-summary-icon--tile,
-.pvf-summary-icon--rated {
-  /* SVG children inherit color/stroke */
-}
-
-.pvf-summary-value { font-family:'Outfit',sans-serif; font-size:15px; font-weight:700; color:#fff; line-height:1.2; margin-bottom:1px; }
-.pvf-summary-key   { font-family: var(--font-display); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.28); }
-
 /* Start Match button */
 .pvf-start-btn {
   appearance:none;
@@ -698,10 +644,8 @@
   .pvf-opponent-card { max-width:460px; height:auto; aspect-ratio: auto; }
   .pvf-difficulty-grid { grid-template-columns:repeat(2,1fr); }
 }
-@media (max-width:640px) {
+@media (max-width: 640px) {
   .pvf-layout { padding:12px 20px 32px; }
   .pvf-title { font-size:40px; }
-  .pvf-summary-container { flex-direction:column; }
-  .pvf-summary-divider { width:100%; height:1px; }
 }
 

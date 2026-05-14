@@ -455,7 +455,7 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
                     : `✗ Invalid · ${validation.reason}`}
                 </div>
               )}
-              <button className="mode-inline-btn" onClick={onBack}>← Back</button>
+              <button className="mode-inline-btn rh-back-button" onClick={onBack}>← Back to Daily Puzzle</button>
             </div>
           </div>
 

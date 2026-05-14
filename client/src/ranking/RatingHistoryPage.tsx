@@ -327,8 +327,8 @@ export default function RatingHistoryPage({
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-          <button className="mode-inline-btn" onClick={onBack}>
-            Back to Home
+          <button className="mode-inline-btn rh-back-button" onClick={onBack}>
+            ← Back to Home
           </button>
         </div>
       </div>

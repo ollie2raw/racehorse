@@ -44,7 +44,7 @@ export function ClaudeModeScreen({
       <header className="claude-mode-topbar">
         <div className="claude-mode-topbar__brand">RACEHORSE</div>
         {onBack ? (
-          <button type="button" className="claude-mode-topbar__back" onClick={onBack}>
+          <button type="button" className="claude-mode-topbar__back rh-back-button" onClick={onBack}>
             <span aria-hidden="true">←</span>
             <span>{backLabel ?? 'Back'}</span>
           </button>

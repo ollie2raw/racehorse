@@ -174,7 +174,7 @@ export default function AuthModal({
                 setNotice(null);
               }}
             >
-              Back to sign in
+              Back to Sign In
             </button>
           </div>
         ) : (

@@ -1,0 +1,271 @@
+/**
+ * Shared Fritz-mode screen primitives (Daily Fritz, Play vs Fritz).
+ * Single source for summary strips, section labels, selectable rows, compact badges.
+ * Palette / page backgrounds stay on each screen file.
+ */
+
+:root {
+  --fritz-muted-label: #8891a0;
+  --fritz-summary-radius: 12px;
+  --fritz-card-radius-md: 14px;
+  --fritz-card-border: rgba(255, 255, 255, 0.08);
+  --fritz-card-border-strong: rgba(255, 255, 255, 0.1);
+  --fritz-card-bg: rgba(255, 255, 255, 0.03);
+  --fritz-card-inset: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --fritz-summary-item-gap: 12px;
+  --fritz-summary-item-pad-y: 10px;
+  --fritz-summary-item-pad-x: 16px;
+  --fritz-summary-icon-size: 32px;
+  --fritz-summary-value-size: 15px;
+  --fritz-summary-key-size: 10px;
+  --fritz-summary-note-size: 11px;
+  --fritz-summary-divider: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.08), transparent);
+  --fritz-section-stack-gap: 16px;
+  --fritz-section-label-mb: 8px;
+  --fritz-selectable-gap: 14px;
+  --fritz-selectable-pad-x: 14px;
+  --fritz-selectable-min-h: 56px;
+  --fritz-selectable-max-h: 64px;
+  --fritz-selectable-muted-opacity: 0.78;
+  --fritz-selectable-muted-sat: 0.5;
+  --fritz-games-stack-gap: 16px;
+  --fritz-compact-badge-gap: 8px;
+  --fritz-compact-badge-pad-y: 10px;
+  --fritz-compact-badge-pad-x: 12px;
+  --fritz-compact-badge-radius: 10px;
+}
+
+/* — Section label (matches PlayVsFritz .pvf-section-label) — */
+.fritz-section-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--fritz-muted-label);
+  margin-bottom: var(--fritz-section-label-mb);
+}
+
+/* — Match summary strip (horizontal; stacks below breakpoint) — */
+.fritz-summary-strip {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  background: var(--fritz-card-bg);
+  border: 1px solid var(--fritz-card-border);
+  border-radius: var(--fritz-summary-radius);
+  overflow: hidden;
+  margin-bottom: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.fritz-summary-strip--mb-lg {
+  margin-bottom: 16px;
+}
+
+.fritz-summary-strip--mb-sm {
+  margin-bottom: 12px;
+}
+
+.fritz-summary-item {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--fritz-summary-item-gap);
+  padding: var(--fritz-summary-item-pad-y) var(--fritz-summary-item-pad-x);
+}
+
+.fritz-summary-divider {
+  width: 1px;
+  flex-shrink: 0;
+  background: var(--fritz-summary-divider);
+}
+
+.fritz-summary-icon {
+  width: var(--fritz-summary-icon-size);
+  height: var(--fritz-summary-icon-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  box-shadow: 0 0 15px color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.fritz-summary-icon--tile {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.fritz-summary-value {
+  font-family: var(--font-body);
+  font-size: var(--fritz-summary-value-size);
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+  margin-bottom: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fritz-summary-key {
+  font-family: var(--font-display);
+  font-size: var(--fritz-summary-key-size);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.28);
+  line-height: 1.2;
+}
+
+.fritz-summary-note {
+  font-size: var(--fritz-summary-note-size);
+  color: var(--fritz-muted-label);
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+@media (max-width: 1000px) {
+  .fritz-summary-strip {
+    flex-direction: column;
+  }
+
+  .fritz-summary-divider {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.08), transparent);
+  }
+
+  .fritz-summary-item {
+    flex: 1 1 auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+/* — Selectable row card (set games) — */
+.fritz-selectable-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--fritz-selectable-gap);
+  box-sizing: border-box;
+  min-height: var(--fritz-selectable-min-h);
+  max-height: var(--fritz-selectable-max-h);
+  height: var(--fritz-selectable-max-h);
+  overflow: hidden;
+  padding: 0 var(--fritz-selectable-pad-x);
+  margin: 0;
+  border-radius: var(--fritz-card-radius-md);
+  background: var(--fritz-card-bg);
+  border: 1px solid var(--fritz-card-border);
+  box-shadow: var(--fritz-card-inset);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    filter 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.fritz-selectable-row:not(.fritz-selectable-row--muted):hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fritz-selectable-row--muted {
+  opacity: var(--fritz-selectable-muted-opacity);
+  filter: saturate(var(--fritz-selectable-muted-sat));
+  border-color: var(--fritz-card-border-strong);
+}
+
+.fritz-selectable-row--active {
+  border: 1px solid var(--fritz-card-border);
+  border-left: 3px solid var(--tier-elite);
+  background: color-mix(in srgb, var(--tier-elite) 7%, rgba(255, 255, 255, 0.03));
+  box-shadow: var(--fritz-card-inset);
+  opacity: 1;
+  filter: none;
+}
+
+.fritz-selectable-row--done {
+  opacity: 1;
+  filter: none;
+}
+
+/* — Compact badge row (Fritz card meta; matches PVF card badges) — */
+.fritz-compact-badge-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--fritz-compact-badge-gap);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.fritz-compact-badge {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--fritz-compact-badge-pad-y) var(--fritz-compact-badge-pad-x);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--fritz-card-border);
+  border-radius: var(--fritz-compact-badge-radius);
+  overflow: hidden;
+}
+
+.fritz-compact-badge__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fritz-compact-badge__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.fritz-compact-badge__icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.fritz-compact-badge__header svg,
+.fritz-compact-badge__header img {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.fritz-compact-badge__title {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tier-elite);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fritz-compact-badge__desc {
+  font-size: 11px;
+  color: var(--fritz-muted-label);
+  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}

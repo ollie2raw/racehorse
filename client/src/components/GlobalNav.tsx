@@ -10,6 +10,8 @@ interface GlobalNavProps {
   onOpenAccount?: () => void;
   currentMode?: AppMode;
   activeColor?: string; // Optional dynamic override
+  /** Slightly shorter bar + padding for dense hub screens (e.g. Daily Fritz). */
+  compactChrome?: boolean;
 }
 
 const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
@@ -28,7 +30,7 @@ const TAB_COLORS: Record<string, string> = {
   'Leaderboard': '#B8C7DA',
 };
 
-export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, activeColor }: GlobalNavProps) {
+export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, activeColor, compactChrome }: GlobalNavProps) {
   const { user: authUser, profile: authProfile } = useAuth();
   const [friendCount, setFriendCount] = useState<number | null>(null);
 
@@ -61,7 +63,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
 
   return (
     <nav 
-      className="relative h-[78px] shrink-0 w-full z-50"
+      className={`relative shrink-0 w-full z-50 ${compactChrome ? 'h-[66px]' : 'h-[78px]'}`}
       style={{ 
         boxSizing: 'border-box', 
         overflow: 'visible',
@@ -72,11 +74,11 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
         fontFamily: "'Outfit', system-ui, sans-serif"
       }}
     >
-      <div className="relative flex h-full items-center justify-between px-9 max-w-[1440px] mx-auto w-full">
+      <div className={`relative flex h-full items-center justify-between max-w-[1440px] mx-auto w-full ${compactChrome ? 'px-7' : 'px-9'}`}>
         {/* Left: Brand & Identity */}
         <div className="flex items-center cursor-pointer min-w-[280px]" onClick={() => onNavigate?.('home')}>
           <BrandLogo 
-            iconSize={44} 
+            iconSize={compactChrome ? 40 : 44} 
             showWordmark={false} 
             borderColor={activeColor ? `${activeColor}99` : undefined} 
           />
@@ -95,7 +97,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
         </div>
 
         {/* Center Content Logic (The Switch) */}
-        <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-8">
+        <div className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
           {isHome ? (
             <div 
               className="uppercase"
@@ -109,7 +111,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
               {todayLabel}
             </div>
           ) : (
-            <div className="flex items-center gap-8">
+            <div className={`flex items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
               {TABS.map((tab) => {
                 const isActive = tab.activeModes.includes(currentMode as AppMode);
                 const color = (isActive && activeColor) || TAB_COLORS[tab.label] || '#E7B64A';
@@ -120,7 +122,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
                     onClick={() => onNavigate?.(tab.mode)}
                     className="relative py-2 transition-all"
                     style={{ 
-                      fontSize: '17px',
+                      fontSize: compactChrome ? '16px' : '17px',
                       fontWeight: 600,
                       color: isActive ? color : '#8A879B',
                       opacity: isActive ? 1 : 0.7
@@ -132,7 +134,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
                         className="absolute -bottom-1 left-0 h-[3px] w-full rounded-full" 
                         style={{ 
                           backgroundColor: color, 
-                          boxShadow: `0 0 10px ${color}66` 
+                          boxShadow: compactChrome ? `0 0 6px ${color}40` : `0 0 10px ${color}66`,
                         }}
                       />
                     )}

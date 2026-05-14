@@ -1,274 +1,197 @@
-/* Single Player Hub */
+/*
+ * Solo hub art: Fritz (fritzwave) layout is frozen under `.daily-fritz-card-container` only.
+ * Ghost + Lab use wider/narrower slot + scale because their PNG canvases differ (landscape
+ * ghost left-heavy; lab portrait with headroom).
+ */
+.sp-solo-main .sp-solo-mode-card.daily-fritz-card-container .sp-solo-mode-card__art-slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 38%;
+  z-index: 1;
+  pointer-events: none;
+}
 
-.sp-page {
+.sp-solo-main .sp-solo-mode-card.daily-fritz-card-container .sp-solo-mode-card__art {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: bottom right;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  opacity: 1;
+}
+
+/* Ghost — match Fritz scale: zoom landscape art, anchor figure (lives on left of file) */
+.sp-solo-main .sp-solo-mode-card.daily-puzzle-card-container .sp-solo-mode-card__art-slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 34%;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.sp-solo-main .sp-solo-mode-card.daily-puzzle-card-container .sp-solo-mode-card__art {
+  position: absolute;
+  bottom: -3%;
+  left: -2%;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: left bottom;
+  transform: scale(1.68) translate(1.5%, 20%);
+  transform-origin: left bottom;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  opacity: 1;
+  filter: brightness(1.52) contrast(1.08) saturate(1.2);
+}
+
+/* No Brainer Lab — match Fritz scale: crop headroom, sit on bottom edge */
+.sp-solo-main .sp-solo-mode-card.sp-lab-mode-card-container .sp-solo-mode-card__art-slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 34%;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.sp-solo-main .sp-solo-mode-card.sp-lab-mode-card-container .sp-solo-mode-card__art {
+  position: absolute;
+  bottom: -2%;
+  right: -4%;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: 56% 100%;
+  transform: scale(1.26) translate(2.2%, 20%);
+  transform-origin: bottom center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  opacity: 1;
+}
+
+/* Lab card chrome — same structure as .daily-puzzle-card-container in RacehorseHomeArt.css */
+.sp-lab-mode-card-container {
   position: relative;
   isolation: isolate;
-  overflow-x: hidden;
-  min-height: 100vh;
-  background: var(--bg-obsidian);
-  color: var(--text-primary);
-  font-family: var(--font-body);
+  border: 1px solid rgba(199, 125, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(199, 125, 255, 0.4),
+    inset -1px 0 0 rgba(199, 125, 255, 0.18),
+    inset 0 -40px 70px rgba(0, 0, 0, 0.32),
+    0 18px 38px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 200ms ease, filter 200ms ease;
 }
 
-.sp-page::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 72% 44% at 50% 0%,
-    rgba(28, 72, 160, 0.2) 0%,
-    transparent 65%
-  );
+.sp-lab-mode-card-container:hover {
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(199, 125, 255, 0.58),
+    inset -1px 0 0 rgba(199, 125, 255, 0.26),
+    inset 0 -40px 70px rgba(0, 0, 0, 0.28),
+    0 22px 46px rgba(0, 0, 0, 0.36);
 }
 
-.sp-container {
-  position: relative;
-  z-index: 1;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 40px 64px 80px;
+/* Stats row (not on home daily cards — styled to read with home typography) */
+.sp-solo-stat-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6a6778;
+  line-height: 1;
 }
 
-.sp-back-btn {
-  margin-bottom: 40px;
-  display: inline-flex;
+.sp-solo-stat-value {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
 }
 
-.sp-hero {
-  text-align: center;
-  margin-bottom: 52px;
+.sp-solo-stat-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
 }
 
-.sp-hero-title {
-  font-family: var(--font-body);
-  font-size: 4rem;
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-}
-
-.sp-subtitle {
-  font-size: 1.1rem;
-  color: var(--text-secondary);
-}
-
-/* ── Cards grid ────────────────────────────────── */
-
-.sp-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-
-.sp-card {
-  display: flex;
-  flex-direction: row;
-  height: 380px;
-  border-radius: var(--radius-card);
-  overflow: hidden;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--border-subtle);
-  cursor: pointer;
-  transition:
-    transform var(--duration-fast) var(--ease-premium),
-    box-shadow var(--duration-fast) var(--ease-premium);
-}
-
-.sp-card:hover {
-  transform: translateY(-2px);
-}
-
-.sp-card-fritz {
-  border-left: 4px solid var(--tier-elite);
-}
-
-.sp-card-ghost {
-  border-left: 4px solid var(--tier-standard);
-}
-
-.sp-card-lab {
-  border-left: 4px solid var(--tier-master);
-}
-
-.sp-card-fritz:hover {
-  box-shadow: var(--shadow-md), 0 0 28px -8px var(--tier-elite);
-}
-
-.sp-card-ghost:hover {
-  box-shadow: var(--shadow-md), 0 0 28px -8px var(--tier-standard);
-}
-
-.sp-card-lab:hover {
-  box-shadow: var(--shadow-md), 0 0 28px -8px var(--tier-master);
-}
-
-/* ── Character art zone ─────────────────────────── */
-
-.sp-card-image {
-  width: 40%;
-  flex-shrink: 0;
-  overflow: hidden;
-  position: relative;
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.sp-card-img {
+.sp-solo-stat-icon svg {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center top;
-  transition: transform var(--duration-fast) var(--ease-premium);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.sp-card:hover .sp-card-img {
-  transform: scale(1.04);
+/* More Modes — locked tiles (premium glass, slightly subdued) */
+.sp-solo-locked-tile {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 11, 22, 0.78);
+  opacity: 0.94;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
 }
 
-/* ── Content zone ───────────────────────────────── */
-
-.sp-card-content {
-  flex: 1;
-  padding: 28px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.sp-solo-locked-tile:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  opacity: 1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 8px 22px rgba(0, 0, 0, 0.4);
 }
 
-.sp-card-text {
-  flex: 1;
+.sp-solo-locked-tile__icon {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(180, 188, 204, 0.75);
 }
 
-.sp-card-title {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  margin-bottom: 8px;
+/* Match HomeScreen daily cards: inner band height; section uses py-8 from TSX */
+.sp-solo-main .sp-solo-mode-card {
+  contain: paint;
 }
 
-.sp-card-fritz .sp-card-title { color: var(--tier-elite); }
-.sp-card-ghost .sp-card-title { color: var(--tier-standard); }
-.sp-card-lab .sp-card-title   { color: var(--tier-master); }
-
-.sp-card-desc {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  line-height: 1.55;
+@media (max-width: 1100px) {
+  .sp-solo-main .grid.grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
 }
 
-/* ── Stats row ──────────────────────────────────── */
-
-.sp-stats {
-  display: flex;
-  gap: 20px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
+@media (max-width: 900px) {
+  .sp-solo-main .grid.grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.sp-stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.sp-stat-label {
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
-
-.sp-stat-value {
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-/* ── Play button — full width ───────────────────── */
-
-.sp-play-btn {
-  width: 100%;
-  justify-content: center;
-}
-
-/* ── More Modes ─────────────────────────────────── */
-
-.sp-more-modes {
-  margin-top: 72px;
-}
-
-.sp-more-title {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.sp-more-title::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  background: var(--tier-elite);
-  border-radius: 50%;
-  box-shadow: 0 0 10px var(--tier-elite);
-  flex-shrink: 0;
-}
-
-.sp-more-subtitle {
-  font-size: 0.875rem;
-  color: var(--text-dim);
-  margin-bottom: 20px;
-}
-
-.sp-locked-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.sp-locked-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 28px 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 130px;
-}
-
-.sp-lock-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid var(--border-subtle);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-dim);
-}
-
-.sp-locked-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+@media (max-width: 520px) {
+  .sp-solo-main .px-14 {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
 }

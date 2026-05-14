@@ -120,7 +120,7 @@ export default function StatsScreen({
       {/* ── Top nav ── */}
       <header className="stats-page-topbar">
         <div className="stats-page-brand">RACEHORSE</div>
-        <button type="button" className="stats-page-back" onClick={onClose}>
+        <button type="button" className="stats-page-back rh-back-button" onClick={onClose}>
           <svg viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
             <path d="M7.5 2L3 6l4.5 4" />
           </svg>

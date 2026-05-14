@@ -74,7 +74,7 @@ export default function LeaderboardPageShell({
   title,
   subtitle,
   onClose,
-  backLabel = 'Back',
+  backLabel = 'Back to Home',
   className,
   summaryCards = [],
   resultsLabel,
@@ -87,10 +87,8 @@ export default function LeaderboardPageShell({
       <header className="leaderboard-screen-topbar">
         <div className="leaderboard-screen-wordmark">RACEHORSE</div>
         {showLiveBadge ? <div className="leaderboard-screen-live" aria-hidden="true">Live</div> : <div aria-hidden="true" />}
-        <button type="button" className="leaderboard-screen-backlink" onClick={onClose}>
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <path d="M10.5 3.5 6 8l4.5 4.5" />
-          </svg>
+        <button type="button" className="leaderboard-screen-backlink rh-back-button" onClick={onClose}>
+          <span aria-hidden="true">←</span>
           <span>{backLabel}</span>
         </button>
       </header>

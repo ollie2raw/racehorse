@@ -230,8 +230,8 @@ export default function NoBrainerLabScreen({
               <button className="btn text" onClick={() => setReloadTick((n) => n + 1)}>
                 Retry
               </button>
-              <button className="btn text" onClick={onBack}>
-                Back to Home
+              <button className="btn text rh-back-button" onClick={onBack}>
+                ← Back to Home
               </button>
             </div>
           </div>
@@ -318,8 +318,8 @@ export default function NoBrainerLabScreen({
             >
               {showSolution ? 'Hide Solution' : 'Show Solution'}
             </button>
-            <button className="btn text leave-btn compact bot-chip-control" onClick={onBack}>
-              Home
+            <button className="btn text leave-btn compact bot-chip-control rh-back-button" onClick={onBack}>
+              ← Back to Home
             </button>
             <button
               onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}

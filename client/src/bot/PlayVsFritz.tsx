@@ -181,8 +181,8 @@ export default function PlayVsFritz({
       <div className="pvf-layout">
         {/* ===== LEFT COLUMN (Title + Fritz Card) ===== */}
         <div className="pvf-left-col">
-          <button className="pvf-back-btn" onClick={onBack}>
-            <span>←</span> BACK TO SINGLE PLAYER
+          <button className="pvf-back-btn rh-back-button" onClick={onBack}>
+            <span>←</span> Back to Single Player
           </button>
 
           <div className="pvf-header">
@@ -244,7 +244,7 @@ export default function PlayVsFritz({
         <div className="pvf-control-panel">
           {/* Section 1: Difficulty */}
           <div className="pvf-section">
-            <div className="pvf-section-label">1. CHOOSE DIFFICULTY</div>
+            <div className="fritz-section-label">1. CHOOSE DIFFICULTY</div>
             <div className="pvf-difficulty-grid">
               {DIFFICULTIES.map(({ id, label, elo, desc, Icon: IconComp }) => (
                 <div
@@ -288,7 +288,7 @@ export default function PlayVsFritz({
 
           {/* Section 2: Format */}
           <div className="pvf-section-gap">
-            <div className="pvf-section-label">2. CHOOSE DEAL SIZE / FORMAT</div>
+            <div className="fritz-section-label">2. CHOOSE DEAL SIZE / FORMAT</div>
             <div className="pvf-deal-grid">
               {DEAL_SIZES.map(({ id, label, sublabel, Icon: IconComp }) => (
                 <div
@@ -317,20 +317,20 @@ export default function PlayVsFritz({
 
           {/* Section 3: Summary & Start */}
           <div className="pvf-section-gap">
-            <div className="pvf-section-label">3. MATCH SUMMARY</div>
-            <div className="pvf-summary-container">
-              <div className="pvf-summary-item">
-                <div className="pvf-summary-icon pvf-summary-icon--bot" style={{ color: dynamicColor }}>
+            <div className="fritz-section-label">3. MATCH SUMMARY</div>
+            <div className="fritz-summary-strip fritz-summary-strip--mb-lg">
+              <div className="fritz-summary-item">
+                <div className="fritz-summary-icon pvf-summary-icon--bot" style={{ color: dynamicColor }}>
                   <IconRobotNav />
                 </div>
                 <div>
-                  <div className="pvf-summary-value">Fritz {selectedDiff.label}</div>
-                  <div className="pvf-summary-key">Difficulty</div>
+                  <div className="fritz-summary-value">Fritz {selectedDiff.label}</div>
+                  <div className="fritz-summary-key">Difficulty</div>
                 </div>
               </div>
-              <div className="pvf-summary-divider" />
-              <div className="pvf-summary-item">
-                <div className="pvf-summary-icon pvf-summary-icon--tile">
+              <div className="fritz-summary-divider" aria-hidden />
+              <div className="fritz-summary-item">
+                <div className="fritz-summary-icon fritz-summary-icon--tile">
                   {dealSize === 7 ? (
                     <IconDomino7 size={20} />
                   ) : (
@@ -338,18 +338,18 @@ export default function PlayVsFritz({
                   )}
                 </div>
                 <div>
-                  <div className="pvf-summary-value">{dealSize}-Tile Format</div>
-                  <div className="pvf-summary-key">Deal Size</div>
+                  <div className="fritz-summary-value">{dealSize}-Tile Format</div>
+                  <div className="fritz-summary-key">Deal Size</div>
                 </div>
               </div>
-              <div className="pvf-summary-divider" />
-              <div className="pvf-summary-item">
-                <div className="pvf-summary-icon pvf-summary-icon--rated" style={{ color: dynamicColor }}>
+              <div className="fritz-summary-divider" aria-hidden />
+              <div className="fritz-summary-item">
+                <div className="fritz-summary-icon pvf-summary-icon--rated" style={{ color: dynamicColor }}>
                   <IconSummaryBars />
                 </div>
                 <div>
-                  <div className="pvf-summary-value">Practice Match</div>
-                  <div className="pvf-summary-key">Rated</div>
+                  <div className="fritz-summary-value">Practice Match</div>
+                  <div className="fritz-summary-key">Rated</div>
                 </div>
               </div>
             </div>

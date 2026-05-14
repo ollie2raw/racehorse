@@ -1670,6 +1670,59 @@ button:hover:not(:disabled) {
   cursor: not-allowed;
 }
 
+.rh-back-button.rh-back-button.rh-back-button {
+  appearance: none;
+  width: fit-content;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(11, 18, 31, 0.72);
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition:
+    transform 120ms cubic-bezier(0.2, 0, 0, 1),
+    color 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.rh-back-button.rh-back-button.rh-back-button:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(11, 18, 31, 0.9);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.rh-back-button.rh-back-button.rh-back-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.rh-back-button.rh-back-button.rh-back-button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.72);
+  outline-offset: 3px;
+}
+
+.rh-back-button.rh-back-button.rh-back-button svg {
+  width: 12px;
+  height: 12px;
+}
+
 .home-help-btn {
   width: 36px;
   min-width: 36px;
@@ -4513,9 +4566,9 @@ button:hover:not(:disabled) {
   font-size: 1.03rem !important;
 }
 
-.large-mode .bot-chip-control,
-.large-mode .daily-chip-control,
-.large-mode .mode-inline-btn {
+.large-mode .bot-chip-control:not(.rh-back-button),
+.large-mode .daily-chip-control:not(.rh-back-button),
+.large-mode .mode-inline-btn:not(.rh-back-button) {
   font-size: 1.05rem !important;
   padding: 12px 18px !important;
   font-weight: 700 !important;

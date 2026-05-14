@@ -46,7 +46,7 @@ function DailyPuzzleLoadingScreen({ onBack }: { onBack: () => void }) {
           <div className="daily-puzzle-loading-brand">
             <BrandLogo iconSize={32} showWordmark={true} />
           </div>
-          <button type="button" className="loading-back-btn" onClick={onBack}>
+          <button type="button" className="loading-back-btn rh-back-button" onClick={onBack}>
             <span className="loading-back-icon">←</span>
             <span>Back to Home</span>
           </button>
@@ -1141,8 +1141,8 @@ export default function DailyPuzzleScreen({
         <p className="auth-inline-error">{loadError}</p>
         <p className="lobby-server">Local date key: {localDateKey}</p>
         <p className="lobby-server">Timezone: {timezone}</p>
-        <button type="button" className="mode-inline-btn" onClick={handleBackHome}>
-          Back to Home
+        <button type="button" className="mode-inline-btn rh-back-button" onClick={handleBackHome}>
+          ← Back to Home
         </button>
       </LayoutScreen>
     );
@@ -1158,8 +1158,8 @@ export default function DailyPuzzleScreen({
       >
         <p className="lobby-server">Local date key: {localDateKey}</p>
         <p className="lobby-server">Timezone: {timezone}</p>
-        <button type="button" className="mode-inline-btn" onClick={handleBackHome}>
-          Back to Home
+        <button type="button" className="mode-inline-btn rh-back-button" onClick={handleBackHome}>
+          ← Back to Home
         </button>
       </LayoutScreen>
     );
@@ -1276,11 +1276,9 @@ export default function DailyPuzzleScreen({
             {/* ── Top bar ── */}
             <header className="daily-dash-topbar">
               <div className="daily-dash-brand">RACEHORSE</div>
-              <button type="button" className="daily-dash-back" onClick={onBack}>
-                <svg viewBox="0 0 12 12" aria-hidden="true">
-                  <path d="M7.5 2L3 6l4.5 4" />
-                </svg>
-                Back to Home
+              <button type="button" className="daily-dash-back rh-back-button" onClick={onBack}>
+                <span aria-hidden="true">←</span>
+                <span>Back to Home</span>
               </button>
             </header>
 
@@ -1528,16 +1526,10 @@ export default function DailyPuzzleScreen({
             Play Again
           </button>
           <button
-            className="btn text compact daily-chip-control"
+            className="btn text compact daily-chip-control rh-back-button"
             onClick={onBack}
-            style={{
-              fontWeight: 700,
-              fontSize: '0.88rem',
-              color: 'rgba(236, 248, 242, 0.92)',
-              letterSpacing: '0.02em',
-            }}
           >
-            Back to Home
+            ← Back to Home
           </button>
         </div>
       </div>
@@ -1682,11 +1674,10 @@ export default function DailyPuzzleScreen({
               <button type="button" className="rh-btn-leave" onClick={resetAttempt}>Play Again</button>
               <button
                 type="button"
-                className="rh-btn-cancel"
-                style={{ background: '#f0c040', color: '#000', boxShadow: '0 8px 22px rgba(240, 192, 64, 0.28)' }}
+                className="rh-btn-cancel rh-back-button"
                 onClick={onBack}
               >
-                Return Home
+                ← Back to Home
               </button>
             </footer>
           </div>

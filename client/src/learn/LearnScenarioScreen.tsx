@@ -262,7 +262,7 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
             </div>
           )}
         </div>
-        <button className="mode-inline-btn" onClick={onBack} style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Exit Academy</button>
+        <button className="mode-inline-btn rh-back-button" onClick={onBack}>← Back to Learn</button>
       </div>
 
       {/* Teacher Panel */}

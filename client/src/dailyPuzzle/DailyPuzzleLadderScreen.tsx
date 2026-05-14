@@ -484,11 +484,9 @@ export default function DailyPuzzleLadderScreen({
           <div className="daily-dash" style={{ ['--dash-accent' as string]: '#f0c040' }}>
             <header className="daily-dash-topbar">
               <div className="daily-dash-brand">RACEHORSE</div>
-              <button type="button" className="daily-dash-back" onClick={onBack}>
-                <svg viewBox="0 0 12 12" aria-hidden="true">
-                  <path d="M7.5 2L3 6l4.5 4" />
-                </svg>
-                Back to Home
+              <button type="button" className="daily-dash-back rh-back-button" onClick={onBack}>
+                <span aria-hidden="true">←</span>
+                <span>Back to Home</span>
               </button>
             </header>
 
@@ -631,8 +629,8 @@ export default function DailyPuzzleLadderScreen({
                 </div>
               </div>
               <footer className="rh-result__actions">
-                <button type="button" className="rh-btn-home" onClick={onBack}>
-                  Home
+                <button type="button" className="rh-btn-home rh-back-button" onClick={onBack}>
+                  ← Back to Home
                 </button>
                 <button type="button" className="rh-btn-leave" onClick={() => setFinalOverlay(null)}>
                   Review / Practice
@@ -664,7 +662,7 @@ export default function DailyPuzzleLadderScreen({
             </div>
           </div>
           <div className="daily-top-actions-pill">
-            <button className="btn text compact daily-chip-control" onClick={onBack}>Back to Home</button>
+            <button className="btn text compact daily-chip-control rh-back-button" onClick={onBack}>← Back to Home</button>
             <button className="btn text compact daily-chip-control" onClick={() => setLeaderboardOpen(true)}>Leaderboard</button>
           </div>
         </div>
@@ -818,7 +816,7 @@ export default function DailyPuzzleLadderScreen({
                     setRuntimeState(null);
                     setActiveSlot(null);
                   }}>
-                    Back to Ladder
+                    ← Back to Ladder
                   </button>
                 )}
               </footer>

@@ -5642,7 +5642,7 @@ export default function BotMatchScreen({
         <div style={{ textAlign: 'center', color: 'white', padding: 40 }}>
           <h3>Game State Error</h3>
           <p>The match state is incomplete or malformed.</p>
-          <button className="btn" onClick={exitMatch}>Return to Home</button>
+          <button className="btn rh-back-button" onClick={exitMatch}>← Back to Home</button>
         </div>
       </div>
     );
@@ -6651,7 +6651,7 @@ export default function BotMatchScreen({
             <div className="rh-topbar__center-divider" />
             <span>Open <strong>{openEnds.join(' · ') || 'NONE'}</strong></span>
           </div>
-          <button type="button" className="claude-mode-topbar__back" onClick={() => setShowLeaveConfirm(true)}>
+          <button type="button" className="claude-mode-topbar__back rh-back-button" onClick={() => setShowLeaveConfirm(true)}>
             <span aria-hidden="true">⏻</span><span>Leave</span>
           </button>
         </header>

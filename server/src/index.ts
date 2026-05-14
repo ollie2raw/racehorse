@@ -32,6 +32,7 @@ import {
   type TournamentPlayer,
 } from './tournament/tournament';
 import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
+import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
 import { supabaseFetch } from './supabaseUtils';
 import {
   buildDailyFritzCompletionHash,
@@ -103,6 +104,9 @@ import {
   type Room,
 } from './rooms';
 import { appendRoomEvent, resetRoomEventLog } from './roomEvents';
+import { registerMatchmakingHandlers } from './matchmaking';
+import { recordMatchEnd } from './matchmaking/persistence';
+import { startSimOpponentLoop } from './matchmaking/simBot';
 import type { GameState } from './game/types';
 import { assertValidGameState } from './game/invariants';
 
@@ -242,6 +246,15 @@ app.get('/api/ranking/profile/:userId', async (req, res) => {
     // Get rank among non-provisional players
     const allProfiles = await supabaseFetch<any[]>(`/rest/v1/profiles?provisional=eq.false&order=glicko_rating.desc`);
     const rankIndex = allProfiles.findIndex(p => p.id === userId);
+
+    const enc = encodeURIComponent(userId);
+    const matchRows = await supabaseFetch<
+      Array<{ winner_user_id: string | null; loser_user_id: string | null; mode: string; created_at: string }>
+    >(
+      `/rest/v1/matches?or=(winner_user_id.eq.${enc},loser_user_id.eq.${enc})` +
+        `&select=winner_user_id,loser_user_id,mode,created_at&order=created_at.asc`,
+    );
+    const currentWinStreak = computeOnlineCurrentWinStreak(userId, matchRows ?? []);
     
     res.json({
       ok: true,
@@ -250,7 +263,8 @@ app.get('/api/ranking/profile/:userId', async (req, res) => {
       provisional: profile.provisional,
       ranked_games_played: profile.ranked_games_played,
       peak_rating: profile.peak_rating,
-      rank: rankIndex >= 0 ? rankIndex + 1 : null
+      rank: rankIndex >= 0 ? rankIndex + 1 : null,
+      currentWinStreak,
     });
   } catch (error) {
     res.status(500).json({
@@ -4378,7 +4392,7 @@ function broadcastStateUpdate(roomCode: string) {
 
             if (playerAProfile && playerBProfile && playerAGame && playerBGame) {
               try {
-                await processRealtimeMultiplayerGame({
+                const ratingResult = await processRealtimeMultiplayerGame({
                   playerAProfile,
                   playerBProfile,
                   playerAGame,
@@ -4388,6 +4402,24 @@ function broadcastStateUpdate(roomCode: string) {
                   playerA: a.userId,
                   playerB: b.userId,
                 });
+
+                // Matchmaking persistence: patch the matchmaking_matches row
+                // we inserted when the queue produced this match. Sim matches
+                // are skipped by recordMatchEnd internally.
+                if (room.matchmakingMatchId) {
+                  const winnerUserId =
+                    winnerSocketId === a.id ? a.userId :
+                    winnerSocketId === b.id ? b.userId :
+                    null;
+                  void recordMatchEnd({
+                    matchId: room.matchmakingMatchId,
+                    status: 'completed',
+                    winnerId: winnerUserId,
+                    playerARatingChange: ratingResult?.playerA?.delta ?? null,
+                    playerBRatingChange: ratingResult?.playerB?.delta ?? null,
+                    isSim: room.matchmakingIsSim,
+                  });
+                }
               } catch (err) {
                 console.error('[Ranking] Real-time update failed:', err);
               }
@@ -4583,6 +4615,9 @@ function broadcastStateUpdate(roomCode: string) {
 }
 
 io.on('connection', (socket: Socket) => {
+  /* Matchmaking queue handlers — additive, does not modify private-match flow. */
+  registerMatchmakingHandlers(io, socket, (code) => broadcastStateUpdate(code));
+
   /* ROOM_REACTIONS_CHAT_EMOTE */
   const leaveTrackedRoom = (
     roomCode: string | undefined,
@@ -5329,6 +5364,50 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
           if (payload) {
             socket.emit('hand:ended', payload);
           }
+        }
+      }
+
+      // ── Matchmaking auto-start hook ─────────────────────────────────────
+      // For rooms created via the matchmaking queue we auto-start the game
+      // server-side once both players are present. This means neither client
+      // needs to emit `game:start` for matchmade matches.
+      if (room.matchmakingMatchId && !room.state) {
+        const realCount = room.players.length;
+        const needsSimSeat =
+          room.matchmakingIsSim &&
+          room.matchmakingSimSocketId &&
+          !room.players.includes(room.matchmakingSimSocketId);
+        if (needsSimSeat) {
+          room.players.push(room.matchmakingSimSocketId!);
+        }
+        const ready =
+          (room.matchmakingIsSim && realCount + (needsSimSeat ? 1 : 0) >= 2) ||
+          (!room.matchmakingIsSim && realCount >= 2);
+        if (ready) {
+          // Defer one tick so the room:update broadcast above settles first.
+          setImmediate(() => {
+            void (async () => {
+              try {
+                const startedRoom = await startGame(room.code, io);
+                broadcastStateUpdate(startedRoom.code);
+                // Sim opponent is already seated — kick its move loop now that
+                // the game has actually begun (initial deal + first turn set).
+                if (startedRoom.matchmakingIsSim && startedRoom.matchmakingSimSocketId) {
+                  startSimOpponentLoop(
+                    io,
+                    startedRoom.code,
+                    startedRoom.matchmakingSimSocketId,
+                    (code) => broadcastStateUpdate(code),
+                  );
+                }
+              } catch (err) {
+                console.warn(
+                  '[matchmaking] auto-start failed',
+                  err instanceof Error ? err.message : err,
+                );
+              }
+            })();
+          });
         }
       }
     } catch (err: unknown) {

@@ -455,6 +455,8 @@ export interface RankingProfile {
   ranked_games_played: number;
   peak_rating: number;
   rank: number | null;
+  /** Consecutive online wins from match history (server-computed). */
+  currentWinStreak: number;
 }
 
 function resolveBaseUrl(): string {
@@ -472,15 +474,35 @@ export async function fetchRankingProfile(
   userId: string,
 ): Promise<{ data: RankingProfile | null; error: string | null }> {
   try {
-    const response = await fetch(`${resolveBaseUrl()}/api/ranking/profile/${userId}`, {
-      credentials: 'include',
-    });
+    const response = await fetch(
+      `${resolveBaseUrl()}/api/ranking/profile/${encodeURIComponent(userId)}`,
+      {
+        credentials: 'include',
+      },
+    );
+    const raw = (await response.json()) as Record<string, unknown>;
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to fetch ranking profile');
+      return { data: null, error: String(raw.error ?? 'Failed to fetch ranking profile') };
     }
-    const data = await response.json();
-    return { data, error: null };
+    if (raw.ok !== true) {
+      return { data: null, error: 'Failed to fetch ranking profile' };
+    }
+    return {
+      data: {
+        glicko_rating: Number(raw.glicko_rating ?? 0),
+        glicko_rd: Number(raw.glicko_rd ?? 350),
+        provisional: Boolean(raw.provisional),
+        ranked_games_played: Number(raw.ranked_games_played ?? 0),
+        peak_rating: Number(raw.peak_rating ?? raw.glicko_rating ?? 0),
+        rank: (() => {
+          if (raw.rank == null || raw.rank === '') return null;
+          const n = Number(raw.rank);
+          return Number.isFinite(n) ? n : null;
+        })(),
+        currentWinStreak: Number(raw.currentWinStreak ?? 0),
+      },
+      error: null,
+    };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : 'Unknown error' };
   }

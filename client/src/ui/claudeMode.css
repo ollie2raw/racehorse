@@ -1283,8 +1283,8 @@
   font-family: 'Barlow Condensed', system-ui, sans-serif;
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-transform: none;
   cursor: pointer;
   padding: 5px 10px;
   border-radius: 2px;
@@ -1297,14 +1297,11 @@
   background: rgba(255, 255, 255, 0.07);
 }
 
-.daily-dash-back svg {
-  width: 12px;
-  height: 12px;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.daily-dash-back span[aria-hidden='true'] {
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.88;
+  font-weight: 700;
 }
 
 .daily-dash-main {

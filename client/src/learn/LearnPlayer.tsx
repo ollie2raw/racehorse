@@ -209,8 +209,8 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
         subtitle="This lesson is unavailable right now."
         contentClassName="screen-shell"
       >
-        <button className="mode-inline-btn" onClick={onExit}>
-          Back to Learn
+        <button className="mode-inline-btn rh-back-button" onClick={onExit}>
+          ← Back to Learn
         </button>
       </LayoutScreen>
     );
@@ -660,7 +660,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
         <div className="learn-match-topbar__center">
           <span>Turn <strong>{stepIndex + 1} / {totalSteps}</strong></span>
         </div>
-        <button type="button" className="claude-mode-topbar__back" onClick={onExit}>
+        <button type="button" className="claude-mode-topbar__back rh-back-button" onClick={onExit}>
           <span aria-hidden="true">⏻</span><span>Leave</span>
         </button>
       </header>
@@ -797,8 +797,8 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
           </div>
 
           <div className="learn-board-nav" style={{ position: 'relative', bottom: 'auto', right: 'auto', marginTop: '14px', justifyContent: 'flex-end' }}>
-            <button className="claude-mode-topbar__back" onClick={handleBack} disabled={stepIndex === 0}>
-              ← Back
+            <button className="claude-mode-topbar__back rh-back-button" onClick={handleBack} disabled={stepIndex === 0}>
+              ← Back to Learn
             </button>
             <button
               className={`claude-mode-primary ${quizSolved ? 'is-next-ready' : ''}`}
