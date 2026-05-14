@@ -51,7 +51,8 @@ type UseMultiplayerConnectionParams = {
     | 'singlePlayerHub'
     | 'tournament'
     | 'leaderboard'
-    | 'profile';
+    | 'profile'
+    | 'feed';
   authUserId?: string | null;
   authEmail?: string | null;
   authProfileUsername?: string | null;

@@ -70,6 +70,16 @@ export interface RecentMatch {
   played_at: string;
 }
 
+export interface GlobalLeaderboardEntry {
+  userId: string;
+  username: string;
+  glicko_rating: number;
+  ranked_games_played: number;
+  provisional: boolean;
+  global_rank: number;
+  is_self: boolean;
+}
+
 export interface PublicProfile {
   ok: boolean;
   userId: string;
@@ -82,6 +92,10 @@ export interface PublicProfile {
   wins: number;
   losses: number;
   win_rate: number;
+  puzzles_completed: number;
+  best_puzzle_score: number | null;
+  fritz_wins: number;
+  fritz_losses: number;
   is_self: boolean;
   is_friend: boolean;
   has_pending_request: boolean;
@@ -106,6 +120,15 @@ export async function fetchActivityFeed(): Promise<{ feed: FeedItem[]; error: st
     return { feed: data.feed, error: null };
   } catch (err) {
     return { feed: [], error: err instanceof Error ? err.message : 'Failed to load feed.' };
+  }
+}
+
+export async function fetchGlobalLeaderboard(): Promise<{ leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null; error: string | null }> {
+  try {
+    const data = await apiFetch<{ ok: boolean; leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null }>('/api/social/leaderboard/global');
+    return { leaderboard: data.leaderboard, self: data.self, error: null };
+  } catch (err) {
+    return { leaderboard: [], self: null, error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
   }
 }
 

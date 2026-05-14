@@ -69,6 +69,7 @@ type UseMultiplayerRoomActionsParams = {
       | 'tournament'
       | 'leaderboard'
       | 'profile'
+      | 'feed'
     >
   >;
   setRoomCode: Dispatch<SetStateAction<string>>;

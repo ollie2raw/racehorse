@@ -31,7 +31,8 @@ type AppMode =
   | 'singlePlayerHub'
   | 'tournament'
   | 'leaderboard'
-  | 'profile';
+  | 'profile'
+  | 'feed';
 
 type DailyStripVisualState = 'done' | 'today' | 'future' | 'missed';
 

@@ -206,7 +206,8 @@
 .rh-pp-stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  grid-auto-rows: auto;
+  gap: 10px;
 }
 
 .rh-pp-stat {

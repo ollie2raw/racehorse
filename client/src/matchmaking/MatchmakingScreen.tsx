@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { AppMode } from '../types';
+import { isGameServerSameOriginAsPage } from '../lib/gameServerUrl';
 import { GlobalNav } from '../components';
 import { MatchFoundOverlay } from './MatchFoundOverlay';
 import { useMatchmaking } from './useMatchmaking';
@@ -13,6 +14,12 @@ export interface MatchmakingScreenProps {
   socket: Socket | null;
   identity: Identity;
   isConnected: boolean;
+  /** True while the Socket.io handshake is in progress */
+  isConnecting?: boolean;
+  /** Resolved base URL used for Socket.io (from VITE_SERVER_URL or page origin) */
+  serverUrl?: string;
+  /** Retry opening the socket (e.g. after fixing env / backend) */
+  onRetryConnect?: () => void;
   myRating?: number | null;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
@@ -114,7 +121,19 @@ const SEARCH_STEPS = [
 ];
 
 export default function MatchmakingScreen(props: MatchmakingScreenProps) {
+  const isConnecting = props.isConnecting ?? false;
+  const serverUrl = props.serverUrl ?? '';
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
+  const [showDisconnectedHint, setShowDisconnectedHint] = useState(false);
+
+  useEffect(() => {
+    if (props.isConnected || isConnecting) {
+      setShowDisconnectedHint(false);
+      return;
+    }
+    const t = window.setTimeout(() => setShowDisconnectedHint(true), 2800);
+    return () => window.clearTimeout(t);
+  }, [props.isConnected, isConnecting]);
 
   const handleMatchReady = useCallback((payload: MatchFoundPayload) => {
     setOverlayPayload(payload);
@@ -128,8 +147,8 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
 
   useEffect(() => {
     if (!props.socket || !props.isConnected) return;
-    props.socket.emit('queue:online', {}, () => undefined);
-  }, [props.socket, props.isConnected]);
+    mm.refreshOnlineCounts();
+  }, [props.socket, props.isConnected, mm.refreshOnlineCounts]);
 
   const isIdle = mm.state === 'idle';
   const isSearching = mm.state === 'searching';
@@ -388,10 +407,29 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                   </button>
                   {!props.identity ? (
                     <p className="mm-help-text">Sign in to find a match.</p>
-                  ) : !props.isConnected ? (
-                    <p className="mm-help-text">Connecting to server…</p>
-                  ) : (
+                  ) : props.isConnected ? (
                     <p className="mm-help-text">First to 60 · 7-Tile · Ranked</p>
+                  ) : isConnecting || !showDisconnectedHint ? (
+                    <p className="mm-help-text">Connecting to game server…</p>
+                  ) : (
+                    <div className="mm-connect-hint">
+                      <p className="mm-error">Multiplayer backend unreachable.</p>
+                      <p className="mm-help-text">
+                        {import.meta.env.PROD && isGameServerSameOriginAsPage(serverUrl)
+                          ? 'VITE_SERVER_URL is set to this same website, but the game server (Node + Socket.io from the server folder) must run on a separate host. Deploy that API (e.g. Render, Railway, Fly.io), set VITE_SERVER_URL in Vercel to that https origin, redeploy the client, then retry.'
+                          : 'Deploy the Node game server and set VITE_SERVER_URL in Vercel to its https origin (not this page). Redeploy the client after changing env vars.'}
+                      </p>
+                      {serverUrl ? (
+                        <p className="mm-help-text mm-help-text--mono" title="Socket.io base URL">
+                          Trying: {serverUrl}
+                        </p>
+                      ) : null}
+                      {props.onRetryConnect ? (
+                        <button type="button" className="mm-cta-secondary mm-connect-retry" onClick={props.onRetryConnect}>
+                          Retry connection
+                        </button>
+                      ) : null}
+                    </div>
                   )}
                   {mm.error ? <p className="mm-error">{mm.error}</p> : null}
                 </>

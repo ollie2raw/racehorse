@@ -19,7 +19,7 @@ const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
   { label: 'Multiplayer', mode: 'multiplayer', activeModes: ['multiplayer'] },
   { label: 'Learn', mode: 'learn', activeModes: ['learn'] },
   { label: 'Tournament', mode: 'tournament', activeModes: ['tournament'] },
-  { label: 'Leaderboard', mode: 'leaderboard', activeModes: ['leaderboard', 'profile', 'stats'] },
+  { label: 'Social', mode: 'feed', activeModes: ['feed', 'friends', 'leaderboard', 'profile', 'stats'] },
 ];
 
 const TAB_COLORS: Record<string, string> = {
@@ -27,7 +27,7 @@ const TAB_COLORS: Record<string, string> = {
   'Multiplayer': '#3FA7FF',   // Blue
   'Learn': '#19D8A2',         // Green
   'Tournament': '#F5A524',    // Gold
-  'Leaderboard': '#B8C7DA',
+  'Social': '#0ea5e9',        // Cyan
 };
 
 export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, activeColor, compactChrome }: GlobalNavProps) {
@@ -171,7 +171,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
           {/* Friends Count */}
           <button
             type="button"
-            onClick={() => onNavigate?.('friends')}
+            onClick={() => onNavigate?.('feed')}
             className="flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-opacity hover:opacity-80"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

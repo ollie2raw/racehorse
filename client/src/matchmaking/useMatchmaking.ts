@@ -21,6 +21,8 @@ export type UseMatchmakingReturn = {
   cancel: () => void;
   acceptTimeoutBotFallback: () => void;
   reset: () => void;
+  /** Ask the server for current online / queue counts (also used on socket connect). */
+  refreshOnlineCounts: () => void;
 };
 
 /**
@@ -42,35 +44,30 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
   const elapsedTimer = useRef<number | null>(null);
   const startMsRef = useRef<number>(0);
   const onMatchReadyRef = useRef(onMatchReady);
+  /** Guards stale queue:join ack / timeout after cancel or disconnect */
+  const joinGenerationRef = useRef(0);
+  const joinAckTimerRef = useRef<number | null>(null);
+  const queueUiStateRef = useRef<QueueUiState>(state);
 
   // Keep callback ref fresh so we don't re-subscribe on every render.
   useEffect(() => { onMatchReadyRef.current = onMatchReady; }, [onMatchReady]);
-
   useEffect(() => {
-    if (!socket) return;
-    const handleOnline = (evt: OnlineCountEvent) => {
-      setOnline(evt?.online ?? 0);
-      setQueued(evt?.queued ?? 0);
-    };
-    const handleMatched = (payload: MatchFoundPayload) => {
-      stopElapsedTimer();
-      setMatched(payload);
-      setState('matched');
-      onMatchReadyRef.current(payload);
-    };
-    const handleTimeout = () => {
-      stopElapsedTimer();
-      setState('timeout');
-    };
-    socket.on('queue:online', handleOnline);
-    socket.on('queue:matched', handleMatched);
-    socket.on('queue:timeout', handleTimeout);
-    return () => {
-      socket.off('queue:online', handleOnline);
-      socket.off('queue:matched', handleMatched);
-      socket.off('queue:timeout', handleTimeout);
-    };
-  }, [socket]);
+    queueUiStateRef.current = state;
+  }, [state]);
+
+  const clearJoinAckTimer = useCallback(() => {
+    if (joinAckTimerRef.current != null) {
+      window.clearTimeout(joinAckTimerRef.current);
+      joinAckTimerRef.current = null;
+    }
+  }, []);
+
+  const stopElapsedTimer = useCallback(() => {
+    if (elapsedTimer.current !== null) {
+      window.clearInterval(elapsedTimer.current);
+      elapsedTimer.current = null;
+    }
+  }, []);
 
   const startElapsedTimer = useCallback(() => {
     startMsRef.current = Date.now();
@@ -81,16 +78,70 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
     }, 250);
   }, []);
 
-  const stopElapsedTimer = () => {
-    if (elapsedTimer.current !== null) {
-      window.clearInterval(elapsedTimer.current);
-      elapsedTimer.current = null;
-    }
-  };
+  const applyOnlineAck = useCallback((resp: { online?: number; queued?: number } | undefined) => {
+    if (typeof resp?.online === 'number') setOnline(resp.online);
+    if (typeof resp?.queued === 'number') setQueued(resp.queued);
+  }, []);
+
+  const refreshOnlineCounts = useCallback(() => {
+    if (!socket?.connected) return;
+    socket.emit('queue:online', {}, (resp: { online?: number; queued?: number } | undefined) => {
+      applyOnlineAck(resp);
+    });
+  }, [socket, applyOnlineAck]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleOnline = (evt: OnlineCountEvent) => {
+      setOnline(evt?.online ?? 0);
+      setQueued(evt?.queued ?? 0);
+    };
+    const handleMatched = (payload: MatchFoundPayload) => {
+      stopElapsedTimer();
+      clearJoinAckTimer();
+      setMatched(payload);
+      setState('matched');
+      onMatchReadyRef.current(payload);
+    };
+    const handleTimeout = () => {
+      stopElapsedTimer();
+      clearJoinAckTimer();
+      setState('timeout');
+    };
+    const handleDisconnect = () => {
+      clearJoinAckTimer();
+      joinGenerationRef.current += 1;
+      setOnline(0);
+      setQueued(0);
+      const prev = queueUiStateRef.current;
+      if (prev === 'searching' || prev === 'matched') {
+        stopElapsedTimer();
+        setError('Lost connection to the game server.');
+        setState('idle');
+      }
+    };
+    const handleConnect = () => {
+      socket.emit('queue:online', {}, (resp: { online?: number; queued?: number } | undefined) => {
+        applyOnlineAck(resp);
+      });
+    };
+    socket.on('queue:online', handleOnline);
+    socket.on('queue:matched', handleMatched);
+    socket.on('queue:timeout', handleTimeout);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect', handleConnect);
+    return () => {
+      socket.off('queue:online', handleOnline);
+      socket.off('queue:matched', handleMatched);
+      socket.off('queue:timeout', handleTimeout);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect', handleConnect);
+    };
+  }, [socket, stopElapsedTimer, clearJoinAckTimer, applyOnlineAck]);
 
   const findMatch = useCallback(() => {
-    if (!socket) {
-      setError('Not connected.');
+    if (!socket?.connected) {
+      setError('Not connected to the game server. Open Multiplayer again or check your connection.');
       return;
     }
     if (!identity) {
@@ -99,38 +150,73 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
     }
     setError(null);
     setMatched(null);
+    clearJoinAckTimer();
+    const gen = (joinGenerationRef.current += 1);
     setState('searching');
     startElapsedTimer();
-    socket.emit('queue:join', identity, (resp: { ok: boolean; error?: string } | undefined) => {
+    joinAckTimerRef.current = window.setTimeout(() => {
+      joinAckTimerRef.current = null;
+      if (joinGenerationRef.current !== gen) return;
+      setError(
+        'Matchmaking did not respond. The socket may be disconnected (try leaving Multiplayer and returning) or the server is slow to wake (Render free tier).',
+      );
+      setState('idle');
+      stopElapsedTimer();
+    }, 22_000);
+    socket.emit('queue:join', identity, (resp: { ok: boolean; error?: string; online?: number; queued?: number } | undefined) => {
+      if (joinGenerationRef.current !== gen) return;
+      clearJoinAckTimer();
+      applyOnlineAck(resp);
       if (!resp?.ok) {
         setError(resp?.error ?? 'Failed to join queue.');
         setState('idle');
         stopElapsedTimer();
       }
     });
-  }, [socket, identity, startElapsedTimer]);
+  }, [socket, identity, startElapsedTimer, clearJoinAckTimer, stopElapsedTimer, applyOnlineAck]);
 
   const cancel = useCallback(() => {
-    if (!socket) return;
-    socket.emit('queue:leave', {}, () => {
-      stopElapsedTimer();
-      setState('idle');
-    });
-  }, [socket]);
-
-  const acceptTimeoutBotFallback = useCallback(() => {
+    joinGenerationRef.current += 1;
+    clearJoinAckTimer();
     stopElapsedTimer();
     setState('idle');
-  }, []);
+    setError(null);
+    if (socket?.connected) {
+      socket.emit('queue:leave', {}, () => undefined);
+    }
+  }, [socket, clearJoinAckTimer, stopElapsedTimer]);
+
+  const acceptTimeoutBotFallback = useCallback(() => {
+    clearJoinAckTimer();
+    stopElapsedTimer();
+    setState('idle');
+  }, [clearJoinAckTimer, stopElapsedTimer]);
 
   const reset = useCallback(() => {
+    joinGenerationRef.current += 1;
+    clearJoinAckTimer();
     stopElapsedTimer();
     setMatched(null);
     setError(null);
     setState('idle');
-  }, []);
+  }, [clearJoinAckTimer, stopElapsedTimer]);
 
-  useEffect(() => () => stopElapsedTimer(), []);
+  useEffect(() => () => {
+    clearJoinAckTimer();
+    stopElapsedTimer();
+  }, [clearJoinAckTimer, stopElapsedTimer]);
 
-  return { state, elapsedMs, online, queued, matched, error, findMatch, cancel, acceptTimeoutBotFallback, reset };
+  return {
+    state,
+    elapsedMs,
+    online,
+    queued,
+    matched,
+    error,
+    findMatch,
+    cancel,
+    acceptTimeoutBotFallback,
+    reset,
+    refreshOnlineCounts,
+  };
 }

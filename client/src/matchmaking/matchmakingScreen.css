@@ -768,6 +768,25 @@
   margin: 0;
 }
 
+.mm-connect-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.mm-help-text--mono {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.mm-connect-retry {
+  margin-top: 4px;
+}
+
 /* ── Responsive ───────────────────────────────────────────────────────── */
 
 @media (max-width: 1100px) {

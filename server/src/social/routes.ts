@@ -152,6 +152,59 @@ socialRouter.get('/friends/with-presence', async (req, res) => {
   }
 });
 
+// GET /api/social/leaderboard/global
+socialRouter.get('/leaderboard/global', async (req, res) => {
+  const userId = await requireAuth(req, res);
+  if (!userId) return;
+  try {
+    const profiles = await supabaseFetch<Array<{
+      id: string; username: string; glicko_rating: number;
+      ranked_games_played: number; provisional: boolean;
+    }>>(
+      `/rest/v1/profiles?provisional=eq.false&order=glicko_rating.desc` +
+      `&select=id,username,glicko_rating,ranked_games_played,provisional&limit=100`,
+    );
+
+    const topRows = profiles.map((p, i) => ({
+      userId: p.id,
+      username: p.username,
+      glicko_rating: Number(p.glicko_rating ?? 800),
+      ranked_games_played: Number(p.ranked_games_played ?? 0),
+      provisional: false,
+      global_rank: i + 1,
+      is_self: p.id === userId,
+    }));
+
+    // If user not in top 100, find their position
+    let selfEntry = topRows.find((r) => r.is_self);
+    if (!selfEntry) {
+      const enc = encodeURIComponent(userId);
+      const selfProfile = await supabaseFetch<Array<{
+        id: string; username: string; glicko_rating: number; ranked_games_played: number; provisional: boolean;
+      }>>(`/rest/v1/profiles?id=eq.${enc}&select=id,username,glicko_rating,ranked_games_played,provisional&limit=1`);
+      if (selfProfile?.[0]) {
+        const sp = selfProfile[0];
+        const aboveCount = await supabaseFetch<Array<{ id: string }>>(
+          `/rest/v1/profiles?provisional=eq.false&glicko_rating=gte.${encodeURIComponent(String(sp.glicko_rating))}&select=id`,
+        );
+        selfEntry = {
+          userId: sp.id,
+          username: sp.username,
+          glicko_rating: Number(sp.glicko_rating ?? 800),
+          ranked_games_played: Number(sp.ranked_games_played ?? 0),
+          provisional: Boolean(sp.provisional),
+          global_rank: aboveCount.length,
+          is_self: true,
+        };
+      }
+    }
+
+    res.json({ ok: true, leaderboard: topRows, self: selfEntry ?? null });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Leaderboard unavailable.' });
+  }
+});
+
 // GET /api/profile/:username  (mounted at /api/profile via app.use)
 socialRouter.get('/:username', async (req, res) => {
   const requestorId = await requireAuth(req, res);
@@ -239,6 +292,22 @@ socialRouter.get('/:username', async (req, res) => {
     const isFriend = friendRow?.status === 'accepted';
     const hasPendingRequest = friendRow?.status === 'pending';
 
+    // Daily puzzle stats
+    const puzzleRows = await supabaseFetch<Array<{ total_score: number | null; completed_at: string }>>(
+      `/rest/v1/daily_puzzle_attempts?user_id=eq.${enc}&status=eq.completed` +
+      `&select=total_score,completed_at&order=completed_at.desc&limit=365`,
+    ).catch(() => [] as Array<{ total_score: number | null; completed_at: string }>);
+    const puzzles_completed = puzzleRows.length;
+    const best_puzzle_score = puzzleRows.reduce((max, r) => Math.max(max, r.total_score ?? 0), 0) || null;
+
+    // Daily fritz stats
+    const fritzRows = await supabaseFetch<Array<{ won: boolean; final_score: number | null }>>(
+      `/rest/v1/daily_fritz_attempts?user_id=eq.${enc}&status=eq.completed` +
+      `&select=won,final_score`,
+    ).catch(() => [] as Array<{ won: boolean; final_score: number | null }>);
+    const fritz_wins = fritzRows.filter((r) => r.won).length;
+    const fritz_losses = fritzRows.filter((r) => !r.won).length;
+
     // Presence
     const presenceMap = await getPresenceBatch([targetId]);
     const presence = presenceMap.get(targetId) ?? { status: 'offline', current_mode: null };
@@ -255,6 +324,10 @@ socialRouter.get('/:username', async (req, res) => {
       wins,
       losses,
       win_rate: winRate,
+      puzzles_completed,
+      best_puzzle_score,
+      fritz_wins,
+      fritz_losses,
       is_self: targetId === requestorId,
       is_friend: isFriend,
       has_pending_request: hasPendingRequest,

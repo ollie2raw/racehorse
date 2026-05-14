@@ -95,4 +95,5 @@ export type AppMode =
   | 'singlePlayerHub'
   | 'tournament'
   | 'leaderboard'
-  | 'profile';
+  | 'profile'
+  | 'feed';

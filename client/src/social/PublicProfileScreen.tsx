@@ -172,6 +172,22 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
             <span className="rh-pp-stat-value">{profile.ranked_games_played}</span>
             <span className="rh-pp-stat-label">RANKED GAMES</span>
           </div>
+          <div className="rh-pp-stat">
+            <span className="rh-pp-stat-value">{profile.puzzles_completed ?? 0}</span>
+            <span className="rh-pp-stat-label">PUZZLES</span>
+          </div>
+          <div className="rh-pp-stat">
+            <span className="rh-pp-stat-value">
+              {(profile.fritz_wins != null && profile.fritz_losses != null)
+                ? `${profile.fritz_wins}W ${profile.fritz_losses}L`
+                : '—'}
+            </span>
+            <span className="rh-pp-stat-label">FRITZ RECORD</span>
+          </div>
+          <div className="rh-pp-stat">
+            <span className="rh-pp-stat-value">{profile.best_puzzle_score ?? '—'}</span>
+            <span className="rh-pp-stat-label">BEST PUZZLE</span>
+          </div>
         </div>
 
         {/* Recent matches */}

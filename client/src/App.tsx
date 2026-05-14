@@ -130,7 +130,8 @@ type AppMode =
   | 'singlePlayerHub'
   | 'tournament'
   | 'leaderboard'
-  | 'profile';
+  | 'profile'
+  | 'feed';
 
 const EMPTY_MOVES: Move[] = [];
 
@@ -149,6 +150,7 @@ const StatsScreen = React.lazy(() => import('./stats/StatsScreen'));
 const FriendsScreen = React.lazy(() => import('./friends/FriendsScreen'));
 const LeaderboardScreen = React.lazy(() => import('./social/LeaderboardScreen'));
 const PublicProfileScreen = React.lazy(() => import('./social/PublicProfileScreen'));
+const ActivityFeedScreen = React.lazy(() => import('./social/ActivityFeedScreen'));
 const LearnHome = React.lazy(() =>
   import('./learn').then((module) => ({ default: module.LearnHome })),
 );
@@ -3255,6 +3257,21 @@ export default function App() {
     );
   }
 
+  if (appMode === 'feed') {
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Feed…" />}>
+          <ActivityFeedScreen
+            user={authUser}
+            onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
+            onClose={() => setAppMode('home')}
+            onNavigateToFriends={() => setAppMode('friends')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   if (appMode === 'leaderboard') {
     return (
       <div className={appRootClassName}>
@@ -3717,6 +3734,9 @@ export default function App() {
           <MatchmakingScreen
             socket={socket}
             isConnected={isConnected}
+            isConnecting={isConnecting}
+            serverUrl={serverUrl}
+            onRetryConnect={connect}
             identity={
               authUser?.id
                 ? {

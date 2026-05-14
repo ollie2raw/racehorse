@@ -62,7 +62,12 @@ export function registerMatchmakingHandlers(
   socket.on('queue:join', async (payload: { userId?: string; username?: string }, ack?: (resp: unknown) => void) => {
     try {
       if (!payload?.userId || !payload?.username) {
-        ack?.({ ok: false, error: 'missing_identity' });
+        ack?.({
+          ok: false,
+          error: 'missing_identity',
+          online: getOnlineCount(io),
+          queued: service.size(),
+        });
         return;
       }
       const rating = await fetchPlayerRating(payload.userId);
@@ -81,7 +86,12 @@ export function registerMatchmakingHandlers(
             socketId: socket.id,
           });
         }
-        ack?.({ ok: false, error: result.reason });
+        ack?.({
+          ok: false,
+          error: result.reason,
+          online: getOnlineCount(io),
+          queued: service.size(),
+        });
         return;
       }
       if (matchmakingDebugEnabled()) {
@@ -94,7 +104,13 @@ export function registerMatchmakingHandlers(
           online: getOnlineCount(io),
         });
       }
-      ack?.({ ok: true, rating, queueSize: service.size() });
+      ack?.({
+        ok: true,
+        rating,
+        queueSize: service.size(),
+        online: getOnlineCount(io),
+        queued: service.size(),
+      });
 
       // One immediate sweep so two players who join milliseconds apart do not
       // always wait for the next interval tick.
@@ -118,7 +134,12 @@ export function registerMatchmakingHandlers(
       }
     } catch (err) {
       console.warn('[matchmaking] queue:join failed', err instanceof Error ? err.message : err);
-      ack?.({ ok: false, error: 'internal' });
+      ack?.({
+        ok: false,
+        error: 'internal',
+        online: getOnlineCount(io),
+        queued: service.size(),
+      });
     }
   });
 

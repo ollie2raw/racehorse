@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import './activityFeed.css';
@@ -8,6 +9,7 @@ type FilterTab = 'all' | 'wins' | 'streaks' | 'tournaments';
 interface ActivityFeedPanelProps {
   user: User | null;
   onViewProfile: (username: string) => void;
+  emptyAction?: React.ReactNode;
 }
 
 function itemIcon(type: FeedItem['type']): string {
@@ -82,7 +84,7 @@ function filterItems(items: FeedItem[], filter: FilterTab): FeedItem[] {
   return items;
 }
 
-export default function ActivityFeedPanel({ user, onViewProfile }: ActivityFeedPanelProps) {
+export default function ActivityFeedPanel({ user, onViewProfile, emptyAction }: ActivityFeedPanelProps) {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,9 +126,8 @@ export default function ActivityFeedPanel({ user, onViewProfile }: ActivityFeedP
         )}
         {!loading && !error && visible.length === 0 && (
           <div className="rh-af-state">
-            {feed.length === 0
-              ? 'Add friends to see their activity here.'
-              : 'No activity matching this filter.'}
+            <span>{feed.length === 0 ? 'Add friends to see their activity here.' : 'No activity matching this filter.'}</span>
+            {feed.length === 0 && emptyAction}
           </div>
         )}
         {!loading && !error && visible.map((item) => (

@@ -24,3 +24,13 @@ export function resolveGameServerUrl(): string {
   }
   return '';
 }
+
+/** True when the configured game server origin is the same as the current page (static SPA only — no Socket.io). */
+export function isGameServerSameOriginAsPage(serverUrl: string): boolean {
+  if (typeof window === 'undefined' || !serverUrl.trim()) return false;
+  try {
+    return new URL(serverUrl).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
