@@ -40,7 +40,6 @@ export interface PrivateMatchLobbyScreenProps {
   onCreateRoom: () => void;
   onJoinRoom: () => void;
   pendingLobbyAction: null | 'create' | 'join';
-  onDisconnect: () => void;
 
   joinedRoom: string;
   players: PrivateMatchLobbyPlayer[];
@@ -63,6 +62,8 @@ export interface PrivateMatchLobbyScreenProps {
   roomChatFeed?: Array<RoomChatEvent | RoomEmoteEvent>;
   onSendRoomChat?: (text: string) => void;
   winTarget?: number;
+  /** When set, the Quick Match sub-tab in the unified toolbar becomes clickable. */
+  onOpenQuickMatch?: () => void;
 }
 
 function LockIcon() {
@@ -306,7 +307,6 @@ export default function PrivateMatchLobbyScreen({
   onCreateRoom,
   onJoinRoom,
   pendingLobbyAction,
-  onDisconnect,
   joinedRoom,
   players,
   you,
@@ -325,6 +325,7 @@ export default function PrivateMatchLobbyScreen({
   roomChatFeed: _roomChatFeed,
   onSendRoomChat: _onSendRoomChat,
   winTarget = 60,
+  onOpenQuickMatch,
 }: PrivateMatchLobbyScreenProps) {
   const [lobbyTab, setLobbyTab] = useState<'create' | 'join'>('create');
   const [dealFormat, setDealFormat] = useState<7 | 14>(7);
@@ -337,7 +338,7 @@ export default function PrivateMatchLobbyScreen({
   const [guestRating, setGuestRating] = useState<number | null>(null);
   const [guestWinStreak, setGuestWinStreak] = useState<number | null>(null);
 
-  const onBackClick = phase === 'disconnected' ? onBackHome : phase === 'lobby' ? onDisconnect : onLeaveRoom;
+  const onBackClick = phase === 'room' ? onLeaveRoom : onBackHome;
 
   const inRoom = phase === 'room';
   const roomHost = players[0];
@@ -623,13 +624,39 @@ export default function PrivateMatchLobbyScreen({
         activeColor="var(--tier-standard)"
       />
 
+      {/* Unified Multiplayer header — mirrors Quick Match (.mm-toolbar). */}
+      <div className="pml-toolbar">
+        <button type="button" className="pml-toolbar-back" onClick={onBackClick}>
+          <span aria-hidden="true">←</span>{' '}
+          {phase === 'room' ? 'Leave Room' : 'Back to Home'}
+        </button>
+        <div className="pml-toolbar-tabs" role="tablist" aria-label="Multiplayer mode">
+          <button
+            type="button"
+            className="pml-toolbar-tab"
+            role="tab"
+            onClick={() => onOpenQuickMatch?.()}
+            disabled={!onOpenQuickMatch || phase === 'room'}
+          >
+            Quick Match
+          </button>
+          <button
+            type="button"
+            className="pml-toolbar-tab is-active"
+            role="tab"
+            aria-selected="true"
+          >
+            Private Match
+          </button>
+        </div>
+        <div className="pml-toolbar-context" aria-live="polite">
+          {/* Right slot intentionally empty in the lobby phase — no live data worth showing.
+              The room code, when applicable, is prominently displayed in the matchup card. */}
+        </div>
+      </div>
+
       <div className="pml-layout">
         <div className={`pml-left pml-left--stack${phase === 'room' ? ' pml-left--room' : ''}`}>
-          <button type="button" className="pml-back pml-back--ghost rh-back-button" onClick={onBackClick}>
-            <span aria-hidden="true">←</span>{' '}
-            {phase === 'disconnected' ? 'Back to Home' : 'Back to Multiplayer'}
-          </button>
-
           <header className="pml-head">
             <p className="pml-kicker">
               <LockIcon />

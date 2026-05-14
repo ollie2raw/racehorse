@@ -1367,6 +1367,7 @@ export default function App() {
     setRoomRecoveryMessage('');
     setRoomReactions([]);
     resetMultiplayerRoomState({ clearRoomCode: true });
+    setMpSubView('quick');
     setAppMode('multiplayer');
   }, [
     normalizeRoomCode,
@@ -3514,6 +3515,11 @@ export default function App() {
                   }
                 : null
             }
+            myRating={
+              authProfile?.glicko_rating != null
+                ? Math.round(Number(authProfile.glicko_rating))
+                : null
+            }
             onNavigate={setAppMode}
             onOpenAuth={() => setAuthModalOpen(true)}
             onBackHome={() => setAppMode('home')}
@@ -3535,11 +3541,6 @@ export default function App() {
             onOpenAccount={() => setUsernameModalOpen(true)}
             onBackHome={() => {
               setMpSubView('quick');
-              if (!joinedRoom) {
-                // Going back from the private lobby — return to quick-match sub-view,
-                // do NOT navigate away from the multiplayer page.
-                return;
-              }
               setAppMode('home');
             }}
             isConnecting={isConnecting}
@@ -3553,7 +3554,6 @@ export default function App() {
             pendingLobbyAction={
               pendingUiAction === 'create' || pendingUiAction === 'join' ? pendingUiAction : null
             }
-            onDisconnect={() => disconnect('user disconnect')}
             joinedRoom={joinedRoom ?? ''}
             players={players}
             you={you}
@@ -3574,6 +3574,7 @@ export default function App() {
             roomRecoveryMessage={roomRecoveryMessage}
             onRetryRoomRecovery={retryRoomRecovery}
             hostWinStreak={privateLobbyHostWinStreak}
+            onOpenQuickMatch={() => setMpSubView('quick')}
           />
         )
       ) : null}

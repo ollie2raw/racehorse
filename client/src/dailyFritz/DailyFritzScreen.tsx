@@ -951,8 +951,9 @@ export default function DailyFritzScreen({
         <div className="df-layout">
           <div className="df-left-col">
             <div className="df-hero-fullbleed">
-                <img src={dailyFritzHeroPng} className="df-hero-fullbleed__img" alt="Fritz at the domino table" />
+              <img src={dailyFritzHeroPng} className="df-hero-fullbleed__img" alt="Fritz at the domino table" />
               <div className="df-hero-fullbleed__overlay" aria-hidden />
+              <div className="df-hero-fullbleed__rim" aria-hidden />
               <div className="df-hero-fullbleed__copy">
                 <div className="df-hero-kicker">• DAILY FRITZ</div>
                 <h1 className="df-title df-title--page df-hero-title">Daily Fritz</h1>

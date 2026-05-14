@@ -106,12 +106,22 @@
   width: 100%;
   overflow: hidden;
   border-radius: 14px;
+  box-sizing: border-box;
+  /* Solid border eats subpixel gaps between clip curve and page; same token as matte */
+  border: 2px solid #04070c;
+  /* Padding-box corner radius — inner layers must match or WebKit draws a light seam */
+  --df-hero-inner-r: calc(14px - 2px);
   /* Same matte base as Play vs Fritz opponent card */
   background: #04070c;
   isolation: isolate;
   transform: translateZ(0);
-  /* No inset highlight — it reads as a harsh light rim on rounded top corners */
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 20px 50px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+}
+
+@supports (overflow: clip) {
+  .df-hero-fullbleed {
+    overflow: clip;
+  }
 }
 
 .df-hero-fullbleed__img {
@@ -128,8 +138,7 @@
   transform: scale(1.06) translateZ(0);
   backface-visibility: hidden;
   z-index: 1;
-  /* Slightly pulled back so vignette + page bg dominate the perimeter */
-  filter: brightness(1.04) contrast(1.02) saturate(1.02);
+  /* No filter — brightness/contrast on composited layers often produces light fringes at rounded overflow clips (WebKit). */
 }
 
 .df-hero-fullbleed__overlay {
@@ -137,6 +146,7 @@
   inset: 0;
   z-index: 2;
   pointer-events: none;
+  border-radius: var(--df-hero-inner-r);
   /* Avoid `transparent` stops — interpolation reads as muddy gray (#c0c0c0-ish) on some engines */
   background:
     linear-gradient(180deg, #04070c 0%, rgba(4, 7, 12, 0.88) 7%, rgba(4, 7, 12, 0.35) 18%, rgba(4, 7, 12, 0) 32%),
@@ -157,6 +167,18 @@
       rgba(4, 7, 12, 0.48) 100%
     ),
     linear-gradient(180deg, rgba(4, 8, 18, 0.28) 0%, rgba(4, 7, 12, 0) 34%);
+}
+
+/* Dedicated rim: empty layer so inset paint order is reliable (covers clip/filter fringe at corners). */
+.df-hero-fullbleed__rim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: var(--df-hero-inner-r);
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 4px #02050c,
+    inset 0 0 0 1px rgba(4, 7, 12, 0.55);
 }
 
 .df-hero-fullbleed__copy {
@@ -203,6 +225,7 @@
   right: 0;
   bottom: 0;
   z-index: 4;
+  border-radius: 0 0 var(--df-hero-inner-r) var(--df-hero-inner-r);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
