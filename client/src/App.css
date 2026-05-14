@@ -2907,21 +2907,11 @@ button:hover:not(:disabled) {
   width: 100vw;
   height: calc(100dvh - var(--tray-height));
   min-height: 0;
-  background: var(--bg-board-gradient);
+  background: var(--bg-obsidian);
   border-radius: 0 0 16px 16px;
   box-shadow: none;
   overflow: hidden;
   position: relative;
-}
-
-.board-area::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--bg-board-pattern);
-  pointer-events: none;
-  opacity: 0.22;
-  z-index: 0;
 }
 
 .board-area::after {
