@@ -10,12 +10,12 @@ interface GlobalNavProps {
   onOpenAccount?: () => void;
   currentMode?: AppMode;
   activeColor?: string; // Optional dynamic override
-  /** Slightly shorter bar + padding for dense hub screens (e.g. Daily Fritz). */
+  /** Slightly shorter bar + padding for dense hub screens. */
   compactChrome?: boolean;
 }
 
 const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
-  { label: 'Single Player', mode: 'singlePlayerHub', activeModes: ['singlePlayerHub', 'botSetup', 'ghostSetup', 'noBrainer'] },
+  { label: 'Single Player', mode: 'singlePlayerHub', activeModes: ['singlePlayerHub', 'botSetup', 'ghostSetup', 'noBrainer', 'dailyFritz'] },
   { label: 'Multiplayer', mode: 'multiplayer', activeModes: ['multiplayer'] },
   { label: 'Learn', mode: 'learn', activeModes: ['learn'] },
   { label: 'Tournament', mode: 'tournament', activeModes: ['tournament'] },

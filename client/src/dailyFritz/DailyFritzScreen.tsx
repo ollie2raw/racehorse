@@ -25,6 +25,7 @@ import {
   type DailyFritzStartResponse,
   type DailyFritzTodayResponse,
 } from './api';
+import dailyFritzHeroPng from '../assets/dailyFritz/dailyfritzimage2.png';
 import './dailyFritz.css';
 
 /* Same marks as Play vs Fritz left-panel badges (compact header icons). */
@@ -77,6 +78,7 @@ interface DailyFritzScreenProps {
   onProfileRefresh?: () => Promise<void> | void;
   onProfilePatch?: (patch: Partial<UserProfile>) => void;
   onOpenAuth: () => void;
+  onOpenAccount?: () => void;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
 }
@@ -354,10 +356,10 @@ export default function DailyFritzScreen({
   onProfileRefresh,
   onProfilePatch,
   onOpenAuth,
+  onOpenAccount,
   onBack,
   onNavigate,
 }: DailyFritzScreenProps) {
-  void onOpenAuth;
 
   const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -937,8 +939,8 @@ export default function DailyFritzScreen({
         currentMode="dailyFritz"
         onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
-        activeColor="var(--tier-elite)"
-        compactChrome
+        onOpenAccount={onOpenAccount}
+        activeColor="#E7B64A"
       />
 
       <div className="df-shell df-shell--daily-fritz">
@@ -949,7 +951,7 @@ export default function DailyFritzScreen({
         <div className="df-layout">
           <div className="df-left-col">
             <div className="df-hero-fullbleed">
-                <img src="/dailyfritzimage.png" className="df-hero-fullbleed__img" alt="Fritz at the domino table" />
+                <img src={dailyFritzHeroPng} className="df-hero-fullbleed__img" alt="Fritz at the domino table" />
               <div className="df-hero-fullbleed__overlay" aria-hidden />
               <div className="df-hero-fullbleed__copy">
                 <div className="df-hero-kicker">• DAILY FRITZ</div>
@@ -1045,12 +1047,8 @@ export default function DailyFritzScreen({
                     </div>
                     <div className="df-overview-stat">
                       <div className="df-overview-stat__icon fritz-summary-icon fritz-summary-icon--df-gold">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                          <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" strokeWidth="2" />
-                          <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" />
-                          <circle cx="9" cy="7" r="1.2" fill="currentColor" />
-                          <circle cx="15" cy="7" r="1.2" fill="currentColor" />
-                          <circle cx="12" cy="17" r="1.2" fill="currentColor" />
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                          <path d="M8 6h12M6 12h12M4 18h12" />
                         </svg>
                       </div>
                       <div className="df-overview-stat__value">{formatLabel}</div>
@@ -1159,41 +1157,6 @@ export default function DailyFritzScreen({
                       </Fragment>
                     ))}
                   </div>
-                  </div>
-                </div>
-
-                <div className="df-section">
-                  <div className="fritz-section-label">3. WHAT&apos;S AT STAKE</div>
-                  <div className="df-stakes-card">
-                    <div className="df-stakes-col">
-                      <div className="df-stakes-icon fritz-summary-icon fritz-summary-icon--df-gold" aria-hidden>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
-                          <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7L12 17.3 5.7 21l2.3-7-6-4.6h7.6L12 2z" />
-                        </svg>
-                      </div>
-                      <div className="df-stakes-value">+15</div>
-                      <div className="df-stakes-key">Rating (Win)</div>
-                    </div>
-                    <div className="df-stakes-col">
-                      <div className="df-stakes-icon fritz-summary-icon fritz-summary-icon--df-gold" aria-hidden>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.5 3.5 6.5 1 1.5 2 3 2 5a7 7 0 1 1-14 0c0-3 2.5-5 2.5-5s0 1 1 2.5z" />
-                        </svg>
-                      </div>
-                      <div className="df-stakes-value">Keep Streak</div>
-                      <div className="df-stakes-key">Maintain your streak</div>
-                    </div>
-                    <div className="df-stakes-col">
-                      <div className="df-stakes-icon fritz-summary-icon fritz-summary-icon--df-gold" aria-hidden>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <path d="M6 20V10" />
-                          <path d="M12 20V4" />
-                          <path d="M18 20v-6" />
-                        </svg>
-                      </div>
-                      <div className="df-stakes-value">Climb Leaderboard</div>
-                      <div className="df-stakes-key">Compete with others</div>
-                    </div>
                   </div>
                 </div>
               </div>

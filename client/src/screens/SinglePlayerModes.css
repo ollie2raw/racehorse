@@ -1,9 +1,10 @@
 /*
- * Solo hub art: Fritz (fritzwave) layout is frozen under `.daily-fritz-card-container` only.
- * Ghost + Lab use wider/narrower slot + scale because their PNG canvases differ (landscape
- * ghost left-heavy; lab portrait with headroom).
+ * Solo hub art: All character images (fritzwave, ghost, lab) now use a standardized 
+ * layout to ensure visual consistency across the Single Player screen.
  */
-.sp-solo-main .sp-solo-mode-card.daily-fritz-card-container .sp-solo-mode-card__art-slot {
+
+/* Common Slot for all cards */
+.sp-solo-mode-card__art-slot {
   position: absolute;
   top: 0;
   right: 0;
@@ -13,7 +14,8 @@
   pointer-events: none;
 }
 
-.sp-solo-main .sp-solo-mode-card.daily-fritz-card-container .sp-solo-mode-card__art {
+/* Standardized Art styling matching fritzwave baseline */
+.sp-solo-mode-card__art {
   position: absolute;
   bottom: 0;
   right: 0;
@@ -27,64 +29,44 @@
   opacity: 1;
 }
 
-/* Ghost — match Fritz scale: zoom landscape art, anchor figure (lives on left of file) */
-.sp-solo-main .sp-solo-mode-card.daily-puzzle-card-container .sp-solo-mode-card__art-slot {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 34%;
-  z-index: 1;
-  pointer-events: none;
-  overflow: visible;
+/* Individual Card Chrome and Overrides */
+
+/* Fritz Card */
+.daily-fritz-card-container {
+  border: 1px solid rgba(231, 182, 74, 0.26);
 }
 
-.sp-solo-main .sp-solo-mode-card.daily-puzzle-card-container .sp-solo-mode-card__art {
-  position: absolute;
-  bottom: -3%;
-  left: -2%;
-  height: 100%;
-  width: 100%;
-  object-fit: cover;
-  object-position: left bottom;
-  transform: scale(1.68) translateX(1.5%);
-  transform-origin: left bottom;
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-drag: none;
-  opacity: 1;
+.daily-fritz-card-container .sp-solo-mode-card__art-slot {
+  left: 28%;
+}
+
+.daily-fritz-card-container .sp-solo-mode-card__art {
+  object-position: center top;
+  transform: scale(1.18) translate(3%, 5%);
+}
+
+/* Ghost Card */
+.daily-puzzle-card-container .sp-solo-mode-card__art-slot {
+  left: 28%;
+}
+
+.daily-puzzle-card-container .sp-solo-mode-card__art {
+  /* Maintain the brightness/contrast boost for the ghost asset */
   filter: brightness(1.52) contrast(1.08) saturate(1.2);
+  object-position: center top;
+  transform: scale(1.3) translate(5%, 2%);
 }
 
-/* No Brainer Lab — match Fritz scale: crop headroom, sit on bottom edge */
-.sp-solo-main .sp-solo-mode-card.sp-lab-mode-card-container .sp-solo-mode-card__art-slot {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 34%;
-  z-index: 1;
-  pointer-events: none;
-  overflow: visible;
+/* No Brainer Lab Card Chrome */
+.sp-lab-mode-card-container .sp-solo-mode-card__art-slot {
+  left: 28%;
 }
 
-.sp-solo-main .sp-solo-mode-card.sp-lab-mode-card-container .sp-solo-mode-card__art {
-  position: absolute;
-  bottom: -2%;
-  right: -4%;
-  height: 100%;
-  width: 100%;
-  object-fit: cover;
-  object-position: 56% 100%;
-  transform: scale(1.26) translateX(2.2%);
-  transform-origin: bottom center;
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-drag: none;
-  opacity: 1;
+.sp-lab-mode-card-container .sp-solo-mode-card__art {
+  object-position: center top;
+  transform: scale(1.2) translate(4%, 3%);
 }
 
-/* Lab card chrome — same structure as .daily-puzzle-card-container in RacehorseHomeArt.css */
 .sp-lab-mode-card-container {
   position: relative;
   isolation: isolate;
@@ -142,37 +124,7 @@
   stroke-linejoin: round;
 }
 
-/* More Modes — locked tiles (premium glass, slightly subdued) */
-.sp-solo-locked-tile {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(8, 11, 22, 0.78);
-  opacity: 0.94;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 6px 18px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    opacity 160ms ease;
-}
-
-.sp-solo-locked-tile:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-  opacity: 1;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 8px 22px rgba(0, 0, 0, 0.4);
-}
-
-.sp-solo-locked-tile__icon {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.35);
-  color: rgba(180, 188, 204, 0.75);
-}
-
-/* Match HomeScreen daily cards: inner band height; section uses py-8 from TSX */
+/* Containment for cards */
 .sp-solo-main .sp-solo-mode-card {
   contain: paint;
 }

@@ -12,12 +12,12 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  /* Match Play vs Fritz (.pvf-root): flat navy stack + only a whisper of off-centre blue */
   background:
     radial-gradient(
-      ellipse 72% 44% at 50% 0%,
-      rgba(28, 72, 160, 0.18) 0%,
-      rgba(16, 44, 100, 0.06) 38%,
-      transparent 65%
+      ellipse 40% 30% at 72% 32%,
+      rgba(22, 60, 130, 0.07) 0%,
+      transparent 54%
     ),
     linear-gradient(
       180deg,
@@ -98,26 +98,38 @@
   gap: 10px;
 }
 
-/* Full-bleed hero — image fills column under GlobalNav stack; no outer card frame */
+/* Full-bleed hero — image fills column; rounded + vignette so it reads as one surface with the shell */
 .df-hero-fullbleed {
   position: relative;
   flex: 1 1 0;
   min-height: min(340px, 44vh);
   width: 100%;
   overflow: hidden;
-  border-radius: 0;
-  background: var(--bg-obsidian);
+  border-radius: 14px;
+  /* Same matte base as Play vs Fritz opponent card */
+  background: #04070c;
+  isolation: isolate;
+  transform: translateZ(0);
+  /* No inset highlight — it reads as a harsh light rim on rounded top corners */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 20px 50px rgba(0, 0, 0, 0.42);
 }
 
 .df-hero-fullbleed__img {
   position: absolute;
-  inset: 0;
+  /* Slight vertical overscan kills 1px hairlines at rounded clips (WebKit) */
+  top: -6px;
+  left: 0;
+  right: 0;
   width: 100%;
-  height: 100%;
+  height: calc(100% + 12px);
   object-fit: cover;
-  object-position: center 30%;
-  transform: scale(1.02);
+  /* Bias down a touch to crop any light strip baked into the art top edge */
+  object-position: 54% 52%;
+  transform: scale(1.06) translateZ(0);
+  backface-visibility: hidden;
   z-index: 1;
+  /* Slightly pulled back so vignette + page bg dominate the perimeter */
+  filter: brightness(1.04) contrast(1.02) saturate(1.02);
 }
 
 .df-hero-fullbleed__overlay {
@@ -125,9 +137,26 @@
   inset: 0;
   z-index: 2;
   pointer-events: none;
+  /* Avoid `transparent` stops — interpolation reads as muddy gray (#c0c0c0-ish) on some engines */
   background:
-    linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.2) 42%, rgba(0, 0, 0, 0) 62%),
-    linear-gradient(to right, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.28) 45%, rgba(0, 0, 0, 0) 70%);
+    linear-gradient(180deg, #04070c 0%, rgba(4, 7, 12, 0.88) 7%, rgba(4, 7, 12, 0.35) 18%, rgba(4, 7, 12, 0) 32%),
+    radial-gradient(ellipse 110% 72% at 50% 108%, rgba(3, 6, 12, 0.82) 0%, rgba(3, 6, 12, 0) 55%),
+    radial-gradient(ellipse 72% 130% at -8% 48%, rgba(4, 8, 16, 0.58) 0%, rgba(4, 7, 12, 0) 52%),
+    radial-gradient(ellipse 65% 130% at 108% 42%, rgba(4, 7, 12, 0.52) 0%, rgba(4, 7, 12, 0) 48%),
+    radial-gradient(ellipse 130% 60% at 50% -12%, rgba(4, 8, 18, 0.45) 0%, rgba(4, 7, 12, 0) 55%),
+    radial-gradient(
+      ellipse 60% 45% at 30% 92%,
+      color-mix(in srgb, var(--tier-elite) 12%, rgba(4, 7, 12, 0)) 0%,
+      rgba(4, 7, 12, 0) 58%
+    ),
+    linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.16) 40%, rgba(0, 0, 0, 0) 62%),
+    linear-gradient(
+      to right,
+      rgba(4, 7, 12, 0.58) 0%,
+      rgba(4, 9, 18, 0.1) 44%,
+      rgba(4, 7, 12, 0.48) 100%
+    ),
+    linear-gradient(180deg, rgba(4, 8, 18, 0.28) 0%, rgba(4, 7, 12, 0) 34%);
 }
 
 .df-hero-fullbleed__copy {
@@ -179,9 +208,13 @@
   gap: 8px;
   padding: 10px 12px 11px;
   box-sizing: border-box;
-  background: rgba(10, 14, 24, 0.76);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  /* Opaque navy stack only — backdrop-filter + translucent end-stops often reads as a gray band */
+  background: linear-gradient(
+    180deg,
+    rgba(4, 7, 12, 0.82) 0%,
+    rgba(4, 7, 12, 0.94) 36%,
+    #04070c 100%
+  );
   border-top: 1px solid rgba(255, 255, 255, 0.04);
   pointer-events: none;
 }
@@ -662,7 +695,7 @@
   box-sizing: border-box;
 }
 
-/* Unified panel — flatter; atmospheric gradient */
+/* Unified panel — match Play vs Fritz .pvf-control-panel (flat, high contrast) */
 .df-panel-surface {
   flex: 1 1 auto;
   min-height: 0;
@@ -670,21 +703,21 @@
   flex-direction: column;
   width: 100%;
   box-sizing: border-box;
-  padding: 16px 20px 12px;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--tier-standard) 14%, transparent) 0%, transparent 38%),
-    color-mix(in srgb, var(--glass-bg) 52%, rgba(7, 10, 18, 0.92));
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  padding: 22px 26px 16px;
+  border-radius: 20px;
+  background: rgba(7, 9, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 32px rgba(0, 0, 0, 0.28);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .df-layout .df-control-panel .fritz-section-label {
   margin-bottom: 6px;
-  letter-spacing: 0.18em;
-  color: rgba(255, 255, 255, 0.52);
+  letter-spacing: 0.14em;
+  color: var(--fritz-muted-label);
 }
 
 /* Frosted pill around Date / Tier / Format / Streak (home card border energy) */
@@ -1008,10 +1041,8 @@
 
 .df-section--games-spotlight .fritz-section-label {
   margin-bottom: 8px;
-}
   padding-bottom: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  margin-bottom: 0;
 }
 
 .df-overview-stats {
@@ -1034,10 +1065,11 @@
 .df-overview-stat__icon.fritz-summary-icon {
   width: 30px;
   height: 30px;
-  border-width: 1.5px;
-  box-shadow: none;
-  color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-dim));
-  background: color-mix(in srgb, var(--tier-elite) 7%, transparent);
+  border-width: 2px;
+  color: var(--tier-elite);
+  border-color: var(--tier-elite);
+  background: color-mix(in srgb, var(--tier-elite) 10%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--tier-elite) 30%, transparent);
 }
 
 .df-overview-stat__value {
@@ -1061,33 +1093,19 @@
   color: rgba(255, 255, 255, 0.38);
 }
 
-/* Best-of-3 “arena” — focal module on the right panel */
+/* Best-of-3 “arena” — same card language as .pvf-tier-card (flat, no radial wash) */
 .df-bof3-arena {
   position: relative;
   padding: 12px 12px 14px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tier-elite) 26%, rgba(255, 255, 255, 0.06));
-  background:
-    radial-gradient(ellipse 95% 130% at 100% -10%, color-mix(in srgb, var(--tier-elite) 16%, transparent) 0%, transparent 45%),
-    radial-gradient(ellipse 65% 55% at -5% 100%, color-mix(in srgb, var(--tier-standard) 12%, transparent) 0%, transparent 52%),
-    rgba(255, 255, 255, 0.034);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--tier-elite) 14%, transparent),
-    0 10px 32px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
 
 .df-bof3-arena__chrome {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    118deg,
-    transparent 36%,
-    color-mix(in srgb, var(--tier-elite) 7%, transparent) 72%,
-    transparent 100%
-  );
-  opacity: 0.9;
+  display: none;
 }
 
 .df-bof3-arena__head {
@@ -1099,29 +1117,16 @@
   gap: 8px 12px;
   margin-bottom: 12px;
   padding-bottom: 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--tier-elite) 18%, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .df-bof3-arena__pulse {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--tier-elite) 78%, var(--accent-amber));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tier-elite) 16%, transparent);
+  background: var(--tier-elite);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tier-elite) 22%, transparent);
   flex-shrink: 0;
-  animation: df-bof3-pulse 2.4s ease-in-out infinite;
-}
-
-@keyframes df-bof3-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.72;
-    transform: scale(0.9);
-  }
 }
 
 .df-bof3-arena__tag {
@@ -1132,16 +1137,16 @@
   text-transform: uppercase;
   padding: 4px 10px;
   border-radius: var(--radius-pill);
-  color: color-mix(in srgb, var(--tier-elite) 90%, var(--text-primary));
-  background: color-mix(in srgb, var(--tier-elite) 11%, rgba(0, 0, 0, 0.28));
-  border: 1px solid color-mix(in srgb, var(--tier-elite) 32%, transparent);
+  color: var(--tier-elite);
+  background: color-mix(in srgb, var(--tier-elite) 10%, rgba(0, 0, 0, 0.35));
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .df-bof3-arena__rule {
   font-family: var(--font-body);
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.56);
+  color: var(--fritz-muted-label);
   flex: 1 1 200px;
   min-width: 0;
   line-height: 1.35;
@@ -1215,11 +1220,7 @@
   min-height: 12px;
   margin: 4px 0 0;
   border-radius: 1px;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--tier-elite) 32%, rgba(255, 255, 255, 0.12)) 0%,
-    rgba(255, 255, 255, 0.05) 100%
-  );
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* Tighter best-of-3 slot rows */
@@ -1271,15 +1272,12 @@
 
 .fritz-selectable-row.df-game-row.df-game-row--bof3.df-bof3-slot.df-game-row--bof3-active.fritz-selectable-row--active {
   animation: none;
-  border: 1px solid color-mix(in srgb, var(--tier-elite) 46%, var(--border-subtle));
-  background: linear-gradient(
-    105deg,
-    color-mix(in srgb, var(--tier-elite) 13%, rgba(255, 255, 255, 0.05)) 0%,
-    rgba(255, 255, 255, 0.03) 58%
-  );
+  /* Match .pvf-tier-card--selected: crisp gold frame, flat fill */
+  border: 2px solid var(--tier-elite);
+  background: color-mix(in srgb, var(--tier-elite) 7%, transparent);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--tier-elite) 20%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--tier-elite) 20%, transparent);
+    inset 0 0 20px color-mix(in srgb, var(--tier-elite) 8%, transparent),
+    0 0 16px color-mix(in srgb, var(--tier-elite) 6%, transparent);
 }
 
 .fritz-selectable-row.df-bof3-slot.df-game-row--bof3 .df-game-status {
@@ -1307,14 +1305,11 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #1a1200;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--tier-elite) 92%, var(--accent-amber)) 0%,
-    color-mix(in srgb, var(--tier-elite) 72%, var(--bg-obsidian)) 100%
-  );
+  background: var(--tier-elite);
   border: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    0 0 20px color-mix(in srgb, var(--tier-elite) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .df-game-play-btn.rh-btn:disabled {
@@ -1328,8 +1323,8 @@
   font-size: 11px;
   letter-spacing: 0.08em;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
-    0 0 0 1px color-mix(in srgb, var(--tier-elite) 22%, transparent);
+    0 0 22px color-mix(in srgb, var(--tier-elite) 28%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
 .df-bof3-done-pill {
@@ -1382,52 +1377,6 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
-.df-stakes-card {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  padding: 14px 12px;
-  box-sizing: border-box;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.df-stakes-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.df-stakes-icon.fritz-summary-icon {
-  width: 32px;
-  height: 32px;
-  border-width: 1.5px;
-  box-shadow: none;
-  color: color-mix(in srgb, var(--tier-elite) 70%, var(--text-dim));
-  background: color-mix(in srgb, var(--tier-elite) 6%, transparent);
-}
-
-.df-stakes-value {
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
-  line-height: 1.15;
-}
-
-.df-stakes-key {
-  font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.52);
-  line-height: 1.3;
-}
-
 .df-reset-countdown {
   display: flex;
   align-items: center;
@@ -1468,40 +1417,21 @@
   font-weight: 700;
   letter-spacing: 0.01em;
   text-transform: none;
-  border-radius: 10px;
+  border-radius: 12px;
   border: none;
   color: #1a1200;
   position: relative;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--tier-elite) 88%, var(--accent-amber)) 0%,
-    color-mix(in srgb, var(--tier-elite) 68%, var(--accent-amber)) 48%,
-    color-mix(in srgb, var(--accent-amber) 45%, var(--tier-elite)) 100%
-  );
+  background: var(--tier-elite);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--tier-elite) 28%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+    0 0 32px color-mix(in srgb, var(--tier-elite) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
   transition:
     transform 120ms cubic-bezier(0.2, 0, 0, 1),
     filter 120ms ease;
 }
 
-@keyframes df-start-ready-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--tier-elite) 32%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.32);
-  }
-  50% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--tier-elite) 44%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.36);
-  }
-}
-
 .df-start-match-btn.rh-btn.df-start-match-btn--ready-pulse:not(:disabled) {
-  animation: df-start-ready-pulse 2.1s ease-in-out infinite;
+  animation: none;
 }
 
 .df-start-match-btn.rh-btn:disabled {
@@ -1510,13 +1440,51 @@
   filter: grayscale(0.2);
 }
 
-.df-start-match-btn.rh-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
+/* Solid gold + PVF-like glow — override .rh-btn--tier-elite gradient/outline */
+.df-game-play-btn.rh-btn.rh-btn--tier-elite:hover:not(:disabled),
+.df-bof3-play-btn.rh-btn.rh-btn--tier-elite:hover:not(:disabled) {
+  background: var(--tier-elite);
+  border-color: transparent;
+  color: #1a1200;
+  filter: brightness(1.1);
   transform: translateY(-1px);
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--tier-elite) 34%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
-.df-start-match-btn.rh-btn:active:not(:disabled) {
+.df-game-play-btn.rh-btn.rh-btn--tier-elite:active:not(:disabled),
+.df-bof3-play-btn.rh-btn.rh-btn--tier-elite:active:not(:disabled) {
+  background: var(--tier-elite);
+  border-color: transparent;
+  color: #1a1200;
+  filter: brightness(1.02);
   transform: scale(0.98);
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--tier-elite) 26%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.df-start-match-btn.rh-btn.rh-btn--tier-elite:hover:not(:disabled) {
+  background: var(--tier-elite);
+  border-color: transparent;
+  color: #1a1200;
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 36px color-mix(in srgb, var(--tier-elite) 28%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.df-start-match-btn.rh-btn.rh-btn--tier-elite:active:not(:disabled) {
+  background: var(--tier-elite);
+  border-color: transparent;
+  color: #1a1200;
+  filter: brightness(1.02);
+  transform: scale(0.98);
+  box-shadow:
+    0 0 24px color-mix(in srgb, var(--tier-elite) 14%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36);
 }
 
 .df-start-match-chevron {
@@ -1557,9 +1525,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .df-start-match-btn.rh-btn.df-start-match-btn--ready-pulse:not(:disabled),
-  .fritz-selectable-row.df-game-row.df-game-row--spotlight.fritz-selectable-row--active,
-  .df-bof3-arena__pulse {
+  .fritz-selectable-row.df-game-row.df-game-row--spotlight.fritz-selectable-row--active {
     animation: none;
   }
 }
@@ -1578,6 +1544,11 @@
   .df-hero-fullbleed {
     min-height: min(320px, 42vh);
     max-height: 440px;
+  }
+
+  .df-hero-fullbleed__img {
+    /* Wider/shorter hero: keep Fritz shifted but avoid over-cropping */
+    object-position: 62% 52%;
   }
 
   .df-streak-card {

@@ -47,6 +47,7 @@ import RacehorseHomeScreen from './screens/HomeScreen';
 import SinglePlayerHubScreen from './screens/SinglePlayerHubScreen';
 import { TournamentScreen } from './screens/TournamentScreen';
 import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
+import MatchmakingScreen from './matchmaking/MatchmakingScreen';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -781,6 +782,7 @@ export default function App() {
     return mode && !SOCKET_MODES.has(mode) ? mode : 'home';
   });
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
+  const [mpSubView, setMpSubView] = useState<'quick' | 'private'>('quick');
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('racehorse_muted') === '1';
@@ -1479,6 +1481,28 @@ export default function App() {
       });
     }
   }, [applyRoomEventMeta, clearTransientRoomUi, socket?.id]);
+
+  /**
+   * Auto-join a matchmaking-reserved room after the Match Found countdown.
+   * The server will auto-start the game once both players are in the room
+   * (see the matchmaking auto-start hook in server/src/index.ts).
+   */
+  const handleMatchmakingAutoJoin = useCallback((code: string) => {
+    if (!socket) return;
+    const username = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'Guest';
+    socket.emit(
+      'room:join',
+      code.trim().toUpperCase(),
+      { username, userId: multiplayerIdentityUserId, authToken: multiplayerAuthToken },
+      (resp: any) => {
+        if (!resp?.ok) {
+          showToast(resp?.error ?? 'Could not join matched room.', 2500);
+          return;
+        }
+        applyJoinedRoomResponse(resp);
+      },
+    );
+  }, [socket, authProfile?.username, authUser?.email, multiplayerIdentityUserId, multiplayerAuthToken, applyJoinedRoomResponse, showToast]);
 
   const roomSocketSyncParams = useMemo(
     () => ({
@@ -3081,6 +3105,7 @@ export default function App() {
             onProfileRefresh={refreshAuthProfile}
             onProfilePatch={applyProfilePatch}
             onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAccount={() => setUsernameModalOpen(true)}
             onBack={() => setAppMode('home')}
             onNavigate={setAppMode}
           />
@@ -3477,51 +3502,80 @@ export default function App() {
       {(!isConnected && !isRecoveringConnection) ||
       (isConnected && !joinedRoom) ||
       (isConnected && joinedRoom && !state) ? (
-        <PrivateMatchLobbyScreen
-          phase={
-            !isConnected && !isRecoveringConnection
-              ? 'disconnected'
-              : isConnected && !joinedRoom
-                ? 'lobby'
-                : 'room'
-          }
-          onNavigate={setAppMode}
-          onOpenAuth={() => setAuthModalOpen(true)}
-          onOpenAccount={() => setUsernameModalOpen(true)}
-          onBackHome={() => setAppMode('home')}
-          isConnecting={isConnecting}
-          serverWaking={serverWaking}
-          serverUrl={serverUrl}
-          onConnect={connect}
-          roomCode={roomCode}
-          onRoomCodeChange={setRoomCode}
-          onCreateRoom={createRoom}
-          onJoinRoom={joinRoom}
-          pendingLobbyAction={
-            pendingUiAction === 'create' || pendingUiAction === 'join' ? pendingUiAction : null
-          }
-          onDisconnect={() => disconnect('user disconnect')}
-          joinedRoom={joinedRoom ?? ''}
-          players={players}
-          you={you}
-          isRoomHost={isRoomHost}
-          onLeaveRoom={leavePrivateLobbyRoom}
-          onStartGame={startGame}
-          pendingStart={pendingUiAction === 'start'}
-          onCopyInviteLink={copyInviteLink}
-          onCopyRoomCode={copyRoomCodeToClipboard}
-          myRating={
-            authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : null
-          }
-          myUsername={authProfile?.username ?? null}
-          roomChatFeed={roomReactions}
-          onSendRoomChat={sendRoomChat}
-          winTarget={60}
-          roomRecoveryState={roomRecoveryState}
-          roomRecoveryMessage={roomRecoveryMessage}
-          onRetryRoomRecovery={retryRoomRecovery}
-          hostWinStreak={privateLobbyHostWinStreak}
-        />
+        mpSubView === 'quick' && !joinedRoom ? (
+          <MatchmakingScreen
+            socket={socket}
+            isConnected={isConnected}
+            identity={
+              authUser?.id
+                ? {
+                    userId: authUser.id,
+                    username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player',
+                  }
+                : null
+            }
+            onNavigate={setAppMode}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onBackHome={() => setAppMode('home')}
+            onOpenPrivateMatch={() => setMpSubView('private')}
+            onAutoJoinRoom={(payload) => handleMatchmakingAutoJoin(payload.roomCode)}
+            onPlayBotFallback={() => setAppMode('botSetup')}
+          />
+        ) : (
+          <PrivateMatchLobbyScreen
+            phase={
+              !isConnected && !isRecoveringConnection
+                ? 'disconnected'
+                : isConnected && !joinedRoom
+                  ? 'lobby'
+                  : 'room'
+            }
+            onNavigate={setAppMode}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAccount={() => setUsernameModalOpen(true)}
+            onBackHome={() => {
+              setMpSubView('quick');
+              if (!joinedRoom) {
+                // Going back from the private lobby — return to quick-match sub-view,
+                // do NOT navigate away from the multiplayer page.
+                return;
+              }
+              setAppMode('home');
+            }}
+            isConnecting={isConnecting}
+            serverWaking={serverWaking}
+            serverUrl={serverUrl}
+            onConnect={connect}
+            roomCode={roomCode}
+            onRoomCodeChange={setRoomCode}
+            onCreateRoom={createRoom}
+            onJoinRoom={joinRoom}
+            pendingLobbyAction={
+              pendingUiAction === 'create' || pendingUiAction === 'join' ? pendingUiAction : null
+            }
+            onDisconnect={() => disconnect('user disconnect')}
+            joinedRoom={joinedRoom ?? ''}
+            players={players}
+            you={you}
+            isRoomHost={isRoomHost}
+            onLeaveRoom={leavePrivateLobbyRoom}
+            onStartGame={startGame}
+            pendingStart={pendingUiAction === 'start'}
+            onCopyInviteLink={copyInviteLink}
+            onCopyRoomCode={copyRoomCodeToClipboard}
+            myRating={
+              authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : null
+            }
+            myUsername={authProfile?.username ?? null}
+            roomChatFeed={roomReactions}
+            onSendRoomChat={sendRoomChat}
+            winTarget={60}
+            roomRecoveryState={roomRecoveryState}
+            roomRecoveryMessage={roomRecoveryMessage}
+            onRetryRoomRecovery={retryRoomRecovery}
+            hostWinStreak={privateLobbyHostWinStreak}
+          />
+        )
       ) : null}
 
       {/* Game Screen */}
