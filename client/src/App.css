@@ -29,17 +29,6 @@ body,
   --bg-secondary: #252b3d;
   --bg-card: #2d3548;
 
-  /* Premium felt green table */
-  --bg-board: #1e5631;
-  --bg-board-gradient: radial-gradient(ellipse at center, #2a7a42 0%, #1e5631 50%, #174525 100%);
-  --bg-board-pattern: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.03) 2px,
-    rgba(0, 0, 0, 0.03) 4px
-  );
-
   --text-primary: #ffffff;
   --text-secondary: #a0a8c0;
   --text-muted: #6b7280;
