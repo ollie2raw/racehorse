@@ -1,18 +1,7 @@
 import type { Server } from 'socket.io';
-import { createReservedRoom } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
 import { advanceSlot, seedBracket } from './bracket';
-import {
-  fetchMatchById,
-  fetchMatches,
-  fetchRegistrations,
-  fetchRegistrationsWithProfile,
-  fetchTournamentById,
-  insertMatch,
-  updateMatch,
-  updateRegistrationStatus,
-  updateTournamentStatus,
-} from './persistence';
+import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 import type { MatchRow, SeededPlayer } from './types';
 
 const MIN_PLAYERS_TO_START = 4;
@@ -35,16 +24,18 @@ function makeTournamentRoomCode(tournamentId: string, round: number, matchNumber
  *  4. Auto-advance any QF that has a bye (player vs null) → the human wins by walkover
  *  5. Update tournament status to in_progress; emit bracket_generated
  *
- * Returns the inserted match rows in canonical order. Throws if < MIN_PLAYERS_TO_START.
+ * `persistence` is injectable for tests; production passes nothing and gets
+ * the real Supabase + in-memory rooms implementation.
  */
 export async function generateBracket(
   io: Server,
   tournamentId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
 ): Promise<MatchRow[]> {
-  const tournament = await fetchTournamentById(tournamentId);
+  const tournament = await persistence.fetchTournamentById(tournamentId);
   if (!tournament) throw new Error('Tournament not found');
 
-  const registrations = await fetchRegistrationsWithProfile(tournamentId);
+  const registrations = await persistence.fetchRegistrationsWithProfile(tournamentId);
   const eligible = registrations.filter((r) => r.status === 'registered');
   if (eligible.length < MIN_PLAYERS_TO_START) {
     throw new Error('Not enough players to start');
@@ -61,10 +52,10 @@ export async function generateBracket(
   const insertedQf: MatchRow[] = [];
   for (const slot of qfSlots) {
     const roomCode = makeTournamentRoomCode(tournamentId, 1, slot.matchNumber);
-    createReservedRoom(roomCode, { winningScore: tournament.win_target });
+    persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target });
     const initialStatus =
       slot.player1 === null || slot.player2 === null ? 'bye' : 'ready';
-    const row = await insertMatch({
+    const row = await persistence.insertMatch({
       tournamentId,
       round: 1,
       matchNumber: slot.matchNumber,
@@ -74,53 +65,69 @@ export async function generateBracket(
       status: initialStatus,
     });
     insertedQf.push(row);
+    // Tag the in-memory room with the match id so the room:join ack and
+    // game-over hook can find it.
+    try {
+      const room = persistence.getRoom(roomCode);
+      room.scheduledTournamentMatchId = row.id;
+      room.scheduledTournamentId = tournamentId;
+    } catch { /* in tests the room may not exist; ignore */ }
   }
 
   // Empty SF and Final rows (slots fill as winners advance).
   for (let m = 1; m <= 2; m++) {
     const roomCode = makeTournamentRoomCode(tournamentId, 2, m);
-    createReservedRoom(roomCode, { winningScore: tournament.win_target });
-    await insertMatch({
+    persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target });
+    const row = await persistence.insertMatch({
       tournamentId, round: 2, matchNumber: m,
       player1Id: null, player2Id: null, roomCode, status: 'waiting',
     });
+    try {
+      const room = persistence.getRoom(roomCode);
+      room.scheduledTournamentMatchId = row.id;
+      room.scheduledTournamentId = tournamentId;
+    } catch { /* noop */ }
   }
   {
     const roomCode = makeTournamentRoomCode(tournamentId, 3, 1);
-    createReservedRoom(roomCode, { winningScore: tournament.win_target });
-    await insertMatch({
+    persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target });
+    const row = await persistence.insertMatch({
       tournamentId, round: 3, matchNumber: 1,
       player1Id: null, player2Id: null, roomCode, status: 'waiting',
     });
+    try {
+      const room = persistence.getRoom(roomCode);
+      room.scheduledTournamentMatchId = row.id;
+      room.scheduledTournamentId = tournamentId;
+    } catch { /* noop */ }
   }
 
   // Mark all registered players "active".
-  for (const reg of eligible) {
-    const idx = eligible.findIndex((r) => r.user_id === reg.user_id);
-    await updateRegistrationStatus(tournamentId, reg.user_id, 'active', idx + 1);
+  for (const [idx, reg] of eligible.entries()) {
+    await persistence.updateRegistrationStatus(tournamentId, reg.user_id, 'active', idx + 1);
   }
 
-  await updateTournamentStatus(tournamentId, 'in_progress');
+  await persistence.updateTournamentStatus(tournamentId, 'in_progress');
 
   // Auto-walkover any bye QFs (player vs null).
   for (const qf of insertedQf) {
     if (qf.status !== 'bye') continue;
     const winnerId = qf.player1_id ?? qf.player2_id;
-    if (!winnerId) continue; // both null — shouldn't happen, but defensively skip
+    if (!winnerId) continue;
     await applyMatchResult(io, {
       matchId: qf.id,
       winnerId,
       player1Score: qf.player1_id === winnerId ? tournament.win_target : 0,
       player2Score: qf.player2_id === winnerId ? tournament.win_target : 0,
       byeWalkover: true,
-    });
+    }, persistence);
   }
 
   // Broadcast.
   io.emit('tournament:bracket_generated', { tournamentId });
 
   // For each non-bye ready match, notify the two players.
-  const matches = await fetchMatches(tournamentId);
+  const matches = await persistence.fetchMatches(tournamentId);
   for (const m of matches) {
     if (m.status === 'ready' && m.player1_id && m.player2_id) {
       notifyMatchReady(io, m);
@@ -144,12 +151,13 @@ export async function applyMatchResult(
     player2Score: number;
     byeWalkover?: boolean;
   },
+  persistence: EnginePersistence = defaultEnginePersistence,
 ): Promise<void> {
-  const match = await fetchMatchById(params.matchId);
+  const match = await persistence.fetchMatchById(params.matchId);
   if (!match) throw new Error('Match not found');
   if (match.status === 'completed') return;
 
-  await updateMatch(match.id, {
+  await persistence.updateMatch(match.id, {
     status: 'completed',
     winner_id: params.winnerId,
     completed_at: new Date().toISOString(),
@@ -162,18 +170,18 @@ export async function applyMatchResult(
     match.player1_id === params.winnerId ? match.player2_id :
     match.player2_id === params.winnerId ? match.player1_id : null;
   if (loserId && !params.byeWalkover) {
-    await updateRegistrationStatus(match.tournament_id, loserId, 'eliminated');
+    await persistence.updateRegistrationStatus(match.tournament_id, loserId, 'eliminated');
   }
 
   if (match.round === 3) {
     // Final — tournament complete.
-    await completeTournament(io, match.tournament_id, params.winnerId);
+    await completeTournament(io, match.tournament_id, params.winnerId, persistence);
     return;
   }
 
   // Advance to next round.
   const next = advanceSlot(match.round as 1 | 2, match.match_number);
-  const nextMatches = await fetchMatches(match.tournament_id);
+  const nextMatches = await persistence.fetchMatches(match.tournament_id);
   const target = nextMatches.find(
     (m) => m.round === next.nextRound && m.match_number === next.nextMatchNumber,
   );
@@ -191,10 +199,10 @@ export async function applyMatchResult(
     next.slot === 'player1' ? target.player2_id !== null : target.player1_id !== null;
   const newStatus: MatchRow['status'] = otherSlotFilled ? 'ready' : 'waiting';
 
-  await updateMatch(target.id, { ...patch, status: newStatus });
+  await persistence.updateMatch(target.id, { ...patch, status: newStatus });
 
   // Re-fetch and broadcast.
-  const updated = await fetchMatchById(target.id);
+  const updated = await persistence.fetchMatchById(target.id);
   io.emit('tournament:match_updated', { tournamentId: match.tournament_id, matchId: target.id });
   if (updated && updated.status === 'ready') {
     notifyMatchReady(io, updated);
@@ -205,14 +213,19 @@ export async function completeTournament(
   io: Server,
   tournamentId: string,
   winnerUserId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
 ): Promise<void> {
-  await updateTournamentStatus(tournamentId, 'completed', { winner_id: winnerUserId });
-  await updateRegistrationStatus(tournamentId, winnerUserId, 'winner');
+  await persistence.updateTournamentStatus(tournamentId, 'completed', { winner_id: winnerUserId });
+  await persistence.updateRegistrationStatus(tournamentId, winnerUserId, 'winner');
   io.emit('tournament:completed', { tournamentId, winnerId: winnerUserId });
 }
 
-export async function cancelTournament(io: Server, tournamentId: string): Promise<void> {
-  await updateTournamentStatus(tournamentId, 'cancelled');
+export async function cancelTournament(
+  io: Server,
+  tournamentId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
+): Promise<void> {
+  await persistence.updateTournamentStatus(tournamentId, 'cancelled');
   io.emit('tournament:cancelled', { tournamentId });
 }
 
@@ -240,8 +253,12 @@ function notifyMatchReady(io: Server, match: MatchRow): void {
 }
 
 /** Helper for the scheduler: open registration on a tournament. */
-export async function openRegistration(io: Server, tournamentId: string): Promise<void> {
-  await updateTournamentStatus(tournamentId, 'registration_open');
+export async function openRegistration(
+  io: Server,
+  tournamentId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
+): Promise<void> {
+  await persistence.updateTournamentStatus(tournamentId, 'registration_open');
   io.emit('tournament:registration_open', { tournamentId });
 }
 
@@ -252,14 +269,15 @@ export async function openRegistration(io: Server, tournamentId: string): Promis
 export async function closeRegistrationAndStart(
   io: Server,
   tournamentId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
 ): Promise<{ started: boolean; reason?: string }> {
-  const regs = await fetchRegistrations(tournamentId);
+  const regs = await persistence.fetchRegistrations(tournamentId);
   const active = regs.filter((r) => r.status === 'registered');
   if (active.length < MIN_PLAYERS_TO_START) {
-    await cancelTournament(io, tournamentId);
+    await cancelTournament(io, tournamentId, persistence);
     return { started: false, reason: 'not_enough_players' };
   }
-  await generateBracket(io, tournamentId);
+  await generateBracket(io, tournamentId, persistence);
   return { started: true };
 }
 

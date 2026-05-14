@@ -2,6 +2,19 @@
 
 8-player single-elimination brackets, fully automated, running every 2 hours on a fixed PST schedule.
 
+---
+
+> ## ⚠ Single-instance only
+>
+> **This system assumes the server runs as a single process.** Each tournament-match room is reserved in-memory via `createReservedRoom()` on the process that handles the bracket generation, and `room.scheduledTournamentMatchId` lives only in that process's memory. If you scale horizontally:
+>
+> - Match-found routing will send both players to the same reserved room code, but only one server actually owns that room — the other player's `room:join` will fail with `Room not found`.
+> - The game-over hook that calls `applyMatchResult()` reads `room.scheduledTournamentMatchId` from memory; on a non-owning process it would be `undefined` and the bracket would not advance.
+>
+> **Before scaling out**, persist the room → matchId mapping (use `findTournamentMatchByRoom(roomCode)` already implemented in `engine.ts`) and either (a) sticky-route all sockets for a given room to one server, or (b) move room state to Redis.
+
+---
+
 ## Schedule
 
 - **Timezone**: America/Los_Angeles (DST-aware).
