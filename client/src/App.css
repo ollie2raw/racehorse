@@ -766,7 +766,7 @@ button:hover:not(:disabled) {
   padding-top: 20px;
 }
 
-.screen.mode-subpage-screen:not(.league-screen) .layout-screen-inner {
+.screen.mode-subpage-screen .layout-screen-inner {
   max-width: 1000px;
   margin-top: clamp(18px, 3.2vh, 34px);
   gap: 8px;
@@ -776,7 +776,7 @@ button:hover:not(:disabled) {
   gap: 8px;
 }
 
-.screen.mode-subpage-screen:not(.league-screen) .layout-screen-content {
+.screen.mode-subpage-screen .layout-screen-content {
   gap: 8px;
 }
 
@@ -1234,10 +1234,6 @@ button:hover:not(:disabled) {
   --menu-section-color: #34d399;
 }
 
-.mode-card-league {
-  --menu-section-color: #22c55e;
-}
-
 .mode-card-ghost {
   --menu-section-color: var(--tier-master);
 }
@@ -1277,14 +1273,6 @@ button:hover:not(:disabled) {
   background: rgba(13, 18, 31, 0.5) !important;
 }
 
-.single-player-hub-cards .mode-option.mode-card-league {
-  --accent-color: #10b981;
-  --menu-section-color: #10b981;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  border-left: 5px solid #10b981 !important;
-  background: rgba(13, 18, 31, 0.5) !important;
-}
-
 .single-player-hub-cards .mode-option.mode-card-bot:hover {
   border-color: var(--card-border) !important;
   border-left-color: #f97316 !important;
@@ -1300,12 +1288,6 @@ button:hover:not(:disabled) {
 .single-player-hub-cards .mode-option.mode-card-ghost:hover {
   border-color: var(--card-border) !important;
   border-left-color: #c084fc !important;
-  box-shadow: var(--card-shadow-hover) !important;
-}
-
-.single-player-hub-cards .mode-option.mode-card-league:hover {
-  border-color: var(--card-border) !important;
-  border-left-color: #10b981 !important;
   box-shadow: var(--card-shadow-hover) !important;
 }
 
@@ -1326,32 +1308,6 @@ button:hover:not(:disabled) {
 
 .screen.mode-accent-daily.mode-subpage-screen {
   --menu-section-color: #f59e0b;
-}
-
-.screen.mode-accent-league.mode-subpage-screen {
-  --menu-section-color: #22c55e;
-}
-
-.screen.mode-accent-league.mode-subpage-screen .mode-section-label {
-  color: #22c55e;
-}
-
-.screen.mode-accent-league.mode-subpage-screen .layout-screen-badge {
-  color: #22c55e;
-}
-
-.screen.mode-accent-league.mode-subpage-screen .mode-option {
-  --menu-section-color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.2);
-  background: rgba(34, 197, 94, 0.05);
-}
-
-.screen.mode-accent-league.mode-subpage-screen .mode-option-title::before {
-  background: #22c55e;
-}
-
-.screen.mode-accent-league.mode-subpage-screen .mode-option:hover {
-  border-color: rgba(34, 197, 94, 0.52);
 }
 
 .screen.mode-accent-daily.mode-subpage-screen .mode-section-label {
@@ -1537,12 +1493,6 @@ button:hover:not(:disabled) {
   --mode-accent: #e05c6a;
   --mode-section-tone: rgba(224, 92, 106, 0.78);
   --mode-hover-border: rgba(224, 92, 106, 0.38);
-}
-
-.mode-accent-league {
-  --mode-accent: rgba(34, 197, 94, 0.66);
-  --mode-section-tone: rgba(177, 242, 197, 0.78);
-  --mode-hover-border: rgba(97, 223, 133, 0.38);
 }
 
 .mode-accent-tournament {

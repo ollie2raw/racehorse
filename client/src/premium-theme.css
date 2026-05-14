@@ -87,7 +87,7 @@ body, #root {
   flex-direction: column !important;
 }
 
-/* ── mode-option (used by LeagueScreen, GameOverModal, LearnScenarioScreen) ── */
+/* ── mode-option (used by GameOverModal, LearnScenarioScreen) ── */
 
 .mode-option {
   background: rgba(13, 18, 31, 0.5) !important;
