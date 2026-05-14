@@ -32,7 +32,7 @@ function formatElapsed(ms: number): string {
 function ratingWindowAt(waitedMs: number): number | null {
   if (waitedMs >= 90_000) return null;
   const steps = Math.floor(waitedMs / 30_000);
-  return 200 + steps * 200;
+  return 100 + steps * 100;
 }
 
 function initialsFor(name: string | undefined): string {
@@ -107,9 +107,9 @@ function IconDominoes({ size = 16 }: { size?: number }) {
 }
 
 const SEARCH_STEPS = [
-  { range: '±200', when: '0–30s' },
-  { range: '±400', when: '30–60s' },
-  { range: '±600', when: '60–90s' },
+  { range: '±100', when: '0–30s' },
+  { range: '±200', when: '30–60s' },
+  { range: '±300', when: '60–90s' },
   { range: 'Any', when: '90s+' },
 ];
 

@@ -32,6 +32,8 @@
   --text-primary:   #f8fafc;
   --text-secondary: rgba(255, 255, 255, 0.6);
   --text-dim:       rgba(255, 255, 255, 0.35);
+  /* High-contrast copy on solid elite / gold CTAs */
+  --text-on-elite:  #1a1200;
 
   /* ── Shadows ─────────────────────────────────────── */
   --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.30);

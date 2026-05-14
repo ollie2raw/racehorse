@@ -2883,6 +2883,44 @@ export default function App() {
     });
   }, [state, joinedRoom, players, supabaseEnabled, authUser, you, multiplayerMoveLog]);
 
+  // Join a tournament room by code — hoisted so effects and render both use it.
+  const joinTournamentRoom = useCallback((code: string) => {
+    setRoomCode(code);
+    if (socket?.connected) {
+      socket.emit(
+        'room:join',
+        code.trim().toUpperCase(),
+        {
+          username: authProfile?.username ?? 'Guest',
+          userId: multiplayerIdentityUserId,
+          authToken: multiplayerAuthToken,
+        },
+        (resp: { ok: boolean; error?: string } & Record<string, unknown>) => {
+          if (resp?.ok) applyJoinedRoomResponse(resp);
+          else showToast(resp?.error ?? 'Could not join tournament match.', 2500);
+        },
+      );
+    }
+  }, [socket, authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, applyJoinedRoomResponse, showToast]);
+
+  // Drain a pending tournament:match_ready signal — auto-join the reserved room.
+  // Must be an effect (not render-path logic) so React StrictMode double-invoke
+  // doesn't clear the pending match before it can be acted on.
+  useEffect(() => {
+    if (!tournament.pendingMatch) return;
+    const p = tournament.pendingMatch;
+    setActiveTournamentId(p.tournamentId);
+    if (p.roomCode) joinTournamentRoom(p.roomCode);
+    tournament.clearPendingMatch();
+  }, [tournament.pendingMatch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load bracket when the result screen is shown without a prior bracket visit.
+  useEffect(() => {
+    if (tournamentSubView === 'result' && activeTournamentId && !tournament.activeBracket) {
+      void tournament.openBracket(activeTournamentId);
+    }
+  }, [tournamentSubView, activeTournamentId, tournament.activeBracket, tournament.openBracket]);
+
   // ─── Render ───────────────────────────────────────────────
   const appRootClassName = 'app large-mode';
   const showLearnAdminView = (() => {
@@ -3129,6 +3167,9 @@ export default function App() {
             user={authUser}
             profile={authProfile}
             onBack={() => setAppMode('home')}
+            onNavigate={setAppMode}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAccount={() => setUsernameModalOpen(true)}
           />
         </Suspense>
       </div>
@@ -3220,33 +3261,6 @@ export default function App() {
     const tIdentity = authUser?.id
       ? { userId: authUser.id, username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player' }
       : null;
-    const joinTournamentRoom = (code: string) => {
-      setRoomCode(code);
-      if (socket?.connected) {
-        socket.emit(
-          'room:join',
-          code.trim().toUpperCase(),
-          {
-            username: authProfile?.username ?? 'Guest',
-            userId: multiplayerIdentityUserId,
-            authToken: multiplayerAuthToken,
-          },
-          (resp: { ok: boolean; error?: string } & Record<string, unknown>) => {
-            if (resp?.ok) applyJoinedRoomResponse(resp);
-            else showToast(resp?.error ?? 'Could not join tournament match.', 2500);
-          },
-        );
-      }
-    };
-
-    // Drain a pending tournament:match_ready signal — auto-join the reserved room.
-    if (tournament.pendingMatch) {
-      const p = tournament.pendingMatch;
-      tournament.clearPendingMatch();
-      setActiveTournamentId(p.tournamentId);
-      if (p.roomCode) joinTournamentRoom(p.roomCode);
-    }
-
     // Auto-route to result screen for a tournament we care about.
     if (completedTournamentId) {
       const ours =

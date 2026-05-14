@@ -33,6 +33,9 @@ import {
 } from './tournament/tournament';
 import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
+import { socialRouter } from './social/routes';
+import { upsertPresence } from './social/presence';
+import { writeMatchActivity, writePuzzleActivity, writeDailyFritzActivity } from './social/activityWriter';
 import { supabaseFetch } from './supabaseUtils';
 import {
   buildDailyFritzCompletionHash,
@@ -68,6 +71,7 @@ import {
   type DailyPuzzleSlotResultRow,
   type DailyPuzzleSlotRow,
 } from './dailyPuzzle';
+import { ensureDailyPuzzleLadderForDate } from './seedDailyPuzzleLadder';
 import {
   buildHomeDailySummary,
   createHomeDailyCompletionMap,
@@ -146,6 +150,8 @@ const corsOptions: CorsOptions = {
 const app = express();
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
+app.use('/api/social', socialRouter);
+app.use('/api/profile', socialRouter);
 
 async function getAuthenticatedUserId(req: express.Request): Promise<string | null> {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
@@ -1001,6 +1007,9 @@ app.post('/bot-matches/cleanup-stale', async (_req, res) => {
 });
 
 const server = http.createServer(app);
+/** Ladder / Fritz warmups can hold the event loop; avoid closing reused proxy sockets mid-request. */
+server.keepAliveTimeout = 120_000;
+server.headersTimeout = 125_000;
 
 const io = new Server(server, {
   cors: {
@@ -1938,6 +1947,39 @@ function scheduleDailyFritzWarmup(): void {
   }, delayMs);
 }
 
+async function warmDailyPuzzleLadders(reason: 'startup' | 'scheduled', runDates: string[]): Promise<void> {
+  const startedAt = Date.now();
+  console.log('[daily-puzzle-ladder-warmup] start', { reason, runDates });
+  try {
+    const results: Array<{ runDate: string; ms: number; outcome: 'skipped' | 'seeded' | 'failed' }> = [];
+    for (const runDate of runDates) {
+      const slotStartedAt = Date.now();
+      const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false });
+      results.push({ runDate, ms: Date.now() - slotStartedAt, outcome });
+    }
+    console.log('[daily-puzzle-ladder-warmup] success', {
+      reason,
+      totalMs: Date.now() - startedAt,
+      results,
+    });
+  } catch (error) {
+    console.warn('[daily-puzzle-ladder-warmup] error', {
+      reason,
+      totalMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function scheduleDailyPuzzleLadderWarmup(): void {
+  const nextWarmupAt = getNextPacificWarmupAt(0, 2);
+  const delayMs = Math.max(1000, nextWarmupAt.getTime() - Date.now());
+  setTimeout(async () => {
+    await warmDailyPuzzleLadders('scheduled', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]);
+    scheduleDailyPuzzleLadderWarmup();
+  }, delayMs);
+}
+
 async function getDailyFritzAttempt(runDate: string, userId: string): Promise<DailyFritzAttemptRecord | null> {
   const rows = await supabaseFetch<DailyFritzAttemptRow[]>(
     `/rest/v1/daily_fritz_attempts?select=id,run_date,user_id,status,current_hand_index,started_at,completed_at,verified_match_id,completion_hash,result,final_score,opponent_score,point_diff,won,moves_used,hands_played&run_date=eq.${encodeURIComponent(runDate)}&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
@@ -2073,6 +2115,36 @@ async function listDailyPuzzleSlotsForDate(runDate: string): Promise<DailyPuzzle
     { method: 'GET' },
   );
   return sortDailyPuzzleSlots(rows.map(normalizeDailyPuzzleSlot));
+}
+
+/** If no ready ladder exists for this Pacific date, generate and upsert three slots (idempotent). */
+async function listDailyPuzzleSlotsForDateWithAutoSeed(runDate: string): Promise<DailyPuzzleSlot[]> {
+  try {
+    let slots = await listDailyPuzzleSlotsForDate(runDate);
+    if (isDailyPuzzleLadderReady(slots)) return slots;
+    const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false });
+    if (outcome === 'seeded') {
+      slots = await listDailyPuzzleSlotsForDate(runDate);
+    }
+    return slots;
+  } catch (error) {
+    console.warn('[daily-puzzle-ladder] listDailyPuzzleSlotsForDateWithAutoSeed failed', {
+      runDate,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+function isAuthorizedDailyPuzzleCronRequest(req: express.Request): boolean {
+  const secret = process.env.DAILY_PUZZLE_CRON_SECRET?.trim();
+  if (!secret) return false;
+  const headerRaw = req.headers['x-daily-puzzle-cron-secret'];
+  const fromHeader = typeof headerRaw === 'string' ? headerRaw.trim() : '';
+  if (fromHeader === secret) return true;
+  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
+  const m = authHeader.match(/^Bearer\s+(.+)$/i);
+  return Boolean(m?.[1]?.trim() && m[1].trim() === secret);
 }
 
 async function getDailyPuzzleAttempt(runDate: string, userId: string): Promise<DailyPuzzleAttempt | null> {
@@ -2719,14 +2791,39 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
 
 app.get('/api/daily-puzzle/today', async (req, res) => {
   try {
-    const authenticatedUserId = await getAuthenticatedUserId(req);
+    let authenticatedUserId: string | null = null;
+    try {
+      authenticatedUserId = await getAuthenticatedUserId(req);
+    } catch (authError) {
+      console.warn('[daily-puzzle-today] auth lookup failed; continuing without user', {
+        error: authError instanceof Error ? authError.message : String(authError),
+      });
+    }
     const runDate = getPacificDateKey();
-    const allSlots = await listDailyPuzzleSlotsForDate(runDate);
+    const allSlots = await listDailyPuzzleSlotsForDateWithAutoSeed(runDate);
     const ladderSlots = findReadyDailyPuzzleLadderSlots(allSlots);
     const ready = ladderSlots !== null;
     const slots = ladderSlots ?? allSlots;
-    const leaderboard = await buildDailyPuzzleLeaderboardForDate(runDate);
-    const attempt = authenticatedUserId ? await getDailyPuzzleAttempt(runDate, authenticatedUserId) : null;
+    let leaderboard: DailyPuzzleLeaderboardEntry[] = [];
+    try {
+      leaderboard = await buildDailyPuzzleLeaderboardForDate(runDate);
+    } catch (leaderboardError) {
+      console.warn('[daily-puzzle-today] leaderboard load failed', {
+        runDate,
+        error: leaderboardError instanceof Error ? leaderboardError.message : String(leaderboardError),
+      });
+    }
+    let attempt: DailyPuzzleAttempt | null = null;
+    if (authenticatedUserId) {
+      try {
+        attempt = await getDailyPuzzleAttempt(runDate, authenticatedUserId);
+      } catch (attemptError) {
+        console.warn('[daily-puzzle-today] attempt load failed', {
+          runDate,
+          error: attemptError instanceof Error ? attemptError.message : String(attemptError),
+        });
+      }
+    }
     const nextAvailableSlotIndex = attempt
       ? attempt.status === 'completed'
         ? null
@@ -2763,7 +2860,7 @@ app.post('/api/daily-puzzle/start', async (req, res) => {
       typeof req.body?.runDate === 'string' && req.body.runDate.trim()
         ? req.body.runDate.trim()
         : getPacificDateKey();
-    const slots = await listDailyPuzzleSlotsForDate(runDate);
+    const slots = await listDailyPuzzleSlotsForDateWithAutoSeed(runDate);
     if (!isDailyPuzzleLadderReady(slots)) {
       res.status(409).json({ error: 'Daily Puzzle ladder is not published for this date yet.', runDate });
       return;
@@ -2850,7 +2947,7 @@ app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
     const slotIndex = slotIndexRaw === 2 || slotIndexRaw === 3 ? slotIndexRaw : 1;
     const existing = attempt.result.slots.find((slot) => slot.slotIndex === slotIndex);
     if (existing) {
-      const slots = await listDailyPuzzleSlotsForDate(attempt.puzzleDate);
+      const slots = await listDailyPuzzleSlotsForDateWithAutoSeed(attempt.puzzleDate);
       const ladderCompleted = attempt.result.slots.length >= 3;
       const nextSlot = slots.find((slot) => slot.slotIndex === attempt.currentSlotIndex) ?? null;
       res.json({
@@ -2870,7 +2967,7 @@ app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
       res.status(409).json({ error: 'Daily Puzzle slot order is invalid.' });
       return;
     }
-    const slots = await listDailyPuzzleSlotsForDate(attempt.puzzleDate);
+    const slots = await listDailyPuzzleSlotsForDateWithAutoSeed(attempt.puzzleDate);
     if (!isDailyPuzzleLadderReady(slots)) {
       res.status(409).json({ error: 'Daily Puzzle ladder is not published for this date yet.' });
       return;
@@ -2983,6 +3080,9 @@ app.post('/api/daily-puzzle/complete', async (req, res) => {
     }
     const leaderboard = await buildDailyPuzzleLeaderboardForDate(saved.puzzleDate);
     const leaderboardRank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
+    if (!replayed) {
+      void writePuzzleActivity({ userId: authenticatedUserId, score: saved.totalScore ?? null, streak: 0 }).catch(() => {});
+    }
     res.json({
       ok: true,
       runDate: saved.puzzleDate,
@@ -3016,6 +3116,35 @@ app.get('/api/daily-puzzle/leaderboard', async (req, res) => {
     });
   }
 });
+
+/**
+ * Optional: schedule a platform cron (Vercel, GitHub Actions, etc.) to hit this route
+ * shortly after Pacific midnight so the ladder exists before the first player.
+ * Set DAILY_PUZZLE_CRON_SECRET and send it as Authorization: Bearer <secret>
+ * or header x-daily-puzzle-cron-secret: <secret>.
+ */
+const handleDailyPuzzleLadderCronWarm: express.RequestHandler = async (_req, res) => {
+  try {
+    if (!isAuthorizedDailyPuzzleCronRequest(_req)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const runDates = [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)];
+    const results: Array<{ runDate: string; outcome: 'skipped' | 'seeded' | 'failed' }> = [];
+    for (const runDate of runDates) {
+      const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false });
+      results.push({ runDate, outcome });
+    }
+    res.json({ ok: true, results });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Daily Puzzle ladder cron warm failed.',
+    });
+  }
+};
+
+app.get('/api/cron/daily-puzzle-ladder-warm', handleDailyPuzzleLadderCronWarm);
+app.post('/api/cron/daily-puzzle-ladder-warm', handleDailyPuzzleLadderCronWarm);
 
 app.get('/api/daily-fritz/today', async (req, res) => {
   const requestStartedAt = Date.now();
@@ -3642,6 +3771,7 @@ app.post('/api/daily-fritz/complete', async (req, res) => {
 
     const leaderboard = await buildDailyFritzLeaderboard(runDate);
     const rank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
+    void writeDailyFritzActivity({ userId: authenticatedUserId, finalScore: attempt.finalScore ?? null, won: attempt.won }).catch(() => {});
     res.json({
       ok: true,
       rank,
@@ -4346,6 +4476,16 @@ function broadcastStateUpdate(roomCode: string) {
             pointDiff: Math.abs(scoreA - scoreB),
           });
 
+          void writeMatchActivity({
+            winnerUserId: winnerSocketId === aId ? a.userId : b.userId,
+            loserUserId: winnerSocketId === aId ? b.userId : a.userId,
+            winnerUsername: winnerSocketId === aId ? a.username : b.username,
+            loserUsername: winnerSocketId === aId ? b.username : a.username,
+            mode: 'online',
+            winnerScore: winnerSocketId === aId ? scoreA : scoreB,
+            loserScore: winnerSocketId === aId ? scoreB : scoreA,
+          }).catch(() => {});
+
           // RANKED GAMES LOGGING
           const rankingParticipants = [
             { me: a, opp: b, myScore: scoreA, oppScore: scoreB },
@@ -4726,6 +4866,7 @@ io.on('connection', (socket: Socket) => {
       const existing = socketsByUserId.get(userId) ?? new Set<string>();
       existing.add(socket.id);
       socketsByUserId.set(userId, existing);
+      void upsertPresence(userId, 'online').catch(() => {});
       cb?.({ ok: true });
     } catch {
       cb?.({ ok: false });
@@ -5711,6 +5852,9 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     removeSocketPresence();
     const roomCode = (socket.data?.roomId as string | undefined) ?? undefined;
     const userId = normalizeUserId(socket.data?.userId);
+    if (isUuidLike(userId)) {
+      void upsertPresence(userId as string, 'offline').catch(() => {});
+    }
     let wasActiveRoomPlayer = false;
     if (roomCode) {
       try {
@@ -5754,10 +5898,21 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
 
 const PORT = Number.parseInt(process.env.PORT ?? '3001', 10) || 3001;
 
-void warmDailyFritzRuns('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]);
-scheduleDailyFritzWarmup();
-
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
   startRankingCron();
+  // Run warmups only after the HTTP server is accepting connections so dev clients (Vite proxy)
+  // never hit a live port while heavy startup work is still racing the accept queue.
+  void warmDailyFritzRuns('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]).catch(
+    (err) => {
+      console.warn('[daily-fritz-warmup] startup failed', err instanceof Error ? err.message : err);
+    },
+  );
+  scheduleDailyFritzWarmup();
+  void warmDailyPuzzleLadders('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]).catch(
+    (err) => {
+      console.warn('[daily-puzzle-ladder-warmup] startup failed', err instanceof Error ? err.message : err);
+    },
+  );
+  scheduleDailyPuzzleLadderWarmup();
 });

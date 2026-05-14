@@ -93,12 +93,18 @@ MATCHMAKING_DEV_MODE=0 npm run dev
 
 | Waited | Half-width |
 |---|---|
-| 0 – 30 s | ±200 |
-| 30 – 60 s | ±400 |
-| 60 – 90 s | ±600 |
+| 0 – 30 s | ±100 |
+| 30 – 60 s | ±200 |
+| 60 – 90 s | ±300 |
 | 90 s + | unbounded (also fires the timeout fallback) |
 
-See `server/src/matchmaking/pairing.ts`. The pure-function pairing algorithm has 10 unit tests in `pairing.test.ts`.
+See `server/src/matchmaking/pairing.ts`. The pure-function pairing algorithm has unit tests in `pairing.test.ts`.
+
+Set `MATCHMAKING_DEBUG=1` on the server to log each successful queue join (and rejections) plus every candidate evaluation in `findPairs` (verbose; turn off after diagnosing).
+
+## Multi-instance deployments
+
+The queue is **in-memory in one Node process**. If you run more than one Socket.io server behind a load balancer without sticky sessions (or a shared adapter plus a centralized queue), two players can both be “searching” on **different** instances — they never appear in the same `findPairs` sweep and will hit the 90s timeout. Mitigations: sticky sessions to one instance, or Redis / Supabase-backed queue coordination with `@socket.io/redis-adapter`.
 
 ## Two-real-player local testing
 
@@ -137,7 +143,7 @@ Inside a match, the **existing 30-second reconnect window** (`server/src/rooms.t
 
 RLS: a user can SELECT only rows where they were a participant.
 
-`user_profiles.glicko_rating` is read at queue-join time. No new column added.
+`profiles.glicko_rating` is read at queue-join time via the service role (see `fetchPlayerRating` in `server/src/matchmaking/index.ts`).
 
 ## Files added
 
@@ -186,7 +192,7 @@ client/src/App.tsx      +import MatchmakingScreen
 
 ## Known limitations / future work
 
-- Queue state is in-memory on the server. Multi-instance deploys will need a Redis or Supabase-backed queue.
+- Queue state is in-memory on a single server process; see **Multi-instance deployments** above.
 - The sim bot is intentionally random, not heuristic. Wire `client/src/bot/botHeuristics` into the server if you want smarter bots.
 - "Opponent disconnected" forfeit handling reuses the existing room reconnect window. Matchmaking adds no new behavior here — verified during integration testing.
 - Sim matches don't write to `matchmaking_matches` because their userIds aren't in `auth.users`. If we ever want sim history, we'd add a synthetic `sim_user_id` row or relax the FK.

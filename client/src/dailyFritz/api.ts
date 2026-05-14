@@ -5,6 +5,13 @@ import type { FritzTier } from '../bot/fritzConfig';
 const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
 const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
 
+const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
+  import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
+
+function dfClientDebug(...args: unknown[]): void {
+  if (DAILY_FRITZ_CLIENT_DEBUG_LOGS) console.log(...args);
+}
+
 function resolveServerBaseUrl(): string {
   const configured = DEFAULT_SERVER_URL.trim();
   if (configured) return configured.replace(/\/$/, '');
@@ -30,7 +37,7 @@ async function authHeaders(): Promise<Record<string, string>> {
     // no-op
   }
   const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  console.log('[daily-fritz-client] authHeaders', {
+  dfClientDebug('[daily-fritz-client] authHeaders', {
     ms: Number((endedAt - startedAt).toFixed(1)),
     hasSupabase: Boolean(supabase),
     hasAuthorization: Boolean(headers.Authorization),
@@ -53,7 +60,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const fetchEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const text = await response.text().catch(() => '');
   const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  console.log('[daily-fritz-client] requestJson', {
+  dfClientDebug('[daily-fritz-client] requestJson', {
     path,
     status: response.status,
     authMs: Number((fetchStartedAt - startedAt).toFixed(1)),

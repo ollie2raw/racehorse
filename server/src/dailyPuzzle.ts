@@ -1,3 +1,5 @@
+import { computeBestPossiblePuzzleScore } from './generatePuzzles';
+
 export type DailyPuzzleTier = 'quick_line' | 'tactical_setup' | 'master_chain';
 export type DailyPuzzleAttemptStatus = 'none' | 'started' | 'completed';
 export type DailyPuzzlePracticeMode = 'none' | 'review' | 'practice';
@@ -182,12 +184,50 @@ function extractBestPossibleScore(
   return null;
 }
 
+/**
+ * Ladder readiness requires a positive best-possible score. Older rows may omit
+ * objective_payload.best_possible_score; recompute from board + hand so a valid
+ * three-slot day is not stuck in legacy mode.
+ */
+function inferBestPossibleScoreFromBoard(row: DailyPuzzleSlotRow, targetScore: number): number | null {
+  const board = row.starting_board;
+  const hand = row.starting_hand;
+  if (!board || !Array.isArray(hand) || hand.length === 0) return null;
+
+  const rawType = row.puzzle_type?.trim();
+  const puzzleType = rawType === 'setup_and_strike' ? 'setup_and_strike' : 'one_turn_high_score';
+  const maxMoves = Number.isFinite(row.max_moves) ? Math.max(1, Math.round(row.max_moves ?? 1)) : 1;
+  const dealSize = Number.isFinite(row.deal_size) ? Math.round(row.deal_size ?? 14) : 14;
+
+  try {
+    const score = computeBestPossiblePuzzleScore({
+      id: row.id,
+      puzzleDate: row.puzzle_date,
+      title: row.title ?? null,
+      startingBoard: board as never,
+      startingHand: hand as never,
+      maxMoves,
+      targetScore,
+      puzzleType,
+      dealSize,
+    });
+    if (typeof score === 'number' && Number.isFinite(score) && score > 0) {
+      return Math.round(score);
+    }
+  } catch {
+    // Invalid or partial puzzle JSON — leave null.
+  }
+  return null;
+}
+
 export function normalizeDailyPuzzleSlot(row: DailyPuzzleSlotRow): DailyPuzzleSlot {
   const slotIndex = clampSlotIndex(row.slot_index);
   const tier = normalizeTier(row.tier, slotIndex);
   const objectivePayload =
     row.objective_payload && typeof row.objective_payload === 'object' ? row.objective_payload : {};
   const targetScore = Number.isFinite(row.target_score) ? Math.round(row.target_score ?? 0) : 0;
+  const bestFromRow = extractBestPossibleScore(objectivePayload, targetScore);
+  const bestPossibleScore = bestFromRow ?? inferBestPossibleScoreFromBoard(row, targetScore);
   return {
     id: row.id,
     puzzleDate: row.puzzle_date,
@@ -202,7 +242,7 @@ export function normalizeDailyPuzzleSlot(row: DailyPuzzleSlotRow): DailyPuzzleSl
     targetScore,
     dealSize: Number.isFinite(row.deal_size) ? Math.round(row.deal_size ?? 0) : 0,
     slotMaxPoints: Number.isFinite(row.slot_max_points) ? Math.round(row.slot_max_points ?? 0) : 0,
-    bestPossibleScore: extractBestPossibleScore(objectivePayload, targetScore),
+    bestPossibleScore,
     startingBoard: row.starting_board ?? null,
     startingHand: row.starting_hand ?? [],
     objectiveType: row.objective_type?.trim() || (row.puzzle_type?.trim() || 'one_turn_high_score'),

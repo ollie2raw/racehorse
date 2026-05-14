@@ -9,7 +9,7 @@ import {
   getLegalMoves,
   type BotMatchState,
 } from '../bot/botEngine';
-import type { Move, Tile } from '../types';
+import type { AppMode, Move, Tile } from '../types';
 import {
   fetchDailyPuzzleLeaderboard,
   getDailyPuzzleByDateSeed,
@@ -22,6 +22,7 @@ import {
   upsertDailyPuzzleBestScore,
 } from './api';
 import type { CuratedDailyPuzzle, DailyPuzzleTodayResponse, PuzzleValidationResult } from './types';
+import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
 import LayoutScreen from '../ui/LayoutScreen';
 import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import {
@@ -88,6 +89,9 @@ interface DailyPuzzleScreenProps {
   user: User | null;
   profile: UserProfile | null;
   onBack: () => void;
+  onNavigate?: (mode: AppMode) => void;
+  onOpenAuth?: () => void;
+  onOpenAccount?: () => void;
 }
 
 type PlayStatus = 'IN_PROGRESS' | 'SOLVED' | 'FAILED';
@@ -96,11 +100,6 @@ interface DailyProgress {
   attempts: number;
   bestMoves: number | null;
   lastResult: PlayStatus | null;
-}
-
-interface DailyPuzzleStreak {
-  lastCompletedDate: string | null;
-  currentStreak: number;
 }
 
 type ValidatorWorkerRequest =
@@ -197,75 +196,6 @@ function writeCachedPuzzle(puzzle: CuratedDailyPuzzle): void {
   }
 }
 
-function streakKey(): string {
-  return 'dailyPuzzle:streak';
-}
-
-function readStreak(): DailyPuzzleStreak {
-  if (typeof window === 'undefined') {
-    return { lastCompletedDate: null, currentStreak: 0 };
-  }
-  try {
-    const raw = window.localStorage.getItem(streakKey());
-    if (!raw) return { lastCompletedDate: null, currentStreak: 0 };
-    const parsed = JSON.parse(raw) as DailyPuzzleStreak;
-    return {
-      lastCompletedDate:
-        typeof parsed.lastCompletedDate === 'string' ? parsed.lastCompletedDate : null,
-      currentStreak: Number.isFinite(parsed.currentStreak) ? Math.max(0, parsed.currentStreak) : 0,
-    };
-  } catch {
-    return { lastCompletedDate: null, currentStreak: 0 };
-  }
-}
-
-function writeStreak(streak: DailyPuzzleStreak): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(streakKey(), JSON.stringify(streak));
-}
-
-function parseLocalDateKeyToDate(dateKey: string): Date | null {
-  const match = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return null;
-  const y = Number(match[1]);
-  const m = Number(match[2]);
-  const d = Number(match[3]);
-  const parsed = new Date(y, m - 1, d);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed;
-}
-
-function diffLocalCalendarDays(prev: string, next: string): number | null {
-  const prevDate = parseLocalDateKeyToDate(prev);
-  const nextDate = parseLocalDateKeyToDate(next);
-  if (!prevDate || !nextDate) return null;
-  const ms = nextDate.getTime() - prevDate.getTime();
-  return Math.round(ms / 86400000);
-}
-
-function recordSolvedStreak(dateKey: string): number {
-  const streak = readStreak();
-  if (streak.lastCompletedDate === dateKey) {
-    const sameDay = Math.max(1, streak.currentStreak || 1);
-    writeStreak({ lastCompletedDate: dateKey, currentStreak: sameDay });
-    return sameDay;
-  }
-
-  const dayDiff = streak.lastCompletedDate ? diffLocalCalendarDays(streak.lastCompletedDate, dateKey) : null;
-  const nextStreak = dayDiff === 1 ? Math.max(1, streak.currentStreak + 1) : 1;
-  writeStreak({ lastCompletedDate: dateKey, currentStreak: nextStreak });
-  return nextStreak;
-}
-
-function getDisplayStreak(todayDateKey: string): number {
-  const streak = readStreak();
-  if (!streak.lastCompletedDate || streak.currentStreak <= 0) return 0;
-  const dayDiff = diffLocalCalendarDays(streak.lastCompletedDate, todayDateKey);
-  if (dayDiff === null) return Math.max(0, streak.currentStreak);
-  if (dayDiff <= 1) return Math.max(0, streak.currentStreak);
-  return 0;
-}
-
 function getDisplayName(username: string | null | undefined): string {
   const value = (username ?? '').trim();
   if (!value) return 'Player';
@@ -332,6 +262,9 @@ export default function DailyPuzzleScreen({
   user,
   profile,
   onBack,
+  onNavigate,
+  onOpenAuth,
+  onOpenAccount,
 }: DailyPuzzleScreenProps) {
   const stableDailyTitle = (
     <span style={{ color: 'rgba(243, 250, 247, 0.97)', opacity: 1 }}>Today&apos;s Challenge</span>
@@ -342,9 +275,11 @@ export default function DailyPuzzleScreen({
   const [archiveDateInput, setArchiveDateInput] = useState(localDateKey);
   const [puzzle, setPuzzle] = useState<CuratedDailyPuzzle | null>(null);
   const [ladderToday, setLadderToday] = useState<DailyPuzzleTodayResponse | null>(null);
-  const [entryMode, setEntryMode] = useState<'checking' | 'legacy' | 'ladder'>(
-    selectedDateSeed === localDateKey ? 'checking' : 'legacy',
-  );
+  const [ladderFetchNonce, setLadderFetchNonce] = useState(0);
+  const [ladderStatusError, setLadderStatusError] = useState<string | null>(null);
+  const [entryMode, setEntryMode] = useState<
+    'checking' | 'legacy' | 'ladder' | 'ladderPending' | 'ladderCheckError'
+  >(selectedDateSeed === localDateKey ? 'checking' : 'legacy');
   const [validation, setValidation] = useState<PuzzleValidationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -408,24 +343,26 @@ export default function DailyPuzzleScreen({
       try {
         const todayResponse = await getTodayDailyPuzzleLadder();
         if (cancelled) return;
+        setLadderStatusError(null);
         if (!todayResponse.legacySinglePuzzleDay && todayResponse.slots.length === 3) {
           setLadderToday(todayResponse);
           setEntryMode('ladder');
           return;
         }
         setLadderToday(todayResponse);
-        setEntryMode('legacy');
-      } catch {
+        setEntryMode('ladderPending');
+      } catch (err) {
         if (!cancelled) {
           setLadderToday(null);
-          setEntryMode('legacy');
+          setLadderStatusError(err instanceof Error ? err.message : 'Unable to load today’s Daily Puzzle ladder.');
+          setEntryMode('ladderCheckError');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [localDateKey, selectedDateSeed]);
+  }, [localDateKey, selectedDateSeed, ladderFetchNonce]);
 
   const flashLastPlayed = useCallback((tile: Tile | null) => {
     if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
@@ -620,6 +557,7 @@ export default function DailyPuzzleScreen({
 
   useEffect(() => {
     if (entryMode === 'checking') return;
+    if (entryMode === 'ladderPending' || entryMode === 'ladderCheckError') return;
     if (entryMode === 'ladder' && selectedDateSeed === localDateKey) {
       setLoading(false);
       return;
@@ -1115,6 +1053,72 @@ export default function DailyPuzzleScreen({
     return <DailyPuzzleLoadingScreen onBack={handleBackHome} />;
   }
 
+  if (entryMode === 'ladderCheckError' && selectedDateSeed === localDateKey) {
+    return (
+      <LayoutScreen
+        className="screen lobby-screen mode-home-screen"
+        title={stableDailyTitle}
+        subtitle="Could not confirm today’s ladder."
+        contentClassName="screen-shell"
+      >
+        <p className="auth-inline-error">{ladderStatusError ?? 'Unknown error.'}</p>
+        <p className="lobby-server">Run calendar uses Pacific time (same as the daily reset).</p>
+        <button
+          type="button"
+          className="mode-inline-btn rh-back-button"
+          onClick={() => {
+            setLadderStatusError(null);
+            setEntryMode('checking');
+            setLadderFetchNonce((n) => n + 1);
+          }}
+        >
+          Retry
+        </button>
+        <button type="button" className="mode-inline-btn rh-back-button" onClick={handleBackHome}>
+          ← Back to Home
+        </button>
+      </LayoutScreen>
+    );
+  }
+
+  if (entryMode === 'ladderPending' && ladderToday && selectedDateSeed === localDateKey) {
+    return (
+      <LayoutScreen
+        className="screen lobby-screen mode-home-screen"
+        title={stableDailyTitle}
+        subtitle="Today’s Daily Puzzle is a three-step ladder for everyone."
+        contentClassName="screen-shell"
+      >
+        <p style={{ color: 'rgba(232,245,240,0.88)', lineHeight: 1.5 }}>
+          The ladder for <strong>{ladderToday.runDate}</strong> is not published yet (needs three live puzzles with
+          valid scoring metadata). Check back soon — the single-puzzle format is no longer offered for today.
+        </p>
+        <button
+          type="button"
+          className="mode-inline-btn rh-back-button"
+          onClick={() => {
+            setEntryMode('checking');
+            setLadderFetchNonce((n) => n + 1);
+          }}
+        >
+          Refresh status
+        </button>
+        <button type="button" className="mode-inline-btn rh-back-button" onClick={handleBackHome}>
+          ← Back to Home
+        </button>
+        {import.meta.env.DEV ? (
+          <p className="lobby-server" style={{ marginTop: '1rem', maxWidth: '42rem' }}>
+            Local dev: ensure API is running on port 3001 (Vite proxies <code>/api</code> there), with{' '}
+            <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_KEY</code> in the server env, then seed three slots:{' '}
+            <code>
+              {`npm run build --prefix server && node server/dist/seedDailyPuzzleLadder.js --date ${ladderToday.runDate} --force`}
+            </code>
+          </p>
+        ) : null}
+      </LayoutScreen>
+    );
+  }
+
   if (entryMode === 'ladder' && ladderToday && selectedDateSeed === localDateKey) {
     return (
       <DailyPuzzleLadderScreen
@@ -1122,6 +1126,9 @@ export default function DailyPuzzleScreen({
         profile={profile}
         initialToday={ladderToday}
         onBack={onBack}
+        onNavigate={onNavigate}
+        onOpenAuth={onOpenAuth}
+        onOpenAccount={onOpenAccount}
       />
     );
   }

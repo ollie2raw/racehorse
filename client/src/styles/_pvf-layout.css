@@ -1,0 +1,651 @@
+/* =============================================
+   RACEHORSE — PVF screen layout (shared)
+   Canonical identity: Play vs Fritz. Also used by Daily Puzzle ladder hub.
+   ============================================= */
+
+@import './_fritz-screen-shell.css';
+
+:root {
+  --pvf-bg:        #040b17;
+  --pvf-text:      #F2EEE8;
+  --pvf-muted:     #8891A0;
+  --pvf-para:      #AAA6B4;
+  --pvf-dim:       #727083;
+  --pvf-radius-lg: 20px;
+  --pvf-radius-md: 14px;
+  --pvf-radius-sm: 12px;
+  --color-obsidian: #04070c;
+  --color-rookie: #4ADE80;
+  --color-standard: #3B82F6;
+  --color-elite: #E7B64A;
+  --color-master: #A855F7;
+}
+
+
+/* ── root ── */
+.pvf-root {
+  --pvf-gold: var(--pvf-dynamic-color, #E7B64A);
+  --dynamic-glow: color-mix(in srgb, var(--pvf-dynamic-color) 40%, transparent);
+  --dynamic-glow-strong: color-mix(in srgb, var(--pvf-dynamic-color) 70%, transparent);
+  
+  /* Dynamic Tier Variables */
+  --pvf-active-color: var(--pvf-dynamic-color, var(--color-standard));
+  
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh !important;
+  height: auto !important;
+  padding-bottom: 40px !important; 
+  width: 100%;
+  box-sizing: border-box;
+  background:
+    /* Very faint off-centre secondary */
+    radial-gradient(
+      ellipse 40% 30% at 72% 32%,
+      rgba(22, 60, 130, 0.07) 0%,
+      transparent 54%
+    ),
+    /* Dark navy-black base — close to reference */
+    linear-gradient(
+      180deg,
+      #040b17 0%,
+      #050c18 24%,
+      #040912 56%,
+      #03080f 100%
+    );
+  color: var(--pvf-text);
+  font-family: var(--font-body);
+  position: relative;
+  isolation: isolate;
+}
+
+.pvf-root.tier-rookie   { --pvf-active-color: var(--color-rookie); }
+.pvf-root.tier-standard { --pvf-active-color: var(--color-standard); }
+.pvf-root.tier-elite    { --pvf-active-color: var(--color-elite); }
+.pvf-root.tier-master   { --pvf-active-color: var(--color-master); }
+
+/* Decorative Background Elements */
+.home-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.home-bg__halo {
+  display: none; /* Removed center glow for PVF screen */
+}
+
+.home-bg__domino {
+  position: absolute;
+  width: 112px;
+  height: 210px;
+  border-radius: 20px;
+  border: 1px solid rgba(105, 160, 240, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  opacity: 0.38;
+  transform-origin: center;
+}
+
+.home-bg__domino--tl {
+  top: 125px;
+  left: -18px;
+  transform: rotate(-34deg);
+}
+
+.home-bg__domino--tr {
+  top: 122px;
+  right: -4px;
+  transform: rotate(25deg);
+}
+
+.home-bg__line {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(75, 140, 240, 0.28),
+    transparent
+  );
+  opacity: 0.6;
+}
+
+.home-bg__line--1 {
+  width: 760px;
+  top: 126px;
+  left: -120px;
+  transform: rotate(31deg);
+}
+
+.home-bg__line--2 {
+  width: 720px;
+  top: 235px;
+  right: -160px;
+  transform: rotate(-27deg);
+}
+
+.home-bg__line--3 {
+  width: 560px;
+  top: 515px;
+  left: 110px;
+  transform: rotate(-18deg);
+  opacity: 0.34;
+}
+
+.home-bg__texture {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18; /* Bumped from 0.12 */
+  background-image:
+    radial-gradient(circle, rgba(90, 148, 240, 0.7) 1px, transparent 1px);
+  background-size: 56px 56px;
+  /* Concentrate dots to upper portion only */
+  mask-image: radial-gradient(
+    ellipse 80% 50% at 50% 6%,
+    black 0%,
+    rgba(0,0,0,0.3) 50%,
+    transparent 72%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 80% 50% at 50% 6%,
+    black 0%,
+    rgba(0,0,0,0.3) 50%,
+    transparent 72%
+  );
+}
+
+.pvf-root > :not(.home-bg) { position: relative; z-index: 1; }
+
+/* ── back link: boxed style matching mockup ── */
+.pvf-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255,255,255,0.7);
+  font-family: 'Outfit', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  background: rgba(11,18,31,0.72);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 11px 18px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  width: fit-content;
+  margin-bottom: 24px !important; 
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.pvf-back-btn:hover { 
+  background: rgba(11,18,31,0.9);
+  border-color: rgba(255,255,255,0.2);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* ── master layout: 40/60 split ── */
+.pvf-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 32px !important; /* Balanced gap */
+  width: 100% !important;
+  max-width: 1440px !important; /* Match GlobalNav max-width */
+  margin: 0 auto !important;
+  padding: 32px 36px 40px !important; /* Match GlobalNav px-9 (36px) */
+  box-sizing: border-box !important;
+  align-items: stretch !important;
+}
+
+.pvf-left-col {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 40% !important;
+  flex: 0 0 40% !important;
+  height: auto !important;
+  align-items: flex-start !important;
+  max-width: none !important; /* Allow fuller width */
+}
+
+/* ── page header ── */
+.pvf-header {
+  margin-bottom: 32px !important; /* Exactly 32px gap as requested */
+  padding: 0;
+  width: 100%;
+}
+.pvf-label {
+  display: flex; align-items: center; gap: 7px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--pvf-active-color); 
+  margin-bottom: 4px !important;
+}
+.pvf-label::before {
+  content: ""; width: 6px; height: 6px;
+  background: var(--pvf-active-color); border-radius: 50%; flex-shrink: 0;
+}
+.pvf-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 52px; font-weight: 900;
+  line-height: 1.0; letter-spacing: -0.04em;
+  color: #fff; margin: 0 0 12px;
+  text-shadow: 0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3);
+  max-width: 100%;
+}
+.pvf-subtitle {
+  font-size: 15px; color: var(--pvf-muted);
+  margin: 0 !important;
+  line-height: 1.45; font-weight: 400;
+  max-width: 100%;
+}
+
+/* =============================================
+   LEFT — Fritz card (CLEAN REWRITE)
+   ============================================= */
+/* =============================================
+   REBUILT FRITZ CARD (High-Fidelity)
+   ============================================= */
+.pvf-opponent-card {
+  position: relative;
+  width: 100%;
+  flex: 1 !important; /* Take remaining vertical space */
+  min-height: 0 !important; /* Allow shrinking */
+  background: #04070c;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* 1. Background Image */
+.pvf-card-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.8;
+  z-index: 1;
+}
+
+/* 2. Gradient Overlay */
+.pvf-card-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: 
+    linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 20%, rgba(0,0,0,0) 45%),
+    linear-gradient(to right, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0) 75%);
+}
+
+/* 3. Content Layer */
+.pvf-card-content {
+  position: absolute;
+  inset: 0;
+  z-index: 3; /* Above overlay */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+/* Top Section */
+.pvf-card-header {
+  max-width: 55%;
+  text-align: left;
+}
+
+.pvf-card-eyebrow {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--pvf-muted);
+  margin-bottom: 8px;
+}
+
+.pvf-card-name {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 900;
+  color: var(--pvf-dynamic-color);
+  line-height: 1;
+  margin: 0;
+  text-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.pvf-card-description {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  max-width: 55%;
+  line-height: 1.5;
+  margin-top: 8px;
+  margin-bottom: 0;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+/* Bottom Section: Badges Row */
+.pvf-card-badges {
+  position: absolute !important;
+  bottom: 16px !important;
+  left: 16px !important;
+  right: 16px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 8px !important;
+}
+
+.pvf-card-badge {
+  flex: 1;
+  min-width: 0; /* Important for text wrapping */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pvf-card-badge-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pvf-card-badge-header svg,
+.pvf-card-badge-header img {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.pvf-card-badge-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pvf-dynamic-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pvf-card-badge-desc {
+  font-size: 11px;
+  color: var(--pvf-muted);
+  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* =============================================
+   RIGHT — control panel
+   ============================================= */
+.pvf-control-panel {
+  flex: 1 !important; /* Take remaining 60% */
+  display: flex; flex-direction: column;
+  background: rgba(7,9,16,0.92);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: var(--pvf-radius-lg);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    0 8px 32px rgba(0,0,0,0.28);
+  padding: 24px 32px;
+  gap: 16px !important;
+  position: relative;
+  width: 100%;
+  align-self: start; /* Wrap tightly around content, no excess bottom space */
+  justify-self: end; 
+}
+
+.pvf-section-gap { margin-top: 0; }
+
+/* divider between sections inside right panel */
+.pvf-section-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.07), transparent);
+  margin: 22px -28px;
+}
+
+/* difficulty grid */
+.pvf-difficulty-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr); /* Spread 4 cards across panel width */
+  gap: 16px;
+  margin-bottom: 12px !important; /* Rating slider exactly 12px below */
+}
+
+.pvf-tier-card {
+  flex: 1;
+  min-width: 140px;
+  position: relative;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--pvf-radius-md);
+  padding: 16px 12px;
+  display: flex; flex-direction: column;
+  align-items: center; text-align: center;
+  cursor: pointer;
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.pvf-tier-card:hover {
+  border-color: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  transform: translateY(-2px);
+}
+.pvf-tier-card--selected {
+  background: color-mix(in srgb, var(--pvf-dynamic-color) 7%, transparent) !important;
+  border: 2px solid var(--pvf-dynamic-color) !important;
+  box-shadow: inset 0 0 20px color-mix(in srgb, var(--pvf-dynamic-color) 8%, transparent), 0 0 16px color-mix(in srgb, var(--pvf-dynamic-color) 6%, transparent);
+}
+
+.pvf-difficulty-grid:has(.pvf-tier-card--selected) .pvf-tier-card:not(.pvf-tier-card--selected) {
+  opacity: 0.45;
+  filter: saturate(0.4);
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+/* colored icon circles */
+.pvf-tier-icon {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--icon-bg, color-mix(in srgb, var(--pvf-dynamic-color) 10%, transparent));
+  border: 2px solid var(--icon-border, var(--pvf-dynamic-color));
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 10px;
+  color: var(--accent-color, var(--pvf-dynamic-color));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent-color, var(--pvf-dynamic-color)) 30%, transparent);
+}
+.pvf-tier-icon svg { width: auto; height: auto; max-width: 32px; max-height: 32px; }
+.pvf-tier-icon img { width: 26px; height: 26px; object-fit: contain; }
+
+.pvf-tier-card[data-tier="rookie"]   { --accent-color: var(--color-rookie);   --icon-bg: color-mix(in srgb, var(--color-rookie) 10%, transparent);   --icon-border: var(--color-rookie); }
+.pvf-tier-card[data-tier="standard"] { --accent-color: var(--color-standard); --icon-bg: color-mix(in srgb, var(--color-standard) 10%, transparent); --icon-border: var(--color-standard); }
+.pvf-tier-card[data-tier="elite"]    { --accent-color: var(--color-elite);    --icon-bg: color-mix(in srgb, var(--color-elite) 10%, transparent);    --icon-border: var(--color-elite); }
+.pvf-tier-card[data-tier="master"]   { --accent-color: var(--color-master);   --icon-bg: color-mix(in srgb, var(--color-master) 10%, transparent);   --icon-border: var(--color-master); }
+
+.pvf-tier-name { font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; color:#fff; margin-bottom:4px; }
+.pvf-tier-elo  { font-family: var(--font-display); font-size:17px; font-weight:700; color:var(--accent-color); margin-bottom:8px; }
+.pvf-tier-desc { font-size:11.5px; color:var(--pvf-muted); line-height:1.35; }
+
+/* checkmark badge */
+.pvf-tier-check, .pvf-deal-check {
+  position: absolute; top:-8px; right:-8px;
+  width: 20px; height: 20px;
+  background: var(--pvf-dynamic-color); border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; color:#040b17; font-weight:900; z-index:10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+/* slider */
+.pvf-slider-row {
+  position: relative;
+  width: 100%;
+  height: 32px;
+  margin: 14px 0 0; /* Add top margin to vertically center */
+}
+.pvf-slider-track {
+  position: absolute;
+  width: 100%;
+  left: 0;
+  top: 4px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  z-index: 0; /* Base layer */
+}
+.pvf-slider-marks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  height: 100%;
+}
+.pvf-slider-mark {
+  /* No position/z-index needed here */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.pvf-slider-dot {
+  position: relative;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #040b17; /* Match page background to hide line */
+  border: 1px solid rgba(255, 255, 255, 0.25); /* Add border for visibility */
+}
+.pvf-slider-mark--active .pvf-slider-dot {
+  background: var(--pvf-dynamic-color);
+  box-shadow: 0 0 0 2px #040b17, 0 0 0 4px var(--pvf-dynamic-color);
+  transform: scale(1.1);
+}
+.pvf-slider-label { 
+  font-family: var(--font-display); 
+  font-size: 9px; 
+  font-weight: 700; 
+  color: rgba(255, 255, 255, 0.22); 
+  letter-spacing: 0.05em; 
+}
+.pvf-slider-mark--active .pvf-slider-label { 
+  color: var(--pvf-dynamic-color); 
+}
+
+/* deal grid */
+.pvf-deal-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.pvf-deal-card {
+  flex: 1;
+  min-width: 240px;
+  position:relative;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:var(--pvf-radius-md);
+  padding: 16px 24px;
+  display:flex; align-items:center; gap:16px;
+  cursor:pointer; 
+  transition: opacity 0.2s ease, filter 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.pvf-deal-card:hover { border-color:rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); }
+.pvf-deal-card--selected {
+  background: color-mix(in srgb, var(--pvf-dynamic-color) 7%, transparent) !important;
+  border: 2px solid var(--pvf-dynamic-color) !important;
+  box-shadow:inset 0 0 20px color-mix(in srgb, var(--pvf-dynamic-color) 8%, transparent);
+}
+
+.pvf-deal-grid:has(.pvf-deal-card--selected) .pvf-deal-card:not(.pvf-deal-card--selected) {
+  opacity: 0.45;
+  filter: saturate(0.4);
+}
+.pvf-deal-icon {
+  flex-shrink: 0;
+  color: var(--pvf-text);
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 48px; 
+  height: 48px;
+}
+
+/* Ensure the tiles are clean */
+.pvf-deal-icon svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.pvf-deal-label { font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; color:#fff; margin-bottom:2px; }
+.pvf-deal-sub   { font-size:12px; color:var(--pvf-muted); }
+
+/* Start Match button */
+.pvf-start-btn {
+  appearance:none;
+  width:100%; height:48px; /* Reduced from 54px */
+  border: none;
+  border-radius:var(--pvf-radius-sm);
+  color:#1a1200;
+  font-family:'Outfit',sans-serif; font-size:18px; font-weight:800;
+  cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  transition:all 0.2s ease; margin: 0;
+  position: relative;
+  letter-spacing:0.01em;
+  box-shadow: 0 0 32px color-mix(in srgb, var(--pvf-dynamic-color) 16%, transparent), inset 0 1px 0 rgba(255,255,255,0.4);
+}
+.pvf-start-btn:hover {
+  filter: brightness(1.1);
+  transform:translateY(-1px);
+}
+.pvf-start-btn:active { transform:scale(0.98); }
+.pvf-start-arrow { 
+  position: absolute;
+  right: 24px;
+  font-size:21px; 
+  line-height:1; 
+  color:#1a1200; 
+  opacity:0.9; 
+}
+
+.pvf-view-tiers {
+  display:block; text-align:center;
+  color:#3FA7FF; /* Blue color as per mockup link */
+  font-family: var(--font-display); font-size:12px; font-weight:700;
+  text-decoration:none; opacity:0.8; transition:opacity 0.2s; letter-spacing:0.05em;
+  margin-top: 12px;
+}
+.pvf-view-tiers:hover { opacity:1; }
+
+/* responsive */
+@media (max-width:1100px) {
+  .pvf-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+    padding: 16px 32px 40px;
+  }
+  .pvf-opponent-card { max-width:460px; height:auto; aspect-ratio: auto; }
+  .pvf-difficulty-grid { grid-template-columns:repeat(2,1fr); }
+}
+@media (max-width: 640px) {
+  .pvf-layout { padding:12px 20px 32px; }
+  .pvf-title { font-size:40px; }
+}
+

@@ -83,6 +83,8 @@ import {
   type DailyFritzNextHandResponse,
   type DailyFritzStartResponse,
 } from '../dailyFritz/api';
+import { formatOrdinalPlace } from '../dailyFritz/format';
+import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 import './botMatch.css';
 import '../styles/shared-ui.css';
 import { useLearningCoach } from '../learning/useLearningCoach';
@@ -149,38 +151,7 @@ interface BotMatchScreenProps {
   onProfilePatch?: ((patch: { glicko_rating?: number | null }) => void) | null;
   dailyFritzPackage?: DailyFritzStartResponse | null;
   onDailyFritzComplete?: (() => void) | null;
-  dailyFritzSetOverlay?: {
-    kind: 'between' | 'final';
-    eyebrow: string;
-    headline: string;
-    subheadline: string;
-    objective: string | null;
-    nextLabel: string | null;
-    primaryLabel: string;
-    primaryTone: 'default' | 'decider' | 'success';
-    primaryDisabled?: boolean;
-    secondaryLabel: string | null;
-    errorMessage?: string | null;
-    gameScoreLabel: string;
-    gameScoreValue: string;
-    setScoreValue: string;
-    marginValue: string;
-    marginTone: 'win' | 'loss' | 'idle';
-    resultValue: string | null;
-    rankValue: string | null;
-    tracker: Array<{
-      gameNumber: 1 | 2 | 3;
-      label: string;
-      tone: 'win' | 'loss' | 'next' | 'idle';
-    }>;
-    games: Array<{
-      gameNumber: 1 | 2 | 3;
-      value: string;
-      tone: 'win' | 'loss';
-    }>;
-    onPrimary: () => void;
-    onSecondary: () => void;
-  } | null;
+  dailyFritzSetOverlay?: DailyFritzSetOverlayViewModel | null;
   onDailyFritzGameComplete?: ((result: {
     winner: 'you' | 'bot' | null;
     yourScore: number;
@@ -253,17 +224,6 @@ function roundedRatingDelta(value: number | null | undefined): number | null {
 function formatRatingDelta(value: number): string {
   if (value === 0) return 'No change';
   return `${value > 0 ? '+' : ''}${value}`;
-}
-
-function formatOrdinalPlace(value: number | null): string | null {
-  if (!value || value <= 0) return null;
-  const mod100 = value % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${value}th Place`;
-  const mod10 = value % 10;
-  if (mod10 === 1) return `${value}st Place`;
-  if (mod10 === 2) return `${value}nd Place`;
-  if (mod10 === 3) return `${value}rd Place`;
-  return `${value}th Place`;
 }
 
 function FullscreenIcon({ isFullscreen, style }: { isFullscreen: boolean; style?: React.CSSProperties }) {
@@ -6385,21 +6345,35 @@ export default function BotMatchScreen({
 
             <div className="daily-fritz-set-overlay-stats" aria-label="Daily Fritz set summary">
               <div className="daily-fritz-set-overlay-stat">
-                <span>{dailyFritzSetOverlay.kind === 'final' ? 'Result' : dailyFritzSetOverlay.gameScoreLabel}</span>
-                <strong className={dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.marginTone === 'loss' ? 'is-loss' : dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.marginTone === 'win' ? 'is-win' : ''}>
-                  {dailyFritzSetOverlay.kind === 'final' ? dailyFritzSetOverlay.resultValue : dailyFritzSetOverlay.gameScoreValue}
+                <span>
+                  {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.resultValue
+                    ? 'Result'
+                    : dailyFritzSetOverlay.gameScoreLabel || 'This game'}
+                </span>
+                <strong
+                  className={
+                    dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.resultValue && dailyFritzSetOverlay.marginTone === 'loss'
+                      ? 'is-loss'
+                      : dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.resultValue && dailyFritzSetOverlay.marginTone === 'win'
+                        ? 'is-win'
+                        : ''
+                  }
+                >
+                  {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.resultValue
+                    ? dailyFritzSetOverlay.resultValue
+                    : dailyFritzSetOverlay.gameScoreValue || '—'}
                 </strong>
               </div>
               <div className="daily-fritz-set-overlay-stat">
                 <span>Set Score</span>
-                <strong>{dailyFritzSetOverlay.setScoreValue}</strong>
+                <strong>{dailyFritzSetOverlay.setScoreValue || '—'}</strong>
               </div>
               <div className="daily-fritz-set-overlay-stat">
                 <span>{dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue ? 'Rank' : 'Set Margin'}</span>
                 <strong className={dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue ? '' : `is-${dailyFritzSetOverlay.marginTone}`}>
                   {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue
                     ? dailyFritzSetOverlay.rankValue
-                    : dailyFritzSetOverlay.marginValue}
+                    : dailyFritzSetOverlay.marginValue || '—'}
                 </strong>
               </div>
             </div>

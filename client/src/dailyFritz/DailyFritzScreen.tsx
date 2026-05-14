@@ -25,6 +25,8 @@ import {
   type DailyFritzStartResponse,
   type DailyFritzTodayResponse,
 } from './api';
+import { formatOrdinalPlace } from './format';
+import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 import dailyFritzHeroPng from '../assets/dailyFritz/dailyfritzimage2.png';
 import './dailyFritz.css';
 
@@ -180,29 +182,42 @@ function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
   if (rec.version !== DAILY_FRITZ_SET_VERSION && rec.version !== 1) {
     // allow version 1 for legacy sets if they exist, but normally we want 2
   }
-  if (rec.format !== 'best_of_3' || !Array.isArray(rec.games)) {
+  if (!Array.isArray(rec.games)) {
+    return null;
+  }
+  const formatNorm =
+    rec.format == null || rec.format === ''
+      ? 'best_of_3'
+      : String(rec.format).toLowerCase().replace(/-/g, '_');
+  if (formatNorm !== 'best_of_3') {
     return null;
   }
   const games = rec.games
     .map((game): DailyFritzSetGameResult | null => {
       if (!game || typeof game !== 'object') return null;
       const g = game as Record<string, unknown>;
-      const gameNumber = Number(g.gameNumber) as DailyFritzSetGameNumber;
+      const rawGameNumber = g.gameNumber ?? g.game_number;
+      const gameNumber = Number(rawGameNumber) as DailyFritzSetGameNumber;
       if (gameNumber !== 1 && gameNumber !== 2 && gameNumber !== 3) return null;
       const seed = typeof g.seed === 'string' ? g.seed : '';
-      const playerScore = Number(g.playerScore);
-      const fritzScore = Number(g.fritzScore);
-      const pointDiff = Number(g.pointDiff);
-      const completedAt = typeof g.completedAt === 'string' ? g.completedAt : '';
-      if (!seed || typeof g.playerWon !== 'boolean' || !Number.isFinite(playerScore) || !Number.isFinite(fritzScore) || !completedAt) {
+      const playerScore = Number(g.playerScore ?? g.player_score);
+      const fritzScore = Number(g.fritzScore ?? g.fritz_score);
+      const pointDiff = Number(g.pointDiff ?? g.point_diff);
+      const completedAt =
+        typeof g.completedAt === 'string' ? g.completedAt : typeof g.completed_at === 'string' ? g.completed_at : '';
+      const rawWon = g.playerWon ?? g.player_won;
+      const playerWon =
+        typeof rawWon === 'boolean' ? rawWon : rawWon === 'true' || rawWon === 1 || rawWon === '1' ? true : rawWon === 'false' || rawWon === 0 || rawWon === '0' ? false : null;
+      if (!seed || playerWon === null || !Number.isFinite(playerScore) || !Number.isFinite(fritzScore) || !completedAt) {
         return null;
       }
-      const movesUsed = g.movesUsed == null ? undefined : Number(g.movesUsed);
-      const handsPlayed = g.handsPlayed == null ? undefined : Number(g.handsPlayed);
+      const movesUsed = g.movesUsed == null && g.moves_used == null ? undefined : Number(g.movesUsed ?? g.moves_used);
+      const handsPlayed =
+        g.handsPlayed == null && g.hands_played == null ? undefined : Number(g.handsPlayed ?? g.hands_played);
       return {
         gameNumber,
         seed,
-        playerWon: g.playerWon,
+        playerWon,
         playerScore,
         fritzScore,
         pointDiff: Number.isFinite(pointDiff) ? pointDiff : playerScore - fritzScore,
@@ -216,13 +231,14 @@ function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
   const playerGamesWon = games.filter((game) => game.playerWon).length;
   const fritzGamesWon = games.length - playerGamesWon;
   const totalPointDiff = games.reduce((sum, game) => sum + game.pointDiff, 0);
+  const totalPointDiffSafe = Number.isFinite(totalPointDiff) ? totalPointDiff : 0;
   const setWinner = playerGamesWon >= 2 ? 'player' : fritzGamesWon >= 2 ? 'fritz' : undefined;
   return {
     version: 2,
     format: 'best_of_3',
     playerGamesWon,
     fritzGamesWon,
-    totalPointDiff,
+    totalPointDiff: totalPointDiffSafe,
     games,
     ...(setWinner ? { setWinner } : {}),
     ...(typeof rec.run_date === 'string' ? { run_date: rec.run_date } : {}),
@@ -235,9 +251,40 @@ function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
   };
 }
 
+/** Normalize set payloads for interstitials; tolerates slightly invalid roots if `games` parses. */
+function setResultForOverlay(raw: unknown): DailyFritzSetResult | null {
+  const primary = normalizeSetResult(raw);
+  if (primary) return primary;
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Record<string, unknown>;
+  if (!Array.isArray(rec.games)) return null;
+  return normalizeSetResult({
+    version: 2,
+    format: 'best_of_3',
+    games: rec.games,
+  });
+}
+
 function getNextGameNumberFromSetResult(setResult: DailyFritzSetResult | null): DailyFritzSetGameNumber {
   if (!setResult || setResult.setWinner) return 1;
   return normalizeGameNumber(setResult.games.length + 1, 3);
+}
+
+/**
+ * Current game slot (1–3) from recorded games + server hint.
+ * `current_game_number` can stay stale after we merge only `set_result` into `activeRun`; prefer the next
+ * game implied by `games.length + 1` while the set is still live.
+ */
+function resolveDailyFritzCurrentGameNumber(
+  setResult: DailyFritzSetResult | null | undefined,
+  reportedCurrent: unknown,
+): DailyFritzSetGameNumber {
+  if (!setResult || setResult.setWinner) {
+    return normalizeGameNumber(reportedCurrent, 1);
+  }
+  const inferred = getNextGameNumberFromSetResult(setResult);
+  const reported = normalizeGameNumber(reportedCurrent, inferred);
+  return reported < inferred ? inferred : reported;
 }
 
 function normalizeStartResponse(
@@ -248,7 +295,7 @@ function normalizeStartResponse(
   const currentGameNumber =
     response.needs_completion && setResult?.setWinner
       ? null
-      : normalizeGameNumber(response.current_game_number, getNextGameNumberFromSetResult(setResult));
+      : resolveDailyFritzCurrentGameNumber(setResult, response.current_game_number);
   const normalized = {
     ...response,
     current_game_number: currentGameNumber,
@@ -258,6 +305,7 @@ function normalizeStartResponse(
 }
 
 function formatMargin(value: number): string {
+  if (!Number.isFinite(value)) return '—';
   return `${value >= 0 ? '+' : ''}${value}`;
 }
 
@@ -484,7 +532,12 @@ export default function DailyFritzScreen({
   ): DailyFritzSetGameResult => ({
     gameNumber,
     seed: getDailyFritzGameSeed(run.run_date, gameNumber),
-    playerWon: game.yourScore > game.botScore,
+    playerWon:
+      game.winner === 'you'
+        ? true
+        : game.winner === 'bot'
+          ? false
+          : game.yourScore > game.botScore,
     playerScore: game.yourScore,
     fritzScore: game.botScore,
     pointDiff: game.yourScore - game.botScore,
@@ -662,7 +715,9 @@ export default function DailyFritzScreen({
   const submitCompletedGame = useCallback(async (game: DailyFritzGameCompletionPayload) => {
     const run = activeRunRef.current;
     if (!run) return;
-    const gameNumber = normalizeGameNumber(run.current_game_number);
+    const priorSet = normalizeSetResult(run.set_result);
+    if (priorSet?.setWinner) return;
+    const gameNumber = getNextGameNumberFromSetResult(priorSet);
     const fallbackCompletedGame = buildCompletedGame(run, game, gameNumber);
     setSetSubmitError(null);
     setError(null);
@@ -693,6 +748,9 @@ export default function DailyFritzScreen({
           ? {
               ...current,
               set_result: setResult,
+              ...(!setResult.setWinner
+                ? { current_game_number: getNextGameNumberFromSetResult(setResult) }
+                : {}),
             }
           : current,
       );
@@ -775,7 +833,7 @@ export default function DailyFritzScreen({
     () => normalizeSetResult(activeRun?.set_result ?? null),
     [activeRun?.set_result],
   );
-  const activeGameNumber = normalizeGameNumber(activeRun?.current_game_number, getNextGameNumberFromSetResult(activeSetResult));
+  const activeGameNumber = resolveDailyFritzCurrentGameNumber(activeSetResult, activeRun?.current_game_number);
 
   const dailyFritzPackageForMatch = useMemo((): DailyFritzStartResponse | null => {
     if (!activeRun) return null;
@@ -786,7 +844,7 @@ export default function DailyFritzScreen({
     };
   }, [activeRun, activeGameNumber, activeSetResult]);
 
-  const setOverlayConfig = useMemo(() => {
+  const setOverlayConfig = useMemo((): DailyFritzSetOverlayViewModel | null => {
     if (!setOverlay) return null;
     
     const base = {
@@ -817,6 +875,7 @@ export default function DailyFritzScreen({
     if (setOverlay.kind === 'saving') {
       return {
         ...base,
+        kind: 'saving' as const,
         headline: 'Saving game',
         subheadline: setOverlay.message,
         primaryLabel: 'Please wait…',
@@ -831,11 +890,14 @@ export default function DailyFritzScreen({
     if (setOverlay.kind === 'record-error') {
       return {
         ...base,
+        kind: 'record-error' as const,
         headline: 'Could not continue',
         subheadline: setOverlay.error,
         primaryLabel: 'Try again',
         primaryTone: 'default' as const,
-        onPrimary: () => void submitCompletedGame(setOverlay.game),
+        onPrimary: (): void => {
+          void submitCompletedGame(setOverlay.game);
+        },
         secondaryLabel: 'Return to Hub',
         onSecondary: () => {
           setSetOverlay(null);
@@ -851,24 +913,28 @@ export default function DailyFritzScreen({
     }
 
     if (setOverlay.kind === 'finalizing') {
+      const sr = setResultForOverlay(setOverlay.setResult) ?? setOverlay.setResult;
       return {
         ...base,
+        kind: 'finalizing' as const,
         headline: 'Posting set',
         subheadline: setOverlay.message,
         primaryLabel: 'Please wait…',
         primaryDisabled: true,
         gameScoreLabel: 'Set score',
-        gameScoreValue: `${setOverlay.setResult.playerGamesWon}–${setOverlay.setResult.fritzGamesWon}`,
+        gameScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
         setScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
-        marginValue: formatMargin(setOverlay.setResult.totalPointDiff),
+        marginValue: formatMargin(sr.totalPointDiff),
         marginTone:
-          setOverlay.setResult.totalPointDiff > 0 ? ('win' as const) : setOverlay.setResult.totalPointDiff < 0 ? ('loss' as const) : ('idle' as const),
+          sr.totalPointDiff > 0 ? ('win' as const) : sr.totalPointDiff < 0 ? ('loss' as const) : ('idle' as const),
       };
     }
 
     if (setOverlay.kind === 'final-error') {
+      const sr = setResultForOverlay(setOverlay.setResult) ?? setOverlay.setResult;
       return {
         ...base,
+        kind: 'final-error' as const,
         headline: 'Could not finalize',
         subheadline: setOverlay.error,
         primaryLabel: 'Return to Hub',
@@ -878,36 +944,71 @@ export default function DailyFritzScreen({
           void loadToday();
         },
         gameScoreLabel: 'Set score',
-        gameScoreValue: `${setOverlay.setResult.playerGamesWon}–${setOverlay.setResult.fritzGamesWon}`,
+        gameScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
         setScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
-        marginValue: formatMargin(setOverlay.setResult.totalPointDiff),
+        marginValue: formatMargin(sr.totalPointDiff),
         marginTone: 'idle' as const,
       };
     }
 
     if (setOverlay.kind === 'between') {
+      const g = setOverlay.completedGame;
+      const sr = setResultForOverlay(setOverlay.setResult) ?? setOverlay.setResult;
+      const margin = formatMargin(sr.totalPointDiff);
+      const marginTone: 'win' | 'loss' | 'idle' =
+        sr.totalPointDiff > 0 ? 'win' : sr.totalPointDiff < 0 ? 'loss' : 'idle';
       return {
         ...base,
-        headline: `You take Game ${setOverlay.completedGame.gameNumber}`,
-        subheadline: `The set is ${setOverlay.setResult.playerGamesWon}-${setOverlay.setResult.fritzGamesWon}`,
+        kind: 'between' as const,
+        headline: g.playerWon
+          ? `You take Game ${g.gameNumber}`
+          : `Fritz takes Game ${g.gameNumber}`,
+        subheadline: `The set is ${sr.playerGamesWon}-${sr.fritzGamesWon}`,
+        gameScoreLabel: `Game ${g.gameNumber}`,
+        gameScoreValue: `${Number.isFinite(g.playerScore) ? g.playerScore : 0}–${Number.isFinite(g.fritzScore) ? g.fritzScore : 0}`,
+        setScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
+        marginValue: margin,
+        marginTone,
+        primaryTone: 'success' as const,
         primaryLabel: `Start Game ${setOverlay.nextGameNumber}`,
-        onPrimary: () => void continueSet(),
+        onPrimary: (): void => {
+          void continueSet();
+        },
         onSecondary: () => { setSetOverlay(null); setActiveRun(null); void loadToday(); },
         secondaryLabel: 'Return to Hub',
         tracker: [1, 2, 3].map(n => ({
           gameNumber: n as DailyFritzSetGameNumber,
-          ...getSetTrackerStatus(setOverlay.setResult, n as DailyFritzSetGameNumber, setOverlay.nextGameNumber)
+          ...getSetTrackerStatus(sr, n as DailyFritzSetGameNumber, setOverlay.nextGameNumber)
         }))
       };
     }
 
     if (setOverlay.kind === 'final') {
+      const sr = setResultForOverlay(setOverlay.setResult) ?? setOverlay.setResult;
+      const g = setOverlay.completedGame;
+      const margin = formatMargin(sr.totalPointDiff);
+      const marginTone: 'win' | 'loss' | 'idle' =
+        sr.totalPointDiff > 0 ? 'win' : sr.totalPointDiff < 0 ? 'loss' : 'idle';
+      const games: OverlayGameItem[] = sr.games.map((game) => ({
+        gameNumber: game.gameNumber,
+        value: `${game.playerScore}–${game.fritzScore}`,
+        tone: game.playerWon ? ('win' as const) : ('loss' as const),
+      }));
       return {
         ...base,
         kind: 'final' as const,
-        headline: setOverlay.setResult.setWinner === 'player' ? 'You win the set!' : 'Fritz wins the set',
+        headline: sr.setWinner === 'player' ? 'You win the set!' : 'Fritz wins the set',
         subheadline: 'Today’s best-of-3 is complete.',
+        gameScoreLabel: 'Final game',
+        gameScoreValue: `${Number.isFinite(g.playerScore) ? g.playerScore : 0}–${Number.isFinite(g.fritzScore) ? g.fritzScore : 0}`,
+        setScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
+        marginValue: margin,
+        marginTone,
+        resultValue: sr.setWinner === 'player' ? 'Victory' : 'Defeat',
+        rankValue: formatOrdinalPlace(setOverlay.rank),
+        games,
         primaryLabel: 'Return to Hub',
+        primaryTone: 'success' as const,
         onPrimary: () => { setSetOverlay(null); setActiveRun(null); void loadToday(); },
         onSecondary: () => {
           setSetOverlay(null);

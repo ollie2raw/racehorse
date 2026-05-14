@@ -93,6 +93,17 @@ export class QueueService {
   tick(): void {
     const now = Date.now();
     const players = Array.from(this.players.values());
+    if (process.env.MATCHMAKING_DEBUG === '1' && players.length > 0) {
+      console.log('[matchmaking][debug] tick', {
+        queueSize: players.length,
+        players: players.map((p) => ({
+          socketId: p.socketId,
+          userId: p.userId,
+          rating: p.rating,
+          waitedMs: now - p.joinedAtMs,
+        })),
+      });
+    }
     const pairs: MatchedPair[] = findPairs(players, now);
     for (const pair of pairs) {
       this.leave(pair.a.socketId);

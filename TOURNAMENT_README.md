@@ -21,6 +21,27 @@
 - **Slots**: 12 AM · 2 AM · 4 AM · 6 AM · 8 AM · 10 AM · 12 PM · 2 PM · 4 PM · 6 PM · 8 PM · 10 PM (PST/PDT).
 - **Registration**: opens 30 minutes before start, closes 5 minutes before start.
 
+## Auto-reseed (always ≥ 30 days ahead)
+
+The table stays topped up to ≥ 360 future slots automatically via **two redundant mechanisms**:
+
+1. **pg_cron daily job** (preferred, runs in-database). Migration `2026-05-14_auto_seed_tournaments.sql` registers `seed-tournaments-daily` at `03:00` daily, which calls `public.ensure_tournament_seed_window()`. The DO block only registers the job if the `pg_cron` extension is installed; otherwise it logs a NOTICE and falls through.
+2. **Server-side 24-hour fallback** (`server/src/scheduledTournament/scheduler.ts`). Every server instance calls the same RPC at boot and then every 24 hours. Multiple instances calling concurrently is safe — `seed_future_tournaments` uses `ON CONFLICT (scheduled_start) DO NOTHING`.
+
+Both invoke the same idempotent SQL functions; running both simultaneously is harmless.
+
+**Manual top-up** (operator):
+```sql
+select public.seed_future_tournaments(30);       -- inserts up to 30 days of new slots
+select public.ensure_tournament_seed_window();   -- only seeds if < 360 future slots remain
+```
+
+**Verify** at any time:
+```sql
+select count(*) from public.scheduled_tournaments where scheduled_start > now();
+-- Should always be ≥ 360.
+```
+
 ## Locked rules
 
 | Decision | Value | Reason |

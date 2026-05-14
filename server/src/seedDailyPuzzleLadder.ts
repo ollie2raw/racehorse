@@ -1,11 +1,19 @@
 import './loadEnv';
 import { spawnSync } from 'child_process';
 import {
+  isDailyPuzzleLadderReady,
+  normalizeDailyPuzzleSlot,
+  sortDailyPuzzleSlots,
+  type DailyPuzzleSlotRow,
+} from './dailyPuzzle';
+import {
   computeBestPossiblePuzzleScore,
   createHighScorePuzzle,
   generateSetupAndStrikePuzzle,
-  validateSetupAndStrikeGeneratedPuzzle,
 } from './generatePuzzles';
+
+const LADDER_SLOT_SELECT =
+  'id,puzzle_date,title,starting_board,starting_hand,max_moves,target_score,puzzle_type,deal_size,slot_index,slot_title,tier,slot_max_points,objective_type,objective_payload,set_version,published';
 
 type LadderSlotGenerationProfile = {
   slotIndex: 1 | 2 | 3;
@@ -72,30 +80,6 @@ function parseCliArgs(argv: string[]): { date: string; force: boolean } {
   }
   const force = argv.includes('--force');
   return { date, force };
-}
-
-async function isLadderAlreadyReady(date: string): Promise<boolean> {
-  try {
-    const response = await postgrestFetch(
-      `/rest/v1/daily_puzzles?select=slot_index,published,set_version,slot_max_points,objective_payload&puzzle_date=eq.${encodeURIComponent(date)}&published=eq.true&set_version=eq.1`,
-    );
-    if (!response.ok) return false;
-    const rows = (await response.json()) as any[];
-    if (rows.length !== 3) return false;
-
-    // Basic check for ready-ness similar to isDailyPuzzleLadderReady
-    const hasAllSlots = [1, 2, 3].every((idx) => rows.some((r) => r.slot_index === idx));
-    if (!hasAllSlots) return false;
-
-    const allValid = rows.every((r) => {
-      const bestScore = r.objective_payload?.best_possible_score;
-      return r.slot_max_points > 0 && typeof bestScore === 'number' && bestScore > 0;
-    });
-
-    return allValid;
-  } catch {
-    return false;
-  }
 }
 
 function clonePuzzleForDate(
@@ -286,6 +270,26 @@ async function postgrestFetch(path: string, init?: RequestInit): Promise<Postgre
   }
 }
 
+async function listPublishedLadderSlotRows(date: string): Promise<DailyPuzzleSlotRow[]> {
+  const response = await postgrestFetch(
+    `/rest/v1/daily_puzzles?select=${LADDER_SLOT_SELECT}&published=eq.true&puzzle_date=eq.${encodeURIComponent(date)}&order=set_version.asc,slot_index.asc,id.asc`,
+  );
+  if (!response.ok) return [];
+  const rows = (await response.json()) as DailyPuzzleSlotRow[];
+  return Array.isArray(rows) ? rows : [];
+}
+
+/** Same readiness contract as `/api/daily-puzzle/today` (three published slots, scoring metadata). */
+async function isLadderReadyFromDatabase(date: string): Promise<boolean> {
+  try {
+    const rawRows = await listPublishedLadderSlotRows(date);
+    const slots = sortDailyPuzzleSlots(rawRows.map(normalizeDailyPuzzleSlot));
+    return isDailyPuzzleLadderReady(slots);
+  } catch {
+    return false;
+  }
+}
+
 async function upsertSlot(
   date: string,
   config: {
@@ -329,45 +333,75 @@ async function upsertSlot(
   }
 }
 
+/**
+ * Idempotently writes three published `daily_puzzles` rows for the Pacific calendar date.
+ * Used by CLI, server startup/schedule, and lazy `/api/daily-puzzle/today` when missing.
+ */
+export async function ensureDailyPuzzleLadderForDate(
+  date: string,
+  options?: { force?: boolean },
+): Promise<'skipped' | 'seeded' | 'failed'> {
+  try {
+    if (!isIsoDate(date)) {
+      console.warn('[daily-puzzle-ladder-seed] invalid date key', date);
+      return 'failed';
+    }
+    if (!options?.force && (await isLadderReadyFromDatabase(date))) {
+      return 'skipped';
+    }
+
+    const results: Array<{
+      profile: LadderSlotGenerationProfile;
+      puzzle: CuratedDailyPuzzle;
+      bestPossibleScore: number;
+      attemptsTried: number;
+      strategy: string;
+    }> = [];
+
+    for (const profile of LADDER_PROFILES) {
+      const result = choosePuzzleForSlot(date, profile);
+      await upsertSlot(
+        date,
+        {
+          slotIndex: profile.slotIndex,
+          slotTitle: profile.slotTitle,
+          tier: profile.tier,
+          slotMaxPoints: profile.slotMaxPoints,
+          puzzleType: result.puzzle.puzzleType,
+        },
+        result.puzzle,
+        result.bestPossibleScore,
+      );
+      results.push({ ...result, profile });
+    }
+
+    console.log(`[daily-puzzle-ladder] seeded ${date}`);
+    for (const res of results) {
+      const handSize = res.puzzle.startingHand.length;
+      console.log(
+        `[daily-puzzle-ladder] slot ${res.profile.slotIndex} | ${res.profile.slotTitle} | ${res.puzzle.puzzleType} | hand=${handSize} | best=${res.bestPossibleScore} | attempts=${res.attemptsTried} | strategy=${res.strategy}`,
+      );
+    }
+    return 'seeded';
+  } catch (error) {
+    console.warn('[daily-puzzle-ladder-seed] ensure failed', {
+      date,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 'failed';
+  }
+}
+
 async function main(): Promise<void> {
   const { date, force } = parseCliArgs(process.argv.slice(2));
-
-  if (!force) {
-    const ready = await isLadderAlreadyReady(date);
-    if (ready) {
-      console.log(`Daily Puzzle Ladder already ready for ${date}, skipping.`);
-      return;
-    }
+  const outcome = await ensureDailyPuzzleLadderForDate(date, { force });
+  if (outcome === 'skipped') {
+    console.log(`Daily Puzzle Ladder already ready for ${date}, skipping.`);
+    return;
   }
-
-  const results = [];
-
-  for (const profile of LADDER_PROFILES) {
-    const result = choosePuzzleForSlot(date, profile);
-    await upsertSlot(
-      date,
-      {
-        slotIndex: profile.slotIndex,
-        slotTitle: profile.slotTitle as any,
-        tier: profile.tier,
-        slotMaxPoints: profile.slotMaxPoints,
-        puzzleType: result.puzzle.puzzleType,
-      },
-      result.puzzle,
-      result.bestPossibleScore,
-    );
-    results.push({
-      ...result,
-      profile,
-    });
-  }
-
-  console.log(`Daily Puzzle Ladder seeded for ${date}`);
-  for (const res of results) {
-    const handSize = res.puzzle.startingHand.length;
-    console.log(
-      `slot ${res.profile.slotIndex} | ${res.profile.slotTitle} | ${res.puzzle.puzzleType} | hand=${handSize} | best=${res.bestPossibleScore} | attempts=${res.attemptsTried} | strategy=${res.strategy}`,
-    );
+  if (outcome === 'failed') {
+    console.error(`Daily Puzzle Ladder seed failed for ${date}.`);
+    process.exitCode = 1;
   }
 }
 

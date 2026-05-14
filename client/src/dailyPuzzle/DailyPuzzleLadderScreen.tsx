@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { Board, DominoTile, RotateOverlay } from '../components';
+import { Board, DominoTile, GlobalNav, RotateOverlay } from '../components';
 import {
   applyPlayMove,
   getLegalMoves,
   type BotMatchState,
 } from '../bot/botEngine';
-import type { Move, Tile } from '../types';
+import type { AppMode, Move, Tile } from '../types';
 import {
   completeDailyPuzzleLadder,
   fetchDailyPuzzleLadderLeaderboard,
-  getTodayDailyPuzzleLadder,
   startDailyPuzzleLadder,
   submitDailyPuzzleSlot,
 } from './api';
@@ -26,18 +25,16 @@ import type {
   DailyPuzzleTodayResponse,
 } from './types';
 import LeaderboardPageShell from '../ui/LeaderboardPageShell';
-import {
-  ClaudePrimaryAction,
-  ClaudeSecondaryAction,
-  ClaudeSectionLabel,
-  ClaudeStatLine,
-} from '../ui/claudeMode';
+import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
 
 interface DailyPuzzleLadderScreenProps {
   user: User | null;
   profile: UserProfile | null;
   initialToday: DailyPuzzleTodayResponse;
   onBack: () => void;
+  onNavigate?: (mode: AppMode) => void;
+  onOpenAuth?: () => void;
+  onOpenAccount?: () => void;
 }
 
 type PlayStatus = 'IN_PROGRESS' | 'SOLVED' | 'FAILED';
@@ -57,12 +54,50 @@ function formatDateLabel(dateText: string): string {
   });
 }
 
-function formatElapsed(seconds: number): string {
-  const safe = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-  const mins = Math.floor(safe / 60);
-  const secs = safe % 60;
-  return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
+function formatShortDate(dateText: string): string {
+  const parsed = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateText;
+  return parsed.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
+
+const LadderIconSameBoard = () => (
+  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" fill="currentColor" opacity={0.92} />
+  </svg>
+);
+
+const LadderIconOrdered = () => (
+  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path d="M7 7h10M7 12h10M7 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="5" cy="7" r="1.5" fill="currentColor" />
+    <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+    <circle cx="5" cy="17" r="1.5" fill="currentColor" />
+  </svg>
+);
+
+const LadderIconLeaderboard = () => (
+  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path d="M8 21V11M12 21V7M16 21V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M6 11h4M10 7h4M14 14h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity={0.5} />
+  </svg>
+);
+
+const DplLockIcon = () => (
+  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden style={{ display: 'block', flexShrink: 0 }}>
+    <path
+      d="M7 11V8a5 5 0 0 1 10 0v3"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    />
+    <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+    <circle cx="12" cy="16" r="1.2" fill="currentColor" />
+  </svg>
+);
 
 function toCuratedPuzzle(slot: DailyPuzzleSlot): CuratedDailyPuzzle | null {
   if (!slot.startingBoard || !slot.startingHand) return null;
@@ -89,8 +124,12 @@ function toCuratedPuzzle(slot: DailyPuzzleSlot): CuratedDailyPuzzle | null {
 
 export default function DailyPuzzleLadderScreen({
   user,
+  profile: _profile,
   initialToday,
   onBack,
+  onNavigate,
+  onOpenAuth,
+  onOpenAccount,
 }: DailyPuzzleLadderScreenProps) {
   const [today, setToday] = useState(initialToday);
   const [attempt, setAttempt] = useState<DailyPuzzleAttempt | null>(initialToday.attempt);
@@ -294,6 +333,7 @@ export default function DailyPuzzleLadderScreen({
         }));
         setFinalOverlay({ response: completeResponse });
         setLeaderboardRows(completeResponse.leaderboardPreview);
+        recordSolvedStreak(completeResponse.attempt.puzzleDate);
         setRuntimeState(null);
         setActiveSlot(null);
       } else {
@@ -404,6 +444,43 @@ export default function DailyPuzzleLadderScreen({
     });
   }, [completedSlots]);
 
+  const streakDisplay = useMemo(() => getDisplayStreak(today.runDate), [today.runDate]);
+
+  const ladderSlotRows = useMemo(() => {
+    return [1, 2, 3].map((slotIndex) => {
+      const slot = today.slots.find((s) => s.slotIndex === slotIndex);
+      const slotResult = completedSlots.find((e) => e.slotIndex === slotIndex);
+      const isCompleteRun = attempt?.status === 'completed';
+      const isAvailable = !isCompleteRun && nextSlotIndex === slotIndex;
+      const isLocked = !isCompleteRun && nextSlotIndex != null && nextSlotIndex < slotIndex;
+      const rowVariant = slotResult ? 'done' : isAvailable ? 'active' : 'muted';
+
+      let statusSub: string;
+      let unlockHint: string | null = null;
+      if (slotResult) {
+        statusSub = `Completed · ${slotResult.awardedPoints} pts`;
+      } else if (isAvailable) {
+        statusSub = 'Available now';
+      } else if (isLocked) {
+        statusSub = 'Locked';
+        unlockHint = slotIndex === 2 ? 'Complete puzzle 1 to unlock' : 'Complete puzzle 2 to unlock';
+      } else {
+        statusSub = 'Up next';
+      }
+
+      return {
+        slotIndex,
+        slot,
+        slotResult,
+        rowVariant,
+        statusSub,
+        unlockHint,
+        isLocked,
+        isAvailable,
+      };
+    });
+  }, [attempt?.status, completedSlots, nextSlotIndex, today.slots]);
+
   if (leaderboardOpen) {
     return (
       <LeaderboardPageShell
@@ -478,127 +555,248 @@ export default function DailyPuzzleLadderScreen({
   }
 
   if (!runtimeState || !activeSlot) {
+    const showNav = Boolean(onNavigate && onOpenAuth);
+    const isLadderComplete = attempt?.status === 'completed';
+    const primaryLabel = isLadderComplete
+      ? 'Practice mode'
+      : attempt
+        ? `Resume puzzle ${attempt.currentSlotIndex}`
+        : 'Start daily ladder';
+
     return (
       <>
-        <div className="screen mode-subpage-screen mode-accent-daily daily-entry-screen">
-          <div className="daily-dash" style={{ ['--dash-accent' as string]: '#f0c040' }}>
-            <header className="daily-dash-topbar">
-              <div className="daily-dash-brand">RACEHORSE</div>
-              <button type="button" className="daily-dash-back rh-back-button" onClick={onBack}>
-                <span aria-hidden="true">←</span>
-                <span>Back to Home</span>
+        <div
+          className="pvf-root tier-standard dpl-ladder-hub"
+          style={{ '--pvf-dynamic-color': 'var(--tier-standard)' } as React.CSSProperties}
+        >
+          <div className="home-bg" aria-hidden="true">
+            <div className="home-bg__halo" />
+            <div className="home-bg__domino home-bg__domino--tl" />
+            <div className="home-bg__domino home-bg__domino--tr" />
+            <div className="home-bg__line home-bg__line--1" />
+            <div className="home-bg__line home-bg__line--2" />
+            <div className="home-bg__line home-bg__line--3" />
+            <div className="home-bg__texture" />
+          </div>
+
+          {showNav ? (
+            <GlobalNav
+              currentMode="daily"
+              onNavigate={onNavigate}
+              onOpenAuth={onOpenAuth}
+              onOpenAccount={onOpenAccount}
+              activeColor="var(--tier-standard)"
+              compactChrome
+            />
+          ) : null}
+
+          <div className="pvf-layout">
+            <div className="pvf-left-col">
+              <button type="button" className="pvf-back-btn rh-back-button" onClick={onBack}>
+                <span aria-hidden>←</span> Back to home
               </button>
-            </header>
 
-            <main className="daily-dash-main">
-              <div className="daily-dash-header">
-                <p className="daily-dash-eyebrow">Daily Puzzle</p>
-                <h1 className="daily-dash-title">Daily Puzzle Ladder</h1>
-                <p className="daily-dash-subtitle">Three fixed puzzles. Same board for everyone.</p>
+              <div className="pvf-header">
+                <div className="pvf-label">Daily puzzle</div>
+                <h1 className="pvf-title">Daily Ladder</h1>
+                <p className="pvf-subtitle">
+                  Three curated boards in a fixed sequence. One scored run posts to the global ladder — practice stays open after you lock it in.
+                </p>
               </div>
-              <div className="daily-dash-separator" aria-hidden="true" />
-              <div className="daily-dash-body">
-                <div className="daily-dash-details">
-                  <div className="daily-ladder-card-grid">
-                    {today.slots.map((slot) => {
-                      const slotResult = completedSlots.find((entry) => entry.slotIndex === slot.slotIndex);
-                      const isAvailable = nextSlotIndex === slot.slotIndex;
-                      const isLocked = nextSlotIndex != null && nextSlotIndex < slot.slotIndex;
-                      return (
-                        <div
-                          key={slot.id}
-                          className={`daily-ladder-slot-card ${isAvailable ? 'is-available' : ''} ${slotResult ? 'is-complete' : ''} ${isLocked ? 'is-locked' : ''}`}
-                        >
-                          <div className="daily-ladder-slot-head">
-                            <span className="daily-ladder-slot-label">Puzzle {slot.slotIndex}</span>
-                            <span className="daily-ladder-slot-points">{slot.slotMaxPoints} pts max</span>
-                          </div>
-                          <strong>{slot.slotTitle}</strong>
-                          <p>{slot.slotIndex === 1 ? 'Short warmup.' : slot.slotIndex === 2 ? 'Medium tactic.' : 'Deep chain challenge.'}</p>
-                          <span className="daily-ladder-slot-status">
-                            {slotResult
-                              ? `Completed · ${slotResult.awardedPoints} pts`
-                              : isAvailable
-                                ? 'Available Now'
-                                : isLocked
-                                  ? 'Locked'
-                                  : 'Pending'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
 
-                <div className="daily-dash-actions">
-                  <div className="daily-ladder-summary-card">
-                    <ClaudeSectionLabel color="#f0c040">Today&apos;s Ladder</ClaudeSectionLabel>
-                    <ClaudeStatLine label="Date" value={formatDateLabel(today.runDate)} />
-                    <ClaudeStatLine label="Total Score" value={`${attempt?.totalScore ?? 0}`} accent="#f0c040" />
-                    <ClaudeStatLine label="Completed" value={`${attempt?.puzzlesCompleted ?? 0}/3`} />
-                    <ClaudeStatLine label="Master Chain" value={`${attempt?.masterChainScore ?? 0}`} />
+              <div className="pvf-opponent-card">
+                <div className="dpl-ladder-hero-art" aria-hidden />
+                <div className="pvf-card-overlay" />
+                <div className="pvf-card-content">
+                  <div className="pvf-card-header">
+                    <div className="pvf-card-eyebrow">The challenge</div>
+                    <h2 className="pvf-card-name">Beat the board</h2>
+                    <p className="pvf-card-description">
+                      Same opening position for every racer. Chase the line score on each stop, then carry momentum into the Master Chain finale.
+                    </p>
                   </div>
 
-                  {hubError ? <p className="auth-inline-error" style={{ margin: '8px 0' }}>{hubError}</p> : null}
-
-                  <div className="daily-dash-actions-group" style={{ display: 'grid', gap: '12px', marginTop: '8px' }}>
-                    {attempt?.status === 'completed' ? (
-                      <>
-                        <ClaudePrimaryAction
-                          accent="#f0c040"
-                          title="Practice Mode"
-                          meta="Replay P1 → P2 → P3"
-                          onClick={() => handleStartPractice(1)}
-                        />
-                        <ClaudeSecondaryAction
-                          title="Leaderboard"
-                          meta="View global standings"
-                          onClick={() => setLeaderboardOpen(true)}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <ClaudePrimaryAction
-                          accent="#f0c040"
-                          disabled={startPending}
-                          title={attempt ? `Resume Puzzle ${attempt.currentSlotIndex}` : 'Start Daily Ladder'}
-                          meta={attempt ? 'Continue your scored run' : 'Begin today’s three-puzzle ladder'}
-                          onClick={() => {
-                            void handleStartScored();
-                          }}
-                        />
-                        <ClaudeSecondaryAction
-                          title="Leaderboard"
-                          meta="View global standings"
-                          onClick={() => setLeaderboardOpen(true)}
-                        />
-                      </>
-                    )}
-                  </div>
-
-                  {attempt?.status === 'completed' ? (
-                    <div style={{ marginTop: '20px', padding: '16px', borderRadius: '14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <p style={{ margin: '0 0 12px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Jump to Practice</p>
-                      <div className="daily-ladder-practice-row" style={{ justifyContent: 'flex-start', gap: '8px', marginTop: 0 }}>
-                        {[1, 2, 3].map((slotIdx) => (
-                          <button
-                            key={`practice-${slotIdx}`}
-                            type="button"
-                            className="mode-inline-btn"
-                            style={{ flex: 1, fontSize: '11px', padding: '10px 4px', textTransform: 'uppercase', fontWeight: 800 }}
-                            onClick={() => handleStartPractice(slotIdx as 1 | 2 | 3)}
-                          >
-                            P{slotIdx}
-                          </button>
-                        ))}
+                  <div className="pvf-card-badges">
+                    <div className="pvf-card-badge">
+                      <div className="pvf-card-badge-header">
+                        <LadderIconSameBoard />
+                        <span className="pvf-card-badge-title">Same boards</span>
                       </div>
+                      <div className="pvf-card-badge-desc">One daily deal copy for the whole field.</div>
                     </div>
-                  ) : null}
+                    <div className="pvf-card-badge">
+                      <div className="pvf-card-badge-header">
+                        <LadderIconOrdered />
+                        <span className="pvf-card-badge-title">Sequenced run</span>
+                      </div>
+                      <div className="pvf-card-badge-desc">Solve in order — no skipping slots.</div>
+                    </div>
+                    <div className="pvf-card-badge">
+                      <div className="pvf-card-badge-header">
+                        <LadderIconLeaderboard />
+                        <span className="pvf-card-badge-title">Live ladder</span>
+                      </div>
+                      <div className="pvf-card-badge-desc">Points lock on a single scored attempt.</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </main>
+            </div>
+
+            <div className="pvf-control-panel dpl-ladder-control-panel">
+              <div className="fritz-section-label">1. TODAY&apos;S SNAPSHOT</div>
+              <div className="fritz-summary-strip dpl-ladder-summary-strip">
+                <div className="fritz-summary-item">
+                  <div className="fritz-summary-icon fritz-summary-icon--tile dpl-ladder-summary-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="fritz-summary-value">{formatShortDate(today.runDate)}</div>
+                    <div className="fritz-summary-key">Board date</div>
+                  </div>
+                </div>
+                <div className="fritz-summary-divider" aria-hidden />
+                <div className="fritz-summary-item">
+                  <div className="fritz-summary-icon fritz-summary-icon--tile dpl-ladder-summary-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                      <path
+                        d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="fritz-summary-value">{attempt?.totalScore ?? 0}</div>
+                    <div className="fritz-summary-key">Scored total</div>
+                  </div>
+                </div>
+                <div className="fritz-summary-divider" aria-hidden />
+                <div className="fritz-summary-item">
+                  <div className="fritz-summary-icon fritz-summary-icon--tile dpl-ladder-summary-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.5 3.5 6.5 1 1.5 2 3 2 5a7 7 0 1 1-14 0c0-3 2.5-5 2.5-5s0 1 1 2.5z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="fritz-summary-value">{streakDisplay} days</div>
+                    <div className="fritz-summary-key">Daily streak</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="dpl-ladder-control-scroll">
+                <div className="fritz-section-label dpl-ladder-section-label--tight">2. THE RUN</div>
+                <div className="dpl-ladder-run-head">
+                  <span className="dpl-ladder-run-pulse" aria-hidden />
+                  <span className="dpl-ladder-run-tag">Live ladder</span>
+                  <span className="dpl-ladder-run-rule">
+                    Three stops in order. One scored run locks points — then practice any slot.
+                  </span>
+                </div>
+
+                <div className="dpl-ladder-run-track">
+                  {ladderSlotRows.map((row, idx) => {
+                    const slot = row.slot;
+                    if (!slot) return null;
+                    const stepClass = [
+                      'dpl-ladder-run-step',
+                      row.rowVariant === 'active' && !row.slotResult && 'dpl-ladder-run-step--active',
+                      row.slotResult?.solved && 'dpl-ladder-run-step--done',
+                      row.slotResult && !row.slotResult.solved && 'dpl-ladder-run-step--failed',
+                      row.isLocked && 'dpl-ladder-run-step--locked',
+                    ]
+                      .filter(Boolean)
+                      .join(' ');
+                    return (
+                      <div key={slot.id} className={stepClass}>
+                        <div className="dpl-ladder-run-rail">
+                          <span className="dpl-ladder-run-badge">{row.slotIndex}</span>
+                          {idx < ladderSlotRows.length - 1 ? <span className="dpl-ladder-run-connector" aria-hidden /> : null}
+                        </div>
+                        <div>
+                          <p className="dpl-ladder-run-eyebrow">Stop {row.slotIndex}</p>
+                          <p className="dpl-ladder-run-status">{row.statusSub}</p>
+                          <p className="dpl-ladder-run-meta">
+                            <strong>{slot.slotTitle}</strong>
+                            <span> · {slot.slotMaxPoints} pts max</span>
+                          </p>
+                        </div>
+                        <div className="dpl-ladder-run-aside">
+                          {row.rowVariant === 'done' && row.slotResult ? (
+                            <span className="dpl-ladder-run-pts">{row.slotResult.awardedPoints} pts</span>
+                          ) : null}
+                          {row.isLocked && row.unlockHint ? (
+                            <div className="dpl-ladder-run-lock">
+                              <span>{row.unlockHint}</span>
+                              <DplLockIcon />
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="dpl-ladder-panel-footer">
+                {hubError ? <p className="dpl-ladder-hub-error">{hubError}</p> : null}
+
+                {isLadderComplete ? (
+                  <button type="button" className="pvf-start-btn dpl-ladder-start-btn" onClick={() => handleStartPractice(1)}>
+                    <span>{primaryLabel}</span>
+                    <span className="pvf-start-arrow" aria-hidden>
+                      ›
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="pvf-start-btn dpl-ladder-start-btn"
+                    disabled={startPending}
+                    onClick={() => {
+                      void handleStartScored();
+                    }}
+                  >
+                    <span>{primaryLabel}</span>
+                    {!startPending ? (
+                      <span className="pvf-start-arrow" aria-hidden>
+                        ›
+                      </span>
+                    ) : null}
+                  </button>
+                )}
+
+                <button type="button" className="dpl-ladder-link" onClick={() => setLeaderboardOpen(true)}>
+                  View leaderboard →
+                </button>
+
+                {isLadderComplete ? (
+                  <div className="dpl-ladder-practice">
+                    <span className="dpl-ladder-practice-label">Jump to practice</span>
+                    <div className="dpl-ladder-practice-row">
+                      {([1, 2, 3] as const).map((slotIdx) => (
+                        <button
+                          key={`practice-${slotIdx}`}
+                          type="button"
+                          className="dpl-ladder-practice-chip"
+                          onClick={() => handleStartPractice(slotIdx)}
+                        >
+                          P{slotIdx}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
+
         {finalOverlay ? (
           <div className="rh-modal-overlay" role="dialog" aria-modal="true">
             <div className="rh-result">

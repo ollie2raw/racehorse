@@ -10,6 +10,10 @@ const MATCH_FOUND_COUNTDOWN_MS = 3000;
 const ONLINE_BROADCAST_INTERVAL_MS = 2000;
 const DEFAULT_RATING = 800;
 
+function matchmakingDebugEnabled(): boolean {
+  return process.env.MATCHMAKING_DEBUG === '1';
+}
+
 let serviceSingleton: QueueService | null = null;
 let onlineBroadcastTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -19,10 +23,12 @@ function makeRoomCode(): string {
 
 async function fetchPlayerRating(userId: string): Promise<number> {
   try {
-    const rows = await supabaseFetch<Array<{ glicko_rating: number }>>(
-      `/rest/v1/user_profiles?select=glicko_rating&id=eq.${encodeURIComponent(userId)}&limit=1`,
+    const rows = await supabaseFetch<Array<{ glicko_rating: number | null }>>(
+      `/rest/v1/profiles?select=glicko_rating&id=eq.${encodeURIComponent(userId)}&limit=1`,
     );
-    return rows[0]?.glicko_rating ?? DEFAULT_RATING;
+    const raw = rows[0]?.glicko_rating;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    return Number.isFinite(n) ? n : DEFAULT_RATING;
   } catch (err) {
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[matchmaking] fetchPlayerRating failed', err instanceof Error ? err.message : err);
@@ -68,10 +74,31 @@ export function registerMatchmakingHandlers(
         isSim: false,
       });
       if (!result.ok) {
+        if (matchmakingDebugEnabled()) {
+          console.log('[matchmaking][debug] queue:join rejected', {
+            reason: result.reason,
+            userId: payload.userId,
+            socketId: socket.id,
+          });
+        }
         ack?.({ ok: false, error: result.reason });
         return;
       }
+      if (matchmakingDebugEnabled()) {
+        console.log('[matchmaking][debug] queue:join accepted', {
+          socketId: socket.id,
+          userId: payload.userId,
+          username: payload.username,
+          rating,
+          queueSize: service.size(),
+          online: getOnlineCount(io),
+        });
+      }
       ack?.({ ok: true, rating, queueSize: service.size() });
+
+      // One immediate sweep so two players who join milliseconds apart do not
+      // always wait for the next interval tick.
+      service.tick();
 
       // Broadcast an immediate online-count update so the joining client
       // sees their own contribution to the count without waiting for the
@@ -85,7 +112,8 @@ export function registerMatchmakingHandlers(
         setTimeout(() => {
           const real = service.list().find((p) => p.socketId === targetSocketId);
           if (!real) return; // already matched or cancelled
-          service.join(makeSimPlayer(real));
+          const simResult = service.join(makeSimPlayer(real));
+          if (simResult.ok) service.tick();
         }, SIM_TIMING.SIM_JOIN_DELAY_MS);
       }
     } catch (err) {
@@ -123,6 +151,9 @@ function getOrCreateService(io: Server): QueueService {
   serviceSingleton = new QueueService({
     onMatched: (a, b) => { void handleMatched(io, a, b); },
     onTimeout: (socketId) => {
+      if (matchmakingDebugEnabled()) {
+        console.log('[matchmaking][debug] queue:timeout', { socketId });
+      }
       io.to(socketId).emit('queue:timeout', { fallbackOffered: true });
     },
   });
@@ -165,6 +196,13 @@ async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Prom
     };
     if (!a.isSim) io.to(a.socketId).emit('queue:matched', aPayload);
     if (!b.isSim) io.to(b.socketId).emit('queue:matched', bPayload);
+    if (matchmakingDebugEnabled()) {
+      console.log('[matchmaking][debug] queue:matched emitted', {
+        roomCode: code,
+        a: { socketId: a.socketId, userId: a.userId, isSim: a.isSim },
+        b: { socketId: b.socketId, userId: b.userId, isSim: b.isSim },
+      });
+    }
     // The sim move loop is started by the auto-start hook in room:join once
     // the game state actually exists. Nothing to do here for sim cases —
     // handleMatched only prepares the room + DB record.
