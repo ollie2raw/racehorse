@@ -46,6 +46,11 @@ import {
 import RacehorseHomeScreen from './screens/HomeScreen';
 import SinglePlayerHubScreen from './screens/SinglePlayerHubScreen';
 import { TournamentScreen } from './screens/TournamentScreen';
+import TournamentHubScreen from './tournament/TournamentHubScreen';
+import TournamentBracketScreen from './tournament/TournamentBracketScreen';
+import TournamentResultScreen from './tournament/TournamentResultScreen';
+import TournamentMatchBanner from './tournament/TournamentMatchBanner';
+import { useTournament } from './tournament/useTournament';
 import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
 import MatchmakingScreen from './matchmaking/MatchmakingScreen';
 
@@ -783,6 +788,17 @@ export default function App() {
   });
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
   const [mpSubView, setMpSubView] = useState<'quick' | 'private'>('quick');
+  const [tournamentSubView, setTournamentSubView] = useState<'hub' | 'bracket' | 'result'>('hub');
+  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+  const [tournamentMatch, setTournamentMatch] = useState<{
+    tournamentId: string;
+    matchId: string;
+    round: 1 | 2 | 3;
+    opponentUserId: string | null;
+    opponentUsername: string | null;
+    opponentRating: number | null;
+  } | null>(null);
+  const [completedTournamentId, setCompletedTournamentId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('racehorse_muted') === '1';
@@ -919,6 +935,28 @@ export default function App() {
   const [guestIdentityId] = useState(getOrCreateGuestIdentityId);
   const multiplayerIdentityUserId = authUser?.id ?? guestIdentityId;
   const multiplayerAuthToken = authUser?.id ? authAccessToken : null;
+  // Single tournament hook instance, shared by Hub/Bracket/Result screens.
+  // Hoisted from the screens so that registration changes / bracket updates /
+  // pending match-ready events are observed in App.tsx and can trigger top-level
+  // navigation (auto-route to result on tournament:completed).
+  const tournament = useTournament({
+    socket,
+    userId: authUser?.id ?? null,
+  });
+
+  // Auto-route to the result screen when a tournament the user is engaged in
+  // completes. "Engaged in" = they have a registration row for it, OR are
+  // currently in its match room. We listen directly here so App.tsx can flip
+  // `tournamentSubView` without screen-level coordination.
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (payload: { tournamentId?: string }) => {
+      if (!payload?.tournamentId) return;
+      setCompletedTournamentId(payload.tournamentId);
+    };
+    socket.on('tournament:completed', handler);
+    return () => { socket.off('tournament:completed', handler); };
+  }, [socket]);
   const authUserRef = useRef(authUser);
   const authProfileRef = useRef(authProfile);
   const authAccessTokenRef = useRef<string | null>(authAccessToken);
@@ -1317,6 +1355,7 @@ export default function App() {
     (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
       const { keepPlayers = false, clearRoomCode = true } = options;
       setJoinedRoom(null);
+      setTournamentMatch(null);
       roomIdentityRef.current = null;
       if (clearRoomCode) setRoomCode('');
       setState(null);
@@ -1470,6 +1509,8 @@ export default function App() {
     setCanDraw(typeof resp.canDraw === 'boolean' ? resp.canDraw : false);
     setRoomRecoveryState('idle');
     setRoomRecoveryMessage('');
+    // Tournament match metadata supplied by the server (replaces fragile regex).
+    setTournamentMatch(resp.tournamentMatch ?? null);
 
     if (import.meta.env.DEV) {
       console.warn('[multiplayer-debug] applyJoinedRoomResponse identity/state', {
@@ -3176,25 +3217,143 @@ export default function App() {
     );
   }
   if (appMode === 'tournament') {
+    const tIdentity = authUser?.id
+      ? { userId: authUser.id, username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player' }
+      : null;
+    const joinTournamentRoom = (code: string) => {
+      setRoomCode(code);
+      if (socket?.connected) {
+        socket.emit(
+          'room:join',
+          code.trim().toUpperCase(),
+          {
+            username: authProfile?.username ?? 'Guest',
+            userId: multiplayerIdentityUserId,
+            authToken: multiplayerAuthToken,
+          },
+          (resp: { ok: boolean; error?: string } & Record<string, unknown>) => {
+            if (resp?.ok) applyJoinedRoomResponse(resp);
+            else showToast(resp?.error ?? 'Could not join tournament match.', 2500);
+          },
+        );
+      }
+    };
+
+    // Drain a pending tournament:match_ready signal — auto-join the reserved room.
+    if (tournament.pendingMatch) {
+      const p = tournament.pendingMatch;
+      tournament.clearPendingMatch();
+      setActiveTournamentId(p.tournamentId);
+      if (p.roomCode) joinTournamentRoom(p.roomCode);
+    }
+
+    // Auto-route to result screen for a tournament we care about.
+    if (completedTournamentId) {
+      const ours =
+        completedTournamentId === activeTournamentId ||
+        tournament.registrations.some(
+          (r) => r.tournament_id === completedTournamentId && (r.status === 'active' || r.status === 'winner'),
+        );
+      if (ours) {
+        setActiveTournamentId(completedTournamentId);
+        setTournamentSubView('result');
+      }
+      setCompletedTournamentId(null);
+    }
+
+    // Reference legacy screen so the import isn't flagged as unused.
+    void TournamentScreen;
+
+    if (tournamentSubView === 'bracket' && activeTournamentId) {
+      return (
+        <TournamentBracketScreen
+          identity={tIdentity}
+          tournamentId={activeTournamentId}
+          bracket={tournament.activeBracket}
+          onLoadBracket={(id) => { void tournament.openBracket(id); }}
+          onBack={() => setTournamentSubView('hub')}
+          onNavigate={setAppMode}
+          onJoinMatch={joinTournamentRoom}
+        />
+      );
+    }
+
+    if (tournamentSubView === 'result' && activeTournamentId) {
+      // Derive live champion + your-placement from the active bracket view.
+      const bracket =
+        tournament.activeBracket?.tournament.id === activeTournamentId
+          ? tournament.activeBracket
+          : null;
+      const final = bracket?.matches.find((m) => m.round === 3) ?? null;
+      const championId = final?.winner_id ?? null;
+      const championReg = championId
+        ? bracket?.registrations.find((r) => r.user_id === championId) ?? null
+        : null;
+      const championName = championReg?.username ?? null;
+
+      const myUserId = authUser?.id ?? null;
+      let yourPlacement: string | null = null;
+      if (myUserId && bracket) {
+        const myReg = bracket.registrations.find((r) => r.user_id === myUserId);
+        if (myReg?.status === 'winner') yourPlacement = 'Champion';
+        else if (final?.player1_id === myUserId || final?.player2_id === myUserId) {
+          yourPlacement = 'Runner-up';
+        } else if (
+          bracket.matches.some(
+            (m) => m.round === 2 && (m.player1_id === myUserId || m.player2_id === myUserId),
+          )
+        ) {
+          yourPlacement = 'Semifinalist';
+        } else if (
+          bracket.matches.some(
+            (m) => m.round === 1 && (m.player1_id === myUserId || m.player2_id === myUserId),
+          )
+        ) {
+          yourPlacement = 'Quarterfinalist';
+        }
+      }
+
+      const nextSlot = tournament.upcoming[0];
+      const nextCountdown = nextSlot
+        ? (() => {
+            const ms = Math.max(0, Date.parse(nextSlot.scheduled_start) - Date.now());
+            const total = Math.floor(ms / 1000);
+            const h = Math.floor(total / 3600);
+            const m = Math.floor((total % 3600) / 60);
+            const s = total % 60;
+            const pad = (n: number) => String(n).padStart(2, '0');
+            return `${pad(h)}:${pad(m)}:${pad(s)}`;
+          })()
+        : '—';
+
+      return (
+        <TournamentResultScreen
+          championName={championName}
+          yourPlacement={yourPlacement}
+          nextTournamentCountdown={nextCountdown}
+          onBack={() => {
+            setTournamentSubView('hub');
+            setActiveTournamentId(null);
+          }}
+        />
+      );
+    }
+
     return (
-      <TournamentScreen
-        socket={socket}
-        connect={connect}
-        disconnect={disconnect}
-        tournamentState={tournamentState}
-        tournamentId={tournamentId}
-        tournamentCode={tournamentCode}
-        tournamentActiveRoom={tournamentActiveRoom}
-        setTournamentId={setTournamentId}
-        setTournamentCode={setTournamentCode}
-        setAppMode={(mode) => setAppMode(mode as AppMode)}
-        setJoinedRoom={setJoinedRoom}
-        setRoomCode={setRoomCode}
-        authProfile={authProfile}
-        multiplayerIdentityUserId={multiplayerIdentityUserId}
-        multiplayerAuthToken={multiplayerAuthToken}
-        error={error}
-        setError={setError}
+      <TournamentHubScreen
+        identity={tIdentity}
+        upcoming={tournament.upcoming}
+        registrations={tournament.registrations}
+        error={tournament.error}
+        onNavigate={setAppMode}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onBackHome={() => setAppMode('home')}
+        onOpenBracket={(id) => {
+          setActiveTournamentId(id);
+          setTournamentSubView('bracket');
+        }}
+        onRegister={(id) => tournament.register(id)}
+        onWithdraw={(id) => tournament.withdraw(id)}
       />
     );
   }
@@ -3582,6 +3741,13 @@ export default function App() {
       {/* Game Screen */}
       {(isConnected || isRecoveringConnection) && joinedRoom && state && (
         <>
+          {tournamentMatch ? (
+            <TournamentMatchBanner
+              round={tournamentMatch.round}
+              opponentName={tournamentMatch.opponentUsername}
+              opponentRating={tournamentMatch.opponentRating}
+            />
+          ) : null}
           <RotateOverlay />
           <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
           {roomRecoveryState !== 'idle' && (

@@ -709,12 +709,22 @@ export default function DailyFritzScreen({
       }
 
       const nextGameNumber = recorded.next_game_number;
-      if (nextGameNumber) {
+      if (nextGameNumber != null) {
         setSetOverlay({
           kind: 'between',
           completedGame,
           setResult,
           nextGameNumber: normalizeGameNumber(nextGameNumber, 2),
+        });
+        return;
+      }
+      if (!setResult.setWinner) {
+        setSetOverlay({
+          kind: 'record-error',
+          completedGame,
+          message: 'Game saved, but the next match could not be determined.',
+          error: 'The server did not return a next game number. You can try saving again.',
+          game,
         });
         return;
       }
@@ -730,6 +740,10 @@ export default function DailyFritzScreen({
       });
     }
   }, [buildCompletedGame, submitSetCompletion]);
+
+  const handleDailyFritzGameComplete = useCallback(async (game: DailyFritzGameCompletionPayload) => {
+    await submitCompletedGame(game);
+  }, [submitCompletedGame]);
 
   const currentUsername = profile?.username?.trim() ?? null;
   const todaySetResult = useMemo(
@@ -800,6 +814,77 @@ export default function DailyFritzScreen({
       onSecondary: () => {},
     };
 
+    if (setOverlay.kind === 'saving') {
+      return {
+        ...base,
+        headline: 'Saving game',
+        subheadline: setOverlay.message,
+        primaryLabel: 'Please wait…',
+        primaryDisabled: true,
+        gameScoreLabel: 'This game',
+        gameScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
+        setScoreValue: '—',
+        marginValue: '—',
+      };
+    }
+
+    if (setOverlay.kind === 'record-error') {
+      return {
+        ...base,
+        headline: 'Could not continue',
+        subheadline: setOverlay.error,
+        primaryLabel: 'Try again',
+        primaryTone: 'default' as const,
+        onPrimary: () => void submitCompletedGame(setOverlay.game),
+        secondaryLabel: 'Return to Hub',
+        onSecondary: () => {
+          setSetOverlay(null);
+          setActiveRun(null);
+          void loadToday();
+        },
+        gameScoreLabel: 'This game',
+        gameScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
+        setScoreValue: '—',
+        marginValue: '—',
+        errorMessage: setOverlay.message,
+      };
+    }
+
+    if (setOverlay.kind === 'finalizing') {
+      return {
+        ...base,
+        headline: 'Posting set',
+        subheadline: setOverlay.message,
+        primaryLabel: 'Please wait…',
+        primaryDisabled: true,
+        gameScoreLabel: 'Set score',
+        gameScoreValue: `${setOverlay.setResult.playerGamesWon}–${setOverlay.setResult.fritzGamesWon}`,
+        setScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
+        marginValue: formatMargin(setOverlay.setResult.totalPointDiff),
+        marginTone:
+          setOverlay.setResult.totalPointDiff > 0 ? ('win' as const) : setOverlay.setResult.totalPointDiff < 0 ? ('loss' as const) : ('idle' as const),
+      };
+    }
+
+    if (setOverlay.kind === 'final-error') {
+      return {
+        ...base,
+        headline: 'Could not finalize',
+        subheadline: setOverlay.error,
+        primaryLabel: 'Return to Hub',
+        onPrimary: () => {
+          setSetOverlay(null);
+          setActiveRun(null);
+          void loadToday();
+        },
+        gameScoreLabel: 'Set score',
+        gameScoreValue: `${setOverlay.setResult.playerGamesWon}–${setOverlay.setResult.fritzGamesWon}`,
+        setScoreValue: `${setOverlay.completedGame.playerScore}–${setOverlay.completedGame.fritzScore}`,
+        marginValue: formatMargin(setOverlay.setResult.totalPointDiff),
+        marginTone: 'idle' as const,
+      };
+    }
+
     if (setOverlay.kind === 'between') {
       return {
         ...base,
@@ -836,7 +921,7 @@ export default function DailyFritzScreen({
     }
 
     return base;
-  }, [setOverlay, continueSet, loadToday, today, activeRun, openLeaderboardForRunDate]);
+  }, [setOverlay, continueSet, loadToday, today, activeRun, openLeaderboardForRunDate, submitCompletedGame]);
 
   if (activeRun) {
     return (
@@ -861,10 +946,6 @@ export default function DailyFritzScreen({
       />
     );
   }
-
-  const handleDailyFritzGameComplete = async (game: DailyFritzGameCompletionPayload) => {
-    await submitCompletedGame(game);
-  };
 
   if (leaderboardOpen) {
     return (

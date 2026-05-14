@@ -40,7 +40,7 @@ export function registerTournamentRoutes(app: Express): void {
 
   app.get('/api/tournaments/:id/bracket', async (req: Request, res: Response) => {
     try {
-      const view = await fetchBracketView(req.params.id);
+      const view = await fetchBracketView(String(req.params.id));
       if (!view) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       res.json({ ok: true, view });
     } catch (err) {
@@ -50,7 +50,7 @@ export function registerTournamentRoutes(app: Express): void {
 
   app.get('/api/tournaments/:id', async (req: Request, res: Response) => {
     try {
-      const t = await fetchTournamentById(req.params.id);
+      const t = await fetchTournamentById(String(req.params.id));
       if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       res.json({ ok: true, tournament: t });
     } catch (err) {
@@ -62,7 +62,7 @@ export function registerTournamentRoutes(app: Express): void {
     const userId = typeof req.body?.userId === 'string' ? req.body.userId : null;
     if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
     try {
-      const t = await fetchTournamentById(req.params.id);
+      const t = await fetchTournamentById(String(req.params.id));
       if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       if (t.status !== 'registration_open') {
         res.status(409).json({ ok: false, error: 'registration_closed' });
@@ -89,7 +89,7 @@ export function registerTournamentRoutes(app: Express): void {
     const userId = typeof req.body?.userId === 'string' ? req.body.userId : null;
     if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
     try {
-      await withdrawRegistration(req.params.id, userId);
+      await withdrawRegistration(String(req.params.id), userId);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });

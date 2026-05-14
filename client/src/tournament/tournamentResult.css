@@ -1,0 +1,93 @@
+.tr-page {
+  --tr-accent: var(--accent-amber);
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 60% 30% at 50% -8%, color-mix(in srgb, var(--accent-amber) 12%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--bg-obsidian) 0%, var(--bg-obsidian) 100%);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+.tr-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 880px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 32px 32px 32px;
+  box-sizing: border-box;
+  text-align: center;
+  overflow: auto;
+  gap: 12px;
+}
+
+.tr-kicker {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--tr-accent);
+  margin-bottom: 6px;
+}
+
+.tr-champion-title {
+  font-family: var(--font-body);
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.tr-champion-name {
+  font-family: var(--font-body);
+  font-size: 52px;
+  font-weight: 900;
+  color: var(--tr-accent);
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+  text-shadow: 0 0 32px color-mix(in srgb, var(--tr-accent) 30%, transparent);
+}
+
+.tr-placement {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+.tr-placement strong { color: var(--text-primary); }
+
+.tr-countdown {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.tr-countdown strong {
+  color: var(--accent-amber);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-back {
+  padding: 12px 22px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tr-back:hover { border-color: var(--border-strong); }

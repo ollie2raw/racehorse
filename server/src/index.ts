@@ -4306,6 +4306,22 @@ function broadcastStateUpdate(roomCode: string) {
 
       void (async () => {
         try {
+          // ── Scheduled tournament match: advance the bracket and SKIP rated ranking.
+          if (room.scheduledTournamentMatchId) {
+            const winnerUserId =
+              winnerSocketId === a.id ? a.userId :
+              winnerSocketId === b.id ? b.userId : null;
+            if (winnerUserId) {
+              await applyTournamentMatchResult(io, {
+                matchId: room.scheduledTournamentMatchId,
+                winnerId: winnerUserId,
+                player1Score: scoreA,
+                player2Score: scoreB,
+              });
+            }
+            return; // bypass ranked logging entirely for tournament matches
+          }
+
           if (getPendingFritzMatchContext(room)) {
             await resolvePendingFritzMatch(room.code);
           }
@@ -4621,6 +4637,9 @@ function broadcastStateUpdate(roomCode: string) {
 io.on('connection', (socket: Socket) => {
   /* Matchmaking queue handlers — additive, does not modify private-match flow. */
   registerMatchmakingHandlers(io, socket, (code) => broadcastStateUpdate(code));
+
+  /* Scheduled tournament handlers + scheduler bootstrap (idempotent). */
+  initScheduledTournaments(io, app, socket);
 
   /* ROOM_REACTIONS_CHAT_EMOTE */
   const leaveTrackedRoom = (
@@ -5350,6 +5369,72 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
 
       const rejoinLegalMoves = room.state ? getRoomLegalMoves(room.code, socket.id) : [];
       const rejoinCanDraw = room.state ? getRoomCanDraw(room.code, socket.id) : false;
+
+      // ── Scheduled-tournament metadata ──────────────────────────────────
+      // When the room belongs to a scheduled tournament, attach the match
+      // info + opponent profile so the client can render the in-game banner
+      // and bracket context without a fragile room-code regex.
+      let tournamentMatchMeta:
+        | {
+            tournamentId: string;
+            matchId: string;
+            round: 1 | 2 | 3;
+            opponentUserId: string | null;
+            opponentUsername: string | null;
+            opponentRating: number | null;
+          }
+        | null = null;
+      if (room.scheduledTournamentMatchId && room.scheduledTournamentId) {
+        try {
+          const matchRows = await supabaseFetch<Array<{
+            id: string;
+            tournament_id: string;
+            round: 1 | 2 | 3;
+            player1_id: string | null;
+            player2_id: string | null;
+          }>>(
+            `/rest/v1/scheduled_tournament_matches` +
+              `?select=id,tournament_id,round,player1_id,player2_id` +
+              `&id=eq.${encodeURIComponent(room.scheduledTournamentMatchId)}&limit=1`,
+          );
+          const match = matchRows[0];
+          if (match) {
+            const opponentUserId =
+              userId && match.player1_id === userId
+                ? match.player2_id
+                : userId && match.player2_id === userId
+                  ? match.player1_id
+                  : null;
+            let opponentUsername: string | null = null;
+            let opponentRating: number | null = null;
+            if (opponentUserId) {
+              try {
+                const profiles = await supabaseFetch<Array<{
+                  username: string | null;
+                  glicko_rating: number | null;
+                }>>(
+                  `/rest/v1/profiles?select=username,glicko_rating&id=eq.${encodeURIComponent(opponentUserId)}&limit=1`,
+                );
+                opponentUsername = profiles[0]?.username ?? null;
+                opponentRating = profiles[0]?.glicko_rating ?? null;
+              } catch {
+                /* profile lookup is best-effort */
+              }
+            }
+            tournamentMatchMeta = {
+              tournamentId: match.tournament_id,
+              matchId: match.id,
+              round: match.round,
+              opponentUserId,
+              opponentUsername,
+              opponentRating,
+            };
+          }
+        } catch {
+          /* tournament metadata is best-effort — never block room:join on this */
+        }
+      }
+
       cb?.({
         ok: true,
         roomCode: room.code,
@@ -5359,6 +5444,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         legalMoves: rejoinLegalMoves,
         canDraw: rejoinCanDraw,
         eventMeta: getRoomMatchEventMeta(room.code),
+        tournamentMatch: tournamentMatchMeta,
       });
 
       if (room.state) {
