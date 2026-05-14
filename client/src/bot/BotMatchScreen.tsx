@@ -932,6 +932,7 @@ export default function BotMatchScreen({
   const ghostCompleteKeyRef = useRef('');
   const dailyFritzCompleteKeyRef = useRef('');
   const dailyFritzGameCompleteKeyRef = useRef('');
+  const matchCompleteKeyRef = useRef('');
   const dailyFritzSubmitSucceededRef = useRef(false);
   const dailyFritzAutoSubmitBlockedRef = useRef(false);
   // One-way guard: set to true when advanceHand starts, reset on success or fatal error.
@@ -1054,6 +1055,7 @@ export default function BotMatchScreen({
     userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
+
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
   const enableDailyFritzProfiling =
