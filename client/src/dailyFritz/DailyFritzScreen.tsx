@@ -3,13 +3,13 @@ import { useRef } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import type { GhostProfileSummary } from '../ghost/api';
+import type { AppMode } from '../types';
 import BotMatchScreen from '../bot/BotMatchScreen';
 import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import DailyFritzLeaderboard from './DailyFritzLeaderboard';
-import { BrandLogo, GlobalNav } from '../components';
+import { GlobalNav } from '../components';
 import { Button } from '../components/primitives';
 import '../screens/RacehorseHomeArt.css';
-import fritzTilesArt from '../assets/home/fritzpngtiles.png';
 
 import {
   buildDailyFritzCompletionHash,
@@ -27,6 +27,18 @@ import {
 } from './api';
 import './dailyFritz.css';
 
+interface OverlayTrackerItem {
+  gameNumber: DailyFritzSetGameNumber;
+  label: string;
+  tone: BetweenGameTrackerTone;
+}
+
+interface OverlayGameItem {
+  gameNumber: DailyFritzSetGameNumber;
+  value: string;
+  tone: 'win' | 'loss';
+}
+
 const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
 const DAILY_FRITZ_SET_VERSION = 2;
 
@@ -39,7 +51,7 @@ interface DailyFritzScreenProps {
   onProfilePatch?: (patch: Partial<UserProfile>) => void;
   onOpenAuth: () => void;
   onBack: () => void;
-  onNavigate?: (mode: string) => void;
+  onNavigate?: (mode: AppMode) => void;
 }
 
 type DailyFritzOverlayState =
@@ -216,15 +228,6 @@ function normalizeStartResponse(
   return normalized;
 }
 
-function formatSetResultLabel(setResult: DailyFritzSetResult | null, legacyWon?: boolean | null): string {
-  if (setResult?.setWinner) {
-    const prefix = setResult.setWinner === 'player' ? 'Won set' : 'Lost set';
-    return `${prefix} ${setResult.playerGamesWon}–${setResult.fritzGamesWon}`;
-  }
-  if (legacyWon != null) return legacyWon ? 'Win' : 'Loss';
-  return '—';
-}
-
 function formatMargin(value: number): string {
   return `${value >= 0 ? '+' : ''}${value}`;
 }
@@ -269,19 +272,111 @@ const GAME_DOMINO_CONFIGS: [number, number][] = [
   [2, 1],
 ];
 
-function DominoTile({ index }: { index: number }) {
+const NY_TZ = 'America/New_York';
+
+const WEEK_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
+
+function zonedCalendarParts(d: Date, timeZone: string) {
+  const f = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const o: Record<string, number> = {};
+  for (const { type, value } of f.formatToParts(d)) {
+    if (type !== 'literal') o[type] = Number(value);
+  }
+  return {
+    year: o.year,
+    month: o.month,
+    day: o.day,
+    hour: o.hour,
+    minute: o.minute,
+    second: o.second,
+  };
+}
+
+function dayKey(p: { year: number; month: number; day: number }) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+}
+
+/** Ms from `from` until the next calendar midnight in `timeZone` (first instant of the next local date). */
+function msUntilNextMidnightInZone(from: Date, timeZone: string): number {
+  const startMs = from.getTime();
+  const startParts = zonedCalendarParts(from, timeZone);
+  const startKey = dayKey(startParts);
+  for (let step = 1; step <= 25 * 60; step += 1) {
+    const t = new Date(startMs + step * 60 * 1000);
+    const p = zonedCalendarParts(t, timeZone);
+    if (dayKey(p) !== startKey && p.hour === 0 && p.minute === 0) {
+      return step * 60 * 1000;
+    }
+  }
+  return 24 * 60 * 60 * 1000;
+}
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return '0:00:00';
+  const totalS = Math.floor(ms / 1000);
+  const h = Math.floor(totalS / 3600);
+  const m = Math.floor((totalS % 3600) / 60);
+  const s = totalS % 60;
+  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+/** Monday = 0 … Sunday = 6, in America/New_York. */
+function getNyMondayBasedWeekdayIndex(): number {
+  const wd = new Intl.DateTimeFormat('en-US', { timeZone: NY_TZ, weekday: 'short' }).format(new Date());
+  const map: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+  return map[wd] ?? 0;
+}
+
+type WeekStripState = 'future' | 'today' | 'done';
+
+function getWeekStripCells(streak: number): { state: WeekStripState; label: string }[] {
+  const todayIdx = getNyMondayBasedWeekdayIndex();
+  const checks = Math.min(Math.max(streak, 0), todayIdx);
+  return WEEK_LABELS.map((label, j) => {
+    if (j > todayIdx) return { state: 'future', label };
+    if (j === todayIdx) return { state: 'today', label };
+    if (checks > 0 && j >= todayIdx - checks) return { state: 'done', label };
+    return { state: 'future', label };
+  });
+}
+
+type DominoAccent = 'elite' | 'standard' | 'neutral';
+
+function DominoTile({ index, accent }: { index: number; accent: DominoAccent }) {
   const [top, bottom] = GAME_DOMINO_CONFIGS[index] ?? [0, 0];
   const topPips = DOMINO_PIPS[top] ?? [];
   const bottomPips = DOMINO_PIPS[bottom] ?? [];
+  const stroke =
+    accent === 'elite'
+      ? 'var(--tier-elite)'
+      : accent === 'standard'
+        ? 'var(--tier-standard)'
+        : 'var(--border-light)';
+  const pip =
+    accent === 'elite'
+      ? 'var(--tier-elite)'
+      : accent === 'standard'
+        ? 'var(--tier-standard)'
+        : 'var(--text-secondary)';
   return (
-    <svg viewBox="0 0 24 46" width="26" height="46" className="df-domino-tile">
-      <rect x="0.75" y="0.75" width="22.5" height="44.5" rx="3.5" fill="#0c0a01" stroke="rgba(255,255,255,0.14)" strokeWidth="0.75" />
-      <line x1="1.5" y1="23" x2="22.5" y2="23" stroke="rgba(255,255,255,0.1)" strokeWidth="0.75" />
+    <svg viewBox="0 0 24 46" width="22" height="42" className={`df-domino-tile df-domino-tile--${accent}`}>
+      <rect x="0.75" y="0.75" width="22.5" height="44.5" rx="3.5" fill="var(--bg-card)" stroke={stroke} strokeWidth="1.25" />
+      <line x1="1.5" y1="23" x2="22.5" y2="23" stroke="var(--border-subtle)" strokeWidth="0.75" />
       {topPips.map(([x, y], i) => (
-        <circle key={`t${i}`} cx={x} cy={y} r="2" fill="rgba(255,255,255,0.75)" />
+        <circle key={`t${i}`} cx={x} cy={y} r="2" fill={pip} opacity={accent === 'neutral' ? 0.55 : 0.9} />
       ))}
       {bottomPips.map(([x, y], i) => (
-        <circle key={`b${i}`} cx={x} cy={y + 23} r="2" fill="rgba(255,255,255,0.75)" />
+        <circle key={`b${i}`} cx={x} cy={y + 23} r="2" fill={pip} opacity={accent === 'neutral' ? 0.55 : 0.9} />
       ))}
     </svg>
   );
@@ -290,14 +385,23 @@ function DominoTile({ index }: { index: number }) {
 function DailyFritzLoadingScreen({ onBack }: { onBack: () => void }) {
   return (
     <div className="df-page">
-      <div className="df-container">
-        <nav className="df-nav">
-          <button type="button" className="df-back-btn" onClick={onBack}>← Back to Home</button>
-        </nav>
-        <header className="df-hero">
-          <BrandLogo iconSize={32} showWordmark={true} />
-          <h1 className="df-title" style={{ marginTop: '24px' }}>Preparing...</h1>
-        </header>
+      <div className="home-bg" aria-hidden="true">
+        <div className="home-bg__halo" />
+        <div className="home-bg__domino home-bg__domino--tl" />
+        <div className="home-bg__domino home-bg__domino--tr" />
+        <div className="home-bg__line home-bg__line--1" />
+        <div className="home-bg__line home-bg__line--2" />
+        <div className="home-bg__line home-bg__line--3" />
+        <div className="home-bg__texture" />
+      </div>
+
+      <div className="df-shell df-shell--loading">
+        <div className="df-page-head">
+          <Button type="button" variant="ghost" className="df-back-btn" onClick={onBack}>
+            ← Back to Home
+          </Button>
+          <h1 className="df-title">Preparing...</h1>
+        </div>
       </div>
     </div>
   );
@@ -314,20 +418,27 @@ export default function DailyFritzScreen({
   onBack,
   onNavigate,
 }: DailyFritzScreenProps) {
-  // Use onOpenAuth to avoid unused variable warning
-  console.log('DailyFritzScreen: Auth available', !!onOpenAuth);
+  void onOpenAuth;
 
   const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<DailyFritzLeaderboardRow[]>([]);
   const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(null);
   const [setOverlay, setSetOverlay] = useState<DailyFritzOverlayState | null>(null);
-  const [setSubmitError, setSetSubmitError] = useState<string | null>(null);
+  const [, setSetSubmitError] = useState<string | null>(null);
   const [startActionPending, setStartActionPending] = useState(false);
+  const [nyResetMs, setNyResetMs] = useState(() => msUntilNextMidnightInZone(new Date(), NY_TZ));
+
+  useEffect(() => {
+    const tick = () => setNyResetMs(msUntilNextMidnightInZone(new Date(), NY_TZ));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const cacheKey = useMemo(
     () => (user?.id ? `${DAILY_FRITZ_TODAY_CACHE_PREFIX}${user.id}` : null),
@@ -611,7 +722,7 @@ export default function DailyFritzScreen({
 
       const setResult = normalizeSetResult(recorded.set_result) ?? recorded.set_result;
       const completedGame =
-        setResult.games.find((entry: any) => entry.gameNumber === gameNumber) ?? fallbackCompletedGame;
+        setResult.games.find((entry) => entry.gameNumber === gameNumber) ?? fallbackCompletedGame;
 
       setActiveRun((current) =>
         current
@@ -677,6 +788,8 @@ export default function DailyFritzScreen({
     ];
   }, [leaderboard, currentUsername, today, todaySetResult]);
 
+  const weekStripCells = useMemo(() => getWeekStripCells(today?.streak ?? 0), [today?.streak]);
+
   const activeSetResult = normalizeSetResult(activeRun?.set_result ?? null);
   const activeGameNumber = normalizeGameNumber(activeRun?.current_game_number, getNextGameNumberFromSetResult(activeSetResult));
 
@@ -702,8 +815,8 @@ export default function DailyFritzScreen({
       marginTone: 'idle' as 'win' | 'loss' | 'idle',
       resultValue: null,
       rankValue: null,
-      tracker: [] as any[],
-      games: [] as any[],
+      tracker: [] as OverlayTrackerItem[],
+      games: [] as OverlayGameItem[],
       onPrimary: () => {},
       onSecondary: () => {},
     };
@@ -805,21 +918,21 @@ export default function DailyFritzScreen({
 
   const dateLabel = today ? formatDateLabel(today.run_date) : '—';
   const tierLabel = today ? tierDisplayLabel(today.fritz_tier) : '—';
-  const formatLabel = today ? `Best-of-3 · ${today.deal_size}-tile` : '—';
+  const formatLabel = today ? `Best-of-3 • ${today.deal_size}-Tile` : '—';
   const streakLabel = today ? `${today.streak} days` : '0 days';
 
   const isComplete = today?.attempt_status === 'completed';
   const isStarted = today?.attempt_status === 'started';
   const isElite = today?.fritz_tier === 'elite';
 
-  const games = [1, 2, 3].map(n => {
-    const res = todaySetResult?.games.find(g => g.gameNumber === n);
-    const isNext = todaySetResult ? (todaySetResult.games.length + 1 === n && !todaySetResult.setWinner) : (n === 1);
-    const isMuted = todaySetResult ? (n > todaySetResult.games.length + 1 || !!todaySetResult.setWinner) : (n > 1);
-    
-    let barColor = 'var(--border-subtle)';
-    if (n === 1) barColor = 'var(--tier-elite)';
-    if (n === 2) barColor = 'var(--tier-rookie)';
+  const games = [1, 2, 3].map((n) => {
+    const res = todaySetResult?.games.find((g) => g.gameNumber === n);
+    const isNext = todaySetResult ? todaySetResult.games.length + 1 === n && !todaySetResult.setWinner : n === 1;
+    const isMuted = todaySetResult ? n > todaySetResult.games.length + 1 || !!todaySetResult.setWinner : n > 1;
+
+    const barColor =
+      n === 1 ? 'var(--tier-elite)' : n === 2 ? 'var(--tier-standard)' : 'var(--border-light)';
+    const dominoAccent: DominoAccent = n === 1 ? 'elite' : n === 2 ? 'standard' : 'neutral';
 
     let status = 'Not played';
     let statusColor = 'var(--text-dim)';
@@ -828,18 +941,26 @@ export default function DailyFritzScreen({
       statusColor = res.playerWon ? 'var(--tier-rookie)' : 'var(--accent-red)';
     } else if (isNext) {
       status = 'Ready';
-      statusColor = 'var(--tier-elite)';
+      statusColor = n === 2 ? 'var(--tier-standard)' : 'var(--tier-elite)';
     } else if (n === 3) {
       status = 'If needed';
+      statusColor = 'var(--text-dim)';
+    } else if (n === 2) {
+      statusColor = 'var(--tier-standard)';
     }
 
     return {
       n,
       barColor,
+      dominoAccent,
       status,
       statusColor,
-      formatText: res ? `Final: ${res.playerScore}–${res.fritzScore}` : (isNext ? `First to ${today?.winning_score ?? 7}` : 'Starts on set launch'),
-      isMuted
+      formatText: res
+        ? `Final: ${res.playerScore}–${res.fritzScore}`
+        : isNext
+          ? `First to ${today?.winning_score ?? 60}`
+          : 'Starts on set launch',
+      isMuted,
     };
   });
 
@@ -857,196 +978,231 @@ export default function DailyFritzScreen({
 
       <GlobalNav
         currentMode="dailyFritz"
-        onNavigate={onNavigate as any}
+        onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
         activeColor="var(--tier-elite)"
       />
 
-      <div className="df-container">
-        {/* ── Hero ── */}
-        <header className="df-hero">
-          <div className="df-hero-left">
-            <button type="button" className="df-back-btn" onClick={onBack}>← Back to Home</button>
-
-            <div className="df-kicker">
-              <span className="df-kicker-dot" />
-              <span className="df-kicker-text">DAILY FRITZ</span>
+      <div className="df-shell">
+        <div className="df-workspace">
+          <div className="df-col df-col--main">
+            <div className="df-page-head">
+              <Button type="button" variant="ghost" className="df-back-btn" onClick={onBack}>
+                ← Back to Home
+              </Button>
+              <div className="df-eyebrow-chip">Daily Fritz</div>
+              <h1 className="df-title">Daily Fritz</h1>
+              <p className="df-subtitle">Best-of-3 set. Same deal for everyone.</p>
             </div>
-            <h1 className="df-title">Daily Fritz</h1>
-            <p className="df-subtitle">Best-of-3 set. Same deal for everyone.</p>
-            <div className="df-hero-pill">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              Today's set ready
-            </div>
-          </div>
-          <img src={fritzTilesArt} alt="" className="df-hero-art" />
-        </header>
 
-        {/* ── Main Grid ── */}
-        <main className="df-main-grid">
-
-          {/* Left Column */}
-          <div className="df-left-col">
-
-            {/* Set Overview Card */}
             <div className="df-overview-card">
-              <div className="df-overview-top">
-                <div className="df-overview-icon-ring">
-                  <svg viewBox="0 0 56 56" width="56" height="56">
-                    <rect x="4" y="4" width="48" height="48" rx="7" fill="rgba(10,7,0,0.95)" stroke="rgba(231,182,74,0.35)" strokeWidth="1.5" />
-                    <line x1="4" y1="30" x2="52" y2="30" stroke="rgba(231,182,74,0.2)" strokeWidth="1" />
-                    <circle cx="17" cy="14" r="3.5" fill="rgba(231,182,74,0.75)" />
-                    <circle cx="28" cy="14" r="3.5" fill="rgba(231,182,74,0.75)" />
-                    <circle cx="39" cy="14" r="3.5" fill="rgba(231,182,74,0.75)" />
-                    <circle cx="17" cy="22" r="3.5" fill="rgba(231,182,74,0.75)" />
-                    <circle cx="28" cy="22" r="3.5" fill="rgba(231,182,74,0.75)" />
-                    <circle cx="39" cy="22" r="3.5" fill="rgba(231,182,74,0.75)" />
-                    <path d="M20 33 L40 42 L20 51 Z" fill="var(--tier-elite)" />
-                  </svg>
+              <div className="df-overview-scroll">
+                <div className="df-overview-body">
+                  <figure className="df-overview-fritz-wrap">
+                    <img src="/fritzwave.png" alt="Fritz" className="df-overview-fritz" />
+                  </figure>
+                  <div className="df-overview-copy">
+                    <div className="df-overview-eyebrow">Today&apos;s set overview</div>
+                    <h2>{isComplete ? 'Set Complete' : isStarted ? 'In Progress' : 'Ready to begin'}</h2>
+                    <p>
+                      Play today&apos;s best-of-3 against Fritz. Win two games to take the set.
+                    </p>
+                  </div>
                 </div>
-                <div className="df-overview-content">
-                  <div className="df-overview-eyebrow">SET OVERVIEW</div>
-                  <h2>{isComplete ? 'Set Complete' : isStarted ? 'In Progress' : 'Ready to begin'}</h2>
-                  <p>Play today's best-of-3 against Fritz.<br />Win two games to take the set.</p>
+
+                <div className="df-overview-divider" />
+
+                <div className="df-overview-meta-grid">
+              <div className="df-overview-meta-cell">
+                <svg viewBox="0 0 24 24" className="df-meta-icon" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <div className="df-meta-text">
+                  <div className="df-meta-label">Date</div>
+                  <div className="df-meta-value">{dateLabel}</div>
                 </div>
               </div>
-
-              <div className="df-overview-divider" />
-
-              <div className="df-stat-row">
-                <div className="df-stat-item">
-                  <svg viewBox="0 0 24 24" className="df-stat-icon" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                  <div className="df-stat-info">
-                    <div className="df-stat-label">DATE</div>
-                    <div className="df-stat-value">{dateLabel}</div>
-                  </div>
+              <div className="df-overview-meta-cell">
+                <svg viewBox="0 0 24 24" className="df-meta-icon df-meta-icon--tier" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <div className="df-meta-text">
+                  <div className="df-meta-label">Tier</div>
+                  <div className="df-meta-value df-meta-value--tier">{tierLabel}</div>
                 </div>
-                <div className="df-stat-item">
-                  <svg viewBox="0 0 24 24" className="df-stat-icon tier" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
-                  <div className="df-stat-info">
-                    <div className="df-stat-label">TIER</div>
-                    <div className="df-stat-value tier">{tierLabel}</div>
-                  </div>
+              </div>
+              <div className="df-overview-meta-cell">
+                <svg viewBox="0 0 24 24" className="df-meta-icon" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+                <div className="df-meta-text">
+                  <div className="df-meta-label">Format</div>
+                  <div className="df-meta-value">{formatLabel}</div>
                 </div>
-                <div className="df-stat-item">
-                  <svg viewBox="0 0 24 24" className="df-stat-icon" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
-                  <div className="df-stat-info">
-                    <div className="df-stat-label">FORMAT</div>
-                    <div className="df-stat-value">{formatLabel}</div>
-                  </div>
-                </div>
-                <div className="df-stat-item">
-                  <svg viewBox="0 0 24 24" className="df-stat-icon" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.5 3.5 6.5 1 1.5 2 3 2 5a7 7 0 1 1-14 0c0-3 2.5-5 2.5-5s0 1 1 2.5z" /></svg>
-                  <div className="df-stat-info">
-                    <div className="df-stat-label">STREAK</div>
-                    <div className="df-stat-value">{streakLabel}</div>
-                  </div>
+              </div>
+              <div className="df-overview-meta-cell">
+                <svg viewBox="0 0 24 24" className="df-meta-icon" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.5 3.5 6.5 1 1.5 2 3 2 5a7 7 0 1 1-14 0c0-3 2.5-5 2.5-5s0 1 1 2.5z" />
+                </svg>
+                <div className="df-meta-text">
+                  <div className="df-meta-label">Streak</div>
+                  <div className="df-meta-value">{streakLabel}</div>
                 </div>
               </div>
             </div>
-
-            {/* Bottom Row: Stats + CTA */}
-            <div className="df-bottom-row">
-
-              {/* Stats Panel */}
-              <div className="df-stats-panel">
-                <div className="df-big-stat">
-                  <div className="df-big-stat-icon">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>
-                  </div>
-                  <div className="df-big-stat-label">SET GOAL</div>
-                  <div className="df-big-stat-value">Win 2 / 3</div>
-                  <div className="df-big-stat-sub">Take two games to win today's set</div>
-                </div>
-                <div className="df-big-stat-divider" />
-                <div className="df-big-stat">
-                  <div className="df-big-stat-icon">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-                  </div>
-                  <div className="df-big-stat-label">TODAY'S DIFFICULTY</div>
-                  <div className="df-big-stat-value">{isElite ? 'Elite' : titleCaseTier(today?.fritz_tier || 'standard')}</div>
-                  <div className="df-big-stat-sub">1800 rated challenge</div>
-                </div>
-                <div className="df-big-stat-divider" />
-                <div className="df-big-stat">
-                  <div className="df-big-stat-icon">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                  </div>
-                  <div className="df-big-stat-label">LEADERBOARD</div>
-                  <div className="df-big-stat-value">{today?.rank ? `#${today.rank}` : '— — —'}</div>
-                  <div className="df-big-stat-sub">See where you rank after completion</div>
-                </div>
               </div>
 
-              {/* CTA Panel */}
-              <div className="df-cta-panel">
-                <div className="df-cta-info">
-                  <div className="df-cta-play-ring">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="var(--tier-elite)"><path d="M8 5v14l11-7z" /></svg>
+              <div className="df-overview-actions">
+                <Button
+                  variant="tier-elite"
+                  size="lg"
+                  className="df-start-btn"
+                  onClick={() => void beginRun()}
+                  disabled={startActionPending || isComplete}
+                >
+                  {isComplete ? 'Set complete' : isStarted ? 'Resume set' : 'Start set'}
+                  <span className="df-start-btn-chevron" aria-hidden>
+                    {' '}
+                    ›
+                  </span>
+                </Button>
+                <Button type="button" variant="ghost" className="df-leaderboard-link" onClick={() => void openLeaderboard()}>
+                  View Leaderboard →
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="df-col df-col--games">
+            <aside className="df-games-card">
+              <div className="df-games-header">Set games</div>
+              <div className="df-games-rows">
+                {games.map((game, idx) => (
+                  <div key={game.n} className="df-game-row" style={{ opacity: game.isMuted ? 0.45 : 1 }}>
+                    <div className="df-accent-bar" style={{ background: game.barColor }} />
+                    <div className="df-game-info">
+                      <h4>Game {game.n}</h4>
+                      <div className="df-game-status" style={{ color: game.statusColor }}>
+                        {game.status}
+                      </div>
+                    </div>
+                    <DominoTile index={idx} accent={game.dominoAccent} />
+                    <div className="df-game-right">
+                      <div className="df-game-format">{game.formatText}</div>
+                      <span className="df-game-chevron">›</span>
+                    </div>
                   </div>
-                  <div className="df-cta-text">
-                    <div className="df-cta-heading">Start today's set</div>
-                    <div className="df-cta-sub">Your result will post<br />after the set ends.</div>
-                  </div>
-                </div>
-                <div className="df-cta-actions">
-                  <Button
-                    variant="tier-elite"
-                    size="lg"
-                    className="df-start-btn"
-                    onClick={() => void beginRun()}
-                    disabled={startActionPending || isComplete}
+                ))}
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div className="df-tail">
+        <div className="df-stats-panel df-stats-panel--hub">
+          <div className="df-big-stat">
+            <div className="df-big-stat-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
+              </svg>
+            </div>
+            <div className="df-big-stat-label">Set goal</div>
+            <div className="df-big-stat-value">Win 2 / 3</div>
+            <div className="df-big-stat-sub">Best of three</div>
+          </div>
+          <div className="df-big-stat-divider" />
+          <div className="df-big-stat">
+            <div className="df-big-stat-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </div>
+            <div className="df-big-stat-label">Difficulty</div>
+            <div className="df-big-stat-value">{isElite ? 'Elite' : titleCaseTier(today?.fritz_tier || 'standard')}</div>
+            <div className="df-big-stat-sub">
+              {isElite ? '1800 rated' : 'Tier-matched for today'}
+            </div>
+          </div>
+          <div className="df-big-stat-divider" />
+          <div className="df-big-stat">
+            <div className="df-big-stat-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </div>
+            <div className="df-big-stat-label">Your rank</div>
+            <div className="df-big-stat-value">{today?.rank != null ? `#${today.rank}` : '—'}</div>
+            <div className="df-big-stat-sub">After completion</div>
+          </div>
+          <div className="df-big-stat-divider" />
+          <div className="df-big-stat df-big-stat--streak">
+            <div className="df-big-stat-icon df-big-stat-icon--streak">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.5 3.5 6.5 1 1.5 2 3 2 5a7 7 0 1 1-14 0c0-3 2.5-5 2.5-5s0 1 1 2.5z" />
+              </svg>
+            </div>
+            <div className="df-big-stat-label">Streak</div>
+            <div className="df-big-stat-value">
+              {today ? `${today.streak} day${today.streak === 1 ? '' : 's'} streak` : '0 days streak'}
+            </div>
+            <div className="df-big-stat-sub">Play Daily Fritz today to keep it going.</div>
+            <div className="df-week-strip" role="presentation">
+              {weekStripCells.map((cell) => (
+                <div key={cell.label} className="df-week-strip__cell">
+                  <span className="df-week-strip__label">{cell.label}</span>
+                  <span
+                    className={
+                      cell.state === 'done'
+                        ? 'df-week-strip__dot df-week-strip__dot--done'
+                        : cell.state === 'today'
+                          ? 'df-week-strip__dot df-week-strip__dot--today'
+                          : 'df-week-strip__dot df-week-strip__dot--future'
+                    }
                   >
-                    {isComplete ? 'Set Complete' : isStarted ? 'Resume Set' : 'Start Set'}
-                  </Button>
-                  <div className="df-leaderboard-link" onClick={() => void openLeaderboard()}>
-                    View Leaderboard →
-                  </div>
+                    {cell.state === 'done' ? '✓' : cell.state === 'today' ? '·' : ''}
+                  </span>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
-
-          {/* Right Column — Set Games */}
-          <aside className="df-games-card">
-            <div className="df-games-header">SET GAMES</div>
-            {games.map((game, idx) => (
-              <div key={game.n} className="df-game-row" style={{ opacity: game.isMuted ? 0.45 : 1 }}>
-                <div className="df-accent-bar" style={{ background: game.barColor }} />
-                <div className="df-game-info">
-                  <h4>GAME {game.n}</h4>
-                  <div className="df-game-status" style={{ color: game.statusColor }}>{game.status}</div>
-                </div>
-                <DominoTile index={idx} />
-                <div className="df-game-right">
-                  <div className="df-game-format">{game.formatText}</div>
-                  <span className="df-game-chevron">›</span>
-                </div>
-              </div>
-            ))}
-          </aside>
-        </main>
-
-        {/* Info Row */}
-        <div className="df-info-row">
-          <div className="df-info-icon">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-          </div>
-          <div className="df-info-content">
-            <span className="df-info-title">How Daily Fritz works</span>
-            <span>One attempt today. Same deal for everyone. Results post after the set is complete.</span>
-          </div>
-          <Button variant="tier-standard" size="sm" className="df-rules-btn">View rules ›</Button>
         </div>
 
-        {/* Countdown */}
-        <div className="df-countdown">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-          <span>Today's set resets in 23:52:17</span>
+        <div className="df-info-footer">
+          <div className="df-info-footer__left">
+            <div className="df-info-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+            </div>
+            <p className="df-info-footer__copy">
+              <span className="df-info-footer__lead">How it works:</span>{' '}
+              One attempt today. Same deal for everyone. Results post after the set is complete.
+            </p>
+          </div>
+          <div className="df-info-footer__right">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span className="df-info-footer__countdown">
+              Today&apos;s set resets in {formatCountdown(nyResetMs)}
+            </span>
+          </div>
         </div>
-
+        </div>
       </div>
     </div>
   );
