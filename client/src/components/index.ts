@@ -14,6 +14,8 @@ export type { MatchLayoutProps } from './MatchLayout';
 export { MatchNblBoardFrame } from './MatchNblBoardFrame';
 export { MatchBoardTurnBar } from './MatchBoardTurnBar';
 export { BoneyardStackIcon } from './BoneyardStackIcon';
+export { BoardOpenEndsPill } from './BoardOpenEndsPill';
+export type { BoardOpenEndsPillProps } from './BoardOpenEndsPill';
 export { RotateOverlay } from './RotateOverlay';
 export { BrandLogo } from './BrandLogo';
 export { GlobalNav } from './GlobalNav';

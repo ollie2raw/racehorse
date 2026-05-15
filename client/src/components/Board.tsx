@@ -532,7 +532,6 @@ function BoardComponent({
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
-  const [hoveredZoom, setHoveredZoom] = useState<'in' | 'out' | null>(null);
   const dragStart = useRef({ x: 0, y: 0, camX: 0, camY: 0 });
   const showTargetDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOARD_TARGET_DEBUG') === '1';
@@ -1065,30 +1064,15 @@ function BoardComponent({
 
       </div>
       <div
-        className="board-zoom-tray"
-        style={{
-          position: 'absolute',
-          bottom: 12,
-          left: 12,
-          zIndex: 20,
-          display: 'flex',
-          alignItems: 'center',
-          background: 'rgba(255,255,255,0.08)',
-          borderRadius: 999,
-          padding: '6px 10px',
-          border: '1.5px solid rgba(236,252,245,0.28)',
-          backdropFilter: 'blur(20px)',
-          boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-        }}
+        className="board-zoom-tray control-pill"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
       >
         <button
+          type="button"
           className="board-zoom-btn"
           title="Zoom out"
-          onMouseEnter={() => setHoveredZoom('out')}
-          onMouseLeave={() => setHoveredZoom(null)}
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1107,36 +1091,13 @@ function BoardComponent({
             });
             applyZoomStep(-0.12);
           }}
-          style={{
-            padding: '6px 10px',
-            color: 'rgba(232,245,240,0.95)',
-            fontSize: '1.2rem',
-            fontWeight: 800,
-            lineHeight: 1,
-            background: hoveredZoom === 'out' ? 'rgba(255,255,255,0.1)' : 'none',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            borderRadius: 8,
-          }}
         >
           −
         </button>
-        <div
-          className="board-zoom-divider"
-          style={{
-            width: 1.5,
-            height: 20,
-            margin: '0 6px',
-            background: 'rgba(236,252,245,0.28)',
-          }}
-        />
         <button
+          type="button"
           className="board-zoom-btn"
           title="Zoom in"
-          onMouseEnter={() => setHoveredZoom('in')}
-          onMouseLeave={() => setHoveredZoom(null)}
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1154,19 +1115,6 @@ function BoardComponent({
               afterScale: Number(Math.min(1.8, Math.max(0.22, camera.scale + 0.12)).toFixed(3)),
             });
             applyZoomStep(0.12);
-          }}
-          style={{
-            padding: '6px 10px',
-            color: 'rgba(232,245,240,0.95)',
-            fontSize: '1.2rem',
-            fontWeight: 800,
-            lineHeight: 1,
-            background: hoveredZoom === 'in' ? 'rgba(255,255,255,0.1)' : 'none',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            borderRadius: 8,
           }}
         >
           +

@@ -7,6 +7,7 @@ import './App.css';
 import {
   AnimatedScore,
   Board,
+  BoardOpenEndsPill,
   BoneyardStackIcon,
   BrandLogo,
   DominoTile,
@@ -4003,10 +4004,9 @@ export default function App() {
               <button
                 type="button"
                 ref={opponentPillRef}
-                className={`wl-player-pill wl-player-pill-btn ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
+                className={`wl-player-pill wl-player-pill-btn score-card ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
-                style={{ width: 154, minWidth: 'unset' }}
               >
                 <div className="wl-pill-top">
                   <span className="wl-player-label">{opponentName}</span>
@@ -4032,30 +4032,6 @@ export default function App() {
               <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
                 {isMyTurn ? 'Your move' : 'Opponent thinking'}
               </span>
-              <span
-                className="open-ends-pill"
-                style={{
-                  position: 'absolute',
-                  left: 'calc(100% + 12px)',
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  height: '45px',
-                  lineHeight: 1,
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 999,
-                  padding: '0 18px',
-                  fontSize: '1.4rem',
-                  color: 'rgba(232,245,240,0.85)',
-                  fontWeight: 600,
-                }}
-              >
-                <span style={{ fontSize: '1.6rem' }}>{openEndsSum}</span>
-                <span style={{ fontSize: '1.0rem', opacity: 0.7, letterSpacing: '0.02em', textTransform: 'uppercase' }}>open</span>
-              </span>
             </div>
             <div
               className="hud-right-cluster"
@@ -4070,10 +4046,9 @@ export default function App() {
             >
               <button
                 type="button"
-                className={`wl-player-pill wl-player-pill-btn is-you ${isMyTurn ? 'is-active' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
+                className={`wl-player-pill wl-player-pill-btn score-card is-you ${isMyTurn ? 'is-active' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
-                style={{ width: 130, minWidth: 'unset' }}
               >
                 <span className="wl-player-label">{hudRightLabel}</span>
                 <AnimatedScore value={hudRightScore} className="wl-player-score" />
@@ -4121,29 +4096,11 @@ export default function App() {
                 </div>
               )}
               {!state.gameOver && (
-                <div
+                <>
+                  <BoardOpenEndsPill openEndsSum={openEndsSum} />
+                  <div
                   ref={boneyardRef}
-                  className={`boneyard-pill${isBoneyardLocked ? ' locked' : ''}`}
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    right: 12,
-                    zIndex: 8,
-                    borderRadius: 999,
-                    border: '1.5px solid rgba(236,252,245,0.28)',
-                    background: 'rgba(255,255,255,0.08)',
-                    backdropFilter: 'blur(20px)',
-                    boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-                    color: 'rgba(232,245,240,0.98)',
-                    padding: '7px 14px',
-                    fontSize: '1rem',
-                    fontWeight: 800,
-                    letterSpacing: '0.02em',
-                    pointerEvents: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
+                  className={`boneyard-pill board-corner-pill board-corner-pill--tr${isBoneyardLocked ? ' locked' : ''}`}
                 >
                   <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
                   <span className="boneyard-count">{boneyardCount}</span>
@@ -4151,75 +4108,39 @@ export default function App() {
                     <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
                   ) : null}
                 </div>
+                </>
               )}              <div
-                className="wl-controls-tray"
+                className="wl-controls-tray control-pill"
                 style={{
                   position: 'absolute',
                   bottom: 12,
                   right: 12,
                   zIndex: 20,
-                  display: 'flex',
-                  gap: 4,
-                  alignItems: 'center',
-                  background: 'rgba(255,255,255,0.08)',
-                  borderRadius: 999,
-                  padding: '6px 10px',
-                  border: '1.5px solid rgba(255,255,255,0.12)',
-                  backdropFilter: 'blur(20px)',
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
                 }}
               >
                 <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
                 <button
-                  onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
-                  title="Toggle table color"
-                  className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
-                  style={{ width: 22, height: 22 }}
-                >
-                  <span className="table-theme-dot" aria-hidden="true" style={{ width: 10, height: 10 }} />
-                </button>
-                <button
+                  type="button"
                   className="btn text icon-btn volume-btn"
                   onClick={() => setIsMuted((prev) => !prev)}
                   title={isMuted ? 'Unmute' : 'Mute'}
-                  style={{
-                    padding: '6px 8px',
-                    color: 'rgba(232,245,240,0.9)',
-                    background: 'none',
-                    border: 'none',
-                  }}
                 >
-                  <VolumeIcon isMuted={isMuted} style={{ width: 20, height: 20 }} />
+                  <VolumeIcon isMuted={isMuted} />
                 </button>
                 <button
+                  type="button"
                   className="btn text icon-btn fullscreen-btn"
                   onClick={toggleFullscreen}
                   title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                  style={{
-                    padding: '6px 8px',
-                    color: 'rgba(232,245,240,0.9)',
-                    background: 'none',
-                    border: 'none',
-                  }}
                 >
-                  <FullscreenIcon isFullscreen={isFullscreen} style={{ width: 20, height: 20 }} />
+                  <FullscreenIcon isFullscreen={isFullscreen} />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setShowLeaveConfirm(true)}
                   title="Leave game"
-                  style={{
-                    padding: '6px 8px',
-                    color: 'rgba(232,245,240,0.8)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
                 >
                   <svg
-                    width="20"
-                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"

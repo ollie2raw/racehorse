@@ -59,12 +59,13 @@ export function ScoreBoard({ players, target = 60, compact = false }: ScoreBoard
             key={player.label}
           >
             {!compact && (
-              <div className="score-track-meta">
-                <span className="score-track-name">{player.label}</span>
-                <span className="score-track-value">{player.score}</span>
+              <div className="score-track-lane__aside">
+                <span className={`score-track-name score-track-name--${player.tone}`}>{player.label}</span>
+                <span className={`score-track-value score-track-value--${player.tone}`}>{player.score}</span>
               </div>
             )}
-            <div className="score-track-lane-grid">
+            <div className="score-track-lane__track">
+              <div className="score-track-lane-grid">
               <div className="score-track-holes score-track-holes--outer">
                 {renderLane(topMainLane, topMainPeg, player, 'outer')}
                 <div className="score-gap score-gap-solo" aria-hidden="true" />
@@ -80,6 +81,7 @@ export function ScoreBoard({ players, target = 60, compact = false }: ScoreBoard
                   className={`score-hole score-hole-solo ${bottomSoloPeg ? `is-peg ${player.tone}` : ''}`}
                   title={`${player.label}: finish`}
                 />
+              </div>
               </div>
             </div>
           </div>

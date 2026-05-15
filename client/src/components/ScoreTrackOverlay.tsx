@@ -31,9 +31,12 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
       <button className="score-track-backdrop" onClick={onClose} aria-label="Close score track" />
       <div className="score-track-card">
         <div className="score-track-header">
-          <h3>Score Track</h3>
-          <button className="score-track-close" onClick={onClose} aria-label="Close">
-            Close
+          <div className="score-track-header__copy">
+            <p className="score-track-eyebrow">Race to {target}</p>
+            <h3>Score Track</h3>
+          </div>
+          <button type="button" className="score-track-close" onClick={onClose} aria-label="Close score track">
+            <span aria-hidden="true">×</span>
           </button>
         </div>
         <ScoreBoard players={players} target={target} />

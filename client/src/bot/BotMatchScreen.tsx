@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import {
   AnimatedScore,
   Board,
+  BoardOpenEndsPill,
   BoneyardStackIcon,
   DominoTile,
   ScoreTrackOverlay,
@@ -5902,36 +5903,19 @@ export default function BotMatchScreen({
           </div>
         )}
         {!match.gameOver && !isLessonLayoutMode && (
-          <div
-            ref={boneyardRef}
-            className="boneyard-pill"
-            style={{
-              position: 'absolute',
-              top: 12,
-              right: 12,
-              zIndex: 8,
-              borderRadius: 999,
-              border: '1.5px solid rgba(236,252,245,0.28)',
-              background: 'rgba(255,255,255,0.08)',
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-              color: 'rgba(232,245,240,0.98)',
-              padding: '7px 14px',
-              fontSize: '1rem',
-              fontWeight: 800,
-              letterSpacing: '0.02em',
-              pointerEvents: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
-            <span className="boneyard-count">{match.boneyard.length}</span>
-            {match.boneyard.length > 0 && match.boneyard.length <= 2 ? (
-              <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
-            ) : null}
-          </div>
+          <>
+            <BoardOpenEndsPill openEndsSum={openEndsSum} />
+            <div
+              ref={boneyardRef}
+              className="boneyard-pill board-corner-pill board-corner-pill--tr"
+            >
+              <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
+              <span className="boneyard-count">{match.boneyard.length}</span>
+              {match.boneyard.length > 0 && match.boneyard.length <= 2 ? (
+                <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
+              ) : null}
+            </div>
+          </>
         )}
         {isGhostMode && ghostAgreementType && (
           <div className={`ghost-agreement-indicator ${ghostAgreementType}`}>
@@ -6109,73 +6093,36 @@ export default function BotMatchScreen({
         />
         {!isLessonLayoutMode && (
           <div
-            className="wl-controls-tray"
+            className="wl-controls-tray control-pill"
             style={{
               position: 'absolute',
               bottom: 12,
               right: 12,
               zIndex: 20,
-              display: 'flex',
-              gap: 4,
-              alignItems: 'center',
-              background: 'rgba(255,255,255,0.08)',
-              borderRadius: 999,
-              padding: '6px 10px',
-              border: '1.5px solid rgba(255,255,255,0.12)',
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
             }}
           >
             <button
-              onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
-              title="Toggle table color"
-              className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
-              style={{ width: 22, height: 22 }}
-            >
-              <span className="table-theme-dot" aria-hidden="true" style={{ width: 10, height: 10 }} />
-            </button>
-            <button
+              type="button"
               className="btn text icon-btn volume-btn"
               onClick={() => setIsMuted((prev) => !prev)}
               title={isMuted ? 'Unmute' : 'Mute'}
-              style={{
-                padding: '6px 8px',
-                color: 'rgba(232,245,240,0.9)',
-                background: 'none',
-                border: 'none',
-              }}
             >
-              <VolumeIcon isMuted={isMuted} style={{ width: 20, height: 20 }} />
+              <VolumeIcon isMuted={isMuted} />
             </button>
             <button
+              type="button"
               className="btn text icon-btn fullscreen-btn"
               onClick={toggleFullscreen}
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-              style={{
-                padding: '6px 8px',
-                color: 'rgba(232,245,240,0.9)',
-                background: 'none',
-                border: 'none',
-              }}
             >
-              <FullscreenIcon isFullscreen={isFullscreen} style={{ width: 20, height: 20 }} />
+              <FullscreenIcon isFullscreen={isFullscreen} />
             </button>
             <button
+              type="button"
               onClick={() => setShowLeaveConfirm(true)}
               title="Leave game"
-              style={{
-                padding: '6px 8px',
-                color: 'rgba(232,245,240,0.8)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-              }}
             >
               <svg
-                width="20"
-                height="20"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -6678,11 +6625,10 @@ export default function BotMatchScreen({
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <button
                 type="button"
-                className={`wl-player-pill wl-player-pill-btn ${botTurn ? 'is-active' : ''}`}
+                className={`wl-player-pill wl-player-pill-btn score-card ${botTurn ? 'is-active' : ''}`}
                 ref={opponentPillRef}
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
-                style={{ width: 'auto', minWidth: ghostSubLabel ? 'min(140px, 32vw)' : 'min(110px, 25vw)', padding: '0 12px' }}
               >
                 <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
                   {ghostSubLabel && (
@@ -6751,20 +6697,15 @@ export default function BotMatchScreen({
                     {turnLabel}
                   </span>
                 )}
-                <div className="open-ends-pill" data-has-turn-label={!!turnLabel}>
-                  <span className="hud-pill-value">{openEndsSum}</span>
-                  <span className="hud-pill-label">OPEN</span>
-                </div>
             </div>
           )}
 
           <div className="bot-hud-right-cluster" style={{ gridColumn: 3, justifySelf: 'end' }}>
             <button
               type="button"
-              className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}
+              className={`wl-player-pill wl-player-pill-btn score-card is-you ${!botTurn && handActive ? 'is-active' : ''}`}
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
-              style={{ width: 'auto', minWidth: 'min(130px, 30vw)' }}
             >
               <span className="wl-player-label">You</span>
               <AnimatedScore value={match.players.you.score} className="wl-player-score" />

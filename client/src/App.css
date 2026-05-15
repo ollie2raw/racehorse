@@ -3176,9 +3176,7 @@ button:hover:not(:disabled) {
     var(--tile-shadow);
 }
 
-.domino-tile.selected:not(.board-tile) {
-  transform: translateY(-2px);
-}
+/* Hand selected lift: game-interactions.css */
 
 .board-canvas .domino-tile.highlight .domino-body {
   box-shadow:
@@ -4312,31 +4310,7 @@ button:hover:not(:disabled) {
   border-width: 1.5px !important;
 }
 
-.large-mode .open-ends-pill {
-  min-width: unset !important;
-  height: 42px !important;
-  padding: 0 16px !important;
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 8px !important;
-  border-width: 1.2px !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-}
-
-.large-mode .open-ends-pill > span:first-child {
-  font-size: 1.5rem !important;
-  font-weight: 800 !important;
-  line-height: 1 !important;
-}
-
-.large-mode .open-ends-pill > span:last-child {
-  font-size: 0.88rem !important;
-  letter-spacing: 0.04em !important;
-  text-transform: uppercase !important;
-  opacity: 0.8 !important;
-}
-
+.large-mode .open-ends-pill.board-corner-pill,
 .large-mode .boneyard-pill,
 .large-mode [data-ui="boneyard"] {
   font-size: 1.26rem !important;
@@ -4346,6 +4320,56 @@ button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14) !important;
   color: rgba(248, 253, 250, 0.98) !important;
   letter-spacing: 0.02em !important;
+}
+
+/* Board corner HUD pills (open ends top-left, boneyard top-right) */
+.board-corner-pill {
+  position: absolute;
+  top: 12px;
+  z-index: 8;
+  border-radius: 999px;
+  border: 1.5px solid rgba(236, 252, 245, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  color: rgba(232, 245, 240, 0.98);
+  padding: 7px 14px;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-corner-pill--tl {
+  left: 12px;
+}
+
+.board-corner-pill--tr {
+  right: 12px;
+}
+
+.open-ends-pill__label {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.66em;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.open-ends-count {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .boneyard-pill,

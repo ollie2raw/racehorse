@@ -114,8 +114,7 @@
   }
 }
 
-.bot-match-screen .daily-fritz-progress-pill,
-.bot-match-screen .open-ends-pill {
+.bot-match-screen .daily-fritz-progress-pill {
   width: auto;
   min-width: unset;
   height: 48px;
@@ -138,15 +137,8 @@
   pointer-events: none;
   position: absolute;
   top: 50%;
-  transform: translateY(-50%);
-}
-
-.bot-match-screen .daily-fritz-progress-pill {
   right: calc(100% + 10px);
-}
-
-.bot-match-screen .open-ends-pill {
-  left: calc(100% + 10px);
+  transform: translateY(-50%);
 }
 
 .bot-match-screen .hud-pill-value {
@@ -167,8 +159,7 @@
 }
 
 @media (max-width: 600px) {
-  .bot-match-screen .daily-fritz-progress-pill,
-  .bot-match-screen .open-ends-pill {
+  .bot-match-screen .daily-fritz-progress-pill {
     position: relative !important;
     left: auto !important;
     right: auto !important;
@@ -178,9 +169,8 @@
     gap: 6px;
     top: auto;
     background: rgba(12, 22, 40, 0.95);
+    margin-right: 12px;
   }
-  .bot-match-screen .daily-fritz-progress-pill { margin-right: 12px; }
-  .bot-match-screen .open-ends-pill { margin-left: 12px; }
 
   .bot-match-screen .hud-pill-value { font-size: 1.15rem; }
   .bot-match-screen .hud-pill-label { font-size: 0.75rem; }
@@ -326,11 +316,6 @@
   .bot-match-screen .wl-turn-label {
     padding: 4px 8px !important;
     font-size: 9px !important;
-  }
-
-  .bot-match-screen .open-ends-pill {
-    margin-left: 4px !important;
-    padding: 2px 8px !important;
   }
 
   .bot-match-screen .wl-player-pill,

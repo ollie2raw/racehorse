@@ -1,0 +1,185 @@
+/* Match HUD polish — score cards, board control pill, view transitions */
+
+@supports (view-transition-name: none) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.25s;
+    animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+  }
+}
+
+/* Score cards (wl-player-pill) — hug content, no fixed stretch */
+.wl-player-pill.score-card,
+.wl-player-pill-btn.score-card {
+  display: inline-flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: fit-content;
+  min-width: 64px;
+  max-width: none;
+  min-height: unset;
+  padding: 8px 16px;
+  border-radius: var(--r-md, 12px);
+  background: var(--surface-1, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  box-shadow: none;
+}
+
+.walnut-live .wl-player-pill.score-card,
+.walnut-live .wl-player-pill-btn.score-card {
+  width: fit-content;
+  max-width: none;
+}
+
+.wl-player-pill.score-card.is-you {
+  justify-items: center;
+  text-align: center;
+}
+
+.wl-player-pill.score-card .wl-pill-top {
+  justify-content: center;
+  width: 100%;
+}
+
+.wl-player-pill.score-card .wl-player-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.58;
+  line-height: 1.2;
+  color: var(--text-primary, #f8fafc);
+}
+
+.wl-player-pill.score-card .wl-player-score {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-primary, #f8fafc);
+}
+
+.bot-match-screen .wl-player-pill.score-card,
+.bot-match-screen .wl-player-pill-btn.score-card {
+  width: fit-content;
+  max-width: none;
+}
+
+@media (max-width: 640px) {
+  .bot-match-screen .wl-player-pill.score-card,
+  .bot-match-screen .wl-player-pill-btn.score-card {
+    padding: 8px 16px !important;
+    width: fit-content;
+    min-width: 64px;
+  }
+
+  .bot-match-screen .wl-player-pill.score-card .wl-player-label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+  }
+
+  .bot-match-screen .wl-player-pill.score-card .wl-player-score {
+    font-size: 24px !important;
+    font-weight: 600 !important;
+  }
+}
+
+/* Bottom board control pills (zoom left, actions right) */
+.board-zoom-tray.control-pill,
+.wl-controls-tray.control-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-pill, 99px);
+  background: var(--surface-2, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  transition: all 120ms ease;
+}
+
+.board-zoom-tray.control-pill {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 20;
+  gap: 12px;
+  padding: 10px 20px;
+}
+
+.board-zoom-tray.control-pill .board-zoom-btn {
+  padding: 4px 6px;
+  margin: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 120ms ease;
+}
+
+.board-zoom-tray.control-pill .board-zoom-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.board-zoom-tray.control-pill .board-zoom-btn:active {
+  transform: scale(0.92);
+}
+
+.board-zoom-tray.control-pill .board-zoom-divider {
+  display: none;
+}
+
+.wl-controls-tray.control-pill {
+  gap: 18px;
+  padding: 10px 20px;
+}
+
+.wl-controls-tray.control-pill > button,
+.wl-controls-tray.control-pill > .btn,
+.wl-controls-tray.control-pill .rr-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.65;
+  transition: all 120ms ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: #fff;
+}
+
+.wl-controls-tray.control-pill > button:hover,
+.wl-controls-tray.control-pill > .btn:hover,
+.wl-controls-tray.control-pill .rr-pill:hover {
+  opacity: 1;
+}
+
+.wl-controls-tray.control-pill > button:active,
+.wl-controls-tray.control-pill > .btn:active,
+.wl-controls-tray.control-pill .rr-pill:active {
+  transform: scale(0.94);
+}
+
+.wl-controls-tray.control-pill svg,
+.wl-controls-tray.control-pill .icon-svg {
+  width: 18px;
+  height: 18px;
+  color: #fff;
+  stroke: #fff;
+  fill: none;
+}
+
+.wl-top-rail {
+  grid-template-columns: auto 1fr auto;
+}
