@@ -5,6 +5,9 @@ import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions'
 import { traceSocketEvent } from '../debug/socketTrace';
 import { playBlockedSound, playHandLoseSound, playHandWinSound } from '../utils/sound';
 import type { GameState, Move, Tile } from '../types';
+import { wrapSocketHandler } from './socketGuards';
+
+type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> };
 
 type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 
@@ -125,6 +128,9 @@ type UseMultiplayerConnectionParams = {
   emitCreateRoom: (targetSocket: Socket) => Promise<any>;
   clearReconnectAttemptTimer: () => void;
   clearTransientRoomUi: () => void;
+  fetchGameState: (reason: string) => Promise<boolean>;
+  resetClientGameSession: () => void;
+  rematchAwaitingStateRef: MutableRefObject<boolean>;
 };
 
 export function useMultiplayerConnection(params: UseMultiplayerConnectionParams) {
@@ -174,8 +180,11 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     p.setError('');
     p.setIsConnecting(true);
     if (p.socket && !p.socket.connected) {
-      p.socket.removeAllListeners();
-      p.socket.disconnect();
+      const oldSocket = p.socket as SocketWithPing;
+      if (oldSocket.__mpPingTimer) clearInterval(oldSocket.__mpPingTimer);
+      oldSocket.removeAllListeners();
+      oldSocket.io.removeAllListeners();
+      oldSocket.disconnect();
     }
 
     const s = io(p.serverUrl, {
@@ -189,13 +198,29 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     });
 
     s.onAny((event, ...args) => traceSocketEvent(String(event), args.length <= 1 ? args[0] : args));
-    if (import.meta.env.DEV) {
-      s.on('connect', () => console.log('[socket] connect', s.id));
-      s.on('disconnect', (reason) => console.log('[socket] disconnect', reason));
-      s.on('connect_error', (error) => console.log('[socket] connect_error', error?.message));
-    }
 
-    s.on('connect', async () => {
+    const recoverState = () => {
+      void latestRef.current.fetchGameState('handler_error');
+    };
+
+    const pingSocket = s as SocketWithPing;
+    pingSocket.__mpPingTimer = setInterval(() => {
+      if (!s.connected) return;
+      const sentAt = performance.now();
+      s.emit('mp:ping', sentAt, () => {
+        if (
+          import.meta.env.DEV &&
+          typeof window !== 'undefined' &&
+          window.localStorage.getItem('mp_debug') === '1'
+        ) {
+          console.info('[mp-ping]', `${Math.round(performance.now() - sentAt)}ms`);
+        }
+      });
+    }, 5000);
+
+    s.on(
+      'connect',
+      wrapSocketHandler('connect', async () => {
       const current = latestRef.current;
       if (current.intentionalDisconnectRef.current) return;
       current.clearReconnectAttemptTimer();
@@ -260,26 +285,6 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           };
           
           const resp = await current.emitWithAck<any>(s, 'room:join', roomToJoin, rejoinIdentity);
-
-          // #region agent log
-          void fetch('http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b186e6' },
-            body: JSON.stringify({
-              sessionId: 'b186e6',
-              location: 'useMultiplayerConnection.ts:room:join-ack',
-              message: 'room:join ack',
-              data: {
-                ok: Boolean(resp?.ok),
-                err: resp?.ok ? null : String(resp?.error ?? ''),
-                roomToJoin,
-                transport: s.io?.engine?.transport?.name ?? null,
-              },
-              timestamp: Date.now(),
-              hypothesisId: 'H2',
-            }),
-          }).catch(() => {});
-          // #endregion
 
           if (resp?.ok) {
             console.warn('[rejoin] room:join success', {
@@ -360,9 +365,12 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           current.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
         }
       })();
-    });
+      }, { recoverOnError: recoverState }),
+    );
 
-    s.on('disconnect', (reason) => {
+    s.on(
+      'disconnect',
+      wrapSocketHandler('disconnect', (reason) => {
       const current = latestRef.current;
       const roomBeforeDisconnect = current.joinedRoomRef.current;
       // Recover any time we have a room to return to — including the game-over /
@@ -412,9 +420,12 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       current.setTournamentId(null);
       current.setTournamentState(null);
       current.setTournamentActiveRoom(null);
-    });
+      }),
+    );
 
-    s.on('tournament:lobby:update', (data: any) => {
+    s.on(
+      'tournament:lobby:update',
+      wrapSocketHandler('tournament:lobby:update', (data: any) => {
       const lobbyCode = typeof data?.lobbyCode === 'string' ? data.lobbyCode : null;
       const players = Array.isArray(data?.players) ? data.players : null;
       if (!players) return;
@@ -431,16 +442,22 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         players,
         hostSocketId: inferredHostSocketId ?? prev?.hostSocketId ?? null,
       }));
-    });
+      }),
+    );
 
-    s.on('tournament:state', (data: any) => {
+    s.on(
+      'tournament:state',
+      wrapSocketHandler('tournament:state', (data: any) => {
       const current = latestRef.current;
       current.setTournamentState(data);
       if (typeof data?.id === 'string') current.setTournamentId(data.id);
       current.setTournamentActiveRoom(typeof data?.activeRoomCode === 'string' ? data.activeRoomCode : null);
-    });
+      }),
+    );
 
-    s.on('tournament:match:assigned', (data: any) => {
+    s.on(
+      'tournament:match:assigned',
+      wrapSocketHandler('tournament:match:assigned', (data: any) => {
       const current = latestRef.current;
       if (typeof data?.roomCode === 'string') current.setTournamentActiveRoom(data.roomCode);
       if (data?.roomCode && (data?.a === s.id || data?.b === s.id)) {
@@ -449,23 +466,32 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         current.setRoomCode(code);
         current.setAppMode('multiplayer');
       }
-    });
+      }),
+    );
 
-    s.on('room:chat', (msg: RoomChatEvent) => {
+    s.on(
+      'room:chat',
+      wrapSocketHandler('room:chat', (msg: RoomChatEvent) => {
       latestRef.current.setRoomReactions((prev) => {
         const next = prev.concat(msg);
         return next.length > 50 ? next.slice(next.length - 50) : next;
       });
-    });
+      }),
+    );
 
-    s.on('room:emote', (evt: RoomEmoteEvent) => {
+    s.on(
+      'room:emote',
+      wrapSocketHandler('room:emote', (evt: RoomEmoteEvent) => {
       latestRef.current.setRoomReactions((prev) => {
         const next = prev.concat(evt);
         return next.length > 50 ? next.slice(next.length - 50) : next;
       });
-    });
+      }),
+    );
 
-    s.on('hand:ended', (payload: HandEndedPayload) => {
+    s.on(
+      'hand:ended',
+      wrapSocketHandler('hand:ended', (payload: HandEndedPayload) => {
       const current = latestRef.current;
       const currentState = current.stateRef.current;
       const myRemaining = currentState?.players[s.id ?? '']?.hand ?? [];
@@ -501,44 +527,76 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           yourRemainingTiles,
         });
       }, 1400);
-    });
+      }),
+    );
 
-    s.on('game:rematch:status', (payload: any) => {
+    s.on(
+      'game:rematch:status',
+      wrapSocketHandler('game:rematch:status', (payload: any) => {
       const readyPlayerIds = Array.isArray(payload?.readyPlayerIds)
         ? payload.readyPlayerIds.filter((id: unknown): id is string => typeof id === 'string')
         : [];
       latestRef.current.setRematchReadyIds(readyPlayerIds);
       latestRef.current.setRematchRequested(readyPlayerIds.includes(s.id ?? ''));
-    });
+      }),
+    );
 
-    s.on('game:rematch:started', () => {
+    s.on(
+      'game:rematch:started',
+      wrapSocketHandler('game:rematch:started', () => {
       const current = latestRef.current;
-      if (import.meta.env.DEV) {
-        console.log('[mp-rematch] game:rematch:started — resetting maxSequenceRef', {
-          before: current.maxSequenceRef.current,
-        });
-      }
-      // Cancel any pending hand-reveal timer from the previous game so the
-      // stale reveal modal cannot appear on top of the new game.
       if (current.handRevealTimerRef.current !== null) {
         clearTimeout(current.handRevealTimerRef.current);
         current.handRevealTimerRef.current = null;
       }
       current.setHandReveal(null);
       current.handRevealShownRef.current = null;
-      current.clearTransientRoomUi();
-      current.maxSequenceRef.current = -1;
+      current.rematchAwaitingStateRef.current = true;
       current.setRematchRequested(false);
       current.setRematchReadyIds([]);
       current.showToast('Rematch started.', 1200);
-    });
+      }, { recoverOnError: recoverState }),
+    );
 
-    s.on('player:dragging', (payload: { playerId?: string; dragging?: boolean }) => {
+    s.on(
+      'player:dragging',
+      wrapSocketHandler('player:dragging', (payload: { playerId?: string; dragging?: boolean }) => {
       if (!payload?.playerId || payload.playerId === s.id) return;
       latestRef.current.setOpponentDragging(Boolean(payload.dragging));
-    });
+      }),
+    );
 
-    s.on('connect_error', () => {
+    s.on(
+      'room:session:superseded',
+      wrapSocketHandler('room:session:superseded', () => {
+      const current = latestRef.current;
+      if (current.intentionalDisconnectRef.current || current.preventAutoRejoinRef.current) return;
+      const roomCode = current.joinedRoomRef.current;
+      if (!roomCode) return;
+      current.reconnectRoomCodeRef.current = roomCode;
+      current.reconnectShouldJoinRef.current = true;
+      current.showToast('Session moved to this device. Syncing…', 1600);
+      current.connectRef.current?.();
+      }),
+    );
+
+    const onIoReconnect = wrapSocketHandler('io:reconnect', () => {
+      const current = latestRef.current;
+      if (
+        current.intentionalDisconnectRef.current ||
+        current.preventAutoRejoinRef.current ||
+        !current.joinedRoomRef.current
+      ) {
+        return;
+      }
+      current.reconnectRoomCodeRef.current = current.joinedRoomRef.current;
+      current.reconnectShouldJoinRef.current = true;
+    });
+    s.io.on('reconnect', onIoReconnect);
+
+    s.on(
+      'connect_error',
+      wrapSocketHandler('connect_error', () => {
       const current = latestRef.current;
       current.setIsConnecting(false);
       const shouldRetryReconnect =
@@ -551,9 +609,12 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       }
       current.setServerWaking(true);
       current.setError('');
-    });
+      }),
+    );
 
-    s.on('reconnect_failed', () => {
+    s.on(
+      'reconnect_failed',
+      wrapSocketHandler('reconnect_failed', () => {
       const current = latestRef.current;
       current.setIsConnecting(false);
       if (
@@ -565,9 +626,12 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           source: 'reconnect_failed',
         });
       }
-    });
+      }),
+    );
 
-    s.on('server:shutdown', (payload: { reason?: string } | undefined) => {
+    s.on(
+      'server:shutdown',
+      wrapSocketHandler('server:shutdown', (payload: { reason?: string } | undefined) => {
       latestRef.current.showToast(
         'Server is updating. You may need to rejoin your match from the lobby.',
         4000,
@@ -575,10 +639,27 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       if (import.meta.env.DEV) {
         console.warn('[socket] server:shutdown', payload);
       }
-    });
+      }),
+    );
 
     p.setSocket(s);
   }, [scheduleReconnectAttempt]);
+
+  useEffect(() => {
+    return () => {
+      const p = latestRef.current;
+      p.intentionalDisconnectRef.current = true;
+      p.clearReconnectAttemptTimer();
+      const sock = p.socketRef.current as SocketWithPing | null;
+      if (sock) {
+        if (sock.__mpPingTimer) clearInterval(sock.__mpPingTimer);
+        sock.removeAllListeners();
+        sock.io.removeAllListeners();
+        sock.disconnect();
+        p.socketRef.current = null;
+      }
+    };
+  }, []);
 
   const retryRoomRecovery = useCallback(() => {
     const p = latestRef.current;

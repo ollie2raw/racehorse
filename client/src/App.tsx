@@ -42,7 +42,8 @@ import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './ty
 import type { BotDealSize } from './bot/botEngine';
 import type { FritzTier } from './bot/fritzConfig';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
-import { useRoomSocketSync } from './multiplayer/useRoomSocketSync';
+import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
+import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
 import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
 import { useRenderProfiler } from './debug/renderProfiler';
@@ -65,6 +66,8 @@ import TournamentMatchBanner from './tournament/TournamentMatchBanner';
 import { useTournament } from './tournament/useTournament';
 import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
 import MatchmakingScreen from './matchmaking/MatchmakingScreen';
+import { MatchFoundOverlay } from './matchmaking/MatchFoundOverlay';
+import type { MatchFoundPayload } from './matchmaking/types';
 
 function emitWithAck<TResp>(
   socket: { emit: (...args: any[]) => void },
@@ -788,6 +791,7 @@ export default function App() {
   });
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
   const [mpSubView, setMpSubView] = useState<'quick' | 'private'>('quick');
+  const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [tournamentSubView, setTournamentSubView] = useState<'hub' | 'bracket' | 'result'>('hub');
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
   const [tournamentMatch, setTournamentMatch] = useState<{
@@ -1003,6 +1007,18 @@ export default function App() {
 
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const appModeRef = useRef(appMode);
+  const mpSubViewRef = useRef(mpSubView);
+  const roomPlayersRef = useRef<RoomPlayer[]>([]);
+  const joinedRoomResponseRef = useRef<any>(null);
+
+  useEffect(() => {
+    appModeRef.current = appMode;
+  }, [appMode]);
+  useEffect(() => {
+    mpSubViewRef.current = mpSubView;
+  }, [mpSubView]);
+
   const joinedRoomRef = useRef<string | null>(null);
   const stateRef = useRef<GameState | null>(state);
   const reconnectRoomCodeRef = useRef<string | null>(null);
@@ -1062,6 +1078,8 @@ export default function App() {
   const opponentPillRef = useRef<HTMLButtonElement>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
   const [opponentDragging, setOpponentDragging] = useState(false);
+  const [opponentDisconnected, setOpponentDisconnected] = useState(false);
+  const [opponentDisconnectMessage, setOpponentDisconnectMessage] = useState('');
   const draggingStateRef = useRef(false);
   const handRevealAutoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealAutoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1353,6 +1371,22 @@ export default function App() {
     setFlyingTiles([]);
   }, [setDrawSequenceActiveBoth]);
 
+  const resetClientGameSession = useCallback(() => {
+    maxSequenceRef.current = -1;
+    maxEventSequenceRef.current = -1;
+    roomMatchIdRef.current = null;
+    autoTurnActionKeyRef.current = '';
+    frozenHandOverBoardRef.current = null;
+    playerReadyEmittedRef.current = false;
+    matchStartedRef.current = false;
+    rematchAwaitingStateRef.current = false;
+    resyncBufferedUpdateRef.current = null;
+    setOpponentDisconnected(false);
+    setOpponentDisconnectMessage('');
+    setBoneyardDisplayCount(null);
+    clearTransientRoomUi();
+  }, [clearTransientRoomUi]);
+
   const resetMultiplayerRoomState = useCallback(
     (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
       const { keepPlayers = false, clearRoomCode = true } = options;
@@ -1372,9 +1406,9 @@ export default function App() {
       if (!keepPlayers) {
         setPlayers([]);
       }
-      clearTransientRoomUi();
+      resetClientGameSession();
     },
-    [clearTransientRoomUi],
+    [resetClientGameSession],
   );
 
   const resetRoomRecoveryState = useCallback(() => {
@@ -1454,21 +1488,7 @@ export default function App() {
           throw new Error(resp?.error ?? 'Unable to create room.');
         }
 
-        roomIdentityRef.current = { username, userId, authToken };
-
-        setError('');
-        setActionError('');
-        setState(null);
-        setLegalMoves([]);
-        setCanDraw(false);
-        setSelectedTile(null);
-        setJoinedRoom(resp.roomCode);
-        setRoomCode(resp.roomCode);
-        setPlayers(normalizeRoomPlayers(resp.players));
-        applyRoomEventMeta(resp.eventMeta);
-        clearTransientRoomUi();
-        setRoomRecoveryState('idle');
-        setRoomRecoveryMessage('');
+        applyJoinedRoomResponseRef.current(resp);
         autoJoinAttemptedRef.current = false;
         preventAutoRejoinRef.current = false;
         resolvePendingCreate(resp.roomCode);
@@ -1478,10 +1498,24 @@ export default function App() {
         throw e;
       }
     },
-    [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate, applyRoomEventMeta, clearTransientRoomUi],
+    [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate],
   );
 
+  const resyncInFlightRef = useRef(false);
+  const resyncCooldownUntilRef = useRef(0);
+  const resyncBufferedUpdateRef = useRef<StateUpdatePayload | null>(null);
+  const resyncFlushRef = useRef<(() => void) | null>(null);
+  const rematchAwaitingStateRef = useRef(false);
+  const playerReadyEmittedRef = useRef(false);
+  const isSeatedPlayerRef = useRef(false);
+  const matchStartedRef = useRef(false);
+  const fetchGameStateRef = useRef<(reason: string) => Promise<boolean>>(async () => false);
+  const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
+  const applyJoinedRoomResponseRef = useRef<(resp: any) => void>(() => {});
+  const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
+
   const applyJoinedRoomResponse = useCallback((resp: any) => {
+    joinedRoomResponseRef.current = resp;
     applyRoomEventMeta(resp.eventMeta);
 
     if (!roomIdentityRef.current) {
@@ -1502,51 +1536,214 @@ export default function App() {
       youRef.current = resolvedYou;
     }
 
+    const nextState = resp.state ?? null;
+    if (nextState && typeof nextState.sequence === 'number') {
+      maxSequenceRef.current = nextState.sequence;
+    }
+
     setJoinedRoom(resp.roomCode);
     setRoomCode(resp.roomCode);
-    setState(resp.state ?? null);
-    setPlayers(normalizeRoomPlayers(resp.players));
+    setState(nextState);
+    const normalized = normalizeRoomPlayers(resp.players);
+    roomPlayersRef.current = normalized;
+    setPlayers(normalized);
     clearTransientRoomUi();
     setLegalMoves(Array.isArray(resp.legalMoves) ? resp.legalMoves : []);
     setCanDraw(typeof resp.canDraw === 'boolean' ? resp.canDraw : false);
+    setBoneyardDisplayCount(nextState?.boneyard?.length ?? null);
     setRoomRecoveryState('idle');
     setRoomRecoveryMessage('');
     // Tournament match metadata supplied by the server (replaces fragile regex).
     setTournamentMatch(resp.tournamentMatch ?? null);
 
-    if (import.meta.env.DEV) {
-      console.warn('[multiplayer-debug] applyJoinedRoomResponse identity/state', {
-        respYou: resp?.you,
-        socketId: socket?.id,
-        resolvedYou,
-        playerIds: resp?.state?.playerIds,
-        playerKeys: resp?.state?.players ? Object.keys(resp.state.players) : null,
-        resolvedHandLength: resp?.state?.players?.[resolvedYou]?.hand?.length ?? null,
-      });
+    const roster = normalizeRoomPlayers(resp.players);
+    const seated =
+      Boolean(resolvedYou) &&
+      (roster.some((p) => p.id === resolvedYou) ||
+        (Array.isArray(nextState?.playerIds) && nextState.playerIds.includes(resolvedYou)));
+    isSeatedPlayerRef.current = seated;
+    matchStartedRef.current = resp.matchStarted === true;
+    if (!seated) {
+      playerReadyEmittedRef.current = false;
+    } else if (!matchStartedRef.current) {
+      playerReadyEmittedRef.current = false;
     }
-  }, [applyRoomEventMeta, clearTransientRoomUi, socket?.id]);
 
-  /**
-   * Auto-join a matchmaking-reserved room after the Match Found countdown.
-   * The server will auto-start the game once both players are in the room
-   * (see the matchmaking auto-start hook in server/src/index.ts).
-   */
-  const handleMatchmakingAutoJoin = useCallback((code: string) => {
-    if (!socket) return;
-    const username = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'Guest';
-    socket.emit(
-      'room:join',
-      code.trim().toUpperCase(),
-      { username, userId: multiplayerIdentityUserId, authToken: multiplayerAuthToken },
-      (resp: any) => {
+    if (hasHandIdentityMismatch(nextState, resolvedYou)) {
+      void fetchGameStateRef.current('hand_identity_mismatch_after_join');
+    } else if (seated && !matchStartedRef.current) {
+      trySchedulePlayerReadyRef.current();
+    }
+  }, [
+    applyRoomEventMeta,
+    clearTransientRoomUi,
+    socket?.id,
+    authProfile?.username,
+    multiplayerIdentityUserId,
+    multiplayerAuthToken,
+    normalizeRoomPlayers,
+  ]);
+
+  /** Fetch full authoritative game state from the server (room:join ack). */
+  const fetchGameState = useCallback(
+    async (reason: string) => {
+      const activeSocket = socketRef.current;
+      const roomCode = normalizeRoomCode(joinedRoomRef.current);
+      if (!activeSocket?.connected || !roomCode) return false;
+      if (resyncInFlightRef.current || rejoinInFlightRef.current) return false;
+      const now = Date.now();
+      if (now < resyncCooldownUntilRef.current) return false;
+
+      resyncInFlightRef.current = true;
+      resyncCooldownUntilRef.current = now + 1200;
+      setRoomRecoveryState('resyncing');
+      setRoomRecoveryMessage('Syncing game state…');
+
+      const identity =
+        roomIdentityRef.current ?? {
+          username: authProfile?.username ?? 'Guest',
+          userId: multiplayerIdentityUserId,
+          authToken: multiplayerAuthToken,
+        };
+
+      try {
+        const resp = await emitWithAck<any>(activeSocket, 'room:join', roomCode, identity);
         if (!resp?.ok) {
-          showToast(resp?.error ?? 'Could not join matched room.', 2500);
-          return;
+          console.error('[mp] fetchGameState failed', { reason, error: resp?.error });
+          return false;
         }
         applyJoinedRoomResponse(resp);
-      },
-    );
-  }, [socket, authProfile?.username, authUser?.email, multiplayerIdentityUserId, multiplayerAuthToken, applyJoinedRoomResponse, showToast]);
+        return true;
+      } catch (error) {
+        console.error('[mp] fetchGameState error', {
+          reason,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      } finally {
+        resyncInFlightRef.current = false;
+        resyncFlushRef.current?.();
+        if (joinedRoomRef.current) {
+          setRoomRecoveryState('idle');
+          setRoomRecoveryMessage('');
+        }
+      }
+    },
+    [
+      normalizeRoomCode,
+      emitWithAck,
+      applyJoinedRoomResponse,
+      authProfile?.username,
+      multiplayerIdentityUserId,
+      multiplayerAuthToken,
+    ],
+  );
+
+  const markClientSpectator = useCallback(() => {
+    isSeatedPlayerRef.current = false;
+  }, []);
+
+  const trySchedulePlayerReady = useCallback(() => {
+    if (!isSeatedPlayerRef.current || matchStartedRef.current || playerReadyEmittedRef.current) {
+      return;
+    }
+
+    // Quick match deferral: if we joined a matchmaking room that isn't a sim,
+    // wait until both players are seated before emitting player:ready.
+    // This prevents the server from timing out or starting with a bot fallback
+    // before the real opponent has even finished their join handshake.
+    const isQuickMatch = appModeRef.current === 'multiplayer' && mpSubViewRef.current === 'quick';
+    const isSimMatch = joinedRoomResponseRef.current?.matchmakingIsSim === true;
+    if (isQuickMatch && !isSimMatch) {
+      if (roomPlayersRef.current.length < 2) {
+        return;
+      }
+    }
+
+    void schedulePlayerReadyRef.current();
+  }, []);
+
+  /**
+   * Emit player:ready only after room:join ack is applied (seated, lobby before deal).
+   * Uses server matchStarted — not local state — so a partial state:update cannot block ready.
+   */
+  const schedulePlayerReady = useCallback(async () => {
+    if (!isSeatedPlayerRef.current || playerReadyEmittedRef.current) return;
+    const activeSocket = socketRef.current;
+    const roomCode = normalizeRoomCode(joinedRoomRef.current);
+    if (!activeSocket?.connected || !roomCode || matchStartedRef.current) {
+      return;
+    }
+
+    playerReadyEmittedRef.current = true;
+    try {
+      const ack = await emitWithAck<any>(activeSocket, 'player:ready', roomCode);
+      if (ack?.started === true) {
+        matchStartedRef.current = true;
+      }
+    } catch (error) {
+      playerReadyEmittedRef.current = false;
+      console.error('[mp] player:ready failed', error instanceof Error ? error.message : error);
+    }
+  }, [normalizeRoomCode, emitWithAck]);
+
+  fetchGameStateRef.current = fetchGameState;
+  schedulePlayerReadyRef.current = schedulePlayerReady;
+  applyJoinedRoomResponseRef.current = applyJoinedRoomResponse;
+  trySchedulePlayerReadyRef.current = trySchedulePlayerReady;
+
+  const handleMatchmakingAutoJoin = useCallback(
+    (payload: MatchFoundPayload) => {
+      const roomCode = payload.roomCode.trim().toUpperCase();
+      const activeSocket = socketRef.current;
+      if (!activeSocket?.connected) {
+        return;
+      }
+      if (normalizeRoomCode(joinedRoomRef.current) === roomCode) {
+        return;
+      }
+
+      setOverlayPayload(payload);
+
+      const username = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'Guest';
+      setAppMode('multiplayer');
+      activeSocket.emit(
+        'room:join',
+        roomCode,
+        { username, userId: multiplayerIdentityUserId, authToken: multiplayerAuthToken },
+        (resp: any) => {
+          if (!resp?.ok) {
+            showToast(resp?.error ?? 'Could not join matched room.', 2500);
+            return;
+          }
+          applyJoinedRoomResponse(resp);
+        },
+      );
+    },
+    [
+      normalizeRoomCode,
+      authProfile?.username,
+      authUser?.email,
+      multiplayerIdentityUserId,
+      multiplayerAuthToken,
+      applyJoinedRoomResponse,
+      showToast,
+      setAppMode,
+    ],
+  );
+
+  useEffect(() => {
+    if (mpSubView !== 'quick' || !joinedRoom || state) return;
+    const roomCode = joinedRoom;
+    const timer = window.setTimeout(() => {
+      if (!matchStartedRef.current && isSeatedPlayerRef.current) {
+        playerReadyEmittedRef.current = false;
+        trySchedulePlayerReadyRef.current();
+      }
+      void fetchGameState('quick_match_stall');
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [mpSubView, joinedRoom, state, fetchGameState]);
 
   const roomSocketSyncParams = useMemo(
     () => ({
@@ -1558,10 +1755,23 @@ export default function App() {
       joinedRoomRef,
       maxSequenceRef,
       setPlayers,
+      roomPlayersRef,
       setState,
       setRoomRecoveryState,
       setRoomRecoveryMessage,
       setOptimisticPlayedTile,
+      fetchGameState,
+      resyncInFlightRef,
+      resyncBufferedUpdateRef,
+      resyncFlushRef,
+      rematchAwaitingStateRef,
+      resetClientGameSession,
+      isSeatedPlayerRef,
+      matchStartedRef,
+      playerReadyEmittedRef,
+      trySchedulePlayerReadyRef,
+      setOpponentDisconnected,
+      setOpponentDisconnectMessage,
       setLegalMoves,
       setCanDraw,
       drawSequenceActiveRef,
@@ -1583,7 +1793,14 @@ export default function App() {
       playDrawSound,
       tileEquals,
     }),
-    [socket, showToast, applyRoomEventMeta, setDrawSequenceActiveBoth],
+    [
+      socket,
+      showToast,
+      applyRoomEventMeta,
+      setDrawSequenceActiveBoth,
+      fetchGameState,
+      resetClientGameSession,
+    ],
   );
 
   useRoomSocketSync(roomSocketSyncParams);
@@ -1696,6 +1913,9 @@ export default function App() {
     emitCreateRoom,
     clearReconnectAttemptTimer,
     clearTransientRoomUi,
+    fetchGameState,
+    resetClientGameSession,
+    rematchAwaitingStateRef,
   });
 
   const authUsernameRef = useRef(authProfile?.username ?? 'Guest');
@@ -2056,7 +2276,6 @@ export default function App() {
       setPendingUiAction('play');
       pendingActionRef.current = true;
       setSelectedTile(null);
-      setOptimisticPlayedTile(tileToPlay);
       setDrawStepMyHand(null);
       const boardEnds = getBoardEnds(state?.board ?? null);
       const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
@@ -2078,7 +2297,6 @@ export default function App() {
 
         if (!resp?.ok) {
           setActionError(resp?.error ?? 'Unable to play tile.');
-          setOptimisticPlayedTile(null);
           return;
         }
         flashLastPlayed(selectedMove?.tile ?? tileToPlay);
@@ -2110,7 +2328,6 @@ export default function App() {
           ),
         });
       } catch (e) {
-        setOptimisticPlayedTile(null);
         showToast(e instanceof Error ? e.message : 'Action failed', 2000);
       } finally {
         setPendingUiAction((prev) => (prev === 'play' ? null : prev));
@@ -2128,22 +2345,8 @@ export default function App() {
   const handForRenderBase = drawSequenceActive && drawStepActorId === you
     ? (drawStepMyHand ?? authoritativeMyHand)
     : authoritativeMyHand;
-  const myHand = optimisticPlayedTile
-    ? handForRenderBase.filter((t) => !tileEquals(t, optimisticPlayedTile))
-    : handForRenderBase;
+  const myHand = handForRenderBase;
 
-  if (import.meta.env.DEV && joinedRoom && state) {
-    console.warn('[multiplayer-debug] App myHand derived JSON', JSON.stringify({
-      you,
-      playerIds: state.playerIds,
-      playerKeys: Object.keys(state.players ?? {}),
-      authoritativeMyHandLength: authoritativeMyHand.length,
-      myHandLength: myHand.length,
-      myHandSample: myHand[0] ?? null,
-      playersShape: state.players,
-      handCounts: state.handCounts ?? null,
-    }, null, 2));
-  }
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const authoritativeOpponentTileCount =
     state && opponentId
@@ -3754,9 +3957,25 @@ export default function App() {
             onOpenAuth={() => setAuthModalOpen(true)}
             onBackHome={() => setAppMode('home')}
             onOpenPrivateMatch={() => setMpSubView('private')}
-            onAutoJoinRoom={(payload) => handleMatchmakingAutoJoin(payload.roomCode)}
+            onAutoJoinRoom={handleMatchmakingAutoJoin}
             onPlayBotFallback={() => setAppMode('botSetup')}
           />
+        ) : mpSubView === 'quick' && joinedRoom && !state ? (
+          <div
+            className="mp-quick-starting"
+            style={{
+              flex: '1 1 0',
+              minHeight: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-secondary, rgba(255,255,255,0.72))',
+              fontSize: '1.05rem',
+              letterSpacing: '0.04em',
+            }}
+          >
+            Starting match…
+          </div>
         ) : (
           <PrivateMatchLobbyScreen
             phase={
@@ -3822,6 +4041,26 @@ export default function App() {
           ) : null}
           <RotateOverlay />
           <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
+          {opponentDisconnected && opponentDisconnectMessage && roomRecoveryState === 'idle' && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 12,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 1190,
+                padding: '8px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(251,191,36,0.35)',
+                background: 'rgba(15,25,20,0.82)',
+                color: 'rgba(255,236,200,0.95)',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+              }}
+            >
+              {opponentDisconnectMessage}
+            </div>
+          )}
           {roomRecoveryState !== 'idle' && (
             <div
               style={{
@@ -4260,6 +4499,16 @@ export default function App() {
           onLeave={() => {
             setShowLeaveConfirm(false);
             disconnect('user leave game');
+          }}
+        />
+      )}
+
+      {overlayPayload && (
+        <MatchFoundOverlay
+          payload={overlayPayload}
+          yourUsername={authProfile?.username ?? 'Guest'}
+          onComplete={() => {
+            setOverlayPayload(null);
           }}
         />
       )}

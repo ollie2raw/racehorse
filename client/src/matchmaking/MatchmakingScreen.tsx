@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { AppMode } from '../types';
 import { isGameServerSameOriginAsPage } from '../lib/gameServerUrl';
 import { GlobalNav } from '../components';
-import { MatchFoundOverlay } from './MatchFoundOverlay';
 import { useMatchmaking } from './useMatchmaking';
 import type { MatchFoundPayload } from './types';
 import { MultiplayerTopBar } from './MultiplayerTopBar';
@@ -124,8 +123,8 @@ const RATING_SEGMENTS = [
 export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const isConnecting = props.isConnecting ?? false;
   const serverUrl = props.serverUrl ?? '';
-  const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [showDisconnectedHint, setShowDisconnectedHint] = useState(false);
+  const pendingAutoJoinRef = useRef<MatchFoundPayload | null>(null);
 
   useEffect(() => {
     if (props.isConnected || isConnecting) {
@@ -136,9 +135,26 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
     return () => window.clearTimeout(t);
   }, [props.isConnected, isConnecting]);
 
-  const handleMatchReady = useCallback((payload: MatchFoundPayload) => {
-    setOverlayPayload(payload);
-  }, []);
+  const handleMatchReady = useCallback(
+    (payload: MatchFoundPayload) => {
+      // Join the match room immediately so both players are seated before the
+      // countdown ends — server can deal as soon as the room is full.
+      if (props.isConnected) {
+        props.onAutoJoinRoom(payload);
+      } else {
+        pendingAutoJoinRef.current = payload;
+        props.onRetryConnect?.();
+      }
+    },
+    [props.isConnected, props.onAutoJoinRoom, props.onRetryConnect],
+  );
+
+  useEffect(() => {
+    if (!props.isConnected || !pendingAutoJoinRef.current) return;
+    const payload = pendingAutoJoinRef.current;
+    pendingAutoJoinRef.current = null;
+    props.onAutoJoinRoom(payload);
+  }, [props.isConnected, props.onAutoJoinRoom]);
 
   const mm = useMatchmaking({
     socket: props.socket,
@@ -506,20 +522,6 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
           }
         />
       </div>
-
-      {overlayPayload ? (
-        <MatchFoundOverlay
-          payload={overlayPayload}
-          yourUsername={myUsername}
-          queueElapsedMs={mm.elapsedMs}
-          onComplete={() => {
-            const captured = overlayPayload;
-            setOverlayPayload(null);
-            mm.reset();
-            props.onAutoJoinRoom(captured);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

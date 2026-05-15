@@ -38,6 +38,8 @@ export type Room = {
   asyncStateVersion: number;
   nextHandReady: Set<string>;
   rematchReady: Set<string>;
+  /** Socket ids that have acked listeners ready before the first deal is broadcast. */
+  matchStartReady: Set<string>;
   lastHandEndedNotifiedHand: number | null;
   lastHandEndedAtMs: number | null;
   lastBroadcastScores: Record<string, number>;
@@ -180,6 +182,7 @@ export function createRoom(hostSocketId: string, config: Partial<Config> = {}): 
     asyncStateVersion: 0,
     nextHandReady: new Set<string>(),
     rematchReady: new Set<string>(),
+    matchStartReady: new Set<string>(),
     lastHandEndedNotifiedHand: null,
     lastHandEndedAtMs: null,
     lastBroadcastScores: {},
@@ -219,6 +222,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
     asyncStateVersion: 0,
     nextHandReady: new Set<string>(),
     rematchReady: new Set<string>(),
+    matchStartReady: new Set<string>(),
     lastHandEndedNotifiedHand: null,
     lastHandEndedAtMs: null,
     lastBroadcastScores: {},
@@ -467,6 +471,7 @@ export async function startGame(
   });
   room.nextHandReady.clear();
   room.rematchReady.clear();
+  room.matchStartReady.clear();
   room.lastHandEndedNotifiedHand = null;
   room.lastHandEndedAtMs = null;
   room.lastBroadcastScores = Object.fromEntries(

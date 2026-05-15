@@ -1,4 +1,5 @@
 import './loadEnv';
+import fs from 'node:fs';
 import express from 'express';
 import cors, { type CorsOptions } from 'cors';
 import http from 'http';
@@ -117,6 +118,12 @@ import {
   applyMatchResult as applyTournamentMatchResult,
 } from './scheduledTournament';
 import { startSimOpponentLoop } from './matchmaking/simBot';
+import {
+  clearDisconnectGrace,
+  onActivePlayerSocketDisconnect,
+  onPlayerSocketRejoined,
+} from './multiplayer/disconnectGrace';
+import { markMatchStartReady, tryStartMatchIfReady } from './multiplayer/matchStartReady';
 import type { GameState } from './game/types';
 import { assertValidGameState } from './game/invariants';
 
@@ -4820,6 +4827,7 @@ function broadcastStateUpdate(roomCode: string) {
         legalMoves,
         canDraw,
         eventMeta: getRoomMatchEventMeta(room.code),
+        matchStarted: true,
       });
 
       if (
@@ -4902,6 +4910,19 @@ function broadcastStateUpdate(roomCode: string) {
     }
     evaluateRoomLifecycle(room.code);
   }
+}
+
+function buildMatchStartDeps(io: Server) {
+  return {
+    broadcastStateUpdate: (roomCode: string) => broadcastStateUpdate(roomCode),
+    onSimMatchStarted: (room: Room) => {
+      if (room.matchmakingIsSim && room.matchmakingSimSocketId) {
+        startSimOpponentLoop(io, room.code, room.matchmakingSimSocketId, (code) =>
+          broadcastStateUpdate(code),
+        );
+      }
+    },
+  };
 }
 
 io.on('connection', (socket: Socket) => {
@@ -5228,15 +5249,8 @@ io.on('connection', (socket: Socket) => {
       bName: roomPlayers[1].username,
     });
 
-    // Start match now
-    void startGame(room.code, io)
-      .then(() => {
-        broadcastStateUpdate(room.code);
-        emitTournament(t);
-      })
-      .catch((err) => {
-        console.warn('[tournament] failed to start match room', err);
-      });
+    // Deal is broadcast after both seated clients emit player:ready (see player:ready handler).
+    emitTournament(t);
 
   };
 
@@ -5253,6 +5267,14 @@ io.on('connection', (socket: Socket) => {
 
     const match = t.matches.find((mm) => mm.id === mid);
     if (!match || match.status === 'done') return;
+    if (t.activeMatchId && t.activeMatchId !== mid) {
+      console.warn('[tournament] ignoring stale gameOver for non-active match', {
+        tournamentId: tid,
+        activeMatchId: t.activeMatchId,
+        reportedMatchId: mid,
+      });
+      return;
+    }
 
     const a = match.a;
     const b = match.b;
@@ -5449,6 +5471,7 @@ io.on('connection', (socket: Socket) => {
         you: socket.id,
         players: roomPlayers,
         eventMeta: getRoomMatchEventMeta(room.code),
+        matchStarted: false,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
@@ -5497,6 +5520,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
           legalMoves: [],
           canDraw: false,
           eventMeta: getRoomMatchEventMeta(code),
+          matchStarted: true,
         });
       }
 
@@ -5509,7 +5533,13 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         },
       });
 
-      cb?.({ ok: true, roomCode: code, players: roster, eventMeta: getRoomMatchEventMeta(code) });
+      cb?.({
+        ok: true,
+        roomCode: code,
+        players: roster,
+        eventMeta: getRoomMatchEventMeta(code),
+        matchStarted: Boolean(room.state),
+      });
     } catch (e) {
       cb?.({ ok: false, error: 'spectate_failed' });
     }
@@ -5546,26 +5576,6 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       leaveExistingSocketRooms();
       const hydrateResult = await tryHydrateMatchmakingRoomShell(roomCode);
       let existingRoom = peekRoom(roomCode);
-      // #region agent log
-      void fetch('http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b186e6' },
-        body: JSON.stringify({
-          sessionId: 'b186e6',
-          location: 'server/index.ts:room:join',
-          message: 'post-hydrate room peek',
-          data: {
-            roomCode,
-            hydrateResult,
-            hadRoom: Boolean(existingRoom),
-            pid: process.pid,
-            transport: socket.conn?.transport?.name ?? null,
-          },
-          timestamp: Date.now(),
-          hypothesisId: 'H1',
-        }),
-      }).catch(() => {});
-      // #endregion
       if (!existingRoom) {
         const message = 'Room not found.';
         console.log(`[room:join] ERROR: ${message} hydrate=${hydrateResult}`);
@@ -5665,7 +5675,35 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       roomPlayersByCode.set(room.code, roster);
       io.to(room.code).emit('room:update', { players: roster });
       console.log(`[room:join] joined room=${room.code}, players=${room.players.length}`);
-      
+
+      // Matchmaking: seat sim before start checks; auto-ready the joining socket so
+      // the deal is not blocked on a client player:ready race or countdown timing.
+      if (room.matchmakingMatchId && !room.state) {
+        const needsSimSeat =
+          room.matchmakingIsSim &&
+          room.matchmakingSimSocketId &&
+          !room.players.includes(room.matchmakingSimSocketId);
+        if (needsSimSeat) {
+          room.players.push(room.matchmakingSimSocketId!);
+        }
+        markMatchStartReady(room.code, socket.id);
+        try {
+          const startResult = await tryStartMatchIfReady(room.code, io, buildMatchStartDeps(io));
+          if (startResult.started) {
+            room = getRoom(room.code);
+            console.log('[room:join] matchmaking auto-started', {
+              roomCode: room.code,
+              socketId: socket.id,
+            });
+          }
+        } catch (startErr) {
+          console.warn(
+            '[room:join] matchmaking auto-start failed',
+            startErr instanceof Error ? startErr.message : startErr,
+          );
+        }
+      }
+
       const recipientId = socket.data?.playerId ?? socket.id;
       const stateWithCounts = room.state
         ? (() => { const m = maskStateForRecipient(room.state!, recipientId); return { ...m, handCounts: getHandCounts(m) }; })()
@@ -5749,6 +5787,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         canDraw: rejoinCanDraw,
         eventMeta: getRoomMatchEventMeta(room.code),
         tournamentMatch: tournamentMatchMeta,
+        matchStarted: Boolean(room.state),
       });
 
       if (room.state) {
@@ -5761,49 +5800,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         }
       }
 
-      // ── Matchmaking auto-start hook ─────────────────────────────────────
-      // For rooms created via the matchmaking queue we auto-start the game
-      // server-side once both players are present. This means neither client
-      // needs to emit `game:start` for matchmade matches.
-      if (room.matchmakingMatchId && !room.state) {
-        const realCount = room.players.length;
-        const needsSimSeat =
-          room.matchmakingIsSim &&
-          room.matchmakingSimSocketId &&
-          !room.players.includes(room.matchmakingSimSocketId);
-        if (needsSimSeat) {
-          room.players.push(room.matchmakingSimSocketId!);
-        }
-        const ready =
-          (room.matchmakingIsSim && realCount + (needsSimSeat ? 1 : 0) >= 2) ||
-          (!room.matchmakingIsSim && realCount >= 2);
-        if (ready) {
-          // Defer one tick so the room:update broadcast above settles first.
-          setImmediate(() => {
-            void (async () => {
-              try {
-                const startedRoom = await startGame(room.code, io);
-                broadcastStateUpdate(startedRoom.code);
-                // Sim opponent is already seated — kick its move loop now that
-                // the game has actually begun (initial deal + first turn set).
-                if (startedRoom.matchmakingIsSim && startedRoom.matchmakingSimSocketId) {
-                  startSimOpponentLoop(
-                    io,
-                    startedRoom.code,
-                    startedRoom.matchmakingSimSocketId,
-                    (code) => broadcastStateUpdate(code),
-                  );
-                }
-              } catch (err) {
-                console.warn(
-                  '[matchmaking] auto-start failed',
-                  err instanceof Error ? err.message : err,
-                );
-              }
-            })();
-          });
-        }
-      }
+      onPlayerSocketRejoined(room.code, io, socket.id);
 
       evaluateRoomLifecycle(room.code);
     } catch (err: unknown) {
@@ -5822,6 +5819,41 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
 
     leaveTrackedRoom(code);
     cb?.({ ok: true, roomCode: code });
+  });
+
+  socket.on('player:ready', async (code: unknown, cb?: AckFn) => {
+    const roomCode = String(code ?? '').trim().toUpperCase();
+    try {
+      const room = getRoom(roomCode);
+      if (!room.players.includes(socket.id)) {
+        cb?.({ ok: false, error: 'Only room players can ready up.' });
+        return;
+      }
+      markMatchStartReady(roomCode, socket.id);
+      const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
+      if (startResult.started) {
+        const started = getRoom(roomCode);
+        for (const socketId of started.players) {
+          const pSocket = io.sockets.sockets.get(socketId);
+          const playerId = normalizeUserId(pSocket?.data?.userId);
+          if (playerId) {
+            void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
+            emitPresenceUpdateToFriends(playerId, 'in_game');
+          }
+        }
+        if (getPendingFritzMatchContext(started)) {
+          await insertPendingFritzMatch(started);
+        }
+      }
+      cb?.({
+        ok: true,
+        started: startResult.started,
+        waitingFor: startResult.waitingFor ?? [],
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      cb?.({ ok: false, error: message });
+    }
   });
 
   socket.on('game:start', async (code, cb) => {
@@ -5846,7 +5878,15 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         if (typeof cb === 'function') cb({ ok: false, error: 'waiting_for_players' });
         return;
       }
-      const room = await startGame(roomCode, io);
+      markMatchStartReady(roomCode, socket.id);
+      const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
+      if (!startResult.started) {
+        if (typeof cb === 'function') {
+          cb({ ok: false, error: 'waiting_for_ready', waitingFor: startResult.waitingFor ?? [] });
+        }
+        return;
+      }
+      const room = getRoom(roomCode);
       console.log(
         `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,
       );
@@ -5861,7 +5901,6 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       if (getPendingFritzMatchContext(room)) {
         await insertPendingFritzMatch(room);
       }
-      broadcastStateUpdate(room.code);
       if (typeof cb === 'function') cb({ ok: true });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
@@ -5870,21 +5909,42 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     }
   });
 
+  socket.on('mp:ping', (_sentAt: unknown, cb?: (serverAt: number) => void) => {
+    if (typeof cb === 'function') cb(Date.now());
+  });
+
   socket.on('game:action', async (code, action, cb) => {
     const roomCode = String(code).trim().toUpperCase();
     console.log(`[game:action] socket=${socket.id}, code=${roomCode}, action=${action?.type}`);
     try {
+      if (!action || typeof action !== 'object' || typeof action.type !== 'string') {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Invalid action payload.' });
+        return;
+      }
+      if (!['DRAW', 'MOVE', 'PASS'].includes(action.type)) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Unknown action type.' });
+        return;
+      }
       const existingRoom = getRoom(roomCode);
       if (!existingRoom.players.includes(socket.id)) {
         if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.' });
         return;
       }
+      if (!existingRoom.state) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Game not started.' });
+        return;
+      }
+      if (existingRoom.state.gameOver) {
+        if (typeof cb === 'function') cb({ ok: false, error: 'Game is over.' });
+        return;
+      }
       const result = await act(roomCode, socket.id, action, io, (code) => broadcastStateUpdate(code));
       const room = result.room;
+      // Authoritative state before draw animations so clients never render against stale hands/board.
+      broadcastStateUpdate(room.code);
       if (result.forcedDrawAnimation) {
         emitForcedDrawAnimationPayload(room.code, result.forcedDrawAnimation);
       }
-      broadcastStateUpdate(room.code);
       if (result.manualDrawAnimation) {
         emitManualDrawAnimationPayload(room.code, result.manualDrawAnimation);
       }
@@ -6040,6 +6100,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
             username: normalizeUsername(socket.data?.username),
             userId,
           });
+          onActivePlayerSocketDisconnect(roomCode, socket.id, io, (code) => broadcastStateUpdate(code));
         }
       } catch {
         // room no longer exists

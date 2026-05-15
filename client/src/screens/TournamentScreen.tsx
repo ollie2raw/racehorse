@@ -32,6 +32,7 @@ interface TournamentScreenProps {
   multiplayerAuthToken: string | null;
   error: string;
   setError: (msg: string) => void;
+  onSpectateAck?: () => void;
 }
 
 export function TournamentScreen({
@@ -52,6 +53,7 @@ export function TournamentScreen({
   multiplayerAuthToken,
   error,
   setError,
+  onSpectateAck,
 }: TournamentScreenProps) {
   const players: TournamentPlayer[] = Array.isArray(tournamentState?.players)
     ? tournamentState.players.filter(
@@ -203,6 +205,7 @@ export function TournamentScreen({
       },
       (resp: any) => {
         if (!resp?.ok) return setError('Spectate failed.');
+        onSpectateAck?.();
         setJoinedRoom(code);
         setRoomCode(code);
         setAppMode('multiplayer');
