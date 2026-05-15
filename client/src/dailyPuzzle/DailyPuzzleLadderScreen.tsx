@@ -25,6 +25,7 @@ import type {
   DailyPuzzleTodayResponse,
 } from './types';
 import LeaderboardPageShell from '../ui/LeaderboardPageShell';
+import dailyLadderHeroImg from '../assets/dailyPuzzle/daily-ladder-perfect.png';
 import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
 
 interface DailyPuzzleLadderScreenProps {
@@ -63,28 +64,6 @@ function formatShortDate(dateText: string): string {
     year: 'numeric',
   });
 }
-
-const LadderIconSameBoard = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" fill="currentColor" opacity={0.92} />
-  </svg>
-);
-
-const LadderIconOrdered = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <path d="M7 7h10M7 12h10M7 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    <circle cx="5" cy="7" r="1.5" fill="currentColor" />
-    <circle cx="5" cy="12" r="1.5" fill="currentColor" />
-    <circle cx="5" cy="17" r="1.5" fill="currentColor" />
-  </svg>
-);
-
-const LadderIconLeaderboard = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <path d="M8 21V11M12 21V7M16 21V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    <path d="M6 11h4M10 7h4M14 14h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity={0.5} />
-  </svg>
-);
 
 const DplLockIcon = () => (
   <svg width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden style={{ display: 'block', flexShrink: 0 }}>
@@ -604,41 +583,18 @@ export default function DailyPuzzleLadderScreen({
                 </p>
               </div>
 
-              <div className="pvf-opponent-card">
-                <div className="dpl-ladder-hero-art" aria-hidden />
-                <div className="pvf-card-overlay" />
-                <div className="pvf-card-content">
-                  <div className="pvf-card-header">
-                    <div className="pvf-card-eyebrow">The challenge</div>
-                    <h2 className="pvf-card-name">Beat the board</h2>
-                    <p className="pvf-card-description">
-                      Same opening position for every racer. Chase the line score on each stop, then carry momentum into the Master Chain finale.
-                    </p>
-                  </div>
-
-                  <div className="pvf-card-badges">
-                    <div className="pvf-card-badge">
-                      <div className="pvf-card-badge-header">
-                        <LadderIconSameBoard />
-                        <span className="pvf-card-badge-title">Same boards</span>
-                      </div>
-                      <div className="pvf-card-badge-desc">One daily deal copy for the whole field.</div>
-                    </div>
-                    <div className="pvf-card-badge">
-                      <div className="pvf-card-badge-header">
-                        <LadderIconOrdered />
-                        <span className="pvf-card-badge-title">Sequenced run</span>
-                      </div>
-                      <div className="pvf-card-badge-desc">Solve in order — no skipping slots.</div>
-                    </div>
-                    <div className="pvf-card-badge">
-                      <div className="pvf-card-badge-header">
-                        <LadderIconLeaderboard />
-                        <span className="pvf-card-badge-title">Live ladder</span>
-                      </div>
-                      <div className="pvf-card-badge-desc">Points lock on a single scored attempt.</div>
-                    </div>
-                  </div>
+              <div
+                className="pvf-opponent-card"
+                aria-label="Beat the board. Same opening position for every racer. Chase the line score on each stop, then the Master Chain finale. Same boards for everyone, solve in order, one scored run locks ladder points."
+              >
+                <div className="dpl-ladder-hero-art" aria-hidden>
+                  <img
+                    className="dpl-ladder-hero-art__img"
+                    src={dailyLadderHeroImg}
+                    alt=""
+                    decoding="async"
+                    loading="eager"
+                  />
                 </div>
               </div>
             </div>

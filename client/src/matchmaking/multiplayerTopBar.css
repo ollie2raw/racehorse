@@ -1,0 +1,126 @@
+/* Shared multiplayer sub-nav (Quick Match + Private lobby) */
+
+.mp-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 10px 36px 12px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.mp-topbar__start {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* PVF back uses margin for the left column; in the top bar row we need no extra vertical gap. */
+.mp-topbar .pvf-back-btn {
+  margin-bottom: 0 !important;
+}
+
+.mp-topbar__mid {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding-left: clamp(4px, 2vw, 32px);
+}
+
+.mp-topbar__end {
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.mp-topbar__seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 12, 22, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.mp-topbar__seg-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.mp-topbar__seg-btn:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.mp-topbar__seg-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mp-topbar__seg-btn.is-active {
+  color: #fff;
+  background: color-mix(in srgb, var(--tier-standard) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tier-standard) 35%, transparent);
+}
+
+.mp-topbar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(100%, 220px);
+}
+
+.mp-topbar__status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(74, 222, 128, 0.55);
+  flex-shrink: 0;
+}
+
+.mp-topbar__status-text {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.38);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 720px) {
+  .mp-topbar {
+    padding: 8px 16px 10px;
+    flex-wrap: wrap;
+  }
+
+  .mp-topbar__mid {
+    order: 3;
+    flex: 1 1 100%;
+    padding-left: 0;
+    justify-content: flex-start;
+  }
+
+  .mp-topbar__end {
+    margin-left: 0;
+  }
+}

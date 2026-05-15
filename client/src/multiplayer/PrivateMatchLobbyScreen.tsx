@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { AppMode } from '../types';
+import type { Socket } from 'socket.io-client';
 import { GlobalNav } from '../components';
+import { MultiplayerTopBar } from '../matchmaking/MultiplayerTopBar';
 import { Button } from '../components/primitives';
 import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
 import '../screens/RacehorseHomeArt.css';
@@ -64,6 +66,8 @@ export interface PrivateMatchLobbyScreenProps {
   winTarget?: number;
   /** When set, the Quick Match sub-tab in the unified toolbar becomes clickable. */
   onOpenQuickMatch?: () => void;
+  /** When connected, used for multiplayer top bar live counts. */
+  socket?: Socket | null;
 }
 
 function LockIcon() {
@@ -128,13 +132,6 @@ function IconEye() {
   );
 }
 
-function IconSwords() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M14.5 17.5L4 7l3-3 10.5 10.5M11 9l4-4 4 4-4 4M3 21l5-5M14 17l5 5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 function IconFlame() {
   return (
@@ -326,6 +323,7 @@ export default function PrivateMatchLobbyScreen({
   onSendRoomChat: _onSendRoomChat,
   winTarget = 60,
   onOpenQuickMatch,
+  socket = null,
 }: PrivateMatchLobbyScreenProps) {
   const [lobbyTab, setLobbyTab] = useState<'create' | 'join'>('create');
   const [dealFormat, setDealFormat] = useState<7 | 14>(7);
@@ -605,7 +603,7 @@ export default function PrivateMatchLobbyScreen({
   );
 
   return (
-    <div className="pml-root">
+    <div className="pml-root pml-mp-bridge">
       <div className="home-bg" aria-hidden>
         <div className="home-bg__halo" />
         <div className="home-bg__domino home-bg__domino--tl" />
@@ -624,39 +622,20 @@ export default function PrivateMatchLobbyScreen({
         activeColor="var(--tier-standard)"
       />
 
-      {/* Unified Multiplayer header — mirrors Quick Match (.mm-toolbar). */}
-      <div className="pml-toolbar">
-        <button type="button" className="pml-toolbar-back" onClick={onBackClick}>
-          <span aria-hidden="true">←</span>{' '}
-          {phase === 'room' ? 'Leave Room' : 'Back to Home'}
-        </button>
-        <div className="pml-toolbar-tabs" role="tablist" aria-label="Multiplayer mode">
-          <button
-            type="button"
-            className="pml-toolbar-tab"
-            role="tab"
-            onClick={() => onOpenQuickMatch?.()}
-            disabled={!onOpenQuickMatch || phase === 'room'}
-          >
-            Quick Match
-          </button>
-          <button
-            type="button"
-            className="pml-toolbar-tab is-active"
-            role="tab"
-            aria-selected="true"
-          >
-            Private Match
-          </button>
-        </div>
-        <div className="pml-toolbar-context" aria-live="polite">
-          {/* Right slot intentionally empty in the lobby phase — no live data worth showing.
-              The room code, when applicable, is prominently displayed in the matchup card. */}
-        </div>
-      </div>
+      <div className="pml-shell pml-shell--pvf">
+        <MultiplayerTopBar
+          activeTab="private"
+          onSelectQuick={() => onOpenQuickMatch?.()}
+          onSelectPrivate={() => {}}
+          privateTabLocksQuick={phase === 'room'}
+          onBackMultiplayer={onBackClick}
+          backAriaLabel={phase === 'room' ? 'Leave room' : 'Back to home'}
+          fetchCounts={phase !== 'disconnected'}
+          socket={socket}
+        />
 
-      <div className="pml-layout">
-        <div className={`pml-left pml-left--stack${phase === 'room' ? ' pml-left--room' : ''}`}>
+        <div className="pvf-layout pml-pvf-layout">
+          <div className={`pvf-left-col pml-left--stack${phase === 'room' ? ' pml-left--room' : ''}`}>
           <header className="pml-head">
             <p className="pml-kicker">
               <LockIcon />
@@ -791,43 +770,10 @@ export default function PrivateMatchLobbyScreen({
               </div>
             </div>
 
-            <div className="pml-info-bar">
-              <div className="pml-info-item">
-                <div className="pml-info-icon" aria-hidden>
-                  <IconSwords />
-                </div>
-                <div className="pml-info-text">
-                  <div className="pml-info-value">1v1</div>
-                  <div className="pml-info-label">Mode</div>
-                </div>
-              </div>
-              <div className="pml-info-divider" aria-hidden />
-              <div className="pml-info-item">
-                <div className="pml-info-icon" aria-hidden>
-                  <IconDominoSm format={dealFormat} />
-                </div>
-                <div className="pml-info-text">
-                  <div className="pml-info-value">{formatLabel}</div>
-                  <div className="pml-info-label">Format</div>
-                </div>
-              </div>
-              <div className="pml-info-divider" aria-hidden />
-              <div className="pml-info-item">
-                <div className="pml-info-icon" aria-hidden>
-                  <IconTarget />
-                </div>
-                <div className="pml-info-text">
-                  <div className="pml-info-value">{winTarget} pts</div>
-                  <div className="pml-info-label">Goal</div>
-                </div>
-              </div>
-            </div>
-
           </div>
         </div>
 
-        <div className="pml-right">
-          <div className="pml-panel">
+        <div className="pvf-control-panel pml-mp-panel">
             {phase === 'lobby' ? (
               <div className="pml-tab-bar" role="tablist" aria-label="Lobby mode">
                 <button
@@ -852,22 +798,24 @@ export default function PrivateMatchLobbyScreen({
             ) : null}
             {phase === 'room' && joinedRoom ? (
               <div className="pml-roomcode-bar" aria-label="Your room code">
-                <div className="pml-roomcode-bar-copy">
+                <div className="pml-roomcode-bar-inner">
                   <span className="pml-roomcode-bar-label">Your room code</span>
-                  <span className="pml-roomcode-bar-code" aria-live="polite">
-                    {joinedRoom}
-                  </span>
+                  <div className="pml-roomcode-bar-row">
+                    <span className="pml-roomcode-bar-code" aria-live="polite">
+                      {joinedRoom}
+                    </span>
+                    {onCopyRoomCode ? (
+                      <button
+                        type="button"
+                        className="pml-roomcode-bar-button"
+                        onClick={onCopyRoomCode}
+                        aria-label="Copy room code"
+                      >
+                        <IconCopy />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                {onCopyRoomCode ? (
-                  <button
-                    type="button"
-                    className="pml-roomcode-bar-button"
-                    onClick={onCopyRoomCode}
-                    aria-label="Copy room code"
-                  >
-                    <IconCopy />
-                  </button>
-                ) : null}
               </div>
             ) : null}
 

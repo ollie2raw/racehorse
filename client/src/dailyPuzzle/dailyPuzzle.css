@@ -2148,6 +2148,7 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
+  overflow: hidden;
   background:
     radial-gradient(ellipse 82% 58% at 16% 24%, color-mix(in srgb, var(--tier-standard) 26%, transparent), transparent 62%),
     radial-gradient(ellipse 60% 48% at 92% 10%, color-mix(in srgb, var(--tier-elite) 12%, transparent), transparent 58%),
@@ -2159,8 +2160,18 @@
     );
 }
 
+.dpl-ladder-hero-art__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left bottom;
+  filter: saturate(1.02);
+}
+
 .dpl-ladder-hub .pvf-opponent-card {
-  min-height: min(320px, 42vh);
+  min-height: min(380px, 48vh);
 }
 
 .dpl-ladder-control-panel.pvf-control-panel {

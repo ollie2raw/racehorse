@@ -6,6 +6,7 @@ import { GlobalNav } from '../components';
 import { MatchFoundOverlay } from './MatchFoundOverlay';
 import { useMatchmaking } from './useMatchmaking';
 import type { MatchFoundPayload } from './types';
+import { MultiplayerTopBar } from './MultiplayerTopBar';
 import './matchmakingScreen.css';
 
 type Identity = { userId: string; username: string } | null;
@@ -36,10 +37,10 @@ function formatElapsed(ms: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function ratingWindowAt(waitedMs: number): number | null {
-  if (waitedMs >= 90_000) return null;
-  const steps = Math.floor(waitedMs / 30_000);
-  return 100 + steps * 100;
+function ratingSegmentIndex(state: 'idle' | 'searching' | 'timeout', elapsedMs: number): number {
+  if (state === 'idle') return 0;
+  if (state === 'timeout') return 3;
+  return Math.min(3, Math.floor(elapsedMs / 30_000));
 }
 
 function initialsFor(name: string | undefined): string {
@@ -113,12 +114,12 @@ function IconDominoes({ size = 16 }: { size?: number }) {
   );
 }
 
-const SEARCH_STEPS = [
+const RATING_SEGMENTS = [
   { range: '±100', when: '0–30s' },
   { range: '±200', when: '30–60s' },
   { range: '±300', when: '60–90s' },
   { range: 'Any', when: '90s+' },
-];
+] as const;
 
 export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const isConnecting = props.isConnecting ?? false;
@@ -158,10 +159,11 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const myUsername = props.identity?.username ?? null;
   const myInitials = useMemo(() => initialsFor(myUsername ?? undefined), [myUsername]);
 
-  const currentWindow = isSearching ? ratingWindowAt(mm.elapsedMs) : null;
+  const queueUiState = isSearching ? 'searching' : isTimeout ? 'timeout' : 'idle';
+  const ratingSegActive = ratingSegmentIndex(queueUiState, mm.elapsedMs);
 
   return (
-    <div className="mm-page">
+    <div className="mm-page mm-mp-bridge">
       <GlobalNav
         currentMode={'multiplayer' as AppMode}
         onNavigate={props.onNavigate}
@@ -169,191 +171,210 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
         activeColor="var(--tier-standard)"
       />
 
-      <div className="mm-shell">
-        <div className="mm-toolbar">
-          <button type="button" className="mm-back" onClick={props.onBackHome}>
-            <span aria-hidden>←</span> Back to Home
-          </button>
-          <div className="mm-subtabs">
-            <button className="mm-subtab is-active" type="button">Quick Match</button>
-            <button className="mm-subtab" type="button" onClick={props.onOpenPrivateMatch}>
-              Private Match
-            </button>
+      <MultiplayerTopBar
+        activeTab="quick"
+        onSelectQuick={() => {}}
+        onSelectPrivate={props.onOpenPrivateMatch}
+        onBackMultiplayer={props.onBackHome}
+        online={mm.online}
+        queued={mm.queued}
+      />
+
+      <div className="pvf-layout mm-pvf-layout">
+        <div className="pvf-left-col">
+          <div className="pvf-header">
+            <div className="pvf-label">MULTIPLAYER</div>
+            <h1 className="pvf-title">Quick Match</h1>
+            <p className="pvf-subtitle">
+              Skill-based 1v1 dominos. We pair you with a player near your rating and expand the search
+              every 30 seconds.
+            </p>
           </div>
-          <div className="mm-online-badge" role="status" aria-live="polite">
-            <span className="mm-online-badge__dot" aria-hidden />
-            {mm.online.toLocaleString()} online · {mm.queued.toLocaleString()} searching
+
+          <div className="mm-atmo-card">
+            <svg className="mm-atmo-card__rings" viewBox="0 0 100 100" aria-hidden>
+              <circle className="mm-atmo-card__ring" cx="50" cy="50" r="22" />
+              <circle className="mm-atmo-card__ring" cx="50" cy="50" r="34" />
+              <circle className="mm-atmo-card__ring" cx="50" cy="50" r="46" />
+            </svg>
+            <div className="mm-atmo-card__matchup">
+              <div className="mm-player-card mm-player-card--you">
+                <div className="mm-player-avatar" aria-hidden>
+                  {myInitials}
+                </div>
+                <span className="mm-player-status">
+                  <span className="mm-player-status__dot" aria-hidden /> Ready
+                </span>
+                <span className="mm-player-name">{myUsername ?? 'You'}</span>
+              </div>
+
+              <div className="mm-versus">
+                <span className="mm-versus__pill">VS</span>
+              </div>
+
+              <div className="mm-player-card mm-player-card--opp">
+                <div className="mm-player-avatar mm-player-avatar--placeholder" aria-hidden>
+                  ?
+                </div>
+                <span className="mm-player-status mm-player-status--searching">
+                  <span className="mm-player-status__dot" aria-hidden />
+                  {isSearching ? 'Searching' : 'Awaiting'}
+                </span>
+                <span className="mm-player-name">Opponent</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mm-features">
+            <div className="mm-feature">
+              <div className="mm-feature__header">
+                <IconCrown /> Ranked
+              </div>
+              <div className="mm-feature__desc">Affects your Glicko rating.</div>
+            </div>
+            <div className="mm-feature">
+              <div className="mm-feature__header">
+                <IconBolt /> Instant Match
+              </div>
+              <div className="mm-feature__desc">No setup. We find the opponent.</div>
+            </div>
+            <div className="mm-feature">
+              <div className="mm-feature__header">
+                <IconUsers /> Real Opponents
+              </div>
+              <div className="mm-feature__desc">Pulled from the global queue.</div>
+            </div>
           </div>
         </div>
 
-        <div className="mm-layout">
-          {/* ── LEFT COLUMN ───────────────────────────────────────────────── */}
-          <div className="mm-left">
-            <div>
-              <p className="mm-kicker">Multiplayer</p>
-              <h1 className="mm-title">Quick Match</h1>
-              <p className="mm-desc">
-                Skill-based 1v1 dominos. We pair you with a player near your rating and expand
-                the search every 30 seconds.
-              </p>
-            </div>
-
-            <div className="mm-stage">
-              <svg className="mm-stage-rings" viewBox="0 0 100 100" aria-hidden>
-                <circle className="mm-stage-rings__ring" cx="50" cy="50" r="22" />
-                <circle className="mm-stage-rings__ring" cx="50" cy="50" r="34" />
-                <circle className="mm-stage-rings__ring" cx="50" cy="50" r="46" />
-              </svg>
-              <div className="mm-matchup">
-                <div className="mm-player-card mm-player-card--you">
-                  <div className="mm-player-avatar" aria-hidden>{myInitials}</div>
-                  <span className="mm-player-status">
-                    <span className="mm-player-status__dot" aria-hidden /> Ready
-                  </span>
-                  <span className="mm-player-name">{myUsername ?? 'You'}</span>
-                  <span className="mm-player-rating">
-                    <span className="mm-player-rating__star" aria-hidden>★</span>
-                    {myRating != null ? myRating.toLocaleString() : '—'} Rating
-                  </span>
-                </div>
-
-                <div className="mm-versus">
-                  <span className="mm-versus__pill">VS</span>
-                </div>
-
-                <div className="mm-player-card mm-player-card--opp">
-                  <div className="mm-player-avatar mm-player-avatar--placeholder" aria-hidden>?</div>
-                  <span className="mm-player-status mm-player-status--searching">
-                    <span className="mm-player-status__dot" aria-hidden />
-                    {isSearching ? 'Searching' : 'Awaiting'}
-                  </span>
-                  <span className="mm-player-name">Opponent</span>
-                  <span className="mm-player-rating">Near your rating</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mm-features">
-              <div className="mm-feature">
-                <div className="mm-feature__header">
-                  <IconCrown /> Ranked
-                </div>
-                <div className="mm-feature__desc">Affects your Glicko rating.</div>
-              </div>
-              <div className="mm-feature">
-                <div className="mm-feature__header">
-                  <IconBolt /> Instant Match
-                </div>
-                <div className="mm-feature__desc">No setup. We find the opponent.</div>
-              </div>
-              <div className="mm-feature">
-                <div className="mm-feature__header">
-                  <IconUsers /> Real Opponents
-                </div>
-                <div className="mm-feature__desc">Pulled from the global queue.</div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── RIGHT COLUMN (control panel) ──────────────────────────────── */}
-          <div className="mm-panel">
-            <div className="mm-panel-body">
-              {/* SECTION 1 — depends on state */}
-              {isIdle ? (
-                <>
-                  <div className="mm-section">
-                    <div className="fritz-section-label">1. MATCH FORMAT</div>
-                    <h2 className="mm-section-heading">Standard 1v1</h2>
-                    <p className="mm-section-body">
-                      First to 60 points, 7-tile classic. Single game; no best-of.
-                    </p>
-                    <div className="fritz-summary-strip">
-                      <div className="fritz-summary-item">
-                        <div className="fritz-summary-icon" style={{ color: 'var(--tier-standard)' }}>
-                          <IconDominoes size={18} />
-                        </div>
-                        <div>
-                          <div className="fritz-summary-value">7-Tile</div>
-                          <div className="fritz-summary-key">Format</div>
-                        </div>
+        <div className="pvf-control-panel mm-mp-panel">
+          <div className="mm-panel-body">
+            {isIdle ? (
+              <>
+                <div className="mm-section">
+                  <div className="fritz-section-label">1. MATCH FORMAT</div>
+                  <h2 className="mm-section-heading">Standard 1v1</h2>
+                  <p className="mm-section-body">
+                    First to 60 points, 7-tile classic. Single game; no best-of.
+                  </p>
+                  <div className="fritz-summary-strip">
+                    <div className="fritz-summary-item">
+                      <div className="fritz-summary-icon" style={{ color: 'var(--tier-standard)' }}>
+                        <IconDominoes size={18} />
                       </div>
-                      <div className="fritz-summary-divider" aria-hidden />
-                      <div className="fritz-summary-item">
-                        <div className="fritz-summary-icon" style={{ color: 'var(--tier-standard)' }}>
-                          <IconTarget size={18} />
-                        </div>
-                        <div>
-                          <div className="fritz-summary-value">First to 60</div>
-                          <div className="fritz-summary-key">Win Target</div>
-                        </div>
+                      <div>
+                        <div className="fritz-summary-value">7-Tile</div>
+                        <div className="fritz-summary-key">Format</div>
                       </div>
-                      <div className="fritz-summary-divider" aria-hidden />
-                      <div className="fritz-summary-item">
-                        <div className="fritz-summary-icon" style={{ color: 'var(--tier-standard)' }}>
-                          <IconClock size={18} />
-                        </div>
-                        <div>
-                          <div className="fritz-summary-value">Untimed</div>
-                          <div className="fritz-summary-key">Turns</div>
-                        </div>
+                    </div>
+                    <div className="fritz-summary-divider" aria-hidden />
+                    <div className="fritz-summary-item">
+                      <div className="fritz-summary-icon" style={{ color: 'var(--tier-standard)' }}>
+                        <IconTarget size={18} />
+                      </div>
+                      <div>
+                        <div className="fritz-summary-value">First to 60</div>
+                        <div className="fritz-summary-key">Win Target</div>
+                      </div>
+                    </div>
+                    <div className="fritz-summary-divider" aria-hidden />
+                    <div className="fritz-summary-item">
+                      <div className="fritz-summary-icon" style={{ color: 'var(--tier-standard)' }}>
+                        <IconClock size={18} />
+                      </div>
+                      <div>
+                        <div className="fritz-summary-value">Untimed</div>
+                        <div className="fritz-summary-key">Turns</div>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="mm-section">
-                    <div className="fritz-section-label">2. RATING RANGE</div>
-                    <h2 className="mm-section-heading">Expanding skill window</h2>
-                    <p className="mm-section-body">
-                      We start with players near your rating, then widen the search every 30 seconds.
-                    </p>
-                    <div className="mm-window-timeline">
-                      {SEARCH_STEPS.map((step) => (
-                        <div className="mm-window-step" key={step.when}>
-                          <div className="mm-window-step__range">{step.range}</div>
-                          <div className="mm-window-step__when">{step.when}</div>
-                        </div>
-                      ))}
-                    </div>
+                <div className="mm-section">
+                  <div className="fritz-section-label">2. RATING RANGE</div>
+                  <h2 className="mm-section-heading">Expanding skill window</h2>
+                  <p className="mm-section-body">
+                    We start with players near your rating, then widen the search every 30 seconds.
+                  </p>
+                  <div className="mm-rating-track" role="list" aria-label="Rating search window over time">
+                    {RATING_SEGMENTS.map((seg, i) => (
+                      <div
+                        key={seg.when}
+                        role="listitem"
+                        className={`mm-rating-seg${i === ratingSegActive ? ' is-active' : ''}`}
+                      >
+                        <span className="mm-rating-seg__range">{seg.range}</span>
+                        <span className="mm-rating-seg__when">{seg.when}</span>
+                      </div>
+                    ))}
                   </div>
+                </div>
 
-                  <div className="mm-section">
-                    <div className="fritz-section-label">3. MATCH SUMMARY</div>
-                    <div className="fritz-summary-strip">
-                      <div className="fritz-summary-item">
-                        <div className="fritz-summary-icon" style={{ color: 'var(--tier-elite)' }}>
-                          <IconCrown size={18} />
-                        </div>
-                        <div>
-                          <div className="fritz-summary-value">{myRating != null ? myRating.toLocaleString() : '—'}</div>
-                          <div className="fritz-summary-key">Your Rating</div>
-                        </div>
+                <div className="mm-section">
+                  <div className="fritz-section-label">3. MATCH SUMMARY</div>
+                  <div className="fritz-summary-strip">
+                    <div className="fritz-summary-item">
+                      <div className="fritz-summary-icon" style={{ color: 'var(--tier-elite)' }}>
+                        <IconCrown size={18} />
                       </div>
-                      <div className="fritz-summary-divider" aria-hidden />
-                      <div className="fritz-summary-item">
-                        <div className="fritz-summary-icon" style={{ color: 'var(--tier-elite)' }}>
-                          <IconUsers size={18} />
+                      <div>
+                        <div className="fritz-summary-value">
+                          {myRating != null ? myRating.toLocaleString() : '—'}
                         </div>
-                        <div>
-                          <div className="fritz-summary-value">{mm.queued.toLocaleString()}</div>
-                          <div className="fritz-summary-key">In Queue</div>
-                        </div>
-                      </div>
-                      <div className="fritz-summary-divider" aria-hidden />
-                      <div className="fritz-summary-item">
-                        <div className="fritz-summary-icon" style={{ color: 'var(--tier-elite)' }}>
-                          <IconBolt size={18} />
-                        </div>
-                        <div>
-                          <div className="fritz-summary-value">Ranked</div>
-                          <div className="fritz-summary-key">Match Type</div>
-                        </div>
+                        <div className="fritz-summary-key">Your Rating</div>
                       </div>
                     </div>
+                    <div className="fritz-summary-divider" aria-hidden />
+                    <div className="fritz-summary-item">
+                      <div className="fritz-summary-icon" style={{ color: 'var(--tier-elite)' }}>
+                        <IconUsers size={18} />
+                      </div>
+                      <div>
+                        <div className="fritz-summary-value">{mm.queued.toLocaleString()}</div>
+                        <div className="fritz-summary-key">In Queue</div>
+                      </div>
+                    </div>
+                    <div className="fritz-summary-divider" aria-hidden />
+                    <div className="fritz-summary-item">
+                      <div className="fritz-summary-icon" style={{ color: 'var(--tier-elite)' }}>
+                        <IconBolt size={18} />
+                      </div>
+                      <div>
+                        <div className="fritz-summary-value">Ranked</div>
+                        <div className="fritz-summary-key">Match Type</div>
+                      </div>
+                    </div>
                   </div>
-                </>
-              ) : null}
+                </div>
+              </>
+            ) : null}
 
-              {isSearching ? (
+            {isSearching ? (
+              <>
+                <div className="mm-section">
+                  <div className="fritz-section-label">1. MATCH FORMAT</div>
+                  <h2 className="mm-section-heading">Standard 1v1</h2>
+                  <p className="mm-section-body">First to 60 · 7-tile · Untimed · Ranked</p>
+                </div>
+
+                <div className="mm-section">
+                  <div className="fritz-section-label">2. RATING RANGE</div>
+                  <h2 className="mm-section-heading">Expanding skill window</h2>
+                  <p className="mm-section-body">Current search band updates as you wait.</p>
+                  <div className="mm-rating-track" role="list" aria-label="Rating search window over time">
+                    {RATING_SEGMENTS.map((seg, i) => (
+                      <div
+                        key={seg.when}
+                        role="listitem"
+                        className={`mm-rating-seg${i === ratingSegActive ? ' is-active' : ''}`}
+                      >
+                        <span className="mm-rating-seg__range">{seg.range}</span>
+                        <span className="mm-rating-seg__when">{seg.when}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="mm-section">
                   <div className="fritz-section-label">SEARCHING</div>
                   <div className="mm-searching">
@@ -364,102 +385,98 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                       {formatElapsed(mm.elapsedMs)}
                     </div>
                     <div className="mm-search-status">Looking for opponent…</div>
-                    <div className="mm-search-meta">
-                      <span className="mm-search-meta__pill">
-                        Range <strong>{currentWindow != null ? `±${currentWindow}` : 'Any'}</strong>
-                      </span>
-                      <span className="mm-search-meta__pill">
-                        Queue <strong>{mm.queued.toLocaleString()}</strong>
-                      </span>
-                    </div>
                   </div>
                 </div>
-              ) : null}
+              </>
+            ) : null}
 
-              {isTimeout ? (
-                <div className="mm-section">
-                  <div className="fritz-section-label">QUEUE TIMEOUT</div>
-                  <div className="mm-timeout">
-                    <div className="mm-timeout__icon" aria-hidden>
-                      <IconClock size={22} />
-                    </div>
-                    <h2 className="mm-timeout__title">No opponent found</h2>
-                    <p className="mm-timeout__sub">
-                      The queue is quiet right now. You can keep waiting or play a ranked match
-                      against Fritz instead.
-                    </p>
+            {isTimeout ? (
+              <div className="mm-section">
+                <div className="fritz-section-label">QUEUE TIMEOUT</div>
+                <div className="mm-timeout">
+                  <div className="mm-timeout__icon" aria-hidden>
+                    <IconClock size={22} />
                   </div>
+                  <h2 className="mm-timeout__title">No opponent found</h2>
+                  <p className="mm-timeout__sub">
+                    The queue is quiet right now. You can keep waiting or play a ranked match against Fritz
+                    instead.
+                  </p>
                 </div>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
+          </div>
 
-            <div className="mm-panel-footer">
-              {isIdle ? (
-                <>
-                  <button
-                    type="button"
-                    className="mm-cta"
-                    onClick={mm.findMatch}
-                    disabled={!props.isConnected || !props.identity}
-                  >
-                    Find Match
-                    <span className="mm-cta-chevron" aria-hidden>›</span>
-                  </button>
-                  {!props.identity ? (
-                    <p className="mm-help-text">Sign in to find a match.</p>
-                  ) : props.isConnected ? (
-                    <p className="mm-help-text">First to 60 · 7-Tile · Ranked</p>
-                  ) : isConnecting || !showDisconnectedHint ? (
-                    <p className="mm-help-text">Connecting to game server…</p>
-                  ) : (
-                    <div className="mm-connect-hint">
-                      <p className="mm-error">Multiplayer backend unreachable.</p>
-                      <p className="mm-help-text">
-                        {import.meta.env.PROD && isGameServerSameOriginAsPage(serverUrl)
-                          ? 'VITE_SERVER_URL is set to this same website, but the game server (Node + Socket.io from the server folder) must run on a separate host. Deploy that API (e.g. Render, Railway, Fly.io), set VITE_SERVER_URL in Vercel to that https origin, redeploy the client, then retry.'
-                          : 'Deploy the Node game server and set VITE_SERVER_URL in Vercel to its https origin (not this page). Redeploy the client after changing env vars.'}
-                      </p>
-                      {serverUrl ? (
-                        <p className="mm-help-text mm-help-text--mono" title="Socket.io base URL">
-                          Trying: {serverUrl}
-                        </p>
-                      ) : null}
-                      {props.onRetryConnect ? (
-                        <button type="button" className="mm-cta-secondary mm-connect-retry" onClick={props.onRetryConnect}>
-                          Retry connection
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-                  {mm.error ? <p className="mm-error">{mm.error}</p> : null}
-                </>
-              ) : null}
-
-              {isSearching ? (
-                <button type="button" className="mm-cta mm-cta--cancel" onClick={mm.cancel}>
-                  Cancel Search
+          <div className="mm-panel-footer">
+            {isIdle ? (
+              <>
+                <button
+                  type="button"
+                  className="mm-cta"
+                  onClick={mm.findMatch}
+                  disabled={!props.isConnected || !props.identity}
+                >
+                  Find Match
+                  <span className="mm-cta-chevron" aria-hidden>
+                    ›
+                  </span>
                 </button>
-              ) : null}
+                {!props.identity ? (
+                  <p className="mm-help-text">Sign in to find a match.</p>
+                ) : props.isConnected ? (
+                  <p className="mm-help-text">First to 60 · 7-Tile · Ranked</p>
+                ) : isConnecting || !showDisconnectedHint ? (
+                  <p className="mm-help-text">Connecting to game server…</p>
+                ) : (
+                  <div className="mm-connect-hint">
+                    <p className="mm-error">Multiplayer backend unreachable.</p>
+                    <p className="mm-help-text">
+                      {import.meta.env.PROD && isGameServerSameOriginAsPage(serverUrl)
+                        ? 'VITE_SERVER_URL is set to this same website, but the game server (Node + Socket.io from the server folder) must run on a separate host. Deploy that API (e.g. Render, Railway, Fly.io), set VITE_SERVER_URL in Vercel to that https origin, redeploy the client, then retry.'
+                        : 'Deploy the Node game server and set VITE_SERVER_URL in Vercel to its https origin (not this page). Redeploy the client after changing env vars.'}
+                    </p>
+                    {serverUrl ? (
+                      <p className="mm-help-text mm-help-text--mono" title="Socket.io base URL">
+                        Trying: {serverUrl}
+                      </p>
+                    ) : null}
+                    {props.onRetryConnect ? (
+                      <button type="button" className="mm-cta-secondary mm-connect-retry" onClick={props.onRetryConnect}>
+                        Retry connection
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+                {mm.error ? <p className="mm-error">{mm.error}</p> : null}
+              </>
+            ) : null}
 
-              {isTimeout ? (
-                <>
-                  <button
-                    type="button"
-                    className="mm-cta"
-                    onClick={() => {
-                      mm.acceptTimeoutBotFallback();
-                      props.onPlayBotFallback();
-                    }}
-                  >
-                    Play vs Fritz
-                    <span className="mm-cta-chevron" aria-hidden>›</span>
-                  </button>
-                  <button type="button" className="mm-cta-secondary" onClick={mm.findMatch}>
-                    Try Again →
-                  </button>
-                </>
-              ) : null}
-            </div>
+            {isSearching ? (
+              <button type="button" className="mm-cta mm-cta--cancel" onClick={mm.cancel}>
+                Cancel Search
+              </button>
+            ) : null}
+
+            {isTimeout ? (
+              <>
+                <button
+                  type="button"
+                  className="mm-cta"
+                  onClick={() => {
+                    mm.acceptTimeoutBotFallback();
+                    props.onPlayBotFallback();
+                  }}
+                >
+                  Play vs Fritz
+                  <span className="mm-cta-chevron" aria-hidden>
+                    ›
+                  </span>
+                </button>
+                <button type="button" className="mm-cta-secondary" onClick={mm.findMatch}>
+                  Try Again →
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </div>

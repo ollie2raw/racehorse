@@ -130,11 +130,24 @@ const configuredCorsOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+/** Public web app URL (e.g. Vercel). Set on Render so CORS matches your deployed client. */
+const CLIENT_DEPLOY_URL = process.env.CLIENT_URL?.trim() || undefined;
+
 const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) return true;
+  if (CLIENT_DEPLOY_URL && origin === CLIENT_DEPLOY_URL) return true;
   if (configuredCorsOrigins.includes(origin)) return true;
   return allowedOriginPatterns.some((pattern) => pattern.test(origin));
 };
+
+/** Exact origins always tried before pattern-based `isAllowedOrigin` (Socket.IO + docs clarity). */
+const socketIoExplicitOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  ...(CLIENT_DEPLOY_URL ? [CLIENT_DEPLOY_URL] : []),
+  ...configuredCorsOrigins,
+];
+const uniqueSocketIoExplicitOrigins = [...new Set(socketIoExplicitOrigins)];
 
 const corsOptions: CorsOptions = {
   origin(origin, callback) {
@@ -203,6 +216,10 @@ async function getAuthenticatedUserIdFromToken(token: string | null): Promise<st
 
 app.get('/health', (_, res) => {
   res.json({ ok: true });
+});
+
+app.get('/ping', (_, res) => {
+  res.json({ status: 'ok' });
 });
 
 app.get('/api/home/daily-summary', async (req, res) => {
@@ -1014,12 +1031,21 @@ server.headersTimeout = 125_000;
 const io = new Server(server, {
   cors: {
     origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (uniqueSocketIoExplicitOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
       if (isAllowedOrigin(origin)) {
         callback(null, true);
         return;
       }
       callback(new Error(`Socket.IO CORS blocked for origin: ${origin ?? 'unknown'}`));
     },
+    methods: ['GET', 'POST'],
     credentials: true,
   },
 });
@@ -5900,6 +5926,13 @@ const PORT = Number.parseInt(process.env.PORT ?? '3001', 10) || 3001;
 
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
+  const serverUrl = process.env.SERVER_URL?.trim();
+  if (serverUrl) {
+    const pingUrl = `${serverUrl.replace(/\/$/, '')}/ping`;
+    setInterval(() => {
+      void fetch(pingUrl).catch((err) => console.log('Ping failed:', err));
+    }, 10 * 60 * 1000);
+  }
   startRankingCron();
   // Run warmups only after the HTTP server is accepting connections so dev clients (Vite proxy)
   // never hit a live port while heavy startup work is still racing the accept queue.

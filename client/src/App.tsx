@@ -1392,7 +1392,7 @@ export default function App() {
     setRoomRecoveryMessage('');
   }, []);
 
-  /** Leave the current private room but stay connected and on the multiplayer create-lobby UI. */
+  /** Leave the current private room, stay connected, and return to Private Match create/join (not Quick Match). */
   const leavePrivateLobbyRoom = useCallback(() => {
     const code = normalizeRoomCode(joinedRoomRef.current);
     const s = socketRef.current;
@@ -1415,13 +1415,13 @@ export default function App() {
     setRoomRecoveryMessage('');
     setRoomReactions([]);
     resetMultiplayerRoomState({ clearRoomCode: true });
-    setMpSubView('quick');
-    setAppMode('multiplayer');
+    /* Stay on Private Match → create / join lobby; do not jump to Quick Match. */
+    setMpSubView('private');
   }, [
     normalizeRoomCode,
     clearReconnectAttemptTimer,
     resetMultiplayerRoomState,
-    setAppMode,
+    setMpSubView,
     setIsRecoveringConnection,
     setRoomRecoveryState,
     setRoomRecoveryMessage,
@@ -3805,6 +3805,7 @@ export default function App() {
             onRetryRoomRecovery={retryRoomRecovery}
             hostWinStreak={privateLobbyHostWinStreak}
             onOpenQuickMatch={() => setMpSubView('quick')}
+            socket={socket}
           />
         )
       ) : null}

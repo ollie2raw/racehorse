@@ -187,7 +187,10 @@
   transform: translateY(-1px);
 }
 
-/* ── master layout: 40/60 split ── */
+/* ── master layout: 40/60 split ──
+   Both columns use align-items: stretch so the bottom edges share one floor.
+   Left: .pvf-opponent-card { flex: 1 } grows inside the left column.
+   Right: .pvf-control-panel stretches with the row; primary action uses margin-top: auto. */
 .pvf-layout {
   display: flex !important;
   flex-direction: row !important;
@@ -394,7 +397,8 @@
    RIGHT — control panel
    ============================================= */
 .pvf-control-panel {
-  flex: 1 !important; /* Take remaining 60% */
+  flex: 1 1 0 !important; /* Remaining width + shared row height with left column */
+  min-height: 0 !important;
   display: flex; flex-direction: column;
   background: rgba(7,9,16,0.92);
   border: 1px solid rgba(255,255,255,0.09);
@@ -406,8 +410,8 @@
   gap: 16px !important;
   position: relative;
   width: 100%;
-  align-self: start; /* Wrap tightly around content, no excess bottom space */
-  justify-self: end; 
+  align-self: stretch !important;
+  justify-self: end;
 }
 
 .pvf-section-gap { margin-top: 0; }
@@ -606,7 +610,9 @@
   font-family:'Outfit',sans-serif; font-size:18px; font-weight:800;
   cursor:pointer;
   display:flex; align-items:center; justify-content:center; gap:10px;
-  transition:all 0.2s ease; margin: 0;
+  transition:all 0.2s ease;
+  margin: 0;
+  margin-top: auto;
   position: relative;
   letter-spacing:0.01em;
   box-shadow: 0 0 32px color-mix(in srgb, var(--pvf-dynamic-color) 16%, transparent), inset 0 1px 0 rgba(255,255,255,0.4);
