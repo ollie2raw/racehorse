@@ -186,12 +186,9 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
                   >
                     {tab.label}
                     {isActive && (
-                      <div 
-                        className="absolute -bottom-1 left-0 h-[3px] w-full rounded-full" 
-                        style={{ 
-                          backgroundColor: color, 
-                          boxShadow: compactChrome ? `0 0 6px ${color}40` : `0 0 10px ${color}66`,
-                        }}
+                      <div
+                        className={`rh-glow-underline rh-glow-underline--global-nav${compactChrome ? ' is-compact' : ''}`}
+                        style={{ ['--rh-glow-underline-color' as string]: color } as React.CSSProperties}
                       />
                     )}
                   </button>

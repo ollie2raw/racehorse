@@ -414,14 +414,9 @@ export default function RacehorseHomeScreen({
                   >
                     {tab.label}
                   </span>
-                  {/* glow bar — 4px, 50% width, centered, soft bloom */}
                   <div
-                    className="absolute bottom-0 left-1/2 h-[4px] w-[50%] -translate-x-1/2 rounded-full transition-all duration-200 group-hover:opacity-100"
-                    style={{
-                      backgroundColor: tab.color,
-                      opacity: 0.92,
-                      boxShadow: `0 0 10px ${tab.color}, 0 0 24px ${tab.color}66`,
-                    }}
+                    className="rh-glow-underline rh-glow-underline--home-tab transition-all duration-200 group-hover:opacity-100"
+                    style={{ ['--rh-glow-underline-color' as string]: tab.color } as CSSProperties}
                   />
                 </button>
               ))}

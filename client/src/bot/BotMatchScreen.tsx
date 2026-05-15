@@ -1,8 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay, RotateOverlay } from '../components';
+import {
+  AnimatedScore,
+  Board,
+  BoneyardStackIcon,
+  DominoTile,
+  ScoreTrackOverlay,
+  RotateOverlay,
+} from '../components';
 import { MatchNblBoardFrame } from '../components/MatchNblBoardFrame';
 import TileRack from '../components/TileRack';
+import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
 import type { BoardState, BranchArm, HubDouble, Move, PlacedTile, PlacementPosition, Tile } from '../types';
 import {
   fetchDailyPuzzleLeaderboard,
@@ -2704,6 +2712,26 @@ export default function BotMatchScreen({
     }
   }, [isDailyFritzMode, isGuidedV1OnlineMode, lessonStepIndex, match]);
   const userPlayMoves = useMemo(() => asPlayMoves(userLegalMoves), [userLegalMoves]);
+  const playableTileKeys = useMemo(() => buildPlayableTileKeys(userPlayMoves), [userPlayMoves]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+    console.log('[hand-legality]', {
+      userLegalMoves,
+      userPlayMoves,
+      playableTileKeys: [...playableTileKeys],
+      hand: match.players.you.hand.map((t) => `${t.low}-${t.high}`),
+    });
+  }, [
+    match.currentPlayer,
+    match.handOver,
+    match.gameOver,
+    match.players.you.hand,
+    userLegalMoves,
+    userPlayMoves,
+    playableTileKeys,
+  ]);
   const guidedRecordFritzPalette = useMemo(() => buildDoubleSixTiles(), []);
   const botLegalMoves = useMemo(() => {
     if (!wantsOriginalGuidedRecordMode) return [];
@@ -5507,6 +5535,10 @@ export default function BotMatchScreen({
 
   const handActive = !match.handOver && !match.gameOver;
   const botTurn = match.currentPlayer === 'bot' && handActive;
+  const showTurnStatusCluster =
+    handActive &&
+    !handReveal &&
+    !isTransitioningRef.current;
   const turnLabel = match.handOver
     ? match.gameOver
       ? match.winnerId === 'you'
@@ -5516,11 +5548,6 @@ export default function BotMatchScreen({
     : botTurn
       ? `${opponentLabel} thinking`
       : 'Your move';
-
-  const showTurnStatusCluster =
-    handActive &&
-    !handReveal &&
-    !isTransitioningRef.current;
 
   if (isGuidedMode && !isAuthoringMode) {
     console.log('[guided-move] rendered match player hand =', match.players.you.hand.map(toTileKey));
@@ -5774,7 +5801,13 @@ export default function BotMatchScreen({
                 <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
                   {row.map((tile, idx) => {
                     const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
-                    const playable = userPlayMoves.some((m) => m.tile && tileEquals(m.tile, tile));
+                    const showLegality = handActive && !botTurn && !drawSequenceActive;
+                    const { highlight: legalityHighlight, unplayable: isUnplayable } = getHandTileLegality(
+                      tile,
+                      showLegality,
+                      playableTileKeys,
+                    );
+                    const playable = legalityHighlight;
                     const absoluteIdx = match.players.you.hand.findIndex((handTile) => tileEquals(handTile, tile));
                     const tileKey = `${tile.low}-${tile.high}`;
                     const guidedPts = isGuidedMode ? (guidedScoringTiles.get(tileKey) ?? 0) : 0;
@@ -5801,7 +5834,8 @@ export default function BotMatchScreen({
                           rotation={0}
                           className={[baseClass, guidedClass].filter(Boolean).join(' ')}
                           selected={selected}
-                          highlight={playable}
+                          highlight={legalityHighlight}
+                          unplayable={isUnplayable}
                           disabled={!handActive || botTurn || drawSequenceActive}
                           onClick={() => {
                             if (isDailyFritzMode) {
@@ -6658,7 +6692,7 @@ export default function BotMatchScreen({
                   )}
                   <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
                 </div>
-                <span className="wl-player-score">{match.players.bot.score}</span>
+                <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
               </button>
               {wantsOriginalGuidedRecordMode ? (
                 <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'min(420px, 40vw)' }}>
@@ -6733,7 +6767,7 @@ export default function BotMatchScreen({
               style={{ width: 'auto', minWidth: 'min(130px, 30vw)' }}
             >
               <span className="wl-player-label">You</span>
-              <span className="wl-player-score">{match.players.you.score}</span>
+              <AnimatedScore value={match.players.you.score} className="wl-player-score" />
             </button>
           </div>
         </div>

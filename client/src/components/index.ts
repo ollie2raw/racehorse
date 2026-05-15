@@ -1,4 +1,6 @@
 // client/src/components/index.ts
+export { AnimatedScore } from './AnimatedScore';
+export type { AnimatedScoreProps } from './AnimatedScore';
 export { DominoTile } from './DominoTile';
 export type { DominoTileProps } from './DominoTile';
 

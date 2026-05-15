@@ -151,27 +151,18 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
     }
 
     if (zones.length > 0) {
-      // Fit strictly to the opening placement zone footprint with a small breathing margin.
-      let minX = Number.POSITIVE_INFINITY;
-      let maxX = Number.NEGATIVE_INFINITY;
-      let minY = Number.POSITIVE_INFINITY;
-      let maxY = Number.NEGATIVE_INFINITY;
-      for (const zone of zones) {
-        const halfW = zone.width / 2;
-        const halfH = zone.height / 2;
-        minX = Math.min(minX, zone.x - halfW);
-        maxX = Math.max(maxX, zone.x + halfW);
-        minY = Math.min(minY, zone.y - halfH);
-        maxY = Math.max(maxY, zone.y + halfH);
-      }
-      const margin = 0.5;
+      // Frame like a one-tile main line so auto-fit zoom matches end placement zones.
+      const virtualLineWidth = TILE_UNIT * 2;
+      const halfLine = virtualLineWidth / 2;
+      const layoutPadX = 3;
+      const layoutPadY = 2.5;
       return {
         tiles,
         zones,
-        minX: minX - margin,
-        maxX: maxX + margin,
-        minY: minY - margin,
-        maxY: maxY + margin,
+        minX: -halfLine - layoutPadX,
+        maxX: halfLine + layoutPadX,
+        minY: -TILE_UNIT - layoutPadY,
+        maxY: TILE_UNIT + layoutPadY,
       };
     }
 
@@ -571,10 +562,21 @@ function BoardComponent({
     }
     return positions;
   }, [board, isResettingBoard]);
-  const cameraFitPositions = useMemo(
-    () => (selectedTile != null || showOpenEndGlow ? openEndPositions : []),
-    [openEndPositions, selectedTile, showOpenEndGlow],
-  );
+
+  const validPositions = useMemo((): PlacementPosition[] => {
+    if (!selectedTile) return [];
+    return legalMoves
+      .filter((m) => m.type === 'play' && m.tile && tileEquals(m.tile, selectedTile))
+      .map((m) => m.position!)
+      .filter(Boolean);
+  }, [selectedTile, legalMoves]);
+
+  const cameraFitPositions = useMemo(() => {
+    if (isResettingBoard) {
+      return validPositions.length > 0 ? validPositions : (['left'] as PlacementPosition[]);
+    }
+    return selectedTile != null || showOpenEndGlow ? openEndPositions : [];
+  }, [isResettingBoard, validPositions, openEndPositions, selectedTile, showOpenEndGlow]);
 
   const logLayoutDebug = useCallback(
     (validPositionsCount: number, selectedTileKey: string | null, layout: BoardLayout) => {
@@ -614,15 +616,6 @@ function BoardComponent({
     [boardTileCount, camera.scale, gameOver, handNumber, handOver, openEndPositions],
   );
 
-  // Get valid positions for the selected tile
-  const validPositions = useMemo((): PlacementPosition[] => {
-    if (!selectedTile) return [];
-    return legalMoves
-      .filter((m) => m.type === 'play' && m.tile && tileEquals(m.tile, selectedTile))
-      .map((m) => m.position!)
-      .filter(Boolean);
-  }, [selectedTile, legalMoves]);
-
   // Keep the camera/layout stable when the player selects a tile.
   const layout = useMemo(() => {
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -649,7 +642,7 @@ function BoardComponent({
   }, [board, cameraFitPositions, profileDailyFritz, logLayoutDebug, selectedTile, validPositions.length, isResettingBoard]);
   const placementZones = useMemo(() => {
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const zones = computeLayout(board, validPositions).zones;
+    const zones = computeLayout(isResettingBoard ? null : board, validPositions).zones;
     if (profileDailyFritz) {
       const end = typeof performance !== 'undefined' ? performance.now() : Date.now();
       recordDailyFritzBoardMetric('computeLayout', end - start);
@@ -659,7 +652,7 @@ function BoardComponent({
       });
     }
     return zones;
-  }, [board, validPositions, profileDailyFritz, selectedTile]);
+  }, [board, validPositions, profileDailyFritz, selectedTile, isResettingBoard]);
 
   useEffect(() => {
     if (!profileDailyFritz) return;

@@ -7,6 +7,7 @@ import './index.css';
 import './premium-theme.css';
 import App from './App.tsx';
 import './styles/walnut-live.css';
+import './styles/rh-glow-underline.css';
 import './styles/game-interactions.css';
 
 {installGlobalErrorHandlers();}

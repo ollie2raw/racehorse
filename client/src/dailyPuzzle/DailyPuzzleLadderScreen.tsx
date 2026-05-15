@@ -922,6 +922,7 @@ export default function DailyPuzzleLadderScreen({
                   <div key={`ladder-hand-row-${rowIdx}`} className="hand-row">
                     {row.map((tile, idx) => {
                       const playable = legalMoves.some((candidate) => candidate.tile && tileEquals(candidate.tile, tile));
+                      const inProgress = status === 'IN_PROGRESS';
                       const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
                       return (
                         <DominoTile
@@ -930,10 +931,11 @@ export default function DailyPuzzleLadderScreen({
                           size={handTileSize}
                           rotation={0}
                           selected={isSelected}
-                          highlight={playable && status === 'IN_PROGRESS'}
-                          disabled={status !== 'IN_PROGRESS' || !playable}
+                          highlight={inProgress && playable}
+                          unplayable={inProgress && !playable}
+                          disabled={!inProgress}
                           onClick={() => {
-                            if (status !== 'IN_PROGRESS' || !playable) return;
+                            if (!inProgress || !playable) return;
                             setSelectedTile(tile);
                           }}
                         />

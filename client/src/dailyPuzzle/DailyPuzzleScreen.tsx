@@ -1588,6 +1588,7 @@ export default function DailyPuzzleScreen({
                     const playable = legalMoves.some(
                       (candidate) => candidate.tile && tileEquals(candidate.tile, tile),
                     );
+                    const inProgress = status === 'IN_PROGRESS';
                     const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
 
                     return (
@@ -1597,10 +1598,11 @@ export default function DailyPuzzleScreen({
                         size={handTileSize}
                         rotation={0}
                         selected={isSelected}
-                        highlight={playable && status === 'IN_PROGRESS'}
-                        disabled={status !== 'IN_PROGRESS' || !playable}
+                        highlight={inProgress && playable}
+                        unplayable={inProgress && !playable}
+                        disabled={!inProgress}
                         onClick={() => {
-                          if (status !== 'IN_PROGRESS' || !playable) return;
+                          if (!inProgress || !playable) return;
                           setSelectedTile(tile);
                         }}
                       />

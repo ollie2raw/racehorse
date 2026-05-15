@@ -99,6 +99,8 @@ export interface DominoTileProps {
   size?: number;
   selected?: boolean;
   highlight?: boolean;
+  /** Dimmed when the tile cannot be played on any open end (player's turn). */
+  unplayable?: boolean;
   onClick?: () => void;
   disabled?: boolean;
   className?: string;
@@ -130,6 +132,7 @@ function DominoTileComponent({
   size = 70,
   selected = false,
   highlight = false,
+  unplayable = false,
   onClick,
   disabled = false,
   className = '',
@@ -144,6 +147,7 @@ function DominoTileComponent({
     isDouble ? 'double' : '',
     selected ? 'selected' : '',
     highlight ? 'highlight' : '',
+    unplayable ? 'unplayable' : '',
     disabled ? 'disabled' : '',
     className,
   ]
@@ -194,6 +198,7 @@ function areDominoTilePropsEqual(prev: DominoTileProps, next: DominoTileProps): 
     prev.size === next.size &&
     prev.selected === next.selected &&
     prev.highlight === next.highlight &&
+    prev.unplayable === next.unplayable &&
     prev.onClick === next.onClick &&
     prev.disabled === next.disabled &&
     prev.className === next.className &&

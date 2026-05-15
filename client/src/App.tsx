@@ -5,6 +5,7 @@ import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './compon
 import type { Socket } from 'socket.io-client';
 import './App.css';
 import {
+  AnimatedScore,
   Board,
   BoneyardStackIcon,
   BrandLogo,
@@ -44,6 +45,7 @@ import { useRoomSocketSync } from './multiplayer/useRoomSocketSync';
 import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
 import { useRenderProfiler } from './debug/renderProfiler';
+import { buildPlayableTileKeys, getHandTileLegality } from './utils/handTileLegality';
 import {
   claudeRgb,
 } from './ui/claudeMode';
@@ -379,24 +381,19 @@ const HandView = React.memo(function HandView({
   drawPulseIndex,
 }: HandViewProps) {
   useRenderProfiler('HandView');
-  const playableTiles = useMemo(() => {
-    return legalMoves.filter((m) => m.type === 'play' && m.tile).map((m) => m.tile!);
-  }, [legalMoves]);
-
-  const canPlayTile = (tile: Tile) => {
-    return playableTiles.some((t) => tileEquals(t, tile));
-  };
+  const playableTileKeys = useMemo(() => buildPlayableTileKeys(legalMoves), [legalMoves]);
 
   const renderTile = (tile: Tile, idx: number) => {
     const isSel = selectedTile && tileEquals(tile, selectedTile);
-    const canPlay = isMyTurn && canPlayTile(tile);
+    const { highlight, unplayable } = getHandTileLegality(tile, isMyTurn, playableTileKeys);
     return (
       <DominoTile
         key={`${tile.low}-${tile.high}`}
         tile={tile}
         size={tileSize}
         selected={isSel ?? false}
-        highlight={canPlay}
+        highlight={highlight}
+        unplayable={unplayable}
         onClick={() => isMyTurn && onSelect(tile)}
         disabled={!isMyTurn}
         className={drawPulseIndex === idx ? 'new-draw' : ''}
@@ -4014,7 +4011,7 @@ export default function App() {
                 <div className="wl-pill-top">
                   <span className="wl-player-label">{opponentName}</span>
                 </div>
-                <span className="wl-player-score">{opponentScore}</span>
+                <AnimatedScore value={opponentScore} className="wl-player-score" />
               </button>
               <TileRack
                 count={opponentTileCount}
@@ -4079,7 +4076,7 @@ export default function App() {
                 style={{ width: 130, minWidth: 'unset' }}
               >
                 <span className="wl-player-label">{hudRightLabel}</span>
-                <span className="wl-player-score">{hudRightScore}</span>
+                <AnimatedScore value={hudRightScore} className="wl-player-score" />
               </button>
             </div>
           </div>
