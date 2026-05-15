@@ -28,12 +28,14 @@ export function getNoBrainerSolvedCount(userId: string | null | undefined): numb
   return readSolvedKeys(userId).size;
 }
 
-export function markNoBrainerHandSolved(userId: string | null | undefined, handKey: string): void {
-  if (!userId || !handKey.trim()) return;
+/** @returns true when this hand was newly added to the solved set */
+export function markNoBrainerHandSolved(userId: string | null | undefined, handKey: string): boolean {
+  if (!userId || !handKey.trim()) return false;
   const keys = readSolvedKeys(userId);
-  if (keys.has(handKey)) return;
+  if (keys.has(handKey)) return false;
   keys.add(handKey);
   writeSolvedKeys(userId, keys);
+  return true;
 }
 
 export function hasNoBrainerHandSolved(userId: string | null | undefined, handKey: string): boolean {

@@ -72,8 +72,12 @@ export default function NoBrainerLabScreen({
   const confettiFiredRef = useRef(false);
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const solvedCount = getNoBrainerSolvedCount(userId);
+  const [solvedCount, setSolvedCount] = useState<number | null>(() => getNoBrainerSolvedCount(userId));
   const comboTotalLabel = NO_BRAINER_COMBO_COUNT.toLocaleString();
+
+  useEffect(() => {
+    setSolvedCount(getNoBrainerSolvedCount(userId));
+  }, [userId]);
 
   function flashLastPlayed(tile: Tile | null) {
     if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
@@ -213,7 +217,9 @@ export default function NoBrainerLabScreen({
   useEffect(() => {
     if (!record || !practiceState || practiceState.status !== 'won') return;
     if (usedHint || usedShowSolution) return;
-    markNoBrainerHandSolved(userId, record.key);
+    if (markNoBrainerHandSolved(userId, record.key)) {
+      setSolvedCount(getNoBrainerSolvedCount(userId));
+    }
   }, [practiceState?.status, record?.key, usedHint, usedShowSolution, userId]);
 
   if (!dataset && !error) {
@@ -279,24 +285,30 @@ export default function NoBrainerLabScreen({
 
       <div className="nbl-shell">
         <header className="nbl-header">
-          <div className="nbl-header__back">
-            <Button variant="ghost" size="sm" className="rh-back-button" onClick={onBack} type="button">
-              ← Single Player
-            </Button>
-          </div>
+          <div className="nbl-header__rail">
+            <div className="nbl-header__back">
+              <Button variant="ghost" size="sm" className="rh-back-button" onClick={onBack} type="button">
+                ← Single Player
+              </Button>
+            </div>
 
-          <div className="nbl-header__mission">
-            <p className="nbl-mission-eyebrow">The Lab · No Brainer Drill</p>
-            <h1 className="nbl-mission-pill">Clear all 7 tiles in one turn</h1>
-          </div>
+            <div className="nbl-header__mission">
+              <h1 className="nbl-mission-pill">Clear all 7 tiles in one turn</h1>
+            </div>
 
-          <div className="nbl-header__meta">
-            <span className="nbl-meta-hand">
-              Hand {handSession.toLocaleString()} · {comboTotalLabel} combos
-            </span>
-            {solvedCount != null ? (
-              <span className="nbl-meta-solved">{solvedCount.toLocaleString()} solved</span>
-            ) : null}
+            <p className="nbl-header__meta">
+              {solvedCount != null ? (
+                <>
+                  <span className="nbl-meta-solved">{solvedCount.toLocaleString()} solved</span>
+                  <span className="nbl-meta-sep" aria-hidden="true">
+                    ·
+                  </span>
+                </>
+              ) : null}
+              <span className="nbl-meta-hand">
+                Hand {handSession.toLocaleString()} · {comboTotalLabel} combos
+              </span>
+            </p>
           </div>
         </header>
 
@@ -304,16 +316,7 @@ export default function NoBrainerLabScreen({
           <div className="nbl-board-frame">
             <div className="nbl-board-canvas">
               <div className="nbl-board-watermark" aria-hidden="true">
-                <svg viewBox="0 0 100 100" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M28 72 L28 32 L50 52 L72 32 L72 72"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                </svg>
+                <img src="/brand_logo.png" alt="" />
               </div>
               {practiceState.status === 'won' ? (
                 <div className="nbl-win-banner" role="status">
