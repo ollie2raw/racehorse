@@ -13,6 +13,8 @@ import {
 import {
   fetchFriendsWithPresence,
   fetchPublicProfile,
+  fetchUserActivity,
+  type FeedItem,
   type PresenceStatus,
   type PublicProfile,
 } from '../social/socialApi';
@@ -32,8 +34,8 @@ interface FriendsScreenProps {
 }
 
 function PresenceDot({ status }: { status: PresenceStatus }) {
-  const color = status === 'online' ? '#4ADE80' : status === 'in_game' ? '#E7B64A' : 'rgba(255,255,255,0.18)';
-  const glow = status === 'online' ? '0 0 8px #4ADE8088' : status === 'in_game' ? '0 0 8px #E7B64A66' : 'none';
+  const color = status === 'online' ? 'var(--tier-rookie)' : status === 'in_game' ? 'var(--tier-elite)' : 'var(--text-dim)';
+  const glow = status === 'online' ? '0 0 6px var(--tier-rookie)' : status === 'in_game' ? '0 0 6px var(--tier-elite)' : 'none';
   const label = status === 'online' ? 'Online' : status === 'in_game' ? 'In Game' : 'Offline';
   return (
     <span aria-hidden="true" className="friends-page-dot" title={label} style={{ background: color, boxShadow: glow }} />
@@ -41,7 +43,7 @@ function PresenceDot({ status }: { status: PresenceStatus }) {
 }
 
 function ratingTier(rating: number, provisional: boolean): { label: string; color: string } {
-  if (provisional) return { label: 'Provisional', color: 'rgba(255,255,255,0.35)' };
+  if (provisional) return { label: 'Provisional', color: 'var(--text-dim)' };
   if (rating >= 1600) return { label: 'Master', color: 'var(--tier-master)' };
   if (rating >= 1300) return { label: 'Elite', color: 'var(--tier-elite)' };
   if (rating >= 1000) return { label: 'Standard', color: 'var(--tier-standard)' };
@@ -79,6 +81,7 @@ export default function FriendsScreen({
   const [query, setQuery] = useState('');
   const [selectedFriend, setSelectedFriend] = useState<FriendRecord | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<PublicProfile | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<FeedItem[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [copiedFriendId, setCopiedFriendId] = useState<string | null>(null);
 
@@ -136,10 +139,15 @@ export default function FriendsScreen({
   const handleSelectFriend = useCallback(async (friend: FriendRecord) => {
     setSelectedFriend(friend);
     setSelectedProfile(null);
+    setSelectedActivity([]);
     setProfileLoading(true);
-    const result = await fetchPublicProfile(friend.username);
+    const [profileResult, activityResult] = await Promise.all([
+      fetchPublicProfile(friend.username),
+      fetchUserActivity(friend.userId),
+    ]);
     setProfileLoading(false);
-    if (!result.error && result.profile) setSelectedProfile(result.profile);
+    if (!profileResult.error && profileResult.profile) setSelectedProfile(profileResult.profile);
+    if (!activityResult.error) setSelectedActivity(activityResult.feed.slice(0, 5));
   }, []);
 
   const onlineCount = useMemo(
@@ -232,7 +240,7 @@ export default function FriendsScreen({
                   ))}
                   {outgoing.map((req) => (
                     <div key={req.id} className="friends-page-row">
-                      <span className="friends-page-row__name" style={{ color: 'rgba(255,255,255,0.42)' }}>Pending: @{req.username}</span>
+                      <span className="friends-page-row__name" style={{ color: 'var(--text-dim)' }}>Pending: @{req.username}</span>
                     </div>
                   ))}
                 </div>
@@ -327,6 +335,12 @@ export default function FriendsScreen({
             </div>
           )}
 
+          {selectedFriend && !profileLoading && !selectedProfile && (
+            <div className="friends-page-preview-empty">
+              <p>Unable to load profile. Try again.</p>
+            </div>
+          )}
+
           {selectedFriend && !profileLoading && selectedProfile && (
             <div className="friends-page-preview">
               {/* Avatar + name */}
@@ -338,7 +352,7 @@ export default function FriendsScreen({
                   <span className="friends-page-preview-username">{selectedProfile.username}</span>
                   {(() => {
                     const s = presenceMap.get(selectedFriend.userId) ?? 'offline';
-                    const color = s === 'online' ? '#4ADE80' : s === 'in_game' ? '#E7B64A' : 'rgba(255,255,255,0.25)';
+                    const color = s === 'online' ? 'var(--tier-rookie)' : s === 'in_game' ? 'var(--tier-elite)' : 'var(--text-dim)';
                     const label = s === 'online' ? 'Online' : s === 'in_game' ? 'In Game' : 'Offline';
                     return (
                       <span className="friends-page-preview-presence" style={{ color }}>
@@ -375,6 +389,46 @@ export default function FriendsScreen({
                   <span className="friends-page-preview-stat-label">PUZZLES</span>
                 </div>
               </div>
+
+              {/* H2H record */}
+              {selectedProfile.h2h && (
+                <div className="friends-page-h2h">
+                  <span className="friends-page-section-label" style={{ margin: 0 }}>Head-to-Head vs you</span>
+                  <span className="friends-page-h2h-record">
+                    <span style={{ color: 'var(--tier-rookie)' }}>{selectedProfile.h2h.wins}W</span>
+                    {' – '}
+                    <span style={{ color: 'var(--accent-red)' }}>{selectedProfile.h2h.losses}L</span>
+                  </span>
+                </div>
+              )}
+
+              {/* Recent activity */}
+              {selectedActivity.length > 0 && (
+                <div className="friends-page-preview-matches">
+                  <p className="friends-page-section-label" style={{ marginBottom: 8 }}>Recent Activity</p>
+                  {selectedActivity.map((item) => {
+                    const icon = item.type === 'win' ? '🏆' : item.type === 'loss' ? '—' : item.type === 'streak' ? '🔥' : item.type === 'tournament' ? '⚔️' : item.type === 'puzzle' ? '🧩' : '🤖';
+                    const desc = item.type === 'win'
+                      ? `won vs ${String(item.metadata.opponent_username ?? 'opponent')}`
+                      : item.type === 'loss'
+                      ? `lost vs ${String(item.metadata.opponent_username ?? 'opponent')}`
+                      : item.type === 'streak'
+                      ? `reached a ${String(item.metadata.streak ?? '?')}-day streak`
+                      : item.type === 'tournament'
+                      ? `finished ${String(item.metadata.placement ?? 'a tournament')}`
+                      : item.type === 'puzzle'
+                      ? `completed daily puzzle`
+                      : `played Daily Fritz`;
+                    return (
+                      <div key={item.id} className="friends-page-match">
+                        <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+                        <span className="friends-page-match-vs">{desc}</span>
+                        <span className="friends-page-match-time">{timeAgo(item.created_at)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Recent matches */}
               {selectedProfile.recent_matches.length > 0 && (

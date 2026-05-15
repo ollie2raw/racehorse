@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { AppMode } from '../types';
 import { isGameServerSameOriginAsPage } from '../lib/gameServerUrl';
@@ -7,6 +7,11 @@ import { MatchFoundOverlay } from './MatchFoundOverlay';
 import { useMatchmaking } from './useMatchmaking';
 import type { MatchFoundPayload } from './types';
 import { MultiplayerTopBar } from './MultiplayerTopBar';
+import { ArenaRings } from '../multiplayer/ArenaRings';
+import { IconFlame, IconPlus, IconUserBust } from '../multiplayer/MultiplayerDuelIcons';
+import { MultiplayerHubFeatureStrip } from '../multiplayer/MultiplayerHubFeatureStrip';
+import { MultiplayerTwoColumnPvLayout } from '../multiplayer/MultiplayerTwoColumnPvLayout';
+import '../multiplayer/privateMatchLobby.css';
 import './matchmakingScreen.css';
 
 type Identity = { userId: string; username: string } | null;
@@ -22,6 +27,8 @@ export interface MatchmakingScreenProps {
   /** Retry opening the socket (e.g. after fixing env / backend) */
   onRetryConnect?: () => void;
   myRating?: number | null;
+  /** Current ranked win streak for the signed-in user (same source as private lobby). */
+  myWinStreak?: number | null;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
   onBackHome: () => void;
@@ -41,13 +48,6 @@ function ratingSegmentIndex(state: 'idle' | 'searching' | 'timeout', elapsedMs: 
   if (state === 'idle') return 0;
   if (state === 'timeout') return 3;
   return Math.min(3, Math.floor(elapsedMs / 30_000));
-}
-
-function initialsFor(name: string | undefined): string {
-  if (!name) return '?';
-  const parts = name.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
-  const init = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
-  return init || name.slice(0, 2).toUpperCase();
 }
 
 function IconBolt({ size = 14 }: { size?: number }) {
@@ -156,14 +156,14 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const isTimeout = mm.state === 'timeout';
 
   const myRating = props.myRating ?? null;
+  const myWinStreak = props.myWinStreak ?? null;
   const myUsername = props.identity?.username ?? null;
-  const myInitials = useMemo(() => initialsFor(myUsername ?? undefined), [myUsername]);
 
   const queueUiState = isSearching ? 'searching' : isTimeout ? 'timeout' : 'idle';
   const ratingSegActive = ratingSegmentIndex(queueUiState, mm.elapsedMs);
 
   return (
-    <div className="mm-page mm-mp-bridge">
+    <div className="mm-page mm-mp-bridge multiplayer-hub">
       <GlobalNav
         currentMode={'multiplayer' as AppMode}
         onNavigate={props.onNavigate}
@@ -171,84 +171,108 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
         activeColor="var(--tier-standard)"
       />
 
-      <MultiplayerTopBar
-        activeTab="quick"
-        onSelectQuick={() => {}}
-        onSelectPrivate={props.onOpenPrivateMatch}
-        onBackMultiplayer={props.onBackHome}
-        online={mm.online}
-        queued={mm.queued}
-      />
+      <div className="mp-hub-shell mp-hub-shell--pvf">
+        <MultiplayerTopBar
+          activeTab="quick"
+          onSelectQuick={() => {}}
+          onSelectPrivate={props.onOpenPrivateMatch}
+          onBackMultiplayer={props.onBackHome}
+          online={mm.online}
+          queued={mm.queued}
+        />
 
-      <div className="pvf-layout mm-pvf-layout">
-        <div className="pvf-left-col">
-          <div className="pvf-header">
-            <div className="pvf-label">MULTIPLAYER</div>
-            <h1 className="pvf-title">Quick Match</h1>
-            <p className="pvf-subtitle">
-              Skill-based 1v1 dominos. We pair you with a player near your rating and expand the search
-              every 30 seconds.
-            </p>
-          </div>
+        <MultiplayerTwoColumnPvLayout
+          leftColClassName="pml-left--stack"
+          left={
+            <>
+              <div className="pvf-header">
+                <div className="pvf-label">MULTIPLAYER</div>
+                <h1 className="pvf-title">Quick Match</h1>
+                <p className="pvf-subtitle mp-hub-subtitle">
+                  <span className="mp-hub-subtitle-line">
+                    Skill-based 1v1 dominos. We pair you with a player near your rating and expand the
+                  </span>
+                  <span className="mp-hub-subtitle-line">search every 30 seconds.</span>
+                </p>
+              </div>
 
-          <div className="mm-atmo-card">
-            <svg className="mm-atmo-card__rings" viewBox="0 0 100 100" aria-hidden>
-              <circle className="mm-atmo-card__ring" cx="50" cy="50" r="22" />
-              <circle className="mm-atmo-card__ring" cx="50" cy="50" r="34" />
-              <circle className="mm-atmo-card__ring" cx="50" cy="50" r="46" />
-            </svg>
-            <div className="mm-atmo-card__matchup">
-              <div className="mm-player-card mm-player-card--you">
-                <div className="mm-player-avatar" aria-hidden>
-                  {myInitials}
+              <div className="pml-room-stage">
+                <div className="pml-room-stage__scroll">
+                  <div className="pml-matchup">
+                  <ArenaRings />
+                  <div className="pml-duel-card pml-duel-card--host">
+                    <div className="pml-duel-avatar-frame">
+                      <div className="pml-duel-avatar" aria-hidden>
+                        <IconUserBust gradientId="mm-bust-you" />
+                      </div>
+                    </div>
+                    <div className="pml-duel-name">
+                      <span className="pml-duel-name-text">{myUsername ?? 'You'}</span>
+                    </div>
+                    <div
+                      className="pml-duel-rating"
+                      aria-label={myRating != null ? `Rating ${myRating.toLocaleString()}` : undefined}
+                    >
+                      {myRating != null ? (
+                        <>
+                          <span className="pml-duel-star" aria-hidden>
+                            ★
+                          </span>
+                          <span className="pml-duel-rating-num">{myRating.toLocaleString()}</span>
+                        </>
+                      ) : (
+                        <span className="pml-duel-rating-num">—</span>
+                      )}
+                    </div>
+                    <div
+                      className={`pml-duel-streak-wrap${
+                        props.identity && myWinStreak != null && myWinStreak > 0 ? '' : ' pml-duel-spacer'
+                      }`}
+                      aria-hidden={!(props.identity && myWinStreak != null && myWinStreak > 0)}
+                    >
+                      {props.identity && myWinStreak != null && myWinStreak > 0 ? (
+                        <div className="pml-duel-streak">
+                          <span className="pml-duel-streak-flame" aria-hidden>
+                            <IconFlame />
+                          </span>
+                          <span>Win Streak: {myWinStreak}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="pml-vs-column">
+                    <span className="pml-vs-text">VS</span>
+                  </div>
+
+                  <div className="pml-duel-card pml-duel-card--guest pml-duel-card--awaiting">
+                    <div className="pml-duel-avatar-frame">
+                      <div className="pml-duel-avatar pml-duel-avatar--invite" aria-hidden>
+                        <IconUserBust gradientId="mm-bust-opp" />
+                        <span className="pml-duel-avatar-plus" aria-hidden>
+                          <IconPlus />
+                        </span>
+                      </div>
+                    </div>
+                    <div className="pml-duel-name pml-duel-name--awaiting">
+                      <span className="pml-duel-name-text">Find Opponent</span>
+                      <span className="pml-duel-awaiting-hint">
+                        {isSearching ? 'Searching the rated queue…' : 'Waiting to start matchmaking…'}
+                      </span>
+                    </div>
+                    <div className="pml-duel-rating pml-duel-spacer" aria-hidden />
+                    <div className="pml-duel-streak-wrap pml-duel-spacer" aria-hidden />
+                  </div>
+                  </div>
                 </div>
-                <span className="mm-player-status">
-                  <span className="mm-player-status__dot" aria-hidden /> Ready
-                </span>
-                <span className="mm-player-name">{myUsername ?? 'You'}</span>
               </div>
 
-              <div className="mm-versus">
-                <span className="mm-versus__pill">VS</span>
-              </div>
-
-              <div className="mm-player-card mm-player-card--opp">
-                <div className="mm-player-avatar mm-player-avatar--placeholder" aria-hidden>
-                  ?
-                </div>
-                <span className="mm-player-status mm-player-status--searching">
-                  <span className="mm-player-status__dot" aria-hidden />
-                  {isSearching ? 'Searching' : 'Awaiting'}
-                </span>
-                <span className="mm-player-name">Opponent</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mm-features">
-            <div className="mm-feature">
-              <div className="mm-feature__header">
-                <IconCrown /> Ranked
-              </div>
-              <div className="mm-feature__desc">Affects your Glicko rating.</div>
-            </div>
-            <div className="mm-feature">
-              <div className="mm-feature__header">
-                <IconBolt /> Instant Match
-              </div>
-              <div className="mm-feature__desc">No setup. We find the opponent.</div>
-            </div>
-            <div className="mm-feature">
-              <div className="mm-feature__header">
-                <IconUsers /> Real Opponents
-              </div>
-              <div className="mm-feature__desc">Pulled from the global queue.</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="pvf-control-panel mm-mp-panel">
-          <div className="mm-panel-body">
+              <MultiplayerHubFeatureStrip variant="quick" />
+            </>
+          }
+          right={
+            <div className="pvf-control-panel mm-mp-panel">
+              <div className="pml-panel-body mm-panel-body">
             {isIdle ? (
               <>
                 <div className="mm-section">
@@ -405,9 +429,9 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                 </div>
               </div>
             ) : null}
-          </div>
+              </div>
 
-          <div className="mm-panel-footer">
+              <div className="pml-panel-footer mm-panel-footer">
             {isIdle ? (
               <>
                 <button
@@ -477,13 +501,17 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                 </button>
               </>
             ) : null}
-          </div>
-        </div>
+              </div>
+            </div>
+          }
+        />
       </div>
 
       {overlayPayload ? (
         <MatchFoundOverlay
           payload={overlayPayload}
+          yourUsername={myUsername}
+          queueElapsedMs={mm.elapsedMs}
           onComplete={() => {
             const captured = overlayPayload;
             setOverlayPayload(null);

@@ -1,4 +1,8 @@
 import { useEffect, type ReactNode } from 'react';
+import { Button } from './primitives';
+import './GameOverModal.css';
+
+export type GameOverMatchKind = 'single-player' | 'multiplayer';
 
 interface ScoreRow {
   label: ReactNode;
@@ -21,6 +25,8 @@ interface GameOverModalProps {
   onExtraAction?: () => void;
   onClose?: () => void;
   children?: ReactNode;
+  /** Single-player / Fritz flows use brass; multiplayer uses electric blue. */
+  matchKind?: GameOverMatchKind;
 }
 
 export default function GameOverModal({
@@ -37,8 +43,14 @@ export default function GameOverModal({
   onExtraAction,
   onClose,
   children,
+  matchKind = 'single-player',
 }: GameOverModalProps) {
   const actionCount = Number(Boolean(extraActionLabel && onExtraAction)) + 1 + Number(Boolean(secondaryLabel && onSecondary));
+  const themeClass = matchKind === 'multiplayer' ? 'rh-go--mp' : 'rh-go--sp';
+  const primaryVariant = matchKind === 'multiplayer' ? 'primary' : 'tier-elite';
+  const primaryMainClass =
+    matchKind === 'multiplayer' ? 'rh-go-btn-full rh-go-btn-main rh-go-btn-main--mp' : 'rh-go-btn-full rh-go-btn-main rh-go-btn-main--sp';
+
   useEffect(() => {
     if (!open || !onClose) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -52,21 +64,28 @@ export default function GameOverModal({
 
   return (
     <div
-      className="game-over-overlay"
+      className={`game-over-overlay rh-go ${themeClass}`}
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
     >
-      <div className="game-over-card" onClick={(e) => e.stopPropagation()}>
+      <div className="game-over-card rh-go-card" onClick={(e) => e.stopPropagation()}>
         <div className="game-over-header">
           <div className="game-over-title-block">
             <span className="game-over-kicker">Match Complete</span>
             <h2 className="victory-title">{title}</h2>
           </div>
           {onClose && (
-            <button className="mode-inline-btn game-over-close" onClick={onClose} aria-label="Close game over dialog">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              aria-label="Close game over dialog"
+              className="rh-go-close"
+            >
               Close
-            </button>
+            </Button>
           )}
         </div>
 
@@ -82,28 +101,28 @@ export default function GameOverModal({
             >
               <span className="player-name-group">
                 <span className="player-name">{row.label}</span>
-                {row.showCrown && <span className="crown">👑</span>}
+                {row.showCrown && <span className="crown rh-go-crown" aria-hidden>👑</span>}
               </span>
               <span className="score">{row.value}</span>
             </div>
           ))}
         </div>
 
-        {children}
+        {children ? <div className="rh-go-addon">{children}</div> : null}
 
-        <div className={`game-over-actions game-over-actions-${actionCount}`}>
+        <div className={`rh-go-actions rh-go-actions--${actionCount}`}>
           {extraActionLabel && onExtraAction && (
-            <button className="mode-option game-over-action-card game-over-action-card-secondary" onClick={onExtraAction}>
-              <span className="mode-option-title">{extraActionLabel}</span>
-            </button>
+            <Button type="button" variant="outline" size="lg" className="rh-go-btn-full" onClick={onExtraAction}>
+              {extraActionLabel}
+            </Button>
           )}
-          <button className="mode-option mode-option-primary game-over-action-card game-over-action-card-primary" onClick={onPrimary}>
-            <span className="mode-option-title">{primaryLabel}</span>
-          </button>
+          <Button type="button" variant={primaryVariant} size="lg" className={primaryMainClass} onClick={onPrimary}>
+            {primaryLabel}
+          </Button>
           {secondaryLabel && onSecondary && (
-            <button className="mode-option game-over-action-card game-over-action-card-muted" onClick={onSecondary}>
-              <span className="mode-option-title">{secondaryLabel}</span>
-            </button>
+            <Button type="button" variant="secondary" size="lg" className="rh-go-btn-full" onClick={onSecondary}>
+              {secondaryLabel}
+            </Button>
           )}
         </div>
       </div>

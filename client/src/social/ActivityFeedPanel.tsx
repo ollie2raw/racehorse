@@ -6,6 +6,12 @@ import './activityFeed.css';
 
 type FilterTab = 'all' | 'wins' | 'streaks' | 'tournaments';
 
+function initials(username: string): string {
+  const parts = username.replace(/[^a-zA-Z0-9]/g, ' ').split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return username.slice(0, 2).toUpperCase();
+}
+
 interface ActivityFeedPanelProps {
   user: User | null;
   onViewProfile: (username: string) => void;
@@ -84,7 +90,7 @@ function filterItems(items: FeedItem[], filter: FilterTab): FeedItem[] {
   return items;
 }
 
-export default function ActivityFeedPanel({ user, onViewProfile, emptyAction }: ActivityFeedPanelProps) {
+export default function ActivityFeedPanel({ user, onViewProfile }: ActivityFeedPanelProps) {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,13 +132,18 @@ export default function ActivityFeedPanel({ user, onViewProfile, emptyAction }: 
         )}
         {!loading && !error && visible.length === 0 && (
           <div className="rh-af-state">
-            <span>{feed.length === 0 ? 'Add friends to see their activity here.' : 'No activity matching this filter.'}</span>
-            {feed.length === 0 && emptyAction}
+            <span>No recent activity to show.</span>
           </div>
         )}
         {!loading && !error && visible.map((item) => (
           <div key={item.id} className="rh-af-item">
-            <span className="rh-af-icon" aria-hidden>{itemIcon(item.type)}</span>
+            <button
+              className="rh-af-avatar"
+              onClick={() => onViewProfile(item.username)}
+              aria-label={`View ${item.username}'s profile`}
+            >
+              {initials(item.username)}
+            </button>
             <div className="rh-af-body">
               <button
                 className="rh-af-username"
@@ -141,6 +152,7 @@ export default function ActivityFeedPanel({ user, onViewProfile, emptyAction }: 
                 {item.username}
               </button>
               <span className="rh-af-desc"> {itemDescription(item)}</span>
+              <span className="rh-af-type-icon" aria-hidden>{itemIcon(item.type)}</span>
             </div>
             <span className="rh-af-time">{timeAgo(item.created_at)}</span>
           </div>

@@ -4,7 +4,15 @@ import type { User } from '@supabase/supabase-js';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import type { Socket } from 'socket.io-client';
 import './App.css';
-import { Board, BoneyardStackIcon, DominoTile, ScoreBoard, ScoreTrackOverlay, RotateOverlay } from './components';
+import {
+  Board,
+  BoneyardStackIcon,
+  BrandLogo,
+  DominoTile,
+  RotateOverlay,
+  ScoreBoard,
+  ScoreTrackOverlay,
+} from './components';
 import LeaveGameModal from './components/LeaveGameModal';
 import TileRack from './components/TileRack';
 import {
@@ -250,28 +258,16 @@ function getBoardTiles(board: GameState['board']): Tile[] {
 
 function ScreenLoader({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        background: 'linear-gradient(180deg, #11231b 0%, #0c1511 100%)',
-        color: 'rgba(232,245,240,0.92)',
-        padding: 24,
-      }}
-    >
-      <div
-        style={{
-          padding: '14px 18px',
-          borderRadius: 18,
-          border: '1px solid rgba(236,252,245,0.16)',
-          background: 'rgba(15,25,20,0.72)',
-          fontSize: '0.95rem',
-          fontWeight: 700,
-          letterSpacing: '0.02em',
-        }}
-      >
-        {label}
+    <div className="rh-screen-loader" role="status" aria-live="polite" aria-busy="true">
+      <div className="rh-screen-loader__bg" aria-hidden />
+      <div className="rh-screen-loader__panel">
+        <div className="rh-screen-loader__brand">
+          <BrandLogo iconSize={30} showWordmark />
+        </div>
+        <p className="rh-screen-loader__label">{label}</p>
+        <div className="rh-screen-loader__rail" aria-hidden>
+          <div className="rh-screen-loader__rail-fill" />
+        </div>
       </div>
     </div>
   );
@@ -496,6 +492,7 @@ function GameOverOverlay({
     <GameOverModal
       open
       ariaLabel="Game over"
+      matchKind="multiplayer"
       title={victoryTitle}
       subtitle="Final score"
       scores={state.playerIds.map((pid, idx) => ({
@@ -513,7 +510,7 @@ function GameOverOverlay({
       onClose={onExit}
     >
       {ratingSummary && (
-        <div className="game-over-result-stat">
+        <div className="rh-go-rating">
           <span>Rating</span>
           <strong>
             {ratingSummary.pending
@@ -524,9 +521,7 @@ function GameOverOverlay({
           </strong>
         </div>
       )}
-      {waitingText && (
-        <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', fontSize: '0.92rem' }}>{waitingText}</p>
-      )}
+      {waitingText && <p className="rh-go-waiting">{waitingText}</p>}
     </GameOverModal>
   );
 }
@@ -3009,7 +3004,8 @@ export default function App() {
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading No Brainer Lab…" />}>
           <NoBrainerLabScreen
-            onBack={() => setAppMode('home')}
+            userId={authUser?.id ?? null}
+            onBack={() => setAppMode('singlePlayerHub')}
           />
         </Suspense>
       </div>
@@ -3133,6 +3129,9 @@ export default function App() {
             userId={authUser?.id ?? null}
             fritzGamesPlayed={authProfile?.ranked_games_played ?? 0}
             onBack={() => setAppMode('home')}
+            onNavigate={setAppMode}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAccount={() => setUsernameModalOpen(true)}
             onStart={(summary, opponentName, opponentUserId) => {
               setGhostProfile(summary);
               setGhostOpponentName(opponentName);
@@ -3295,6 +3294,7 @@ export default function App() {
             user={authUser}
             showToast={showToast}
             onClose={() => setAppMode('home')}
+            onChallenge={() => setAppMode('multiplayer')}
           />
         </Suspense>
       </div>
@@ -3305,6 +3305,7 @@ export default function App() {
     return (
       <div className={appRootClassName}>
         <SinglePlayerHubScreen
+          userId={authUser?.id ?? null}
           onBack={() => setAppMode('home')}
           onNavigate={(mode) => setAppMode(mode as any)}
         />
@@ -3750,6 +3751,7 @@ export default function App() {
                 ? Math.round(Number(authProfile.glicko_rating))
                 : null
             }
+            myWinStreak={privateLobbyHostWinStreak}
             onNavigate={setAppMode}
             onOpenAuth={() => setAuthModalOpen(true)}
             onBackHome={() => setAppMode('home')}
@@ -3910,7 +3912,7 @@ export default function App() {
           )}
           {handReveal && !state.gameOver && (
             <div className="game-over-overlay hand-over-upgraded-overlay">
-              <div className="game-over-card hand-over-upgraded-card">
+              <div className="game-over-card hand-over-upgraded-card hand-over--mp">
                 {(() => {
                   const youPoints = handReveal.pointsAwarded.you;
                   const opponentPoints = handReveal.pointsAwarded.opponent;
@@ -3977,7 +3979,7 @@ export default function App() {
                                 <DominoTile key={idx} tile={tile} size={40} />
                               ))}
                               {scoredTiles.length > 2 && (
-                                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', alignSelf: 'center', marginLeft: 4 }}>+{scoredTiles.length - 2}</div>
+                                <div className="hand-over-tile-more">+{scoredTiles.length - 2}</div>
                               )}
                             </div>
                           </div>

@@ -3,12 +3,17 @@ import type { User } from '@supabase/supabase-js';
 import {
   fetchFriendsLeaderboard,
   fetchGlobalLeaderboard,
+  fetchWeeklyLeaderboard,
+  fetchModeLeaderboard,
   type LeaderboardEntry,
   type GlobalLeaderboardEntry,
+  type WeeklyLeaderboardEntry,
+  type ModeLeaderboardEntry,
 } from './socialApi';
 import './leaderboard.css';
 
-type Tab = 'global' | 'friends';
+type Tab = 'global' | 'friends' | 'weekly' | 'mode';
+type GameMode = 'online' | 'bot' | 'ghost';
 
 interface LeaderboardScreenProps {
   user: User | null;
@@ -17,99 +22,180 @@ interface LeaderboardScreenProps {
 }
 
 const MEDAL_COLORS = ['#E7B64A', '#94A3B8', '#C97B3F'] as const;
+const GAME_MODES: { id: GameMode; label: string }[] = [
+  { id: 'online', label: 'Ranked' },
+  { id: 'bot', label: 'vs Bot' },
+  { id: 'ghost', label: 'Ghost' },
+];
 
 function ratingTier(rating: number, provisional: boolean): { label: string; color: string } {
-  if (provisional) return { label: 'Provisional', color: 'var(--text-dim)' };
+  if (provisional) return { label: 'Prov', color: 'var(--text-dim)' };
   if (rating >= 1600) return { label: 'Master', color: 'var(--tier-master)' };
   if (rating >= 1300) return { label: 'Elite', color: 'var(--tier-elite)' };
   if (rating >= 1000) return { label: 'Standard', color: 'var(--tier-standard)' };
   return { label: 'Rookie', color: 'var(--tier-rookie)' };
 }
 
-type AnyEntry = (LeaderboardEntry | GlobalLeaderboardEntry) & { rank: number };
-
-function normalizeEntry(entry: LeaderboardEntry | GlobalLeaderboardEntry, tab: Tab): AnyEntry {
-  if (tab === 'friends') {
-    const e = entry as LeaderboardEntry;
-    return { ...e, rank: e.rank_in_friends };
-  }
-  const e = entry as GlobalLeaderboardEntry;
-  return { ...e, rank: e.global_rank };
+function initials(username: string): string {
+  const parts = username.replace(/[^a-zA-Z0-9]/g, ' ').split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return username.slice(0, 2).toUpperCase();
 }
 
-function LeaderboardRow({
-  entry,
-  rank,
+function TrendArrow({ winsThisWeek }: { winsThisWeek: number }) {
+  if (winsThisWeek >= 5) return <span className="rh-lb-trend rh-lb-trend--up" title={`${winsThisWeek} wins this week`}>↑</span>;
+  if (winsThisWeek > 0) return <span className="rh-lb-trend rh-lb-trend--mid" title={`${winsThisWeek} wins this week`}>→</span>;
+  return <span className="rh-lb-trend rh-lb-trend--down" title="No wins this week">↓</span>;
+}
+
+interface GenericRow {
+  rank: number;
+  username: string;
+  is_self: boolean;
+  glicko_rating: number;
+  provisional: boolean;
+  secondary: string;
+  win_rate?: number;
+  wins_this_week?: number;
+}
+
+function RankedRow({
+  row,
+  showWinRate,
+  showTrend,
   onViewProfile,
 }: {
-  entry: LeaderboardEntry | GlobalLeaderboardEntry;
-  rank: number;
-  onViewProfile: (username: string) => void;
+  row: GenericRow;
+  showWinRate: boolean;
+  showTrend: boolean;
+  onViewProfile: (u: string) => void;
 }) {
-  const tier = ratingTier(entry.glicko_rating, entry.provisional);
-  const medalColor = rank <= 3 ? MEDAL_COLORS[rank - 1] : null;
+  const tier = ratingTier(row.glicko_rating, row.provisional);
+  const medalColor = row.rank <= 3 ? MEDAL_COLORS[row.rank - 1] : null;
   return (
     <button
-      className={`rh-lb-row${entry.is_self ? ' rh-lb-row--self' : ''}`}
+      className={`rh-lb-row${row.is_self ? ' rh-lb-row--self' : ''}`}
       style={medalColor ? { borderLeftColor: medalColor } : undefined}
-      onClick={() => onViewProfile(entry.username)}
+      onClick={() => onViewProfile(row.username)}
     >
       <span className="rh-lb-rank" style={medalColor ? { color: medalColor } : undefined}>
-        #{rank}
+        #{row.rank}
+      </span>
+      <span className="rh-lb-avatar" aria-hidden>
+        {initials(row.username)}
       </span>
       <span className="rh-lb-username">
-        {entry.username}
-        {entry.is_self && <span className="rh-lb-you"> YOU</span>}
+        {row.username}
+        {row.is_self && <span className="rh-lb-you"> YOU</span>}
       </span>
       <span className="rh-lb-tier" style={{ color: tier.color }}>{tier.label}</span>
-      <span className="rh-lb-rating">{Math.round(entry.glicko_rating).toLocaleString()}</span>
-      <span className="rh-lb-games">{entry.ranked_games_played} games</span>
+      <span className="rh-lb-rating">{Math.round(row.glicko_rating).toLocaleString()}</span>
+      {showWinRate && (
+        <span className="rh-lb-winrate">
+          {row.win_rate !== undefined ? `${row.win_rate.toFixed(1)}%` : '—'}
+        </span>
+      )}
+      {showTrend && row.wins_this_week !== undefined && (
+        <TrendArrow winsThisWeek={row.wins_this_week} />
+      )}
+      {!showWinRate && !showTrend && (
+        <span className="rh-lb-games">{row.secondary}</span>
+      )}
     </button>
   );
 }
 
 export default function LeaderboardScreen({ user, onViewProfile, onClose }: LeaderboardScreenProps) {
   const [tab, setTab] = useState<Tab>('global');
+  const [gameMode, setGameMode] = useState<GameMode>('online');
+
   const [globalData, setGlobalData] = useState<{ leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null } | null>(null);
   const [friendsData, setFriendsData] = useState<LeaderboardEntry[] | null>(null);
+  const [weeklyData, setWeeklyData] = useState<{ leaderboard: WeeklyLeaderboardEntry[]; self: WeeklyLeaderboardEntry | null } | null>(null);
+  const [modeData, setModeData] = useState<Partial<Record<GameMode, { leaderboard: ModeLeaderboardEntry[]; self: ModeLeaderboardEntry | null }>>>({});
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadGlobal = useCallback(async () => {
-    if (!user || globalData) return;
+  const load = useCallback(async () => {
+    if (!user) return;
+    if (tab === 'global' && globalData) return;
+    if (tab === 'friends' && friendsData) return;
+    if (tab === 'weekly' && weeklyData) return;
+    if (tab === 'mode' && modeData[gameMode]) return;
+
     setLoading(true);
     setError(null);
-    const result = await fetchGlobalLeaderboard();
-    setLoading(false);
-    if (result.error) { setError(result.error); return; }
-    setGlobalData({ leaderboard: result.leaderboard, self: result.self });
-  }, [user, globalData]);
 
-  const loadFriends = useCallback(async () => {
-    if (!user || friendsData) return;
-    setLoading(true);
-    setError(null);
-    const result = await fetchFriendsLeaderboard();
-    setLoading(false);
-    if (result.error) { setError(result.error); return; }
-    setFriendsData(result.leaderboard);
-  }, [user, friendsData]);
+    if (tab === 'global') {
+      const r = await fetchGlobalLeaderboard();
+      setLoading(false);
+      if (r.error) { setError(r.error); return; }
+      setGlobalData({ leaderboard: r.leaderboard, self: r.self });
+    } else if (tab === 'friends') {
+      const r = await fetchFriendsLeaderboard();
+      setLoading(false);
+      if (r.error) { setError(r.error); return; }
+      setFriendsData(r.leaderboard);
+    } else if (tab === 'weekly') {
+      const r = await fetchWeeklyLeaderboard();
+      setLoading(false);
+      if (r.error) { setError(r.error); return; }
+      setWeeklyData({ leaderboard: r.leaderboard, self: r.self });
+    } else {
+      const r = await fetchModeLeaderboard(gameMode);
+      setLoading(false);
+      if (r.error) { setError(r.error); return; }
+      setModeData((prev) => ({ ...prev, [gameMode]: { leaderboard: r.leaderboard, self: r.self } }));
+    }
+  }, [user, tab, gameMode, globalData, friendsData, weeklyData, modeData]);
 
-  useEffect(() => {
-    if (tab === 'global') void loadGlobal();
-    else void loadFriends();
-  }, [tab, loadGlobal, loadFriends]);
+  useEffect(() => { void load(); }, [load]);
 
-  const rows: Array<{ entry: LeaderboardEntry | GlobalLeaderboardEntry; rank: number }> =
-    tab === 'global'
-      ? (globalData?.leaderboard ?? []).map((e) => ({ entry: e, rank: e.global_rank }))
-      : (friendsData ?? []).map((e) => ({ entry: e, rank: e.rank_in_friends }));
+  const rows: GenericRow[] = (() => {
+    if (tab === 'global') {
+      return (globalData?.leaderboard ?? []).map((e) => ({
+        rank: e.global_rank,
+        username: e.username,
+        is_self: e.is_self,
+        glicko_rating: e.glicko_rating,
+        provisional: e.provisional,
+        secondary: `${e.ranked_games_played} games`,
+      }));
+    }
+    if (tab === 'friends') {
+      return (friendsData ?? []).map((e) => ({
+        rank: e.rank_in_friends,
+        username: e.username,
+        is_self: e.is_self,
+        glicko_rating: e.glicko_rating,
+        provisional: e.provisional,
+        secondary: `${e.ranked_games_played} games`,
+        win_rate: e.win_rate,
+      }));
+    }
+    if (tab === 'weekly') {
+      return (weeklyData?.leaderboard ?? []).map((e) => ({
+        rank: e.rank,
+        username: e.username,
+        is_self: e.is_self,
+        glicko_rating: e.glicko_rating,
+        provisional: e.provisional,
+        secondary: `${e.wins_this_week}W this week`,
+        wins_this_week: e.wins_this_week,
+      }));
+    }
+    return (modeData[gameMode]?.leaderboard ?? []).map((e) => ({
+      rank: e.rank,
+      username: e.username,
+      is_self: e.is_self,
+      glicko_rating: e.glicko_rating,
+      provisional: e.provisional,
+      secondary: `${e.wins}W (90d)`,
+    }));
+  })();
 
-  const selfEntry: (GlobalLeaderboardEntry | LeaderboardEntry) | undefined =
-    tab === 'global' ? (globalData?.self ?? undefined) : (friendsData?.find((e) => e.is_self));
-  const selfRank = tab === 'global'
-    ? (selfEntry as GlobalLeaderboardEntry | undefined)?.global_rank
-    : (selfEntry as LeaderboardEntry | undefined)?.rank_in_friends;
+  const selfRow: GenericRow | undefined = rows.find((r) => r.is_self);
 
   return (
     <div className="rh-lb-screen">
@@ -123,20 +209,31 @@ export default function LeaderboardScreen({ user, onViewProfile, onClose }: Lead
           <h1 className="rh-lb-title">Leaderboard</h1>
         </div>
         <div className="rh-lb-tabs">
-          <button
-            className={`rh-lb-tab${tab === 'global' ? ' rh-lb-tab--active' : ''}`}
-            onClick={() => setTab('global')}
-          >
-            Global
-          </button>
-          <button
-            className={`rh-lb-tab${tab === 'friends' ? ' rh-lb-tab--active' : ''}`}
-            onClick={() => setTab('friends')}
-          >
-            Friends
-          </button>
+          {(['global', 'friends', 'weekly', 'mode'] as Tab[]).map((t) => (
+            <button
+              key={t}
+              className={`rh-lb-tab${tab === t ? ' rh-lb-tab--active' : ''}`}
+              onClick={() => { setTab(t); setError(null); }}
+            >
+              {t === 'global' ? 'Global' : t === 'friends' ? 'Friends' : t === 'weekly' ? 'Weekly' : 'By Mode'}
+            </button>
+          ))}
         </div>
       </div>
+
+      {tab === 'mode' && (
+        <div className="rh-lb-mode-bar">
+          {GAME_MODES.map((m) => (
+            <button
+              key={m.id}
+              className={`rh-lb-mode-btn${gameMode === m.id ? ' rh-lb-mode-btn--active' : ''}`}
+              onClick={() => { setGameMode(m.id); setError(null); }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="rh-lb-content">
         {loading && <div className="rh-lb-state"><span className="rh-lb-state-text">Loading…</span></div>}
@@ -144,28 +241,38 @@ export default function LeaderboardScreen({ user, onViewProfile, onClose }: Lead
         {!loading && !error && rows.length === 0 && (
           <div className="rh-lb-state">
             <span className="rh-lb-state-text">
-              {tab === 'friends' ? 'Add friends to see your friends leaderboard.' : 'No ranked players yet.'}
+              {tab === 'friends' ? 'Add friends to see your friends leaderboard.' :
+               tab === 'weekly' ? 'No ranked games this week yet.' :
+               tab === 'mode' ? 'No games in this mode yet.' :
+               'No ranked players yet.'}
             </span>
           </div>
         )}
         {!loading && !error && rows.length > 0 && (
           <div className="rh-lb-list">
-            {rows.map(({ entry, rank }) => (
-              <LeaderboardRow key={entry.userId} entry={entry} rank={rank} onViewProfile={onViewProfile} />
+            {rows.map((row) => (
+              <RankedRow
+                key={row.username}
+                row={row}
+                showWinRate={tab === 'friends'}
+                showTrend={tab === 'weekly'}
+                onViewProfile={onViewProfile}
+              />
             ))}
           </div>
         )}
       </div>
 
-      {selfEntry && selfRank && (
+      {selfRow && (
         <div className="rh-lb-self-pin">
           <div className="rh-lb-self-pin-inner">
-            <span className="rh-lb-rank" style={{ color: 'var(--tier-standard)' }}>#{selfRank}</span>
-            <span className="rh-lb-username">{selfEntry.username} <span className="rh-lb-you">YOU</span></span>
-            <span className="rh-lb-tier" style={{ color: ratingTier(selfEntry.glicko_rating, selfEntry.provisional).color }}>
-              {ratingTier(selfEntry.glicko_rating, selfEntry.provisional).label}
+            <span className="rh-lb-rank" style={{ color: 'var(--tier-standard)' }}>#{selfRow.rank}</span>
+            <span className="rh-lb-avatar" aria-hidden>{initials(selfRow.username)}</span>
+            <span className="rh-lb-username">{selfRow.username} <span className="rh-lb-you">YOU</span></span>
+            <span className="rh-lb-tier" style={{ color: ratingTier(selfRow.glicko_rating, selfRow.provisional).color }}>
+              {ratingTier(selfRow.glicko_rating, selfRow.provisional).label}
             </span>
-            <span className="rh-lb-rating">{Math.round(selfEntry.glicko_rating).toLocaleString()}</span>
+            <span className="rh-lb-rating">{Math.round(selfRow.glicko_rating).toLocaleString()}</span>
           </div>
         </div>
       )}

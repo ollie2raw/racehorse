@@ -167,7 +167,9 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
   const connect = useCallback(() => {
     const p = latestRef.current;
-    if (p.isConnecting || p.socket?.connected) return;
+    if (p.socket?.connected) return;
+    if (p.socket && !p.socket.connected && p.socket.active) return;
+    if (p.isConnecting) return;
     p.intentionalDisconnectRef.current = false;
     p.setError('');
     p.setIsConnecting(true);
@@ -179,10 +181,10 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     const s = io(p.serverUrl, {
       transports: ['polling', 'websocket'],
       upgrade: true,
-      reconnection: false,
-      reconnectionAttempts: 0,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 10000,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 20000,
     });
 
@@ -258,7 +260,27 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           };
           
           const resp = await current.emitWithAck<any>(s, 'room:join', roomToJoin, rejoinIdentity);
-          
+
+          // #region agent log
+          void fetch('http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b186e6' },
+            body: JSON.stringify({
+              sessionId: 'b186e6',
+              location: 'useMultiplayerConnection.ts:room:join-ack',
+              message: 'room:join ack',
+              data: {
+                ok: Boolean(resp?.ok),
+                err: resp?.ok ? null : String(resp?.error ?? ''),
+                roomToJoin,
+                transport: s.io?.engine?.transport?.name ?? null,
+              },
+              timestamp: Date.now(),
+              hypothesisId: 'H2',
+            }),
+          }).catch(() => {});
+          // #endregion
+
           if (resp?.ok) {
             console.warn('[rejoin] room:join success', {
               roomCode: resp.roomCode,
@@ -529,6 +551,30 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       }
       current.setServerWaking(true);
       current.setError('');
+    });
+
+    s.on('reconnect_failed', () => {
+      const current = latestRef.current;
+      current.setIsConnecting(false);
+      if (
+        current.reconnectShouldJoinRef.current &&
+        !current.intentionalDisconnectRef.current &&
+        !current.preventAutoRejoinRef.current
+      ) {
+        scheduleReconnectAttempt(current, 'Reconnect exhausted. Trying fresh connection…', {
+          source: 'reconnect_failed',
+        });
+      }
+    });
+
+    s.on('server:shutdown', (payload: { reason?: string } | undefined) => {
+      latestRef.current.showToast(
+        'Server is updating. You may need to rejoin your match from the lobby.',
+        4000,
+      );
+      if (import.meta.env.DEV) {
+        console.warn('[socket] server:shutdown', payload);
+      }
     });
 
     p.setSocket(s);

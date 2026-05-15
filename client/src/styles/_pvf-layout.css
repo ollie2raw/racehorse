@@ -33,8 +33,12 @@
   
   display: flex;
   flex-direction: column;
-  min-height: 100dvh !important;
-  height: auto !important;
+  /* Viewport-locked shell: fill .app (flex child), clip overflow — no page scroll */
+  flex: 1 1 0;
+  min-height: 0 !important;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
   padding-bottom: 40px !important; 
   width: 100%;
   box-sizing: border-box;
@@ -203,6 +207,13 @@
   align-items: stretch !important;
 }
 
+/* Viewport-locked Play vs Fritz / Ghost: row fills space below GlobalNav inside .pvf-root */
+.pvf-root > .pvf-layout {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
 .pvf-left-col {
   display: flex !important;
   flex-direction: column !important;
@@ -211,6 +222,16 @@
   height: auto !important;
   align-items: flex-start !important;
   max-width: none !important; /* Allow fuller width */
+}
+
+.pvf-root > .pvf-layout > .pvf-left-col {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.pvf-root > .pvf-layout > .pvf-control-panel {
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* ── page header ── */

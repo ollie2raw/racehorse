@@ -1,0 +1,168 @@
+/* Match complete modal — glass + PVF-aligned single-player (gold) vs multiplayer (blue) */
+
+.rh-go-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.rh-go-actions--1 {
+  grid-template-columns: 1fr;
+}
+
+.rh-go-actions--2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.rh-go-actions--3 {
+  grid-template-columns: 1.05fr 1fr 1fr;
+}
+
+.rh-go-btn-full {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Primary CTA: solid gold ladder like PVF start (single-player) */
+.rh-go--sp .rh-go-btn-main.rh-btn--tier-elite {
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    var(--tier-elite) 0%,
+    color-mix(in srgb, var(--tier-elite) 72%, #000) 100%
+  );
+  border-color: color-mix(in srgb, var(--tier-elite) 55%, #1a1200);
+  color: var(--text-on-elite);
+  box-shadow:
+    0 12px 36px color-mix(in srgb, var(--tier-elite) 32%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.rh-go--sp .rh-go-btn-main.rh-btn--tier-elite:hover {
+  box-shadow:
+    0 16px 44px color-mix(in srgb, var(--tier-elite) 42%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+/* Multiplayer: full-width standard primary */
+.rh-go--mp .rh-go-btn-main.rh-btn--primary {
+  height: 52px;
+  border-radius: 12px;
+  width: 100%;
+  justify-content: center;
+}
+
+.rh-go-close {
+  flex-shrink: 0;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.rh-go-close:hover {
+  color: var(--text-secondary);
+}
+
+.rh-go-addon {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rh-go--sp .game-over-kicker {
+  color: color-mix(in srgb, var(--tier-elite) 88%, #fff);
+}
+
+.rh-go--mp .game-over-kicker {
+  color: color-mix(in srgb, var(--tier-standard) 82%, #fff);
+}
+
+.rh-go--sp .final-score.winner {
+  background: color-mix(in srgb, var(--tier-elite) 11%, transparent);
+  border-color: color-mix(in srgb, var(--tier-elite) 38%, transparent);
+}
+
+.rh-go--sp .final-score.winner .score {
+  color: var(--tier-elite);
+}
+
+.rh-go--mp .final-score.winner {
+  background: color-mix(in srgb, var(--tier-standard) 11%, transparent);
+  border-color: color-mix(in srgb, var(--tier-standard) 38%, transparent);
+}
+
+.rh-go--mp .final-score.winner .score {
+  color: var(--tier-standard);
+}
+
+.rh-go-rating {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--glass-bg) 100%, transparent);
+  border: 1px solid var(--border-subtle);
+}
+
+.rh-go-rating > span {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.rh-go-rating > strong {
+  font-family: var(--font-body);
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.rh-go-crown {
+  font-size: 1.45rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--tier-elite) 45%, transparent));
+}
+
+.rh-go--mp .rh-go-crown {
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--tier-standard) 40%, transparent));
+}
+
+.rh-go-waiting {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.rh-go-daily-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--glass-bg) 100%, transparent);
+}
+
+.rh-go-daily-panel .rh-go-rating {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+@media (max-width: 600px) {
+  .rh-go-actions--2,
+  .rh-go-actions--3 {
+    grid-template-columns: 1fr;
+  }
+}

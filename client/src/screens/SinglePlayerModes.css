@@ -3,6 +3,10 @@
  * layout to ensure visual consistency across the Single Player screen.
  */
 
+.sp-solo-mode-card__text {
+  max-width: 55%;
+}
+
 /* Common Slot for all cards */
 .sp-solo-mode-card__art-slot {
   position: absolute;

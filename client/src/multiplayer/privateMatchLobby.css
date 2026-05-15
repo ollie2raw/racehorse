@@ -1,14 +1,8 @@
 /* Private 1v1 lobby — premium dark glass, brass private accents, electric host / purple guest */
 @import '../styles/_pvf-layout.css';
+@import './multiplayerHubShell.css';
 
 .pml-root {
-  --pml-brass: var(--tier-standard);
-  --pml-brass-soft: color-mix(in srgb, var(--tier-standard) 38%, transparent);
-  --pml-host: var(--tier-standard);
-  --pml-host-soft: color-mix(in srgb, var(--tier-standard) 45%, transparent);
-  --pml-guest: var(--tier-master);
-  --pml-guest-soft: color-mix(in srgb, var(--tier-master) 45%, transparent);
-
   display: flex;
   flex-direction: column;
   /* Viewport-locked shell: fill `.app` flex column without growing past it */
@@ -37,26 +31,36 @@
   --pvf-dim: var(--text-dim);
 }
 
-.pml-shell.pml-shell--pvf {
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  flex: 1 1 0;
-  min-height: 0;
-}
-
-.pml-pvf-layout.pvf-layout {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-}
-
 .pml-mp-panel.pvf-control-panel {
   border-left: 1px solid rgba(255, 255, 255, 0.07);
+  overflow-x: hidden;
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  width: auto;
 }
 
-.pml-root .pvf-left-col.pml-left--stack {
-  gap: 16px;
-  min-height: 0;
+/* Private-only: keep the 40/60 hub row inside the viewport (no horizontal clip on guest card at 100% zoom).
+   Overrides global `flex: 0 0 40%` on `.pvf-left-col` so the left column may shrink when space is tight. */
+.pml-root .mp-hub-pvf-layout.pvf-layout {
+  gap: 18px !important;
+  padding-left: clamp(14px, 2.6vw, 28px) !important;
+  padding-right: clamp(14px, 2.6vw, 28px) !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  box-sizing: border-box !important;
+}
+
+.pml-root .mp-hub-pvf-layout.pvf-layout > .pvf-left-col.pml-left--stack {
+  flex: 0 1 40% !important;
+  width: auto;
+  max-width: 40%;
+  min-width: 0 !important;
+  /* Vertical clip at 100% zoom: keep horizontal containment only */
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .pml-root .home-bg {
@@ -65,21 +69,6 @@
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-}
-
-/* Matches Quick Match `.mm-shell` — one padding box for toolbar + two columns (no horizontal drift). */
-.pml-shell {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 18px 32px 24px;
-  box-sizing: border-box;
 }
 
 .pml-layout {
@@ -123,8 +112,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 14px 12px;
+  gap: 0;
+  padding: 14px 14px 14px;
   box-sizing: border-box;
   border-radius: var(--radius-card);
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -134,11 +123,29 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 8px 28px rgba(0, 0, 0, 0.22);
-  contain: paint;
+  /* Glass mask only — scroll/clip lives on `.pml-room-stage__scroll` to avoid bottom border bleed */
   overflow: hidden;
 }
 
-.pml-room-stage .pml-duel-name {
+/* Scrollport inset inside the glass shell (separate from border-radius + backdrop-filter) */
+.pml-room-stage__scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-bottom: 14px;
+}
+
+/* Only in-room private UI may shrink the duel stage below the shared hub clamp (tight vertical stack). */
+.multiplayer-hub .mp-hub-pvf-layout.pvf-layout > .pvf-left-col .pml-room-stage.pml-room-stage--shrink {
+  min-height: 0;
+}
+
+.pml-room-stage .pml-duel-name-text {
   font-size: clamp(21px, 2.5vw, 26px);
 }
 
@@ -220,17 +227,40 @@
   position: relative;
   width: 100%;
   flex: 1 1 0;
-  min-height: 0;
+  /* Do not shrink below card content — parent `.pml-room-stage__scroll` scrolls instead of clipping */
+  min-height: min-content;
   display: flex;
   flex-direction: row;
   align-items: stretch;
   gap: 18px;
-  padding: 4px 2px 0;
+  padding: 4px 2px 12px;
   border-radius: 0;
   border: none;
   background: transparent;
-  overflow: hidden;
+  /* Horizontal containment is on `.pml-room-stage__scroll`; avoid double-clipping card glows */
+  overflow-x: visible;
+  overflow-y: visible;
   box-shadow: none;
+}
+
+@keyframes pml-arena-rings-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.62;
+  }
+}
+
+@keyframes pml-vs-gutter-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.42;
+  }
 }
 
 .pml-arena-rings {
@@ -246,6 +276,11 @@
   z-index: 0;
   opacity: 0.55;
   mix-blend-mode: screen;
+}
+
+/* Quick + Private: one pulse contract for radar rings (same timing as VS gutter glow) */
+.multiplayer-hub .pml-matchup > .pml-arena-rings {
+  animation: pml-arena-rings-pulse 2.4s ease-in-out infinite;
 }
 
 .pml-duel-card {
@@ -268,6 +303,13 @@
   -webkit-backdrop-filter: blur(8px);
   overflow: hidden;
   z-index: 1;
+}
+
+/* Hub duel cards: height follows content (no tall min-height); slightly tighter vertical rhythm */
+.multiplayer-hub .pml-matchup > .pml-duel-card {
+  justify-content: flex-start;
+  padding: 14px 12px 12px;
+  gap: 6px;
 }
 
 .pml-duel-card > .pml-duel-avatar-frame {
@@ -294,14 +336,6 @@
 .pml-duel-spacer {
   visibility: hidden;
   pointer-events: none;
-}
-
-.pml-duel-rating--placeholder {
-  font-family: 'Outfit', sans-serif;
-  font-weight: 500;
-  font-size: 13px;
-  color: var(--text-dim);
-  letter-spacing: 0;
 }
 
 .pml-duel-card--host {
@@ -333,6 +367,24 @@
 
 .pml-duel-card--awaiting .pml-duel-placeholder-title {
   margin-top: 4px;
+}
+
+.pml-duel-name--awaiting {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pml-duel-awaiting-hint {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: 0;
+  color: var(--text-dim);
+  text-align: center;
+  max-width: 100%;
 }
 
 .pml-duel-avatar {
@@ -498,19 +550,6 @@
   margin-top: -2px;
 }
 
-.pml-host-badge {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  padding: 3px 7px;
-  border-radius: 4px;
-  border: 1px solid rgba(59, 130, 246, 0.5);
-  color: #60a5fa;
-  background: rgba(37, 99, 235, 0.25);
-}
-
 .pml-duel-placeholder-title {
   font-family: 'Outfit', sans-serif;
   font-weight: 800;
@@ -532,13 +571,17 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  z-index: 2;
+  /* Above duel cards (z-index 1) so VS can paint over adjacent borders when it extends past the gutter width */
+  z-index: 10;
+  overflow: visible;
 }
 
 .pml-vs-column::before {
   content: "";
   position: absolute;
-  inset: -30% -50%;
+  z-index: 0;
+  /* Keep glow inside the VS gutter so it cannot paint into the duel cards (fixes edge bleed). */
+  inset: -24% 6% -24% 6%;
   border-radius: 50%;
   filter: blur(24px);
   background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--pml-host) 32%, transparent) 0%, transparent 60%);
@@ -546,9 +589,13 @@
   pointer-events: none;
 }
 
+.multiplayer-hub .pml-matchup > .pml-vs-column::before {
+  animation: pml-vs-gutter-glow-pulse 2.4s ease-in-out infinite;
+}
+
 .pml-vs-text {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
   font-size: clamp(48px, 5.4vw, 64px);
@@ -824,22 +871,18 @@
 
 
 .pml-panel-body {
-  padding: 9px 20px 12px;
+  padding: 9px 22px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   flex: 1 1 0;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: hidden;
+  /* Create / room / join: scroll the form stack so footer + hints keep breathing room at 100% zoom */
+  overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
-}
-
-/* Join + pre-connect: scroll the middle; footer stays on the floor of the glass card */
-.pml-panel-body:has(.pml-join-panel),
-.pml-panel-body:has(.pml-preconnect-panel) {
-  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .pml-tabs {
@@ -902,7 +945,9 @@
 .pml-tile-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 7px;
+  gap: 8px;
+  padding: 0 2px;
+  box-sizing: border-box;
 }
 
 .pml-tile-row--2 {
@@ -912,9 +957,9 @@
 .pml-choice {
   position: relative;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-  padding: 5px 8px;
+  padding: 4px 7px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -940,9 +985,8 @@
 }
 
 .pml-choice.is-active {
-  border: 2px solid var(--pml-brass);
+  border-color: var(--pml-brass);
   background: color-mix(in srgb, var(--pml-brass) 7%, transparent);
-  padding: 4px 7px;
   box-shadow:
     inset 0 0 20px color-mix(in srgb, var(--pml-brass) 8%, transparent),
     0 0 16px color-mix(in srgb, var(--pml-brass) 10%, transparent);
@@ -967,7 +1011,7 @@
 
 .pml-tile-row--locked .pml-choice:hover {
   transform: none;
-  border-color: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
 }
 
@@ -982,13 +1026,13 @@
   cursor: not-allowed;
   transform: none;
   filter: saturate(0.4);
-  border-color: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.015);
 }
 
 .pml-choice.is-disabled:hover {
   transform: none;
-  border-color: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.015);
 }
 
@@ -1015,8 +1059,8 @@
 
 .pml-choice-check {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: 5px;
+  right: 5px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -1144,30 +1188,72 @@
   transform: translateX(20px);
 }
 
-.pml-invite-row {
+/* Same grid rhythm as `.pml-settings-strip` — two equal halves, no wrap overflow */
+.pml-invite-actions-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* One surface per half — same tokens as `.pml-mini-tile` (no nested bordered box) */
+.pml-invite-cell {
+  min-width: 0;
+  box-sizing: border-box;
   display: flex;
-  gap: 0;
+  align-items: stretch;
+  padding: 4px 8px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
 
-.pml-invite-row .rh-btn {
-  height: 28px;
-  min-height: 28px;
-  font-size: 12px;
-  padding: 0 12px;
+.pml-invite-cell--compound {
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Copy half: wrapper is invisible — the button is the only pill (matches section 3 single border) */
+.pml-invite-cell.pml-invite-cell--copy {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  min-height: 0;
+}
+
+/* Input + Invite share the left pill; no inner frame */
+.pml-invite-cell .pml-invite-row {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 0;
+  align-self: stretch;
+  align-items: center;
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
 }
 
 .pml-invite-input {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0;
   height: 28px;
   border: none;
-  background: color-mix(in srgb, var(--bg-obsidian) 55%, transparent);
+  background: transparent;
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 13px;
-  padding: 0 14px;
+  padding: 0 6px 0 2px;
   outline: none;
 }
 
@@ -1175,38 +1261,84 @@
   color: var(--text-dim);
 }
 
-.pml-or {
-  text-align: center;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin: 2px 0;
-}
-
-.pml-row-btns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.pml-row-btns .rh-btn {
-  flex: 1;
+/* Inline Invite reads as the right “segment” of the pill (divider only, no second box) */
+.pml-invite-cell .pml-invite-row .pml-invite-inline-btn.rh-btn.rh-btn--secondary.rh-btn--sm {
   height: 28px;
   min-height: 28px;
-  font-size: 12px;
+  align-self: center;
+  flex-shrink: 0;
+  margin: 0;
   padding: 0 10px;
+  border-radius: 0;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
 }
 
-.pml-row-btns .pml-invite-leave-room {
-  flex: 1;
+.pml-invite-cell .pml-invite-row .pml-invite-inline-btn.rh-btn--secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.65);
+  transform: none;
+}
+
+.pml-invite-cell .pml-invite-row .pml-invite-inline-btn.rh-btn:disabled {
+  opacity: 0.55;
+}
+
+/* Single pill: mini-tile surface on the control (replaces outline + outer cell double stroke) */
+.pml-invite-copy-full.rh-btn.rh-btn--outline {
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--text-primary);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.pml-invite-copy-full.rh-btn--outline:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+  color: var(--text-primary);
+}
+
+.pml-invite-leave-row {
+  display: flex;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.pml-invite-leave-row .pml-invite-leave-room {
+  width: 100%;
   height: 28px;
   min-height: 28px;
   box-sizing: border-box;
   margin: 0;
   padding: 0 12px;
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-body);
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -1222,12 +1354,12 @@
     background 0.15s ease;
 }
 
-.pml-row-btns .pml-invite-leave-room:hover {
+.pml-invite-leave-row .pml-invite-leave-room:hover {
   border-color: rgba(239, 68, 68, 0.6);
   color: rgba(239, 68, 68, 1);
 }
 
-.pml-row-btns .pml-invite-leave-room:focus-visible {
+.pml-invite-leave-row .pml-invite-leave-room:focus-visible {
   outline: 2px solid rgba(239, 68, 68, 0.45);
   outline-offset: 2px;
 }
@@ -1235,8 +1367,9 @@
 .pml-section-invite-block {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   padding-bottom: 0;
+  min-width: 0;
 }
 
 .pml-section-invite-block .pml-section-label {
@@ -1247,6 +1380,7 @@
   flex-shrink: 0;
   margin-top: auto;
   padding: 9px 20px 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
@@ -1269,7 +1403,7 @@
 }
 
 .pml-roomcode-bar {
-  margin: 6px 12px 4px;
+  margin: 6px 22px 4px;
   padding: 8px 14px 9px;
   box-sizing: border-box;
   display: flex;
@@ -1718,7 +1852,7 @@
   display: flex;
   flex-direction: row;
   gap: 0;
-  margin: 6px 12px 4px;
+  margin: 6px 22px 4px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
@@ -1924,11 +2058,11 @@
 }
 
 @media (max-width: 1024px) {
-  .pml-pvf-layout.pvf-layout {
+  .mp-hub-pvf-layout.pvf-layout {
     flex-direction: column;
   }
 
-  .pml-root .pvf-left-col.pml-left--stack,
+  .multiplayer-hub .pvf-left-col.pml-left--stack,
   .pml-left {
     width: 100%;
     flex: 0 0 auto;
@@ -2094,7 +2228,7 @@
 }
 
 @media (max-width: 720px) {
-  .pml-shell.pml-shell--pvf {
+  .mp-hub-shell.mp-hub-shell--pvf {
     padding: 16px 16px 24px;
   }
 }

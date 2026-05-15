@@ -490,71 +490,316 @@
   }
 }
 
-/* ═══════════════════════════════════════════════
-   Ghost Mode — Claude reference v2 layout classes
-   ═══════════════════════════════════════════════ */
+/* Ghost setup — PVF shell accents (Play vs Fritz shared layout) */
+.ghost-pvf-root .fritz-selectable-row--active {
+  border-left-color: var(--pvf-dynamic-color);
+  background: color-mix(in srgb, var(--pvf-dynamic-color) 7%, rgba(255, 255, 255, 0.03));
+}
 
-/* Hero style bars (appear in left hero footer) */
-.ghost-hero-style-bars {
+.ghost-pvf-stat-card.pvf-tier-card,
+.ghost-pvf-stat-card.pvf-deal-card {
+  cursor: default;
+  pointer-events: none;
+}
+
+.ghost-pvf-plain {
+  margin: 8px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--pvf-muted);
+  line-height: 1.5;
+}
+
+.ghost-pvf-plain--tight {
+  margin-top: 0;
+}
+
+.ghost-flat-body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.5;
+}
+
+.ghost-pvf-locked-block {
   margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+/* Right panel: viewport-locked column (matches Play vs Fritz control panel behavior) */
+.ghost-pvf-root .pvf-control-panel {
+  gap: 10px !important;
+  padding: 18px 22px 20px !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.ghost-pvf-control-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+}
+
+.ghost-pvf-control-body--signedout {
+  justify-content: space-between;
+}
+
+.ghost-pvf-signout-cta {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ghost-pvf-root .pvf-header {
+  margin-bottom: 18px !important;
+}
+
+.ghost-pvf-section--status,
+.ghost-pvf-section--how {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.ghost-pvf-root .ghost-pvf-section--how .fritz-section-label,
+.ghost-pvf-root .ghost-pvf-section--status .fritz-section-label {
+  margin-bottom: 6px !important;
+}
+
+/* 1. GHOST STATUS — three stat cards, one row, compact tier treatment */
+.ghost-pvf-root .ghost-pvf-status-grid.pvf-difficulty-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  margin-bottom: 0 !important;
+}
+
+.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-card {
+  padding: 10px 8px !important;
+  min-width: 0 !important;
+}
+
+.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-icon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 6px !important;
+}
+
+.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-name {
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  margin-bottom: 2px !important;
+}
+
+.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-elo {
+  font-size: 13px !important;
+  margin-bottom: 4px !important;
+}
+
+.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-desc {
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+}
+
+.ghost-pvf-tier-scores {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   width: 100%;
+  min-height: 0;
 }
-.ghost-hero-style-bar-row { display: flex; flex-direction: column; gap: 4px; }
-.ghost-hero-style-bar-meta { display: flex; justify-content: space-between; align-items: baseline; }
-.ghost-hero-style-bar-label { font-family: var(--font-body); font-size: 11px; color: rgba(255,255,255,0.40); }
-.ghost-hero-style-bar-pct { font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: 0.1em; color: rgba(255,255,255,0.28); }
-.ghost-hero-style-bar-track { height: 2px; background: rgba(255,255,255,0.07); }
-.ghost-hero-style-bar-fill { height: 100%; background: linear-gradient(90deg,#7c10cc,#c040ff); transition: width 600ms ease; }
 
-/* Right panel v2 — flat flex column */
-.ghost-claude-panel-v2 {
-  display: flex; flex-direction: column; gap: 0;
-  flex: 1; min-height: 0;
-  overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+.ghost-pvf-root .ghost-score-list--pvf {
+  flex-wrap: nowrap;
+  gap: 4px;
 }
-.ghost-claude-panel-v2::-webkit-scrollbar { display: none; }
 
-/* Ghost stats header */
-.ghost-stats-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 20px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
-.ghost-stats-header__left { display: flex; flex-direction: column; gap: 10px; }
-.ghost-stats-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; background: rgba(192,64,255,0.10); border: 1px solid rgba(192,64,255,0.28); font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: 0.16em; color: #c040ff; text-transform: uppercase; }
-.ghost-stats-badge__dot { width: 5px; height: 5px; border-radius: 50%; background: #c040ff; flex-shrink: 0; }
-.ghost-stats-avg { display: flex; align-items: baseline; gap: 6px; }
-.ghost-stats-avg__value { font-family: 'Outfit', system-ui, sans-serif; font-size: 52px; font-weight: 900; color: #fff; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.ghost-stats-avg__unit { font-family: var(--font-display); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: rgba(255,255,255,0.35); margin-bottom: 4px; }
+.ghost-pvf-root .ghost-score-list--pvf .ghost-score-pill--sharp {
+  padding: 2px 6px;
+  font-size: 10px;
+}
 
-/* Confidence ring */
-.ghost-confidence-ring { position: relative; width: 50px; height: 50px; flex-shrink: 0; }
-.ghost-ring-svg { width: 50px; height: 50px; }
-.ghost-ring-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Outfit', system-ui, sans-serif; font-size: 11px; font-weight: 900; color: rgba(255,255,255,0.85); }
+/* 2. HOW IT WORKS — one row of deal cards + tight milestone row */
+.ghost-pvf-root .ghost-pvf-deal-row.pvf-deal-grid {
+  flex-wrap: nowrap !important;
+  gap: 10px !important;
+}
 
-/* Flat sections */
-.ghost-flat-section { display: flex; flex-direction: column; gap: 10px; padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
-.ghost-flat-body { margin: 0; font-family: var(--font-body); font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.5; }
+.ghost-pvf-root .ghost-pvf-deal-row .pvf-deal-card {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  padding: 10px 12px !important;
+}
 
-/* Score pills — sharp */
-.ghost-score-pill--sharp { display: inline-flex; align-items: center; padding: 4px 10px; border: 1px solid rgba(192,64,255,0.18); font-family: var(--font-display); font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.65); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; border-radius: 0; }
+.ghost-pvf-root .ghost-pvf-deal-row .pvf-deal-icon {
+  width: 40px !important;
+  height: 40px !important;
+}
 
-/* How It Works rows */
-.ghost-how-row { display: flex; gap: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.04); margin-bottom: 10px; }
-.ghost-how-row:last-of-type { border-bottom: 0; margin-bottom: 0; }
-.ghost-how-num { font-family: 'Outfit', system-ui, sans-serif; font-size: 18px; font-weight: 900; color: rgba(192,64,255,0.30); letter-spacing: -0.02em; flex-shrink: 0; line-height: 1.2; }
-.ghost-how-title { margin: 0 0 2px; font-family: 'Barlow Condensed', system-ui, sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.65); }
-.ghost-how-copy { margin: 0; font-family: var(--font-body); font-size: 12px; color: rgba(255,255,255,0.30); line-height: 1.4; }
+.ghost-pvf-root .ghost-pvf-deal-row .pvf-deal-label {
+  font-size: 15px !important;
+}
 
-/* Opponent list */
-.ghost-opponent-list { display: flex; flex-direction: column; }
-.ghost-opponent-row { appearance: none; font: inherit; color: inherit; display: flex; align-items: center; justify-content: space-between; padding: 12px 0 12px 10px; cursor: pointer; text-align: left; background: transparent; border: 0; border-bottom: 1px solid rgba(255,255,255,0.05); border-left: 3px solid transparent; transition: background 120ms ease, border-left-color 120ms ease; }
-.ghost-opponent-row.is-active { border-left-color: #c040ff; background: rgba(192,64,255,0.07); }
-.ghost-opponent-row--featured .ghost-opponent-name::before { content: '★ '; color: #c040ff; font-size: 0.8em; }
-.ghost-opponent-name { display: block; font-family: 'Barlow Condensed', system-ui, sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.55); transition: color 120ms; }
-.ghost-opponent-row.is-active .ghost-opponent-name { color: #fff; }
-.ghost-opponent-sub { display: block; font-family: var(--font-body); font-size: 11px; color: rgba(255,255,255,0.30); margin-top: 2px; }
-.ghost-opponent-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.2); flex-shrink: 0; transition: background 120ms ease, box-shadow 120ms ease; }
-.ghost-opponent-row.is-active .ghost-opponent-dot { background: #c040ff; box-shadow: 0 0 8px #c040ff; }
+.ghost-pvf-root .ghost-pvf-deal-row .pvf-deal-sub {
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
-/* CTA section */
-.ghost-cta-section { display: flex; flex-direction: column; gap: 14px; padding-top: 20px; flex-shrink: 0; margin-top: auto; }
+.ghost-pvf-milestone-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-top: 4px;
+  border-radius: var(--fritz-summary-radius);
+  background: var(--fritz-card-bg);
+  border: 1px solid var(--fritz-card-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.ghost-pvf-milestone-strip__item {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.ghost-pvf-milestone-strip__sep {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.22);
+  font-weight: 700;
+  font-size: 10px;
+}
+
+/* Ghost hero card — image contained, calmer title, tighter copy (Fritz parity) */
+.ghost-pvf-root .ghost-pvf-opponent-card.pvf-opponent-card {
+  contain: layout paint;
+}
+
+.ghost-pvf-root .ghost-pvf-card-bg-img.pvf-card-bg-img {
+  object-fit: cover;
+  object-position: 56% 36%;
+  transform: scale(1.06);
+  transform-origin: center center;
+}
+
+.ghost-pvf-root .ghost-pvf-opponent-card .pvf-card-header {
+  max-width: 58%;
+}
+
+.ghost-pvf-root .ghost-pvf-opponent-card .pvf-card-description {
+  max-width: 58%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ghost-pvf-root .ghost-pvf-opponent-card .pvf-card-name {
+  font-size: clamp(32px, 4.2vw, 52px);
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
+}
+
+/* 3. SELECT OPPONENT — list fills space above CTA; internal scroll, full rows */
+.ghost-pvf-select-section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 6px;
+}
+
+.ghost-pvf-select-section > .fritz-section-label {
+  flex-shrink: 0;
+}
+
+.ghost-pvf-opponent-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.ghost-pvf-opponent-scroll .fritz-selectable-row {
+  flex-shrink: 0;
+}
+
+.ghost-pvf-opponent-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ghost-pvf-opponent-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+
+.ghost-pvf-cta-note {
+  text-align: center;
+  margin: 0;
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ghost-pvf-start-btn {
+  margin-top: auto !important;
+  flex-shrink: 0;
+}
+
+.ghost-score-list--pvf {
+  justify-content: center;
+  margin-top: 0;
+}
+
+.ghost-score-pill--sharp {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid rgba(192, 64, 255, 0.18);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.65);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  border-radius: 0;
+}
+
+.pvf-tier-card .ghost-sparkline {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.ghost-sparkline--compact {
+  max-height: 36px;
+}
+
+@media (max-width: 1100px) {
+  .ghost-pvf-root .ghost-pvf-status-grid.pvf-difficulty-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}

@@ -7,7 +7,7 @@ import type { AppMode } from '../types';
 import BotMatchScreen from '../bot/BotMatchScreen';
 import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import DailyFritzLeaderboard from './DailyFritzLeaderboard';
-import { GlobalNav } from '../components';
+import { BrandLogo, GlobalNav } from '../components';
 import { Button } from '../components/primitives';
 import '../screens/RacehorseHomeArt.css';
 
@@ -379,24 +379,50 @@ function formatCountdownHms(totalSeconds: number): string {
 
 function DailyFritzLoadingScreen({ onBack }: { onBack: () => void }) {
   return (
-    <div className="df-page">
+    <div className="df-fritz-loading-root">
       <div className="home-bg" aria-hidden="true">
         <div className="home-bg__halo" />
-        <div className="home-bg__domino home-bg__domino--tl" />
-        <div className="home-bg__domino home-bg__domino--tr" />
-        <div className="home-bg__line home-bg__line--1" />
-        <div className="home-bg__line home-bg__line--2" />
-        <div className="home-bg__line home-bg__line--3" />
         <div className="home-bg__texture" />
       </div>
 
-      <div className="df-shell df-shell--loading df-shell--daily-fritz">
-        <button type="button" className="df-back-btn df-back--ghost df-back--floating rh-back-button" onClick={onBack}>
-          <span aria-hidden>←</span> Back to Single Player
-        </button>
-        <div className="df-page-head df-page-head--loading">
-          <h1 className="df-title df-title--page">Preparing...</h1>
-        </div>
+      <div className="df-fritz-loading-shell">
+        <nav className="df-fritz-loading-nav">
+          <div className="df-fritz-loading-brand">
+            <BrandLogo iconSize={32} showWordmark={true} />
+          </div>
+          <button type="button" className="df-fritz-loading-back rh-back-button" onClick={onBack}>
+            <span className="df-fritz-loading-back-icon">←</span>
+            <span>Back to Single Player</span>
+          </button>
+        </nav>
+
+        <main className="df-fritz-loading-main">
+          <div className="df-fritz-loading-lockup" role="status" aria-live="polite" aria-busy="true">
+            <div className="df-fritz-loading-eyebrow">
+              <span className="df-fritz-loading-dot" aria-hidden />
+              DAILY FRITZ
+            </div>
+            <h1 className="df-fritz-loading-title">Preparing today’s set</h1>
+            <p className="df-fritz-loading-subtitle">Best-of-3 vs Fritz. Same deal for everyone.</p>
+
+            <div className="df-fritz-loading-steps">
+              <div className="df-fritz-loading-step">
+                <div className="df-fritz-loading-chip is-active" />
+                <span className="df-fritz-loading-step-label">1 Game one</span>
+              </div>
+              <div className="df-fritz-loading-step-connector" aria-hidden />
+              <div className="df-fritz-loading-step">
+                <div className="df-fritz-loading-chip" />
+                <span className="df-fritz-loading-step-label">2 Game two</span>
+              </div>
+              <div className="df-fritz-loading-step-connector" aria-hidden />
+              <div className="df-fritz-loading-step">
+                <div className="df-fritz-loading-chip" />
+                <span className="df-fritz-loading-step-label">3 Decider</span>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );
@@ -1117,7 +1143,7 @@ export default function DailyFritzScreen({
       showPlay = !isComplete && !startActionPending;
     } else {
       statusSub = 'Locked';
-      unlockHint = n === 2 ? 'Win game 1 to unlock' : 'Win game 2 to unlock';
+      unlockHint = n === 2 ? 'Play game 1 to unlock' : 'Win game 1 or 2 to unlock';
     }
 
     const scoreLine = res ? `${res.playerScore}–${res.fritzScore}` : null;

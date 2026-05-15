@@ -254,10 +254,25 @@ export function joinRoom(code: string, socketId: string): Room {
   return room;
 }
 
+export function peekRoom(code: string): Room | undefined {
+  const key = String(code ?? '').trim().toUpperCase();
+  if (!key) return undefined;
+  return rooms.get(key);
+}
+
 export function getRoom(code: string): Room {
-  const room = rooms.get(code);
+  const room = peekRoom(code);
   if (!room) throw new Error('Room not found.');
   return room;
+}
+
+/** In-process stats for ops/debug endpoints (lost on process restart). */
+export function getRoomRuntimeStats(): { roomCount: number; gamesInProgress: number } {
+  let gamesInProgress = 0;
+  for (const r of rooms.values()) {
+    if (r.state && !r.state.gameOver) gamesInProgress += 1;
+  }
+  return { roomCount: rooms.size, gamesInProgress };
 }
 
 export function deleteRoom(code: string): boolean {

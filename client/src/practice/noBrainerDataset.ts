@@ -9,6 +9,9 @@ export interface NoBrainerHandRecord {
   key: string;
 }
 
+/** Validated distinct no-brainer hands in `client/public/data/noBrainers.valid.json`. */
+export const NO_BRAINER_COMBO_COUNT = 1284;
+
 let cachedDatasetPromise: Promise<NoBrainerHandRecord[]> | null = null;
 const DATASET_URLS = ['/data/noBrainers.valid.json', '/data/noBrainers.generated.json'];
 

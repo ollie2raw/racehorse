@@ -185,6 +185,17 @@
   transform: translateY(-1px);
 }
 
+.rh-pp-btn--challenge {
+  background: rgba(231, 182, 74, 0.15);
+  color: var(--tier-elite);
+  border: 1px solid rgba(231, 182, 74, 0.35);
+}
+
+.rh-pp-btn--challenge:hover {
+  background: rgba(231, 182, 74, 0.25);
+  transform: translateY(-1px);
+}
+
 .rh-pp-pending-badge {
   font-size: 13px;
   color: var(--text-dim);
@@ -236,6 +247,58 @@
   color: var(--text-dim);
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+/* Sparkline + H2H row */
+.rh-pp-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.rh-pp-sparkline-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rh-pp-sparkline-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.rh-pp-sparkline {
+  display: block;
+  opacity: 0.9;
+}
+
+.rh-pp-h2h {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 18px;
+  background: var(--glass-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.rh-pp-h2h-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.rh-pp-h2h-record {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
 }
 
 /* Section */

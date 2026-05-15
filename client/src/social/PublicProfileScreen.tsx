@@ -9,6 +9,7 @@ interface PublicProfileScreenProps {
   user: User | null;
   onClose: () => void;
   showToast: (msg: string) => void;
+  onChallenge?: (username: string) => void;
 }
 
 function presenceDot(status: PresenceStatus) {
@@ -30,6 +31,32 @@ function ratingTier(rating: number, provisional: boolean): { label: string; colo
   return { label: 'Rookie', color: 'var(--tier-rookie)' };
 }
 
+function RatingSparkline({ matches }: { matches: PublicProfile['recent_matches'] }) {
+  if (matches.length < 3) return null;
+  // Reverse so oldest is left, newest is right
+  const ordered = [...matches].reverse();
+  let cumulative = 0;
+  const points = ordered.map((m) => { cumulative += m.result === 'win' ? 1 : -1; return cumulative; });
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = Math.max(max - min, 2);
+  const W = 200;
+  const H = 44;
+  const norm = (v: number) => H - ((v - min) / range) * (H - 6) - 3;
+  const d = points.map((v, i) => `${(i / (points.length - 1)) * W},${norm(v)}`).join(' L ');
+  const lastWin = matches[0]?.result === 'win';
+  const color = lastWin ? 'var(--tier-rookie)' : 'var(--accent-red, #ef4444)';
+  return (
+    <div className="rh-pp-sparkline-wrap">
+      <span className="rh-pp-sparkline-label">Recent Form</span>
+      <svg className="rh-pp-sparkline" width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden>
+        <path d={`M ${d}`} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+        <circle cx={(points.length - 1) / (points.length - 1) * W} cy={norm(points[points.length - 1])} r="3" fill={color} />
+      </svg>
+    </div>
+  );
+}
+
 function timeAgo(isoDate: string): string {
   const ms = Date.now() - new Date(isoDate).getTime();
   const m = Math.floor(ms / 60000);
@@ -41,7 +68,7 @@ function timeAgo(isoDate: string): string {
   return `${d}d ago`;
 }
 
-export default function PublicProfileScreen({ username, user, onClose, showToast }: PublicProfileScreenProps) {
+export default function PublicProfileScreen({ username, user, onClose, showToast, onChallenge }: PublicProfileScreenProps) {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +154,14 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
           </div>
           {!profile.is_self && user && (
             <div className="rh-pp-hero-actions">
+              {profile.presence.status !== 'offline' && onChallenge && (
+                <button
+                  className="rh-pp-btn rh-pp-btn--challenge"
+                  onClick={() => onChallenge(profile.username)}
+                >
+                  Challenge
+                </button>
+              )}
               {!profile.is_friend && !profile.has_pending_request && (
                 <button
                   className="rh-pp-btn rh-pp-btn--primary"
@@ -188,6 +223,28 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
             <span className="rh-pp-stat-value">{profile.best_puzzle_score ?? '—'}</span>
             <span className="rh-pp-stat-label">BEST PUZZLE</span>
           </div>
+          <div className="rh-pp-stat">
+            <span className="rh-pp-stat-value" style={{ color: (profile.best_streak ?? 0) >= 7 ? 'var(--tier-elite)' : 'inherit' }}>
+              {profile.best_streak ?? 0}
+            </span>
+            <span className="rh-pp-stat-label">BEST STREAK</span>
+          </div>
+        </div>
+
+        {/* Sparkline + H2H row */}
+        <div className="rh-pp-meta-row">
+          <RatingSparkline matches={profile.recent_matches} />
+          {profile.h2h && !profile.is_self && (
+            <div className="rh-pp-h2h">
+              <span className="rh-pp-h2h-label">H2H</span>
+              <span className="rh-pp-h2h-record">
+                <span style={{ color: 'var(--tier-rookie)' }}>{profile.h2h.wins}W</span>
+                {' – '}
+                <span style={{ color: 'var(--accent-red, #ef4444)' }}>{profile.h2h.losses}L</span>
+                {' vs you'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Recent matches */}

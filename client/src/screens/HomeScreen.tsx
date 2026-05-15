@@ -304,7 +304,7 @@ export default function RacehorseHomeScreen({
                     className="mt-7"
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
-                    <span>{fritzStatus === 'completed' ? 'View Result' : fritzStatus === 'started' ? 'Continue' : 'Play Today'}</span>
+                    <span>{fritzStatus === 'completed' ? 'View Result' : fritzStatus === 'started' ? 'Continue' : 'Play'}</span>
                     <span style={{ fontSize: 22, lineHeight: 1, color: '#FFD76A', opacity: 0.9 }}>›</span>
                   </Button>
                 </div>
@@ -330,7 +330,7 @@ export default function RacehorseHomeScreen({
                     className="mt-7"
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
-                    <span>{puzzleStatus === 'completed' ? 'Review Puzzle' : puzzleStatus === 'started' ? 'Continue' : 'Play Today'}</span>
+                    <span>{puzzleStatus === 'completed' ? 'Review Puzzle' : puzzleStatus === 'started' ? 'Continue' : 'Play'}</span>
                     <span style={{ fontSize: 22, lineHeight: 1, color: '#68B3FF', opacity: 0.9 }}>›</span>
                   </Button>
                 </div>

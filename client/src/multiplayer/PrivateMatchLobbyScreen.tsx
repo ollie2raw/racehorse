@@ -11,6 +11,10 @@ import '../ui/claudeMode.css';
 import { ClaudePrimaryAction, ClaudeSectionLabel } from '../ui/claudeMode';
 import { fetchRankingProfile } from '../stats/statsApi';
 import { supabase } from '../lib/supabase';
+import { ArenaRings } from './ArenaRings';
+import { IconFlame, IconPlus, IconUserBust } from './MultiplayerDuelIcons';
+import { MultiplayerHubFeatureStrip } from './MultiplayerHubFeatureStrip';
+import { MultiplayerTwoColumnPvLayout } from './MultiplayerTwoColumnPvLayout';
 
 /** Matches `App.tsx` `RoomPlayer` shape. */
 export type PrivateMatchLobbyPlayer = {
@@ -132,84 +136,6 @@ function IconEye() {
   );
 }
 
-
-function IconFlame() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2s4 4 4 8-2 6-4 6-4-2-4-6c0 0-2 2-2 5a6 6 0 0 0 12 0c0-5-6-9-6-13z" />
-    </svg>
-  );
-}
-
-function IconUserBust({ gradientId }: { gradientId: string }) {
-  return (
-    <svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden preserveAspectRatio="xMidYMax meet">
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="currentColor" stopOpacity="0.95" />
-          <stop offset="55%" stopColor="currentColor" stopOpacity="0.7" />
-          <stop offset="100%" stopColor="currentColor" stopOpacity="0.35" />
-        </linearGradient>
-      </defs>
-      <path
-        fill={`url(#${gradientId})`}
-        d="M32 13c5 0 9 4.2 9 9.6 0 4.6-2.7 8.4-6.5 9.4 9.5 1.4 18 8.2 18 18.6V64H9.5V50.6c0-10.4 8.5-17.2 18-18.6-3.8-1-6.5-4.8-6.5-9.4 0-5.4 4-9.6 9-9.6z"
-      />
-    </svg>
-  );
-}
-
-function ArenaRings() {
-  return (
-    <svg
-      className="pml-arena-rings"
-      viewBox="-200 -200 400 400"
-      aria-hidden
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <defs>
-        <radialGradient id="pml-ring-fade" cx="50%" cy="50%" r="70%">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.85)" />
-          <stop offset="55%" stopColor="rgba(255,255,255,0.35)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-        </radialGradient>
-        <mask id="pml-ring-mask">
-          <rect x="-200" y="-200" width="400" height="400" fill="url(#pml-ring-fade)" />
-        </mask>
-      </defs>
-      <g mask="url(#pml-ring-mask)" fill="none" stroke="rgba(140,210,230,0.45)" strokeWidth="0.6">
-        <circle r="14" />
-        <circle r="24" />
-        <circle r="36" />
-        <circle r="50" />
-        <circle r="66" />
-        <circle r="84" />
-        <circle r="104" />
-        <circle r="126" />
-        <circle r="150" />
-        <circle r="176" />
-        <circle r="204" />
-        <circle r="234" />
-      </g>
-      <g
-        mask="url(#pml-ring-mask)"
-        stroke="rgba(140,210,230,0.4)"
-        strokeWidth="0.5"
-        strokeDasharray="2 4"
-      >
-        <line x1="-230" y1="0" x2="230" y2="0" />
-      </g>
-    </svg>
-  );
-}
-
-function IconPlus() {
-  return (
-    <svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-      <path d="M12 6v12M6 12h12" />
-    </svg>
-  );
-}
 
 function IconDominoSm({ format }: { format: 7 | 14 }) {
   if (format === 7) {
@@ -577,33 +503,38 @@ export default function PrivateMatchLobbyScreen({
   const invitePlayerBlock = (
     <div className="pml-section-invite-block">
       <div className="pml-section-label">4. Invite player</div>
-      <div className="pml-invite-row">
-        <input
-          className="pml-invite-input"
-          placeholder="Enter username or email…"
-          disabled
-          aria-disabled="true"
-        />
-        <Button variant="tier-elite" type="button" disabled style={{ borderRadius: 0 }}>
-          Invite
-        </Button>
+      <div className="pml-invite-actions-strip">
+        <div className="pml-invite-cell pml-invite-cell--compound">
+          <div className="pml-invite-row">
+            <input
+              className="pml-invite-input"
+              placeholder="Enter username or email…"
+              disabled
+              aria-disabled="true"
+            />
+            <Button variant="secondary" size="sm" type="button" disabled className="pml-invite-inline-btn">
+              Invite
+            </Button>
+          </div>
+        </div>
+        <div className="pml-invite-cell pml-invite-cell--copy">
+          <Button variant="outline" type="button" className="pml-invite-copy-full" onClick={onCopyInviteLink}>
+            Copy invite link
+          </Button>
+        </div>
       </div>
-      <div className="pml-or">or</div>
-      <div className="pml-row-btns">
-        <Button variant="outline" type="button" onClick={onCopyInviteLink}>
-          Copy invite link
-        </Button>
-        {phase === 'room' ? (
+      {phase === 'room' ? (
+        <div className="pml-invite-leave-row">
           <button type="button" className="pml-invite-leave-room" onClick={onLeaveRoom}>
             ← Leave Room
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 
   return (
-    <div className="pml-root pml-mp-bridge">
+    <div className="pml-root pml-mp-bridge multiplayer-hub">
       <div className="home-bg" aria-hidden>
         <div className="home-bg__halo" />
         <div className="home-bg__domino home-bg__domino--tl" />
@@ -622,7 +553,7 @@ export default function PrivateMatchLobbyScreen({
         activeColor="var(--tier-standard)"
       />
 
-      <div className="pml-shell pml-shell--pvf">
+      <div className="mp-hub-shell mp-hub-shell--pvf">
         <MultiplayerTopBar
           activeTab="private"
           onSelectQuick={() => onOpenQuickMatch?.()}
@@ -634,19 +565,26 @@ export default function PrivateMatchLobbyScreen({
           socket={socket}
         />
 
-        <div className="pvf-layout pml-pvf-layout">
-          <div className={`pvf-left-col pml-left--stack${phase === 'room' ? ' pml-left--room' : ''}`}>
-          <header className="pml-head">
-            <p className="pml-kicker">
-              <LockIcon />
-              Private 1v1 lobby
-            </p>
-            <h1 className="pml-title">Private 1v1 Lobby</h1>
-            <p className="pml-desc">Invite a friend and play a private match.</p>
-          </header>
+        <MultiplayerTwoColumnPvLayout
+          leftColClassName={`pml-left--stack${phase === 'room' ? ' pml-left--room' : ''}`}
+          left={
+            <>
+              <div className="pvf-header">
+                <div className="pvf-label">MULTIPLAYER</div>
+                <h1 className="pvf-title">Private Match</h1>
+                <p className="pvf-subtitle mp-hub-subtitle">
+                  <span className="mp-hub-subtitle-line">
+                    Invite-only 1v1 dominos. Host a room, share code or link, and your guest may join
+                  </span>
+                  <span className="mp-hub-subtitle-line">anytime. Start when ready.</span>
+                </p>
+              </div>
 
-          <div className="pml-room-stage">
-            <div className="pml-matchup">
+          <div
+            className={`pml-room-stage${phase === 'room' ? ' pml-room-stage--shrink' : ''}`}
+          >
+            <div className="pml-room-stage__scroll">
+              <div className="pml-matchup">
               <ArenaRings />
               <div className="pml-duel-card pml-duel-card--host">
                 <div className="pml-duel-avatar-frame">
@@ -654,19 +592,13 @@ export default function PrivateMatchLobbyScreen({
                     <IconUserBust gradientId="pml-bust-host" />
                   </div>
                 </div>
-                <div
-                  className={`pml-duel-status${
-                    phase === 'disconnected' ? ' pml-duel-status--offline' : ' pml-duel-status--live'
-                  }`}
-                >
-                  <span className="pml-duel-status-dot" aria-hidden />
-                  {phase === 'disconnected' ? 'Offline' : 'Online'}
-                </div>
                 <div className="pml-duel-name">
                   <span className="pml-duel-name-text">{leftPlainName}</span>
-                  {phase !== 'disconnected' ? <span className="pml-host-badge">Host</span> : null}
                 </div>
-                <div className="pml-duel-rating">
+                <div
+                  className="pml-duel-rating"
+                  aria-label={leftRatingStr !== '—' ? `Rating ${leftRatingStr}` : undefined}
+                >
                   {leftRatingStr !== '—' ? (
                     <>
                       <span className="pml-duel-star" aria-hidden>
@@ -678,7 +610,6 @@ export default function PrivateMatchLobbyScreen({
                     <span className="pml-duel-rating-num">—</span>
                   )}
                 </div>
-                <div className="pml-duel-rating-label">Rating</div>
                 <div
                   className={`pml-duel-streak-wrap${
                     leftCardIsCurrentUser && hostWinStreak != null && hostWinStreak > 0 ? '' : ' pml-duel-spacer'
@@ -708,14 +639,17 @@ export default function PrivateMatchLobbyScreen({
                         <IconUserBust gradientId="pml-bust-guest" />
                       </div>
                     </div>
-                    <div className="pml-duel-status pml-duel-status--live">
-                      <span className="pml-duel-status-dot" aria-hidden />
-                      Online
-                    </div>
                     <div className="pml-duel-name">
                       <span className="pml-duel-name-text">{guestDisplayName}</span>
                     </div>
-                    <div className="pml-duel-rating">
+                    <div
+                      className="pml-duel-rating"
+                      aria-label={
+                        !guestRankedLoading && guestRating != null
+                          ? `Rating ${guestRating.toLocaleString()}`
+                          : undefined
+                      }
+                    >
                       {guestRankedLoading ? (
                         <span className="pml-duel-rating-num">—</span>
                       ) : guestRating != null ? (
@@ -729,7 +663,6 @@ export default function PrivateMatchLobbyScreen({
                         <span className="pml-duel-rating-num">—</span>
                       )}
                     </div>
-                    <div className="pml-duel-rating-label">Rating</div>
                     <div
                       className={`pml-duel-streak-wrap${
                         !guestRankedLoading && guestWinStreak != null && guestWinStreak > 0 ? '' : ' pml-duel-spacer'
@@ -756,23 +689,24 @@ export default function PrivateMatchLobbyScreen({
                         </span>
                       </div>
                     </div>
-                    <div className="pml-duel-status pml-duel-spacer" aria-hidden />
-                    <div className="pml-duel-name">
+                    <div className="pml-duel-name pml-duel-name--awaiting">
                       <span className="pml-duel-name-text">Invite Opponent</span>
+                      <span className="pml-duel-awaiting-hint">Waiting for player…</span>
                     </div>
-                    <div className="pml-duel-rating pml-duel-rating--placeholder">
-                      <span>Waiting for player…</span>
-                    </div>
-                    <div className="pml-duel-rating-label pml-duel-spacer" aria-hidden />
+                    <div className="pml-duel-rating pml-duel-spacer" aria-hidden />
                     <div className="pml-duel-streak-wrap pml-duel-spacer" aria-hidden />
                   </>
                 )}
               </div>
+              </div>
             </div>
 
           </div>
-        </div>
 
+          <MultiplayerHubFeatureStrip variant="private" />
+        </>
+          }
+          right={
         <div className="pvf-control-panel pml-mp-panel">
             {phase === 'lobby' ? (
               <div className="pml-tab-bar" role="tablist" aria-label="Lobby mode">
@@ -1073,7 +1007,8 @@ export default function PrivateMatchLobbyScreen({
               ) : null}
             </div>
           </div>
-        </div>
+          }
+        />
       </div>
     </div>
   );

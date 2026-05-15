@@ -16,11 +16,22 @@ CREATE INDEX IF NOT EXISTS idx_activity_feed_user_created
 
 ALTER TABLE activity_feed ENABLE ROW LEVEL SECURITY;
 
--- Authenticated users can read all activity (needed for cross-friend feed queries).
-CREATE POLICY "authenticated read activity"
+-- Users can read their own activity plus the activity of accepted friends.
+-- The friends table stores accepted friendships in both directions via OR.
+CREATE POLICY "read own and friends activity"
   ON activity_feed FOR SELECT
   TO authenticated
-  USING (true);
+  USING (
+    user_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM friends
+      WHERE status = 'accepted'
+        AND (
+          (user_id = auth.uid() AND friend_user_id = activity_feed.user_id)
+          OR (friend_user_id = auth.uid() AND user_id = activity_feed.user_id)
+        )
+    )
+  );
 
 -- NOTE: service_role bypasses RLS by default; no INSERT policy needed for
 -- authenticated users because clients never write activity rows directly.

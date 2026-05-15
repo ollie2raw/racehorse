@@ -6210,7 +6210,7 @@ export default function BotMatchScreen({
       {false && toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
         <div className="game-over-overlay hand-over-upgraded-overlay">
-          <div className="game-over-card hand-over-upgraded-card">
+          <div className="game-over-card hand-over-upgraded-card hand-over--sp">
             {(() => {
               const pointsAwarded = handReveal.pointsAwarded;
               const winner = handReveal.winner;
@@ -6270,16 +6270,7 @@ export default function BotMatchScreen({
                             <DominoTile key={idx} tile={tile} size={40} />
                           ))}
                           {scoredTiles.length > 2 && (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: 'rgba(255,255,255,0.4)',
-                                alignSelf: 'center',
-                                marginLeft: 4,
-                              }}
-                            >
-                              +{scoredTiles.length - 2}
-                            </div>
+                            <div className="hand-over-tile-more">+{scoredTiles.length - 2}</div>
                           )}
                         </div>
                       </div>
@@ -6439,6 +6430,7 @@ export default function BotMatchScreen({
         <GameOverModal
           open
           ariaLabel={`${opponentLabel} match over`}
+          matchKind="single-player"
           title={isGhostMode ? 'Ghost Mode' : match.winnerId === 'you' ? 'Champion!' : `${opponentLabel} Wins`}
           subtitle={`Final hand ${match.handNumber} · ${match.dealSize}-tile mode`}
           scores={[
@@ -6480,7 +6472,7 @@ export default function BotMatchScreen({
             !isGhostMode &&
             !isDailyFritzMode &&
             (ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null) && (
-            <div className="game-over-result-stat">
+            <div className="rh-go-rating">
               <span>Rating</span>
               <strong>
                 {ghostResultLoading
@@ -6500,25 +6492,27 @@ export default function BotMatchScreen({
             </div>
           )}
           {isDailyFritzMode && (
-            <div className="game-over-result-stat">
-              <span>Daily Run</span>
-              <strong>
-                {ghostResultLoading
-                  ? 'Submitting...'
-                  : ghostResultError
-                    ? ghostResultError
-                    : formatOrdinalPlace(dailyFritzRank)
-                      ? formatOrdinalPlace(dailyFritzRank)
-                      : dailyFritzLeaderboard.length > 0
-                        ? 'Ranked'
-                      : 'Submitted'}
-              </strong>
+            <div className="rh-go-daily-panel">
+              <div className="rh-go-rating">
+                <span>Daily Run</span>
+                <strong>
+                  {ghostResultLoading
+                    ? 'Submitting...'
+                    : ghostResultError
+                      ? ghostResultError
+                      : formatOrdinalPlace(dailyFritzRank)
+                        ? formatOrdinalPlace(dailyFritzRank)
+                        : dailyFritzLeaderboard.length > 0
+                          ? 'Ranked'
+                        : 'Submitted'}
+                </strong>
+              </div>
               {ghostResultError ? (
                 <button
                   type="button"
                   className="mode-inline-btn"
                   onClick={retryDailyFritzCompletion}
-                  style={{ marginTop: 10, alignSelf: 'flex-start' }}
+                  style={{ alignSelf: 'flex-start' }}
                 >
                   Retry Submit
                 </button>

@@ -1,0 +1,88 @@
+/**
+ * Shared shell + PVF row for Quick Match and Private Match hubs.
+ * Imported by matchmakingScreen.css and privateMatchLobby.css.
+ */
+
+/* Shell below GlobalNav — matches historical `.pml-shell` / `--pvf` pairing */
+.mp-hub-shell {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 18px 32px 24px;
+  box-sizing: border-box;
+}
+
+.mp-hub-shell.mp-hub-shell--pvf {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* Same flex contract as historical `.pml-pvf-layout.pvf-layout` */
+.mp-hub-pvf-layout.pvf-layout {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+}
+
+/* Quick / Private hub copy: two editorial lines, even rhythm (no <br /> margin quirks) */
+.pvf-subtitle.mp-hub-subtitle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2em;
+  line-height: 1.45;
+}
+
+.mp-hub-subtitle-line {
+  display: block;
+  margin: 0;
+  max-width: 100%;
+  text-wrap: pretty;
+}
+
+/* Duel lane tokens — `.pml-duel-card` / avatars read these; both hubs mount `.multiplayer-hub` */
+.multiplayer-hub {
+  --pml-brass: var(--tier-standard);
+  --pml-brass-soft: color-mix(in srgb, var(--tier-standard) 38%, transparent);
+  --pml-host: var(--tier-standard);
+  --pml-host-soft: color-mix(in srgb, var(--tier-standard) 45%, transparent);
+  --pml-guest: var(--tier-master);
+  --pml-guest-soft: color-mix(in srgb, var(--tier-master) 45%, transparent);
+}
+
+/* ── Shared left column (Quick + Private): one contract for width, clip, duel stage height ── */
+.multiplayer-hub .mp-hub-pvf-layout.pvf-layout > .pvf-left-col.pml-left--stack {
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Duel glass: same minimum footprint on both hubs so the 1v1 stage matches visually */
+.multiplayer-hub .mp-hub-pvf-layout.pvf-layout > .pvf-left-col .pml-room-stage {
+  flex: 1 1 0;
+  min-height: clamp(268px, 34vh, 400px);
+  min-width: 0;
+}
+
+.multiplayer-hub .mp-hub-pvf-layout.pvf-layout > .pvf-left-col > .mm-features {
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+.multiplayer-hub .mp-hub-pvf-layout.pvf-layout > .pvf-left-col > .pvf-header {
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+}

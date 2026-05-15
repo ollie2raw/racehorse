@@ -1,5 +1,5 @@
-/* Daily Fritz — Landing Page Styles */
-@import '../styles/_fritz-screen-shell.css';
+/* Daily Fritz — Landing Page Styles (PVF tokens + fritz shell via _pvf-layout) */
+@import '../styles/_pvf-layout.css';
 
 /* All color values use design tokens from src/styles/tokens.css */
 
@@ -40,20 +40,16 @@
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
-  padding: 14px 28px 10px;
+  /* Match .pvf-layout horizontal rhythm (GlobalNav uses the same max-width) */
+  padding: 16px 36px 32px;
   box-sizing: border-box;
   overflow: hidden;
-}
-
-.df-shell--loading {
-  flex: 0 1 auto;
-  padding-top: 24px;
 }
 
 .df-back--floating {
   position: absolute;
   top: 10px;
-  left: 14px;
+  left: 36px;
   z-index: 6;
   margin: 0;
 }
@@ -65,8 +61,230 @@
   padding-top: 46px;
 }
 
-.df-shell--daily-fritz.df-shell--loading {
-  padding-top: 46px;
+/* ── Daily Fritz loading (mirrors Daily Puzzle ladder preparing layout; brass accent) ── */
+
+.df-fritz-loading-root {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  max-height: 100%;
+  overflow: hidden;
+  background: var(--bg-obsidian);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-body);
+}
+
+.df-fritz-loading-shell {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 40px;
+  box-sizing: border-box;
+}
+
+.df-fritz-loading-nav {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.df-fritz-loading-brand {
+  opacity: 0.9;
+}
+
+.df-fritz-loading-back {
+  appearance: none;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition:
+    transform var(--duration-fast) var(--ease-premium),
+    background-color var(--duration-fast) var(--ease-premium),
+    border-color var(--duration-fast) var(--ease-premium),
+    color var(--duration-fast) var(--ease-premium);
+  font-size: 13px;
+}
+
+.df-fritz-loading-back:hover {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+  transform: translateY(-1px);
+}
+
+.df-fritz-loading-back:active {
+  transform: scale(0.97);
+}
+
+.df-fritz-loading-back-icon {
+  font-size: 16px;
+  line-height: 1;
+  margin-top: -1px;
+}
+
+.df-fritz-loading-main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 8vh;
+}
+
+.df-fritz-loading-lockup {
+  text-align: center;
+  max-width: 600px;
+  animation: df-fritz-loading-fade-in 800ms var(--ease-premium) forwards;
+}
+
+@keyframes df-fritz-loading-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.df-fritz-loading-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--tier-elite);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.df-fritz-loading-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--tier-elite);
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tier-elite) 90%, transparent);
+}
+
+.df-fritz-loading-title {
+  font-family: var(--font-body);
+  font-size: clamp(32px, 5vw, 56px);
+  font-weight: 900;
+  line-height: 1.05;
+  margin: 0 0 16px;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.df-fritz-loading-subtitle {
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.8vw, 19px);
+  margin: 0 0 56px;
+  opacity: 0.85;
+  line-height: 1.45;
+}
+
+.df-fritz-loading-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.df-fritz-loading-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.df-fritz-loading-chip {
+  width: 52px;
+  height: 68px;
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 300ms var(--ease-premium),
+    border-color 300ms var(--ease-premium),
+    box-shadow 300ms var(--ease-premium),
+    background-color 300ms var(--ease-premium);
+}
+
+.df-fritz-loading-chip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    transparent 35%,
+    color-mix(in srgb, var(--tier-elite) 14%, transparent) 50%,
+    transparent 65%
+  );
+  background-size: 250% 250%;
+  animation: df-fritz-loading-shimmer 2.5s infinite linear;
+}
+
+@keyframes df-fritz-loading-shimmer {
+  0% {
+    background-position: 200% 200%;
+  }
+  100% {
+    background-position: -200% -200%;
+  }
+}
+
+.df-fritz-loading-chip.is-active {
+  background: color-mix(in srgb, var(--tier-elite) 8%, transparent);
+  border-color: color-mix(in srgb, var(--tier-elite) 45%, var(--border-light));
+  box-shadow: 0 0 25px color-mix(in srgb, var(--tier-elite) 18%, transparent);
+  transform: scale(1.05);
+}
+
+.df-fritz-loading-step-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.df-fritz-loading-step-connector {
+  width: 28px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--border-subtle),
+    color-mix(in srgb, var(--text-primary) 10%, transparent),
+    var(--border-subtle)
+  );
+  margin-top: -24px;
 }
 
 /* ── Two-column layout (Play vs Fritz family) ── */
@@ -75,11 +293,11 @@
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  gap: 18px;
+  gap: 32px;
   width: 100%;
   flex: 1 1 0;
   min-height: 0;
-  padding-top: 14px;
+  padding-top: 24px;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -89,13 +307,13 @@
 .df-left-col {
   display: flex;
   flex-direction: column;
-  width: 38%;
-  flex: 0 0 38%;
+  width: 40%;
+  flex: 0 0 40%;
   min-width: 0;
   min-height: 0;
   align-items: stretch;
   align-self: stretch;
-  gap: 10px;
+  gap: 24px;
 }
 
 /* Full-bleed hero — image fills column; rounded + vignette so it reads as one surface with the shell */
@@ -105,17 +323,16 @@
   min-height: min(340px, 44vh);
   width: 100%;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: var(--pvf-radius-lg);
   box-sizing: border-box;
-  /* Solid border eats subpixel gaps between clip curve and page; same token as matte */
-  border: 2px solid #04070c;
-  /* Padding-box corner radius — inner layers must match or WebKit draws a light seam */
-  --df-hero-inner-r: calc(14px - 2px);
-  /* Same matte base as Play vs Fritz opponent card */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  --df-hero-inner-r: calc(var(--pvf-radius-lg) - 1px);
   background: #04070c;
   isolation: isolate;
   transform: translateZ(0);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 32px rgba(0, 0, 0, 0.28);
 }
 
 @supports (overflow: clip) {
@@ -135,7 +352,7 @@
   object-fit: cover;
   /* Bias down a touch to crop any light strip baked into the art top edge */
   object-position: 54% 52%;
-  transform: scale(1.06) translateZ(0);
+  transform: scale(1.04) translateZ(0);
   backface-visibility: hidden;
   z-index: 1;
   /* No filter — brightness/contrast on composited layers often produces light fringes at rounded overflow clips (WebKit). */
@@ -187,7 +404,7 @@
   left: 0;
   right: 0;
   z-index: 3;
-  padding: 8px 6px 0 0;
+  padding: 22px 24px 0 22px;
   box-sizing: border-box;
   pointer-events: none;
 }
@@ -196,10 +413,10 @@
   font-family: var(--font-body);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-dim));
-  margin: 0 0 6px;
+  margin: 0 0 8px;
 }
 
 .df-hero-title.df-title--page {
@@ -210,10 +427,10 @@
   margin: 0;
   max-width: 22rem;
   font-family: var(--font-body);
-  font-size: 14px;
-  line-height: 1.42;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--text-secondary);
   text-align: left;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
@@ -290,15 +507,15 @@
   flex-shrink: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr) minmax(0, 1.15fr);
-  gap: 10px 12px;
+  gap: 12px 16px;
   align-items: center;
   width: 100%;
-  padding: 12px 14px;
+  padding: 14px 16px;
   box-sizing: border-box;
-  border-radius: 14px;
+  border-radius: var(--pvf-radius-md);
   background: color-mix(in srgb, var(--glass-bg) 38%, rgba(7, 10, 18, 0.88));
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .df-streak-card__block--current {
@@ -695,19 +912,15 @@
   background: color-mix(in srgb, var(--glass-bg) 72%, transparent);
 }
 
-.df-page-head--loading {
-  padding-left: 0;
-}
-
 .df-control-panel {
-  flex: 1 1 auto;
+  /* Match .pvf-control-panel: share row cross-size with left column; min-height 0 enables inner scroll */
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   align-self: stretch;
   width: 100%;
-  max-height: calc(100dvh - 96px);
   padding: 0;
   border: none;
   background: transparent;
@@ -720,14 +933,14 @@
 
 /* Unified panel — match Play vs Fritz .pvf-control-panel (flat, high contrast) */
 .df-panel-surface {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   width: 100%;
   box-sizing: border-box;
-  padding: 22px 26px 16px;
-  border-radius: 20px;
+  padding: 24px 32px;
+  border-radius: var(--pvf-radius-lg);
   background: rgba(7, 9, 16, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow:
@@ -735,10 +948,11 @@
     0 8px 32px rgba(0, 0, 0, 0.28);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  overflow: hidden;
 }
 
 .df-layout .df-control-panel .fritz-section-label {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   letter-spacing: 0.14em;
   color: var(--fritz-muted-label);
 }
@@ -862,8 +1076,9 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  flex: 1 1 auto;
+  /* Play vs Fritz control panel rhythm */
+  gap: 16px;
+  flex: 1 1 0;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1059,20 +1274,27 @@
 }
 
 .df-section--games-spotlight {
-  margin-top: 2px;
+  margin-top: 0;
+  /* Fill slack between overview and footer (mirrors .pvf-control-panel column flow) */
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .df-section--games-spotlight .fritz-section-label {
+  flex-shrink: 0;
   margin-bottom: 8px;
   padding-bottom: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: none;
 }
 
 .df-overview-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px 2px;
-  padding: 2px 0 12px;
+  gap: 6px 4px;
+  padding: 2px 0 8px;
   box-sizing: border-box;
 }
 
@@ -1081,7 +1303,7 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -1116,11 +1338,15 @@
   color: rgba(255, 255, 255, 0.38);
 }
 
-/* Best-of-3 “arena” — same card language as .pvf-tier-card (flat, no radial wash) */
+/* Best-of-3 “arena” — grows with the games column; rows share extra height (PvF-style) */
 .df-bof3-arena {
   position: relative;
-  padding: 12px 12px 14px;
-  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 8px 10px 10px;
+  border-radius: var(--pvf-radius-md);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -1134,13 +1360,14 @@
 .df-bof3-arena__head {
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  gap: 6px 10px;
+  margin-bottom: 6px;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .df-bof3-arena__pulse {
@@ -1154,11 +1381,11 @@
 
 .df-bof3-arena__tag {
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: var(--radius-pill);
   color: var(--tier-elite);
   background: color-mix(in srgb, var(--tier-elite) 10%, rgba(0, 0, 0, 0.35));
@@ -1167,21 +1394,25 @@
 
 .df-bof3-arena__rule {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--fritz-muted-label);
   flex: 1 1 200px;
   min-width: 0;
-  line-height: 1.35;
+  line-height: 1.28;
 }
 
 .df-bof3 {
   position: relative;
   z-index: 1;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(48px, 1fr));
   column-gap: 12px;
-  row-gap: 12px;
+  row-gap: 8px;
   align-items: stretch;
 }
 
@@ -1190,20 +1421,21 @@
   flex-direction: column;
   align-items: center;
   width: 100%;
-  min-height: 100%;
-  padding-top: 12px;
+  height: 100%;
+  min-height: 0;
+  padding-top: 0;
   box-sizing: border-box;
 }
 
 .df-bof3__step {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-pill);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -1240,20 +1472,25 @@
 .df-bof3__connector {
   flex: 1 1 auto;
   width: 2px;
-  min-height: 12px;
-  margin: 4px 0 0;
+  min-height: 6px;
+  margin: 2px 0 0;
   border-radius: 1px;
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* Tighter best-of-3 slot rows */
+/* Last game rail has no connector — center the step in the stretched row */
+.df-bof3__rail:not(:has(.df-bof3__connector)) {
+  justify-content: center;
+}
+
+/* Best-of-3 rows — same card padding + radius rhythm as .pvf-tier-card */
 .fritz-selectable-row.df-game-row.df-game-row--bof3.df-bof3-slot {
-  min-height: 54px;
-  max-height: 58px;
-  height: 58px;
+  min-height: 48px;
+  height: 100%;
+  max-height: none;
   gap: 12px;
-  padding: 0 14px;
-  border-radius: 10px;
+  padding: 0 12px;
+  border-radius: var(--pvf-radius-md);
 }
 
 .fritz-selectable-row.df-bof3-slot.df-game-row--bof3 .df-game-info h4 {
@@ -1264,8 +1501,8 @@
 .fritz-selectable-row.df-bof3-slot.df-game-row--bof3 .df-bof3-slot__game-label {
   display: inline-flex;
   align-items: center;
-  min-height: 18px;
-  padding: 2px 8px;
+  min-height: 16px;
+  padding: 1px 6px;
   border-radius: 6px;
   font-family: var(--font-display);
   font-size: 9px;
@@ -1304,8 +1541,9 @@
 }
 
 .fritz-selectable-row.df-bof3-slot.df-game-row--bof3 .df-game-status {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 .df-game-status--gold {
@@ -1420,27 +1658,34 @@
 
 .df-panel-footer {
   flex-shrink: 0;
-  margin-top: 4px;
-  padding: 10px 0 0;
+  margin-top: 0;
+  padding: 16px 0 0;
   border-top: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
   background: transparent;
+  position: relative;
+  z-index: 2;
+}
+
+/* .pvf-start-btn uses margin-top:auto for PvF’s single-column panel; here the footer is a sibling — reset */
+.df-panel-footer .pvf-start-btn {
+  margin-top: 0;
 }
 
 .df-start-match-btn.rh-btn {
   width: 100%;
-  height: 54px;
-  min-height: 0;
+  height: 48px;
+  min-height: 48px;
   padding: 0 24px;
   justify-content: center;
-  font-family: 'Outfit', system-ui, sans-serif;
-  font-size: 16px;
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 800;
   letter-spacing: 0.01em;
   text-transform: none;
-  border-radius: 12px;
+  border-radius: var(--pvf-radius-sm);
   border: none;
   color: #1a1200;
   position: relative;
@@ -1512,8 +1757,8 @@
 
 .df-start-match-chevron {
   position: absolute;
-  right: 20px;
-  font-size: 18px;
+  right: 24px;
+  font-size: 21px;
   line-height: 1;
   font-weight: 800;
   color: #1a1200;
@@ -1609,7 +1854,7 @@
   }
 
   .df-back--floating {
-    left: 12px;
+    left: 20px;
     top: 10px;
   }
 
@@ -1631,10 +1876,6 @@
 
   .df-panel-surface {
     padding: 16px 18px 14px;
-  }
-
-  .df-control-panel {
-    max-height: none;
   }
 }
 

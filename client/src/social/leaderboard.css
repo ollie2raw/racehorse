@@ -94,6 +94,42 @@
   color: var(--accent-blue);
 }
 
+/* Mode selector bar (shown when "By Mode" tab is active) */
+.rh-lb-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 32px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.rh-lb-mode-btn {
+  padding: 5px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-premium),
+              color var(--duration-fast) var(--ease-premium),
+              border-color var(--duration-fast) var(--ease-premium);
+}
+
+.rh-lb-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.rh-lb-mode-btn--active {
+  background: rgba(231, 182, 74, 0.10);
+  border-color: rgba(231, 182, 74, 0.35);
+  color: var(--tier-elite);
+}
+
 .rh-lb-content {
   flex: 1 1 0;
   overflow-y: auto;
@@ -126,7 +162,7 @@
 
 .rh-lb-row {
   display: grid;
-  grid-template-columns: 44px 1fr 100px 80px 80px;
+  grid-template-columns: 44px 32px 1fr 90px 80px 70px;
   align-items: center;
   gap: 12px;
   padding: 14px 20px;
@@ -152,6 +188,43 @@
   border-color: rgba(59, 130, 246, 0.3);
   border-left-color: var(--tier-standard);
 }
+
+/* Avatar initials bubble */
+.rh-lb-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+/* Win rate column */
+.rh-lb-winrate {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tier-rookie);
+  text-align: right;
+}
+
+/* Trend arrow */
+.rh-lb-trend {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: right;
+}
+.rh-lb-trend--up   { color: var(--tier-rookie); }
+.rh-lb-trend--mid  { color: var(--tier-elite); }
+.rh-lb-trend--down { color: var(--text-dim); }
 
 .rh-lb-rank {
   font-family: var(--font-display);
@@ -212,7 +285,7 @@
 
 .rh-lb-self-pin-inner {
   display: grid;
-  grid-template-columns: 44px 1fr 100px 80px;
+  grid-template-columns: 44px 32px 1fr 90px 80px;
   align-items: center;
   gap: 12px;
   padding: 10px 20px;

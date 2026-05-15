@@ -1,0 +1,56 @@
+/* Shared 3-up feature strip under duel cards (Quick Match + Private lobby left column) */
+
+.mm-features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  align-items: stretch;
+}
+
+.mm-feature {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: rgba(10, 16, 28, 0.6);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-sizing: border-box;
+  min-height: 5.5rem;
+  height: 100%;
+  justify-content: flex-start;
+}
+
+.mm-feature__header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tier-standard) 75%, var(--text-primary));
+}
+
+.mm-feature__header svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.mm-feature__desc {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  min-height: calc(11px * 1.35);
+}
+
+@media (max-width: 720px) {
+  .mm-features {
+    grid-template-columns: 1fr;
+  }
+}

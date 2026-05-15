@@ -4,6 +4,21 @@ import { useAuth } from '../auth/useAuth';
 import { fetchFriends } from '../friends/friendsApi';
 import type { AppMode } from '../types';
 
+/**
+ * Each route mounts its own `<GlobalNav />`, so local state resets on navigation.
+ * Keep last-known HUD values in module scope (per signed-in user) so rating / friends
+ * do not flash placeholders while friends refetch or profile is briefly incomplete.
+ */
+const globalNavHudCache: {
+  userId: string | null;
+  ratingDisplay: string | null;
+  friendCount: number | null;
+} = {
+  userId: null,
+  ratingDisplay: null,
+  friendCount: null,
+};
+
 interface GlobalNavProps {
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
@@ -32,18 +47,59 @@ const TAB_COLORS: Record<string, string> = {
 
 export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, activeColor, compactChrome }: GlobalNavProps) {
   const { user: authUser, profile: authProfile } = useAuth();
-  const [friendCount, setFriendCount] = useState<number | null>(null);
+  const [friendCountFetched, setFriendCountFetched] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!authUser?.id) { setFriendCount(null); return; }
+    if (!authUser) {
+      globalNavHudCache.userId = null;
+      globalNavHudCache.ratingDisplay = null;
+      globalNavHudCache.friendCount = null;
+      setFriendCountFetched(null);
+      return;
+    }
+    if (authUser.id !== globalNavHudCache.userId) {
+      setFriendCountFetched(null);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+    if (authProfile?.glicko_rating == null) return;
+    globalNavHudCache.userId = authUser.id;
+    globalNavHudCache.ratingDisplay = Math.round(Number(authProfile.glicko_rating)).toLocaleString();
+  }, [authUser?.id, authProfile?.glicko_rating]);
+
+  useEffect(() => {
+    if (!authUser?.id) return;
     fetchFriends(authUser.id)
-      .then(({ friends }) => setFriendCount(friends.length))
-      .catch(() => setFriendCount(0));
+      .then(({ friends }) => {
+        const n = friends.length;
+        globalNavHudCache.userId = authUser.id;
+        globalNavHudCache.friendCount = n;
+        setFriendCountFetched(n);
+      })
+      .catch(() => {
+        globalNavHudCache.userId = authUser.id;
+        globalNavHudCache.friendCount = 0;
+        setFriendCountFetched(0);
+      });
   }, [authUser?.id]);
 
-  const rating = authProfile?.glicko_rating != null
-    ? Math.round(Number(authProfile.glicko_rating)).toLocaleString()
-    : authUser ? '800' : '—';
+  const rating =
+    authProfile?.glicko_rating != null
+      ? Math.round(Number(authProfile.glicko_rating)).toLocaleString()
+      : !authUser
+        ? '—'
+        : globalNavHudCache.userId === authUser.id && globalNavHudCache.ratingDisplay != null
+          ? globalNavHudCache.ratingDisplay
+          : '…';
+
+  const friendCountDisplay =
+    friendCountFetched !== null
+      ? friendCountFetched
+      : authUser && globalNavHudCache.userId === authUser.id && globalNavHudCache.friendCount !== null
+        ? globalNavHudCache.friendCount
+        : null;
 
   const initials = useMemo(() => {
     const username = authProfile?.username;
@@ -182,7 +238,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
               <div 
                 style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}
               >
-                {friendCount !== null ? friendCount : authUser ? '…' : '—'}
+                {friendCountDisplay !== null ? friendCountDisplay : authUser ? '…' : '—'}
               </div>
               <div 
                 style={{ fontSize: '12px', fontWeight: 500, color: '#8891A0' }}

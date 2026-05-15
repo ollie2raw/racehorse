@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Board, DominoTile } from '../components';
+import { Button } from '../components/primitives';
+import '../components/primitives/Button.css';
 import type { PlacementPosition, Tile } from '../types';
+import '../screens/RacehorseHomeArt.css';
 import {
   loadNoBrainerDataset,
+  NO_BRAINER_COMBO_COUNT,
   pickNoBrainerHand,
   type NoBrainerHandRecord,
 } from './noBrainerDataset';
@@ -13,18 +17,16 @@ import {
   playPracticeMove,
   type NoBrainerPracticeState,
 } from './noBrainerLogic';
+import { getNoBrainerSolvedCount, markNoBrainerHandSolved } from './noBrainerLabProgress';
 import './noBrainerLab.css';
 
 interface NoBrainerLabScreenProps {
+  userId?: string | null;
   onBack: () => void;
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
-}
-
-function tileLabel(tile: Tile): string {
-  return `[${tile.low}|${tile.high}]`;
 }
 
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
@@ -50,6 +52,7 @@ function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
 }
 
 export default function NoBrainerLabScreen({
+  userId = null,
   onBack,
 }: NoBrainerLabScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -61,13 +64,16 @@ export default function NoBrainerLabScreen({
   const [showSolution, setShowSolution] = useState(false);
   const [usedHint, setUsedHint] = useState(false);
   const [usedShowSolution, setUsedShowSolution] = useState(false);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState('');
   const [reloadTick, setReloadTick] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [uiTheme, setUiTheme] = useState<'green' | 'brown'>('green');
+  const [handSession, setHandSession] = useState(1);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
   const confettiFiredRef = useRef(false);
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const solvedCount = getNoBrainerSolvedCount(userId);
+  const comboTotalLabel = NO_BRAINER_COMBO_COUNT.toLocaleString();
 
   function flashLastPlayed(tile: Tile | null) {
     if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
@@ -96,12 +102,6 @@ export default function NoBrainerLabScreen({
     return () => {
       if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
     };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem('racehorse_ui_theme');
-    setUiTheme(stored === 'brown' ? 'brown' : 'green');
   }, []);
 
   const toggleFullscreen = async () => {
@@ -146,7 +146,8 @@ export default function NoBrainerLabScreen({
     setUsedShowSolution(false);
     confettiFiredRef.current = false;
     setError('');
-  }, [dataset]);
+    setHandSession((n) => (record ? n + 1 : 1));
+  }, [dataset, record]);
 
   useEffect(() => {
     if (canStart && !record) {
@@ -205,35 +206,39 @@ export default function NoBrainerLabScreen({
       particleCount: 150,
       spread: 80,
       origin: { y: 0.55 },
-      colors: ['#2ecc8e', '#95f0ca', '#d8b56f', '#ffffff'],
+      colors: ['#c77dff', '#e9d5ff', '#d8b56f', '#ffffff'],
     });
   }, [practiceState, usedHint, usedShowSolution]);
 
+  useEffect(() => {
+    if (!record || !practiceState || practiceState.status !== 'won') return;
+    if (usedHint || usedShowSolution) return;
+    markNoBrainerHandSolved(userId, record.key);
+  }, [practiceState?.status, record?.key, usedHint, usedShowSolution, userId]);
+
   if (!dataset && !error) {
     return (
-      <div className="app">
-        <div className="screen practice-loading">Loading No-Brainer Lab…</div>
+      <div className="nbl-loading-screen">
+        <div className="nbl-loading-card">Loading The Lab…</div>
       </div>
     );
   }
 
   if (error && !record) {
     return (
-      <div className="app">
-        <div className="screen practice-loading">
-          <div style={{ display: 'grid', gap: 10, justifyItems: 'center', textAlign: 'center', padding: 20 }}>
-            <div>{error}</div>
-            <div style={{ opacity: 0.85, fontSize: '0.92rem' }}>
-              To regenerate validated hands: `npm --prefix ../server run nobrainer:validate`
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button className="btn text" onClick={() => setReloadTick((n) => n + 1)}>
-                Retry
-              </button>
-              <button className="btn text rh-back-button" onClick={onBack}>
-                ← Back to Home
-              </button>
-            </div>
+      <div className="nbl-loading-screen">
+        <div className="nbl-loading-card">
+          <p>{error}</p>
+          <p className="nbl-loading-card__hint">
+            To regenerate validated hands: npm --prefix ../server run nobrainer:validate
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Button variant="secondary" size="sm" onClick={() => setReloadTick((n) => n + 1)}>
+              Retry
+            </Button>
+            <Button variant="ghost" size="sm" className="rh-back-button" onClick={onBack}>
+              ← Back
+            </Button>
           </div>
         </div>
       </div>
@@ -242,16 +247,25 @@ export default function NoBrainerLabScreen({
 
   if (!record || !practiceState) {
     return (
-      <div className="app">
-        <div className="screen practice-loading">No hand available.</div>
+      <div className="nbl-loading-screen">
+        <div className="nbl-loading-card">No hand available.</div>
       </div>
     );
   }
 
   return (
-    <div ref={rootRef} className={`app walnut-live practice-lab theme-${uiTheme}`}>
+    <div ref={rootRef} className="practice-lab home-page-root">
+      <div className="home-bg" aria-hidden="true">
+        <div className="home-bg__halo" />
+        <div className="home-bg__line home-bg__line--1" />
+        <div className="home-bg__line home-bg__line--2" />
+        <div className="home-bg__line home-bg__line--3" />
+        <div className="home-bg__texture" />
+      </div>
+
       <canvas
         ref={confettiCanvasRef}
+        className="nbl-confetti"
         style={{
           position: 'fixed',
           inset: 0,
@@ -262,138 +276,153 @@ export default function NoBrainerLabScreen({
           display: practiceState.status === 'won' ? 'block' : 'none',
         }}
       />
-      <section className="wl-top-rail practice-top-rail" data-ui="hud">
-        <div className="wl-center-status practice-center-status">
-          <span className="wl-turn-label your-turn">Clear all 7 tiles in one turn</span>
-        </div>
-        <div className="practice-top-spacer" aria-hidden="true" />
-      </section>
 
-      <div className="wl-stage-shell practice-stage-shell">
-        <div className="board-area wl-board-area practice-board-area">
-          <Board
-            board={practiceState.board}
-            legalMoves={practiceState.legalMoves}
-            selectedTile={selectedTile}
-            lastPlayedTile={lastPlayedTile}
-            onPositionClick={onPositionClick}
-            tileSize={72}
-          />
-          <div
-            className="wl-controls-tray"
-            style={{
-              position: 'absolute',
-              bottom: 10,
-              right: 10,
-              zIndex: 20,
-              display: 'flex',
-              gap: 2,
-              alignItems: 'center',
-              background: 'rgba(255,255,255,0.06)',
-              borderRadius: 999,
-              padding: '4px 6px',
-              border: '1px solid rgba(255,255,255,0.08)',
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-            }}
-          >
-            <button className="btn text compact bot-chip-control" onClick={retryHand}>
-              Retry
-            </button>
-            <button className="btn text compact bot-chip-control" onClick={startHand}>
-              New Hand
-            </button>
-            <button className="btn text compact bot-chip-control" onClick={onHint}>
-              Hint
-            </button>
-            <button
-              className="btn text compact bot-chip-control"
-              onClick={() =>
-                setShowSolution((prev) => {
-                  const next = !prev;
-                  if (next) setUsedShowSolution(true);
-                  return next;
-                })
-              }
-            >
-              {showSolution ? 'Hide Solution' : 'Show Solution'}
-            </button>
-            <button className="btn text leave-btn compact bot-chip-control rh-back-button" onClick={onBack}>
-              ← Back to Home
-            </button>
-            <button
-              onClick={() => setUiTheme((prev) => (prev === 'green' ? 'brown' : 'green'))}
-              title="Toggle table color"
-              className={`table-theme-toggle ${uiTheme === 'green' ? 'is-green' : 'is-brown'}`}
-            >
-              <span className="table-theme-dot" aria-hidden="true" />
-            </button>
-            <button
-              className="btn text icon-btn fullscreen-btn"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-              style={{
-                padding: '4px 6px',
-                color: 'rgba(200,220,215,0.7)',
-                background: 'none',
-                border: 'none',
-              }}
-            >
-              <FullscreenIcon isFullscreen={isFullscreen} />
-            </button>
+      <div className="nbl-shell">
+        <header className="nbl-header">
+          <div className="nbl-header__back">
+            <Button variant="ghost" size="sm" className="rh-back-button" onClick={onBack} type="button">
+              ← Single Player
+            </Button>
           </div>
-        </div>
+
+          <div className="nbl-header__mission">
+            <p className="nbl-mission-eyebrow">The Lab · No Brainer Drill</p>
+            <h1 className="nbl-mission-pill">Clear all 7 tiles in one turn</h1>
+          </div>
+
+          <div className="nbl-header__meta">
+            <span className="nbl-meta-hand">
+              Hand {handSession.toLocaleString()} · {comboTotalLabel} combos
+            </span>
+            {solvedCount != null ? (
+              <span className="nbl-meta-solved">{solvedCount.toLocaleString()} solved</span>
+            ) : null}
+          </div>
+        </header>
+
+        <main className="nbl-stage">
+          <div className="nbl-board-frame">
+            <div className="nbl-board-canvas">
+              <div className="nbl-board-watermark" aria-hidden="true">
+                <svg viewBox="0 0 100 100" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M28 72 L28 32 L50 52 L72 32 L72 72"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                </svg>
+              </div>
+              {practiceState.status === 'won' ? (
+                <div className="nbl-win-banner" role="status">
+                  Cleared — no brainer
+                </div>
+              ) : null}
+              <Board
+                board={practiceState.board}
+                legalMoves={practiceState.legalMoves}
+                selectedTile={selectedTile}
+                lastPlayedTile={lastPlayedTile}
+                onPositionClick={onPositionClick}
+                tileSize={72}
+              />
+              <div className="nbl-board-toolbar">
+                <button
+                  type="button"
+                  className="nbl-icon-btn"
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                >
+                  <FullscreenIcon isFullscreen={isFullscreen} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {showSolution ? (
+            <section className="nbl-solution" aria-label="Solution sequence">
+              <h2 className="nbl-solution__title">Solution sequence</h2>
+              <div className="nbl-solution__tiles">
+                {record.example.map((tile, idx) => (
+                  <DominoTile
+                    key={`sol-${idx}-${tile.low}-${tile.high}`}
+                    tile={tile}
+                    size={48}
+                    disabled
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </main>
+
+        <footer className="nbl-dock">
+          <div className="nbl-tray">
+            <p className="nbl-tray__label">Your hand · play every tile</p>
+            <div className="nbl-hand-row">
+              {practiceState.remainingHand.map((tile, idx) => {
+                const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
+                return (
+                  <DominoTile
+                    key={`hand-${idx}-${tile.low}-${tile.high}`}
+                    tile={tile}
+                    size={handTileSize}
+                    selected={selected}
+                    highlight={false}
+                    disabled={practiceState.status !== 'playing'}
+                    onClick={() => {
+                      if (practiceState.status !== 'playing') return;
+                      const isPlayable = practiceState.legalMoves.some(
+                        (m) => m.type === 'play' && m.tile && tileEquals(m.tile, tile),
+                      );
+                      if (!isPlayable) return;
+                      setSelectedTile(tile);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="nbl-controls">
+            <div className="nbl-controls__group" aria-label="Hand navigation">
+              <Button variant="secondary" size="sm" onClick={retryHand} type="button">
+                Retry
+              </Button>
+              <Button variant="secondary" size="sm" onClick={startHand} type="button">
+                New Hand
+              </Button>
+            </div>
+
+            <div className="nbl-controls__divider" aria-hidden="true" />
+
+            <div className="nbl-controls__group" aria-label="Training assistance">
+              <Button variant="outline" size="sm" onClick={onHint} type="button">
+                Hint
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setShowSolution((prev) => {
+                    const next = !prev;
+                    if (next) setUsedShowSolution(true);
+                    return next;
+                  })
+                }
+                type="button"
+              >
+                {showSolution ? 'Hide Solution' : 'Show Solution'}
+              </Button>
+            </div>
+          </div>
+        </footer>
       </div>
 
-      <div className="wl-hand-area practice-hand-area">
-        <div className="practice-hand-row">
-          {practiceState.remainingHand.map((tile, idx) => {
-            const selected = selectedTile ? tileEquals(selectedTile, tile) : false;
-            return (
-              <DominoTile
-                key={`hand-${idx}-${tile.low}-${tile.high}`}
-                tile={tile}
-                size={handTileSize}
-                selected={selected}
-                highlight={false}
-                disabled={practiceState.status !== 'playing'}
-                onClick={() => {
-                  if (practiceState.status !== 'playing') return;
-                  const isPlayable = practiceState.legalMoves.some(
-                    (m) => m.type === 'play' && m.tile && tileEquals(m.tile, tile),
-                  );
-                  if (!isPlayable) return;
-                  setSelectedTile(tile);
-                }}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      {showSolution && (
-        <section
-          className="practice-solution"
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}
-        >
-          <h4 style={{ textAlign: 'center', width: '100%' }}>Solution sequence</h4>
-          <div
-            className="practice-solution-tiles"
-            style={{ width: '100%', justifyContent: 'center' }}
-          >
-            {record.example.map((tile, idx) => (
-              <DominoTile
-                key={`sol-${idx}-${tile.low}-${tile.high}`}
-                tile={tile}
-                size={48}
-                disabled
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {showDebug && (
+      {showDebug ? (
         <aside className="practice-debug">
           <div>
             <strong>open ends:</strong> {practiceState.openEnds.join(', ') || '(none)'}
@@ -408,7 +437,7 @@ export default function NoBrainerLabScreen({
             <strong>must continue:</strong> {practiceState.mustContinue ? 'yes' : 'no'}
           </div>
         </aside>
-      )}
+      ) : null}
     </div>
   );
 }

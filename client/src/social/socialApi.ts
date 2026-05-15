@@ -50,6 +50,8 @@ export interface LeaderboardEntry {
   provisional: boolean;
   rank_in_friends: number;
   is_self: boolean;
+  wins: number;
+  win_rate: number;
 }
 
 export interface RivalEntry {
@@ -80,6 +82,26 @@ export interface GlobalLeaderboardEntry {
   is_self: boolean;
 }
 
+export interface WeeklyLeaderboardEntry {
+  userId: string;
+  username: string;
+  glicko_rating: number;
+  provisional: boolean;
+  wins_this_week: number;
+  rank: number;
+  is_self: boolean;
+}
+
+export interface ModeLeaderboardEntry {
+  userId: string;
+  username: string;
+  glicko_rating: number;
+  provisional: boolean;
+  wins: number;
+  rank: number;
+  is_self: boolean;
+}
+
 export interface PublicProfile {
   ok: boolean;
   userId: string;
@@ -96,9 +118,11 @@ export interface PublicProfile {
   best_puzzle_score: number | null;
   fritz_wins: number;
   fritz_losses: number;
+  best_streak: number;
   is_self: boolean;
   is_friend: boolean;
   has_pending_request: boolean;
+  h2h: { wins: number; losses: number } | null;
   presence: { status: PresenceStatus; current_mode: string | null };
   recent_matches: RecentMatch[];
 }
@@ -141,12 +165,39 @@ export async function fetchFriendsLeaderboard(): Promise<{ leaderboard: Leaderbo
   }
 }
 
+export async function fetchWeeklyLeaderboard(): Promise<{ leaderboard: WeeklyLeaderboardEntry[]; self: WeeklyLeaderboardEntry | null; error: string | null }> {
+  try {
+    const data = await apiFetch<{ ok: boolean; leaderboard: WeeklyLeaderboardEntry[]; self: WeeklyLeaderboardEntry | null }>('/api/social/leaderboard/weekly');
+    return { leaderboard: data.leaderboard, self: data.self, error: null };
+  } catch (err) {
+    return { leaderboard: [], self: null, error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
+  }
+}
+
+export async function fetchModeLeaderboard(mode: string): Promise<{ leaderboard: ModeLeaderboardEntry[]; self: ModeLeaderboardEntry | null; error: string | null }> {
+  try {
+    const data = await apiFetch<{ ok: boolean; leaderboard: ModeLeaderboardEntry[]; self: ModeLeaderboardEntry | null }>(`/api/social/leaderboard/mode/${encodeURIComponent(mode)}`);
+    return { leaderboard: data.leaderboard, self: data.self, error: null };
+  } catch (err) {
+    return { leaderboard: [], self: null, error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
+  }
+}
+
 export async function fetchRivals(): Promise<{ rivals: RivalEntry[]; error: string | null }> {
   try {
     const data = await apiFetch<{ ok: boolean; rivals: RivalEntry[] }>('/api/social/rivals');
     return { rivals: data.rivals, error: null };
   } catch (err) {
     return { rivals: [], error: err instanceof Error ? err.message : 'Failed to load rivals.' };
+  }
+}
+
+export async function fetchUserActivity(userId: string): Promise<{ feed: FeedItem[]; error: string | null }> {
+  try {
+    const data = await apiFetch<{ ok: boolean; feed: FeedItem[] }>(`/api/social/feed/user/${encodeURIComponent(userId)}`);
+    return { feed: data.feed, error: null };
+  } catch (err) {
+    return { feed: [], error: err instanceof Error ? err.message : 'Activity unavailable.' };
   }
 }
 

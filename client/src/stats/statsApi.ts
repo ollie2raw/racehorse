@@ -740,3 +740,11 @@ export async function fetchUserStatsByUserId(
     error: null,
   };
 }
+
+export async function fetchFritzHubStats(
+  userId: string,
+): Promise<FritzStatsSummary | null> {
+  const historyResp = await fetchRatingHistory(userId);
+  if (historyResp.error || !historyResp.data) return null;
+  return deriveFritzSummary(historyResp.data.games, getWeekStart());
+}

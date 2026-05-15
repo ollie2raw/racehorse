@@ -5,11 +5,13 @@ import "./SinglePlayerModes.css";
 import type { AppMode } from "../types";
 import { GlobalNav } from "../components";
 import { Button } from "../components/primitives";
+import { useSinglePlayerHubStats, type HubStatRow } from "./useSinglePlayerHubStats";
 import artFritzPng from "../assets/singlePlayerHub/fritzwave.png";
 import artGhostPng from "../assets/singlePlayerHub/fritzghost2.png";
 import artLabPng from "../assets/singlePlayerHub/fritznobrainer2.png";
 
 interface SinglePlayerHubScreenProps {
+  userId?: string | null;
   onBack: () => void;
   onNavigate: (mode: AppMode) => void;
 }
@@ -23,7 +25,6 @@ type CardConfig = {
   title: string;
   titleColor: string;
   desc: string;
-  stats: { icon: StatIconName; label: string; value: string }[];
   variant: "tier-elite" | "tier-standard" | "tier-master";
   chevronColor: string;
 };
@@ -78,11 +79,7 @@ const MODES: CardConfig[] = [
     sectionRounded: "rounded-[20px] rounded-tl-[5px]",
     title: "Play vs Fritz",
     titleColor: "#E7B64A",
-    desc: "Challenge Fritz, a world-class AI opponent with adaptive difficulty.",
-    stats: [
-      { icon: "crown", label: "Top Rating", value: "1,742" },
-      { icon: "bolt", label: "Best Streak", value: "12" },
-    ],
+    desc: "Fritz doesn't go easy. Find out if you're good enough.",
     variant: "tier-elite",
     chevronColor: "#FFD76A",
     artSrc: artFritzPng,
@@ -93,11 +90,7 @@ const MODES: CardConfig[] = [
     sectionRounded: "rounded-[20px] rounded-tr-[5px]",
     title: "Ghost Mode",
     titleColor: "#4FC3F7",
-    desc: "Race against your past games. Can you beat your best?",
-    stats: [
-      { icon: "clock", label: "Best Time", value: "02:48" },
-      { icon: "bars", label: "Games Played", value: "24" },
-    ],
+    desc: "Race against a model of your own game. Can you beat yourself?",
     variant: "tier-standard",
     chevronColor: "#4FC3F7",
     artSrc: artGhostPng,
@@ -106,13 +99,9 @@ const MODES: CardConfig[] = [
     key: "noBrainer" as AppMode,
     containerClass: "sp-lab-mode-card-container",
     sectionRounded: "rounded-[20px] rounded-tr-[5px]",
-    title: "No Brainer Lab",
+    title: "The Lab",
     titleColor: "#C77DFF",
-    desc: "Solve curated puzzles and expand your domino intuition.",
-    stats: [
-      { icon: "puzzle", label: "Puzzles Solved", value: "156" },
-      { icon: "bolt", label: "Best Streak", value: "18" },
-    ],
+    desc: "Drill every no brainer combination until you never miss one.",
     variant: "tier-master",
     chevronColor: "#C77DFF",
     artSrc: artLabPng,
@@ -133,7 +122,23 @@ const themeVars = {
   "--rh-muted": "#7A778A",
 } as CSSProperties;
 
-export default function SinglePlayerHubScreen({ onBack, onNavigate }: SinglePlayerHubScreenProps) {
+function statsForMode(
+  modeKey: AppMode,
+  hubStats: ReturnType<typeof useSinglePlayerHubStats>,
+): HubStatRow[] {
+  if (modeKey === "botSetup") return hubStats.fritz;
+  if (modeKey === "ghostSetup") return hubStats.ghost;
+  if (modeKey === "noBrainer") return hubStats.lab;
+  return [];
+}
+
+export default function SinglePlayerHubScreen({
+  userId = null,
+  onBack,
+  onNavigate,
+}: SinglePlayerHubScreenProps) {
+  const hubStats = useSinglePlayerHubStats(userId);
+
   return (
     <div
       className="relative flex max-h-full min-h-0 flex-1 overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root"
@@ -198,12 +203,14 @@ export default function SinglePlayerHubScreen({ onBack, onNavigate }: SinglePlay
                 <div className="home-card-scrim" aria-hidden="true" />
                 <div className="home-card-content relative flex h-[268px] items-center">
                   <div className="flex flex-1 flex-col justify-center">
-                    <h2 className="text-[44px] font-bold tracking-[-0.055em]" style={{ color: mode.titleColor }}>
-                      {mode.title}
-                    </h2>
-                    <p className="mt-3 text-[17px] leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
+                    <div className="sp-solo-mode-card__text">
+                      <h2 className="text-[44px] font-bold tracking-[-0.055em]" style={{ color: mode.titleColor }}>
+                        {mode.title}
+                      </h2>
+                      <p className="mt-3 text-[16px] leading-relaxed text-[#AAA6B4]">{mode.desc}</p>
+                    </div>
                     <div className="sp-solo-stats mt-6 flex flex-wrap items-center gap-x-10 gap-y-3">
-                      {mode.stats.map((stat) => (
+                      {statsForMode(mode.key, hubStats).map((stat) => (
                         <div key={stat.label} className="flex min-w-0 items-start gap-2">
                           <span className="sp-solo-stat-icon mt-0.5" style={{ color: mode.titleColor }}>
                             <StatIcon icon={stat.icon} />
@@ -225,7 +232,7 @@ export default function SinglePlayerHubScreen({ onBack, onNavigate }: SinglePlay
                       style={{ width: 188, height: 50, justifyContent: "space-between" }}
                       type="button"
                     >
-                      <span>Play Today</span>
+                      <span>Play</span>
                       <span
                         style={{ fontSize: 22, lineHeight: 1, color: mode.chevronColor, opacity: 0.9 }}
                         aria-hidden="true"

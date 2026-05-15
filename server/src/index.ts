@@ -99,11 +99,13 @@ import {
   nextHand,
   readyForNextHand,
   getRoom,
+  peekRoom,
   deleteRoom,
   getRoomLegalMoves,
   getRoomCanDraw,
   getRoomMatchEventMeta,
   getRoomMatchEventSnapshot,
+  getRoomRuntimeStats,
   type ManualDrawAnimationStep,
   type Room,
 } from './rooms';
@@ -220,6 +222,19 @@ app.get('/health', (_, res) => {
 
 app.get('/ping', (_, res) => {
   res.json({ status: 'ok' });
+});
+
+/** Multiplayer process-local stats (in-memory rooms; resets on deploy / spin-down). */
+app.get('/api/mp-stats', (_req, res) => {
+  const { roomCount, gamesInProgress } = getRoomRuntimeStats();
+  res.json({
+    ok: true,
+    pid: process.pid,
+    roomCount,
+    gamesInProgress,
+    connectedSockets: io.sockets.sockets.size,
+    roomCleanupGraceMs: ROOM_CLEANUP_GRACE_MS,
+  });
 });
 
 app.get('/api/home/daily-summary', async (req, res) => {
@@ -1048,6 +1063,11 @@ const io = new Server(server, {
     methods: ['GET', 'POST'],
     credentials: true,
   },
+  /** Longer windows help mobile / cold Render instances; defaults are easy to false-positive disconnect. */
+  pingTimeout: 60_000,
+  pingInterval: 25_000,
+  connectTimeout: 45_000,
+  maxHttpBufferSize: 1e6,
 });
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
@@ -1056,7 +1076,10 @@ type AckFn = (payload: any) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
 const RECONNECT_GRACE_MS = 5 * 60_000;
-const ROOM_CLEANUP_GRACE_MS = 5 * 60_000;
+const parsedRoomCleanupGrace = Number.parseInt(process.env.ROOM_CLEANUP_GRACE_MS ?? '', 10);
+const ROOM_CLEANUP_GRACE_MS = Number.isFinite(parsedRoomCleanupGrace)
+  ? Math.max(60_000, parsedRoomCleanupGrace)
+  : 5 * 60_000;
 type ReconnectSeat = {
   oldSocketId: string;
   username: string;
@@ -1066,6 +1089,52 @@ type ReconnectSeat = {
 const reconnectSeatsByCode = new Map<string, ReconnectSeat[]>();
 const socketsByUserId = new Map<string, Set<string>>();
 const roomCleanupTimersByCode = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * After Render/deploy the in-memory Map is empty but matchmaking still has an
+ * `in_progress` row. Recreate a reserved room shell so players can re-seat;
+ * game state is not restored (would require separate persisted snapshots).
+ */
+async function tryHydrateMatchmakingRoomShell(roomCode: string): Promise<'skipped' | 'already' | 'hydrated' | 'miss'> {
+  const code = roomCode.trim().toUpperCase();
+  if (!code.startsWith('MM')) return 'skipped';
+  if (peekRoom(code)) return 'already';
+  try {
+    const rows = await supabaseFetch<Array<{ id: string }>>(
+      `/rest/v1/matchmaking_matches?room_code=eq.${encodeURIComponent(code)}&status=eq.in_progress&select=id&limit=1`,
+    );
+    const id = typeof rows[0]?.id === 'string' ? rows[0].id : null;
+    if (!id) return 'miss';
+    const room = createReservedRoom(code, { winningScore: 60 });
+    room.matchmakingMatchId = id;
+    console.log('[room:hydrate] matchmaking shell restored', { roomCode: code, matchmakingMatchId: id });
+    return 'hydrated';
+  } catch (err) {
+    console.warn('[room:hydrate] failed', err instanceof Error ? err.message : err);
+    return 'miss';
+  }
+}
+
+// Emit presence:update to all sockets of friends who are currently connected.
+function emitPresenceUpdateToFriends(userId: string, status: string): void {
+  void (async () => {
+    try {
+      const enc = encodeURIComponent(userId);
+      const rows = await supabaseFetch<Array<{ user_id: string; friend_user_id: string }>>(
+        `/rest/v1/friends?or=(user_id.eq.${enc},friend_user_id.eq.${enc})` +
+        `&status=eq.accepted&select=user_id,friend_user_id`,
+      );
+      for (const r of rows) {
+        const friendId = r.user_id === userId ? r.friend_user_id : r.user_id;
+        const friendSockets = socketsByUserId.get(friendId);
+        if (!friendSockets?.size) continue;
+        for (const socketId of friendSockets) {
+          io.to(socketId).emit('presence:update', { userId, status });
+        }
+      }
+    } catch { /* non-critical */ }
+  })();
+}
 let finalizeTournamentMatchHook: ((room: any) => void) | null = null;
 
 type VerifiedSinglePlayerMatch = {
@@ -2357,6 +2426,21 @@ async function getUsernameForUserId(userId: string): Promise<string | null> {
   return username || null;
 }
 
+async function getDailyPuzzleLadderStreak(userId: string, todayPuzzleDate: string): Promise<number> {
+  const dates = await listCompletedDailyPuzzleLadderDatesForUser(userId);
+  const sortedUnique = [...new Set(dates)].sort((a, b) => b.localeCompare(a));
+  if (!sortedUnique.includes(todayPuzzleDate)) return 0;
+  let streak = 0;
+  let cursor = new Date(`${todayPuzzleDate}T00:00:00-08:00`);
+  while (true) {
+    const key = getPacificDateKey(cursor);
+    if (!sortedUnique.includes(key)) break;
+    streak += 1;
+    cursor = new Date(cursor.getTime() - 86400000);
+  }
+  return streak;
+}
+
 async function getDailyFritzStreak(userId: string, todayRunDate: string): Promise<number> {
   const rows = await supabaseFetch<Array<{ run_date: string; status: DailyFritzAttemptStatus }>>(
     `/rest/v1/daily_fritz_attempts?select=run_date,status&user_id=eq.${encodeURIComponent(userId)}&status=eq.completed&order=run_date.desc&limit=365`,
@@ -2577,6 +2661,16 @@ function getPendingFritzMatchContext(room: Room): { realPlayer: RoomPlayer; frit
     realPlayer: realPlayers[0],
     fritzTier: getFritzTierForRoom(room, botPlayer.id),
   };
+}
+
+/** Activity feed copy: "Fritz (Elite)", "Fritz (Master)", etc. */
+function formatFritzActivityOpponentLabel(rawTier: string): string {
+  const tier = rawTier.trim().toLowerCase();
+  if (tier === 'grandmaster') return 'Fritz (Grandmaster)';
+  if (tier === 'rookie' || tier === 'standard' || tier === 'elite' || tier === 'master') {
+    return `Fritz (${tier.charAt(0).toUpperCase()}${tier.slice(1)})`;
+  }
+  return 'Fritz';
 }
 
 function getFritzIdentityForTier(rawTier: unknown): { fritzId: string; gameType: string } {
@@ -3107,7 +3201,9 @@ app.post('/api/daily-puzzle/complete', async (req, res) => {
     const leaderboard = await buildDailyPuzzleLeaderboardForDate(saved.puzzleDate);
     const leaderboardRank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
     if (!replayed) {
-      void writePuzzleActivity({ userId: authenticatedUserId, score: saved.totalScore ?? null, streak: 0 }).catch(() => {});
+      void getDailyPuzzleLadderStreak(authenticatedUserId, saved.puzzleDate)
+        .then((streak) => writePuzzleActivity({ userId: authenticatedUserId, score: saved.totalScore ?? null, streak }))
+        .catch(() => {});
     }
     res.json({
       ok: true,
@@ -4502,12 +4598,20 @@ function broadcastStateUpdate(roomCode: string) {
             pointDiff: Math.abs(scoreA - scoreB),
           });
 
+          const fritzActivityCtx = getPendingFritzMatchContext(room);
+          const winnerRoster = winnerSocketId === aId ? a : b;
+          const loserRoster = winnerSocketId === aId ? b : a;
+          const activityDisplayName = (p: typeof a) =>
+            fritzActivityCtx && typeof p.id === 'string' && p.id.startsWith('bot:fritz:')
+              ? formatFritzActivityOpponentLabel(fritzActivityCtx.fritzTier)
+              : p.username;
+
           void writeMatchActivity({
             winnerUserId: winnerSocketId === aId ? a.userId : b.userId,
             loserUserId: winnerSocketId === aId ? b.userId : a.userId,
-            winnerUsername: winnerSocketId === aId ? a.username : b.username,
-            loserUsername: winnerSocketId === aId ? b.username : a.username,
-            mode: 'online',
+            winnerUsername: activityDisplayName(winnerRoster),
+            loserUsername: activityDisplayName(loserRoster),
+            mode: fritzActivityCtx ? 'bot' : 'online',
             winnerScore: winnerSocketId === aId ? scoreA : scoreB,
             loserScore: winnerSocketId === aId ? scoreB : scoreA,
           }).catch(() => {});
@@ -4801,6 +4905,11 @@ function broadcastStateUpdate(roomCode: string) {
 }
 
 io.on('connection', (socket: Socket) => {
+  console.log(`[socket.io] client connected id=${socket.id} transport=${socket.conn.transport.name}`);
+  socket.conn.on('upgrade', (transport) => {
+    console.log(`[socket.io] transport upgraded id=${socket.id} -> ${transport.name}`);
+  });
+
   /* Matchmaking queue handlers — additive, does not modify private-match flow. */
   registerMatchmakingHandlers(io, socket, (code) => broadcastStateUpdate(code));
 
@@ -4893,6 +5002,7 @@ io.on('connection', (socket: Socket) => {
       existing.add(socket.id);
       socketsByUserId.set(userId, existing);
       void upsertPresence(userId, 'online').catch(() => {});
+      emitPresenceUpdateToFriends(userId, 'online');
       cb?.({ ok: true });
     } catch {
       cb?.({ ok: false });
@@ -5434,10 +5544,37 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       console.log(`[room:join] identity user=${username} (${userId})`);
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
+      const hydrateResult = await tryHydrateMatchmakingRoomShell(roomCode);
+      let existingRoom = peekRoom(roomCode);
+      // #region agent log
+      void fetch('http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b186e6' },
+        body: JSON.stringify({
+          sessionId: 'b186e6',
+          location: 'server/index.ts:room:join',
+          message: 'post-hydrate room peek',
+          data: {
+            roomCode,
+            hydrateResult,
+            hadRoom: Boolean(existingRoom),
+            pid: process.pid,
+            transport: socket.conn?.transport?.name ?? null,
+          },
+          timestamp: Date.now(),
+          hypothesisId: 'H1',
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (!existingRoom) {
+        const message = 'Room not found.';
+        console.log(`[room:join] ERROR: ${message} hydrate=${hydrateResult}`);
+        cb?.({ ok: false, error: message });
+        return;
+      }
       let room: Room | null = null;
       let roster: RoomPlayer[] = [];
       let migratedByUserId = false;
-      const existingRoom = getRoom(roomCode);
       roster = (
         roomPlayersByCode.get(roomCode) ??
         getRoomPlayersWithFallback(roomCode, existingRoom.players)
@@ -5667,6 +5804,8 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
           });
         }
       }
+
+      evaluateRoomLifecycle(room.code);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'unknown error';
       console.log(`[room:join] ERROR: ${message}`);
@@ -5711,6 +5850,14 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       console.log(
         `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,
       );
+      for (const socketId of room.players) {
+        const pSocket = io.sockets.sockets.get(socketId);
+        const playerId = normalizeUserId(pSocket?.data?.userId);
+        if (playerId) {
+          void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
+          emitPresenceUpdateToFriends(playerId, 'in_game');
+        }
+      }
       if (getPendingFritzMatchContext(room)) {
         await insertPendingFritzMatch(room);
       }
@@ -5880,6 +6027,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     const userId = normalizeUserId(socket.data?.userId);
     if (isUuidLike(userId)) {
       void upsertPresence(userId as string, 'offline').catch(() => {});
+      emitPresenceUpdateToFriends(userId as string, 'offline');
     }
     let wasActiveRoomPlayer = false;
     if (roomCode) {
@@ -5921,6 +6069,17 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     console.log('Client disconnected:', socket.id);
   });
 });
+
+function notifyClientsOfProcessShutdown(signal: string): void {
+  try {
+    console.warn(`[server] ${signal} — notifying sockets before exit`);
+    io.emit('server:shutdown', { reason: 'server_restart', signal });
+  } catch {
+    /* ignore */
+  }
+}
+process.once('SIGTERM', () => notifyClientsOfProcessShutdown('SIGTERM'));
+process.once('SIGINT', () => notifyClientsOfProcessShutdown('SIGINT'));
 
 const PORT = Number.parseInt(process.env.PORT ?? '3001', 10) || 3001;
 
