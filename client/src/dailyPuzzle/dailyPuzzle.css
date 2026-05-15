@@ -2143,6 +2143,10 @@
   color: color-mix(in srgb, var(--tier-standard) 82%, var(--text-dim));
 }
 
+.dpl-ladder-df-page .df-feature-bar {
+  --df-feature-bar-shadow-tint: color-mix(in srgb, var(--tier-standard) 16%, rgba(0, 0, 0, 0.5));
+}
+
 .dpl-ladder-overview-stats.df-overview-stats {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 2px 0 6px;

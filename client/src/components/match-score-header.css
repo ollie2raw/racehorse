@@ -1,0 +1,222 @@
+/* Match score header — shared 6×5 cribbage grid, full width */
+
+.wl-score-header {
+  flex: 0 0 var(--score-header-height, 72px);
+  width: 100%;
+  max-width: 100%;
+  height: var(--score-header-height, 72px);
+  min-height: var(--score-header-height, 72px);
+  max-height: var(--score-header-height, 72px);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #0b1222;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  isolation: isolate;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.wl-score-header.is-interactive {
+  cursor: pointer;
+}
+
+.wl-score-header.is-interactive:focus-visible {
+  outline: 2px solid rgba(149, 240, 202, 0.75);
+  outline-offset: 2px;
+}
+
+.wl-score-header__inner {
+  --score-label-width: 6.75rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--score-label-width) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  height: 100%;
+  width: 100%;
+  padding: 5px 12px 5px 14px;
+  box-sizing: border-box;
+}
+
+.wl-score-header__labels {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  align-content: center;
+  gap: 6px;
+  min-height: 0;
+}
+
+.wl-score-header__label-block {
+  display: flex;
+  align-items: center;
+  min-height: 0;
+}
+
+.wl-score-header__player-line {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.1;
+}
+
+.wl-score-header__player-line.score-hit {
+  animation: wl-score-hit 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.wl-score-header__player-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.wl-score-header__player-sublabel {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wl-score-header__player-tiles {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+}
+
+.wl-score-header__player-line--opp .wl-score-header__player-tiles {
+  color: rgba(224, 175, 123, 0.75);
+}
+
+.wl-score-header__player-line--you .wl-score-header__player-tiles {
+  color: rgba(149, 240, 202, 0.75);
+}
+
+.wl-score-header__boneyard-anchor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* One grid: 6 group columns × 4 hole rows; track rows use display:contents */
+.wl-score-tracks {
+  display: grid;
+  grid-auto-rows: auto;
+  row-gap: 3px;
+  column-gap: clamp(8px, 1.8vw, 22px);
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  padding: 3px 4px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.wl-score-track-row {
+  display: contents;
+}
+
+.wl-hole-group {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 0 1px;
+  box-sizing: border-box;
+}
+
+.wl-cribbage-hole {
+  justify-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+
+.wl-cribbage-hole.is-mark {
+  background: rgba(255, 255, 255, 0.26);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.wl-cribbage-hole.is-active {
+  z-index: 1;
+}
+
+.wl-cribbage-peg {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.wl-cribbage-peg--opp {
+  background: var(--wl-gold, #e0af7b);
+  box-shadow:
+    0 0 0 1px rgba(224, 175, 123, 0.35),
+    0 0 8px rgba(224, 175, 123, 0.55);
+}
+
+.wl-cribbage-peg--you {
+  background: var(--wl-mint, #95f0ca);
+  box-shadow:
+    0 0 0 1px rgba(149, 240, 202, 0.35),
+    0 0 8px rgba(149, 240, 202, 0.5);
+}
+
+.wl-cribbage-peg.is-turn {
+  animation: wl-peg-breathe 2.2s ease-in-out infinite;
+}
+
+@keyframes wl-peg-breathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    filter: brightness(1);
+  }
+
+  50% {
+    transform: translate(-50%, -50%) scale(1.12);
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes wl-score-hit {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.04);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}

@@ -1124,14 +1124,21 @@ export default function DailyFritzScreen({
   const isComplete = today?.attempt_status === 'completed';
   const isStarted = today?.attempt_status === 'started';
 
+  const matchClinched =
+    todaySetResult != null &&
+    (todaySetResult.setWinner != null ||
+      todaySetResult.playerGamesWon >= 2 ||
+      todaySetResult.fritzGamesWon >= 2);
+
   const games = [1, 2, 3].map((n) => {
     const res = todaySetResult?.games.find((g) => g.gameNumber === n);
     const isNext = todaySetResult ? todaySetResult.games.length + 1 === n && !todaySetResult.setWinner : n === 1;
+    const game3NotRequired = n === 3 && !res && matchClinched;
 
     const rowVariant = res ? 'done' : isNext ? 'active' : 'muted';
     const youWonRow = res ? Number(res.playerScore) > Number(res.fritzScore) : false;
     const outcome = res ? (youWonRow ? ('won' as const) : ('lost' as const)) : null;
-    const isLocked = rowVariant === 'muted';
+    const isLocked = rowVariant === 'muted' && !game3NotRequired;
 
     let statusSub: string;
     let unlockHint: string | null = null;
@@ -1141,6 +1148,9 @@ export default function DailyFritzScreen({
     } else if (isNext) {
       statusSub = 'Ready to play';
       showPlay = !isComplete && !startActionPending;
+    } else if (game3NotRequired) {
+      statusSub = 'Not required';
+      unlockHint = 'Game 3 not required';
     } else {
       statusSub = 'Locked';
       unlockHint = n === 2 ? 'Play game 1 to unlock' : 'Win game 1 or 2 to unlock';
@@ -1383,12 +1393,14 @@ export default function DailyFritzScreen({
                           {game.rowVariant === 'done' && game.scoreLine ? (
                             <div className="df-game-done-score df-bof3-done-pill">{game.scoreLine}</div>
                           ) : null}
-                          {game.isLocked && game.unlockHint ? (
+                          {game.unlockHint && game.rowVariant !== 'done' && !game.showPlay ? (
                             <>
                               <div className="df-game-unlock-hint df-bof3-unlock-hint">{game.unlockHint}</div>
-                              <div className="df-game-lock-wrap df-bof3-lock" aria-hidden>
-                                <DfLockIcon />
-                              </div>
+                              {game.isLocked ? (
+                                <div className="df-game-lock-wrap df-bof3-lock" aria-hidden>
+                                  <DfLockIcon />
+                                </div>
+                              ) : null}
                             </>
                           ) : null}
                         </div>

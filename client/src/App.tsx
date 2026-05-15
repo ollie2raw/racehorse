@@ -10,9 +10,9 @@ import {
   BrandLogo,
   DominoTile,
   RotateOverlay,
-  ScoreBoard,
   ScoreTrackOverlay,
 } from './components';
+import { MatchNblBoardFrame } from './components/MatchNblBoardFrame';
 import LeaveGameModal from './components/LeaveGameModal';
 import TileRack from './components/TileRack';
 import {
@@ -4085,37 +4085,7 @@ export default function App() {
           </div>
 
           <div className="wl-stage-shell">
-              <div className="board-area wl-board-area" data-ui="board">
-                {!state.gameOver && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 12,
-                      left: 12,
-                      zIndex: 8,
-                      borderRadius: 18,
-                      border: '1.5px solid rgba(236,252,245,0.22)',
-                      background: 'rgba(255,255,255,0.08)',
-                      backdropFilter: 'blur(20px)',
-                      boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-                      padding: '4px 8px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      pointerEvents: 'none',
-                      transform: 'scale(0.82)',
-                      transformOrigin: 'top left',
-                    }}
-                  >
-                    <ScoreBoard
-                      compact
-                      target={60}
-                      players={[
-                        { label: opponentName, score: opponentScore, tone: 'opp' },
-                        { label: myName, score: myScore, tone: 'you' },
-                      ]}
-                    />
-                  </div>
-                )}
+            <MatchNblBoardFrame>
                 {scoreToast && (
                 <div
                   style={{
@@ -4288,7 +4258,7 @@ export default function App() {
                   }
                 />
               ))}
-            </div>
+            </MatchNblBoardFrame>
           </div>
 
           <div ref={handAreaRef} className="hand-area wl-hand-area" data-ui="tray">

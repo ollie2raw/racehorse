@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Board, BoneyardStackIcon, DominoTile, ScoreBoard, ScoreTrackOverlay, RotateOverlay } from '../components';
+import { Board, BoneyardStackIcon, DominoTile, ScoreTrackOverlay, RotateOverlay } from '../components';
+import { MatchNblBoardFrame } from '../components/MatchNblBoardFrame';
 import TileRack from '../components/TileRack';
 import type { BoardState, BranchArm, HubDouble, Move, PlacedTile, PlacementPosition, Tile } from '../types';
 import {
@@ -5830,40 +5831,8 @@ export default function BotMatchScreen({
     </div>
   );
 
-  const boardStage = (
-    <div className={`wl-stage-shell ${isLessonLayoutMode ? 'learn-lesson-stage-shell' : ''}`}>
-      <div
-        className={`board-area wl-board-area ${ghostBoardPulse ? 'ghost-board-pulse' : ''} ${isLessonLayoutMode ? 'learn-lesson-board-area' : ''}`}
-        data-ui="board"
-      >
-        {!match.gameOver && !isLessonLayoutMode && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 12,
-              left: 12,
-              zIndex: 8,
-              borderRadius: 18,
-              border: '1.5px solid rgba(236,252,245,0.22)',
-              background: 'rgba(255,255,255,0.08)',
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
-              padding: '4px 8px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              pointerEvents: 'none',
-            }}
-          >
-            <ScoreBoard
-              compact
-              target={60}
-              players={[
-                { label: opponentLabel, score: match.players.bot.score, tone: 'opp' },
-                { label: 'You', score: match.players.you.score, tone: 'you' },
-              ]}
-            />
-          </div>
-        )}
+  const boardStageInner = (
+    <>
         {scoreToast && (
           <div
             style={{
@@ -6186,7 +6155,23 @@ export default function BotMatchScreen({
             </button>
           </div>
         )}
-      </div>
+    </>
+  );
+
+  const boardStage = (
+    <div className={`wl-stage-shell ${isLessonLayoutMode ? 'learn-lesson-stage-shell' : ''}`}>
+      {isLessonLayoutMode ? (
+        <div
+          className={`board-area wl-board-area ${ghostBoardPulse ? 'ghost-board-pulse' : ''} learn-lesson-board-area`}
+          data-ui="board"
+        >
+          {boardStageInner}
+        </div>
+      ) : (
+        <MatchNblBoardFrame className={ghostBoardPulse ? 'ghost-board-pulse' : undefined}>
+          {boardStageInner}
+        </MatchNblBoardFrame>
+      )}
     </div>
   );
 
@@ -6655,7 +6640,7 @@ export default function BotMatchScreen({
         </header>
       ) : (
         <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
-          <div className="bot-hud-left-cluster">
+          <div className="bot-hud-left-cluster" style={{ gridColumn: 1 }}>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <button
                 type="button"
@@ -6707,9 +6692,20 @@ export default function BotMatchScreen({
             </div>
           </div>
 
-          <div className="bot-hud-center-cluster" style={{ position: 'relative' }}>
-            {showTurnStatusCluster && (
-              <>
+          {showTurnStatusCluster && (
+            <div
+              className="wl-center-status"
+              data-ui="turn-status"
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
                 {isDailyFritzMode && dailyFritzPackage && (
                   <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
                     <span className="hud-pill-label">GAME</span>
@@ -6717,7 +6713,7 @@ export default function BotMatchScreen({
                   </div>
                 )}
                 {turnLabel && (
-                  <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`} style={{ transform: 'none' }}>
+                  <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
                     {turnLabel}
                   </span>
                 )}
@@ -6725,11 +6721,10 @@ export default function BotMatchScreen({
                   <span className="hud-pill-value">{openEndsSum}</span>
                   <span className="hud-pill-label">OPEN</span>
                 </div>
-              </>
-            )}
-          </div>
+            </div>
+          )}
 
-          <div className="bot-hud-right-cluster">
+          <div className="bot-hud-right-cluster" style={{ gridColumn: 3, justifySelf: 'end' }}>
             <button
               type="button"
               className={`wl-player-pill wl-player-pill-btn is-you ${!botTurn && handActive ? 'is-active' : ''}`}

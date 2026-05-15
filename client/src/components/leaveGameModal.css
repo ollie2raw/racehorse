@@ -1,136 +1,137 @@
-.rh-modal-overlay {
+/* Leave-game confirmation — visual language from Match Found pre-game (matchFoundOverlay.css) */
+
+.rh-leave-overlay {
   position: fixed;
   inset: 0;
   z-index: 1900;
   display: grid;
   place-items: center;
-  background: rgba(2, 4, 10, 0.62);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  padding: 16px;
-  animation: rh-fade 180ms ease;
+  padding: clamp(16px, 2.2vw, 28px);
+  background: rgba(2, 4, 10, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: rh-leave-fade 240ms var(--ease-premium);
 }
 
-@keyframes rh-fade {
+@keyframes rh-leave-fade {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.rh-modal {
+/* Player-card presence: .mm-found-seat + danger accent (.mm-found-wld--l) */
+.rh-leave-card {
   position: relative;
-  width: min(520px, calc(100vw - 32px));
-  background:
-    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(var(--rh-accent-rgb, 255, 111, 94), 0.12), transparent 70%),
-    linear-gradient(180deg, rgba(13, 15, 28, 0.98), rgba(8, 9, 18, 0.98));
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  width: min(560px, calc(100vw - 32px));
+  min-width: min(520px, calc(100vw - 32px));
+  padding: clamp(36px, 5vw, 48px) clamp(32px, 4.5vw, 44px);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid color-mix(in srgb, var(--accent-red) 38%, var(--border-subtle));
   box-shadow:
-    0 32px 80px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  padding: clamp(28px, 5vw, 40px) clamp(24px, 5vw, 36px);
-  animation: rh-pop 220ms cubic-bezier(.2,.9,.3,1.1);
+    inset 0 0 56px color-mix(in srgb, var(--accent-red) 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  color: var(--text-primary);
+  animation: rh-leave-enter 360ms var(--ease-premium);
 }
 
-@keyframes rh-pop {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+@keyframes rh-leave-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-.rh-modal__decor {
-  position: absolute;
-  top: -28px;
-  right: -8px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 220px;
-  font-weight: 900;
-  line-height: 1;
-  color: rgba(var(--rh-accent-rgb, 255, 111, 94), 0.05);
-  pointer-events: none;
-}
-
-.rh-modal__eyebrow {
-  margin: 0 0 14px;
-  color: #ff6f5e;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
-.rh-modal__title {
-  margin: 0 0 12px;
-  font-family: 'Outfit', sans-serif;
-  font-size: clamp(36px, 4.4vw, 48px);
+/* Hero scale: .mm-found-center__title + .mm-found-seat__elo-num weight */
+.rh-leave-modal__title {
+  margin: 0 0 16px;
+  font-family: var(--font-body);
+  font-size: clamp(2rem, 5vw, 2.5rem);
   font-weight: 900;
   letter-spacing: -0.04em;
-  line-height: 0.95;
-  color: #fff;
-  white-space: pre-line;
+  line-height: 0.92;
+  color: var(--text-primary);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
 }
 
-.rh-modal__copy {
-  margin: 0 0 28px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
-  line-height: 1.6;
+.rh-leave-modal__copy {
+  margin: 0 0 clamp(32px, 4.5vw, 40px);
+  max-width: 42ch;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
 }
 
-.rh-modal__warn-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(255, 111, 94, 0.4);
-  background: rgba(255, 111, 94, 0.08);
-  color: #ff6f5e;
-  margin-bottom: 16px;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 900;
-  font-size: 18px;
-}
-
-.rh-modal__buttons {
+.rh-leave-modal__buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
-.rh-btn-cancel,
-.rh-btn-leave {
-  appearance: none;
-  border: 0;
-  cursor: pointer;
-  padding: 16px 18px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  display: inline-flex;
-  align-items: center;
+.rh-leave-modal__btn {
+  width: 100%;
+  height: 52px;
+  border-radius: var(--pvf-radius-sm, 12px);
   justify-content: center;
-  gap: 8px;
-  transition: filter 160ms, transform 160ms, background 160ms, border-color 160ms;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
-.rh-btn-cancel {
-  background: #2dd4a8;
-  color: #04111c;
-  box-shadow: 0 8px 22px rgba(45, 212, 168, 0.28);
+/* Secondary: .mm-found-badge on player cards */
+.rh-leave-modal__btn--cancel.rh-btn {
+  background: rgba(0, 0, 0, 0.28);
+  border-color: var(--border-light);
+  color: rgba(248, 250, 252, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.rh-btn-cancel:hover {
-  filter: brightness(1.06);
+.rh-leave-modal__btn--cancel.rh-btn:hover {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transform: translateY(-1px);
 }
 
-.rh-btn-leave {
-  background: rgba(255, 111, 94, 0.06);
-  color: #ff6f5e;
-  border: 1px solid rgba(255, 111, 94, 0.5);
+.rh-leave-modal__btn--cancel.rh-btn:active {
+  transform: scale(0.97);
 }
 
-.rh-btn-leave:hover {
-  background: rgba(255, 111, 94, 0.14);
-  border-color: rgba(255, 111, 94, 0.75);
+/* Destructive — unchanged site danger red */
+.rh-leave-modal__btn--leave.rh-btn {
+  background: var(--accent-danger, var(--accent-red));
+  border-color: color-mix(in srgb, var(--accent-danger, var(--accent-red)) 78%, #000);
+  color: #fff;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent-danger, var(--accent-red)) 34%, transparent);
+}
+
+.rh-leave-modal__btn--leave.rh-btn:hover {
+  background: color-mix(in srgb, var(--accent-danger, var(--accent-red)) 94%, white);
+  border-color: color-mix(in srgb, var(--accent-danger, var(--accent-red)) 86%, #000);
+  color: #fff;
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--accent-danger, var(--accent-red)) 42%, transparent);
+  transform: translateY(-1px);
+}
+
+.rh-leave-modal__btn--leave.rh-btn:active {
+  transform: scale(0.97);
+}
+
+@media (max-width: 540px) {
+  .rh-leave-card {
+    min-width: 0;
+    width: calc(100vw - 32px);
+  }
+
+  .rh-leave-modal__buttons {
+    grid-template-columns: 1fr;
+  }
 }
