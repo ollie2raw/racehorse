@@ -25,7 +25,7 @@ import type {
   DailyPuzzleTodayResponse,
 } from './types';
 import LeaderboardPageShell from '../ui/LeaderboardPageShell';
-import dailyLadderHeroImg from '../assets/dailyPuzzle/daily-ladder-perfect.png';
+import dailyLadderHeroImg from '../assets/dailyPuzzle/ladderimage-done.png';
 import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
 
 interface DailyPuzzleLadderScreenProps {
