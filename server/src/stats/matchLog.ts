@@ -2,20 +2,67 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+export type MatchLogSide = {
+  seatId: string;
+  userId: string | null;
+  username: string;
+};
+
 export type MatchLogEntry = {
   id: string;
   endedAtMs: number;
   roomCode: string;
   tournamentId?: string;
   tournamentMatchId?: string;
-  a: { socketId: string; userId: string | null; username: string };
-  b: { socketId: string; userId: string | null; username: string };
+  a: MatchLogSide;
+  b: MatchLogSide;
   scoreA: number;
   scoreB: number;
-  winnerSocketId: string;
+  winnerSeatId: string;
   pointDiff: number;
   maxDeficitWinner?: number;
 };
+
+function normalizeMatchLogSide(raw: unknown): MatchLogSide {
+  const side = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const seatId =
+    typeof side.seatId === 'string'
+      ? side.seatId
+      : typeof side.socketId === 'string'
+        ? side.socketId
+        : '';
+  return {
+    seatId,
+    userId: typeof side.userId === 'string' ? side.userId : null,
+    username: typeof side.username === 'string' ? side.username : 'Guest',
+  };
+}
+
+function normalizeMatchLogEntry(raw: unknown): MatchLogEntry {
+  const entry = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const winnerSeatId =
+    typeof entry.winnerSeatId === 'string'
+      ? entry.winnerSeatId
+      : typeof entry.winnerSocketId === 'string'
+        ? entry.winnerSocketId
+        : '';
+  return {
+    id: typeof entry.id === 'string' ? entry.id : randomUUID(),
+    endedAtMs: typeof entry.endedAtMs === 'number' ? entry.endedAtMs : 0,
+    roomCode: typeof entry.roomCode === 'string' ? entry.roomCode : '',
+    tournamentId: typeof entry.tournamentId === 'string' ? entry.tournamentId : undefined,
+    tournamentMatchId:
+      typeof entry.tournamentMatchId === 'string' ? entry.tournamentMatchId : undefined,
+    a: normalizeMatchLogSide(entry.a),
+    b: normalizeMatchLogSide(entry.b),
+    scoreA: typeof entry.scoreA === 'number' ? entry.scoreA : 0,
+    scoreB: typeof entry.scoreB === 'number' ? entry.scoreB : 0,
+    winnerSeatId,
+    pointDiff: typeof entry.pointDiff === 'number' ? entry.pointDiff : 0,
+    maxDeficitWinner:
+      typeof entry.maxDeficitWinner === 'number' ? entry.maxDeficitWinner : undefined,
+  };
+}
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const FILE_PATH = path.join(DATA_DIR, 'matches.jsonl');
@@ -54,7 +101,7 @@ export async function readMatches(): Promise<MatchLogEntry[]> {
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => JSON.parse(line) as MatchLogEntry);
+      .map((line) => normalizeMatchLogEntry(JSON.parse(line)));
   } catch {
     return [];
   }
@@ -105,9 +152,9 @@ export async function computeWeeklyAwards(nowMs: number): Promise<WeeklyAwards> 
   const weekStartISO = iso(startMs);
   const weekEndISO = iso(endMs);
 
-  type Key = string; // userId preferred, fallback to socketId
+  type Key = string; // userId preferred, fallback to seatId
   const keyOf = (m: MatchLogEntry, side: 'a' | 'b'): Key =>
-    (m[side].userId ?? '') ? `u:${m[side].userId}` : `s:${m[side].socketId}`;
+    (m[side].userId ?? '') ? `u:${m[side].userId}` : `s:${m[side].seatId}`;
   const nameOf = (m: MatchLogEntry, side: 'a' | 'b'): string => m[side].username;
   const userIdOf = (m: MatchLogEntry, side: 'a' | 'b'): string | null => m[side].userId;
 
@@ -125,7 +172,7 @@ export async function computeWeeklyAwards(nowMs: number): Promise<WeeklyAwards> 
     games[aK].count += 1;
     games[bK].count += 1;
 
-    const winnerSide = m.winnerSocketId === m.a.socketId ? 'a' : 'b';
+    const winnerSide = m.winnerSeatId === m.a.seatId ? 'a' : 'b';
     const wK = keyOf(m, winnerSide);
     wins[wK] ??= { username: nameOf(m, winnerSide), userId: userIdOf(m, winnerSide), count: 0 };
     wins[wK].count += 1;
@@ -161,7 +208,9 @@ export async function computeWeeklyAwards(nowMs: number): Promise<WeeklyAwards> 
       const isA = keyOf(m, 'a') === k;
       const side = isA ? 'a' : 'b';
       meta ??= { username: nameOf(m, side), userId: userIdOf(m, side) };
-      const won = (side === 'a' && m.winnerSocketId === m.a.socketId) || (side === 'b' && m.winnerSocketId === m.b.socketId);
+      const won =
+        (side === 'a' && m.winnerSeatId === m.a.seatId) ||
+        (side === 'b' && m.winnerSeatId === m.b.seatId);
       cur = won ? cur + 1 : 0;
       best = Math.max(best, cur);
     }

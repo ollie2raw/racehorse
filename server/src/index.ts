@@ -119,10 +119,50 @@ import {
 } from './scheduledTournament';
 import {
   clearDisconnectGrace,
-  configureDisconnectGraceSeatResolver,
   onActivePlayerSocketDisconnect,
   onPlayerSocketRejoined,
 } from './multiplayer/disconnectGrace';
+import {
+  allocatePlayerSeatId,
+  cancelRoomCleanup,
+  clearReconnectSeatsForSocket,
+  clearRoomMetadata,
+  ensureSocketDataSeat,
+  evaluateRoomLifecycle,
+  getEngineSeatSocketIds,
+  getRoomPlayersWithFallback,
+  getRoomRoster,
+  getSeatIdForSocket,
+  getSocketForSeat,
+  deleteRoomRoster,
+  identityMatchesReconnectSeat,
+  initRoomSession,
+  joinSocketToRoom,
+  broadcastStateUpdate,
+  buildHandEndedPayload,
+  buildMatchStartDeps,
+  clearSocketRematchReady,
+  emitForcedDrawAnimationPayload,
+  emitRematchStatus,
+  getHandCounts,
+  maskStateForRecipient,
+  migrateRoomSeat,
+  pruneReconnectSeats,
+  ROOM_CLEANUP_GRACE_MS,
+  releaseReconnectSeat,
+  reserveReconnectSeat,
+  resolveActorSeatId,
+  scheduleRoomCleanup,
+  setRoomRoster,
+  type AckFn,
+  type GameOverPersistInput,
+  type RoomJoinConfig,
+  type RoomPlayer,
+} from './multiplayer/roomSession';
+import {
+  handleRoomPlayerDisconnect,
+  registerRoomSessionHandlers,
+} from './multiplayer/registerRoomSessionHandlers';
 import { markMatchStartReady, tryStartMatchIfReady } from './multiplayer/matchStartReady';
 import type { BranchArm, GameState } from './game/types';
 import { assertValidGameState } from './game/invariants';
@@ -1077,70 +1117,7 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e6,
 });
 
-type RoomPlayer = { id: string; socketId: string; username: string; userId: string | null };
-type RoomJoinConfig = { username?: string; userId?: string | null; authToken?: string | null };
-type AckFn = (payload: any) => void;
-
-const roomPlayersByCode = new Map<string, RoomPlayer[]>();
-configureDisconnectGraceSeatResolver((roomCode, playerSeatId) => {
-  const roster = roomPlayersByCode.get(roomCode) ?? [];
-  return roster.find((player) => player.id === playerSeatId)?.socketId ?? null;
-});
-const RECONNECT_GRACE_MS = 5 * 60_000;
-const parsedRoomCleanupGrace = Number.parseInt(process.env.ROOM_CLEANUP_GRACE_MS ?? '', 10);
-const ROOM_CLEANUP_GRACE_MS = Number.isFinite(parsedRoomCleanupGrace)
-  ? Math.max(60_000, parsedRoomCleanupGrace)
-  : 5 * 60_000;
-type ReconnectSeat = {
-  seatId: string;
-  oldSocketId: string;
-  username: string;
-  userId: string | null;
-  expiresAt: number;
-};
-
-function allocatePlayerSeatId(): string {
-  return randomUUID();
-}
-
-function getRoomRoster(roomCode: string): RoomPlayer[] {
-  return roomPlayersByCode.get(roomCode) ?? [];
-}
-
-function getSeatIdForSocket(roomCode: string, socketId: string): string | null {
-  const match = getRoomRoster(roomCode).find((player) => player.socketId === socketId);
-  return match?.id ?? null;
-}
-
-function getSocketForSeat(roomCode: string, seatId: string): string | null {
-  return getRoomRoster(roomCode).find((player) => player.id === seatId)?.socketId ?? null;
-}
-
-function ensureSocketDataSeat(socket: Socket, playerSeatId: string): void {
-  socket.data.playerId = playerSeatId;
-}
-
-function resolveActorSeatId(roomCode: string, socket: Socket): string {
-  const fromData = typeof socket.data?.playerId === 'string' ? socket.data.playerId : null;
-  if (fromData) {
-    const roster = getRoomRoster(roomCode);
-    if (roster.some((player) => player.id === fromData)) {
-      return fromData;
-    }
-  }
-  const fromRoster = getSeatIdForSocket(roomCode, socket.id);
-  if (fromRoster) return fromRoster;
-  throw new Error('Player seat not found for socket.');
-}
-
-function getEngineSeatSocketIds(roomCode: string, seatIds: string[]): string[] {
-  return seatIds
-    .map((seatId) => getSocketForSeat(roomCode, seatId))
-    .filter((socketId): socketId is string => Boolean(socketId));
-}
-const reconnectSeatsByCode = new Map<string, ReconnectSeat[]>();
 const socketsByUserId = new Map<string, Set<string>>();
-const roomCleanupTimersByCode = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
  * After Render/deploy the in-memory Map is empty but matchmaking still has an
@@ -2726,7 +2703,9 @@ function getFritzTierForRoom(room: Room, botPlayerId: string | null): string {
 }
 
 function getPendingFritzMatchContext(room: Room): { realPlayer: RoomPlayer; fritzTier: string } | null {
-  const roster = roomPlayersByCode.get(room.code) ?? getRoomPlayersWithFallback(room.code, room.players);
+  const rosterCached = getRoomRoster(room.code);
+  const roster =
+    rosterCached.length > 0 ? rosterCached : getRoomPlayersWithFallback(room.code, room.players);
   const botPlayer = roster.find((player) => typeof player.id === 'string' && player.id.startsWith('bot:fritz:')) ?? null;
   const realPlayers = roster.filter((player) => player.userId);
   if (!botPlayer || realPlayers.length !== 1) return null;
@@ -4203,795 +4182,254 @@ app.get('/api/room-events/:matchId', async (req, res) => {
   }
 });
 
-function getRoomPlayersWithFallback(roomCode: string, seatIds: string[]): RoomPlayer[] {
-  const existing = roomPlayersByCode.get(roomCode) ?? [];
-  const byId = new Map(existing.map((p) => [p.id, p]));
-  const next = seatIds.map(
-    (id) => byId.get(id) ?? { id, socketId: '', username: 'Guest', userId: null },
-  );
-  roomPlayersByCode.set(roomCode, next);
-  return next;
-}
-
-function pruneReconnectSeats(roomCode: string): ReconnectSeat[] {
-  const now = Date.now();
-  const seats = (reconnectSeatsByCode.get(roomCode) ?? []).filter((seat) => seat.expiresAt > now);
-  if (seats.length > 0) reconnectSeatsByCode.set(roomCode, seats);
-  else reconnectSeatsByCode.delete(roomCode);
-  return seats;
-}
-
-function reserveReconnectSeat(roomCode: string, seat: Omit<ReconnectSeat, 'expiresAt'>) {
-  const seats = pruneReconnectSeats(roomCode).filter((s) => s.oldSocketId !== seat.oldSocketId);
-  seats.push({ ...seat, expiresAt: Date.now() + RECONNECT_GRACE_MS });
-  reconnectSeatsByCode.set(roomCode, seats);
-}
-
-function clearRoomMetadata(roomCode: string) {
-  roomPlayersByCode.delete(roomCode);
-  reconnectSeatsByCode.delete(roomCode);
-}
-
-function cancelRoomCleanup(roomCode: string) {
-  const timer = roomCleanupTimersByCode.get(roomCode);
-  if (timer) {
-    clearTimeout(timer);
-    roomCleanupTimersByCode.delete(roomCode);
-  }
-}
-
-function scheduleRoomCleanup(roomCode: string) {
-  if (!roomCode || roomCleanupTimersByCode.has(roomCode)) return;
-  const timer = setTimeout(async () => {
-    roomCleanupTimersByCode.delete(roomCode);
-    let room;
-    try {
-      room = getRoom(roomCode);
-    } catch {
-      clearRoomMetadata(roomCode);
-      return;
-    }
-    const activePlayers = room.players.filter((seatId) => {
-      const socketId = getSocketForSeat(roomCode, seatId);
-      return Boolean(socketId && io.sockets.sockets.has(socketId));
-    });
-    if (activePlayers.length > 0) return;
-    try {
-      await persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
-    } catch (error) {
-      console.error('[room-match-logs] failed to archive room before cleanup:', error);
-    }
-    deleteRoom(roomCode);
-    clearRoomMetadata(roomCode);
-  }, ROOM_CLEANUP_GRACE_MS);
-  roomCleanupTimersByCode.set(roomCode, timer);
-}
-
-function evaluateRoomLifecycle(roomCode: string | undefined) {
-  if (!roomCode) return;
-  let room;
-  try {
-    room = getRoom(roomCode);
-  } catch {
-    clearRoomMetadata(roomCode);
-    cancelRoomCleanup(roomCode);
-    return;
-  }
-  const activePlayers = room.players.filter((seatId) => {
-    const socketId = getSocketForSeat(roomCode, seatId);
-    return Boolean(socketId && io.sockets.sockets.has(socketId));
-  });
-  if (activePlayers.length === 0 || room.state?.gameOver) {
-    scheduleRoomCleanup(roomCode);
-    return;
-  }
-  cancelRoomCleanup(roomCode);
-}
-
-function joinSocketToRoom(socketId: string, roomCode: string, preservePrefixes: string[] = []) {
-  const target = io.sockets.sockets.get(socketId);
-  if (!target) return;
-  const currentRooms = [...target.rooms].filter(
-    (joined) =>
-      joined !== target.id && !preservePrefixes.some((prefix) => joined.startsWith(prefix)),
-  );
-  currentRooms.forEach((joined) => {
-    target.leave(joined);
-    evaluateRoomLifecycle(joined);
-  });
-  target.join(roomCode);
-  target.data.roomId = roomCode;
-}
-
-function identityMatchesReconnectSeat(
-  seat: ReconnectSeat,
-  identity: { username: string; userId: string | null },
-): boolean {
-  // Prefer userId match — strongest signal
-  if (seat.userId && identity.userId) {
-    return seat.userId === identity.userId;
-  }
-  // If one has userId and the other doesn't, no match
-  if (seat.userId || identity.userId) {
-    return false;
-  }
-  // Both are guests — username match is acceptable only
-  // if the username is not a generic default
-  const genericNames = new Set(['guest', 'player', '']);
-  const normalized = identity.username.toLowerCase().trim();
-  if (genericNames.has(normalized)) {
-    return false; // Too ambiguous to trust username alone
-  }
-  return seat.username === identity.username;
-}
-
-function migrateRoomSeat(roomCode: string, playerSeatId: string, newSocketId: string) {
-  const roster = roomPlayersByCode.get(roomCode) ?? [];
-  const rosterIdx = roster.findIndex((player) => player.id === playerSeatId);
-  if (rosterIdx < 0) return;
-  roster[rosterIdx] = { ...roster[rosterIdx], socketId: newSocketId };
-  roomPlayersByCode.set(roomCode, roster);
-}
-
-function emitRematchStatus(roomCode: string) {
-  let room;
-  try {
-    room = getRoom(roomCode);
-  } catch {
-    return;
-  }
-  const readyPlayerIds = room.players.filter((pid) => room.rematchReady.has(pid));
-  io.to(room.code).emit('game:rematch:status', {
-    roomCode: room.code,
-    readyPlayerIds,
-    readyCount: readyPlayerIds.length,
-    needed: room.players.length,
-  });
-}
-
-function emitForcedDrawAnimationPayload(
-  roomCode: string,
-  payload: {
-    playerId: string;
-    sequence: number;
-    steps: DrawAnimationStep[];
-    stoppedReason: 'playable' | 'locked_pass' | 'locked_no_pass';
-    finalState: GameState;
-  },
-) {
-  const hasPlayableFollowUp = getRoomLegalMoves(roomCode, payload.playerId).some((move) => move.type === 'play');
-  const sequence = payload.finalState.sequence;
-  const targetSocketId = getSocketForSeat(roomCode, payload.playerId);
-  if (!targetSocketId) return;
-  io.to(targetSocketId).emit('game:draw_animation', {
-    playerId: payload.playerId,
-    sequence,
-    mode: 'forced_draw',
-    steps: payload.steps.map((step) => ({
-      tile: step.tile,
-      boneyardCount: step.boneyardCount,
-      drawerHandCount: step.drawerHandCount,
-    })),
-    final: {
-      drewCount: payload.steps.length,
-      stoppedReason: payload.stoppedReason,
-      canPlayNow: hasPlayableFollowUp,
-      handOver: payload.finalState.handOver,
-      gameOver: payload.finalState.gameOver,
-    },
-  });
-
-  io.to(roomCode).except(targetSocketId).emit('game:draw_animation', {
-    playerId: payload.playerId,
-    sequence,
-    mode: 'forced_draw',
-    steps: payload.steps.map((step) => ({
-      tile: null,
-      boneyardCount: step.boneyardCount,
-      drawerHandCount: step.drawerHandCount,
-    })),
-    final: {
-      drewCount: payload.steps.length,
-      stoppedReason: payload.stoppedReason,
-      canPlayNow: false,
-      handOver: payload.finalState.handOver,
-      gameOver: payload.finalState.gameOver,
-    },
-  });
-}
-
-function clearSocketRematchReady(roomCode: string | undefined, socketId: string) {
-  if (!roomCode) return;
-  try {
-    const playerSeatId = getSeatIdForSocket(roomCode, socketId);
-    if (!playerSeatId) return;
-    const room = getRoom(roomCode);
-    const changed = room.rematchReady.delete(playerSeatId);
-    if (changed) emitRematchStatus(room.code);
-  } catch {
-    // room no longer exists
-  }
-}
-
-/**
- * Build a personalized hand:ended payload for a specific player.
- */
-function buildHandEndedPayload(room: Room, playerId: string) {
-  if (!room.state) return null;
-  const opponentId = room.state.playerIds.find((id) => id !== playerId) ?? null;
-  const opponentHand = opponentId ? (room.state.players[opponentId]?.hand ?? []) : [];
-  const myHand = room.state.players[playerId]?.hand ?? [];
-
-  // Compute awards directly from remaining tiles — do NOT use score deltas
-  // (scores are already applied to room.state before this runs)
-  const opponentPipSum = opponentHand.reduce((s, t) => s + t.high + t.low, 0);
-  const myPipSum = myHand.reduce((s, t) => s + t.high + t.low, 0);
-
-  // Winner is whoever went out (hand.length === 0), or lowest pips in blocked hand
-  const iWentOut = myHand.length === 0;
-  const opponentWentOut = opponentHand.length === 0;
-
-  const youScoreDelta = iWentOut
-    ? Math.round(opponentPipSum / 5)
-    : opponentWentOut
-    ? 0
-    : myPipSum <= opponentPipSum
-    ? Math.round(opponentPipSum / 5) // blocked hand, I had lower pips
-    : 0;
-
-  const opponentScoreDelta = opponentWentOut
-    ? Math.round(myPipSum / 5)
-    : iWentOut
-    ? 0
-    : opponentPipSum <= myPipSum
-    ? Math.round(myPipSum / 5) // blocked hand, opponent had lower pips
-    : 0;
-
-  let handWinnerId: string | null = null;
-  if (iWentOut) handWinnerId = playerId;
-  else if (opponentWentOut) handWinnerId = opponentId;
-  else if (myPipSum <= opponentPipSum) handWinnerId = playerId;
-  else handWinnerId = opponentId;
-
-  return {
-    handNumber: room.state.handNumber,
-    opponentRemainingTiles: opponentHand,
-    yourRemainingTiles: myHand,
-    pointsAwarded: {
-      you: youScoreDelta,
-      opponent: opponentScoreDelta,
-    },
-    whoWentOut: iWentOut ? playerId : opponentWentOut ? opponentId : null,
-    winnerId: handWinnerId,
-    handWinnerId: handWinnerId,
-  };
-}
-
-/** Ensure masked wire snapshots keep the invariant the client trusts (main spine + BranchArm `.tiles`). */
-function warnIfMaskedSnapshotMalformed(state: GameState, ctx: string): void {
-  if (!state.players || typeof state.players !== 'object') {
-    console.warn(`[maskStateForRecipient:${ctx}] players dictionary missing`);
-  }
-  if (!Array.isArray(state.playerIds)) {
-    console.warn(`[maskStateForRecipient:${ctx}] playerIds missing or not array`);
-  }
-  const board = state.board as GameState['board'];
-  if (board === undefined) {
-    console.warn(`[maskStateForRecipient:${ctx}] board omitted (must be explicit null)`);
-    return;
-  }
-  if (board === null) return;
-  if (!Array.isArray(board.mainLine) || !Array.isArray(board.hubDoubles)) {
-    console.warn(`[maskStateForRecipient:${ctx}] board malformed: mainLine/hubDoubles must be arrays`);
-    return;
-  }
-  for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
-    const hub = board.hubDoubles[hubIdx];
-    if (!hub || typeof hub !== 'object' || !Array.isArray(hub.branches)) {
-      console.warn(`[maskStateForRecipient:${ctx}] hub ${hubIdx} missing branches BranchArm[]`);
-      continue;
-    }
-    hub.branches.forEach((arm: BranchArm | undefined | null, armIdx: number) => {
-      if (!arm || typeof arm !== 'object' || !Array.isArray(arm.tiles)) {
-        console.warn(
-          `[maskStateForRecipient:${ctx}] hub ${hubIdx} arm ${armIdx} missing BranchArm.tiles array`,
-        );
-      }
-    });
-  }
-}
-
-function maskStateForRecipient(state: GameState, recipientPlayerId: string | null): GameState {
-  const canRevealAll = state.handOver || state.gameOver;
-  const masked: GameState = {
-    ...state,
-    players: Object.fromEntries(
-      state.playerIds.map((pid) => {
-        const ps = state.players[pid];
-        if (!ps) {
-          return [pid, { id: pid, hand: [], score: 0 }];
+function createGameOverPersistScheduler(input: GameOverPersistInput): () => void {
+  const { room, cfg, aId, bId, a, b, scoreA, scoreB, winnerSeatId } = input;
+  return () => {
+    void (async () => {
+      try {
+        if (room.scheduledTournamentMatchId) {
+          const winnerUserId =
+            winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
+          if (winnerUserId) {
+            await applyTournamentMatchResult(io, {
+              matchId: room.scheduledTournamentMatchId,
+              winnerId: winnerUserId,
+              player1Score: scoreA,
+              player2Score: scoreB,
+            });
+          }
+          return;
         }
-        const reveal = canRevealAll || pid === recipientPlayerId;
-        return [
-          pid,
-          {
-            ...ps,
-            hand: reveal ? ps.hand : [],
-          },
+
+        if (getPendingFritzMatchContext(room)) {
+          await resolvePendingFritzMatch(room.code);
+        }
+
+        await appendMatch({
+          endedAtMs: Date.now(),
+          roomCode: room.code,
+          tournamentId: typeof cfg.tournamentId === 'string' ? cfg.tournamentId : undefined,
+          tournamentMatchId: typeof cfg.tournamentMatchId === 'string' ? cfg.tournamentMatchId : undefined,
+          maxDeficitWinner: (() => {
+            const t = room.leadTracker;
+            if (!t) return 0;
+            if (winnerSeatId === aId) return t.maxLeadB ?? 0;
+            if (winnerSeatId === bId) return t.maxLeadA ?? 0;
+            return 0;
+          })(),
+          a: { seatId: a.id, userId: a.userId, username: a.username },
+          b: { seatId: b.id, userId: b.userId, username: b.username },
+          scoreA,
+          scoreB,
+          winnerSeatId,
+          pointDiff: Math.abs(scoreA - scoreB),
+        });
+
+        const fritzActivityCtx = getPendingFritzMatchContext(room);
+        const winnerRoster = winnerSeatId === aId ? a : b;
+        const loserRoster = winnerSeatId === aId ? b : a;
+        const activityDisplayName = (p: typeof a) =>
+          fritzActivityCtx && typeof p.id === 'string' && p.id.startsWith('bot:fritz:')
+            ? formatFritzActivityOpponentLabel(fritzActivityCtx.fritzTier)
+            : p.username;
+
+        void writeMatchActivity({
+          winnerUserId: winnerSeatId === aId ? a.userId : b.userId,
+          loserUserId: winnerSeatId === aId ? b.userId : a.userId,
+          winnerUsername: activityDisplayName(winnerRoster),
+          loserUsername: activityDisplayName(loserRoster),
+          mode: fritzActivityCtx ? 'bot' : 'online',
+          winnerScore: winnerSeatId === aId ? scoreA : scoreB,
+          loserScore: winnerSeatId === aId ? scoreB : scoreA,
+        }).catch(() => {});
+
+        const rankingParticipants = [
+          { me: a, opp: b, myScore: scoreA, oppScore: scoreB },
+          { me: b, opp: a, myScore: scoreB, oppScore: scoreA },
         ];
-      }),
-    ),
-  };
+        const rankingProfiles = new Map<string, any>();
+        const insertedRankedGames = new Map<string, any>();
 
-  warnIfMaskedSnapshotMalformed(
-    masked,
-    typeof recipientPlayerId === 'string' ? `player:${recipientPlayerId}` : 'spectator-null',
-  );
-  return masked;
-}
-
-/**
- * Tile counts per seat from authoritative hands (not masked / redacted state).
- * Masked states clear opponent hands to [] — never pass those in here.
- */
-function getHandCounts(state: GameState): Record<string, number> {
-  return Object.fromEntries(
-    state.playerIds.map((pid) => [pid, state.players[pid]?.hand.length ?? 0]),
-  );
-}
-
-/**
- * Send state update to all players in a room.
- * Each player receives:
- * - The game state
- * - Their legal moves (if it's their turn)
- * - Whether they can draw
- */
-function broadcastStateUpdate(roomCode: string) {
-  /** Game-over persistence (filesystem + Supabase) — must never run before realtime emits. */
-  let scheduleDeferredMatchPersist: null | (() => void) = null;
-
-  const room = getRoom(roomCode);
-  if (!room.state) return;
-  assertValidGameState(room.state, `broadcastStateUpdate:${roomCode}`);
-
-  // WEEKLY_STATS_LOGGING (non-tournament only)
-  const cfg = (room as any).config ?? {};
-  const isTournamentRoom = Boolean(cfg.tournamentId);
-  // WEEKLY_STATS_LEAD_TRACKER (score-based comeback)
-  const pidsForLead = room.state.playerIds;
-  if (Array.isArray(pidsForLead) && pidsForLead.length === 2) {
-    const aId = pidsForLead[0];
-    const bId = pidsForLead[1];
-    const scoreA = room.state.players[aId]?.score ?? 0;
-    const scoreB = room.state.players[bId]?.score ?? 0;
-    const diff = scoreA - scoreB; // + means A is leading
-    const t = (room.leadTracker ??= { aId, bId, maxLeadA: 0, maxLeadB: 0 });
-    if (t.aId !== aId || t.bId !== bId) {
-      room.leadTracker = { aId, bId, maxLeadA: 0, maxLeadB: 0 };
-    } else {
-      if (diff > 0) t.maxLeadA = Math.max(t.maxLeadA, diff);
-      if (diff < 0) t.maxLeadB = Math.max(t.maxLeadB, -diff);
-    }
-  }
-
-  if (room.state.gameOver && !isTournamentRoom && !room.matchLogged) {
-    const pids = room.state.playerIds;
-    if (Array.isArray(pids) && pids.length === 2) {
-      // Set the guard synchronously before launching the async IIFE so that
-      // rapid back-to-back broadcastStateUpdate calls can't both slip through.
-      room.matchLogged = true;
-
-      const roster = roomPlayersByCode.get(room.code) ?? [];
-      const byId = new Map(roster.map((p) => [p.id, p]));
-      const aId = pids[0];
-      const bId = pids[1];
-      const a = byId.get(aId) ?? { id: aId, socketId: '', username: 'Guest', userId: null };
-      const b = byId.get(bId) ?? { id: bId, socketId: '', username: 'Guest', userId: null };
-      const scoreA = room.state.players[aId]?.score ?? 0;
-      const scoreB = room.state.players[bId]?.score ?? 0;
-      const winnerSocketId = room.state.winnerId ?? (scoreA >= scoreB ? aId : bId);
-
-      scheduleDeferredMatchPersist = () => {
-        void (async () => {
-        try {
-          // ── Scheduled tournament match: advance the bracket and SKIP rated ranking.
-          if (room.scheduledTournamentMatchId) {
-            const winnerUserId =
-              winnerSocketId === a.id ? a.userId :
-              winnerSocketId === b.id ? b.userId : null;
-            if (winnerUserId) {
-              await applyTournamentMatchResult(io, {
-                matchId: room.scheduledTournamentMatchId,
-                winnerId: winnerUserId,
-                player1Score: scoreA,
-                player2Score: scoreB,
-              });
-            }
-            return; // bypass ranked logging entirely for tournament matches
-          }
-
-          if (getPendingFritzMatchContext(room)) {
-            await resolvePendingFritzMatch(room.code);
-          }
-
-          await appendMatch({
-            endedAtMs: Date.now(),
-            roomCode: room.code,
-            tournamentId: typeof cfg.tournamentId === 'string' ? cfg.tournamentId : undefined,
-            tournamentMatchId: typeof cfg.tournamentMatchId === 'string' ? cfg.tournamentMatchId : undefined,
-            maxDeficitWinner: (() => {
-              const t = room.leadTracker;
-              if (!t) return 0;
-              if (winnerSocketId === aId) return t.maxLeadB ?? 0;
-              if (winnerSocketId === bId) return t.maxLeadA ?? 0;
-              return 0;
-            })(),
-            a: { socketId: a.id, userId: a.userId, username: a.username },
-            b: { socketId: b.id, userId: b.userId, username: b.username },
-            scoreA,
-            scoreB,
-            winnerSocketId,
-            pointDiff: Math.abs(scoreA - scoreB),
-          });
-
-          const fritzActivityCtx = getPendingFritzMatchContext(room);
-          const winnerRoster = winnerSocketId === aId ? a : b;
-          const loserRoster = winnerSocketId === aId ? b : a;
-          const activityDisplayName = (p: typeof a) =>
-            fritzActivityCtx && typeof p.id === 'string' && p.id.startsWith('bot:fritz:')
-              ? formatFritzActivityOpponentLabel(fritzActivityCtx.fritzTier)
-              : p.username;
-
-          void writeMatchActivity({
-            winnerUserId: winnerSocketId === aId ? a.userId : b.userId,
-            loserUserId: winnerSocketId === aId ? b.userId : a.userId,
-            winnerUsername: activityDisplayName(winnerRoster),
-            loserUsername: activityDisplayName(loserRoster),
-            mode: fritzActivityCtx ? 'bot' : 'online',
-            winnerScore: winnerSocketId === aId ? scoreA : scoreB,
-            loserScore: winnerSocketId === aId ? scoreB : scoreA,
-          }).catch(() => {});
-
-          // RANKED GAMES LOGGING
-          const rankingParticipants = [
-            { me: a, opp: b, myScore: scoreA, oppScore: scoreB },
-            { me: b, opp: a, myScore: scoreB, oppScore: scoreA }
-          ];
-          const rankingProfiles = new Map<string, any>();
-          const insertedRankedGames = new Map<string, any>();
-
-          for (const p of rankingParticipants) {
-            if (p.me.userId) {
-              const opponentId = p.opp.userId || (p.opp.id.startsWith('bot:fritz:') ? FRITZ_SYSTEM_ID : null);
-              if (opponentId) {
-                let profile = rankingProfiles.get(p.me.userId);
-                if (!profile) {
-                  const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
-                  profile = profileData?.[0];
-                  if (profile) {
-                    rankingProfiles.set(p.me.userId, profile);
-                  }
-                }
+        for (const p of rankingParticipants) {
+          if (p.me.userId) {
+            const opponentId = p.opp.userId || (p.opp.id.startsWith('bot:fritz:') ? FRITZ_SYSTEM_ID : null);
+            if (opponentId) {
+              let profile = rankingProfiles.get(p.me.userId);
+              if (!profile) {
+                const profileData = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${p.me.userId}`);
+                profile = profileData?.[0];
                 if (profile) {
-                  const insertedGames = await supabaseFetch<any[]>('/rest/v1/ranked_games', {
-                    method: 'POST',
-                    headers: {
-                      Prefer: 'return=representation',
-                    },
-                    body: JSON.stringify({
-                      player_id: p.me.userId,
-                      opponent_id: opponentId,
-                      player_score: p.myScore,
-                      opponent_score: p.oppScore,
-                      game_type: opponentId === FRITZ_SYSTEM_ID ? 'fritz' : 'multiplayer',
-                      rating_before: profile.glicko_rating,
-                      rd_before: profile.glicko_rd,
-                      played_at: new Date().toISOString()
-                    })
-                  });
-                  const insertedGame = insertedGames?.[0];
-                  if (insertedGame) {
-                    insertedRankedGames.set(p.me.userId, insertedGame);
-                  }
+                  rankingProfiles.set(p.me.userId, profile);
                 }
+              }
+              if (profile) {
+                const insertedGames = await supabaseFetch<any[]>('/rest/v1/ranked_games', {
+                  method: 'POST',
+                  headers: {
+                    Prefer: 'return=representation',
+                  },
+                  body: JSON.stringify({
+                    player_id: p.me.userId,
+                    opponent_id: opponentId,
+                    player_score: p.myScore,
+                    opponent_score: p.oppScore,
+                    game_type: opponentId === FRITZ_SYSTEM_ID ? 'fritz' : 'multiplayer',
+                    rating_before: profile.glicko_rating,
+                    rd_before: profile.glicko_rd,
+                    played_at: new Date().toISOString(),
+                  }),
+                });
+                const insertedGame = insertedGames?.[0];
+                if (insertedGame) {
+                  insertedRankedGames.set(p.me.userId, insertedGame);
+                }
+              }
 
-                const moveLog = room.ghostMoveLogs[p.me.id] ?? [];
-                if (moveLog.length > 0) {
-                  await completeGhostGame({
-                    userId: p.me.userId,
-                    opponentUserId: opponentId,
-                    finalScore: p.myScore,
-                    opponentScore: p.oppScore,
-                    moveLog,
-                    matchId: room.matchId,
-                  });
-                }
+              const moveLog = room.ghostMoveLogs[p.me.id] ?? [];
+              if (moveLog.length > 0) {
+                await completeGhostGame({
+                  userId: p.me.userId,
+                  opponentUserId: opponentId,
+                  finalScore: p.myScore,
+                  opponentScore: p.oppScore,
+                  moveLog,
+                  matchId: room.matchId,
+                });
               }
             }
           }
+        }
 
-          if (a.userId && b.userId) {
-            const playerAProfile = rankingProfiles.get(a.userId);
-            const playerBProfile = rankingProfiles.get(b.userId);
-            const playerAGame = insertedRankedGames.get(a.userId);
-            const playerBGame = insertedRankedGames.get(b.userId);
+        if (a.userId && b.userId) {
+          const playerAProfile = rankingProfiles.get(a.userId);
+          const playerBProfile = rankingProfiles.get(b.userId);
+          const playerAGame = insertedRankedGames.get(a.userId);
+          const playerBGame = insertedRankedGames.get(b.userId);
 
-            if (playerAProfile && playerBProfile && playerAGame && playerBGame) {
-              try {
-                const ratingResult = await processRealtimeMultiplayerGame({
-                  playerAProfile,
-                  playerBProfile,
-                  playerAGame,
-                  playerBGame,
-                });
-                console.log('[Ranking] Real-time update complete', {
-                  playerA: a.userId,
-                  playerB: b.userId,
-                });
-
-                // Matchmaking persistence: patch the matchmaking_matches row
-                // we inserted when the queue produced this match. Sim matches
-                // are skipped by recordMatchEnd internally.
-                if (room.matchmakingMatchId) {
-                  const winnerUserId =
-                    winnerSocketId === a.id ? a.userId :
-                    winnerSocketId === b.id ? b.userId :
-                    null;
-                  void recordMatchEnd({
-                    matchId: room.matchmakingMatchId,
-                    status: 'completed',
-                    winnerId: winnerUserId,
-                    playerARatingChange: ratingResult?.playerA?.delta ?? null,
-                    playerBRatingChange: ratingResult?.playerB?.delta ?? null,
-                    isSim: false,
-                  });
-                }
-              } catch (err) {
-                console.error('[Ranking] Real-time update failed:', err);
-              }
-            } else {
-              console.warn('[Ranking] Skipping real-time update — missing data', {
-                hasPlayerAProfile: !!playerAProfile,
-                hasPlayerBProfile: !!playerBProfile,
-                hasPlayerAGame: !!playerAGame,
-                hasPlayerBGame: !!playerBGame,
+          if (playerAProfile && playerBProfile && playerAGame && playerBGame) {
+            try {
+              const ratingResult = await processRealtimeMultiplayerGame({
+                playerAProfile,
+                playerBProfile,
+                playerAGame,
+                playerBGame,
               });
-            }
-          }
+              console.log('[Ranking] Real-time update complete', {
+                playerA: a.userId,
+                playerB: b.userId,
+              });
 
-          const linkedFixtureRows = await supabaseFetch<any[]>(
-            `/rest/v1/fixtures?select=id,status,home_member_id,away_member_id,live_room_code&live_room_code=eq.${room.code}&limit=1`,
-          );
-          const linkedFixture = linkedFixtureRows?.[0];
-          if (linkedFixture && linkedFixture.status !== 'completed' && linkedFixture.status !== 'forfeit') {
-            const fixtureMembers = await supabaseFetch<any[]>(
-              `/rest/v1/league_members?select=id,player_user_id&id=in.("${linkedFixture.home_member_id}","${linkedFixture.away_member_id}")`,
-            );
-            const homeMember = fixtureMembers.find((member) => member?.id === linkedFixture.home_member_id) ?? null;
-            const awayMember = fixtureMembers.find((member) => member?.id === linkedFixture.away_member_id) ?? null;
-            const livePlayers = [a, b];
-            const homePlayer = livePlayers.find((player) => player.userId === homeMember?.player_user_id) ?? null;
-            const awayPlayer = livePlayers.find((player) => player.userId === awayMember?.player_user_id) ?? null;
-
-            if (homeMember && awayMember && homePlayer && awayPlayer) {
-              const homeScore = homePlayer.id === a.id ? scoreA : scoreB;
-              const awayScore = awayPlayer.id === a.id ? scoreA : scoreB;
-              try {
-                await recordLeagueLiveResult({
-                  fixtureId: linkedFixture.id,
-                  playerMemberId: homeMember.id,
-                  opponentMemberId: awayMember.id,
-                  homeScore,
-                  awayScore,
-                  sourceUserId: a.userId ?? b.userId ?? null,
-                  roomCode: room.code,
-                  metadata: { via: 'live-room-auto-finalize' },
+              if (room.matchmakingMatchId) {
+                const winnerUserId =
+                  winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
+                void recordMatchEnd({
+                  matchId: room.matchmakingMatchId,
+                  status: 'completed',
+                  winnerId: winnerUserId,
+                  playerARatingChange: ratingResult?.playerA?.delta ?? null,
+                  playerBRatingChange: ratingResult?.playerB?.delta ?? null,
+                  isSim: false,
                 });
-                console.log('[League] Live fixture finalized', {
-                  fixtureId: linkedFixture.id,
-                  roomCode: room.code,
-                });
-              } catch (err) {
-                console.error('[League] Live fixture finalization failed:', err);
               }
-            } else {
-              console.warn('[League] Skipping live fixture finalization — player mapping missing', {
+            } catch (err) {
+              console.error('[Ranking] Real-time update failed:', err);
+            }
+          } else {
+            console.warn('[Ranking] Skipping real-time update — missing data', {
+              hasPlayerAProfile: !!playerAProfile,
+              hasPlayerBProfile: !!playerBProfile,
+              hasPlayerAGame: !!playerAGame,
+              hasPlayerBGame: !!playerBGame,
+            });
+          }
+        }
+
+        const linkedFixtureRows = await supabaseFetch<any[]>(
+          `/rest/v1/fixtures?select=id,status,home_member_id,away_member_id,live_room_code&live_room_code=eq.${room.code}&limit=1`,
+        );
+        const linkedFixture = linkedFixtureRows?.[0];
+        if (linkedFixture && linkedFixture.status !== 'completed' && linkedFixture.status !== 'forfeit') {
+          const fixtureMembers = await supabaseFetch<any[]>(
+            `/rest/v1/league_members?select=id,player_user_id&id=in.("${linkedFixture.home_member_id}","${linkedFixture.away_member_id}")`,
+          );
+          const homeMember = fixtureMembers.find((member) => member?.id === linkedFixture.home_member_id) ?? null;
+          const awayMember = fixtureMembers.find((member) => member?.id === linkedFixture.away_member_id) ?? null;
+          const livePlayers = [a, b];
+          const homePlayer = livePlayers.find((player) => player.userId === homeMember?.player_user_id) ?? null;
+          const awayPlayer = livePlayers.find((player) => player.userId === awayMember?.player_user_id) ?? null;
+
+          if (homeMember && awayMember && homePlayer && awayPlayer) {
+            const homeScore = homePlayer.id === a.id ? scoreA : scoreB;
+            const awayScore = awayPlayer.id === a.id ? scoreA : scoreB;
+            try {
+              await recordLeagueLiveResult({
+                fixtureId: linkedFixture.id,
+                playerMemberId: homeMember.id,
+                opponentMemberId: awayMember.id,
+                homeScore,
+                awayScore,
+                sourceUserId: a.userId ?? b.userId ?? null,
+                roomCode: room.code,
+                metadata: { via: 'live-room-auto-finalize' },
+              });
+              console.log('[League] Live fixture finalized', {
                 fixtureId: linkedFixture.id,
                 roomCode: room.code,
-                hasHomeMember: !!homeMember,
-                hasAwayMember: !!awayMember,
-                hasHomePlayer: !!homePlayer,
-                hasAwayPlayer: !!awayPlayer,
               });
+            } catch (err) {
+              console.error('[League] Live fixture finalization failed:', err);
             }
-          }
-        } catch (err) {
-          console.warn('Ranking/Match logging failed', err);
-          // Note: matchLogged was already set to true above (before this IIFE),
-          // which is intentional — it prevents infinite retry loops on transient
-          // errors. The game result should be considered logged; individual
-          // sub-operations log their own errors above.
-        }
-        })();
-      };
-    }
-  }
-
-  // Self-heal Socket.IO room membership for active (human) match players.
-  for (const seatId of room.state.playerIds) {
-    if (seatId.startsWith('bot:fritz:')) continue;
-    const connectionId = getSocketForSeat(roomCode, seatId);
-    if (!connectionId) continue;
-    const playerSocket = io.sockets.sockets.get(connectionId);
-    if (!playerSocket) continue;
-    if (!playerSocket.rooms.has(roomCode)) {
-      playerSocket.join(roomCode);
-      playerSocket.data.roomId = roomCode;
-      ensureSocketDataSeat(playerSocket, seatId);
-    }
-  }
-
-  const sockets = io.sockets.adapter.rooms.get(roomCode);
-  if (!sockets) return;
-
-  const pendingForcedDraw = room.pendingForcedDrawBroadcast;
-  const pendingAutoPasses =
-    Array.isArray(room.pendingAutoPassNotice) && room.pendingAutoPassNotice.length > 0
-      ? room.pendingAutoPassNotice
-      : undefined;
-
-  const currentScores = Object.fromEntries(
-    room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
-  );
-  const previousScores = room.lastBroadcastScores;
-
-  for (const connectionId of sockets) {
-    const socket = io.sockets.sockets.get(connectionId);
-    if (socket) {
-      const recipientPlayerId = (() => {
-        const fromData =
-          typeof socket.data?.playerId === 'string' ? socket.data.playerId : null;
-        if (fromData && room.state!.playerIds.includes(fromData)) {
-          return fromData;
-        }
-        const fromRoster = getSeatIdForSocket(roomCode, connectionId);
-        if (fromRoster && room.state!.playerIds.includes(fromRoster)) {
-          return fromRoster;
-        }
-        return null;
-      })();
-      const isPlayer = recipientPlayerId !== null;
-
-      const legalMoves = isPlayer ? getRoomLegalMoves(roomCode, recipientPlayerId) : [];
-      const canDraw = isPlayer ? getRoomCanDraw(roomCode, recipientPlayerId) : false;
-
-      const maskedState = maskStateForRecipient(room.state, recipientPlayerId);
-      const broadcastHandCounts = getHandCounts(room.state);
-      socket.emit('state:update', {
-        state: { ...maskedState, handCounts: broadcastHandCounts },
-
-        legalMoves,
-        canDraw,
-        you: recipientPlayerId ?? undefined,
-        eventMeta: getRoomMatchEventMeta(room.code),
-        matchStarted: true,
-        ...(pendingForcedDraw
-          ? {
-              forcedDrawCount: pendingForcedDraw.count,
-              forcedDrawActorId: pendingForcedDraw.playerId,
-            }
-          : {}),
-        ...(pendingAutoPasses ? { recentAutoPasses: pendingAutoPasses } : {}),
-      });
-
-      if (
-        room.state.handOver &&
-        !room.state.gameOver &&
-        room.lastHandEndedNotifiedHand !== room.state.handNumber
-      ) {
-        room.lastHandEndedNotifiedHand = room.state.handNumber;
-        for (const seatId of room.state.playerIds) {
-          if (seatId.startsWith('bot:fritz:')) continue;
-          const connectionId = getSocketForSeat(roomCode, seatId);
-          if (!connectionId) continue;
-          const playerSocket = io.sockets.sockets.get(connectionId);
-          if (!playerSocket) continue;
-
-          const payload = buildHandEndedPayload(room, seatId);
-          if (payload) {
-            playerSocket.emit('hand:ended', payload);
+          } else {
+            console.warn('[League] Skipping live fixture finalization — player mapping missing', {
+              fixtureId: linkedFixture.id,
+              roomCode: room.code,
+              hasHomeMember: !!homeMember,
+              hasAwayMember: !!awayMember,
+              hasHomePlayer: !!homePlayer,
+              hasAwayPlayer: !!awayPlayer,
+            });
           }
         }
+      } catch (err) {
+        console.warn('Ranking/Match logging failed', err);
       }
-    }
-  }
-
-  room.lastBroadcastScores = currentScores;
-
-  // TOURNAMENT_SPECTATE_BROADCAST
-  // Spectator-safe broadcast only to non-player sockets. Active players already
-  // received personalized state:update above; sending this to them would hide
-  // their own hand with the same sequence number.
-  if (room.state) {
-    const spectatorMasked = maskStateForRecipient(room.state, null);
-    const stateForSpectators = { ...spectatorMasked, handCounts: getHandCounts(room.state) };
-    const spectatorPayload = {
-      state: stateForSpectators,
-      eventMeta: getRoomMatchEventMeta(room.code),
-      ...(pendingForcedDraw
-        ? {
-            forcedDrawCount: pendingForcedDraw.count,
-            forcedDrawActorId: pendingForcedDraw.playerId,
-          }
-        : {}),
-      ...(pendingAutoPasses ? { recentAutoPasses: pendingAutoPasses } : {}),
-    };
-    const currentRoomSockets = io.sockets.adapter.rooms.get(room.code);
-    if (currentRoomSockets) {
-      for (const connectionId of currentRoomSockets) {
-        const recipient = io.sockets.sockets.get(connectionId);
-        if (!recipient) continue;
-        const playerSeatId =
-          typeof recipient.data?.playerId === 'string' &&
-          room.state.playerIds.includes(recipient.data.playerId)
-            ? recipient.data.playerId
-            : getSeatIdForSocket(room.code, connectionId);
-        if (playerSeatId && room.state.playerIds.includes(playerSeatId)) continue;
-        recipient.emit('state:spectate', spectatorPayload);
-      }
-    }
-  }
-
-  room.pendingForcedDrawBroadcast = undefined;
-  room.pendingAutoPassNotice = undefined;
-
-  // Game-over archival / rating MUST follow state:update so clients are not stalled on I/O.
-  setImmediate(() => scheduleDeferredMatchPersist?.());
-
-  const roomAfter = (() => { try { return getRoom(roomCode); } catch { return null; } })();
-
-  // Auto-ready bots for next hand
-  if (roomAfter?.state?.handOver && !roomAfter.state.gameOver) {
-    for (const pid of roomAfter.players) {
-      if (pid.startsWith('bot:fritz:') && !roomAfter.nextHandReady.has(pid)) {
-        setTimeout(async () => {
-          try {
-            const result = await readyForNextHand(roomCode, pid, io);
-            if (result.started) {
-              broadcastStateUpdate(roomCode);
-              const freshRoom = (() => { try { return getRoom(roomCode); } catch { return null; } })();
-              if (freshRoom?.state && !freshRoom.state.handOver && !freshRoom.state.gameOver) {
-                // no-op
-              }
-            }
-          } catch (e) {
-            console.warn('[bot] auto-ready error', e);
-          }
-        }, 800);
-      }
-    }
-  }
-
-  if (room.state.gameOver) {
-    const finRoom = room;
-    const finCode = roomCode;
-    const shouldFinalizeTour = isTournamentRoom;
-    setImmediate(() => {
-      if (shouldFinalizeTour) finalizeTournamentMatchHook?.(finRoom);
-      evaluateRoomLifecycle(finCode);
-    });
-  }
-}
-
-function buildMatchStartDeps(io: Server) {
-  return {
-    broadcastStateUpdate: (roomCode: string) => broadcastStateUpdate(roomCode),
-    onSimMatchStarted: (_room: Room) => {
-      // Sim matches removed from matchmaking path.
-    },
+    })();
   };
 }
+
+function notifyRoomPlayersInGame(roomCode: string): void {
+  const room = getRoom(roomCode);
+  for (const seatId of room.players) {
+    const connectionId = getSocketForSeat(roomCode, seatId);
+    if (!connectionId) continue;
+    const pSocket = io.sockets.sockets.get(connectionId);
+    const playerId = normalizeUserId(pSocket?.data?.userId);
+    if (playerId) {
+      void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
+      emitPresenceUpdateToFriends(playerId, 'in_game');
+    }
+  }
+}
+
+async function onAfterMatchStarted(room: Room): Promise<void> {
+  if (getPendingFritzMatchContext(room)) {
+    await insertPendingFritzMatch(room);
+  }
+}
+
+initRoomSession(io, {
+  persistRoomMatchLog,
+  onGameOver: createGameOverPersistScheduler,
+  finalizeTournamentMatch: (room) => finalizeTournamentMatchHook?.(room),
+  resolveSocketIdentity,
+  normalizeUsername,
+  normalizeUserId,
+  tryHydrateMatchmakingRoomShell,
+  waitUntilMatchmakingRoomSocketsReady,
+  onAfterMatchStarted,
+  notifyRoomPlayersInGame,
+  maybeFinalizeTournamentMatch: (room) => finalizeTournamentMatchHook?.(room),
+});
 
 io.on('connection', (socket: Socket) => {
   console.log(`[socket.io] client connected id=${socket.id} transport=${socket.conn.transport.name}`);
@@ -5006,70 +4444,7 @@ io.on('connection', (socket: Socket) => {
   initScheduledTournaments(io, app, socket);
 
   /* ROOM_REACTIONS_CHAT_EMOTE */
-  const leaveTrackedRoom = (
-    roomCode: string | undefined,
-    options: { preserveSeat?: boolean } = {},
-  ) => {
-    if (!roomCode) return;
-    const code = roomCode.trim().toUpperCase();
-    if (!code) return;
-
-    const preserveSeat = Boolean(options.preserveSeat);
-    socket.leave(code);
-    if (socket.data.roomId === code) {
-      socket.data.roomId = undefined;
-    }
-
-    let room: Room | null = null;
-    try {
-      room = getRoom(code);
-    } catch {
-      clearRoomMetadata(code);
-      cancelRoomCleanup(code);
-      return;
-    }
-
-    const playerSeatId = getSeatIdForSocket(code, socket.id);
-    const wasPlayer = playerSeatId ? room.players.includes(playerSeatId) : false;
-    clearSocketRematchReady(code, socket.id);
-
-    if (!preserveSeat && wasPlayer && playerSeatId) {
-      appendRoomEvent(room, {
-        type: 'player_left',
-        actorSocketId: socket.id,
-        actorUserId: normalizeUserId(socket.data?.userId),
-        payload: {
-          preserveSeat,
-          playerSeatId,
-        },
-      });
-      room.players = room.players.filter((pid) => pid !== playerSeatId);
-      const nextRoster = (roomPlayersByCode.get(code) ?? []).filter((player) => player.id !== playerSeatId);
-      if (nextRoster.length > 0) {
-        roomPlayersByCode.set(code, nextRoster);
-      } else {
-        roomPlayersByCode.delete(code);
-      }
-
-      const nextSeats = (reconnectSeatsByCode.get(code) ?? []).filter((seat) => seat.oldSocketId !== socket.id);
-      if (nextSeats.length > 0) {
-        reconnectSeatsByCode.set(code, nextSeats);
-      } else {
-        reconnectSeatsByCode.delete(code);
-      }
-
-      io.to(code).emit('room:update', { players: nextRoster });
-    }
-
-    evaluateRoomLifecycle(code);
-  };
-
-  const leaveExistingSocketRooms = () => {
-    const previousRooms = [...socket.rooms].filter((roomId) => roomId !== socket.id);
-    previousRooms.forEach((roomId) => leaveTrackedRoom(roomId));
-    socket.data.roomId = undefined;
-  };
-
+  registerRoomSessionHandlers(io, socket);
   const removeSocketPresence = () => {
     const userId = normalizeUserId(socket.data?.userId);
     if (!userId) return;
@@ -5308,7 +4683,7 @@ io.on('connection', (socket: Socket) => {
       { id: seatA, socketId: m.a, username: pa?.username ?? 'Player', userId: pa?.userId ?? null },
       { id: seatB, socketId: m.b, username: pb?.username ?? 'Player', userId: pb?.userId ?? null },
     ];
-    roomPlayersByCode.set(room.code, roomPlayers);
+    setRoomRoster(room.code, roomPlayers);
     io.to(room.code).emit('room:update', { players: roomPlayers });
 
     // Announce active match (players + spectators)
@@ -5503,726 +4878,15 @@ io.on('connection', (socket: Socket) => {
   });
 
 
-  socket.on('room:create', async (arg1?: unknown, arg2?: unknown) => {
-    const config = (
-      arg1 && typeof arg1 === 'object' && !Array.isArray(arg1) ? arg1 : {}
-    ) as RoomJoinConfig;
-    const cb = (typeof arg1 === 'function' ? arg1 : arg2) as AckFn | undefined;
-    const {
-      username: _ignoredUsername,
-      userId: _ignoredUserId,
-      authToken: _ignoredAuthToken,
-      ...roomConfig
-    } = config as Record<string, unknown>;
-    console.log(`[room:create] socket=${socket.id}`);
-    try {
-      const { username, userId } = await resolveSocketIdentity(config);
-      clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
-      leaveExistingSocketRooms();
-      const playerSeatId = allocatePlayerSeatId();
-      const room = createRoom(playerSeatId, roomConfig as Record<string, unknown>);
-      socket.join(room.code);
-      socket.data.roomId = room.code;
-      socket.data.username = username;
-      socket.data.userId = userId;
-      ensureSocketDataSeat(socket, playerSeatId);
-      const roomPlayers: RoomPlayer[] = [{ id: playerSeatId, socketId: socket.id, username, userId }];
-      roomPlayersByCode.set(room.code, roomPlayers);
-      appendRoomEvent(room, {
-        type: 'player_joined',
-        actorSocketId: socket.id,
-        actorUserId: userId,
-        payload: {
-          username,
-          via: 'room:create',
-        },
-      });
-      console.log(`[room:create] created room=${room.code}, players=${room.players.length}`);
-      cb?.({
-        ok: true,
-        roomCode: room.code,
-        you: playerSeatId,
-        players: roomPlayers,
-        eventMeta: getRoomMatchEventMeta(room.code),
-        matchStarted: false,
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[room:create] ERROR: ${message}`);
-      cb?.({ ok: false, error: message });
-    }
-  });
-
-  
-socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
-    const cb = (
-      typeof arg3 === 'function' ? arg3 : typeof arg2 === 'function' ? arg2 : undefined
-    ) as AckFn | undefined;
-    const config =
-      arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? (arg2 as RoomJoinConfig) : {};
-    const code = String(argCode ?? '').trim().toUpperCase();
-    try {
-      const { username, userId } = await resolveSocketIdentity(config);
-      if (!code) return cb?.({ ok: false, error: 'missing_code' });
-      clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
-      leaveExistingSocketRooms();
-
-      let room: Room | null = null;
-      try {
-        room = getRoom(code);
-      } catch {
-        return cb?.({ ok: false, error: 'not_found' });
-      }
-
-      // Socket room only — DO NOT join the game engine.
-      socket.join(code);
-      socket.data.roomId = code;
-      socket.data.username = username;
-      socket.data.userId = userId;
-      socket.data.playerId = socket.id;
-
-      // Send roster snapshot
-      const roster = roomPlayersByCode.get(code) ?? [];
-      socket.emit('room:update', { players: roster });
-
-      // Send a spectator-safe snapshot to just this socket.
-      if (room.state) {
-        const specMasked = maskStateForRecipient(room.state, null);
-        socket.emit('state:update', {
-          state: { ...specMasked, handCounts: getHandCounts(room.state) },
-          legalMoves: [],
-          canDraw: false,
-          eventMeta: getRoomMatchEventMeta(code),
-          matchStarted: true,
-        });
-      }
-
-      appendRoomEvent(room, {
-        type: 'spectator_joined',
-        actorSocketId: socket.id,
-        actorUserId: userId,
-        payload: {
-          username,
-        },
-      });
-
-      cb?.({
-        ok: true,
-        roomCode: code,
-        players: roster,
-        eventMeta: getRoomMatchEventMeta(code),
-        matchStarted: Boolean(room.state),
-      });
-    } catch (e) {
-      cb?.({ ok: false, error: 'spectate_failed' });
-    }
-  });
-
-  socket.on('room:join', async (argCode: unknown, arg2?: unknown, arg3?: unknown) => {
-    const cb = (
-      typeof arg3 === 'function' ? arg3 : typeof arg2 === 'function' ? arg2 : undefined
-    ) as AckFn | undefined;
-    const explicitConfig =
-      arg2 && typeof arg2 === 'object' && !Array.isArray(arg2) ? (arg2 as RoomJoinConfig) : null;
-    const codeFromObject =
-      argCode && typeof argCode === 'object' && !Array.isArray(argCode)
-        ? (argCode as { roomCode?: unknown; username?: unknown; userId?: unknown; authToken?: unknown })
-        : null;
-    const configFromCodeObject: RoomJoinConfig | null = codeFromObject
-      ? {
-          username:
-            typeof codeFromObject.username === 'string' ? codeFromObject.username : undefined,
-          userId: typeof codeFromObject.userId === 'string' ? codeFromObject.userId : null,
-          authToken: typeof codeFromObject.authToken === 'string' ? codeFromObject.authToken : null,
-        }
-      : null;
-    const config = explicitConfig ?? configFromCodeObject ?? {};
-    const rawCode = codeFromObject?.roomCode ?? argCode;
-    const roomCode = String(rawCode ?? '')
-      .trim()
-      .toUpperCase();
-    console.log(`[room:join] socket=${socket.id}, code=${roomCode}`);
-    try {
-      const { username, userId } = await resolveSocketIdentity(config);
-      console.log(`[room:join] identity user=${username} (${userId})`);
-      clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
-      leaveExistingSocketRooms();
-      const hydrateResult = await tryHydrateMatchmakingRoomShell(roomCode);
-      let existingRoom = peekRoom(roomCode);
-      if (!existingRoom) {
-        const message = 'Room not found.';
-        console.log(`[room:join] ERROR: ${message} hydrate=${hydrateResult}`);
-        cb?.({ ok: false, error: message });
-        return;
-      }
-      let room: Room | null = null;
-      let roster: RoomPlayer[] = [];
-      let migratedByUserId = false;
-      roster = (
-        roomPlayersByCode.get(roomCode) ??
-        getRoomPlayersWithFallback(roomCode, existingRoom.players)
-      ).slice();
-      if (existingRoom && userId) {
-        const existingPlayer = roster.find((player) => player.userId === userId);
-        if (existingPlayer) {
-          const oldSocket = existingPlayer.socketId
-            ? io.sockets.sockets.get(existingPlayer.socketId)
-            : undefined;
-          if (oldSocket && oldSocket.id !== socket.id && oldSocket.connected) {
-            console.log(`[room:join] FORCE-DISCONNECT: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
-            oldSocket.emit('room:session:superseded', { reason: 'new_session', newSocketId: socket.id });
-            oldSocket.disconnect(true);
-            await new Promise(resolve => setTimeout(resolve, 50));
-          }
-
-          console.log(`[room:join] RECONNECT: migrating seat ${existingPlayer.id} socket -> ${socket.id} for userId=${userId}`);
-          migrateRoomSeat(roomCode, existingPlayer.id, socket.id);
-          roster = roster.map((player) =>
-            player.id === existingPlayer.id
-              ? { ...player, socketId: socket.id, username, userId }
-              : player,
-          );
-          roomPlayersByCode.set(roomCode, roster);
-          socket.data.roomId = roomCode;
-          ensureSocketDataSeat(socket, existingPlayer.id);
-          room = existingRoom;
-          migratedByUserId = true;
-          appendRoomEvent(room, {
-            type: 'player_reconnected',
-            actorSocketId: socket.id,
-            actorUserId: userId,
-            payload: {
-              previousSocketId: existingPlayer.socketId,
-              playerSeatId: existingPlayer.id,
-              username,
-            },
-          });
-        }
-      }
-      let joinedPlayerSeatId: string | null = migratedByUserId
-        ? roster.find((player) => player.userId === userId)?.id ?? null
-        : null;
-      if (!migratedByUserId) {
-        try {
-          joinedPlayerSeatId = allocatePlayerSeatId();
-          room = joinRoom(roomCode, joinedPlayerSeatId);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'unknown error';
-          if (!message.toLowerCase().includes('room is full')) {
-            throw err;
-          }
-          const seats = pruneReconnectSeats(roomCode);
-          const match = seats.find((seat) =>
-            identityMatchesReconnectSeat(seat, {
-              username,
-              userId,
-            }),
-          );
-          if (!match) throw err;
-          joinedPlayerSeatId = match.seatId;
-          migrateRoomSeat(roomCode, match.seatId, socket.id);
-          reconnectSeatsByCode.set(
-            roomCode,
-            seats.filter((seat) => seat.seatId !== match.seatId),
-          );
-          const rosterIdx = roster.findIndex((player) => player.id === match.seatId);
-          if (rosterIdx >= 0) {
-            roster[rosterIdx] = { ...roster[rosterIdx], socketId: socket.id, username, userId };
-          } else {
-            roster.push({
-              id: match.seatId,
-              socketId: socket.id,
-              username,
-              userId,
-            });
-          }
-          room = getRoom(roomCode);
-        }
-      }
-      if (!room) throw new Error('Room not found.');
-      if (!joinedPlayerSeatId) {
-        joinedPlayerSeatId = resolveActorSeatId(room.code, socket);
-      }
-      socket.join(room.code);
-      socket.data.roomId = room.code;
-      socket.data.username = username;
-      socket.data.userId = userId;
-      ensureSocketDataSeat(socket, joinedPlayerSeatId);
-      const existingIdx = roster.findIndex((p) => p.id === joinedPlayerSeatId);
-      if (existingIdx >= 0) {
-        roster[existingIdx] = {
-          id: joinedPlayerSeatId,
-          socketId: socket.id,
-          username,
-          userId,
-        };
-      } else {
-        roster.push({ id: joinedPlayerSeatId, socketId: socket.id, username, userId });
-        appendRoomEvent(room, {
-          type: 'player_joined',
-          actorSocketId: socket.id,
-          actorUserId: userId,
-          payload: {
-            username,
-            via: migratedByUserId ? 'reconnect' : 'room:join',
-          },
-        });
-      }
-      roomPlayersByCode.set(room.code, roster);
-      io.to(room.code).emit('room:update', { players: roster });
-      console.log(`[room:join] joined room=${room.code}, players=${room.players.length}`);
-
-      // Matchmaking: seat sim before start checks; auto-ready the joining socket so
-      // the deal is not blocked on a client player:ready race or countdown timing.
-      if (room.matchmakingMatchId && !room.state) {
-        markMatchStartReady(room.code, joinedPlayerSeatId);
-
-        console.log('[matchmaking] players in room:', room.players.length);
-
-        const mmSeatSockets = getEngineSeatSocketIds(room.code, [...room.players]);
-        if (mmSeatSockets.length >= 2) {
-          try {
-            await waitUntilMatchmakingRoomSocketsReady(io, room.code, mmSeatSockets);
-            const startResult = await tryStartMatchIfReady(room.code, io, buildMatchStartDeps(io));
-            if (startResult.started) {
-              room = getRoom(room.code);
-              console.log('[room:join] matchmaking auto-started', {
-                roomCode: room.code,
-                socketId: socket.id,
-              });
-            }
-          } catch (startErr) {
-            console.warn(
-              '[room:join] matchmaking auto-start failed',
-              startErr instanceof Error ? startErr.message : startErr,
-            );
-          }
-        }
-      }
-
-      const recipientId = joinedPlayerSeatId;
-      const stateWithCounts = room.state
-        ? (() => {
-            const m = maskStateForRecipient(room.state!, recipientId);
-            return { ...m, handCounts: getHandCounts(room.state!) };
-          })()
-        : null;
-
-      const rejoinLegalMoves = room.state ? getRoomLegalMoves(room.code, joinedPlayerSeatId) : [];
-      const rejoinCanDraw = room.state ? getRoomCanDraw(room.code, joinedPlayerSeatId) : false;
-
-      // ── Scheduled-tournament metadata ──────────────────────────────────
-      // When the room belongs to a scheduled tournament, attach the match
-      // info + opponent profile so the client can render the in-game banner
-      // and bracket context without a fragile room-code regex.
-      let tournamentMatchMeta:
-        | {
-            tournamentId: string;
-            matchId: string;
-            round: 1 | 2 | 3;
-            opponentUserId: string | null;
-            opponentUsername: string | null;
-            opponentRating: number | null;
-          }
-        | null = null;
-      if (room.scheduledTournamentMatchId && room.scheduledTournamentId) {
-        try {
-          const matchRows = await supabaseFetch<Array<{
-            id: string;
-            tournament_id: string;
-            round: 1 | 2 | 3;
-            player1_id: string | null;
-            player2_id: string | null;
-          }>>(
-            `/rest/v1/scheduled_tournament_matches` +
-              `?select=id,tournament_id,round,player1_id,player2_id` +
-              `&id=eq.${encodeURIComponent(room.scheduledTournamentMatchId)}&limit=1`,
-          );
-          const match = matchRows[0];
-          if (match) {
-            const opponentUserId =
-              userId && match.player1_id === userId
-                ? match.player2_id
-                : userId && match.player2_id === userId
-                  ? match.player1_id
-                  : null;
-            let opponentUsername: string | null = null;
-            let opponentRating: number | null = null;
-            if (opponentUserId) {
-              try {
-                const profiles = await supabaseFetch<Array<{
-                  username: string | null;
-                  glicko_rating: number | null;
-                }>>(
-                  `/rest/v1/profiles?select=username,glicko_rating&id=eq.${encodeURIComponent(opponentUserId)}&limit=1`,
-                );
-                opponentUsername = profiles[0]?.username ?? null;
-                opponentRating = profiles[0]?.glicko_rating ?? null;
-              } catch {
-                /* profile lookup is best-effort */
-              }
-            }
-            tournamentMatchMeta = {
-              tournamentId: match.tournament_id,
-              matchId: match.id,
-              round: match.round,
-              opponentUserId,
-              opponentUsername,
-              opponentRating,
-            };
-          }
-        } catch {
-          /* tournament metadata is best-effort — never block room:join on this */
-        }
-      }
-
-      cb?.({
-        ok: true,
-        roomCode: room.code,
-        you: joinedPlayerSeatId,
-        players: roster,
-        state: stateWithCounts,
-        legalMoves: rejoinLegalMoves,
-        canDraw: rejoinCanDraw,
-        eventMeta: getRoomMatchEventMeta(room.code),
-        tournamentMatch: tournamentMatchMeta,
-        matchStarted: Boolean(room.state),
-      });
-
-      if (room.state) {
-        // REPLAY hand:ended if rejoining into a handOver state
-        if (room.state.handOver && !room.state.gameOver) {
-          const payload = buildHandEndedPayload(room, joinedPlayerSeatId);
-          if (payload) {
-            socket.emit('hand:ended', payload);
-          }
-        }
-      }
-
-      onPlayerSocketRejoined(room.code, io, joinedPlayerSeatId);
-
-      evaluateRoomLifecycle(room.code);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[room:join] ERROR: ${message}`);
-      cb?.({ ok: false, error: message });
-    }
-  });
-
-  socket.on('room:leave', (roomCode: unknown, cb?: AckFn) => {
-    const code = typeof roomCode === 'string' ? roomCode.trim().toUpperCase() : '';
-    if (!code) {
-      cb?.({ ok: false, error: 'missing_code' });
-      return;
-    }
-
-    leaveTrackedRoom(code);
-    cb?.({ ok: true, roomCode: code });
-  });
-
-  socket.on('player:ready', async (code: unknown, cb?: AckFn) => {
-    const roomCode = String(code ?? '').trim().toUpperCase();
-    try {
-      const room = getRoom(roomCode);
-      const playerSeatId = resolveActorSeatId(roomCode, socket);
-      if (!room.players.includes(playerSeatId)) {
-        cb?.({ ok: false, error: 'Only room players can ready up.' });
-        return;
-      }
-      markMatchStartReady(roomCode, playerSeatId);
-      const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
-      if (startResult.started) {
-        const started = getRoom(roomCode);
-        for (const seatId of started.players) {
-          const connectionId = getSocketForSeat(roomCode, seatId);
-          if (!connectionId) continue;
-          const pSocket = io.sockets.sockets.get(connectionId);
-          const playerId = normalizeUserId(pSocket?.data?.userId);
-          if (playerId) {
-            void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
-            emitPresenceUpdateToFriends(playerId, 'in_game');
-          }
-        }
-        if (getPendingFritzMatchContext(started)) {
-          await insertPendingFritzMatch(started);
-        }
-      }
-      cb?.({
-        ok: true,
-        started: startResult.started,
-        waitingFor: startResult.waitingFor ?? [],
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      cb?.({ ok: false, error: message });
-    }
-  });
-
-  socket.on('game:start', async (code, cb) => {
-    const roomCode = String(code).trim().toUpperCase();
-    console.log(`[game:start] socket=${socket.id}, code=${roomCode}`);
-    try {
-      const existingRoom = getRoom(roomCode);
-      const playerSeatId = resolveActorSeatId(roomCode, socket);
-      if (!existingRoom.players.includes(playerSeatId)) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Only room players can start the game.' });
-        return;
-      }
-      if (existingRoom.players[0] !== playerSeatId) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Only the room host can start the game.' });
-        return;
-      }
-      const liveCount = io.sockets.adapter.rooms.get(roomCode)?.size ?? 0;
-      const rosterCount = (
-        roomPlayersByCode.get(roomCode) ??
-        getRoomPlayersWithFallback(roomCode, existingRoom.players)
-      ).length;
-      if (liveCount < 2 || rosterCount < 2) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'waiting_for_players' });
-        return;
-      }
-      markMatchStartReady(roomCode, playerSeatId);
-      const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
-      if (!startResult.started) {
-        if (typeof cb === 'function') {
-          cb({ ok: false, error: 'waiting_for_ready', waitingFor: startResult.waitingFor ?? [] });
-        }
-        return;
-      }
-      const room = getRoom(roomCode);
-      console.log(
-        `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,
-      );
-      for (const seatId of room.players) {
-        const connectionId = getSocketForSeat(roomCode, seatId);
-        if (!connectionId) continue;
-        const pSocket = io.sockets.sockets.get(connectionId);
-        const playerId = normalizeUserId(pSocket?.data?.userId);
-        if (playerId) {
-          void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
-          emitPresenceUpdateToFriends(playerId, 'in_game');
-        }
-      }
-      if (getPendingFritzMatchContext(room)) {
-        await insertPendingFritzMatch(room);
-      }
-      if (typeof cb === 'function') cb({ ok: true });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[game:start] ERROR: ${message}`);
-      if (typeof cb === 'function') cb({ ok: false, error: message });
-    }
-  });
-
-  socket.on('mp:ping', (_sentAt: unknown, cb?: (serverAt: number) => void) => {
-    if (typeof cb === 'function') cb(Date.now());
-  });
-
-  socket.on('game:action', async (code, action, cb) => {
-    const roomCode = String(code).trim().toUpperCase();
-    console.log(`[game:action] socket=${socket.id}, code=${roomCode}, action=${action?.type}`);
-    try {
-      if (!action || typeof action !== 'object' || typeof action.type !== 'string') {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Invalid action payload.' });
-        return;
-      }
-      if (!['DRAW', 'MOVE', 'PASS'].includes(action.type)) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Unknown action type.' });
-        return;
-      }
-      const existingRoom = getRoom(roomCode);
-      const playerSeatId = resolveActorSeatId(roomCode, socket);
-      if (!existingRoom.players.includes(playerSeatId)) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.' });
-        return;
-      }
-      if (!existingRoom.state) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Game not started.' });
-        return;
-      }
-      if (existingRoom.state.gameOver) {
-        if (typeof cb === 'function') cb({ ok: false, error: 'Game is over.' });
-        return;
-      }
-      const result = await act(roomCode, playerSeatId, action, io, (code) => broadcastStateUpdate(code));
-      const room = result.room;
-      room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
-        ? {
-            playerId: result.forcedDrawAnimation.playerId,
-            count: result.forcedDrawAnimation.steps.length,
-          }
-        : undefined;
-      // Authoritative state before draw animations so clients never render against stale hands/board.
-      broadcastStateUpdate(room.code);
-      if (result.forcedDrawAnimation) {
-        emitForcedDrawAnimationPayload(room.code, result.forcedDrawAnimation);
-      }
-      setImmediate(() => maybeFinalizeTournamentMatch(room));
-      if (process.env.NODE_ENV !== 'production' || process.env.MP_DEBUG === '1' || process.env.DEBUG_MP === '1') {
-        console.log('[mp-action-ack]', {
-          roomCode: room.code,
-          playerId: socket.id,
-          action: action?.type,
-          sequence: room.state?.sequence ?? null,
-        });
-      }
-      if (typeof cb === 'function') cb({ ok: true, sequence: room.state?.sequence ?? null });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      console.log(`[game:action] ERROR: ${message}`);
-      if (typeof cb === 'function') cb({ ok: false, error: message });
-    }
-  });
-
-  socket.on('hand:ready', async (code, arg2?: unknown, arg3?: unknown) => {
-    const roomCode = String(code).trim().toUpperCase();
-    const handNumber = typeof arg2 === 'number' && Number.isFinite(arg2) ? arg2 : undefined;
-    const cb = (typeof arg2 === 'function' ? arg2 : arg3) as AckFn | undefined;
-    try {
-      const playerSeatId = resolveActorSeatId(roomCode, socket);
-      const result = await readyForNextHand(roomCode, playerSeatId, io, handNumber, (code) => {
-        broadcastStateUpdate(code);
-      });
-      if (result.started) {
-        broadcastStateUpdate(result.room.code);
-        setImmediate(() => maybeFinalizeTournamentMatch(result.room));
-      }
-      cb?.({
-        ok: !result.ignored,
-        started: result.started,
-        ignored: Boolean(result.ignored),
-        handNumber: result.room.state?.handNumber ?? null,
-        waitMs: result.waitMs ?? 0,
-        error: result.ignored ? 'stale_or_duplicate_hand_ready' : undefined,
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      cb?.({ ok: false, error: message });
-    }
-  });
-
-  socket.on('game:rematch', async (code: unknown, cb?: AckFn) => {
-    const roomCode = String(code ?? '').trim().toUpperCase();
-    try {
-      const room = getRoom(roomCode);
-      const cfg = (room as any).config ?? {};
-
-      if (cfg.tournamentId) {
-        return cb?.({ ok: false, error: 'Rematch is unavailable in tournament rooms.' });
-      }
-      const playerSeatId = resolveActorSeatId(roomCode, socket);
-      if (!room.players.includes(playerSeatId)) {
-        return cb?.({ ok: false, error: 'Only room players can request rematch.' });
-      }
-      if (!room.state) {
-        return cb?.({ ok: false, error: 'Game not started.' });
-      }
-      if (!room.state.gameOver) {
-        return cb?.({ ok: false, error: 'Rematch is only available after game over.' });
-      }
-
-      room.rematchReady.add(playerSeatId);
-      appendRoomEvent(room, {
-        type: 'rematch_requested',
-        actorSocketId: socket.id,
-        actorUserId: normalizeUserId(socket.data?.userId),
-        payload: {
-          readyCount: room.rematchReady.size,
-          requiredCount: room.players.length,
-        },
-      });
-      emitRematchStatus(room.code);
-
-      const bothReady =
-        room.players.length === 2 && room.players.every((playerId) => room.rematchReady.has(playerId));
-      if (!bothReady) {
-        return cb?.({ ok: true, started: false });
-      }
-
-      room.rematchReady.clear();
-      room.matchLogged = false;
-      room.leadTracker = {
-        aId: room.players[0],
-        bId: room.players[1],
-        maxLeadA: 0,
-        maxLeadB: 0,
-      };
-      try {
-        await persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
-      } catch (error) {
-        console.error('[room-match-logs] failed to archive room before rematch reset:', error);
-      }
-      resetRoomEventLog(room);
-      appendRoomEvent(room, {
-        type: 'rematch_started',
-        actorSocketId: socket.id,
-        actorUserId: normalizeUserId(socket.data?.userId),
-        payload: {
-          players: [...room.players],
-        },
-      });
-      await startGame(room.code, io, { allowRestart: true });
-      // game:rematch:started MUST be emitted before broadcastStateUpdate so the
-      // client resets its sequence watermark before the first state:update of
-      // the new game arrives. If the order is reversed, a client whose watermark
-      // is still at the old game's final sequence number will silently discard
-      // the new game state as stale, leaving the board frozen.
-      io.to(room.code).emit('game:rematch:started', { roomCode: room.code });
-      broadcastStateUpdate(room.code);
-      emitRematchStatus(room.code);
-      cb?.({ ok: true, started: true });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'unknown error';
-      cb?.({ ok: false, error: message });
-    }
-  });
-
-  socket.on('player:dragging', (code: unknown, payload?: { dragging?: boolean }) => {
-    const roomCode = String(code ?? '').trim().toUpperCase();
-    if (!roomCode) return;
-    try {
-      const room = getRoom(roomCode);
-      const playerSeatId = resolveActorSeatId(roomCode, socket);
-      if (!room.players.includes(playerSeatId)) return;
-      socket.to(roomCode).emit('player:dragging', {
-        playerId: playerSeatId,
-        dragging: Boolean(payload?.dragging),
-      });
-    } catch {
-      // ignore invalid room
-    }
-  });
 
   socket.on('disconnect', () => {
     removeSocketPresence();
-    const roomCode = (socket.data?.roomId as string | undefined) ?? undefined;
     const userId = normalizeUserId(socket.data?.userId);
     if (isUuidLike(userId)) {
       void upsertPresence(userId as string, 'offline').catch(() => {});
       emitPresenceUpdateToFriends(userId as string, 'offline');
     }
-    let wasActiveRoomPlayer = false;
-    if (roomCode) {
-      try {
-        const room = getRoom(roomCode);
-        const playerSeatId = getSeatIdForSocket(roomCode, socket.id);
-        if (playerSeatId && room.players.includes(playerSeatId)) {
-          wasActiveRoomPlayer = true;
-          reserveReconnectSeat(roomCode, {
-            seatId: playerSeatId,
-            oldSocketId: socket.id,
-            username: normalizeUsername(socket.data?.username),
-            userId,
-          });
-          onActivePlayerSocketDisconnect(roomCode, playerSeatId, io, (code) =>
-            broadcastStateUpdate(code),
-          );
-        }
-      } catch {
-        // room no longer exists
-      }
-    }
-    leaveTrackedRoom(roomCode, { preserveSeat: wasActiveRoomPlayer });
+    const { wasActiveRoomPlayer, roomCode } = handleRoomPlayerDisconnect(io, socket);
     if (isUuidLike(userId) && roomCode && wasActiveRoomPlayer) {
       const verifiedUserId = userId as string;
       void (async () => {
@@ -6246,7 +4910,6 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     console.log('Client disconnected:', socket.id);
   });
 });
-
 function notifyClientsOfProcessShutdown(signal: string): void {
   try {
     console.warn(`[server] ${signal} — notifying sockets before exit`);
