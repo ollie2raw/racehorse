@@ -59,7 +59,26 @@ export async function writeDailyFritzActivity(params: {
   userId: string;
   finalScore: number | null;
   won: boolean;
+  games?: Array<{
+    gameNumber: number;
+    playerWon: boolean;
+    playerScore: number;
+    fritzScore: number;
+  }>;
 }): Promise<void> {
+  if (params.games?.length) {
+    await Promise.all(
+      params.games.map((game) =>
+        writeActivity(params.userId, 'daily_fritz', {
+          result: game.playerWon ? 'win' : 'loss',
+          game_number: game.gameNumber,
+          player_score: game.playerScore,
+          fritz_score: game.fritzScore,
+        }),
+      ),
+    );
+    return;
+  }
   await writeActivity(params.userId, 'daily_fritz', {
     score: params.finalScore,
     result: params.won ? 'win' : 'loss',

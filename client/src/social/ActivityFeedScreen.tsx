@@ -58,6 +58,11 @@ function trendLabel(item: FeedItem): string {
     return `${String(item.metadata.streak ?? '—')} Win Streak`;
   }
   if (item.type === 'daily_fritz') {
+    const playerScore = item.metadata.player_score;
+    const fritzScore = item.metadata.fritz_score;
+    if (playerScore != null && fritzScore != null) {
+      return `Daily Fritz · ${String(playerScore)}-${String(fritzScore)}`;
+    }
     return `Daily Fritz · ${String(item.metadata.score ?? '—')} pts`;
   }
   return 'Recent ranked result';
@@ -184,25 +189,6 @@ export default function ActivityFeedScreen({
                     See what your friends and the community are up to.
                   </p>
                 </div>
-                <button
-                  className="rh-sf-post-btn"
-                  type="button"
-                  title="Post updates are coming soon"
-                  onClick={() => {
-                    /* visual-only until post API exists */
-                  }}
-                >
-                  <span>Post Update</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path
-                      d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
               </header>
 
               {!user ? (

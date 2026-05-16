@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import './activityFeed.css';
@@ -14,8 +13,6 @@ const FILTER_TABS: { id: FilterTab; label: string }[] = [
   { id: 'tournaments', label: 'Tournaments' },
   { id: 'mentions', label: 'Mentions' },
 ];
-
-const PAGE_SIZE = 8;
 
 function initials(username: string): string {
   const parts = username.replace(/[^a-zA-Z0-9]/g, ' ').split(/\s+/).filter(Boolean);
@@ -55,23 +52,10 @@ function tilesSuffix(meta: Record<string, unknown>): string {
   return ` • ${tiles} Tiles`;
 }
 
-function itemAccent(type: FeedItem['type']): string {
-  switch (type) {
-    case 'win':
-      return 'var(--tier-elite)';
-    case 'loss':
-      return 'color-mix(in srgb, var(--tier-elite) 55%, transparent)';
-    case 'streak':
-      return 'var(--tier-rookie)';
-    case 'tournament':
-      return 'var(--tier-master)';
-    case 'puzzle':
-      return 'var(--tier-standard)';
-    case 'daily_fritz':
-      return 'var(--tier-elite)';
-    default:
-      return 'var(--text-dim)';
-  }
+function feedModeKey(mode: unknown): 'fritz' | 'ranked' {
+  const value = typeof mode === 'string' ? mode.toLowerCase() : '';
+  if (value.includes('fritz') || value === 'bot' || value === 'daily_fritz') return 'fritz';
+  return 'ranked';
 }
 
 function feedRowCopy(item: FeedItem): FeedRowCopy {
@@ -129,11 +113,19 @@ function feedRowCopy(item: FeedItem): FeedRowCopy {
     }
     case 'daily_fritz': {
       const result = meta.result as string | undefined;
-      const s = meta.score as number | undefined;
-      const verb = result === 'win' ? 'beat' : 'lost to';
+      const gameNumber = meta.game_number as number | undefined;
+      const playerScore = meta.player_score as number | undefined;
+      const fritzScore = meta.fritz_score as number | undefined;
+      const scoreline =
+        playerScore != null && fritzScore != null ? `${playerScore}-${fritzScore}` : null;
+      const legacyScore = meta.score as number | undefined;
+      const verb = result === 'win' ? 'won' : 'lost';
       return {
-        action: `${verb} Daily Fritz`,
-        secondary: s != null ? `Play vs Fritz · ${s} pts` : 'Play vs Fritz',
+        action:
+          gameNumber != null && scoreline
+            ? `${verb} Game ${gameNumber} vs Daily Fritz · ${scoreline}`
+            : `${verb} to Daily Fritz`,
+        secondary: scoreline ? 'Daily Fritz Set' : legacyScore != null ? `Daily Fritz · ${legacyScore} pts` : 'Daily Fritz',
         score: null,
         badge: result === 'win' ? '🏆' : '🎁',
       };
@@ -191,7 +183,6 @@ export default function ActivityFeedPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterTab>('all');
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const load = useCallback(async () => {
     if (!user) {
@@ -212,18 +203,10 @@ export default function ActivityFeedPanel({
 
   useEffect(() => { void load(); }, [load]);
 
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [filter]);
-
   const filtered = useMemo(
     () => filterItems(feed, filter, friendUsernames),
     [feed, filter, friendUsernames],
   );
-
-  const visible = filtered.slice(0, visibleCount);
-  const canLoadMore = visible.length < filtered.length;
-  const showLoadMore = !loading && !error && visible.length > 0;
 
   return (
     <div className="rh-af-panel">
@@ -246,7 +229,7 @@ export default function ActivityFeedPanel({
         <div className="rh-af-feed">
           {loading && <p className="rh-af-status">Loading activity…</p>}
           {!loading && error && <p className="rh-af-status rh-af-status--error">{error}</p>}
-          {!loading && !error && visible.length === 0 && (
+          {!loading && !error && filtered.length === 0 && (
             <div className="rh-af-empty">
               <p>
                 {filter === 'mentions'
@@ -256,13 +239,17 @@ export default function ActivityFeedPanel({
               {emptyAction}
             </div>
           )}
-          {!loading && !error && visible.map((item) => {
+          {!loading && !error && filtered.map((item) => {
             const copy = feedRowCopy(item);
+            const modeKey = item.type === 'win' || item.type === 'loss'
+              ? feedModeKey(item.metadata.mode)
+              : undefined;
             return (
               <article
                 key={item.id}
                 className="rh-af-row"
-                style={{ ['--rh-af-accent' as string]: itemAccent(item.type) } as CSSProperties}
+                data-feed-type={item.type}
+                data-feed-mode={modeKey}
               >
                 <button
                   type="button"
@@ -294,19 +281,6 @@ export default function ActivityFeedPanel({
             );
           })}
         </div>
-
-        {showLoadMore ? (
-          <button
-            type="button"
-            className="rh-af-load-more"
-            disabled={!canLoadMore}
-            onClick={() => {
-              if (canLoadMore) setVisibleCount((count) => count + PAGE_SIZE);
-            }}
-          >
-            Load More
-          </button>
-        ) : null}
       </div>
     </div>
   );

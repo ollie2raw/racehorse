@@ -145,10 +145,16 @@ export function GlobalNav({
       <div className={`relative flex h-full items-center justify-between max-w-[1440px] mx-auto w-full ${compactChrome ? 'px-7' : 'px-9'}`}>
         {/* Left: Brand & Identity */}
         <div className="flex items-center cursor-pointer min-w-[280px]" onClick={() => onNavigate?.('home')}>
-          <BrandLogo 
-            iconSize={compactChrome ? 40 : 44} 
-            showWordmark={false} 
-            borderColor={activeColor ? `color-mix(in srgb, ${activeColor} 60%, transparent)` : undefined} 
+          <BrandLogo
+            iconSize={compactChrome ? 40 : 44}
+            showWordmark={false}
+            borderColor={
+              solidDarkChrome
+                ? '#ffffff'
+                : activeColor
+                  ? `color-mix(in srgb, ${activeColor} 60%, transparent)`
+                  : undefined
+            }
           />
           <div 
             className="uppercase text-white"
@@ -182,25 +188,28 @@ export function GlobalNav({
             <div className={`flex items-center ${compactChrome ? 'gap-6' : 'gap-8'}`}>
               {TABS.map((tab) => {
                 const isActive = tab.activeModes.includes(currentMode as AppMode);
-                const color = (isActive && activeColor) || TAB_COLORS[tab.label] || '#E7B64A';
+                const accentColor = (isActive && activeColor) || TAB_COLORS[tab.label] || '#E7B64A';
+                const textColor = isActive
+                  ? (tab.label === 'Social' && activeColor ? '#ffffff' : accentColor)
+                  : '#8A879B';
 
                 return (
                   <button
                     key={tab.label}
                     onClick={() => onNavigate?.(tab.mode)}
                     className="relative py-2 transition-all"
-                    style={{ 
+                    style={{
                       fontSize: compactChrome ? '16px' : '17px',
                       fontWeight: 600,
-                      color: isActive ? color : '#8A879B',
-                      opacity: isActive ? 1 : 0.7
+                      color: textColor,
+                      opacity: isActive ? 1 : 0.7,
                     }}
                   >
                     {tab.label}
                     {isActive && (
                       <div
                         className={`rh-glow-underline rh-glow-underline--global-nav${compactChrome ? ' is-compact' : ''}`}
-                        style={{ ['--rh-glow-underline-color' as string]: color } as React.CSSProperties}
+                        style={{ ['--rh-glow-underline-color' as string]: accentColor } as React.CSSProperties}
                       />
                     )}
                   </button>

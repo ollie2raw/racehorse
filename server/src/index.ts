@@ -3945,7 +3945,12 @@ app.post('/api/daily-fritz/complete', async (req, res) => {
 
     const leaderboard = await buildDailyFritzLeaderboard(runDate);
     const rank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
-    void writeDailyFritzActivity({ userId: authenticatedUserId, finalScore: attempt.finalScore ?? null, won: attempt.won }).catch(() => {});
+    void writeDailyFritzActivity({
+      userId: authenticatedUserId,
+      finalScore: attempt.finalScore ?? null,
+      won: attempt.won,
+      games: setResult?.games,
+    }).catch(() => {});
     res.json({
       ok: true,
       rank,

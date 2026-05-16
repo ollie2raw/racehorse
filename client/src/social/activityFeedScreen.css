@@ -68,11 +68,17 @@
 }
 
 .rh-sf-page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
   flex-shrink: 0;
+}
+
+/* Legacy/cached markup guard — Post Update was removed from the screen */
+.rh-sf-post-btn {
+  display: none;
+}
+
+.rh-sf-page-head,
+.rh-sf-page-title {
+  color: #ffffff;
 }
 
 .rh-sf-page-title {
@@ -82,7 +88,6 @@
   font-weight: 700;
   line-height: 1.12;
   letter-spacing: -0.02em;
-  color: #ffffff;
 }
 
 .rh-sf-page-sub {
@@ -91,35 +96,6 @@
   font-size: 15px;
   line-height: 1.5;
   color: var(--sf-text-muted);
-}
-
-.rh-sf-post-btn {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 0 16px;
-  border: 1px solid var(--sf-border);
-  border-radius: 10px;
-  background: var(--sf-surface);
-  color: #ffffff;
-  font-family: var(--font-body);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast) var(--ease-premium),
-    color var(--duration-fast) var(--ease-premium);
-}
-
-.rh-sf-post-btn:hover {
-  border-color: color-mix(in srgb, var(--tier-elite) 50%, var(--sf-border));
-  color: var(--tier-elite);
-}
-
-.rh-sf-post-btn svg {
-  opacity: 0.9;
 }
 
 .rh-sf-signin {
@@ -422,11 +398,6 @@
   .rh-sf-page-head {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .rh-sf-post-btn {
-    width: 100%;
-    justify-content: center;
   }
 
   .rh-sf-friend {

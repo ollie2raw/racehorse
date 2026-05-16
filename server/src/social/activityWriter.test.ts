@@ -87,7 +87,37 @@ describe('writePuzzleActivity', () => {
 });
 
 describe('writeDailyFritzActivity', () => {
-  it('writes daily_fritz row with win result', async () => {
+  it('writes one daily_fritz row per game when set game results are present', async () => {
+    await writeDailyFritzActivity({
+      userId: 'u1',
+      finalScore: 2,
+      won: true,
+      games: [
+        { gameNumber: 1, playerWon: true, playerScore: 66, fritzScore: 52 },
+        { gameNumber: 2, playerWon: false, playerScore: 48, fritzScore: 61 },
+        { gameNumber: 3, playerWon: true, playerScore: 71, fritzScore: 44 },
+      ],
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    const bodies = mockFetch.mock.calls.map(
+      ([, init]: [string, { body: string }]) => JSON.parse(init.body),
+    );
+    expect(bodies.map((body: { type: string }) => body.type)).toEqual(['daily_fritz', 'daily_fritz', 'daily_fritz']);
+    expect(bodies[0].metadata).toMatchObject({
+      result: 'win',
+      game_number: 1,
+      player_score: 66,
+      fritz_score: 52,
+    });
+    expect(bodies[1].metadata).toMatchObject({
+      result: 'loss',
+      game_number: 2,
+      player_score: 48,
+      fritz_score: 61,
+    });
+  });
+
+  it('falls back to set-level daily_fritz row without game results', async () => {
     await writeDailyFritzActivity({ userId: 'u1', finalScore: 35, won: true });
     const body = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
     expect(body.type).toBe('daily_fritz');
