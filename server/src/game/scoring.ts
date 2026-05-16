@@ -21,6 +21,13 @@ function nextHubId(board: BoardState): number {
   return Math.max(...board.hubDoubles.map((h, idx) => hubIdAt(h, idx))) + 1;
 }
 
+/** Dense two-slot branch array: null = empty arm (never leave sparse holes or undefined). */
+function normalizeHubBranchSlots(
+  branches: readonly (BranchArm | null | undefined)[],
+): (BranchArm | null)[] {
+  return [branches[0] ?? null, branches[1] ?? null];
+}
+
 function recomputeBranchLaneHubStates(
   hubDoubles: BoardState['hubDoubles'],
   laneRef: string,
@@ -358,7 +365,7 @@ function placeTileOnBranch(
 
   const tileIsDouble = isDouble(tile);
   const laneRef = `branch-${hubRef}-${armIndex}`;
-  let newBranches: BranchArm[];
+  let newBranches: (BranchArm | null)[];
   let newHubDoubles = [...board.hubDoubles];
 
   if (hub.branches[armIndex]) {
@@ -376,12 +383,13 @@ function placeTileOnBranch(
     newBranches = hub.branches.map((b, i) =>
       i === armIndex
         ? {
-            tiles: [...b.tiles, placedTile],
+            tiles: [...b!.tiles, placedTile],
             openEnd: branchNewEnd,
             openEndIsDouble: tileIsDouble,
           }
-        : b,
+        : (b ?? null),
     );
+    newBranches = normalizeHubBranchSlots(newBranches);
 
     // A new double at the branch tip becomes a new branch-lane hub.
     if (tileIsDouble) {
@@ -420,6 +428,7 @@ function placeTileOnBranch(
       openEnd: newExposedEnd,
       openEndIsDouble: tileIsDouble,
     };
+    newBranches = normalizeHubBranchSlots(newBranches);
 
     if (tileIsDouble) {
       const newHubId = nextHubId({ ...board, hubDoubles: newHubDoubles });

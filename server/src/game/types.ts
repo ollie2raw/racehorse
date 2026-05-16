@@ -124,7 +124,7 @@ export interface HubDouble {
   readonly leftSideFilled?: boolean; // tile exists on the left side of this hub
   readonly rightSideFilled?: boolean; // tile exists on the right side of this hub
   readonly isCrossed: boolean; // true once both sides are filled
-  readonly branches: readonly BranchArm[]; // 0-2 branch arms
+  readonly branches: readonly (BranchArm | null)[]; // dense slots 0–1; null = empty arm
 }
 
 export interface BoardState {

@@ -11,6 +11,7 @@ import {
   canDraw,
 } from '../engine';
 import { simulatePlacement } from '../scoring';
+import { assertValidGameState } from '../invariants';
 import {
   Tile,
   PlacedTile,
@@ -354,9 +355,10 @@ describe('Crossed Doubles and Branching', () => {
     // Create branch with [3|1]
     board = simulatePlacement(board, t(1, 3), 'branch-0-0');
 
-    expect(board.hubDoubles[0].branches.length).toBe(1);
-    expect(board.hubDoubles[0].branches[0].tiles.length).toBe(1);
-    expect(board.hubDoubles[0].branches[0].openEnd).toBe(1);
+    expect(board.hubDoubles[0].branches.length).toBe(2);
+    expect(board.hubDoubles[0].branches[0]?.tiles.length).toBe(1);
+    expect(board.hubDoubles[0].branches[0]?.openEnd).toBe(1);
+    expect(board.hubDoubles[0].branches[1]).toBeNull();
   });
 
   it('branch end is included in open ends sum', () => {
@@ -413,6 +415,31 @@ describe('Crossed Doubles and Branching', () => {
     // Sum: left=2, right=5, branch=4 → 11
     expect(computeOpenEndsSum(board)).toBe(11);
     expect(computePlayScore(board)).toBe(0);
+  });
+
+  it('arm 1 before arm 0 then extend arm 1 does not break assertValidGameState', () => {
+    let board = simulatePlacement(null, t(3, 3), 'left');
+    board = simulatePlacement(board, t(3, 5), 'right');
+    board = simulatePlacement(board, t(2, 3), 'left');
+    board = simulatePlacement(board, t(1, 3), 'branch-0-1');
+    board = simulatePlacement(board, t(1, 4), 'branch-0-1');
+
+    expect(board.hubDoubles[0].branches[0]).toBeNull();
+    expect(board.hubDoubles[0].branches[1]?.tiles.length).toBe(2);
+    expect(board.hubDoubles[0].branches[1]?.openEnd).toBe(4);
+
+    const state = setupState({
+      board,
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: 'A', hand: [], score: 0 },
+        B: { id: 'B', hand: [], score: 0 },
+      },
+      boneyard: [],
+      deadTiles: [],
+    });
+
+    expect(() => assertValidGameState(state, 'branch-arm1-first')).not.toThrow();
   });
 
   it('multiple crossed doubles can each have branches', () => {

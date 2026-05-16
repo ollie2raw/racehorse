@@ -49,6 +49,7 @@ export function tilesOnBoard(board: BoardState | null): Tile[] {
   const result: Tile[] = board.mainLine.map((pt) => pt.tile);
   for (const hub of board.hubDoubles) {
     for (const arm of hub.branches) {
+      if (!arm) continue;
       for (const pt of arm.tiles) {
         result.push(pt.tile);
       }
@@ -62,6 +63,7 @@ export function boardTileCount(board: BoardState | null): number {
   let count = board.mainLine.length;
   for (const hub of board.hubDoubles) {
     for (const arm of hub.branches) {
+      if (!arm) continue;
       count += arm.tiles.length;
     }
   }
