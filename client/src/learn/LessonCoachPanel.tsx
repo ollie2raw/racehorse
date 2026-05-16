@@ -19,55 +19,15 @@ interface LessonCoachPanelProps {
   canBestMove: boolean;
   /** Whether the player has deviated from the authored line */
   isOffAuthoredLine?: boolean;
-}
-
-function deriveCoachHeadline(text: string, firstSentence: string): string {
-  const normalized = text.toLowerCase();
-
-  if (normalized.includes('good openings') || normalized.includes('opening was')) {
-    return normalized.includes('draw') ? 'DRAW FOR POWER' : 'OPENING CHOICE';
-  }
-  if (normalized.includes('scoring choices') || normalized.includes('score the same')) {
-    return 'SCORING CHOICES';
-  }
-  if (
-    (normalized.includes('draw') && normalized.includes('still fine')) ||
-    normalized.includes('increase our options') ||
-    normalized.includes('future chain opportunities')
-  ) {
-    return 'BUILD OPTIONS';
-  }
-  if (normalized.includes('go out')) {
-    return 'GO OUT';
-  }
-  if (normalized.includes('only one move')) {
-    return 'ONLY MOVE';
-  }
-  if (normalized.includes('double') && normalized.includes('keep the turn')) {
-    return 'USE THE DOUBLE';
-  }
-  if (normalized.includes('no scoring move')) {
-    return 'NO SCORE HERE';
-  }
-
-  const compactSentence = firstSentence.replace(/[.!?]+$/, '').trim();
-  const compactWordCount = compactSentence.split(/\s+/).filter(Boolean).length;
-  if (compactSentence.length <= 34 && compactWordCount <= 5) {
-    return compactSentence.toUpperCase();
-  }
-
-  return 'YOUR MOVE';
+  /** Whether the recommendation details are currently visible */
+  showRecommendation?: boolean;
+  /** Toggle recommendation visibility */
+  onToggleRecommendation?: () => void;
 }
 
 function splitCoachingCopy(text: string): { title: string; body: string[]; callout: string | null } {
-  let callout: string | null = null;
-  let remainingText = text.trim();
-
-  const playMatch = remainingText.match(/(Play:?\s*.*|Start with\s*\d-\d.*)$/im);
-  if (playMatch) {
-    callout = playMatch[1].trim();
-    remainingText = remainingText.substring(0, playMatch.index).trim();
-  }
+  const callout: string | null = null;
+  const remainingText = text.trim();
 
   if (!remainingText) return { title: '', body: [], callout };
 
@@ -78,23 +38,9 @@ function splitCoachingCopy(text: string): { title: string; body: string[]; callo
   }
 
   const firstParagraph = paragraphs[0];
-  const firstSentenceMatch = firstParagraph.match(/^(.+?[.!?])(\s+|$)(.*)$/s);
-
   let title = firstParagraph;
   const body: string[] = [];
-
-  if (firstSentenceMatch) {
-    const firstSentence = firstSentenceMatch[1].trim();
-    title = deriveCoachHeadline(remainingText, firstSentence);
-    const restOfFirst = firstSentenceMatch[3].trim();
-    if (title === firstSentence.replace(/[.!?]+$/, '').trim().toUpperCase()) {
-      if (restOfFirst) {
-        body.push(restOfFirst);
-      }
-    } else {
-      body.push(firstParagraph);
-    }
-  }
+  body.push(firstParagraph);
 
   for (let i = 1; i < paragraphs.length; i++) {
     body.push(paragraphs[i]);
@@ -103,19 +49,14 @@ function splitCoachingCopy(text: string): { title: string; body: string[]; callo
   return { title, body, callout };
 }
 
-function deriveCoachChips(text: string): string[] {
-  const normalized = text.toLowerCase();
-  const chips: string[] = [];
-  const scoreMatch = normalized.match(/score(?:s|ing)?\s+(\d+)/);
-  if (scoreMatch) chips.push(`Scores ${scoreMatch[1]}`);
-  if (normalized.includes('keep my turn') || normalized.includes('keep our turn') || normalized.includes('turn continues')) {
-    chips.push('Keeps turn');
-  }
-  if (normalized.includes('draw')) chips.push('Sets up draw');
-  if (normalized.includes('go out')) chips.push('Threatens go out');
-  if (normalized.includes('double')) chips.push('Double pressure');
-  if (normalized.includes('tight') || normalized.includes('limit')) chips.push('Board control');
-  return Array.from(new Set(chips)).slice(0, 4);
+function getCoachCopyDensity(body: string[], callout: string | null): 'short' | 'medium' | 'long' {
+  const combined = [...body, callout ?? ''].join(' ').trim();
+  const charCount = combined.length;
+  const paragraphCount = body.length + (callout ? 1 : 0);
+
+  if (charCount <= 140 && paragraphCount <= 2) return 'short';
+  if (charCount >= 280 || paragraphCount >= 4) return 'long';
+  return 'medium';
 }
 
 export default function LessonCoachPanel({
@@ -125,99 +66,83 @@ export default function LessonCoachPanel({
   onBestMove,
   canBestMove,
   isOffAuthoredLine = false,
+  showRecommendation = true,
+  onToggleRecommendation,
 }: LessonCoachPanelProps) {
-  const { title, body, callout } = splitCoachingCopy(coachingText);
-  const chips = deriveCoachChips(coachingText);
-  
+  const { body, callout } = splitCoachingCopy(coachingText);
+  const copyDensityClass = `is-${getCoachCopyDensity(
+    body.length > 0 ? body : [coachingText || 'No coaching note for this turn.'],
+    callout,
+  )}`;
+  const progressPct = totalSteps > 0 ? ((stepIndex + 1) / totalSteps) * 100 : 0;
+  const progressLabel = `${stepIndex + 1} / ${totalSteps}`;
+
   return (
-    <div className="rh-coach">
-      <div className="rh-coach__avatar">
-        <div className="rh-coach__avatar-mark">O</div>
-        <div className="rh-coach__avatar-meta">
-          <div className="rh-coach__avatar-sub">COACH</div>
-          <div className="rh-coach__avatar-name">OLIVER · MASTER</div>
-        </div>
-      </div>
-
-      <div className="rh-progress">
-        <div className="rh-progress__head">
-          <span>LESSON PROGRESS</span>
-          <strong>{stepIndex + 1} / {totalSteps}</strong>
-        </div>
-        <div className="rh-progress__rail">
-          <div
-            className="rh-progress__fill"
-            style={{ width: `${((stepIndex + 1) / totalSteps) * 100}%` }}
-          />
-        </div>
-        <div className="rh-tickrail">
-          {Array.from({ length: 60 }).map((_, i) => (
-            <div
-              key={i}
-              className={`rh-tickrail__tick ${
-                i < stepIndex ? 'is-played' : i === stepIndex ? 'is-current' : ''
-              }`}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="rh-coach__content">
-        <div className="claude-mode-hero__eyebrow">YOUR MOVE</div>
+    <section className="learn-coach-panel pvf-opponent-card" aria-label="Your coach">
+      <div className="learn-coach-panel__opponent-bg" aria-hidden="true" />
+      <div className="pvf-card-overlay learn-coach-panel__opponent-overlay" aria-hidden="true" />
+      <div className="pvf-card-content learn-coach-panel__card-content">
+        <div className="learn-coach-panel__middle">
         {isOffAuthoredLine ? (
-          <>
-            <h2 className="rh-coach__heading">OFFLINE FALLBACK</h2>
-            <div className="rh-coach__body">
-              You went off the authored line, so this hand will continue live from here.
-            </div>
-          </>
+          <div className={`learn-coach-panel__copy ${copyDensityClass}`}>
+            <p>You went off the authored line, so this hand will continue live from here.</p>
+          </div>
+        ) : !showRecommendation ? (
+          <div className={`learn-coach-panel__copy ${copyDensityClass}`}>
+            <p>Reveal the coach panel below when you want the lesson explanation and suggested move.</p>
+          </div>
         ) : (
-          <>
-            <h2 className="rh-coach__heading">{title || 'COACHING'}</h2>
-            <div className="rh-coach__body">
-              {body.length > 0 ? (
-                <div style={{ display: 'grid', gap: '12px' }}>
-                  {body.map((p, i) => (
-                    <p key={i} style={{ margin: 0 }}>{p}</p>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ margin: 0 }}>{coachingText || 'No coaching note for this turn.'}</p>
-              )}
-              {chips.length > 0 && (
-                <div className="claude-mode-chip-row" style={{ marginTop: '14px' }}>
-                  {chips.map((chip) => (
-                    <span key={chip} className="claude-mode-chip">{chip}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
+          <div className={`learn-coach-panel__copy ${copyDensityClass}`}>
+            {body.length > 0 ? (
+              body.map((p, i) => <p key={i}>{p}</p>)
+            ) : (
+              <p>{coachingText || 'No coaching note for this turn.'}</p>
+            )}
+            {callout ? <p className="learn-coach-panel__callout-inline">{callout}</p> : null}
+          </div>
         )}
-      </div>
-
-      {!isOffAuthoredLine && callout && (
-        <div className="rh-coach__rec">
-          <div className="rh-coach__rec-head">
-            <div className="claude-mode-section-label">RECOMMENDED</div>
-            <div className="rh-stat__value" style={{ color: '#22d3ee', fontSize: '11px', letterSpacing: '0.04em' }}>+5 CONFIDENCE</div>
-          </div>
-          <div className="rh-coach__rec-tile">
-             <div className="rh-preview__note-text" style={{ fontSize: '14px', fontWeight: 600, color: '#fff', letterSpacing: '0.02em' }}>
-              {callout}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="claude-mode-primary"
-            style={{ padding: '10px 16px', minHeight: 0, alignSelf: 'flex-start', background: '#22d3ee', color: '#000', boxShadow: '0 8px 22px rgba(34, 211, 238, 0.28)' }}
-            disabled={!canBestMove}
-            onClick={onBestMove}
-          >
-            <span className="claude-mode-primary__title" style={{ fontSize: '13px' }}>SHOW BEST MOVE</span>
-          </button>
         </div>
-      )}
-    </div>
+
+        {!isOffAuthoredLine ? (
+          <div className="learn-coach-panel__bottom">
+            <div className="rh-progress learn-coach-panel__progress">
+              <div className="rh-progress__head">
+                <span>LESSON PROGRESS</span>
+                <strong>{progressLabel}</strong>
+              </div>
+              <div className="rh-progress__rail">
+                <div className="rh-progress__fill" style={{ width: `${progressPct}%` }} />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="pvf-start-btn learn-coach-panel__bestmove"
+              disabled={!canBestMove}
+              onClick={onBestMove}
+              style={{
+                background:
+                  'linear-gradient(180deg, var(--tier-elite) 0%, color-mix(in srgb, var(--tier-elite) 80%, #000) 100%)',
+                boxShadow:
+                  '0 0 32px color-mix(in srgb, var(--tier-elite) 20%, transparent), inset 0 1px 0 rgba(255,255,255,0.4)',
+              }}
+            >
+              <span>Show Best Move</span>
+              <span className="pvf-start-arrow" aria-hidden="true">
+                ›
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="learn-coach-panel__toggle"
+              onClick={onToggleRecommendation}
+            >
+              {showRecommendation ? 'HIDE RECOMMENDATION' : 'SHOW RECOMMENDATION'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }

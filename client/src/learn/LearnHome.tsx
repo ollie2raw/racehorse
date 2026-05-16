@@ -1,110 +1,98 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
-import { Board } from '../components';
-import type { BoardState } from '../types';
+import { GlobalNav } from '../components';
+import { Button } from '../components/primitives';
+import '../screens/RacehorseHomeArt.css';
+import '../screens/SinglePlayerModes.css';
 import './learn.css';
 import {
   freezeV2Lesson,
   loadV2AuthoringSession,
   loadV2FrozenLesson,
-  parseLessonV2BoardState,
-  type LessonV2,
-  type LessonV2Event,
   type LessonV2AuthoringSession,
 } from './lessonV2';
-import { GUIDED_LESSON_COACHING_BY_VISIBLE_STEP } from './guidedLessonNotes';
-import {
-  ClaudeModeScreen,
-  ClaudePrimaryAction,
-  ClaudeSecondaryAction,
-  ClaudeSectionLabel,
-  ClaudeStatLine,
-} from '../ui/claudeMode';
+import artCoachPng from '../assets/singlePlayerHub/fritzwave.png';
 
-const GUEST_LEARN_PREVIEW_BOARD: BoardState = {
-  mainLine: [
-    { tile: { low: 0, high: 5 }, orientation: 'horizontal-normal' },
-    { tile: { low: 1, high: 5 }, orientation: 'horizontal-flipped' },
-    { tile: { low: 1, high: 1 }, orientation: 'vertical-normal' },
-    { tile: { low: 1, high: 6 }, orientation: 'horizontal-normal' },
-    { tile: { low: 3, high: 6 }, orientation: 'horizontal-flipped' },
-    { tile: { low: 3, high: 5 }, orientation: 'horizontal-normal' },
-  ],
-  leftEnd: 0,
-  rightEnd: 5,
-  leftEndIsDouble: false,
-  rightEndIsDouble: false,
-  hubDoubles: [],
+const themeVars = {
+  '--rh-bg': '#050911',
+  '--rh-panel': '#09101A',
+  '--rh-panel-2': '#0B121D',
+  '--rh-brass': '#D7A64A',
+  '--rh-blue': '#4A8FD4',
+  '--rh-green': '#67D957',
+  '--rh-violet': '#8B5CF6',
+  '--rh-cyan': '#20D1C7',
+  '--rh-orange': '#F2A63A',
+  '--rh-text': '#F2EEE8',
+  '--rh-muted': '#7A778A',
+} as CSSProperties;
+
+const LockIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+);
+
+type LearnModeCard = {
+  id: string;
+  unlocked: boolean;
+  containerClass: string;
+  sectionRounded: string;
+  title: string;
+  titleColor: string;
+  desc: string;
+  badges?: string[];
+  variant?: 'tier-elite' | 'tier-standard' | 'tier-master';
+  chevronColor?: string;
+  artSrc?: string;
 };
 
-const GUEST_LEARN_PREVIEW_FALLBACK = {
-  board: GUEST_LEARN_PREVIEW_BOARD,
-  coachingText: GUIDED_LESSON_COACHING_BY_VISIBLE_STEP[0] ?? "There are a few good openings here.",
-  turnLabel: 'Turn 2 / 60',
-  progress: 2 / 60,
-};
-
-function countBoardTiles(board: BoardState | null): number {
-  if (!board) return 0;
-  return (
-    board.mainLine.length +
-    board.hubDoubles.reduce(
-      (sum, hub) => sum + hub.branches.reduce((branchSum, branch) => branchSum + branch.tiles.length, 0),
-      0,
-    )
-  );
-}
-
-function shortenCoachingPreview(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) return '';
-  const sentences = trimmed.match(/[^.!?]+[.!?]+/g);
-  if (sentences && sentences.length > 0) {
-    const first = sentences[0]!.trim();
-    if (first.length >= 40) return first;
-    const second = sentences[1]?.trim();
-    if (second) return `${first} ${second}`;
-    return first;
-  }
-  return trimmed;
-}
-
-function pickPreviewMoment(lesson: LessonV2 | null): {
-  board: BoardState;
-  coachingText: string;
-  turnLabel: string;
-  progress: number;
-} | null {
-  if (!lesson) return null;
-  const playerPlayEvents = lesson.events.filter(
-    (event): event is LessonV2Event =>
-      event.actor === 'player' && event.action === 'play' && Boolean(event.coachingText.trim()),
-  );
-  if (playerPlayEvents.length === 0) return null;
-
-  const preferred =
-    playerPlayEvents.find((event) => {
-      const board = parseLessonV2BoardState(event.boardAfter);
-      const tileCount = countBoardTiles(board);
-      return board != null && tileCount >= 5 && tileCount <= 8;
-    }) ?? playerPlayEvents.find((event) => parseLessonV2BoardState(event.boardAfter) != null);
-
-  if (!preferred) return null;
-
-  const board = parseLessonV2BoardState(preferred.boardAfter);
-  if (!board) return null;
-
-  const turnIndex = playerPlayEvents.findIndex((event) => event.eventIndex === preferred.eventIndex);
-  const totalTurns = playerPlayEvents.length;
-  const turnNumber = turnIndex >= 0 ? turnIndex + 1 : 1;
-
-  return {
-    board,
-    coachingText: shortenCoachingPreview(preferred.coachingText),
-    turnLabel: `Turn ${turnNumber} / ${totalTurns}`,
-    progress: totalTurns > 0 ? turnNumber / totalTurns : 0,
-  };
-}
+const LEARN_MODE_CARDS: LearnModeCard[] = [
+  {
+    id: 'guided',
+    unlocked: true,
+    containerClass: 'daily-fritz-card-container',
+    sectionRounded: 'rounded-[20px] rounded-tl-[5px]',
+    title: 'Guided Match',
+    titleColor: '#E7B64A',
+    desc: 'One coached game. Oliver narrates every move.',
+    badges: ['60 TURNS', 'COACHING EVERY MOVE', 'FIXED LESSON'],
+    variant: 'tier-elite',
+    chevronColor: '#FFD76A',
+    artSrc: artCoachPng,
+  },
+  {
+    id: 'library',
+    unlocked: false,
+    containerClass: 'learn-library-card-container',
+    sectionRounded: 'rounded-[20px] rounded-tr-[5px]',
+    title: 'Lesson Library',
+    titleColor: '#34D399',
+    desc: 'Short focused lessons on strategy and scoring.',
+    artSrc: artCoachPng,
+  },
+  {
+    id: 'drills',
+    unlocked: false,
+    containerClass: 'learn-drills-card-container',
+    sectionRounded: 'rounded-[20px]',
+    title: 'Position Drills',
+    titleColor: '#22D3EE',
+    desc: 'Find the best move from real board positions.',
+    artSrc: artCoachPng,
+  },
+  {
+    id: 'replay',
+    unlocked: false,
+    containerClass: 'learn-replay-card-container',
+    sectionRounded: 'rounded-[20px] rounded-br-[5px]',
+    title: 'Replay Analysis',
+    titleColor: '#A78BFA',
+    desc: "Review your past games with Oliver's commentary.",
+    artSrc: artCoachPng,
+  },
+];
 
 interface LearnHomeProps {
   onBack: () => void;
@@ -128,7 +116,7 @@ export default function LearnHome({
   onStartAuthoringV2,
 }: LearnHomeProps) {
   const [v2AuthoringSession, setV2AuthoringSession] = useState<LessonV2AuthoringSession | null>(null);
-  const [v2FrozenLesson, setV2FrozenLesson] = useState<LessonV2 | null>(null);
+  const [_v2FrozenLesson, setV2FrozenLesson] = useState<ReturnType<typeof loadV2FrozenLesson>>(null);
   const [v2FreezeFlash, setV2FreezeFlash] = useState(false);
 
   useEffect(() => {
@@ -136,11 +124,6 @@ export default function LearnHome({
     if (!isAdmin || !showAdminView) return;
     setV2AuthoringSession(loadV2AuthoringSession());
   }, [isAdmin, showAdminView]);
-
-  const guestPreviewMoment = useMemo(
-    () => pickPreviewMoment(v2FrozenLesson) ?? GUEST_LEARN_PREVIEW_FALLBACK,
-    [v2FrozenLesson],
-  );
 
   const handleFreezeV2 = () => {
     const session = loadV2AuthoringSession();
@@ -154,75 +137,131 @@ export default function LearnHome({
 
   if (!isAdmin || !showAdminView) {
     return (
-      <div className="screen learn-home-screen mode-subpage-screen mode-accent-learn claude-mode-screen-shell">
-        <ClaudeModeScreen
-          accent="#22d3ee"
-          eyebrow="Learn"
-          title={'GUIDED\nMATCH'}
-          description="One coached match that teaches strong play one move at a time. Coach Oliver narrates every turn — from opening tempo to closing the board."
-          decor="L"
-          backLabel="Back to Home"
-          onBack={onBack}
-          heroFooter={
-            <div className="claude-mode-chip-row">
-              <span className="claude-mode-chip">60 Turns</span>
-              <span className="claude-mode-chip">Coaching Every Move</span>
-              <span className="claude-mode-chip">Fixed Lesson</span>
+      <div
+        className="learn-hub-page relative flex max-h-full min-h-0 flex-1 overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root"
+        style={themeVars}
+      >
+        <div className="home-bg" aria-hidden="true">
+          <div className="home-bg__halo" />
+          <div className="home-bg__domino home-bg__domino--tl" />
+          <div className="home-bg__domino home-bg__domino--tr" />
+          <div className="home-bg__line home-bg__line--1" />
+          <div className="home-bg__line home-bg__line--2" />
+          <div className="home-bg__line home-bg__line--3" />
+          <div className="home-bg__texture" />
+        </div>
+
+        <div className="home-shell relative mx-auto flex min-h-0 w-full max-w-[1580px] flex-1 flex-col">
+          <GlobalNav
+            currentMode="learn"
+            activeColor="#34D399"
+            onNavigate={(mode) => {
+              if (mode === 'home') onBack();
+            }}
+          />
+
+          <main className="sp-solo-main learn-hub-main relative flex min-h-0 flex-1 flex-col overflow-hidden px-0 pb-5 pt-10 home-main">
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]"
+              aria-hidden="true"
+            />
+
+            <Button variant="ghost" className="absolute left-14 top-10 z-20 rh-back-button" onClick={onBack} type="button">
+              ← Back to Home
+            </Button>
+
+            <div className="relative z-10 text-center">
+              <h1
+                className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-[var(--rh-text)]"
+                style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}
+              >
+                Learn
+              </h1>
+              <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">
+                Coach-led practice modes to sharpen your Racehorse strategy.
+              </p>
             </div>
-          }
-          panel={
-            <div className="claude-mode-panel-stack">
-              <ClaudeSectionLabel>Lesson Brief</ClaudeSectionLabel>
-              <ClaudeStatLine label="Format" value="Single Guided Game" />
-              <ClaudeStatLine label="Coach" value="Oliver · Master" accent="#22d3ee" />
-              <ClaudeStatLine label="Length" value="~22 minutes" />
-              <ClaudeStatLine label="Last Played" value={guestPreviewMoment.turnLabel} />
 
-              <div className="learn-landing-preview">
-                <div className="learn-landing-preview__head">
-                  <ClaudeSectionLabel>Preview</ClaudeSectionLabel>
-                  <span className="learn-landing-preview__turn-label">{guestPreviewMoment.turnLabel}</span>
-                </div>
+            <div className="relative z-10 mt-[42px] grid grid-cols-4 items-stretch gap-5 px-14">
+              {LEARN_MODE_CARDS.map((mode) => {
+                const isLocked = !mode.unlocked;
 
-                <div className="learn-landing-preview__rail">
-                  <div
-                    className="learn-landing-preview__fill"
-                    style={{ width: `${guestPreviewMoment.progress * 100}%` }}
-                  />
-                </div>
+                return (
+                  <section
+                    key={mode.id}
+                    className={`sp-solo-mode-card learn-mode-card ${mode.containerClass} relative box-border flex flex-col overflow-hidden ${mode.sectionRounded}${isLocked ? ' sp-solo-mode-card--locked' : ' cursor-pointer'}`}
+                    onClick={isLocked ? undefined : () => onStartGuidedV2Game?.()}
+                    aria-disabled={isLocked || undefined}
+                  >
+                    {isLocked ? (
+                      <div className="learn-mode-card__lock" aria-hidden="true">
+                        <LockIcon />
+                      </div>
+                    ) : null}
 
-                <div className="learn-landing-preview__board">
-                  <Board
-                    board={guestPreviewMoment.board}
-                    legalMoves={[]}
-                    selectedTile={null}
-                    onPositionClick={() => {}}
-                    tileSize={64}
-                    showOpenEndGlow={false}
-                  />
-                </div>
+                    {mode.artSrc ? (
+                      <div className="sp-solo-mode-card__art-slot" aria-hidden>
+                        <img
+                          src={mode.artSrc}
+                          alt=""
+                          className="sp-solo-mode-card__art"
+                          draggable={false}
+                          aria-hidden
+                        />
+                      </div>
+                    ) : null}
 
-                <div className="learn-landing-preview__note">
-                  <div className="learn-landing-preview__note-mark">Coach Note · {guestPreviewMoment.turnLabel.split(' / ')[0]}</div>
-                  <div className="learn-landing-preview__note-text">{guestPreviewMoment.coachingText}</div>
-                </div>
-              </div>
+                    <div className="home-card-scrim" aria-hidden="true" />
+                    <div className="home-card-content learn-mode-card__content">
+                      <div className="learn-mode-card__body">
+                        <div className="sp-solo-mode-card__text">
+                          <h2
+                            className="learn-mode-card__title"
+                            style={{ color: isLocked ? 'rgba(255,255,255,0.42)' : mode.titleColor }}
+                          >
+                            {mode.title}
+                          </h2>
+                          <p className={`learn-mode-card__desc ${isLocked ? 'is-muted' : ''}`}>{mode.desc}</p>
+                        </div>
 
-              <ClaudePrimaryAction
-                accent="#22d3ee"
-                title="Start Guided Game"
-                meta={`Resume from ${guestPreviewMoment.turnLabel} — Coach Oliver`}
-                onClick={onStartGuidedV2Game}
-                disabled={!onStartGuidedV2Game}
-              />
-              <ClaudeSecondaryAction
-                title="Back"
-                meta="Return to game mode menu"
-                onClick={onBack}
-              />
+                        {mode.badges && mode.badges.length > 0 ? (
+                          <div className="learn-mode-card__badges">
+                            {mode.badges.map((badge) => (
+                              <span key={badge} className="learn-mode-card__badge">
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className={`learn-mode-card__footer${isLocked ? ' learn-mode-card__footer--locked' : ''}`}>
+                        {isLocked ? (
+                          <div className="learn-mode-card__soon">COMING SOON</div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="pvf-start-btn learn-mode-card__play"
+                            onClick={(e: MouseEvent) => {
+                              e.stopPropagation();
+                              onStartGuidedV2Game?.();
+                            }}
+                            disabled={!onStartGuidedV2Game}
+                          >
+                            <span>Play</span>
+                            <span className="pvf-start-arrow" aria-hidden="true">
+                              ›
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })}
             </div>
-          }
-        />
+          </main>
+        </div>
       </div>
     );
   }
@@ -240,9 +279,7 @@ export default function LearnHome({
           <button className="learn-start-guided-btn" onClick={onStartAuthoringV2}>
             Start V2 Authoring Session
           </button>
-          <p className="learn-cta-sub">
-            Build the event timeline for the new guided match system.
-          </p>
+          <p className="learn-cta-sub">Build the event timeline for the new guided match system.</p>
         </div>
         <div className="learn-col">
           {isAdmin ? (
@@ -267,9 +304,7 @@ export default function LearnHome({
               >
                 {v2FreezeFlash ? '✓ Lesson Frozen' : '❄️ Freeze Fixed Lesson'}
               </button>
-              <p className="learn-cta-sub">
-                Promotes the authored event timeline to the live guided lesson
-              </p>
+              <p className="learn-cta-sub">Promotes the authored event timeline to the live guided lesson</p>
             </>
           ) : null}
         </div>

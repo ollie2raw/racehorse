@@ -1,69 +1,95 @@
 /* ─── Guided Learn Match Redesign ─── */
 .learn-lesson-screen {
+  --learn-guided-accent: #e7b64a;
+  --learn-guided-accent-strong: #f0c76a;
+  --learn-guided-border: rgba(231, 182, 74, 0.18);
+  --learn-guided-border-strong: rgba(231, 182, 74, 0.34);
+  --learn-guided-card: rgba(7, 9, 16, 0.92);
+  --learn-guided-card-soft: rgba(255, 255, 255, 0.035);
+  --learn-guided-text: rgba(242, 238, 232, 0.94);
+  --learn-guided-muted: rgba(170, 166, 180, 0.76);
+  --pvf-dynamic-color: var(--learn-guided-accent);
   width: 100%;
-  height: 100dvh;
-  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: clamp(8px, 1.6vh, 14px) clamp(12px, 1.7vw, 18px) clamp(12px, 1.9vh, 18px);
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  padding: 10px 14px 16px;
   background:
-    radial-gradient(circle at top left, rgba(61, 142, 255, 0.12), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(0, 240, 200, 0.07), transparent 30%),
-    linear-gradient(180deg, #01010a 0%, #04050d 35%, #080912 100%);
+    radial-gradient(circle at top left, rgba(76, 132, 255, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(231, 182, 74, 0.09), transparent 34%),
+    linear-gradient(180deg, #020612 0%, #040914 38%, #060b16 100%);
   box-sizing: border-box;
 }
 
 .learn-match-grid {
-  display: grid;
-  grid-template-columns: minmax(320px, 32%) 1fr;
-  flex: 1 1 auto;
+  display: flex;
+  gap: 32px;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  flex: 1 1 0;
   min-height: 0;
-  height: auto;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(3, 5, 14, 0.84);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
   overflow: hidden;
 }
 
 .learn-match-coach {
-  background: linear-gradient(180deg, rgba(8, 9, 18, 0.98), rgba(13, 15, 28, 0.98));
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  padding: clamp(24px, 2.4vw, 32px);
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  width: 40%;
+  flex: 0 0 40%;
+  min-width: 320px;
+  min-height: 0;
+  overflow: hidden;
+  gap: 14px;
 }
 
 .learn-match-board {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: clamp(22px, 2.4vw, 32px);
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(34, 211, 238, 0.035), transparent 70%),
-    linear-gradient(180deg, #04050d 0%, #01010a 100%);
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  gap: 14px;
+  padding: 24px 28px;
+  border-radius: var(--pvf-radius-lg, 20px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--learn-guided-card);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 32px rgba(0, 0, 0, 0.28);
 }
 
 .learn-match-board-frame {
   position: relative;
-  flex: 1;
-  min-height: 360px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background:
-    radial-gradient(ellipse at center, rgba(34, 211, 238, 0.025), transparent 72%),
-    linear-gradient(180deg, #030714 0%, #020611 100%);
+  flex: 1 1 0;
+  min-height: 0;
   overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(231, 182, 74, 0.05), transparent 58%),
+    radial-gradient(ellipse at center, rgba(84, 142, 255, 0.05), transparent 70%),
+    linear-gradient(180deg, rgba(4, 10, 22, 0.98) 0%, rgba(3, 8, 18, 0.98) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 0 0 1px rgba(231, 182, 74, 0.04);
 }
 
 .learn-match-rack {
   display: flex;
   gap: 4px;
-  padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(7, 9, 18, 0.96), rgba(10, 12, 22, 0.96));
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(11, 15, 27, 0.98), rgba(8, 12, 22, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .learn-match-topbar {
@@ -96,6 +122,271 @@
   margin-left: 8px;
 }
 
+.lesson-coach-slot {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.lesson-coach-slot .rh-coach {
+  width: 100%;
+  min-height: 0;
+  padding: 28px;
+  border-radius: var(--pvf-radius-lg, 20px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--learn-guided-card);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 32px rgba(0, 0, 0, 0.28);
+}
+
+.lesson-coach-slot .rh-coach__avatar--small {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border-color: var(--learn-guided-border-strong);
+  background: color-mix(in srgb, var(--learn-guided-accent) 12%, transparent);
+}
+
+.lesson-coach-slot .rh-coach__progress,
+.lesson-coach-slot .rh-coach__text {
+  color: var(--learn-guided-muted);
+}
+
+.lesson-coach-slot .rh-coach__heading {
+  font-size: clamp(24px, 2.2vw, 34px);
+  color: var(--learn-guided-text);
+}
+
+.learn-coach-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.learn-coach-panel__opponent {
+  flex: 0 0 300px !important;
+  min-height: 300px !important;
+  border-color: var(--learn-guided-border) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 36px rgba(0, 0, 0, 0.28);
+}
+
+.learn-coach-panel__opponent-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(231, 182, 74, 0.28), transparent 22%),
+    radial-gradient(circle at 18% 10%, rgba(83, 148, 255, 0.16), transparent 26%),
+    linear-gradient(135deg, rgba(11, 16, 29, 0.96) 0%, rgba(18, 12, 7, 0.84) 100%);
+  z-index: 1;
+}
+
+.learn-coach-panel__opponent-overlay {
+  background:
+    linear-gradient(to top, rgba(0, 0, 0, 0.96) 0%, rgba(0, 0, 0, 0.74) 28%, rgba(0, 0, 0, 0.18) 52%, rgba(0, 0, 0, 0) 82%),
+    linear-gradient(to right, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.38) 58%, rgba(0, 0, 0, 0.08) 100%);
+}
+
+.learn-coach-panel__header {
+  max-width: 70%;
+}
+
+.learn-coach-panel__name-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.learn-coach-panel__name {
+  font-size: clamp(34px, 4.2vw, 56px);
+}
+
+.learn-coach-panel__header-badges {
+  align-items: stretch;
+}
+
+.learn-coach-panel__badge-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--learn-guided-accent);
+  box-shadow: 0 0 12px rgba(231, 182, 74, 0.42);
+}
+
+.learn-coach-panel__section,
+.learn-coach-panel__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+  border-radius: var(--pvf-radius-lg, 20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--learn-guided-card);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 26px rgba(0, 0, 0, 0.2);
+}
+
+.learn-coach-panel__section {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.learn-coach-panel__footer {
+  flex: 0 0 auto;
+}
+
+.learn-coach-panel .fritz-section-label,
+.learn-match-board .claude-mode-section-label,
+.rh-match__hand-head .claude-mode-section-label {
+  color: var(--learn-guided-accent);
+  letter-spacing: 0.22em;
+}
+
+.learn-coach-panel__concept {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 2.2vw, 34px);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  color: var(--learn-guided-text);
+}
+
+.learn-coach-panel__copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.learn-coach-panel__copy p {
+  margin: 0;
+  color: var(--learn-guided-text);
+  font-size: 15px;
+  line-height: 1.58;
+  text-wrap: pretty;
+}
+
+.learn-coach-panel__copy,
+.learn-match-coach,
+.learn-match-rack,
+.learn-lesson-screen .hand-container.is-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(231, 182, 74, 0.26) transparent;
+}
+
+.learn-coach-panel__copy::-webkit-scrollbar,
+.learn-match-coach::-webkit-scrollbar,
+.learn-match-rack::-webkit-scrollbar,
+.learn-lesson-screen .hand-container.is-scrollable::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.learn-coach-panel__copy::-webkit-scrollbar-thumb,
+.learn-match-coach::-webkit-scrollbar-thumb,
+.learn-match-rack::-webkit-scrollbar-thumb,
+.learn-lesson-screen .hand-container.is-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(231, 182, 74, 0.24);
+  border-radius: 999px;
+}
+
+.learn-coach-panel__tags {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.learn-coach-panel__tag {
+  min-height: 60px;
+  border-color: rgba(231, 182, 74, 0.18);
+  background: color-mix(in srgb, var(--learn-guided-accent) 7%, rgba(255, 255, 255, 0.03));
+}
+
+.learn-coach-panel__tag .pvf-deal-content {
+  justify-content: center;
+}
+
+.learn-coach-panel__tag .pvf-deal-label {
+  margin: 0;
+  color: var(--learn-guided-text);
+  font-size: 13px;
+}
+
+.learn-coach-panel__summary {
+  margin-bottom: 0 !important;
+}
+
+.learn-coach-panel__summary .fritz-summary-icon {
+  color: var(--learn-guided-accent) !important;
+}
+
+.learn-coach-panel__callout {
+  color: var(--learn-guided-text);
+  font-size: 16px;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+.learn-coach-panel__summary .fritz-summary-key {
+  color: var(--learn-guided-muted);
+  letter-spacing: 0.2em;
+}
+
+.learn-coach-panel__progress .rh-progress__head strong {
+  color: var(--learn-guided-accent);
+}
+
+.learn-coach-panel__progress .rh-progress__rail {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.learn-coach-panel__progress .rh-progress__fill {
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--learn-guided-accent), var(--learn-guided-accent-strong));
+  box-shadow: 0 0 14px rgba(231, 182, 74, 0.4);
+}
+
+.learn-coach-panel__bestmove {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.learn-match-coach-toggle {
+  width: 100%;
+  margin-top: auto;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.learn-match-coach-toggle .claude-mode-secondary__title {
+  color: var(--learn-guided-text);
+}
+
+.learn-match-coach-toggle .claude-mode-secondary__meta {
+  color: var(--learn-guided-muted);
+}
+
+.rh-match__board-head,
+.rh-match__hand-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 20px;
+}
+
 
 /* ─── Shared Components Ported from Handoff ─── */
 .rh-coach {
@@ -121,9 +412,11 @@
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
   font-size: 22px;
-  color: #22d3ee;
-  border: 1px solid rgba(34, 211, 238, 0.4);
-  background: rgba(34, 211, 238, 0.06);
+  color: var(--learn-guided-accent);
+  border: 1px solid rgba(231, 182, 74, 0.42);
+  background: rgba(231, 182, 74, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 0 18px rgba(231, 182, 74, 0.16);
 }
 
 .rh-coach__avatar-meta {
@@ -248,7 +541,7 @@
 }
 
 .rh-progress__head strong {
-  color: #22d3ee;
+  color: var(--learn-guided-accent);
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 16px;
   font-weight: 800;
@@ -265,8 +558,8 @@
 .rh-progress__fill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, #22d3ee, rgba(34, 211, 238, 0.4));
-  box-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
+  background: linear-gradient(90deg, var(--learn-guided-accent), rgba(231, 182, 74, 0.45));
+  box-shadow: 0 0 12px rgba(231, 182, 74, 0.34);
   transition: width 320ms ease;
 }
 
@@ -380,13 +673,24 @@
 /* ─── Responsive Match ─── */
 @media (max-width: 960px) {
   .learn-match-grid {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    gap: 16px;
   }
   .learn-match-coach {
-    max-height: 38vh;
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+    max-height: 44vh;
     overflow-y: auto;
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .learn-match-board {
+    padding: 20px;
+  }
+
+  .learn-coach-panel__opponent {
+    flex-basis: 260px !important;
+    min-height: 260px !important;
   }
 }
 
@@ -396,7 +700,8 @@
   border: 0 !important;
   box-shadow: none !important;
   background:
-    radial-gradient(ellipse at center, rgba(34, 211, 238, 0.025), transparent 72%),
+    radial-gradient(ellipse at center, rgba(231, 182, 74, 0.04), transparent 70%),
+    radial-gradient(ellipse at 50% 0%, rgba(84, 142, 255, 0.06), transparent 66%),
     linear-gradient(180deg, #030714 0%, #020611 100%) !important;
 }
 
@@ -425,9 +730,9 @@
   display: flex;
   flex-direction: row;
   gap: 4px;
-  padding: 6px 8px;
-  background: linear-gradient(180deg, rgba(7, 9, 18, 0.96), rgba(10, 12, 22, 0.96));
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0;
+  background: transparent;
+  border: 0;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -463,7 +768,7 @@
 
 /* Override selection highlight to match Claude design */
 .learn-lesson-screen .domino-tile.selected .domino-body {
-  box-shadow: 0 0 0 2.5px #22d3ee, 0 0 20px rgba(34, 211, 238, 0.4) !important;
+  box-shadow: 0 0 0 2.5px var(--learn-guided-accent), 0 0 20px rgba(231, 182, 74, 0.32) !important;
 }
 
 .learn-lesson-screen .hand-container .domino-tile:not(.disabled):hover {
@@ -521,22 +826,22 @@
 }
 
 .learn-lesson-screen .placement-zone.active {
-  border-color: rgba(34, 211, 238, 0.72) !important;
-  background: rgba(34, 211, 238, 0.16) !important;
+  border-color: rgba(231, 182, 74, 0.72) !important;
+  background: rgba(231, 182, 74, 0.14) !important;
   animation: none !important;
-  box-shadow: 0 0 18px rgba(34, 211, 238, 0.24) !important;
+  box-shadow: 0 0 18px rgba(231, 182, 74, 0.24) !important;
 }
 
 .learn-lesson-screen .placement-zone.highlighted {
-  border-color: rgba(34, 211, 238, 0.9) !important;
-  background: rgba(34, 211, 238, 0.22) !important;
-  box-shadow: 0 0 18px rgba(34, 211, 238, 0.34) !important;
+  border-color: rgba(231, 182, 74, 0.9) !important;
+  background: rgba(231, 182, 74, 0.18) !important;
+  box-shadow: 0 0 18px rgba(231, 182, 74, 0.32) !important;
 }
 
 .learn-lesson-screen .board-canvas .domino-tile.highlight .domino-body,
 .learn-lesson-screen .guided-scoring .domino-tile,
 .learn-lesson-screen .guided-scoring {
   box-shadow:
-    0 0 0 2px rgba(34, 211, 238, 0.9),
-    0 0 18px rgba(34, 211, 238, 0.34) !important;
+    0 0 0 2px rgba(231, 182, 74, 0.9),
+    0 0 18px rgba(231, 182, 74, 0.34) !important;
 }

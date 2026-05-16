@@ -491,9 +491,20 @@
 }
 
 /* Ghost setup — PVF shell accents (Play vs Fritz shared layout) */
-.ghost-pvf-root .fritz-selectable-row--active {
-  border-left-color: var(--pvf-dynamic-color);
-  background: color-mix(in srgb, var(--pvf-dynamic-color) 7%, rgba(255, 255, 255, 0.03));
+.ghost-pvf-root .ghost-pvf-opponent-row.fritz-selectable-row--active.ghost-pvf-opponent-row--purple {
+  border: 1px solid color-mix(in srgb, var(--pvf-dynamic-color) 72%, transparent);
+  border-left: 3px solid var(--pvf-dynamic-color);
+  background: color-mix(in srgb, var(--pvf-dynamic-color) 9%, rgba(255, 255, 255, 0.03));
+  opacity: 1;
+  filter: none;
+}
+
+.ghost-pvf-root .ghost-pvf-opponent-row.fritz-selectable-row--active.ghost-pvf-opponent-row--gold {
+  border: 1px solid color-mix(in srgb, var(--color-elite) 78%, transparent);
+  border-left: 3px solid var(--color-elite);
+  background: color-mix(in srgb, var(--color-elite) 10%, rgba(255, 255, 255, 0.03));
+  opacity: 1;
+  filter: none;
 }
 
 .ghost-pvf-stat-card.pvf-tier-card,
@@ -560,144 +571,257 @@
   margin-bottom: 18px !important;
 }
 
+.ghost-pvf-section--opponent.pvf-section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .ghost-pvf-section--status,
-.ghost-pvf-section--how {
+.ghost-pvf-section--play {
   flex: 0 0 auto;
   min-height: 0;
 }
 
-.ghost-pvf-root .ghost-pvf-section--how .fritz-section-label,
+.ghost-pvf-root .ghost-pvf-section--opponent .fritz-section-label,
 .ghost-pvf-root .ghost-pvf-section--status .fritz-section-label {
   margin-bottom: 6px !important;
 }
 
-/* 1. GHOST STATUS — three stat cards, one row, compact tier treatment */
-.ghost-pvf-root .ghost-pvf-status-grid.pvf-difficulty-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  gap: 10px !important;
-  margin-bottom: 0 !important;
-}
-
-.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-card {
-  padding: 10px 8px !important;
-  min-width: 0 !important;
-}
-
-.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-icon {
-  width: 40px;
-  height: 40px;
-  margin-bottom: 6px !important;
-}
-
-.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-name {
-  font-size: 11px !important;
-  line-height: 1.2 !important;
-  margin-bottom: 2px !important;
-}
-
-.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-elo {
-  font-size: 13px !important;
-  margin-bottom: 4px !important;
-}
-
-.ghost-pvf-root .ghost-pvf-status-grid .pvf-tier-desc {
-  font-size: 10px !important;
-  line-height: 1.25 !important;
-}
-
-.ghost-pvf-tier-scores {
+/* 1. CHOOSE OPPONENT — Oliver + scrollable friend rows (Fritz-style density) */
+.ghost-pvf-opponent-stack {
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  min-height: 0;
-}
-
-.ghost-pvf-root .ghost-score-list--pvf {
-  flex-wrap: nowrap;
-  gap: 4px;
-}
-
-.ghost-pvf-root .ghost-score-list--pvf .ghost-score-pill--sharp {
-  padding: 2px 6px;
-  font-size: 10px;
-}
-
-/* 2. HOW IT WORKS — one row of deal cards + tight milestone row */
-.ghost-pvf-root .ghost-pvf-deal-row.pvf-deal-grid {
-  flex-wrap: nowrap !important;
-  gap: 10px !important;
-}
-
-.ghost-pvf-root .ghost-pvf-deal-row .pvf-deal-card {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
-  padding: 10px 12px !important;
-}
-
-.ghost-pvf-root .ghost-pvf-deal-row .pvf-deal-icon {
-  width: 40px !important;
-  height: 40px !important;
-}
-
-.ghost-pvf-root .ghost-pvf-deal-row .pvf-deal-label {
-  font-size: 15px !important;
-}
-
-.ghost-pvf-root .ghost-pvf-deal-row .pvf-deal-sub {
-  font-size: 10px !important;
-  line-height: 1.25 !important;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  gap: 8px;
   overflow: hidden;
 }
 
-.ghost-pvf-milestone-strip {
+.ghost-pvf-friend-block {
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: nowrap;
+  flex-direction: column;
   gap: 6px;
-  padding: 8px 12px;
-  margin-top: 4px;
-  border-radius: var(--fritz-summary-radius);
-  background: var(--fritz-card-bg);
-  border: 1px solid var(--fritz-card-border);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  overflow: hidden;
 }
 
-.ghost-pvf-milestone-strip__item {
+.ghost-pvf-friend-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.ghost-pvf-friend-picker__label {
   font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--fritz-muted-label);
+  margin: 0;
+}
+
+.ghost-pvf-friend-count {
+  flex-shrink: 0;
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  color: color-mix(in srgb, var(--pvf-dynamic-color) 88%, #fff);
+  background: color-mix(in srgb, var(--pvf-dynamic-color) 14%, rgba(255, 255, 255, 0.04));
+  border: 1px solid color-mix(in srgb, var(--pvf-dynamic-color) 32%, rgba(255, 255, 255, 0.1));
+}
+
+.ghost-pvf-friend-list {
+  flex: 1 1 0;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(192, 64, 255, 0.35) transparent;
+}
+
+.ghost-pvf-friend-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ghost-pvf-friend-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--pvf-dynamic-color) 40%, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+}
+
+.ghost-pvf-friend-empty {
+  cursor: default;
+  pointer-events: none;
+  padding: 0 14px !important;
+}
+
+.ghost-pvf-friend-empty .ghost-pvf-opponent-row__name {
+  color: var(--fritz-muted-label) !important;
+  font-weight: 600 !important;
+}
+
+.ghost-pvf-friend-empty .ghost-pvf-opponent-row__label {
+  color: rgba(255, 255, 255, 0.38) !important;
+  font-size: 9px !important;
+  letter-spacing: 0.12em !important;
+}
+
+.ghost-pvf-opponent-row.fritz-selectable-row {
+  cursor: pointer;
+  gap: 12px;
+  width: 100%;
+}
+
+.ghost-pvf-opponent-row--gold.fritz-selectable-row:not(.fritz-selectable-row--active) {
+  border-color: color-mix(in srgb, var(--color-elite) 28%, rgba(255, 255, 255, 0.08));
+}
+
+.ghost-pvf-opponent-row--purple.fritz-selectable-row:not(.fritz-selectable-row--active) {
+  border-color: color-mix(in srgb, var(--pvf-dynamic-color) 22%, rgba(255, 255, 255, 0.08));
+}
+
+.ghost-pvf-opponent-row__icon {
+  flex: 0 0 auto;
+  width: var(--fritz-summary-icon-size, 32px);
+  height: var(--fritz-summary-icon-size, 32px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid currentColor;
+  box-shadow: 0 0 14px color-mix(in srgb, currentColor 28%, transparent);
+}
+
+.ghost-pvf-opponent-row--gold .ghost-pvf-opponent-row__icon {
+  color: var(--color-elite);
+  background: color-mix(in srgb, var(--color-elite) 12%, transparent);
+}
+
+.ghost-pvf-opponent-row--purple .ghost-pvf-opponent-row__icon {
+  color: var(--pvf-dynamic-color);
+  background: color-mix(in srgb, var(--pvf-dynamic-color) 12%, transparent);
+}
+
+.ghost-pvf-opponent-row__initial {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ghost-pvf-opponent-row__initial--muted {
+  opacity: 0.35;
+}
+
+.ghost-pvf-opponent-row__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.ghost-pvf-opponent-row__name {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
 }
 
-.ghost-pvf-milestone-strip__sep {
-  flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.22);
-  font-weight: 700;
+.ghost-pvf-opponent-row__label {
+  font-family: var(--font-display);
   font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.1;
 }
 
-/* Ghost hero card — image contained, calmer title, tighter copy (Fritz parity) */
+.ghost-pvf-opponent-row--gold .ghost-pvf-opponent-row__label {
+  color: var(--color-elite);
+}
+
+.ghost-pvf-opponent-row--purple .ghost-pvf-opponent-row__label {
+  color: color-mix(in srgb, var(--pvf-dynamic-color) 88%, #fff);
+}
+
+.ghost-pvf-opponent-row__check {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  color: #040b17;
+  line-height: 1;
+}
+
+.ghost-pvf-opponent-row--gold .ghost-pvf-opponent-row__check:not(.ghost-pvf-opponent-row__check--empty) {
+  background: var(--color-elite);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-elite) 45%, transparent);
+}
+
+.ghost-pvf-opponent-row--purple .ghost-pvf-opponent-row__check:not(.ghost-pvf-opponent-row__check--empty) {
+  background: var(--pvf-dynamic-color);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--pvf-dynamic-color) 40%, transparent);
+}
+
+.ghost-pvf-opponent-row__check--empty {
+  visibility: hidden;
+}
+
+/* 2. GHOST STATUS — compact summary strip */
+.ghost-pvf-root .ghost-pvf-status-strip.fritz-summary-strip {
+  margin-bottom: 0 !important;
+}
+
+.ghost-pvf-last-five-value {
+  font-size: 13px !important;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ghost hero card — illustration bg + live HTML (Fritz parity) */
 .ghost-pvf-root .ghost-pvf-opponent-card.pvf-opponent-card {
   contain: layout paint;
 }
 
 .ghost-pvf-root .ghost-pvf-card-bg-img.pvf-card-bg-img {
   object-fit: cover;
-  object-position: 56% 36%;
-  transform: scale(1.06);
-  transform-origin: center center;
+  object-position: 78% 38%;
+  transform: scale(1.14);
+  transform-origin: 78% 38%;
+  opacity: 0.88;
+}
+
+.ghost-pvf-root .ghost-pvf-card-overlay.pvf-card-overlay {
+  background:
+    linear-gradient(to top, rgba(4, 7, 12, 0.98) 0%, rgba(4, 7, 12, 0.9) 26%, rgba(4, 7, 12, 0.35) 52%, transparent 68%),
+    linear-gradient(to right, rgba(4, 7, 12, 0.97) 0%, rgba(4, 7, 12, 0.88) 46%, rgba(4, 7, 12, 0.25) 62%, transparent 78%);
 }
 
 .ghost-pvf-root .ghost-pvf-opponent-card .pvf-card-header {
@@ -717,43 +841,15 @@
   text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
 }
 
-/* 3. SELECT OPPONENT — list fills space above CTA; internal scroll, full rows */
-.ghost-pvf-select-section {
-  flex: 1 1 0;
-  min-height: 0;
+/* 3. START MATCH — compact footer (no dead space above CTA) */
+.ghost-pvf-section--play {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  gap: 6px;
+  gap: 8px;
 }
 
-.ghost-pvf-select-section > .fritz-section-label {
-  flex-shrink: 0;
-}
-
-.ghost-pvf-opponent-scroll {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 2px;
-  scrollbar-width: thin;
-}
-
-.ghost-pvf-opponent-scroll .fritz-selectable-row {
-  flex-shrink: 0;
-}
-
-.ghost-pvf-opponent-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.ghost-pvf-opponent-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
+.ghost-pvf-root .ghost-pvf-section--play .fritz-section-label {
+  margin-bottom: 0 !important;
 }
 
 .ghost-pvf-cta-note {
@@ -765,7 +861,6 @@
 }
 
 .ghost-pvf-start-btn {
-  margin-top: auto !important;
   flex-shrink: 0;
 }
 
@@ -798,8 +893,3 @@
   max-height: 36px;
 }
 
-@media (max-width: 1100px) {
-  .ghost-pvf-root .ghost-pvf-status-grid.pvf-difficulty-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
-}

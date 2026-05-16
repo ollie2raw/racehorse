@@ -13,6 +13,7 @@ const FULL_LABEL_THRESHOLD = 15;
 const FEATURED_GHOST_USERNAME = 'oliver';
 
 const GHOST_DYNAMIC = '#c040ff';
+const ELITE_GOLD = '#E7B64A';
 
 function ghostTier(gamesPlayed: number): 'early' | 'learning' | 'trained' {
   if (gamesPlayed < FULL_LABEL_THRESHOLD) return 'early';
@@ -33,7 +34,7 @@ function formatDiagnosticDate(value: string | null | undefined): string {
 }
 
 const IconLightning = ({ color = 'currentColor' }: { color?: string }) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
     <path d="M13 3L5 14H12L11 21L19 10H12L13 3Z" fill={color} />
   </svg>
 );
@@ -46,46 +47,25 @@ const IconShield = () => (
   </svg>
 );
 
-const IconBars = ({ size = 24 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round">
+const IconBars = ({ size = 24, color = 'currentColor' }: { size?: number; color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3.5" strokeLinecap="round">
     <line x1="18" y1="20" x2="18" y2="10" />
     <line x1="12" y1="20" x2="12" y2="4" />
     <line x1="6" y1="20" x2="6" y2="14" />
   </svg>
 );
 
-const HOW_IT_WORKS: Array<{ n: string; title: string; copy: string }> = [
-  { n: '01', title: 'Play Fritz matches', copy: 'Every match teaches your ghost your habits.' },
-  { n: '02', title: 'Unlock at 5 games', copy: 'Then you can play against your own ghost.' },
-  { n: '03', title: 'Gets sharper over time', copy: 'Around 30 games, it starts to feel much more like you.' },
-];
+const IconCrown = ({ color = 'currentColor', size = 26 }: { color?: string; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" fill={color} />
+  </svg>
+);
 
-function renderSparkline(scores: number[], compact?: boolean) {
-  if (scores.length === 0) return null;
-  const maxScore = Math.max(...scores, 1);
-  const width = compact ? 140 : 220;
-  const height = compact ? 32 : 56;
-  const strokeW = compact ? 2 : 3;
-  const rDot = compact ? 2.5 : 3.5;
-  const step = scores.length > 1 ? width / (scores.length - 1) : width;
-  const points = scores
-    .map((score, index) => {
-      const x = index * step;
-      const y = height - (score / maxScore) * (height - 8) - 4;
-      return `${x},${y}`;
-    })
-    .join(' ');
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className={`ghost-sparkline${compact ? ' ghost-sparkline--compact' : ''}`} aria-hidden="true">
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth={strokeW} strokeLinecap="round" strokeLinejoin="round" />
-      {scores.map((score, index) => {
-        const x = index * step;
-        const y = height - (score / maxScore) * (height - 8) - 4;
-        return <circle key={`${score}-${index}`} cx={x} cy={y} r={rDot} fill="currentColor" />;
-      })}
-    </svg>
-  );
-}
+const IconTrend = ({ color = 'currentColor' }: { color?: string }) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  </svg>
+);
 
 interface GhostSetupScreenProps {
   userId: string | null;
@@ -114,7 +94,6 @@ export default function GhostSetupScreen({
   const [selectedUsername, setSelectedUsername] = useState<string>('Your Ghost');
   const [featuredUserId, setFeaturedUserId] = useState<string | null>(null);
   const [featuredUsername, setFeaturedUsername] = useState<string>(FEATURED_GHOST_USERNAME);
-
   const isViewingOwnGhost = selectedUserId === userId;
   const isLocked = Boolean(userId) && isViewingOwnGhost && fritzGamesPlayed < UNLOCK_THRESHOLD;
   const canPlay = Boolean(summary) && !loading && !isLocked;
@@ -205,19 +184,62 @@ export default function GhostSetupScreen({
               ? 'Still learning'
               : 'Healthy';
 
-  const statusBadgeText =
-    !userId || !summary
-      ? 'GHOST MODE'
-      : isLocked
-        ? `EARLY GHOST — ${fritzGamesPlayed}/${UNLOCK_THRESHOLD} GAMES`
-        : tier === 'trained'
-          ? `TRAINED GHOST — ${confidencePct}% CONFIDENCE`
-          : tier === 'learning'
-            ? `LEARNING — ${confidencePct}% CONFIDENCE`
-            : `EARLY GHOST — ${fritzGamesPlayed}/${UNLOCK_THRESHOLD} GAMES`;
+  const isOliverSelected = Boolean(featuredUserId && selectedUserId === featuredUserId);
+  const isOwnGhostSelected = Boolean(userId && selectedUserId === userId && !isOliverSelected);
+  const hasFriends = visibleFriends.length > 0;
+  const lastFiveLabel =
+    recentScores.length > 0 && !loading && !error && summary && !isLocked
+      ? recentScores.join(' · ')
+      : '—';
 
-  const tierSubLabel =
-    tier === 'trained' ? 'Trained ghost' : tier === 'learning' ? 'Learning ghost' : 'Early ghost';
+  const renderOpponentRow = (
+    key: string,
+    opts: {
+      selected: boolean;
+      variant: 'gold' | 'purple';
+      onClick: () => void;
+      icon: React.ReactNode;
+      name: string;
+      label: string;
+    },
+  ) => {
+    const { selected, variant, onClick, icon, name, label } = opts;
+    return (
+      <div
+        key={key}
+        role="button"
+        tabIndex={0}
+        className={[
+          'fritz-selectable-row',
+          'ghost-pvf-opponent-row',
+          `ghost-pvf-opponent-row--${variant}`,
+          selected && 'fritz-selectable-row--active',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+      >
+        <div className="ghost-pvf-opponent-row__icon">{icon}</div>
+        <div className="ghost-pvf-opponent-row__body">
+          <div className="ghost-pvf-opponent-row__name">{name}</div>
+          <div className="ghost-pvf-opponent-row__label">{label}</div>
+        </div>
+        {selected ? (
+          <div className="ghost-pvf-opponent-row__check" aria-hidden>
+            ✓
+          </div>
+        ) : (
+          <div className="ghost-pvf-opponent-row__check ghost-pvf-opponent-row__check--empty" aria-hidden />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -258,8 +280,8 @@ export default function GhostSetupScreen({
           </div>
 
           <div className="pvf-opponent-card ghost-pvf-opponent-card">
-            <img src="/fritzGHOST.png" className="pvf-card-bg-img ghost-pvf-card-bg-img" alt="" />
-            <div className="pvf-card-overlay" />
+            <img src="/ghostmodeimage.png" className="pvf-card-bg-img ghost-pvf-card-bg-img" alt="" />
+            <div className="pvf-card-overlay ghost-pvf-card-overlay" />
             <div className="pvf-card-content">
               <div className="pvf-card-header">
                 <div className="pvf-card-eyebrow">YOUR GHOST</div>
@@ -326,51 +348,109 @@ export default function GhostSetupScreen({
             </div>
           ) : (
             <div className="ghost-pvf-control-body">
-              <div className="pvf-section ghost-pvf-section--status">
-                <div className="fritz-section-label">1. GHOST STATUS</div>
-                <div className="pvf-difficulty-grid ghost-pvf-status-grid">
-                  <div className="pvf-tier-card ghost-pvf-stat-card">
-                    <div className="pvf-tier-icon" style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.12em' }}>
-                      ●
+              <div className="pvf-section ghost-pvf-section--opponent">
+                <div className="fritz-section-label">1. CHOOSE OPPONENT</div>
+                <div className="ghost-pvf-opponent-stack">
+                  {renderOpponentRow('featured-oliver', {
+                    selected: isOliverSelected,
+                    variant: 'gold',
+                    onClick: () => {
+                      if (featuredUserId) {
+                        handleSelectFriend({
+                          id: 'featured',
+                          userId: featuredUserId,
+                          username: featuredUsername,
+                          online: true,
+                        });
+                      }
+                    },
+                    icon: <IconCrown color={ELITE_GOLD} size={18} />,
+                    name: 'Oliver · Master',
+                    label: 'FEATURED',
+                  })}
+
+                  <div className="ghost-pvf-friend-block">
+                    <div className="ghost-pvf-friend-section-head">
+                      <div className="ghost-pvf-friend-picker__label">OR CHALLENGE A FRIEND</div>
+                      {hasFriends ? (
+                        <span className="ghost-pvf-friend-count" aria-label={`${visibleFriends.length} friends`}>
+                          {visibleFriends.length}
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="pvf-tier-name" style={{ fontSize: 13, lineHeight: 1.25 }}>
-                      {loading ? 'Loading…' : statusBadgeText}
+                    <div className="ghost-pvf-friend-list" role="listbox" aria-label="Friends with trained ghosts">
+                      {userId
+                        ? renderOpponentRow('own-ghost', {
+                            selected: isOwnGhostSelected,
+                            variant: 'purple',
+                            onClick: () => handleSelectFriend(null),
+                            icon: <span className="ghost-pvf-opponent-row__initial">Y</span>,
+                            name: 'Your Ghost',
+                            label: 'YOUR MODEL',
+                          })
+                        : null}
+                      {hasFriends
+                        ? visibleFriends.map((f) =>
+                            renderOpponentRow(f.userId, {
+                              selected: selectedUserId === f.userId && !isOliverSelected,
+                              variant: 'purple',
+                              onClick: () => handleSelectFriend(f),
+                              icon: (
+                                <span className="ghost-pvf-opponent-row__initial">
+                                  {(f.username[0] ?? '?').toUpperCase()}
+                                </span>
+                              ),
+                              name: f.username,
+                              label: 'TRAINED GHOST',
+                            }),
+                          )
+                        : (
+                            <div className="ghost-pvf-friend-empty fritz-selectable-row fritz-selectable-row--muted">
+                              <div className="ghost-pvf-opponent-row__body">
+                                <div className="ghost-pvf-opponent-row__name">No friends yet</div>
+                                <div className="ghost-pvf-opponent-row__label">ADD FRIENDS TO CHALLENGE THEIR GHOSTS</div>
+                              </div>
+                            </div>
+                          )}
                     </div>
-                    <div className="pvf-tier-elo" style={{ fontSize: 14, color: 'var(--pvf-dynamic-color)' }}>
-                      {summary?.styleProfile ? `${confidencePct}%` : '—'}
-                    </div>
-                    <div className="pvf-tier-desc">Style confidence</div>
                   </div>
-                  <div className="pvf-tier-card ghost-pvf-stat-card">
-                    <div className="pvf-tier-icon">
-                      <IconBars size={22} />
+                </div>
+              </div>
+
+              <div className="pvf-section-gap ghost-pvf-section--status">
+                <div className="fritz-section-label">2. GHOST STATUS</div>
+                <div className="fritz-summary-strip fritz-summary-strip--mb-lg ghost-pvf-status-strip">
+                  <div className="fritz-summary-item">
+                    <div className="fritz-summary-icon" style={{ color: GHOST_DYNAMIC }}>
+                      <IconShield />
                     </div>
-                    <div className="pvf-tier-name">Avg Pts</div>
-                    <div className="pvf-tier-elo" style={{ color: 'var(--pvf-dynamic-color)' }}>
-                      {summary?.avgScore == null || loading ? '—' : summary.avgScore}
+                    <div>
+                      <div className="fritz-summary-value">
+                        {loading ? '—' : summary?.styleProfile ? `${confidencePct}%` : '—'}
+                      </div>
+                      <div className="fritz-summary-key">Confidence</div>
                     </div>
-                    <div className="pvf-tier-desc">Recent performance</div>
                   </div>
-                  <div className="pvf-tier-card ghost-pvf-stat-card">
-                    <div className="pvf-tier-icon" style={{ fontSize: 12, fontWeight: 900, opacity: 0.85 }}>
-                      5
+                  <div className="fritz-summary-divider" aria-hidden />
+                  <div className="fritz-summary-item">
+                    <div className="fritz-summary-icon" style={{ color: GHOST_DYNAMIC }}>
+                      <IconBars size={18} color={GHOST_DYNAMIC} />
                     </div>
-                    <div className="pvf-tier-name">Last 5 Scores</div>
-                    <div className="pvf-tier-desc ghost-pvf-tier-scores">
-                      {recentScores.length > 0 && !loading && !error && summary && !isLocked ? (
-                        <>
-                          <div className="ghost-score-list ghost-score-list--pvf">
-                            {recentScores.map((score, index) => (
-                              <span key={`${score}-${index}`} className="ghost-score-pill ghost-score-pill--sharp">
-                                {score}
-                              </span>
-                            ))}
-                          </div>
-                          {renderSparkline(recentScores, true)}
-                        </>
-                      ) : (
-                        <span style={{ color: 'var(--pvf-muted)' }}>—</span>
-                      )}
+                    <div>
+                      <div className="fritz-summary-value">
+                        {summary?.avgScore == null || loading ? '—' : summary.avgScore}
+                      </div>
+                      <div className="fritz-summary-key">Avg Pts</div>
+                    </div>
+                  </div>
+                  <div className="fritz-summary-divider" aria-hidden />
+                  <div className="fritz-summary-item">
+                    <div className="fritz-summary-icon" style={{ color: GHOST_DYNAMIC }}>
+                      <IconTrend color={GHOST_DYNAMIC} />
+                    </div>
+                    <div>
+                      <div className="fritz-summary-value ghost-pvf-last-five-value">{lastFiveLabel}</div>
+                      <div className="fritz-summary-key">Last 5</div>
                     </div>
                   </div>
                 </div>
@@ -400,109 +480,8 @@ export default function GhostSetupScreen({
                 )}
               </div>
 
-              <div className="pvf-section-gap ghost-pvf-section--how">
-                <div className="fritz-section-label">2. HOW IT WORKS</div>
-                <div className="pvf-deal-grid ghost-pvf-deal-row">
-                  {HOW_IT_WORKS.map((s) => (
-                    <div key={s.n} className="pvf-deal-card ghost-pvf-stat-card">
-                      <div
-                        className="pvf-deal-icon"
-                        style={{
-                          fontFamily: 'var(--font-display)',
-                          fontSize: 22,
-                          fontWeight: 900,
-                          color: 'rgba(255,255,255,0.28)',
-                        }}
-                      >
-                        {s.n}
-                      </div>
-                      <div className="pvf-deal-content">
-                        <div className="pvf-deal-label" style={{ color: 'var(--pvf-dynamic-color)' }}>
-                          {s.title}
-                        </div>
-                        <div className="pvf-deal-sub">{s.copy}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="ghost-pvf-milestone-strip" aria-label="Ghost training milestones">
-                  <span className="ghost-pvf-milestone-strip__item">Unlocks at 5 games</span>
-                  <span className="ghost-pvf-milestone-strip__sep" aria-hidden="true">
-                    ·
-                  </span>
-                  <span className="ghost-pvf-milestone-strip__item">15 — Learning</span>
-                  <span className="ghost-pvf-milestone-strip__sep" aria-hidden="true">
-                    ·
-                  </span>
-                  <span className="ghost-pvf-milestone-strip__item">30 — Trained ✓</span>
-                </div>
-              </div>
-
-              <div className="pvf-section-gap ghost-pvf-select-section">
-                <div className="fritz-section-label">3. SELECT OPPONENT</div>
-                <div className="ghost-pvf-opponent-scroll">
-                  <button
-                    type="button"
-                    className={`fritz-selectable-row${selectedUserId === userId ? ' fritz-selectable-row--active' : ''}`}
-                    onClick={() => handleSelectFriend(null)}
-                  >
-                    <div className="fritz-summary-icon" style={{ color: 'var(--pvf-dynamic-color)' }}>
-                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 900 }}>Y</span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                      <div className="fritz-summary-value">You</div>
-                      <div className="fritz-summary-key">{tierSubLabel}</div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    className={[
-                      'fritz-selectable-row',
-                      'ghost-pvf-row--featured',
-                      featuredUserId && selectedUserId === featuredUserId ? 'fritz-selectable-row--active' : '',
-                      !featuredUserId ? 'fritz-selectable-row--muted' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    disabled={!featuredUserId}
-                    onClick={() =>
-                      featuredUserId &&
-                      handleSelectFriend({
-                        id: 'featured',
-                        userId: featuredUserId,
-                        username: featuredUsername,
-                        online: true,
-                      })
-                    }
-                  >
-                    <div className="fritz-summary-icon" style={{ color: 'var(--pvf-dynamic-color)' }}>
-                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 900 }}>★</span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                      <div className="fritz-summary-value">@{featuredUsername}</div>
-                      <div className="fritz-summary-key">Trained ghost</div>
-                    </div>
-                  </button>
-                  {visibleFriends.map((f) => (
-                    <button
-                      type="button"
-                      key={f.userId}
-                      className={`fritz-selectable-row${selectedUserId === f.userId ? ' fritz-selectable-row--active' : ''}`}
-                      onClick={() => handleSelectFriend(f)}
-                    >
-                      <div className="fritz-summary-icon" style={{ color: 'var(--pvf-dynamic-color)' }}>
-                        <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 900 }}>
-                          {(f.username[0] ?? '?').toUpperCase()}
-                        </span>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                        <div className="fritz-summary-value">{f.username}</div>
-                        <div className="fritz-summary-key">Friend ghost</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
+              <div className="pvf-section-gap ghost-pvf-section--play">
+                <div className="fritz-section-label">3. START MATCH</div>
                 <div className="ghost-training-diagnostics">
                   Ghost diagnostics: {trainingHealth}. Training counter {trainingGamesPlayed}; recent logs {compositeSourceGames}; style
                   snapshots {styleSnapshotCount}; move memory {compositeStateCount}; padding games {summary?.paddingGames ?? 0}; average turn
@@ -512,15 +491,13 @@ export default function GhostSetupScreen({
                 </div>
 
                 <p className="fritz-summary-note ghost-pvf-cta-note">
-                  {!userId
-                    ? 'Sign in to unlock this mode'
-                    : isLocked
-                      ? `Unlocks after ${UNLOCK_THRESHOLD} Fritz games`
-                      : loading
-                        ? 'Loading ghost profile…'
-                        : summary
-                          ? `Opponent: ${selectedUsername}`
-                          : 'Ghost profile unavailable'}
+                  {isLocked
+                    ? `Unlocks after ${UNLOCK_THRESHOLD} Fritz games`
+                    : loading
+                      ? 'Loading ghost profile…'
+                      : summary
+                        ? `Opponent: ${selectedUsername}`
+                        : 'Ghost profile unavailable'}
                 </p>
                 <button
                   type="button"

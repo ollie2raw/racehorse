@@ -24,7 +24,7 @@ export default function LeaveGameModal({ onCancel, onLeave }: Props) {
         <div className="rh-leave-modal__buttons">
           <Button
             type="button"
-            variant="outline"
+            variant="primary"
             size="lg"
             className="rh-leave-modal__btn rh-leave-modal__btn--cancel"
             onClick={onCancel}
@@ -33,7 +33,7 @@ export default function LeaveGameModal({ onCancel, onLeave }: Props) {
           </Button>
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             size="lg"
             className="rh-leave-modal__btn rh-leave-modal__btn--leave"
             onClick={onLeave}
