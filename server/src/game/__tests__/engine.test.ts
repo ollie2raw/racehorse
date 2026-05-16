@@ -57,11 +57,9 @@ describe('Racehorse Engine Core Rules', () => {
     expect(state.players['B'].hand.length).toBe(7);
     expect(state.deadTiles.length).toBe(2);
 
+    // Dead tiles are still represented as the tail of `boneyard`; do not double-count.
     const total =
-      state.players['A'].hand.length +
-      state.players['B'].hand.length +
-      state.boneyard.length +
-      state.deadTiles.length;
+      state.players['A'].hand.length + state.players['B'].hand.length + state.boneyard.length;
 
     expect(total).toBe(28);
   });
@@ -83,12 +81,13 @@ describe('Racehorse Engine Core Rules', () => {
       },
       boneyard: [t(3, 4)],
       deadTiles: [],
+      config: { ...DEFAULT_CONFIG, deadTileCount: 0 },
     });
 
     const moves = getLegalMoves(state, 'A');
     expect(moves.some((m) => m.type === 'play' && m.position === 'right')).toBe(true);
 
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(2, 2),
       position: 'right',
@@ -117,12 +116,13 @@ describe('Racehorse Engine Core Rules', () => {
       },
       boneyard: [t(2, 2)],
       deadTiles: [],
+      config: { ...DEFAULT_CONFIG, deadTileCount: 0 },
     });
 
     const moves = getLegalMoves(state, 'A');
     expect(moves.some((m) => m.type === 'play' && m.position === 'left')).toBe(true);
 
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(1, 6),
       position: 'left',
@@ -151,7 +151,7 @@ describe('Racehorse Engine Core Rules', () => {
       deadTiles: [],
     });
 
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(2, 0),
       position: 'left',
@@ -180,7 +180,7 @@ describe('Racehorse Engine Core Rules', () => {
       deadTiles: [],
     });
 
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(1, 6),
       position: 'left',
@@ -209,7 +209,7 @@ describe('Racehorse Engine Core Rules', () => {
       deadTiles: [],
     });
 
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(3, 3),
       position: 'left',
@@ -481,7 +481,7 @@ describe('Crossed Doubles and Branching', () => {
     });
 
     // First, play the [5|5] on right
-    const afterDouble = applyMove(state, 'A', {
+    const { state: afterDouble } = applyMove(state, 'A', {
       type: 'play',
       tile: t(5, 5),
       position: 'right',
@@ -544,7 +544,7 @@ describe('Crossed Doubles and Branching', () => {
     );
     expect(branchMovesBeforeCross.length).toBe(0);
 
-    const afterOneSide = applyMove(state, 'A', {
+    const { state: afterOneSide } = applyMove(state, 'A', {
       type: 'play',
       tile: t(3, 5),
       position: 'right',
@@ -555,7 +555,7 @@ describe('Crossed Doubles and Branching', () => {
       ...afterOneSide,
       currentPlayerIndex: 0,
     };
-    const afterTwoSides = applyMove(afterCross, 'A', {
+    const { state: afterTwoSides } = applyMove(afterCross, 'A', {
       type: 'play',
       tile: t(2, 3),
       position: 'left',
@@ -660,6 +660,7 @@ describe('Last-tile branch scoring behavior', () => {
       },
       boneyard: [t(2, 2)],
       deadTiles: [],
+      config: { ...DEFAULT_CONFIG, deadTileCount: 0 },
     });
 
     const moves = getLegalMoves(state, 'A');
@@ -667,7 +668,7 @@ describe('Last-tile branch scoring behavior', () => {
     const branchMove = moves.find((m) => m.type === 'play' && m.position === 'branch-0-0');
     expect(branchMove).toBeDefined();
 
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(3, 4),
       position: 'branch-0-0',
@@ -688,15 +689,11 @@ describe('Dead tiles behavior', () => {
     const deadTiles = state.deadTiles;
     expect(deadTiles.length).toBe(2);
 
-    // Dead tiles should not be in anyone's hand or boneyard
-    const allAccessible = [
-      ...state.players['A'].hand,
-      ...state.players['B'].hand,
-      ...state.boneyard,
-    ];
+    // Dead tiles sit in the boneyard tail (never dealt to hands); they must not be in hands.
+    const handTiles = [...state.players['A'].hand, ...state.players['B'].hand];
 
     for (const deadTile of deadTiles) {
-      const found = allAccessible.some((t) => t.high === deadTile.high && t.low === deadTile.low);
+      const found = handTiles.some((t) => t.high === deadTile.high && t.low === deadTile.low);
       expect(found).toBe(false);
     }
   });
@@ -725,7 +722,7 @@ describe('Extra turn chaining', () => {
 
     // First play: [0|0] on left → double → extra turn
     // Sum: 0 (double) + 5 = 5 → 1 point AND double
-    let next = applyMove(state, 'A', {
+    let { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(0, 0),
       position: 'left',
@@ -738,7 +735,7 @@ describe('Extra turn chaining', () => {
       type: 'play',
       tile: t(0, 5),
       position: 'left',
-    });
+    }).state;
     expect(next.currentPlayerIndex).toBe(0);
     expect(next.players.A.score).toBe(3); // 1 + 2
 
@@ -828,12 +825,12 @@ describe('Blocked hand', () => {
     });
 
     // A passes
-    let next = applyMove(state, 'A', { type: 'pass' });
+    let { state: next } = applyMove(state, 'A', { type: 'pass' });
     expect(next.consecutivePasses).toBe(1);
     expect(next.handOver).toBe(false);
 
     // B passes
-    next = applyMove(next, 'B', { type: 'pass' });
+    next = applyMove(next, 'B', { type: 'pass' }).state;
     expect(next.consecutivePasses).toBe(2);
     expect(next.handOver).toBe(true); // 2 players passed = blocked
   });
@@ -870,13 +867,13 @@ describe('Blocked hand', () => {
       consecutivePasses: 0,
     });
 
-    let next = applyMove(state, 'A', { type: 'pass' });
-    next = applyMove(next, 'B', { type: 'pass' });
+    let { state: next } = applyMove(state, 'A', { type: 'pass' });
+    next = applyMove(next, 'B', { type: 'pass' }).state;
 
     // A wins (1 pip < 9 pips)
-    // B's penalty: 9 pips → rounded up to 10
-    // A gets bonus of 10
-    expect(next.players.A.score).toBe(20); // 10 + 10
+    // B's penalty: 9 pips → round(9/5) = 2 points
+    // A gets bonus of 2
+    expect(next.players.A.score).toBe(12); // 10 + 2
     expect(next.players.B.score).toBe(5); // unchanged
   });
 });
@@ -902,7 +899,7 @@ describe('Game ends at 60 points', () => {
     });
 
     // Play [1|6] on left: ends 6 + 4 = 10 → scores 2 points → A reaches 60
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(1, 6),
       position: 'left',
@@ -933,7 +930,7 @@ describe('Game ends at 60 points', () => {
       deadTiles: [],
     });
 
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(1, 6),
       position: 'left',
@@ -963,7 +960,7 @@ describe('Game ends at 60 points', () => {
       deadTiles: [],
     });
 
-    const afterA = applyMove(state, 'A', {
+    const { state: afterA } = applyMove(state, 'A', {
       type: 'play',
       tile: t(1, 6),
       position: 'left',
@@ -973,7 +970,7 @@ describe('Game ends at 60 points', () => {
     expect(afterA.gameOver).toBe(false);
 
     const bTurn = { ...afterA, currentPlayerIndex: 1 };
-    const afterB = applyMove(bTurn, 'B', {
+    const { state: afterB } = applyMove(bTurn, 'B', {
       type: 'play',
       tile: t(4, 5),
       position: 'right',
@@ -1005,7 +1002,7 @@ describe('Go-out bonus scoring', () => {
       deadTiles: [],
     });
 
-    const next = applyMove(state, 'A', {
+    const { state: next } = applyMove(state, 'A', {
       type: 'play',
       tile: t(1, 2),
       position: 'left',
@@ -1383,6 +1380,7 @@ describe('canDraw function', () => {
       },
       boneyard: [t(5, 6)], // Has tiles
       deadTiles: [],
+      config: { ...DEFAULT_CONFIG, deadTileCount: 0 },
     });
 
     expect(canDraw(state, 'A')).toBe(true);

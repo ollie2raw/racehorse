@@ -57,34 +57,29 @@ export type Room = {
   scheduledTournamentMatchId?: string;
   /** Parent tournament id (denormalized for cheap lookups during game-over). */
   scheduledTournamentId?: string;
+  /** One-shot metadata for the next `state:update` after resolving forced-draw steps (cleared after emit). */
+  pendingForcedDrawBroadcast?: { playerId: string; count: number };
 };
 
-export type ManualDrawAnimationStep = {
+export type DrawAnimationStep = {
   tile: Tile;
   boneyardCount: number;
   drawerHandCount: number;
 };
 
-type ResolveManualDrawResult = {
+type ResolveDrawUntilPlayableResult = {
   state: GameState;
-  animationSteps: ManualDrawAnimationStep[];
+  animationSteps: DrawAnimationStep[];
   stoppedReason: 'playable' | 'locked_pass';
   passed: boolean;
 };
 
 export type ActResult = {
   room: Room;
-  manualDrawAnimation?: {
-    playerId: string;
-    sequence: number;
-    steps: ManualDrawAnimationStep[];
-    stoppedReason: 'playable' | 'locked_pass';
-    finalState: GameState;
-  };
   forcedDrawAnimation?: {
     playerId: string;
     sequence: number;
-    steps: ManualDrawAnimationStep[];
+    steps: DrawAnimationStep[];
     stoppedReason: 'playable' | 'locked_pass' | 'locked_no_pass';
     finalState: GameState;
   };
@@ -311,12 +306,17 @@ function appendResolutionEvents(room: Room, previousState: GameState, actorSocke
   }
 }
 
-function resolveManualDrawAtomically(
+/** Draw chain entered only when the player cannot play; continues until playable or blocked. */
+function resolveDrawUntilPlayableAtomically(
   state: GameState,
   playerId: string,
-): ResolveManualDrawResult {
+): ResolveDrawUntilPlayableResult {
+  if (getLegalMoves(state, playerId).some((move) => move.type === 'play')) {
+    throw new Error('Cannot draw while a legal play is available.');
+  }
+
   let current = state;
-  const animationSteps: ManualDrawAnimationStep[] = [];
+  const animationSteps: DrawAnimationStep[] = [];
 
   while (getLegalMoves(current, playerId).every((move) => move.type !== 'play')) {
     const step = drawOne(current, playerId);
@@ -357,7 +357,7 @@ function resolveManualDrawAtomically(
 
 type ResolveForcedDrawResult = {
   state: GameState;
-  animationSteps: ManualDrawAnimationStep[];
+  animationSteps: DrawAnimationStep[];
   stoppedReason: 'playable' | 'locked_pass' | 'locked_no_pass';
 };
 
@@ -375,7 +375,7 @@ function resolveForcedDrawAtomically(
   forcedTile: Tile,
 ): ResolveForcedDrawResult {
   let current = stateAfterMove;
-  const animationSteps: ManualDrawAnimationStep[] = [];
+  const animationSteps: DrawAnimationStep[] = [];
 
   // The forced tile is already in the player's hand — record it as step 0.
   animationSteps.push({
@@ -393,7 +393,9 @@ function resolveForcedDrawAtomically(
   // the loop naturally exits when drawOne returns !drew).
   const maxIterations = stateAfterMove.boneyard.length + 1;
   for (let i = 0; i < maxIterations; i++) {
-    const step = drawOne(current, playerId);
+    // Do not bump sequence per physical draw tile — the aggregated MOVE (+ forced chain)
+    // must advance sequence once overall (already bumped by applyMove for this action).
+    const step = drawOne(current, playerId, false);
     if (!step.drew) {
       // Boneyard exhausted — forced auto-pass.
       const passed = applyMove(current, playerId, { type: 'pass' }).state;
@@ -643,7 +645,7 @@ export async function act(
     }
 
     const previousState = state;
-    const result = resolveManualDrawAtomically(state, socketId);
+    const result = resolveDrawUntilPlayableAtomically(state, socketId);
     room.state = result.state;
     assertValidGameState(room.state, `act:DRAW:${code}`);
     appendRoomEvent(room, {
@@ -685,7 +687,7 @@ export async function act(
     appendResolutionEvents(room, previousState, socketId);
     return {
       room,
-      manualDrawAnimation: {
+      forcedDrawAnimation: {
         playerId: socketId,
         sequence: room.state.sequence,
         steps: result.animationSteps,
@@ -726,8 +728,6 @@ export async function act(
       forced_draw: Boolean(forcedDraw),
     });
     room.ghostTurnIndex += 1;
-    room.state = stateAfterMove;
-    assertValidGameState(room.state, `act:MOVE:${code}`);
     appendRoomEvent(room, {
       type: 'tile_played',
       actorSocketId: socketId,
@@ -738,22 +738,33 @@ export async function act(
         forcedDraw: Boolean(forcedDraw),
       },
     });
+
+    let authoritativeState = stateAfterMove;
+    let resolvedForced: ResolveForcedDrawResult | null = null;
     if (forcedDraw) {
-      const resolved = resolveForcedDrawAtomically(stateAfterMove, socketId, forcedDraw);
-      room.state = resolved.state;
-      assertValidGameState(room.state, `act:MOVE:forcedDraw:${code}`);
+      resolvedForced = resolveForcedDrawAtomically(stateAfterMove, socketId, forcedDraw);
+      authoritativeState = resolvedForced.state;
+    }
+
+    room.state = authoritativeState;
+    assertValidGameState(
+      room.state,
+      forcedDraw ? `act:MOVE:forcedDraw:${code}` : `act:MOVE:${code}`,
+    );
+
+    if (forcedDraw && resolvedForced) {
       logMpDebug('mp-forced-draw', {
         roomCode: room.code,
         playerId: socketId,
         action: 'MOVE',
         event: 'forced_draw_resolved_sync',
         sequence: room.state.sequence,
-        tilesDrawn: resolved.animationSteps.length,
-        stoppedReason: resolved.stoppedReason,
+        tilesDrawn: resolvedForced.animationSteps.length,
+        stoppedReason: resolvedForced.stoppedReason,
         boneyardCount: room.state.boneyard.length,
         handNumber: room.state.handNumber,
       });
-      for (const step of resolved.animationSteps) {
+      for (const step of resolvedForced.animationSteps) {
         appendRoomEvent(room, {
           type: 'tile_drawn',
           actorSocketId: socketId,
@@ -770,12 +781,13 @@ export async function act(
         forcedDrawAnimation: {
           playerId: socketId,
           sequence: room.state.sequence,
-          steps: resolved.animationSteps,
-          stoppedReason: resolved.stoppedReason,
+          steps: resolvedForced.animationSteps,
+          stoppedReason: resolvedForced.stoppedReason,
           finalState: room.state as GameState,
         },
       };
     }
+
     appendResolutionEvents(room, previousState, socketId);
     return { room };
   }

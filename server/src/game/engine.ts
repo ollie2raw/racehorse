@@ -76,8 +76,10 @@ function checkForGameWinner(state: GameState): string | null {
 }
 
 /**
- * A player cannot go out (play their last tile) if that tile is a double
- * OR if that final play would score.
+ * A player cannot legally empty their hand on a scoring play or double when
+ * the boneyard has no drawable tiles—those plays must chain into draws when
+ * the boneyard is non-empty (applyMove forcedDraw), otherwise the move cannot
+ * be represented as legal go-out state.
  */
 function isGoingOutIllegal(
   state: GameState,
@@ -85,12 +87,14 @@ function isGoingOutIllegal(
   tile: Tile,
   position: PlacementPosition,
 ): boolean {
-  void state;
-  void playerId;
-  void tile;
-  void position;
-  // Last-tile constraints are enforced after applyMove (forced draw), not in legal generation.
-  return false;
+  const hand = state.players[playerId].hand;
+  if (hand.length !== 1 || !tileEquals(hand[0], tile)) return false;
+  if (getDrawableBoneyardCount(state) > 0) return false;
+
+  const newBoard = simulatePlacement(state.board, tile, position);
+  const scoring = computePlayScore(newBoard, state.config) > 0;
+  const doublePlayed = isDouble(tile);
+  return scoring || doublePlayed;
 }
 
 function validateConfig(playerCount: number, cfg: Config): void {
@@ -395,10 +399,13 @@ export function getLegalMoves(state: GameState, playerId: string): Move[] {
 
 /**
  * Check if drawing is allowed for the current player.
- * Draw is only allowed if:
+ * In this variant there is no discretionary draw — drawing only happens when
+ * the player has zero legal plays and drawable tiles remain in the boneyard.
+ *
+ * Allowed only if:
  * - It is the player's turn
- * - They have no legal play moves
- * - The boneyard has tiles
+ * - They have no legal `play` moves (pass-only / blocked does not authorize draw)
+ * - The boneyard has drawable (non-dead) tiles
  */
 export function canDraw(state: GameState, playerId: string): boolean {
   if (state.handOver || state.gameOver) return false;
@@ -456,9 +463,17 @@ export function drawUntilPlayableOrEmpty(
 export function drawOne(
   state: GameState,
   playerId: string,
+  bumpSequence = true,
 ): { state: GameState; drew: Tile | null } {
+  assertCurrentPlayer(state, playerId);
+
   const drawableCount = Math.max(0, state.boneyard.length - state.config.deadTileCount);
   if (drawableCount === 0) return { state, drew: null };
+
+  const illegalDrawWhilePlayAvailable = getLegalMoves(state, playerId).some((m) => m.type === 'play');
+  if (illegalDrawWhilePlayAvailable) {
+    throw new Error('Cannot draw while a legal play is available.');
+  }
 
   const [drawnTile, ...remainingBoneyard] = state.boneyard;
   const playerState = state.players[playerId];
@@ -475,7 +490,7 @@ export function drawOne(
           hand: newHand,
         },
       },
-      sequence: state.sequence + 1,
+      sequence: bumpSequence ? state.sequence + 1 : state.sequence,
     },
     drew: drawnTile,
   };
@@ -600,38 +615,45 @@ export function applyMove(
     sequence: state.sequence + 1,
   };
 
-  // Check if player went out (hand is empty)
+  const extraTurnEligible = playedDouble || scored > 0;
+
+  const hasPlayMove = (s: GameState): boolean =>
+    getLegalMoves(s, playerId).some((m) => m.type === 'play');
+
+  // After a scoring play or double, the turn continues; if nothing is playable yet
+  // and drawable tiles exist, one tile seeds the forced-draw chain (rooms.ts resolves the rest).
+  if (extraTurnEligible && getDrawableBoneyardCount(newState) > 0 && !hasPlayMove(newState)) {
+    const { state: afterDraw, drew } = drawOne(newState, playerId, true);
+    if (!drew) {
+      throw new Error('Invariant: drawable count > 0 but drawOne failed.');
+    }
+    return { state: afterDraw, forcedDraw: drew };
+  }
+
   if (newHand.length === 0) {
-    // House rule: scoring or double last tile must draw 1 and continue (if boneyard has tiles).
-    if ((playedDouble || scored > 0) && getDrawableBoneyardCount(newState) > 0) {
-      const [drawnTile, ...remainingBoneyard] = newState.boneyard;
-      return {
-        state: {
-          ...newState,
-          players: {
-            ...newState.players,
-            [playerId]: {
-              ...newState.players[playerId],
-              hand: [drawnTile],
-            },
-          },
-          boneyard: remainingBoneyard,
-          sequence: newState.sequence + 1,
-        },
-        forcedDraw: drawnTile,
-      };
+    if (extraTurnEligible) {
+      throw new Error(
+        'Invariant: emptied hand with scoring/double—should be unreachable ' +
+          'when drawable boneyard is empty (see isGoingOutIllegal).',
+      );
     }
     return { state: resolveGoOut(newState, playerId), forcedDraw: null };
   }
 
-  // Extra turn: doubles or scoring plays grant another turn (can chain)
-  if (playedDouble || scored > 0) {
+  if (extraTurnEligible) {
     return { state: newState, forcedDraw: null };
   }
 
   // Normal: advance to next player
   const nextIndex = (state.currentPlayerIndex + 1) % state.playerIds.length;
-  return { state: { ...newState, currentPlayerIndex: nextIndex, sequence: newState.sequence + 1 }, forcedDraw: null };
+  return {
+    state: {
+      ...newState,
+      currentPlayerIndex: nextIndex,
+      sequence: newState.sequence + 1,
+    },
+    forcedDraw: null,
+  };
 }
 
 // ─── Exports for scoring module ────────────────────────────

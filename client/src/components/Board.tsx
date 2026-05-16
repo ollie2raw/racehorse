@@ -1,9 +1,10 @@
 // client/src/components/Board.tsx
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { DominoTile } from './DominoTile';
-import type { Tile, BoardState, PlacementPosition, Move } from '../types';
+import type { Tile, BoardState, PlacementPosition, Move, PlacedTile } from '../types';
 import { isDouble } from '../bot/botEngine';
 import { useRenderProfiler } from '../debug/renderProfiler';
+import { isRenderableNonNullBoard } from '../multiplayer/boardSnapshotGuards';
 
 type DailyFritzMetric = {
   count: number;
@@ -176,7 +177,17 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
     };
   }
 
+  if (!isRenderableNonNullBoard(board)) {
+    return computeLayout(null, validPositions);
+  }
+
   const { mainLine, hubDoubles } = board;
+
+  for (const pt of mainLine) {
+    if (!pt?.tile || typeof pt.orientation !== 'string') {
+      return computeLayout(null, validPositions);
+    }
+  }
 
   // Build hub lookup
   const hubLookup: HubLookup = {
@@ -186,6 +197,7 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
   };
   for (let idx = 0; idx < hubDoubles.length; idx++) {
     const hub = hubDoubles[idx];
+    if (!hub) continue;
     const stableHubId = hub.hubId;
     if (typeof stableHubId !== 'number') continue;
     hubLookup.byId.set(stableHubId, hub);
@@ -278,10 +290,12 @@ function computeLayout(board: BoardState | null, validPositions: PlacementPositi
     if (hub && hub.isCrossed && typeof hub.hubId === 'number') {
       // Mainline is horizontal.
       const branchResult = layoutHubBranches(hub, hub.hubId, centerX, mainY, true);
-      tiles.push(...branchResult.tiles);
-      zones.push(...branchResult.zones);
-      minY = Math.min(minY, branchResult.minY);
-      maxY = Math.max(maxY, branchResult.maxY);
+      const bt = branchResult.tiles ?? [];
+      const bz = branchResult.zones ?? [];
+      tiles.push(...bt);
+      zones.push(...bz);
+      minY = Math.min(minY, branchResult.minY ?? minY);
+      maxY = Math.max(maxY, branchResult.maxY ?? maxY);
     }
 
     currentX += tileWidth + TILE_GAP;
@@ -358,6 +372,10 @@ function layoutBranches(
   let minX = hubX - TILE_UNIT / 2;
   let maxX = hubX + TILE_UNIT / 2;
 
+  if (!hub || typeof hub !== 'object') {
+    return { tiles, zones, minY, maxY };
+  }
+
   // Branch arms are always perpendicular to the lane this hub is on.
   const verticalArms = laneHorizontal;
 
@@ -367,16 +385,25 @@ function layoutBranches(
 
   for (let armIdx = 0; armIdx < 2; armIdx++) {
     const direction = directions[armIdx];
-    const branch = hub.branches[armIdx];
+    const branchesArray = Array.isArray(hub.branches) ? hub.branches : [];
+    const branchArm = branchesArray[armIdx];
+    let branchTiles: PlacedTile[] = [];
+    const rawTiles =
+      branchArm && typeof branchArm === 'object' ? (branchArm as { tiles?: unknown }).tiles : undefined;
+    if (Array.isArray(rawTiles)) {
+      branchTiles = rawTiles as PlacedTile[];
+    }
 
     // Start position for branch
     let currentX = hubX + (verticalArms ? 0 : direction * (TILE_UNIT + DOUBLE_CROSS_GAP));
     let currentY = hubY + (verticalArms ? direction * (TILE_UNIT + DOUBLE_CROSS_GAP) : 0);
 
-    if (branch && branch.tiles.length > 0) {
+    if (branchTiles.length > 0) {
       // Layout branch tiles
-      for (let i = 0; i < branch.tiles.length; i++) {
-        const pt = branch.tiles[i];
+      for (let i = 0; i < branchTiles.length; i++) {
+        const pt = branchTiles[i];
+        if (!pt?.tile || typeof pt.orientation !== 'string') continue;
+
         const double = isDouble(pt.tile);
 
         const tileSpan = double ? TILE_UNIT : TILE_UNIT * 2;
@@ -395,7 +422,7 @@ function layoutBranches(
           y: centerY,
           rotation,
           flipped,
-          key: `branch-${hubId}-${armIdx}-${i}-${branch.tiles[i].tile.high}-${branch.tiles[i].tile.low}`,
+          key: `branch-${hubId}-${armIdx}-${i}-${pt.tile.high}-${pt.tile.low}`,
         });
 
         if (double) {
@@ -413,10 +440,18 @@ function layoutBranches(
                 centerY,
                 !laneHorizontal,
               );
-              tiles.push(...nested.tiles);
-              zones.push(...nested.zones);
-              minX = Math.min(minX, ...nested.tiles.map((t) => t.x));
-              maxX = Math.max(maxX, ...nested.tiles.map((t) => t.x));
+              const nt = nested.tiles ?? [];
+              const nz = nested.zones ?? [];
+              tiles.push(...nt);
+              zones.push(...nz);
+              minX =
+                nt.length > 0
+                  ? Math.min(minX, ...nt.map((t) => t.x))
+                  : minX;
+              maxX =
+                nt.length > 0
+                  ? Math.max(maxX, ...nt.map((t) => t.x))
+                  : maxX;
               minY = Math.min(minY, nested.minY);
               maxY = Math.max(maxY, nested.maxY);
             }

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, Tile } from '../types';
+import { isRenderableMultiplayerSnapshot } from './boardSnapshotGuards';
 import { hasHandIdentityMismatch } from './handIdentity';
 import { evaluateSequenceUpdate, wrapSocketHandler } from './socketGuards';
 
@@ -12,6 +13,9 @@ export type StateUpdatePayload = {
   eventMeta?: RoomEventMeta | null;
   /** Authoritative lobby flag from server — do not infer from local state shape. */
   matchStarted?: boolean;
+  /** Set with `state` when the server aggregated a forced-draw chain after a PLAY. */
+  forcedDrawCount?: number;
+  forcedDrawActorId?: string;
 };
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
@@ -68,6 +72,7 @@ type UseRoomSocketSyncParams = {
   playDrawSound: (muted: boolean) => void;
   tileEquals: (a: Tile, b: Tile) => boolean;
   fetchGameState: (reason: string) => Promise<boolean>;
+  pendingForcedHandRevealRef: MutableRefObject<{ sequence: number; fullHand: Tile[] } | null>;
   resyncInFlightRef: MutableRefObject<boolean>;
   resyncBufferedUpdateRef: MutableRefObject<StateUpdatePayload | null>;
   resyncFlushRef: MutableRefObject<(() => void) | null>;
@@ -173,8 +178,34 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         params.rematchAwaitingStateRef.current = false;
       }
 
+      const maxSeqWatermarkBeforeMeta = params.maxSequenceRef.current;
       params.applyRoomEventMeta(payload?.eventMeta);
+
+      /** After a new match identity, watermark is −1 briefly — insist on structural integrity before hydration. */
+      const eventMetaResetSequenceWatermark =
+        maxSeqWatermarkBeforeMeta !== params.maxSequenceRef.current &&
+        params.maxSequenceRef.current === -1;
+
       const nextState = payload?.state ?? null;
+
+      if (nextState !== null && !isRenderableMultiplayerSnapshot(nextState)) {
+        void params.fetchGameState('invalid_state_projection');
+        return;
+      }
+
+      /**
+       * After match identity rolls the sequence watermark back to −1, require a numbered snapshot frame
+       * so stray undated payloads cannot hydrate the chrome before the authoritative counter exists.
+       */
+      if (
+        eventMetaResetSequenceWatermark &&
+        nextState !== null &&
+        (typeof nextState.sequence !== 'number' || !Number.isFinite(nextState.sequence))
+      ) {
+        void params.fetchGameState('fresh_match_requires_sequence');
+        return;
+      }
+
       if (
         nextState &&
         !applySequenceToWatermark(
@@ -205,6 +236,12 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       }
 
       params.setState(nextState);
+      const selfForcedRevealPending =
+        typeof payload.forcedDrawCount === 'number' &&
+        payload.forcedDrawCount > 0 &&
+        payload.forcedDrawActorId === params.youRef.current &&
+        !!nextState;
+
       if (params.joinedRoomRef.current) {
         params.setRoomRecoveryState('idle');
         params.setRoomRecoveryMessage('');
@@ -213,7 +250,28 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       params.setOptimisticPlayedTile(null);
       params.setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       params.setCanDraw(Boolean(payload?.canDraw));
-      clearDrawPreview(params);
+
+      if (selfForcedRevealPending) {
+        if (params.drawSequenceTimeoutRef.current) {
+          clearTimeout(params.drawSequenceTimeoutRef.current);
+          params.drawSequenceTimeoutRef.current = null;
+        }
+        params.setDrawSequenceActiveBoth(false);
+        params.setDrawStepMyHand(null);
+        params.setDrawStepActorId(null);
+        params.setDrawStepOpponentHandCount(null);
+        params.setFlyingTiles([]);
+        const actorId = payload.forcedDrawActorId!;
+        const actorHand = nextState.players[actorId]?.hand ?? [];
+        params.pendingForcedHandRevealRef.current = {
+          sequence: nextState.sequence,
+          fullHand: actorHand.slice(),
+        };
+      } else {
+        params.pendingForcedHandRevealRef.current = null;
+        clearDrawPreview(params);
+      }
+
       params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
       params.setOpponentDisconnected(false);
       params.setOpponentDisconnectMessage('');
@@ -247,6 +305,10 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         if (nextState?.playerIds?.includes(params.youRef.current)) {
           return;
         }
+        if (nextState !== null && !isRenderableMultiplayerSnapshot(nextState)) {
+          void params.fetchGameState('invalid_spectator_snapshot');
+          return;
+        }
         if (
           nextState &&
           !applySequenceToWatermark(
@@ -277,7 +339,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       (payload: {
         playerId: string;
         sequence: number;
-        mode: 'manual_draw' | 'forced_draw';
+        mode: 'forced_draw';
         steps: Array<{
           tile: Tile | null;
           boneyardCount: number;
@@ -291,71 +353,129 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
           gameOver: boolean;
         };
       }) => {
-        if (
-          !payload ||
-          (payload.mode !== 'manual_draw' && payload.mode !== 'forced_draw') ||
-          !Array.isArray(payload.steps) ||
-          payload.steps.length === 0
-        ) {
+        const FORCED_DRAW_STAGGER_MS = 300;
+
+        if (!payload || payload.mode !== 'forced_draw' || !Array.isArray(payload.steps) || payload.steps.length === 0) {
           return;
         }
 
         clearPendingDrawAnimationTimers();
-        params.setDrawStepActorId(payload.playerId);
         if (params.drawSequenceTimeoutRef.current) {
           clearTimeout(params.drawSequenceTimeoutRef.current);
         }
 
-        payload.steps.forEach((step, index) => {
-          const stepTimer = window.setTimeout(() => {
-            try {
-              params.playDrawSound(params.isMutedRef.current);
-              params.setBoneyardDisplayCount(step.boneyardCount);
+        const ownForcedDraw = payload.playerId === params.youRef.current;
 
-              if (!params.boneyardRef.current) {
-                clearPendingDrawAnimationTimers();
-                return;
-              }
+        params.setDrawSequenceActiveBoth(true);
+        params.setDrawStepActorId(payload.playerId);
 
-              const from = params.boneyardRef.current.getBoundingClientRect();
-              const isMe = payload.playerId === params.youRef.current;
-              const targetEl: HandTileTarget = isMe
-                ? params.handAreaRef.current
-                : params.opponentPillRef.current;
-              if (targetEl) {
-                const to = targetEl.getBoundingClientRect();
-                const id = ++params.flyingTileIdRef.current;
-                params.setFlyingTiles((prev) => [
-                  ...prev,
-                  {
-                    x: from.left + from.width / 2,
-                    y: from.top + from.height / 2,
-                    toX: to.left + to.width / 2,
-                    toY: to.top + to.height / 2,
-                    id,
-                  },
-                ]);
-                const removalTimer = window.setTimeout(() => {
-                  params.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id));
-                }, 1800);
-                drawAnimationStepTimers.push(removalTimer);
-              }
+        const stepDelayMs = FORCED_DRAW_STAGGER_MS;
 
-              if (payload.playerId !== params.youRef.current) {
-                params.setDrawStepOpponentHandCount(step.drawerHandCount);
-              }
-            } catch (error) {
-              console.error('[socket:game:draw_animation] step error', error);
-              clearPendingDrawAnimationTimers();
+        const runDrawAnimationCore = (pendingForStagger: { fullHand: Tile[] } | null) => {
+          // Do not compare pending vs payload.sequence: state:update uses post-draw sequence while
+          // older guards expected draw-start sequence; ref is set fresh and cleared after stagger.
+          const shouldStaggerOwnHandReveal =
+            ownForcedDraw &&
+            !!pendingForStagger &&
+            pendingForStagger.fullHand.length > 0 &&
+            pendingForStagger.fullHand.length >= payload.steps.length;
+
+          if (shouldStaggerOwnHandReveal && pendingForStagger) {
+            params.pendingForcedHandRevealRef.current = null;
+            const full = pendingForStagger.fullHand;
+            const revealCount = Math.min(payload.steps.length, full.length);
+            const initialVisibleLen = Math.max(0, full.length - revealCount);
+            params.setDrawStepMyHand(full.slice(0, initialVisibleLen));
+            for (let i = 1; i <= revealCount; i++) {
+              const stepTimer = window.setTimeout(() => {
+                const nextLen = initialVisibleLen + i;
+                params.setDrawStepMyHand(full.slice(0, nextLen));
+                const pulseAt = nextLen - 1;
+                if (pulseAt >= 0) {
+                  params.setDrawPulseIndex(pulseAt);
+                  window.setTimeout(() => {
+                    params.setDrawPulseIndex(null);
+                  }, 380);
+                }
+              }, i * stepDelayMs);
+              drawAnimationStepTimers.push(stepTimer);
             }
-          }, index * 150);
-          drawAnimationStepTimers.push(stepTimer);
-        });
+          } else if (ownForcedDraw && params.pendingForcedHandRevealRef.current) {
+            params.pendingForcedHandRevealRef.current = null;
+          }
 
-        params.drawSequenceTimeoutRef.current = setTimeout(() => {
-          clearPendingDrawAnimationTimers();
-          clearDrawPreview(params);
-        }, payload.steps.length * 150 + 1800);
+          payload.steps.forEach((step, index) => {
+            const stepTimer = window.setTimeout(() => {
+              try {
+                params.playDrawSound(params.isMutedRef.current);
+                params.setBoneyardDisplayCount(step.boneyardCount);
+
+                if (!params.boneyardRef.current) {
+                  clearPendingDrawAnimationTimers();
+                  return;
+                }
+
+                const from = params.boneyardRef.current.getBoundingClientRect();
+                const isMe = payload.playerId === params.youRef.current;
+                const targetEl: HandTileTarget = isMe
+                  ? params.handAreaRef.current
+                  : params.opponentPillRef.current;
+                if (targetEl) {
+                  const to = targetEl.getBoundingClientRect();
+                  const id = ++params.flyingTileIdRef.current;
+                  params.setFlyingTiles((prev) => [
+                    ...prev,
+                    {
+                      x: from.left + from.width / 2,
+                      y: from.top + from.height / 2,
+                      toX: to.left + to.width / 2,
+                      toY: to.top + to.height / 2,
+                      id,
+                    },
+                  ]);
+                  const removalTimer = window.setTimeout(() => {
+                    params.setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id));
+                  }, 1800);
+                  drawAnimationStepTimers.push(removalTimer);
+                }
+
+                if (payload.playerId !== params.youRef.current) {
+                  params.setDrawStepOpponentHandCount(step.drawerHandCount);
+                }
+              } catch (error) {
+                console.error('[socket:game:draw_animation] step error', error);
+                clearPendingDrawAnimationTimers();
+              }
+            }, index * stepDelayMs);
+            drawAnimationStepTimers.push(stepTimer);
+          });
+
+          params.drawSequenceTimeoutRef.current = setTimeout(() => {
+            clearPendingDrawAnimationTimers();
+            clearDrawPreview(params);
+          }, payload.steps.length * stepDelayMs + 1800);
+        };
+
+        if (ownForcedDraw && !params.pendingForcedHandRevealRef.current) {
+          const pollStartMs = Date.now();
+          const pollIntervalMs = 20;
+          const pollMaxMs = 200;
+
+          const pollPending = () => {
+            const p = params.pendingForcedHandRevealRef.current;
+            if (p || Date.now() - pollStartMs >= pollMaxMs) {
+              runDrawAnimationCore(p ?? null);
+              return;
+            }
+            const tid = window.setTimeout(pollPending, pollIntervalMs);
+            drawAnimationStepTimers.push(tid);
+          };
+
+          pollPending();
+        } else {
+          const p = ownForcedDraw ? params.pendingForcedHandRevealRef.current : null;
+          runDrawAnimationCore(p ?? null);
+        }
       },
     );
 

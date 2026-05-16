@@ -107,7 +107,7 @@ import {
   getRoomMatchEventMeta,
   getRoomMatchEventSnapshot,
   getRoomRuntimeStats,
-  type ManualDrawAnimationStep,
+  type DrawAnimationStep,
   type Room,
 } from './rooms';
 import { appendRoomEvent, resetRoomEventLog } from './roomEvents';
@@ -123,7 +123,7 @@ import {
   onPlayerSocketRejoined,
 } from './multiplayer/disconnectGrace';
 import { markMatchStartReady, tryStartMatchIfReady } from './multiplayer/matchStartReady';
-import type { GameState } from './game/types';
+import type { BranchArm, GameState } from './game/types';
 import { assertValidGameState } from './game/invariants';
 
 const allowedOriginPatterns = [
@@ -4340,68 +4340,21 @@ function emitRematchStatus(roomCode: string) {
   });
 }
 
-function emitManualDrawAnimationPayload(
-  roomCode: string,
-  payload: {
-    playerId: string;
-    sequence: number;
-    steps: ManualDrawAnimationStep[];
-    stoppedReason: 'playable' | 'locked_pass';
-    finalState: GameState;
-  },
-) {
-  const hasPlayableFollowUp = getRoomLegalMoves(roomCode, payload.playerId).some((move) => move.type === 'play');
-  io.to(payload.playerId).emit('game:draw_animation', {
-    playerId: payload.playerId,
-    sequence: payload.sequence,
-    mode: 'manual_draw',
-    steps: payload.steps.map((step) => ({
-      tile: step.tile,
-      boneyardCount: step.boneyardCount,
-      drawerHandCount: step.drawerHandCount,
-    })),
-    final: {
-      drewCount: payload.steps.length,
-      stoppedReason: payload.stoppedReason,
-      canPlayNow: hasPlayableFollowUp,
-      handOver: payload.finalState.handOver,
-      gameOver: payload.finalState.gameOver,
-    },
-  });
-
-  io.to(roomCode).except(payload.playerId).emit('game:draw_animation', {
-    playerId: payload.playerId,
-    sequence: payload.sequence,
-    mode: 'manual_draw',
-    steps: payload.steps.map((step) => ({
-      tile: null,
-      boneyardCount: step.boneyardCount,
-      drawerHandCount: step.drawerHandCount,
-    })),
-    final: {
-      drewCount: payload.steps.length,
-      stoppedReason: payload.stoppedReason,
-      canPlayNow: false,
-      handOver: payload.finalState.handOver,
-      gameOver: payload.finalState.gameOver,
-    },
-  });
-}
-
 function emitForcedDrawAnimationPayload(
   roomCode: string,
   payload: {
     playerId: string;
     sequence: number;
-    steps: ManualDrawAnimationStep[];
+    steps: DrawAnimationStep[];
     stoppedReason: 'playable' | 'locked_pass' | 'locked_no_pass';
     finalState: GameState;
   },
 ) {
   const hasPlayableFollowUp = getRoomLegalMoves(roomCode, payload.playerId).some((move) => move.type === 'play');
+  const sequence = payload.finalState.sequence;
   io.to(payload.playerId).emit('game:draw_animation', {
     playerId: payload.playerId,
-    sequence: payload.sequence,
+    sequence,
     mode: 'forced_draw',
     steps: payload.steps.map((step) => ({
       tile: step.tile,
@@ -4419,7 +4372,7 @@ function emitForcedDrawAnimationPayload(
 
   io.to(roomCode).except(payload.playerId).emit('game:draw_animation', {
     playerId: payload.playerId,
-    sequence: payload.sequence,
+    sequence,
     mode: 'forced_draw',
     steps: payload.steps.map((step) => ({
       tile: null,
@@ -4501,9 +4454,43 @@ function buildHandEndedPayload(room: Room, playerId: string) {
   };
 }
 
+/** Ensure masked wire snapshots keep the invariant the client trusts (main spine + BranchArm `.tiles`). */
+function warnIfMaskedSnapshotMalformed(state: GameState, ctx: string): void {
+  if (!state.players || typeof state.players !== 'object') {
+    console.warn(`[maskStateForRecipient:${ctx}] players dictionary missing`);
+  }
+  if (!Array.isArray(state.playerIds)) {
+    console.warn(`[maskStateForRecipient:${ctx}] playerIds missing or not array`);
+  }
+  const board = state.board as GameState['board'];
+  if (board === undefined) {
+    console.warn(`[maskStateForRecipient:${ctx}] board omitted (must be explicit null)`);
+    return;
+  }
+  if (board === null) return;
+  if (!Array.isArray(board.mainLine) || !Array.isArray(board.hubDoubles)) {
+    console.warn(`[maskStateForRecipient:${ctx}] board malformed: mainLine/hubDoubles must be arrays`);
+    return;
+  }
+  for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
+    const hub = board.hubDoubles[hubIdx];
+    if (!hub || typeof hub !== 'object' || !Array.isArray(hub.branches)) {
+      console.warn(`[maskStateForRecipient:${ctx}] hub ${hubIdx} missing branches BranchArm[]`);
+      continue;
+    }
+    hub.branches.forEach((arm: BranchArm | undefined | null, armIdx: number) => {
+      if (!arm || typeof arm !== 'object' || !Array.isArray(arm.tiles)) {
+        console.warn(
+          `[maskStateForRecipient:${ctx}] hub ${hubIdx} arm ${armIdx} missing BranchArm.tiles array`,
+        );
+      }
+    });
+  }
+}
+
 function maskStateForRecipient(state: GameState, recipientPlayerId: string | null): GameState {
   const canRevealAll = state.handOver || state.gameOver;
-  return {
+  const masked: GameState = {
     ...state,
     players: Object.fromEntries(
       state.playerIds.map((pid) => {
@@ -4522,6 +4509,12 @@ function maskStateForRecipient(state: GameState, recipientPlayerId: string | nul
       }),
     ),
   };
+
+  warnIfMaskedSnapshotMalformed(
+    masked,
+    typeof recipientPlayerId === 'string' ? `player:${recipientPlayerId}` : 'spectator-null',
+  );
+  return masked;
 }
 
 /**
@@ -4822,6 +4815,8 @@ function broadcastStateUpdate(roomCode: string) {
   const sockets = io.sockets.adapter.rooms.get(roomCode);
   if (!sockets) return;
 
+  const pendingForcedDraw = room.pendingForcedDrawBroadcast;
+
   const currentScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
@@ -4850,6 +4845,12 @@ function broadcastStateUpdate(roomCode: string) {
         canDraw,
         eventMeta: getRoomMatchEventMeta(room.code),
         matchStarted: true,
+        ...(pendingForcedDraw
+          ? {
+              forcedDrawCount: pendingForcedDraw.count,
+              forcedDrawActorId: pendingForcedDraw.playerId,
+            }
+          : {}),
       });
 
       if (
@@ -4884,6 +4885,12 @@ function broadcastStateUpdate(roomCode: string) {
     const spectatorPayload = {
       state: stateForSpectators,
       eventMeta: getRoomMatchEventMeta(room.code),
+      ...(pendingForcedDraw
+        ? {
+            forcedDrawCount: pendingForcedDraw.count,
+            forcedDrawActorId: pendingForcedDraw.playerId,
+          }
+        : {}),
     };
     const currentRoomSockets = io.sockets.adapter.rooms.get(room.code);
     if (currentRoomSockets) {
@@ -4901,6 +4908,8 @@ function broadcastStateUpdate(roomCode: string) {
       }
     }
   }
+
+  room.pendingForcedDrawBroadcast = undefined;
 
   const roomAfter = (() => { try { return getRoom(roomCode); } catch { return null; } })();
 
@@ -5961,13 +5970,16 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       }
       const result = await act(roomCode, socket.id, action, io, (code) => broadcastStateUpdate(code));
       const room = result.room;
+      room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
+        ? {
+            playerId: result.forcedDrawAnimation.playerId,
+            count: result.forcedDrawAnimation.steps.length,
+          }
+        : undefined;
       // Authoritative state before draw animations so clients never render against stale hands/board.
       broadcastStateUpdate(room.code);
       if (result.forcedDrawAnimation) {
         emitForcedDrawAnimationPayload(room.code, result.forcedDrawAnimation);
-      }
-      if (result.manualDrawAnimation) {
-        emitManualDrawAnimationPayload(room.code, result.manualDrawAnimation);
       }
       maybeFinalizeTournamentMatch(room);
       if (process.env.NODE_ENV !== 'production' || process.env.MP_DEBUG === '1' || process.env.DEBUG_MP === '1') {

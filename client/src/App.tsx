@@ -44,6 +44,7 @@ import type { FritzTier } from './bot/fritzConfig';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
 import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
+import { isRenderableMultiplayerSnapshot } from './multiplayer/boardSnapshotGuards';
 import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
 import { useRenderProfiler } from './debug/renderProfiler';
@@ -248,10 +249,10 @@ function getBoardEnds(board: GameState['board']): [number, number] {
 
 function getBoardTileCount(board: GameState['board']): number {
   if (!board) return 0;
-  let count = board.mainLine.length;
-  for (const hub of board.hubDoubles) {
-    for (const arm of hub.branches) {
-      if (arm) count += arm.tiles.length;
+  let count = board.mainLine?.length ?? 0;
+  for (const hub of board.hubDoubles ?? []) {
+    for (const arm of hub?.branches ?? []) {
+      if (arm?.tiles?.length) count += arm.tiles.length;
     }
   }
   return count;
@@ -260,13 +261,15 @@ function getBoardTileCount(board: GameState['board']): number {
 function getBoardTiles(board: GameState['board']): Tile[] {
   if (!board) return [];
   const tiles: Tile[] = [];
-  for (const placed of board.mainLine) {
+  for (const placed of board.mainLine ?? []) {
+    if (!placed?.tile) continue;
     tiles.push(placed.tile);
   }
-  for (const hub of board.hubDoubles) {
-    for (const branch of hub.branches) {
-      if (!branch) continue;
+  for (const hub of board.hubDoubles ?? []) {
+    for (const branch of hub?.branches ?? []) {
+      if (!branch?.tiles) continue;
       for (const placed of branch.tiles) {
+        if (!placed?.tile) continue;
         tiles.push(placed.tile);
       }
     }
@@ -1063,6 +1066,8 @@ export default function App() {
   const [handTileSize, setHandTileSize] = useState(44);
   const [handCompactStacked, setHandCompactStacked] = useState(false);
   const autoTurnActionKeyRef = useRef<string>('');
+  /** Multiplayer: block auto draw/pass until `state:update` reaches the server ack sequence (avoids duplicate DRAW after MOVE). */
+  const mpAutoDrawSuppressUntilSequenceRef = useRef<number | null>(null);
   const handRevealShownRef = useRef<number | null>(null);
   const handRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevOppCountRef = useRef<number | null>(null);
@@ -1085,6 +1090,7 @@ export default function App() {
     { x: number; y: number; toX: number; toY: number; id: number }[]
   >([]);
   const flyingTileIdRef = useRef(0);
+  const pendingForcedHandRevealRef = useRef<{ sequence: number; fullHand: Tile[] } | null>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
@@ -1388,6 +1394,7 @@ export default function App() {
     maxEventSequenceRef.current = -1;
     roomMatchIdRef.current = null;
     autoTurnActionKeyRef.current = '';
+    mpAutoDrawSuppressUntilSequenceRef.current = null;
     frozenHandOverBoardRef.current = null;
     playerReadyEmittedRef.current = false;
     matchStartedRef.current = false;
@@ -1548,7 +1555,14 @@ export default function App() {
       youRef.current = resolvedYou;
     }
 
-    const nextState = resp.state ?? null;
+    const rawState = resp.state ?? null;
+    let nextState = rawState;
+    if (rawState !== null && !isRenderableMultiplayerSnapshot(rawState)) {
+      console.warn('[mp] room:join handshake state failed projection validation — resync scheduled');
+      void fetchGameStateRef.current('join_ack_projection_invalid');
+      nextState = null;
+    }
+
     if (nextState && typeof nextState.sequence === 'number') {
       maxSequenceRef.current = nextState.sequence;
     }
@@ -1650,6 +1664,15 @@ export default function App() {
       multiplayerAuthToken,
     ],
   );
+
+  /** Last-line defense: malformed snapshots should never drive the tabletop UI in a joined room. */
+  useEffect(() => {
+    if (!joinedRoom) return;
+    if (!state) return;
+    if (!isRenderableMultiplayerSnapshot(state)) {
+      void fetchGameState('runtime_state_projection_guard');
+    }
+  }, [joinedRoom, state, fetchGameState]);
 
   const markClientSpectator = useCallback(() => {
     isSeatedPlayerRef.current = false;
@@ -1799,6 +1822,7 @@ export default function App() {
       youRef,
       stateRef,
       flyingTileIdRef,
+      pendingForcedHandRevealRef,
       isMutedRef,
       playDrawSound,
       tileEquals,
@@ -2309,6 +2333,10 @@ export default function App() {
           setActionError(resp?.error ?? 'Unable to play tile.');
           return;
         }
+        if (joinedRoom && typeof resp.sequence === 'number' && Number.isFinite(resp.sequence)) {
+          mpAutoDrawSuppressUntilSequenceRef.current = resp.sequence;
+          autoTurnActionKeyRef.current = '';
+        }
         flashLastPlayed(selectedMove?.tile ?? tileToPlay);
         appendMultiplayerMove({
           player: 'you',
@@ -2352,9 +2380,12 @@ export default function App() {
   const isMyTurn = currentTurnId === you;
   const authoritativeMyHand = state?.players[you]?.hand ?? [];
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-  const handForRenderBase = drawSequenceActive && drawStepActorId === you
-    ? (drawStepMyHand ?? authoritativeMyHand)
-    : authoritativeMyHand;
+  const useDrawStepOverlayForMyHand =
+    drawSequenceActive && drawStepActorId === you;
+  const handForRenderBase =
+    drawStepMyHand != null && useDrawStepOverlayForMyHand
+      ? drawStepMyHand
+      : authoritativeMyHand;
   const myHand = handForRenderBase;
 
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
@@ -2415,9 +2446,9 @@ export default function App() {
   const hudRightScore =
     isSpectatingMatch && spectateRightPlayerId ? (state?.players[spectateRightPlayerId]?.score ?? 0) : myScore;
   const hudRightScorePulse = isSpectatingMatch && spectateRightPlayerId ? Boolean(hudScorePulse[spectateRightPlayerId]) : Boolean(hudScorePulse[you]);
-  const canDrawNow = canDraw && !drawSequenceActive;
-  const canPass = legalMoves.some((m) => m.type === 'pass') && !drawSequenceActive;
   const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
+  const canDrawNow = canDraw && !drawSequenceActive && !hasPlayMoves;
+  const canPass = legalMoves.some((m) => m.type === 'pass') && !drawSequenceActive;
   const boneyardCount = boneyardDisplayCount ?? state?.boneyard.length ?? 0;
   const isBoneyardLocked = boneyardCount <= 2;
   const openEndsSum = getOpenEndsSum(state?.board ?? null);
@@ -2812,6 +2843,20 @@ export default function App() {
 
   useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
+
+    if (
+      joinedRoom &&
+      mpAutoDrawSuppressUntilSequenceRef.current != null &&
+      state &&
+      typeof state.sequence === 'number'
+    ) {
+      if (state.sequence < mpAutoDrawSuppressUntilSequenceRef.current) {
+        return;
+      }
+      mpAutoDrawSuppressUntilSequenceRef.current = null;
+      autoTurnActionKeyRef.current = '';
+    }
+
     if (
       !handActive ||
       !isMyTurn ||
@@ -2837,7 +2882,21 @@ export default function App() {
     } else {
       pass();
     }
-  }, [state, isMyTurn, hasPlayMoves, canDrawNow, canPass, myHand.length, boneyardCount, draw, pass, drawSequenceActive, roomRecoveryState, isRecoveringConnection]);
+  }, [
+    state,
+    joinedRoom,
+    isMyTurn,
+    hasPlayMoves,
+    canDrawNow,
+    canPass,
+    myHand.length,
+    boneyardCount,
+    draw,
+    pass,
+    drawSequenceActive,
+    roomRecoveryState,
+    isRecoveringConnection,
+  ]);
 
   useEffect(() => {
     if (!state) {
