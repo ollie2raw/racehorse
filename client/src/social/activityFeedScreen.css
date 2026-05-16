@@ -1,13 +1,32 @@
-/* Activity Feed — layout matches social mock (two-column feed + sidebar) */
+/* Activity Feed — forced dark mock palette (black canvas + navy surfaces) */
+
+.app:has(.rh-sf-screen) {
+  background: #000000;
+}
+
+.app:has(.rh-sf-screen) > * {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+}
 
 .rh-sf-screen {
+  --sf-page-bg: #000000;
+  --sf-surface: #111827;
+  --sf-surface-raised: #161b22;
+  --sf-surface-inset: #0c1018;
+  --sf-border: rgba(255, 255, 255, 0.06);
+  --sf-text-muted: rgba(255, 255, 255, 0.45);
+  --sf-text-subtle: rgba(255, 255, 255, 0.58);
+
   display: flex;
   flex: 1 1 0;
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
-  background: var(--bg-obsidian);
-  color: var(--text-primary);
+  background: var(--sf-page-bg);
+  color: #ffffff;
   font-family: var(--font-body);
 }
 
@@ -18,21 +37,25 @@
   max-height: 100%;
   flex-direction: column;
   width: 100%;
+  background: var(--sf-page-bg);
 }
 
 .rh-sf-body {
   display: flex;
   flex: 1 1 0;
   min-height: 0;
+  justify-content: center;
   overflow: hidden;
-  padding: 20px 28px 28px;
+  padding: 18px 28px 24px;
+  background: var(--sf-page-bg);
 }
 
 .rh-sf-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 360px);
   gap: 22px;
   width: 100%;
+  max-width: 1280px;
   min-height: 0;
 }
 
@@ -40,7 +63,7 @@
   display: flex;
   min-height: 0;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   overflow: hidden;
 }
 
@@ -55,19 +78,19 @@
 .rh-sf-page-title {
   margin: 0;
   font-family: var(--font-body);
-  font-size: clamp(28px, 3.2vw, 36px);
+  font-size: 32px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.12;
   letter-spacing: -0.02em;
-  color: var(--text-primary);
+  color: #ffffff;
 }
 
 .rh-sf-page-sub {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   max-width: 520px;
   font-size: 15px;
   line-height: 1.5;
-  color: var(--text-secondary);
+  color: var(--sf-text-muted);
 }
 
 .rh-sf-post-btn {
@@ -75,21 +98,28 @@
   flex-shrink: 0;
   align-items: center;
   gap: 10px;
-  min-height: 42px;
+  min-height: 40px;
   padding: 0 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
-  color: var(--text-primary);
+  border: 1px solid var(--sf-border);
+  border-radius: 10px;
+  background: var(--sf-surface);
+  color: #ffffff;
   font-family: var(--font-body);
   font-size: 14px;
   font-weight: 600;
-  cursor: not-allowed;
-  opacity: 0.72;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-premium),
+    color var(--duration-fast) var(--ease-premium);
+}
+
+.rh-sf-post-btn:hover {
+  border-color: color-mix(in srgb, var(--tier-elite) 50%, var(--sf-border));
+  color: var(--tier-elite);
 }
 
 .rh-sf-post-btn svg {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .rh-sf-signin {
@@ -97,11 +127,11 @@
   flex: 1 1 0;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  border: 1px solid var(--sf-border);
+  border-radius: 12px;
+  background: var(--sf-surface);
   padding: 32px;
-  color: var(--text-secondary);
+  color: var(--sf-text-muted);
   font-size: 15px;
 }
 
@@ -120,16 +150,16 @@
 
 .rh-sf-sidebar::-webkit-scrollbar-thumb {
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text-dim) 55%, transparent);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .rh-sf-widget {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-obsidian));
+  border: 1px solid var(--sf-border);
+  border-radius: 12px;
+  background: var(--sf-surface);
   padding: 16px;
 }
 
@@ -145,7 +175,7 @@
   font-family: var(--font-body);
   font-size: 15px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #ffffff;
 }
 
 .rh-sf-widget-title--solo {
@@ -169,7 +199,7 @@
   padding: 4px 0;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--text-secondary);
+  color: var(--sf-text-muted);
 }
 
 .rh-sf-friend {
@@ -178,7 +208,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 12px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  border-bottom: 1px solid var(--sf-border);
 }
 
 .rh-sf-friend:last-child {
@@ -207,29 +237,31 @@
 
 .rh-sf-avatar {
   display: inline-flex;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border-radius: 50%;
-  border: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--bg-card) 80%, var(--tier-elite) 12%);
-  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 28%, var(--sf-border));
+  background: var(--sf-surface-raised);
+  color: #ffffff;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.06em;
 }
 
 .rh-sf-avatar-dot {
   position: absolute;
-  right: 0;
-  bottom: 0;
+  right: 1px;
+  bottom: 1px;
   width: 10px;
   height: 10px;
-  border: 2px solid var(--bg-card);
+  border: 2px solid var(--sf-surface);
   border-radius: 50%;
   background: var(--tier-rookie);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--tier-rookie) 55%, transparent);
 }
 
 .rh-sf-friend-copy {
@@ -242,12 +274,12 @@
 .rh-sf-friend-copy strong {
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #ffffff;
 }
 
 .rh-sf-friend-copy span {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--sf-text-muted);
 }
 
 .rh-sf-friend-actions {
@@ -259,9 +291,9 @@
 
 .rh-sf-challenge-btn,
 .rh-sf-chat-btn {
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-obsidian) 40%, transparent);
-  color: var(--text-primary);
+  border: 1px solid var(--sf-border);
+  background: var(--sf-surface-inset);
+  color: #ffffff;
   cursor: pointer;
   transition:
     border-color var(--duration-fast) var(--ease-premium),
@@ -288,17 +320,17 @@
 
 .rh-sf-challenge-btn:hover,
 .rh-sf-chat-btn:hover {
-  border-color: color-mix(in srgb, var(--tier-elite) 45%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--tier-elite) 45%, var(--sf-border));
 }
 
 .rh-sf-trend,
 .rh-sf-tournament {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   padding: 11px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  border-bottom: 1px solid var(--sf-border);
 }
 
 .rh-sf-trend:last-child,
@@ -308,12 +340,15 @@
 }
 
 .rh-sf-trend-icon {
-  font-size: 16px;
+  display: inline-flex;
+  width: 22px;
+  justify-content: center;
+  font-size: 15px;
   line-height: 1;
 }
 
 .rh-sf-trend-icon--trophy {
-  filter: saturate(0.9);
+  filter: saturate(0.95);
 }
 
 .rh-sf-trend-copy {
@@ -326,19 +361,20 @@
 .rh-sf-trend-copy strong {
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #ffffff;
 }
 
 .rh-sf-trend-copy span {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--sf-text-muted);
 }
 
 .rh-sf-trend-link,
 .rh-sf-tournament-date {
+  justify-self: end;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--sf-text-muted);
   white-space: nowrap;
 }
 
@@ -352,7 +388,7 @@
   margin-top: 2px;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--sf-text-muted);
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;

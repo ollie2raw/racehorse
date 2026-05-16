@@ -27,6 +27,8 @@ interface GlobalNavProps {
   activeColor?: string; // Optional dynamic override
   /** Slightly shorter bar + padding for dense hub screens. */
   compactChrome?: boolean;
+  /** Opaque black bar (social feed mock) — no frosted gray chrome. */
+  solidDarkChrome?: boolean;
 }
 
 const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
@@ -45,7 +47,15 @@ const TAB_COLORS: Record<string, string> = {
   'Social': '#0ea5e9',        // Cyan
 };
 
-export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, activeColor, compactChrome }: GlobalNavProps) {
+export function GlobalNav({
+  onNavigate,
+  onOpenAuth,
+  onOpenAccount,
+  currentMode,
+  activeColor,
+  compactChrome,
+  solidDarkChrome,
+}: GlobalNavProps) {
   const { user: authUser, profile: authProfile } = useAuth();
   const [friendCountFetched, setFriendCountFetched] = useState<number | null>(null);
 
@@ -120,14 +130,16 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
   return (
     <nav 
       className={`relative shrink-0 w-full z-50 ${compactChrome ? 'h-[66px]' : 'h-[78px]'}`}
-      style={{ 
-        boxSizing: 'border-box', 
+      style={{
+        boxSizing: 'border-box',
         overflow: 'visible',
-        background: 'rgba(3, 7, 14, 0.42)',
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
-        boxShadow: 'inset 0 -1px 0 rgba(255, 255, 255, 0.04)',
-        fontFamily: "'Outfit', system-ui, sans-serif"
+        background: solidDarkChrome ? '#000000' : 'rgba(3, 7, 14, 0.42)',
+        backdropFilter: solidDarkChrome ? 'none' : 'blur(18px)',
+        WebkitBackdropFilter: solidDarkChrome ? 'none' : 'blur(18px)',
+        boxShadow: solidDarkChrome
+          ? 'inset 0 -1px 0 rgba(255, 255, 255, 0.06)'
+          : 'inset 0 -1px 0 rgba(255, 255, 255, 0.04)',
+        fontFamily: "'Outfit', system-ui, sans-serif",
       }}
     >
       <div className={`relative flex h-full items-center justify-between max-w-[1440px] mx-auto w-full ${compactChrome ? 'px-7' : 'px-9'}`}>

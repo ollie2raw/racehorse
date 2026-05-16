@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { GlobalNav } from '../components';
 import type { AppMode } from '../types';
@@ -30,6 +31,26 @@ function initials(username: string): string {
   const parts = username.replace(/[^a-zA-Z0-9]/g, ' ').split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return username.slice(0, 2).toUpperCase();
+}
+
+function avatarHue(username: string): number {
+  let hash = 0;
+  for (let i = 0; i < username.length; i += 1) {
+    hash = username.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash) % 360;
+}
+
+function friendAvatarStyle(username: string): CSSProperties {
+  const hue = avatarHue(username);
+  return {
+    background: `linear-gradient(145deg, hsl(${hue} 42% 38%), hsl(${(hue + 48) % 360} 48% 24%))`,
+  };
+}
+
+function trendingIcon(item: FeedItem): string {
+  if (item.type === 'streak') return '🔥';
+  return '';
 }
 
 function trendLabel(item: FeedItem): string {
@@ -143,6 +164,7 @@ export default function ActivityFeedScreen({
         <GlobalNav
           currentMode="feed"
           activeColor="var(--tier-elite)"
+          solidDarkChrome
           onNavigate={(mode) => {
             if (mode === 'home') {
               onClose();
@@ -162,7 +184,14 @@ export default function ActivityFeedScreen({
                     See what your friends and the community are up to.
                   </p>
                 </div>
-                <button className="rh-sf-post-btn" type="button" disabled aria-disabled="true">
+                <button
+                  className="rh-sf-post-btn"
+                  type="button"
+                  title="Post updates are coming soon"
+                  onClick={() => {
+                    /* visual-only until post API exists */
+                  }}
+                >
                   <span>Post Update</span>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path
@@ -212,7 +241,9 @@ export default function ActivityFeedScreen({
                         onClick={() => onViewProfile(friend.username)}
                       >
                         <span className="rh-sf-avatar-wrap">
-                          <span className="rh-sf-avatar">{initials(friend.username)}</span>
+                          <span className="rh-sf-avatar" style={friendAvatarStyle(friend.username)}>
+                            {initials(friend.username)}
+                          </span>
                           <span className="rh-sf-avatar-dot" aria-hidden="true" />
                         </span>
                         <span className="rh-sf-friend-copy">
@@ -259,7 +290,7 @@ export default function ActivityFeedScreen({
                   {trendingMoments.length > 0 ? trendingMoments.map((item) => (
                     <div key={item.id} className="rh-sf-trend">
                       <span className="rh-sf-trend-icon" aria-hidden="true">
-                        {item.type === 'streak' ? '🔥' : '🏆'}
+                        {trendingIcon(item)}
                       </span>
                       <span className="rh-sf-trend-copy">
                         <strong>{item.username}</strong>
