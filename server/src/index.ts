@@ -4535,6 +4535,9 @@ function getHandCounts(state: GameState): Record<string, number> {
  * - Whether they can draw
  */
 function broadcastStateUpdate(roomCode: string) {
+  /** Game-over persistence (filesystem + Supabase) — must never run before realtime emits. */
+  let scheduleDeferredMatchPersist: null | (() => void) = null;
+
   const room = getRoom(roomCode);
   if (!room.state) return;
   assertValidGameState(room.state, `broadcastStateUpdate:${roomCode}`);
@@ -4576,7 +4579,8 @@ function broadcastStateUpdate(roomCode: string) {
       const scoreB = room.state.players[bId]?.score ?? 0;
       const winnerSocketId = room.state.winnerId ?? (scoreA >= scoreB ? aId : bId);
 
-      void (async () => {
+      scheduleDeferredMatchPersist = () => {
+        void (async () => {
         try {
           // ── Scheduled tournament match: advance the bracket and SKIP rated ranking.
           if (room.scheduledTournamentMatchId) {
@@ -4796,7 +4800,8 @@ function broadcastStateUpdate(roomCode: string) {
           // errors. The game result should be considered logged; individual
           // sub-operations log their own errors above.
         }
-      })();
+        })();
+      };
     }
   }
 
@@ -4911,6 +4916,9 @@ function broadcastStateUpdate(roomCode: string) {
 
   room.pendingForcedDrawBroadcast = undefined;
 
+  // Game-over archival / rating MUST follow state:update so clients are not stalled on I/O.
+  setImmediate(() => scheduleDeferredMatchPersist?.());
+
   const roomAfter = (() => { try { return getRoom(roomCode); } catch { return null; } })();
 
   // Auto-ready bots for next hand
@@ -4936,10 +4944,13 @@ function broadcastStateUpdate(roomCode: string) {
   }
 
   if (room.state.gameOver) {
-    if (isTournamentRoom) {
-      finalizeTournamentMatchHook?.(room);
-    }
-    evaluateRoomLifecycle(room.code);
+    const finRoom = room;
+    const finCode = roomCode;
+    const shouldFinalizeTour = isTournamentRoom;
+    setImmediate(() => {
+      if (shouldFinalizeTour) finalizeTournamentMatchHook?.(finRoom);
+      evaluateRoomLifecycle(finCode);
+    });
   }
 }
 
@@ -5981,7 +5992,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       if (result.forcedDrawAnimation) {
         emitForcedDrawAnimationPayload(room.code, result.forcedDrawAnimation);
       }
-      maybeFinalizeTournamentMatch(room);
+      setImmediate(() => maybeFinalizeTournamentMatch(room));
       if (process.env.NODE_ENV !== 'production' || process.env.MP_DEBUG === '1' || process.env.DEBUG_MP === '1') {
         console.log('[mp-action-ack]', {
           roomCode: room.code,
@@ -6008,7 +6019,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       });
       if (result.started) {
         broadcastStateUpdate(result.room.code);
-        maybeFinalizeTournamentMatch(result.room);
+        setImmediate(() => maybeFinalizeTournamentMatch(result.room));
       }
       cb?.({
         ok: !result.ignored,
