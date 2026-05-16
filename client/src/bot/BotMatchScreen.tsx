@@ -5017,7 +5017,8 @@ export default function BotMatchScreen({
               handleEndOfRun(err.message);
               return;
             }
-            // Retryable network/server error — reset guard and surface to UI.
+            // Retryable network/server error — reset guard and let the watchdog retry.
+            // Daily Fritz should not show a red banner for transient hand-transition fetches.
             // The watchdog will retry after 10 s if still stuck.
             const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
             const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -5032,7 +5033,6 @@ export default function BotMatchScreen({
               handNumber: matchRef.current.handNumber,
               durationMs: Number((requestEndedAt - (cache?.startedAt ?? dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
             });
-            setGhostResultError(errMsg);
             // handReveal intentionally NOT cleared here — keep the reveal visible
             // so the player sees the score while the watchdog queues a retry.
           });

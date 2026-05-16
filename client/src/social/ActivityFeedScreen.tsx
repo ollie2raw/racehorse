@@ -1,10 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { GlobalNav } from '../components';
 import type { AppMode } from '../types';
-import type { FeedItem } from './socialApi';
+import {
+  fetchFriendsWithPresence,
+  fetchPublicProfile,
+  type FeedItem,
+  type FriendWithPresence,
+} from './socialApi';
 import ActivityFeedPanel from './ActivityFeedPanel';
-import '../screens/RacehorseHomeArt.css';
 import './activityFeedScreen.css';
 
 interface ActivityFeedScreenProps {
@@ -15,8 +19,35 @@ interface ActivityFeedScreenProps {
   onNavigate?: (mode: AppMode) => void;
 }
 
-function statCount(feed: FeedItem[], type: FeedItem['type']): number {
-  return feed.filter((item) => item.type === type).length;
+function formatMonthDay(value: string): string {
+  return new Date(value).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function initials(username: string): string {
+  const parts = username.replace(/[^a-zA-Z0-9]/g, ' ').split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return username.slice(0, 2).toUpperCase();
+}
+
+function trendLabel(item: FeedItem): string {
+  if (item.type === 'streak') {
+    return `${String(item.metadata.streak ?? '—')} Win Streak`;
+  }
+  if (item.type === 'daily_fritz') {
+    return `Daily Fritz · ${String(item.metadata.score ?? '—')} pts`;
+  }
+  return 'Recent ranked result';
+}
+
+function tournamentTitle(item: FeedItem): string {
+  return String(item.metadata.tournament_name ?? 'Tournament result');
+}
+
+function tournamentPlacement(item: FeedItem): string {
+  return String(item.metadata.placement ?? 'Placement posted');
 }
 
 export default function ActivityFeedScreen({
@@ -27,40 +58,91 @@ export default function ActivityFeedScreen({
   onNavigate,
 }: ActivityFeedScreenProps) {
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const [friends, setFriends] = useState<FriendWithPresence[]>([]);
+  const [friendRatings, setFriendRatings] = useState<Record<string, string>>({});
 
-  const summary = useMemo(() => {
-    const wins = statCount(feedItems, 'win');
-    const streaks = statCount(feedItems, 'streak');
-    const tournaments = statCount(feedItems, 'tournament');
-    const featuredMoment = feedItems[0] ? new Date(feedItems[0].created_at).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    }) : 'Waiting';
-    return {
-      total: feedItems.length,
-      wins,
-      streaks,
-      tournaments,
-      featuredMoment,
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user) {
+      setFriends([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void fetchFriendsWithPresence().then((result) => {
+      if (cancelled || result.error) return;
+      setFriends(result.friends);
+    });
+
+    return () => {
+      cancelled = true;
     };
-  }, [feedItems]);
+  }, [user]);
+
+  const friendUsernames = useMemo(
+    () => new Set(friends.map((friend) => friend.username.toLowerCase())),
+    [friends],
+  );
+
+  const onlineFriends = useMemo(
+    () =>
+      friends
+        .filter((friend) => friend.presence_status === 'online' || friend.presence_status === 'in_game')
+        .slice(0, 3),
+    [friends],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (onlineFriends.length === 0) {
+      setFriendRatings({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void Promise.all(
+      onlineFriends.map(async (friend) => {
+        const result = await fetchPublicProfile(friend.username);
+        return [
+          friend.username,
+          result.profile?.glicko_rating != null
+            ? Math.round(result.profile.glicko_rating).toLocaleString()
+            : '—',
+        ] as const;
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setFriendRatings(Object.fromEntries(entries));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onlineFriends]);
+
+  const trendingMoments = useMemo(
+    () =>
+      feedItems
+        .filter((item) => item.type === 'streak' || item.type === 'daily_fritz')
+        .slice(0, 3),
+    [feedItems],
+  );
+
+  const recentTournaments = useMemo(
+    () => feedItems.filter((item) => item.type === 'tournament').slice(0, 2),
+    [feedItems],
+  );
 
   return (
-    <div className="rh-afs-screen home-page-root">
-      <div className="home-bg" aria-hidden="true">
-        <div className="home-bg__halo" />
-        <div className="home-bg__domino home-bg__domino--tl" />
-        <div className="home-bg__domino home-bg__domino--tr" />
-        <div className="home-bg__line home-bg__line--1" />
-        <div className="home-bg__line home-bg__line--2" />
-        <div className="home-bg__line home-bg__line--3" />
-        <div className="home-bg__texture" />
-      </div>
-
-      <div className="rh-afs-shell home-shell">
+    <div className="rh-sf-screen">
+      <div className="rh-sf-shell">
         <GlobalNav
           currentMode="feed"
-          activeColor="#52B6FF"
+          activeColor="var(--tier-elite)"
           onNavigate={(mode) => {
             if (mode === 'home') {
               onClose();
@@ -70,127 +152,165 @@ export default function ActivityFeedScreen({
           }}
         />
 
-        <main className="rh-afs-main home-main">
-          <section className="rh-afs-hero">
-            <div className="rh-afs-hero-copy">
-              <button className="rh-afs-back rh-back-button" onClick={onClose} aria-label="Back to home">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Back to Home
-              </button>
-              <p className="rh-afs-kicker">SOCIAL</p>
-              <h1 className="rh-afs-title">Activity Feed</h1>
-              <p className="rh-afs-subtitle">
-                Track the pulse of your Racehorse circle: ranked wins, Daily Fritz results,
-                streaks, and tournament moments in one premium social rail.
-              </p>
-              <div className="rh-afs-hero-actions">
-                {onNavigateToFriends ? (
-                  <button className="rh-afs-cta rh-afs-cta--primary" onClick={onNavigateToFriends}>
-                    Open Friends
-                  </button>
-                ) : null}
-                <button
-                  className="rh-afs-cta"
-                  onClick={() => onNavigate?.('stats')}
-                  type="button"
-                >
-                  View Stats
+        <div className="rh-sf-body">
+          <div className="rh-sf-layout">
+            <main className="rh-sf-main">
+              <header className="rh-sf-page-head">
+                <div className="rh-sf-page-copy">
+                  <h1 className="rh-sf-page-title">Activity Feed</h1>
+                  <p className="rh-sf-page-sub">
+                    See what your friends and the community are up to.
+                  </p>
+                </div>
+                <button className="rh-sf-post-btn" type="button" disabled aria-disabled="true">
+                  <span>Post Update</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </button>
-              </div>
-            </div>
-
-            <div className="rh-afs-hero-stats">
-              <article className="rh-afs-statcard rh-afs-statcard--feature">
-                <span className="rh-afs-statcard__label">Recent Volume</span>
-                <strong className="rh-afs-statcard__value">{summary.total}</strong>
-                <span className="rh-afs-statcard__meta">Tracked social moments</span>
-              </article>
-              <article className="rh-afs-statcard">
-                <span className="rh-afs-statcard__label">Ranked Wins</span>
-                <strong className="rh-afs-statcard__value">{summary.wins}</strong>
-                <span className="rh-afs-statcard__meta">Victory posts in feed</span>
-              </article>
-              <article className="rh-afs-statcard">
-                <span className="rh-afs-statcard__label">Streak Alerts</span>
-                <strong className="rh-afs-statcard__value">{summary.streaks}</strong>
-                <span className="rh-afs-statcard__meta">Momentum moments</span>
-              </article>
-              <article className="rh-afs-statcard">
-                <span className="rh-afs-statcard__label">Featured Window</span>
-                <strong className="rh-afs-statcard__value">{summary.featuredMoment}</strong>
-                <span className="rh-afs-statcard__meta">Most recent post date</span>
-              </article>
-            </div>
-          </section>
-
-          <section className="rh-afs-content">
-            <div className="rh-afs-rail">
-              <div className="rh-afs-panel-head">
-                <div>
-                  <p className="rh-afs-panel-eyebrow">Live Feed</p>
-                  <h2 className="rh-afs-panel-title">Friends and rivals</h2>
-                </div>
-                <div className="rh-afs-panel-pills" aria-hidden="true">
-                  <span className="rh-afs-panel-pill">Ranked</span>
-                  <span className="rh-afs-panel-pill">Daily</span>
-                  <span className="rh-afs-panel-pill">Streaks</span>
-                </div>
-              </div>
+              </header>
 
               {!user ? (
-                <div className="rh-afs-empty-card">
-                  <span className="rh-afs-empty-card__kicker">Account required</span>
-                  <h3>Sign in to unlock your social rail.</h3>
-                  <p>Follow friends, compare daily results, and see the latest movement across your Racehorse network.</p>
+                <div className="rh-sf-signin">
+                  <p>Sign in to see activity from your friends and rivals.</p>
                 </div>
               ) : (
                 <ActivityFeedPanel
                   user={user}
+                  friendUsernames={friendUsernames}
                   onViewProfile={onViewProfile}
                   onFeedChange={setFeedItems}
                   emptyAction={
                     onNavigateToFriends ? (
-                      <button className="rh-afs-cta rh-afs-cta--primary" onClick={onNavigateToFriends}>
+                      <button className="rh-sf-widget-link" type="button" onClick={onNavigateToFriends}>
                         Add Friends
                       </button>
                     ) : undefined
                   }
                 />
               )}
-            </div>
+            </main>
 
-            <aside className="rh-afs-sidecard">
-              <p className="rh-afs-sidecard__eyebrow">Social Radar</p>
-              <h2 className="rh-afs-sidecard__title">What this rail tracks</h2>
-              <div className="rh-afs-sidecard__list">
-                <div className="rh-afs-sidecard__item">
-                  <strong>Head-to-head results</strong>
-                  <span>Wins and losses from ranked matches surface immediately.</span>
+            <aside className="rh-sf-sidebar" aria-label="Social sidebar">
+              <section className="rh-sf-widget">
+                <div className="rh-sf-widget-head">
+                  <h2 className="rh-sf-widget-title">Online Friends</h2>
+                  <span className="rh-sf-widget-online">{onlineFriends.length} online</span>
                 </div>
-                <div className="rh-afs-sidecard__item">
-                  <strong>Daily competition</strong>
-                  <span>Daily Fritz and puzzle progress keep the social loop active between matches.</span>
+                <div className="rh-sf-widget-list">
+                  {onlineFriends.length > 0 ? onlineFriends.map((friend) => (
+                    <div key={friend.id} className="rh-sf-friend">
+                      <button
+                        className="rh-sf-friend-profile"
+                        type="button"
+                        onClick={() => onViewProfile(friend.username)}
+                      >
+                        <span className="rh-sf-avatar-wrap">
+                          <span className="rh-sf-avatar">{initials(friend.username)}</span>
+                          <span className="rh-sf-avatar-dot" aria-hidden="true" />
+                        </span>
+                        <span className="rh-sf-friend-copy">
+                          <strong>{friend.username}</strong>
+                          <span>Rating {friendRatings[friend.username] ?? '—'}</span>
+                        </span>
+                      </button>
+                      <div className="rh-sf-friend-actions">
+                        <button className="rh-sf-challenge-btn" type="button">Challenge</button>
+                        <button
+                          className="rh-sf-chat-btn"
+                          type="button"
+                          aria-label={`Message ${friend.username}`}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path
+                              d="M7 10h10M7 14h6M6 19l-2 2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6Z"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )) : (
+                    <p className="rh-sf-widget-empty">
+                      {user ? 'No friends online right now.' : 'Sign in to see who is online.'}
+                    </p>
+                  )}
                 </div>
-                <div className="rh-afs-sidecard__item">
-                  <strong>Momentum signals</strong>
-                  <span>Streaks and tournament placements highlight who is rising in your circle.</span>
+                {onNavigateToFriends ? (
+                  <button className="rh-sf-widget-link" type="button" onClick={onNavigateToFriends}>
+                    View All Friends
+                    <span aria-hidden="true">›</span>
+                  </button>
+                ) : null}
+              </section>
+
+              <section className="rh-sf-widget">
+                <h2 className="rh-sf-widget-title rh-sf-widget-title--solo">Trending Now</h2>
+                <div className="rh-sf-widget-list">
+                  {trendingMoments.length > 0 ? trendingMoments.map((item) => (
+                    <div key={item.id} className="rh-sf-trend">
+                      <span className="rh-sf-trend-icon" aria-hidden="true">
+                        {item.type === 'streak' ? '🔥' : '🏆'}
+                      </span>
+                      <span className="rh-sf-trend-copy">
+                        <strong>{item.username}</strong>
+                        <span>{trendLabel(item)}</span>
+                      </span>
+                      <span className="rh-sf-trend-link">
+                        {item.type === 'daily_fritz' ? 'Daily Fritz' : 'Play vs Fritz'} ›
+                      </span>
+                    </div>
+                  )) : (
+                    <p className="rh-sf-widget-empty">Trends appear as friends post wins and streaks.</p>
+                  )}
                 </div>
-              </div>
-              <div className="rh-afs-sidecard__footer">
-                <div className="rh-afs-sidecard__metric">
-                  <span className="rh-afs-sidecard__metric-label">Tournament moments</span>
-                  <strong>{summary.tournaments}</strong>
+                <button
+                  className="rh-sf-widget-link"
+                  type="button"
+                  onClick={() => onNavigate?.('leaderboard')}
+                >
+                  View Leaderboard
+                  <span aria-hidden="true">›</span>
+                </button>
+              </section>
+
+              <section className="rh-sf-widget">
+                <h2 className="rh-sf-widget-title rh-sf-widget-title--solo">Recent Tournaments</h2>
+                <div className="rh-sf-widget-list">
+                  {recentTournaments.length > 0 ? recentTournaments.map((item) => (
+                    <div className="rh-sf-tournament" key={item.id}>
+                      <span className="rh-sf-trend-icon rh-sf-trend-icon--trophy" aria-hidden="true">🏆</span>
+                      <span className="rh-sf-trend-copy">
+                        <strong>{tournamentTitle(item)}</strong>
+                        <span>{tournamentPlacement(item)}</span>
+                      </span>
+                      <span className="rh-sf-tournament-date">{formatMonthDay(item.created_at)} ›</span>
+                    </div>
+                  )) : (
+                    <p className="rh-sf-widget-empty">Tournament placements show up here when posted.</p>
+                  )}
                 </div>
-                <div className="rh-afs-sidecard__metric">
-                  <span className="rh-afs-sidecard__metric-label">Feed status</span>
-                  <strong>{user ? 'Live' : 'Guest'}</strong>
-                </div>
-              </div>
+                <button
+                  className="rh-sf-widget-link"
+                  type="button"
+                  onClick={() => onNavigate?.('tournament')}
+                >
+                  View Tournaments
+                  <span aria-hidden="true">›</span>
+                </button>
+              </section>
             </aside>
-          </section>
-        </main>
+          </div>
+        </div>
       </div>
     </div>
   );

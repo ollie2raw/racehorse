@@ -777,19 +777,15 @@ export default function DailyFritzScreen({
       const completedGame =
         setResult.games.find((entry) => entry.gameNumber === gameNumber) ?? fallbackCompletedGame;
 
-      setActiveRun((current) =>
-        current
-          ? {
-              ...current,
-              set_result: setResult,
-              ...(!setResult.setWinner
-                ? { current_game_number: getNextGameNumberFromSetResult(setResult) }
-                : {}),
-            }
-          : current,
-      );
-
       if (setResult.setWinner) {
+        setActiveRun((current) =>
+          current
+            ? {
+                ...current,
+                set_result: setResult,
+              }
+            : current,
+        );
         await submitSetCompletion({
           run,
           setResult,

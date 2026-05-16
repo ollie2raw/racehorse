@@ -1,10 +1,21 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import './activityFeed.css';
 
-type FilterTab = 'all' | 'wins' | 'streaks' | 'tournaments';
+type FilterTab = 'all' | 'friends' | 'wins' | 'streaks' | 'tournaments' | 'mentions';
+
+const FILTER_TABS: { id: FilterTab; label: string }[] = [
+  { id: 'all', label: 'All Activity' },
+  { id: 'friends', label: 'Friends' },
+  { id: 'wins', label: 'Wins' },
+  { id: 'streaks', label: 'Streaks' },
+  { id: 'tournaments', label: 'Tournaments' },
+  { id: 'mentions', label: 'Mentions' },
+];
+
+const PAGE_SIZE = 8;
 
 function initials(username: string): string {
   const parts = username.replace(/[^a-zA-Z0-9]/g, ' ').split(/\s+/).filter(Boolean);
@@ -14,53 +25,50 @@ function initials(username: string): string {
 
 interface ActivityFeedPanelProps {
   user: User | null;
+  friendUsernames?: Set<string>;
   onViewProfile: (username: string) => void;
   emptyAction?: React.ReactNode;
   onFeedChange?: (feed: FeedItem[]) => void;
 }
 
-function itemIcon(type: FeedItem['type']): string {
-  switch (type) {
-    case 'win': return '🏆';
-    case 'loss': return '—';
-    case 'streak': return '🔥';
-    case 'tournament': return '⚔️';
-    case 'puzzle': return '🧩';
-    case 'daily_fritz': return '🤖';
-    default: return '•';
-  }
-}
-
-function itemLabel(type: FeedItem['type']): string {
-  switch (type) {
-    case 'win': return 'Ranked Win';
-    case 'loss': return 'Ranked Loss';
-    case 'streak': return 'Streak';
-    case 'tournament': return 'Tournament';
-    case 'puzzle': return 'Puzzle';
-    case 'daily_fritz': return 'Daily Fritz';
-    default: return 'Activity';
-  }
+function formatMode(mode: unknown): string {
+  const value = typeof mode === 'string' ? mode.toLowerCase() : '';
+  if (value.includes('fritz') || value === 'bot' || value === 'daily_fritz') return 'Play vs Fritz';
+  if (value.includes('puzzle')) return 'Daily Puzzle';
+  if (value.includes('ranked')) return 'Ranked Match';
+  if (value.includes('tournament')) return 'Tournament';
+  if (value.includes('multi')) return 'Multiplayer';
+  if (!value) return 'Racehorse';
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function itemAccent(type: FeedItem['type']): string {
   switch (type) {
-    case 'win': return '#4A8FD4';
-    case 'loss': return '#7C8AA6';
-    case 'streak': return '#19D8A2';
-    case 'tournament': return '#F2A63A';
-    case 'puzzle': return '#D7A64A';
-    case 'daily_fritz': return '#D7A64A';
-    default: return '#A9B4C9';
+    case 'win':
+      return 'var(--tier-elite)';
+    case 'loss':
+      return 'rgba(231, 182, 74, 0.55)';
+    case 'streak':
+      return 'var(--tier-rookie)';
+    case 'tournament':
+      return 'var(--tier-master)';
+    case 'puzzle':
+      return 'var(--tier-standard)';
+    case 'daily_fritz':
+      return 'var(--tier-elite)';
+    default:
+      return 'var(--text-dim)';
   }
 }
 
-function itemDescription(item: FeedItem): string {
+function itemAction(item: FeedItem): string {
   const meta = item.metadata;
   switch (item.type) {
     case 'win': {
       const opp = meta.opponent_username as string | undefined;
-      const score = meta.score != null ? ` · ${meta.score}–${meta.opponent_score}` : '';
+      const score = meta.score != null && meta.opponent_score != null
+        ? ` ${meta.score}–${meta.opponent_score}`
+        : '';
       return `won vs ${opp ?? 'opponent'}${score}`;
     }
     case 'loss': {
@@ -69,23 +77,56 @@ function itemDescription(item: FeedItem): string {
     }
     case 'streak': {
       const n = meta.streak as number | undefined;
-      return `reached a ${n ?? '?'}-day streak`;
+      return `hit a ${n ?? '?'} win streak`;
     }
     case 'tournament': {
       const p = meta.placement as string | undefined;
-      return `finished ${p ?? 'a tournament'}`;
+      return `placed ${p ?? 'in a tournament'}`;
     }
     case 'puzzle': {
       const s = meta.score as number | undefined;
-      return `completed daily puzzle${s != null ? ` · ${s} pts` : ''}`;
+      return `solved daily puzzle${s != null ? ` · ${s} pts` : ''}`;
     }
     case 'daily_fritz': {
       const result = meta.result as string | undefined;
       const s = meta.score as number | undefined;
-      return `${result === 'win' ? 'beat' : 'lost to'} Daily Fritz${s != null ? ` · ${s} pts` : ''}`;
+      const verb = result === 'win' ? 'beat' : 'lost to';
+      return `${verb} Daily Fritz${s != null ? ` · ${s} pts` : ''}`;
     }
     default:
-      return 'did something';
+      return 'posted an update';
+  }
+}
+
+function itemContext(item: FeedItem): string {
+  const meta = item.metadata;
+  switch (item.type) {
+    case 'win':
+    case 'loss':
+      return formatMode(meta.mode);
+    case 'puzzle':
+      return meta.score != null ? `Daily Puzzle · ${meta.score} pts` : 'Daily Puzzle';
+    case 'daily_fritz':
+      return meta.score != null ? `Play vs Fritz · ${meta.score} pts` : 'Play vs Fritz';
+    case 'streak':
+      return meta.source === 'puzzle' ? 'Daily Puzzle streak' : 'Win streak';
+    case 'tournament':
+      return String(meta.tournament_name ?? 'Tournament');
+    default:
+      return 'Racehorse';
+  }
+}
+
+function itemBadge(type: FeedItem['type']): string | null {
+  switch (type) {
+    case 'win':
+      return '🏆';
+    case 'daily_fritz':
+      return '🎁';
+    case 'streak':
+      return '🔥';
+    default:
+      return null;
   }
 }
 
@@ -100,26 +141,39 @@ function timeAgo(isoDate: string): string {
   return `${d}d ago`;
 }
 
-const FILTER_TABS: { id: FilterTab; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'wins', label: 'Wins' },
-  { id: 'streaks', label: 'Streaks' },
-  { id: 'tournaments', label: 'Tournaments' },
-];
-
-function filterItems(items: FeedItem[], filter: FilterTab): FeedItem[] {
-  if (filter === 'all') return items;
-  if (filter === 'wins') return items.filter((i) => i.type === 'win');
-  if (filter === 'streaks') return items.filter((i) => i.type === 'streak');
-  if (filter === 'tournaments') return items.filter((i) => i.type === 'tournament');
-  return items;
+function filterItems(
+  items: FeedItem[],
+  filter: FilterTab,
+  friendUsernames: Set<string>,
+): FeedItem[] {
+  switch (filter) {
+    case 'wins':
+      return items.filter((item) => item.type === 'win');
+    case 'streaks':
+      return items.filter((item) => item.type === 'streak');
+    case 'tournaments':
+      return items.filter((item) => item.type === 'tournament');
+    case 'friends':
+      return items.filter((item) => friendUsernames.has(item.username.toLowerCase()));
+    case 'mentions':
+      return [];
+    default:
+      return items;
+  }
 }
 
-export default function ActivityFeedPanel({ user, onViewProfile, emptyAction, onFeedChange }: ActivityFeedPanelProps) {
+export default function ActivityFeedPanel({
+  user,
+  friendUsernames = new Set(),
+  onViewProfile,
+  emptyAction,
+  onFeedChange,
+}: ActivityFeedPanelProps) {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterTab>('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const load = useCallback(async () => {
     if (!user) {
@@ -140,15 +194,28 @@ export default function ActivityFeedPanel({ user, onViewProfile, emptyAction, on
 
   useEffect(() => { void load(); }, [load]);
 
-  const visible = filterItems(feed, filter);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filter]);
+
+  const filtered = useMemo(
+    () => filterItems(feed, filter, friendUsernames),
+    [feed, filter, friendUsernames],
+  );
+
+  const visible = filtered.slice(0, visibleCount);
+  const canLoadMore = visible.length < filtered.length;
 
   return (
     <div className="rh-af-panel">
-      <div className="rh-af-filter-bar">
+      <div className="rh-af-filters" role="tablist" aria-label="Activity filters">
         {FILTER_TABS.map((tab) => (
           <button
             key={tab.id}
-            className={`rh-af-filter-btn${filter === tab.id ? ' rh-af-filter-btn--active' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={filter === tab.id}
+            className={`rh-af-filter${filter === tab.id ? ' rh-af-filter--active' : ''}`}
             onClick={() => setFilter(tab.id)}
           >
             {tab.label}
@@ -156,70 +223,66 @@ export default function ActivityFeedPanel({ user, onViewProfile, emptyAction, on
         ))}
       </div>
 
-      <div className="rh-af-list">
-        {loading && (
-          <div className="rh-af-state rh-af-state--rich">
-            <div className="rh-af-state-card">
-              <span className="rh-af-state-kicker">Social</span>
-              <strong>Loading activity feed…</strong>
-              <span>Pulling in recent wins, streaks, and tournament moments.</span>
-            </div>
-          </div>
-        )}
-        {!loading && error && (
-          <div className="rh-af-state rh-af-state--rich">
-            <div className="rh-af-state-card rh-af-state-card--error">
-              <span className="rh-af-state-kicker">Feed unavailable</span>
-              <strong>{error}</strong>
-              <span>Try again in a moment.</span>
-            </div>
-          </div>
-        )}
+      <div className="rh-af-feed">
+        {loading && <p className="rh-af-status">Loading activity…</p>}
+        {!loading && error && <p className="rh-af-status rh-af-status--error">{error}</p>}
         {!loading && !error && visible.length === 0 && (
-          <div className="rh-af-state rh-af-state--rich">
-            <div className="rh-af-state-card">
-              <span className="rh-af-state-kicker">Quiet board</span>
-              <strong>No recent activity to show.</strong>
-              <span>Add friends or finish a few matches to start building your social rail.</span>
-              {emptyAction ? <div className="rh-af-state-action">{emptyAction}</div> : null}
-            </div>
+          <div className="rh-af-empty">
+            <p>
+              {filter === 'mentions'
+                ? 'Mentions will appear here when friends tag you in updates.'
+                : 'No activity matches this filter yet.'}
+            </p>
+            {emptyAction}
           </div>
         )}
-        {!loading && !error && visible.map((item) => (
-          <div
-            key={item.id}
-            className="rh-af-item"
-            style={{ ['--rh-af-accent' as string]: itemAccent(item.type) } as CSSProperties}
-          >
-            <button
-              className="rh-af-avatar"
-              onClick={() => onViewProfile(item.username)}
-              aria-label={`View ${item.username}'s profile`}
+        {!loading && !error && visible.map((item) => {
+          const badge = itemBadge(item.type);
+          return (
+            <article
+              key={item.id}
+              className="rh-af-row"
+              style={{ ['--rh-af-accent' as string]: itemAccent(item.type) } as CSSProperties}
             >
-              {initials(item.username)}
-            </button>
-            <div className="rh-af-body">
-              <div className="rh-af-meta-row">
-                <span className="rh-af-chip" aria-hidden="true">
-                  <span className="rh-af-chip-icon">{itemIcon(item.type)}</span>
-                  <span>{itemLabel(item.type)}</span>
-                </span>
-                <span className="rh-af-time rh-af-time--mobile">{timeAgo(item.created_at)}</span>
+              <button
+                type="button"
+                className="rh-af-row-avatar"
+                onClick={() => onViewProfile(item.username)}
+                aria-label={`View ${item.username}'s profile`}
+              >
+                {initials(item.username)}
+              </button>
+              <div className="rh-af-row-body">
+                <p className="rh-af-row-primary">
+                  <button
+                    type="button"
+                    className="rh-af-row-user"
+                    onClick={() => onViewProfile(item.username)}
+                  >
+                    {item.username}
+                  </button>
+                  <span>{itemAction(item)}</span>
+                  {badge ? <span className="rh-af-row-badge" aria-hidden="true">{badge}</span> : null}
+                </p>
+                <p className="rh-af-row-secondary">{itemContext(item)}</p>
               </div>
-              <div className="rh-af-copy-row">
-                <button
-                  className="rh-af-username"
-                  onClick={() => onViewProfile(item.username)}
-                >
-                  {item.username}
-                </button>
-                <span className="rh-af-desc">{itemDescription(item)}</span>
-              </div>
-            </div>
-            <span className="rh-af-time">{timeAgo(item.created_at)}</span>
-          </div>
-        ))}
+              <time className="rh-af-row-time" dateTime={item.created_at}>
+                {timeAgo(item.created_at)}
+              </time>
+            </article>
+          );
+        })}
       </div>
+
+      {!loading && !error && canLoadMore ? (
+        <button
+          type="button"
+          className="rh-af-load-more"
+          onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+        >
+          Load More
+        </button>
+      ) : null}
     </div>
   );
 }
