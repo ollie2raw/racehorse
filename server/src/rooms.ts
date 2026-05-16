@@ -6,6 +6,7 @@ import {
   startNewHand,
   drawOne,
   applyMove,
+  finalizeMandatoryAutoPasses,
   getLegalMoves,
   getOpenEnds,
   canDraw,
@@ -59,6 +60,8 @@ export type Room = {
   scheduledTournamentId?: string;
   /** One-shot metadata for the next `state:update` after resolving forced-draw steps (cleared after emit). */
   pendingForcedDrawBroadcast?: { playerId: string; count: number };
+  /** One-shot: socket ids that auto-passed this resolution (cleared after `state:update`). */
+  pendingAutoPassNotice?: string[];
 };
 
 export type DrawAnimationStep = {
@@ -604,6 +607,15 @@ export interface ActionPayload {
   };
 }
 
+function commitResolvedGameState(room: Room, assertLabel: string, nextState: GameState, autoPassExtras?: string[]) {
+  const finalized = finalizeMandatoryAutoPasses(nextState);
+  room.state = finalized.state;
+  assertValidGameState(room.state, assertLabel);
+  const extras = autoPassExtras?.filter(Boolean) ?? [];
+  const merged = [...extras, ...finalized.autoPassedPlayerIds];
+  room.pendingAutoPassNotice = merged.length > 0 ? merged : undefined;
+}
+
 /**
  * Processes an action for a room.
  * Note: `onStateReady` is passed through to `readyForNextHand` only. `act()` itself does not invoke it.
@@ -646,8 +658,8 @@ export async function act(
 
     const previousState = state;
     const result = resolveDrawUntilPlayableAtomically(state, socketId);
-    room.state = result.state;
-    assertValidGameState(room.state, `act:DRAW:${code}`);
+    const drawAutoPassExtras = result.passed ? [socketId] : [];
+    commitResolvedGameState(room, `act:DRAW:${code}`, result.state, drawAutoPassExtras);
     appendRoomEvent(room, {
       type: 'draw_requested',
       actorSocketId: socketId,
@@ -746,10 +758,10 @@ export async function act(
       authoritativeState = resolvedForced.state;
     }
 
-    room.state = authoritativeState;
-    assertValidGameState(
-      room.state,
+    commitResolvedGameState(
+      room,
       forcedDraw ? `act:MOVE:forcedDraw:${code}` : `act:MOVE:${code}`,
+      authoritativeState,
     );
 
     if (forcedDraw && resolvedForced) {
@@ -809,8 +821,8 @@ export async function act(
       forced_draw: false,
     });
     room.ghostTurnIndex += 1;
-    room.state = applyMove(state, socketId, { type: 'pass' }).state;
-    assertValidGameState(room.state, `act:PASS:${code}`);
+    const afterPass = applyMove(state, socketId, { type: 'pass' }).state;
+    commitResolvedGameState(room, `act:PASS:${code}`, afterPass);
     appendRoomEvent(room, {
       type: 'turn_passed',
       actorSocketId: socketId,

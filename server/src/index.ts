@@ -4821,6 +4821,10 @@ function broadcastStateUpdate(roomCode: string) {
   if (!sockets) return;
 
   const pendingForcedDraw = room.pendingForcedDrawBroadcast;
+  const pendingAutoPasses =
+    Array.isArray(room.pendingAutoPassNotice) && room.pendingAutoPassNotice.length > 0
+      ? room.pendingAutoPassNotice
+      : undefined;
 
   const currentScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
@@ -4856,6 +4860,7 @@ function broadcastStateUpdate(roomCode: string) {
               forcedDrawActorId: pendingForcedDraw.playerId,
             }
           : {}),
+        ...(pendingAutoPasses ? { recentAutoPasses: pendingAutoPasses } : {}),
       });
 
       if (
@@ -4896,6 +4901,7 @@ function broadcastStateUpdate(roomCode: string) {
             forcedDrawActorId: pendingForcedDraw.playerId,
           }
         : {}),
+      ...(pendingAutoPasses ? { recentAutoPasses: pendingAutoPasses } : {}),
     };
     const currentRoomSockets = io.sockets.adapter.rooms.get(room.code);
     if (currentRoomSockets) {
@@ -4915,6 +4921,7 @@ function broadcastStateUpdate(roomCode: string) {
   }
 
   room.pendingForcedDrawBroadcast = undefined;
+  room.pendingAutoPassNotice = undefined;
 
   // Game-over archival / rating MUST follow state:update so clients are not stalled on I/O.
   setImmediate(() => scheduleDeferredMatchPersist?.());

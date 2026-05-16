@@ -4,6 +4,7 @@ import {
   startNewHand,
   getLegalMoves,
   applyMove,
+  finalizeMandatoryAutoPasses,
   computeOpenEndsSum,
   computePlayScore,
   getOpenEnds,
@@ -875,6 +876,65 @@ describe('Blocked hand', () => {
     // A gets bonus of 2
     expect(next.players.A.score).toBe(12); // 10 + 2
     expect(next.players.B.score).toBe(5); // unchanged
+  });
+});
+
+describe('finalizeMandatoryAutoPasses', () => {
+  it('auto-passes locked-out player so turn rests on someone who can act', () => {
+    const locked = setupState({
+      board: {
+        mainLine: [pt(1, 4)],
+        leftEnd: 1,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      currentPlayerIndex: 1,
+      players: {
+        A: { id: 'A', hand: [t(1, 5)], score: 0 },
+        B: { id: 'B', hand: [t(6, 6)], score: 0 },
+      },
+      boneyard: [t(0, 0), t(0, 1)],
+      deadTiles: [t(0, 0), t(0, 1)],
+      config: { ...DEFAULT_CONFIG, deadTileCount: 2 },
+      consecutivePasses: 0,
+    });
+
+    expect(getLegalMoves(locked, 'B').every((m) => m.type !== 'play')).toBe(true);
+
+    const { state: fin, autoPassedPlayerIds } = finalizeMandatoryAutoPasses(locked);
+
+    expect(autoPassedPlayerIds).toEqual(['B']);
+    expect(fin.currentPlayerIndex).toBe(0);
+    expect(getLegalMoves(fin, 'A').some((m) => m.type === 'play')).toBe(true);
+  });
+
+  it('does nothing when drawable boneyard exists (player must DRAW first)', () => {
+    const canDrawInstead = setupState({
+      board: {
+        mainLine: [pt(1, 4)],
+        leftEnd: 1,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      currentPlayerIndex: 1,
+      players: {
+        A: { id: 'A', hand: [t(2, 2)], score: 0 },
+        B: { id: 'B', hand: [t(6, 6)], score: 0 },
+      },
+      boneyard: [t(0, 0), t(0, 1), t(2, 3)],
+      deadTiles: [t(0, 0), t(0, 1)],
+      config: { ...DEFAULT_CONFIG, deadTileCount: 2 },
+      consecutivePasses: 0,
+    });
+
+    expect(canDraw(canDrawInstead, 'B')).toBe(true);
+    const { state: fin, autoPassedPlayerIds } = finalizeMandatoryAutoPasses(canDrawInstead);
+    expect(autoPassedPlayerIds).toEqual([]);
+    expect(fin).toEqual(canDrawInstead);
   });
 });
 

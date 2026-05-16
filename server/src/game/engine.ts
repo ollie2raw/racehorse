@@ -496,6 +496,35 @@ export function drawOne(
   };
 }
 
+/**
+ * Applies PASS repeatedly for the current player while they have no legal plays
+ * and the boneyard has no drawable (non-dead) tiles. Stops when someone can play,
+ * can draw, or the hand ends.
+ */
+export function finalizeMandatoryAutoPasses(state: GameState): {
+  state: GameState;
+  autoPassedPlayerIds: string[];
+} {
+  let s = state;
+  const autoPassedPlayerIds: string[] = [];
+  const maxSteps = 32;
+
+  for (let i = 0; i < maxSteps; i++) {
+    if (s.handOver || s.gameOver) break;
+
+    const pid = s.playerIds[s.currentPlayerIndex];
+    const moves = getLegalMoves(s, pid);
+    if (moves.some((m) => m.type === 'play')) break;
+    if (getDrawableBoneyardCount(s) > 0) break;
+    if (!moves.some((m) => m.type === 'pass')) break;
+
+    autoPassedPlayerIds.push(pid);
+    s = applyMove(s, pid, { type: 'pass' }).state;
+  }
+
+  return { state: s, autoPassedPlayerIds };
+}
+
 export function applyMove(
   state: GameState,
   playerId: string,

@@ -2870,7 +2870,7 @@ export default function App() {
       return;
     }
 
-    const autoAction: 'draw' | 'pass' | null = canDrawNow ? 'draw' : canPass ? 'pass' : null;
+    const autoAction: 'draw' | 'pass' | null = canDrawNow ? 'draw' : canPass && !joinedRoom ? 'pass' : null;
     if (!autoAction) return;
 
     const turnKey = `${state?.handNumber ?? 0}:${state?.currentPlayerIndex ?? -1}:${myHand.length}:${boneyardCount}:${autoAction}`;

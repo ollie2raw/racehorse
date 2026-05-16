@@ -16,6 +16,8 @@ export type StateUpdatePayload = {
   /** Set with `state` when the server aggregated a forced-draw chain after a PLAY. */
   forcedDrawCount?: number;
   forcedDrawActorId?: string;
+  /** Server auto-passed players (socket ids) this frame — show a brief notice. */
+  recentAutoPasses?: string[];
 };
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
@@ -250,6 +252,11 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       params.setOptimisticPlayedTile(null);
       params.setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       params.setCanDraw(Boolean(payload?.canDraw));
+
+      const autoPassIds = Array.isArray(payload.recentAutoPasses) ? payload.recentAutoPasses : [];
+      if (autoPassIds.length > 0) {
+        params.showToast('No moves available — passing…', 1500);
+      }
 
       if (selfForcedRevealPending) {
         if (params.drawSequenceTimeoutRef.current) {
