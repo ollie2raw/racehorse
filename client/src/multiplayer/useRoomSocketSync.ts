@@ -38,9 +38,12 @@ type UseRoomSocketSyncParams = {
   applyRoomEventMeta: (meta?: RoomEventMeta | null) => void;
   setFriendInvite: Dispatch<
     SetStateAction<{
+      inviteId: string;
       fromUsername: string;
+      fromUserId: string | null;
       roomCode: string;
       inviteUrl: string;
+      matchSummary: string;
     } | null>
   >;
   joinedRoomRef: MutableRefObject<string | null>;
@@ -151,8 +154,22 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
 
     const onFriendInvited = wrapSocketHandler(
       'friend:invited',
-      (payload: { fromUsername: string; roomCode: string; inviteUrl: string }) => {
-        params.setFriendInvite(payload);
+      (payload: {
+        inviteId?: string;
+        fromUsername: string;
+        fromUserId?: string | null;
+        roomCode: string;
+        inviteUrl: string;
+        matchSummary?: string;
+      }) => {
+        params.setFriendInvite({
+          inviteId: String(payload.inviteId ?? `${Date.now()}-${payload.roomCode}`),
+          fromUsername: payload.fromUsername,
+          fromUserId: payload.fromUserId ?? null,
+          roomCode: payload.roomCode,
+          inviteUrl: payload.inviteUrl,
+          matchSummary: payload.matchSummary ?? '7-Tile · First to 60 · Untimed',
+        });
       },
     );
 

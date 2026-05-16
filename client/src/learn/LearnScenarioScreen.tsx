@@ -242,7 +242,6 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
     <>
     <RotateOverlay />
     <div className="screen learn-scenario-screen" style={{ 
-      background: 'linear-gradient(180deg, #0f172a 0%, #020617 100%)',
       color: 'white',
       height: '100vh',
       maxHeight: '100vh',

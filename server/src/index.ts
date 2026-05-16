@@ -4500,24 +4500,71 @@ io.on('connection', (socket: Socket) => {
 
   socket.on(
     'friend:invite',
-    (payload: { toUserId: string; fromUsername: string; roomCode: string; inviteUrl: string }) => {
+    (
+      payload: {
+        toUserId: string;
+        fromUsername: string;
+        fromUserId?: string;
+        roomCode: string;
+        inviteUrl: string;
+        inviteId?: string;
+        matchSummary?: string;
+      },
+      cb?: AckFn,
+    ) => {
       const roomCode = String(payload?.roomCode ?? '').trim().toUpperCase();
       try {
         getRoom(roomCode);
       } catch {
         console.log(`[friend:invite] ERROR room_not_found code=${roomCode} from=${socket.id}`);
         socket.emit('friend:invite:error', { ok: false, error: 'room_not_found' });
+        cb?.({ ok: false, error: 'room_not_found' });
         return;
       }
       const toUserId = normalizeUserId(payload?.toUserId);
-      if (!toUserId) return;
+      if (!toUserId) {
+        cb?.({ ok: false, error: 'invalid_target' });
+        return;
+      }
       const targetSockets = socketsByUserId.get(toUserId);
-      if (!targetSockets) return;
+      if (!targetSockets || targetSockets.size === 0) {
+        cb?.({ ok: false, error: 'recipient_unreachable' });
+        return;
+      }
+      const fromUserId =
+        normalizeUserId(payload?.fromUserId) ??
+        normalizeUserId(socket.data?.userId as string | undefined);
+      const inviteId = String(payload?.inviteId ?? `${Date.now()}-${roomCode}`).slice(0, 80);
+      const matchSummary = String(payload?.matchSummary ?? '7-Tile · First to 60 · Untimed').slice(0, 120);
       for (const socketId of targetSockets) {
         io.to(socketId).emit('friend:invited', {
+          inviteId,
           fromUsername: normalizeUsername(payload?.fromUsername),
+          fromUserId,
           roomCode,
           inviteUrl: String(payload?.inviteUrl ?? ''),
+          matchSummary,
+        });
+      }
+      cb?.({ ok: true, delivered: true, inviteId });
+    },
+  );
+
+  socket.on(
+    'friend:invite:decline',
+    (payload: { toUserId?: string; roomCode?: string; inviteId?: string }) => {
+      const challengerUserId = normalizeUserId(payload?.toUserId);
+      if (!challengerUserId) return;
+      const challengerSockets = socketsByUserId.get(challengerUserId);
+      if (!challengerSockets) return;
+      const fromUsername = normalizeUsername(socket.data?.username as string | undefined);
+      const roomCode = String(payload?.roomCode ?? '').trim().toUpperCase();
+      const inviteId = String(payload?.inviteId ?? '').slice(0, 80);
+      for (const socketId of challengerSockets) {
+        io.to(socketId).emit('friend:invite:declined', {
+          inviteId: inviteId || undefined,
+          fromUsername,
+          roomCode: roomCode || undefined,
         });
       }
     },

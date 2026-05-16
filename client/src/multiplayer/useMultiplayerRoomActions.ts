@@ -1,6 +1,14 @@
 import { useCallback, useEffect } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
+import {
+  FRIEND_CHALLENGE_EXPIRY_MS,
+  FRIEND_CHALLENGE_MATCH_SUMMARY,
+  makeFriendChallengeInviteId,
+  type FriendChallengeTarget,
+  type OutboundChallenge,
+  type SendFriendChallengeResult,
+} from './friendChallenge';
 
 type PendingUiAction = null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play';
 
@@ -11,9 +19,12 @@ type RoomJoinConfig = {
 };
 
 type FriendInvite = {
+  inviteId: string;
   fromUsername: string;
+  fromUserId: string | null;
   roomCode: string;
   inviteUrl: string;
+  matchSummary: string;
 } | null;
 
 type UseMultiplayerRoomActionsParams = {
@@ -80,6 +91,9 @@ type UseMultiplayerRoomActionsParams = {
   setRoomRecoveryState: Dispatch<SetStateAction<'idle' | 'reconnecting' | 'resyncing' | 'failed'>>;
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
   setFriendInvite: Dispatch<SetStateAction<FriendInvite>>;
+  setMpSubView: Dispatch<SetStateAction<'quick' | 'private'>>;
+  outboundChallenge: OutboundChallenge | null;
+  setOutboundChallenge: Dispatch<SetStateAction<OutboundChallenge | null>>;
   roomIdentityRef: MutableRefObject<{
     username: string;
     userId: string | null;
@@ -241,6 +255,148 @@ export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParam
     }
   }, [params, roomJoinConfig]);
 
+  const ensureSocketConnected = useCallback(async (): Promise<boolean> => {
+    const activeSocket = params.socketRef.current;
+    if (activeSocket?.connected) return true;
+    params.connectRef.current();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error('Connection timed out')), 15000);
+        params.socketRef.current?.once('connect', () => {
+          window.clearTimeout(timeout);
+          resolve();
+        });
+        params.socketRef.current?.once('connect_error', () => {
+          window.clearTimeout(timeout);
+          reject(new Error('Connection failed'));
+        });
+      });
+      return Boolean(params.socketRef.current?.connected);
+    } catch {
+      return false;
+    }
+  }, [params]);
+
+  const sendFriendChallenge = useCallback(
+    async (target: FriendChallengeTarget): Promise<SendFriendChallengeResult> => {
+      if (!target.userId || target.userId.startsWith('demo-')) {
+        return { ok: false, error: 'invalid_target' };
+      }
+      if (!params.authUserId) {
+        return { ok: false, error: 'invalid_target' };
+      }
+      if (target.userId === params.authUserId) {
+        return { ok: false, error: 'self' };
+      }
+      if (target.presenceStatus === 'offline') {
+        return { ok: false, error: 'offline' };
+      }
+      if (target.presenceStatus === 'in_game') {
+        return { ok: false, error: 'in_game' };
+      }
+      if (
+        params.outboundChallenge
+        && params.outboundChallenge.friendUserId === target.userId
+      ) {
+        return { ok: false, error: 'already_pending' };
+      }
+      if (params.outboundChallenge) {
+        return { ok: false, error: 'already_pending' };
+      }
+
+      const connected = await ensureSocketConnected();
+      if (!connected || !params.socketRef.current) {
+        return { ok: false, error: 'not_connected' };
+      }
+
+      let roomCode = params.normalizeRoomCode(params.joinedRoomRef.current);
+      if (!roomCode) {
+        try {
+          const resp = await params.emitCreateRoom(params.socketRef.current);
+          roomCode = params.normalizeRoomCode(resp?.roomCode);
+          if (roomCode) {
+            params.setRoomCode(roomCode);
+            params.setPlayers(params.normalizeRoomPlayers(resp?.players ?? []));
+          }
+        } catch {
+          return { ok: false, error: 'room_failed' };
+        }
+      }
+
+      const inviteUrl = roomCode ? params.getInviteLink(roomCode) : '';
+      if (!roomCode || !inviteUrl) {
+        return { ok: false, error: 'room_failed' };
+      }
+
+      const inviteId = makeFriendChallengeInviteId();
+      try {
+        const deliverResp = await params.emitWithAck<{
+          ok?: boolean;
+          error?: string;
+          delivered?: boolean;
+        }>(params.socketRef.current, 'friend:invite', {
+          inviteId,
+          toUserId: target.userId,
+          fromUsername: params.authUsername,
+          fromUserId: params.authUserId,
+          roomCode,
+          inviteUrl,
+          matchSummary: FRIEND_CHALLENGE_MATCH_SUMMARY,
+        });
+        if (!deliverResp?.ok) {
+          if (deliverResp?.error === 'recipient_unreachable') {
+            return { ok: false, error: 'unreachable' };
+          }
+          if (deliverResp?.error === 'room_not_found') {
+            return { ok: false, error: 'room_failed' };
+          }
+          return { ok: false, error: 'unreachable' };
+        }
+      } catch {
+        return { ok: false, error: 'unreachable' };
+      }
+
+      const expiresAt = Date.now() + FRIEND_CHALLENGE_EXPIRY_MS;
+      params.setOutboundChallenge({
+        inviteId,
+        friendUserId: target.userId,
+        friendUsername: target.username,
+        roomCode,
+        matchSummary: FRIEND_CHALLENGE_MATCH_SUMMARY,
+        expiresAt,
+      });
+
+      params.setAppMode('multiplayer');
+      params.setMpSubView('private');
+      params.setRoomCode(roomCode);
+
+      return {
+        ok: true,
+        inviteId,
+        roomCode,
+        expiresAt,
+      };
+    },
+    [ensureSocketConnected, params],
+  );
+
+  const declineFriendInvite = useCallback(() => {
+    const invite = params.friendInvite;
+    if (!invite || !params.socket?.connected) {
+      params.setFriendInvite(null);
+      return;
+    }
+    if (invite.fromUserId) {
+      params.socket.emit('friend:invite:decline', {
+        toUserId: invite.fromUserId,
+        roomCode: invite.roomCode,
+        inviteId: invite.inviteId,
+      });
+    }
+    params.setFriendInvite(null);
+    params.showToast('Challenge declined.', 1800);
+  }, [params]);
+
   const acceptFriendInvite = useCallback(async () => {
     if (!params.socket || !params.friendInvite) return;
     if (params.inviteJoinInFlightRef.current) return;
@@ -285,6 +441,7 @@ export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParam
       }
       params.applyJoinedRoomResponse(resp);
       params.setAppMode('multiplayer');
+      params.setMpSubView('private');
       params.autoJoinAttemptedRef.current = false;
       params.setFriendInvite(null);
     } catch (error) {
@@ -346,5 +503,7 @@ export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParam
     createRoom,
     joinRoom,
     acceptFriendInvite,
+    declineFriendInvite,
+    sendFriendChallenge,
   };
 }

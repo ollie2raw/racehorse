@@ -6184,7 +6184,7 @@ export default function BotMatchScreen({
       <RotateOverlay />
       <div
         ref={rootRef}
-        className={`screen game-screen walnut-live theme-${isLessonLayoutMode ? 'green' : uiTheme} bot-match-screen ${isLessonLayoutMode ? 'learn-lesson-screen claude-mode-screen-shell' : ''}`}
+        className={`screen game-screen walnut-live theme-${isLessonLayoutMode ? 'green' : uiTheme} bot-match-screen bot-match-mode-${mode} ${isLessonLayoutMode ? 'learn-lesson-screen claude-mode-screen-shell' : ''}`}
       >
       {isLessonLayoutMode && (
         <div className="home-bg" aria-hidden="true">

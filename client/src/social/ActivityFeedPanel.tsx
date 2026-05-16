@@ -3,9 +3,9 @@ import type { User } from '@supabase/supabase-js';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import './activityFeed.css';
 
-type FilterTab = 'all' | 'friends' | 'wins' | 'streaks' | 'tournaments' | 'mentions';
+export type ActivityFeedFilterTab = 'all' | 'friends' | 'wins' | 'streaks' | 'tournaments' | 'mentions';
 
-const FILTER_TABS: { id: FilterTab; label: string }[] = [
+export const ACTIVITY_FEED_FILTER_TABS: { id: ActivityFeedFilterTab; label: string }[] = [
   { id: 'all', label: 'All Activity' },
   { id: 'friends', label: 'Friends' },
   { id: 'wins', label: 'Wins' },
@@ -20,8 +20,37 @@ function initials(username: string): string {
   return username.slice(0, 2).toUpperCase();
 }
 
+interface ActivityFeedFilterTabsProps {
+  filter: ActivityFeedFilterTab;
+  onFilterChange: (filter: ActivityFeedFilterTab) => void;
+}
+
+export function ActivityFeedFilterTabs({ filter, onFilterChange }: ActivityFeedFilterTabsProps) {
+  return (
+    <nav
+      className="rh-af-filters social-tabs-row social-filter-tabs"
+      role="tablist"
+      aria-label="Activity filters"
+    >
+      {ACTIVITY_FEED_FILTER_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={filter === tab.id}
+          className={`rh-af-filter social-filter-tab${filter === tab.id ? ' rh-af-filter--active active' : ''}`}
+          onClick={() => onFilterChange(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 interface ActivityFeedPanelProps {
   user: User | null;
+  filter: ActivityFeedFilterTab;
   friendUsernames?: Set<string>;
   onViewProfile: (username: string) => void;
   emptyAction?: React.ReactNode;
@@ -30,9 +59,10 @@ interface ActivityFeedPanelProps {
 
 interface FeedRowCopy {
   action: string;
-  secondary: string;
-  score: string | null;
-  badge: string | null;
+  detail: string | null;
+  pill: string;
+  icon: string;
+  accent: 'win' | 'loss' | 'streak' | 'tournament' | 'fritz' | 'puzzle' | 'mention';
 }
 
 function formatMode(mode: unknown): string {
@@ -70,45 +100,53 @@ function feedRowCopy(item: FeedItem): FeedRowCopy {
           : null;
       return {
         action: `won vs ${opp ?? 'opponent'}`,
-        secondary: `${formatMode(meta.mode)}${tilesSuffix(meta)}`,
-        score,
-        badge: '🏆',
+        detail: score ? `${score} 🏆` : '🏆',
+        pill: `${formatMode(meta.mode)}${tilesSuffix(meta) || ' • Ranked'}`,
+        icon: '🏆',
+        accent: 'win',
       };
     }
     case 'loss': {
       const opp = meta.opponent_username as string | undefined;
       return {
         action: `lost vs ${opp ?? 'opponent'}`,
-        secondary: `${formatMode(meta.mode)}${tilesSuffix(meta)}`,
-        score: null,
-        badge: null,
+        detail:
+          meta.score != null && meta.opponent_score != null
+            ? `${meta.score}–${meta.opponent_score}`
+            : null,
+        pill: `${formatMode(meta.mode)}${tilesSuffix(meta) || ' • Ranked'}`,
+        icon: '•',
+        accent: 'loss',
       };
     }
     case 'streak': {
       const n = meta.streak as number | undefined;
       return {
         action: `${n ?? '?'} win streak`,
-        secondary: meta.source === 'puzzle' ? 'Daily Puzzle' : 'Play vs Fritz',
-        score: null,
-        badge: '🔥',
+        detail: null,
+        pill: meta.source === 'puzzle' ? 'Daily Puzzle' : 'Play vs Fritz',
+        icon: '🔥',
+        accent: 'streak',
       };
     }
     case 'tournament': {
       const p = meta.placement as string | undefined;
       return {
-        action: p ?? 'Tournament placement',
-        secondary: String(meta.tournament_name ?? 'Tournament'),
-        score: null,
-        badge: null,
+        action: String(meta.tournament_name ?? 'Tournament'),
+        detail: p ?? 'Placement posted',
+        pill: 'Tournament Result',
+        icon: '🏆',
+        accent: 'tournament',
       };
     }
     case 'puzzle': {
       const s = meta.score as number | undefined;
       return {
         action: 'completed daily puzzle',
-        secondary: s != null ? `Daily Puzzle · ${s} pts` : 'Daily Puzzle',
-        score: null,
-        badge: null,
+        detail: s != null ? `${s} pts` : null,
+        pill: 'Daily Puzzle',
+        icon: '◆',
+        accent: 'puzzle',
       };
     }
     case 'daily_fritz': {
@@ -120,22 +158,30 @@ function feedRowCopy(item: FeedItem): FeedRowCopy {
         playerScore != null && fritzScore != null ? `${playerScore}-${fritzScore}` : null;
       const legacyScore = meta.score as number | undefined;
       const verb = result === 'win' ? 'won' : 'lost';
+      const ptsDetail =
+        scoreline
+          ?? (legacyScore != null ? `${legacyScore} pts` : null);
       return {
         action:
           gameNumber != null && scoreline
-            ? `${verb} Game ${gameNumber} vs Daily Fritz · ${scoreline}`
+            ? `${verb} Game ${gameNumber} vs Daily Fritz`
             : `${verb} to Daily Fritz`,
-        secondary: scoreline ? 'Daily Fritz Set' : legacyScore != null ? `Daily Fritz · ${legacyScore} pts` : 'Daily Fritz',
-        score: null,
-        badge: result === 'win' ? '🏆' : '🎁',
+        detail:
+          ptsDetail && result === 'win'
+            ? `${ptsDetail} 🏆`
+            : ptsDetail,
+        pill: scoreline ? 'Daily Fritz · Elite' : 'Daily Fritz · Elite',
+        icon: result === 'win' ? '🏆' : '•',
+        accent: result === 'win' ? 'win' : 'loss',
       };
     }
     default:
       return {
         action: 'posted an update',
-        secondary: 'Racehorse',
-        score: null,
-        badge: null,
+        detail: null,
+        pill: 'Racehorse',
+        icon: '•',
+        accent: 'mention',
       };
   }
 }
@@ -153,7 +199,7 @@ function timeAgo(isoDate: string): string {
 
 function filterItems(
   items: FeedItem[],
-  filter: FilterTab,
+  filter: ActivityFeedFilterTab,
   friendUsernames: Set<string>,
 ): FeedItem[] {
   switch (filter) {
@@ -174,6 +220,7 @@ function filterItems(
 
 export default function ActivityFeedPanel({
   user,
+  filter,
   friendUsernames = new Set(),
   onViewProfile,
   emptyAction,
@@ -182,7 +229,7 @@ export default function ActivityFeedPanel({
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterTab>('all');
+  const [visibleCount, setVisibleCount] = useState(10);
 
   const load = useCallback(async () => {
     if (!user) {
@@ -198,6 +245,7 @@ export default function ActivityFeedPanel({
       return;
     }
     setFeed(result.feed);
+    setVisibleCount(10);
     onFeedChange?.(result.feed);
   }, [onFeedChange, user]);
 
@@ -207,26 +255,13 @@ export default function ActivityFeedPanel({
     () => filterItems(feed, filter, friendUsernames),
     [feed, filter, friendUsernames],
   );
+  const visibleItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+  const canLoadMore = visibleCount < filtered.length;
 
   return (
-    <div className="rh-af-panel">
-      <div className="rh-af-filters" role="tablist" aria-label="Activity filters">
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={filter === tab.id}
-            className={`rh-af-filter${filter === tab.id ? ' rh-af-filter--active' : ''}`}
-            onClick={() => setFilter(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="rh-af-feed-card">
-        <div className="rh-af-feed">
+    <div className="rh-af-panel social-feed-panel">
+      <div className="rh-af-feed-card rh-social-card social-feed-panel-surface">
+        <div className="rh-af-feed social-feed-scroll">
           {loading && <p className="rh-af-status">Loading activity…</p>}
           {!loading && error && <p className="rh-af-status rh-af-status--error">{error}</p>}
           {!loading && !error && filtered.length === 0 && (
@@ -239,7 +274,7 @@ export default function ActivityFeedPanel({
               {emptyAction}
             </div>
           )}
-          {!loading && !error && filtered.map((item) => {
+          {!loading && !error && visibleItems.map((item) => {
             const copy = feedRowCopy(item);
             const modeKey = item.type === 'win' || item.type === 'loss'
               ? feedModeKey(item.metadata.mode)
@@ -247,13 +282,23 @@ export default function ActivityFeedPanel({
             return (
               <article
                 key={item.id}
-                className="rh-af-row"
+                className="rh-af-row rh-activity-row"
                 data-feed-type={item.type}
                 data-feed-mode={modeKey}
+                data-feed-accent={copy.accent}
+                data-event={
+                  copy.accent === 'fritz' || copy.accent === 'puzzle'
+                    ? copy.accent === 'puzzle'
+                      ? 'puzzle'
+                      : 'win'
+                    : copy.accent === 'mention'
+                      ? 'social'
+                      : copy.accent
+                }
               >
                 <button
                   type="button"
-                  className="rh-af-row-avatar"
+                  className="rh-af-row-avatar rh-social-avatar"
                   onClick={() => onViewProfile(item.username)}
                   aria-label={`View ${item.username}'s profile`}
                 >
@@ -269,10 +314,14 @@ export default function ActivityFeedPanel({
                       {item.username}
                     </button>
                     <span className="rh-af-row-action">{copy.action}</span>
-                    {copy.score ? <span className="rh-af-row-score">{copy.score}</span> : null}
-                    {copy.badge ? <span className="rh-af-row-badge" aria-hidden="true">{copy.badge}</span> : null}
+                    {copy.detail ? <span className="rh-af-row-score">{copy.detail}</span> : null}
+                    {!copy.detail && copy.icon !== '•' ? (
+                      <span className="rh-af-row-badge" aria-hidden="true">{copy.icon}</span>
+                    ) : null}
                   </p>
-                  <p className="rh-af-row-secondary">{copy.secondary}</p>
+                  <div className="rh-af-row-secondary-wrap">
+                    <span className="rh-af-row-secondary rh-activity-pill">{copy.pill}</span>
+                  </div>
                 </div>
                 <time className="rh-af-row-time" dateTime={item.created_at}>
                   {timeAgo(item.created_at)}
@@ -280,6 +329,17 @@ export default function ActivityFeedPanel({
               </article>
             );
           })}
+          {!loading && !error && canLoadMore ? (
+            <div className="rh-af-load-more-wrap">
+              <button
+                type="button"
+                className="rh-af-load-more"
+                onClick={() => setVisibleCount((count) => count + 10)}
+              >
+                Load More
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

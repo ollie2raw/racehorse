@@ -70,6 +70,8 @@ import TournamentResultScreen from './tournament/TournamentResultScreen';
 import TournamentMatchBanner from './tournament/TournamentMatchBanner';
 import { useTournament } from './tournament/useTournament';
 import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
+import IncomingFriendChallengeCard from './multiplayer/IncomingFriendChallengeCard';
+import type { OutboundChallenge } from './multiplayer/friendChallenge';
 import MatchmakingScreen from './matchmaking/MatchmakingScreen';
 import { MatchFoundOverlay } from './matchmaking/MatchFoundOverlay';
 import type { MatchFoundPayload } from './matchmaking/types';
@@ -993,10 +995,15 @@ export default function App() {
   const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
   const [playersOnlineCount, setPlayersOnlineCount] = useState<number | null>(null);
   const [friendInvite, setFriendInvite] = useState<{
+    inviteId: string;
     fromUsername: string;
+    fromUserId: string | null;
     roomCode: string;
     inviteUrl: string;
+    matchSummary: string;
   } | null>(null);
+  const [outboundChallenge, setOutboundChallenge] = useState<OutboundChallenge | null>(null);
+  const clearOutboundChallenge = useCallback(() => setOutboundChallenge(null), []);
 
   useEffect(() => {
     if (!authUser) {
@@ -1465,11 +1472,13 @@ export default function App() {
     setRoomRecoveryMessage('');
     setRoomReactions([]);
     resetMultiplayerRoomState({ clearRoomCode: true });
+    clearOutboundChallenge();
     /* Stay on Private Match → create / join lobby; do not jump to Quick Match. */
     setMpSubView('private');
   }, [
     normalizeRoomCode,
     clearReconnectAttemptTimer,
+    clearOutboundChallenge,
     resetMultiplayerRoomState,
     setMpSubView,
     setIsRecoveringConnection,
@@ -1848,9 +1857,51 @@ export default function App() {
 
   useEffect(() => {
     if (!friendInvite) return;
-    const timer = setTimeout(() => setFriendInvite(null), 30000);
+    const timer = setTimeout(() => {
+      setFriendInvite(null);
+    }, 60_000);
     return () => clearTimeout(timer);
   }, [friendInvite]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onDeclined = (payload: { inviteId?: string; fromUsername?: string }) => {
+      setOutboundChallenge((current) => {
+        if (!current) return null;
+        if (payload.inviteId && current.inviteId !== payload.inviteId) return current;
+        const name = payload.fromUsername ?? current.friendUsername;
+        showToast(`${name} declined the challenge.`, 2400);
+        return null;
+      });
+    };
+    socket.on('friend:invite:declined', onDeclined);
+    return () => {
+      socket.off('friend:invite:declined', onDeclined);
+    };
+  }, [showToast, socket]);
+
+  useEffect(() => {
+    if (!outboundChallenge) return;
+    const delay = Math.max(0, outboundChallenge.expiresAt - Date.now());
+    const timer = window.setTimeout(() => {
+      setOutboundChallenge((current) => {
+        if (!current || current.inviteId !== outboundChallenge.inviteId) return current;
+        return null;
+      });
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [outboundChallenge]);
+
+  useEffect(() => {
+    if (players.length >= 2 && outboundChallenge) {
+      clearOutboundChallenge();
+    }
+  }, [players.length, outboundChallenge, clearOutboundChallenge]);
+
+  useEffect(() => {
+    if (appMode !== 'feed' || !authUser) return;
+    if (!socket?.connected) connectRef.current();
+  }, [appMode, authUser, socket?.connected]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -1974,6 +2025,8 @@ export default function App() {
     createRoom,
     joinRoom,
     acceptFriendInvite,
+    declineFriendInvite,
+    sendFriendChallenge,
   } = useMultiplayerRoomActions({
     socket,
     socketRef,
@@ -2013,9 +2066,23 @@ export default function App() {
     setRoomRecoveryState,
     setRoomRecoveryMessage,
     setFriendInvite,
+    setMpSubView,
+    outboundChallenge,
+    setOutboundChallenge,
     roomIdentityRef,
     lastRoomStorageKey: LAST_ROOM_STORAGE_KEY,
   });
+
+  const friendInvitePopup = friendInvite ? (
+    <IncomingFriendChallengeCard
+      invite={friendInvite}
+      joining={pendingUiAction === 'join'}
+      onAccept={() => {
+        void acceptFriendInvite();
+      }}
+      onDecline={declineFriendInvite}
+    />
+  ) : null;
 
   useEffect(() => {
     if (!weeklyStatsOpen) return;
@@ -3522,6 +3589,7 @@ export default function App() {
             onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
           />
         </Suspense>
+        {friendInvitePopup}
       </div>
     );
   }
@@ -3544,15 +3612,23 @@ export default function App() {
   if (appMode === 'feed') {
     return (
       <div className={appRootClassName}>
+        {toast && <div className="toast">{toast}</div>}
         <Suspense fallback={<ScreenLoader label="Loading Feed…" />}>
           <ActivityFeedScreen
             user={authUser}
+            socket={socket}
+            connect={connect}
+            sendFriendChallenge={sendFriendChallenge}
+            showToast={showToast}
+            outboundChallenge={outboundChallenge}
+            clearOutboundChallenge={clearOutboundChallenge}
             onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
             onClose={() => setAppMode('home')}
             onNavigateToFriends={() => setAppMode('friends')}
             onNavigate={setAppMode}
           />
         </Suspense>
+        {friendInvitePopup}
       </div>
     );
   }
@@ -3712,59 +3788,6 @@ export default function App() {
       />
     );
   }
-
-  const friendInvitePopup = friendInvite ? (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 24,
-        right: 24,
-        zIndex: 2000,
-        background: 'linear-gradient(170deg, rgba(18,26,39,0.96), rgba(9,15,26,0.98))',
-        border: '1px solid rgba(236,252,245,0.2)',
-        borderRadius: 14,
-        padding: '16px 20px',
-        color: 'rgba(235,245,242,0.96)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        display: 'grid',
-        gap: 10,
-        minWidth: 280,
-      }}
-    >
-      <p style={{ margin: 0 }}>
-        ⚡ <strong>@{friendInvite.fromUsername}</strong> invited you to a game!
-      </p>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          className="mode-inline-btn"
-          onClick={() => {
-            void acceptFriendInvite();
-          }}
-          disabled={pendingUiAction === 'join'}
-        >
-          {pendingUiAction === 'join' ? 'Joining…' : 'Join'}
-        </button>
-        {friendInvite.inviteUrl && (
-          <button
-            className="mode-inline-btn"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(friendInvite.inviteUrl);
-                showToast('Invite link copied.', 1200);
-              } catch {
-                showToast('Could not copy invite link.', 1200);
-              }
-            }}
-          >
-            Copy Link
-          </button>
-        )}
-        <button className="mode-inline-btn" onClick={() => setFriendInvite(null)}>
-          Dismiss
-        </button>
-      </div>
-    </div>
-  ) : null;
 
   const dismissWelcome = () => {
     if (typeof window !== 'undefined') {
@@ -4109,6 +4132,15 @@ export default function App() {
             hostWinStreak={privateLobbyHostWinStreak}
             onOpenQuickMatch={() => setMpSubView('quick')}
             socket={socket}
+            pendingChallenge={
+              outboundChallenge && players.length < 2
+                ? {
+                    friendUsername: outboundChallenge.friendUsername,
+                    matchSummary: outboundChallenge.matchSummary,
+                    expiresAt: outboundChallenge.expiresAt,
+                  }
+                : null
+            }
           />
         )
       ) : null}

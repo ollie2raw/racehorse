@@ -1,0 +1,274 @@
+/* Shared Racehorse page atmosphere: heavy obsidian base, restrained route accents. */
+
+:root {
+  --rh-bg-top: #050914;
+  --rh-bg-mid: #02040a;
+  --rh-bg-bottom: #000104;
+  --rh-surface: rgba(11, 15, 24, 0.9);
+  --rh-surface-soft: rgba(13, 18, 30, 0.76);
+  --rh-border: rgba(148, 163, 184, 0.14);
+  --rh-border-strong: rgba(148, 163, 184, 0.22);
+  --rh-nav-fade: rgba(2, 4, 10, 0.56);
+  --page-accent-rgb: 59, 130, 246;
+}
+
+.racehorse-page-bg,
+.home-page-root,
+.screen.lobby-screen.mode-home-screen,
+.layout-screen,
+.mode-home-screen,
+.pvf-root,
+.df-page,
+.df-fritz-loading-root,
+.pml-root,
+.mm-page,
+.th-page,
+.tb-page,
+.tr-page,
+.learn-hub-page,
+.learn-player-screen,
+.learn-match-screen,
+.learn-scenario-screen,
+.daily-entry-screen,
+.daily-puzzle-entry-screen,
+.daily-puzzle-loading-root,
+.rh-sf-screen,
+.rh-sf-shell,
+.friends-page,
+.stats-page,
+.rh-pp-screen,
+.rh-lb-screen,
+.leaderboard-screen,
+.rating-history-screen,
+.practice-lab,
+.screen.game-screen.walnut-live,
+.claude-mode-page,
+.daily-dash {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% -20%, rgba(var(--page-accent-rgb), 0.062), transparent 32%),
+    radial-gradient(circle at 100% 16%, rgba(37, 99, 235, 0.028), transparent 26%),
+    radial-gradient(circle at 0% 26%, rgba(15, 23, 42, 0.095), transparent 28%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0%, rgba(0, 0, 0, 0.08) 12%, transparent 28%),
+    linear-gradient(180deg, var(--rh-bg-top) 0%, var(--rh-bg-mid) 46%, var(--rh-bg-bottom) 100%) !important;
+}
+
+.racehorse-page-bg::before,
+.home-page-root::before,
+.screen.lobby-screen.mode-home-screen::before,
+.layout-screen::before,
+.pvf-root::before,
+.df-page::before,
+.df-fritz-loading-root::before,
+.pml-root::before,
+.mm-page::before,
+.th-page::before,
+.tb-page::before,
+.tr-page::before,
+.learn-hub-page::before,
+.learn-player-screen::before,
+.learn-match-screen::before,
+.learn-scenario-screen::before,
+.daily-entry-screen::before,
+.daily-puzzle-entry-screen::before,
+.daily-puzzle-loading-root::before,
+.rh-sf-screen::before,
+.friends-page::before,
+.stats-page::before,
+.rh-pp-screen::before,
+.rh-lb-screen::before,
+.leaderboard-screen::before,
+.rating-history-screen::before,
+.practice-lab::before,
+.screen.game-screen.walnut-live::before,
+.claude-mode-page::before,
+.daily-dash::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.58;
+  background:
+    linear-gradient(180deg, var(--rh-nav-fade) 0%, rgba(2, 4, 10, 0.2) 16%, transparent 34%),
+    radial-gradient(circle at 50% 0%, rgba(var(--page-accent-rgb), 0.042), transparent 33%),
+    radial-gradient(circle at 90% 11%, rgba(var(--page-accent-rgb), 0.024), transparent 22%);
+}
+
+.racehorse-page-bg::after,
+.home-page-root::after,
+.screen.lobby-screen.mode-home-screen::after,
+.layout-screen::after,
+.pvf-root::after,
+.df-page::after,
+.df-fritz-loading-root::after,
+.pml-root::after,
+.mm-page::after,
+.th-page::after,
+.tb-page::after,
+.tr-page::after,
+.learn-hub-page::after,
+.learn-player-screen::after,
+.learn-match-screen::after,
+.learn-scenario-screen::after,
+.daily-entry-screen::after,
+.daily-puzzle-entry-screen::after,
+.daily-puzzle-loading-root::after,
+.rh-sf-screen::after,
+.friends-page::after,
+.stats-page::after,
+.rh-pp-screen::after,
+.rh-lb-screen::after,
+.leaderboard-screen::after,
+.rating-history-screen::after,
+.practice-lab::after,
+.screen.game-screen.walnut-live::after,
+.claude-mode-page::after,
+.daily-dash::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image:
+    radial-gradient(circle, rgba(148, 163, 184, 0.16) 0.8px, transparent 0.9px),
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size:
+    22px 22px,
+    96px 96px,
+    96px 96px;
+  background-position:
+    center bottom,
+    center bottom,
+    center bottom;
+  mask-image:
+    linear-gradient(180deg, transparent 0%, transparent 52%, rgba(0, 0, 0, 0.6) 72%, black 100%),
+    radial-gradient(circle at 50% 106%, black 0%, transparent 62%);
+  -webkit-mask-image:
+    linear-gradient(180deg, transparent 0%, transparent 52%, rgba(0, 0, 0, 0.6) 72%, black 100%),
+    radial-gradient(circle at 50% 106%, black 0%, transparent 62%);
+}
+
+.racehorse-page-content,
+.layout-screen-inner,
+.home-shell,
+.home-main,
+.pvf-root > :not(.home-bg),
+.df-shell,
+.df-fritz-loading-shell,
+.pml-root > :not(.home-bg),
+.mm-page > *,
+.th-shell,
+.tb-shell,
+.tr-shell,
+.rh-sf-shell,
+.friends-page > *,
+.stats-page > *,
+.rh-pp-screen > *,
+.rh-lb-screen > *,
+.leaderboard-screen > *,
+.practice-lab > *,
+.screen.game-screen.walnut-live > *,
+.claude-mode-page > *,
+.daily-dash > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rh-panel {
+  background:
+    linear-gradient(180deg, rgba(12, 15, 24, 0.9), rgba(5, 7, 13, 0.92));
+  border: 1px solid var(--rh-border);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.rh-panel-accent {
+  border-color: rgba(var(--page-accent-rgb), 0.32);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.45),
+    0 0 42px rgba(var(--page-accent-rgb), 0.075),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.mode-accent-multiplayer,
+.multiplayer-hub,
+.pml-root,
+.mm-page {
+  --page-accent-rgb: 59, 130, 246;
+}
+
+.sp-page,
+.pvf-root,
+.mode-accent-single-player,
+.mode-accent-daily-fritz,
+.df-page,
+.df-fritz-loading-root,
+.bot-match-mode-bot,
+.bot-match-mode-daily-fritz {
+  --page-accent-rgb: 245, 185, 55;
+}
+
+.mode-accent-tournament,
+.th-page,
+.tb-page,
+.tr-page {
+  --page-accent-rgb: 245, 158, 11;
+}
+
+.mode-accent-learn,
+.learn-hub-page,
+.learn-player-screen,
+.learn-match-screen,
+.learn-scenario-screen {
+  --page-accent-rgb: 16, 185, 129;
+}
+
+.rh-sf-screen,
+.friends-page,
+.stats-page,
+.rh-pp-screen,
+.rh-lb-screen,
+.leaderboard-screen,
+.rating-history-screen {
+  --page-accent-rgb: 203, 213, 225;
+}
+
+.mode-accent-ghost,
+.ghost-pvf-root,
+.bot-match-mode-ghost {
+  --page-accent-rgb: 168, 85, 247;
+}
+
+.mode-accent-daily,
+.daily-entry-screen,
+.daily-puzzle-entry-screen,
+.daily-puzzle-loading-root,
+.daily-puzzle-screen,
+.daily-dash {
+  --page-accent-rgb: 59, 130, 246;
+}
+
+.home-bg {
+  opacity: 0.28;
+}
+
+.home-bg__halo {
+  display: none;
+}
+
+.home-bg__texture {
+  opacity: 0.025 !important;
+}
+
+.layout-screen-bg,
+.layout-screen-beam,
+.layout-screen-vignette {
+  display: none;
+}

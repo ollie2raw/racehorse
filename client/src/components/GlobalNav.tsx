@@ -27,7 +27,7 @@ interface GlobalNavProps {
   activeColor?: string; // Optional dynamic override
   /** Slightly shorter bar + padding for dense hub screens. */
   compactChrome?: boolean;
-  /** Opaque black bar (social feed mock) — no frosted gray chrome. */
+  /** Denser navy bar for mock-heavy screens; still uses the shared Racehorse atmosphere. */
   solidDarkChrome?: boolean;
 }
 
@@ -133,15 +133,24 @@ export function GlobalNav({
       style={{
         boxSizing: 'border-box',
         overflow: 'visible',
-        background: solidDarkChrome ? '#000000' : 'rgba(3, 7, 14, 0.42)',
-        backdropFilter: solidDarkChrome ? 'none' : 'blur(18px)',
-        WebkitBackdropFilter: solidDarkChrome ? 'none' : 'blur(18px)',
+        background: solidDarkChrome
+          ? 'linear-gradient(180deg, rgba(0, 1, 4, 0.9), rgba(0, 1, 4, 0.76))'
+          : 'linear-gradient(180deg, rgba(0, 1, 4, 0.72), rgba(0, 1, 4, 0.46))',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
         boxShadow: solidDarkChrome
-          ? 'inset 0 -1px 0 rgba(255, 255, 255, 0.06)'
-          : 'inset 0 -1px 0 rgba(255, 255, 255, 0.04)',
+          ? 'inset 0 -1px 0 rgba(255, 255, 255, 0.05)'
+          : 'inset 0 -1px 0 rgba(255, 255, 255, 0.035)',
         fontFamily: "'Outfit', system-ui, sans-serif",
       }}
     >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-[-26px] h-[40px]"
+        style={{
+          background: 'linear-gradient(180deg, rgba(2, 4, 10, 0.22) 0%, rgba(2, 4, 10, 0.08) 48%, rgba(2, 4, 10, 0) 100%)',
+        }}
+      />
       <div className={`relative flex h-full items-center justify-between max-w-[1440px] mx-auto w-full ${compactChrome ? 'px-7' : 'px-9'}`}>
         {/* Left: Brand & Identity */}
         <div className="flex items-center cursor-pointer min-w-[280px]" onClick={() => onNavigate?.('home')}>

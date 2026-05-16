@@ -10,6 +10,7 @@ import './styles/walnut-live.css';
 import './styles/rh-glow-underline.css';
 import './styles/game-interactions.css';
 import './styles/match-hud-polish.css';
+import './styles/racehorse-background.css';
 
 {installGlobalErrorHandlers();}
 

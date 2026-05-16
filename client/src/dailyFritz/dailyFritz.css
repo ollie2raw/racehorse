@@ -12,20 +12,6 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  /* Match Play vs Fritz (.pvf-root): flat navy stack + only a whisper of off-centre blue */
-  background:
-    radial-gradient(
-      ellipse 40% 30% at 72% 32%,
-      rgba(22, 60, 130, 0.07) 0%,
-      transparent 54%
-    ),
-    linear-gradient(
-      180deg,
-      #040b17 0%,
-      #050c18 24%,
-      #040912 56%,
-      #03080f 100%
-    );
   color: var(--text-primary);
   font-family: var(--font-body);
 }
@@ -69,7 +55,6 @@
   height: 100dvh;
   max-height: 100%;
   overflow: hidden;
-  background: var(--bg-obsidian);
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
@@ -327,7 +312,8 @@
   box-sizing: border-box;
   border: 1px solid transparent;
   --df-hero-inner-r: calc(var(--pvf-radius-lg) - 1px);
-  background: #04070c;
+  background:
+    linear-gradient(180deg, rgba(16, 22, 34, 0.9), rgba(5, 8, 15, 0.94));
   isolation: isolate;
   transform: translateZ(0);
   contain: paint;
@@ -669,7 +655,8 @@
   position: relative;
   width: 100%;
   flex: 0 1 auto;
-  background: var(--bg-obsidian);
+  background:
+    linear-gradient(180deg, rgba(16, 22, 34, 0.9), rgba(5, 8, 15, 0.94));
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   overflow: hidden;
@@ -684,7 +671,8 @@
   min-height: 260px;
   aspect-ratio: 5 / 4;
   max-width: 100%;
-  background: #04070c;
+  background:
+    linear-gradient(180deg, rgba(16, 22, 34, 0.9), rgba(5, 8, 15, 0.94));
   border: 1px solid color-mix(in srgb, var(--tier-elite) 44%, rgba(255, 255, 255, 0.08));
   border-radius: 20px;
   box-shadow:

@@ -14,10 +14,6 @@
   box-sizing: border-box;
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(ellipse 78% 48% at 50% -8%, color-mix(in srgb, var(--tier-standard) 12%, transparent) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 36% at 90% 20%, color-mix(in srgb, var(--tier-standard) 8%, transparent) 0%, transparent 50%),
-    linear-gradient(180deg, var(--bg-obsidian) 0%, var(--bg-obsidian) 100%);
   color: var(--text-primary);
   font-family: var(--font-body);
 }
@@ -137,7 +133,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding-bottom: 14px;
+  /* Horizontal inset so duel card borders/glows are not clipped by the glass scrollport */
+  padding: 0 14px 14px;
 }
 
 /* Only in-room private UI may shrink the duel stage below the shared hub clamp (tight vertical stack). */
@@ -233,7 +230,7 @@
   flex-direction: row;
   align-items: stretch;
   gap: 18px;
-  padding: 4px 2px 12px;
+  padding: 8px 10px 14px;
   border-radius: 0;
   border: none;
   background: transparent;
@@ -310,6 +307,9 @@
   justify-content: flex-start;
   padding: 14px 12px 12px;
   gap: 6px;
+  box-sizing: border-box;
+  /* Allow border/glow to paint outside the card box; inner avatar keeps its own clip */
+  overflow: visible;
 }
 
 .pml-duel-card > .pml-duel-avatar-frame {
@@ -425,6 +425,38 @@
   border-style: solid;
   border-width: 2px;
   border-color: color-mix(in srgb, var(--pml-guest) 60%, transparent);
+}
+
+.pml-duel-avatar--pending {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: rgba(245, 185, 55, 0.95);
+  border-style: solid;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--tier-elite) 42%, transparent);
+  background: rgba(245, 185, 55, 0.08);
+}
+
+.pml-duel-awaiting-hint--challenge {
+  color: rgba(245, 185, 55, 0.82);
+}
+
+.pml-duel-challenge-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 13, 20, 0.72);
+  color: rgba(203, 213, 225, 0.68);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .pml-duel-avatar-plus {
@@ -1808,6 +1840,72 @@
   position: relative;
   display: grid;
   place-items: center;
+  overflow: visible;
+}
+
+/* Quick Match: friend request on a matched human opponent (not invite placeholder) */
+.pml-match-add-friend-button {
+  position: absolute;
+  right: -2px;
+  bottom: 4px;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  background: rgba(10, 13, 20, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #e8edf5;
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  z-index: 4;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.pml-match-add-friend-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pml-match-add-friend-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--pml-host) 55%, rgba(148, 163, 184, 0.2));
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.pml-match-add-friend-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pml-host) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.pml-match-add-friend-button:disabled {
+  cursor: wait;
+  opacity: 0.85;
+}
+
+.pml-match-add-friend-button__dots {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+.pml-match-add-friend-button--pending,
+.pml-match-add-friend-button--friends {
+  cursor: default;
+  color: color-mix(in srgb, var(--pml-host) 75%, #c8d4e8);
+  border-color: color-mix(in srgb, var(--pml-host) 35%, rgba(148, 163, 184, 0.2));
+}
+
+.pml-match-add-friend-button--friends {
+  color: color-mix(in srgb, var(--tier-rookie) 80%, #c8e8d4);
+  border-color: color-mix(in srgb, var(--tier-rookie) 40%, rgba(148, 163, 184, 0.2));
 }
 
 .pml-duel-star {
@@ -2232,4 +2330,3 @@
     padding: 16px 16px 24px;
   }
 }
-

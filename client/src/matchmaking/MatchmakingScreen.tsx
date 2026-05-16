@@ -7,7 +7,8 @@ import { useMatchmaking } from './useMatchmaking';
 import type { MatchFoundPayload } from './types';
 import { MultiplayerTopBar } from './MultiplayerTopBar';
 import { ArenaRings } from '../multiplayer/ArenaRings';
-import { IconFlame, IconPlus, IconUserBust } from '../multiplayer/MultiplayerDuelIcons';
+import { IconFlame, IconUserBust } from '../multiplayer/MultiplayerDuelIcons';
+import { DuelOpponentFriendButton } from '../multiplayer/DuelOpponentFriendButton';
 import { MultiplayerHubFeatureStrip } from '../multiplayer/MultiplayerHubFeatureStrip';
 import { MultiplayerTwoColumnPvLayout } from '../multiplayer/MultiplayerTwoColumnPvLayout';
 import '../multiplayer/privateMatchLobby.css';
@@ -123,7 +124,14 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const isConnecting = props.isConnecting ?? false;
   const serverUrl = props.serverUrl ?? '';
   const [showDisconnectedHint, setShowDisconnectedHint] = useState(false);
+  const [friendToast, setFriendToast] = useState('');
   const pendingAutoJoinRef = useRef<MatchFoundPayload | null>(null);
+
+  useEffect(() => {
+    if (!friendToast) return;
+    const t = window.setTimeout(() => setFriendToast(''), 3000);
+    return () => window.clearTimeout(t);
+  }, [friendToast]);
 
   useEffect(() => {
     if (props.isConnected || isConnecting) {
@@ -177,8 +185,19 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const queueUiState = isSearching ? 'searching' : isTimeout ? 'timeout' : 'idle';
   const ratingSegActive = ratingSegmentIndex(queueUiState, mm.elapsedMs);
 
+  const matchedOpponent = mm.matched?.opponent ?? null;
+  const showMatchedOpponent = mm.state === 'matched' && matchedOpponent != null;
+  const opponentAwaitingHint = isSearching
+    ? 'Searching the rated queue…'
+    : 'Waiting to start matchmaking…';
+
   return (
     <div className="mm-page mm-mp-bridge multiplayer-hub">
+      {friendToast ? (
+        <div className="mm-friend-toast" role="status" aria-live="polite">
+          {friendToast}
+        </div>
+      ) : null}
       <GlobalNav
         currentMode={'multiplayer' as AppMode}
         onNavigate={props.onNavigate}
@@ -260,23 +279,56 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                     <span className="pml-vs-text">VS</span>
                   </div>
 
-                  <div className="pml-duel-card pml-duel-card--guest pml-duel-card--awaiting">
-                    <div className="pml-duel-avatar-frame">
-                      <div className="pml-duel-avatar pml-duel-avatar--invite" aria-hidden>
-                        <IconUserBust gradientId="mm-bust-opp" />
-                        <span className="pml-duel-avatar-plus" aria-hidden>
-                          <IconPlus />
-                        </span>
-                      </div>
-                    </div>
-                    <div className="pml-duel-name pml-duel-name--awaiting">
-                      <span className="pml-duel-name-text">Find Opponent</span>
-                      <span className="pml-duel-awaiting-hint">
-                        {isSearching ? 'Searching the rated queue…' : 'Waiting to start matchmaking…'}
-                      </span>
-                    </div>
-                    <div className="pml-duel-rating pml-duel-spacer" aria-hidden />
-                    <div className="pml-duel-streak-wrap pml-duel-spacer" aria-hidden />
+                  <div
+                    className={`pml-duel-card pml-duel-card--guest${showMatchedOpponent ? '' : ' pml-duel-card--awaiting'}`}
+                  >
+                    {showMatchedOpponent ? (
+                      <>
+                        <div className="pml-duel-avatar-frame">
+                          <div className="pml-duel-avatar" aria-hidden>
+                            <IconUserBust gradientId="mm-bust-opp" />
+                          </div>
+                          {!matchedOpponent.isSim && props.identity ? (
+                            <DuelOpponentFriendButton
+                              currentUserId={props.identity.userId}
+                              opponentUserId={matchedOpponent.userId}
+                              opponentUsername={matchedOpponent.username}
+                              hidden={matchedOpponent.userId === props.identity.userId}
+                              onToast={setFriendToast}
+                            />
+                          ) : null}
+                        </div>
+                        <div className="pml-duel-name">
+                          <span className="pml-duel-name-text">{matchedOpponent.username}</span>
+                        </div>
+                        <div
+                          className="pml-duel-rating"
+                          aria-label={`Rating ${matchedOpponent.rating.toLocaleString()}`}
+                        >
+                          <span className="pml-duel-star" aria-hidden>
+                            ★
+                          </span>
+                          <span className="pml-duel-rating-num">
+                            {matchedOpponent.rating.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="pml-duel-streak-wrap pml-duel-spacer" aria-hidden />
+                      </>
+                    ) : (
+                      <>
+                        <div className="pml-duel-avatar-frame">
+                          <div className="pml-duel-avatar pml-duel-avatar--invite" aria-hidden>
+                            <IconUserBust gradientId="mm-bust-opp" />
+                          </div>
+                        </div>
+                        <div className="pml-duel-name pml-duel-name--awaiting">
+                          <span className="pml-duel-name-text">Find Opponent</span>
+                          <span className="pml-duel-awaiting-hint">{opponentAwaitingHint}</span>
+                        </div>
+                        <div className="pml-duel-rating pml-duel-spacer" aria-hidden />
+                        <div className="pml-duel-streak-wrap pml-duel-spacer" aria-hidden />
+                      </>
+                    )}
                   </div>
                   </div>
                 </div>

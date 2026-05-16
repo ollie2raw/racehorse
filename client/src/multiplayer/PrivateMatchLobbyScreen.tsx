@@ -72,6 +72,12 @@ export interface PrivateMatchLobbyScreenProps {
   onOpenQuickMatch?: () => void;
   /** When connected, used for multiplayer top bar live counts. */
   socket?: Socket | null;
+  /** Outbound friend challenge waiting for opponent to join the lobby. */
+  pendingChallenge?: {
+    friendUsername: string;
+    matchSummary: string;
+    expiresAt: number;
+  } | null;
 }
 
 function LockIcon() {
@@ -250,6 +256,7 @@ export default function PrivateMatchLobbyScreen({
   winTarget = 60,
   onOpenQuickMatch,
   socket = null,
+  pendingChallenge = null,
 }: PrivateMatchLobbyScreenProps) {
   const [lobbyTab, setLobbyTab] = useState<'create' | 'join'>('create');
   const [dealFormat, setDealFormat] = useState<7 | 14>(7);
@@ -293,6 +300,12 @@ export default function PrivateMatchLobbyScreen({
   const guestPresent = inRoom && !!roomGuest?.username;
   const guestDisplayName =
     guestPresent && roomGuest ? roomGuest.username.replace(/^@+/, '') : null;
+  const pendingInviteActive = Boolean(
+    pendingChallenge && pendingChallenge.expiresAt > Date.now() && !guestPresent,
+  );
+  const pendingInviteName = pendingInviteActive
+    ? pendingChallenge!.friendUsername.replace(/^@+/, '')
+    : null;
 
   useEffect(() => {
     if (!guestPresent || !roomGuest) {
@@ -347,11 +360,13 @@ export default function PrivateMatchLobbyScreen({
   }, [guestPresent, roomGuest?.userId, roomGuest?.username]);
 
   const footerHint =
-    phase === 'room' && players.length < 2
-      ? 'Waiting for opponent to join…'
-      : phase === 'room' && players.length === 2 && !isRoomHost
-        ? 'Waiting for host to start the match…'
-        : null;
+    phase === 'room' && players.length < 2 && pendingInviteActive && pendingInviteName
+      ? `Waiting for @${pendingInviteName} to accept your challenge…`
+      : phase === 'room' && players.length < 2
+        ? 'Waiting for opponent to join…'
+        : phase === 'room' && players.length === 2 && !isRoomHost
+          ? 'Waiting for host to start the match…'
+          : null;
 
   const formatLabel = dealFormat === 7 ? '7 Tiles' : '14 Tiles';
 
@@ -677,6 +692,24 @@ export default function PrivateMatchLobbyScreen({
                           <span>Win Streak: {guestWinStreak}</span>
                         </div>
                       ) : null}
+                    </div>
+                  </>
+                ) : pendingInviteActive && pendingInviteName ? (
+                  <>
+                    <div className="pml-duel-avatar-frame">
+                      <div className="pml-duel-avatar pml-duel-avatar--pending" aria-hidden>
+                        {pendingInviteName.slice(0, 2).toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="pml-duel-name pml-duel-name--awaiting">
+                      <span className="pml-duel-name-text">@{pendingInviteName}</span>
+                      <span className="pml-duel-awaiting-hint pml-duel-awaiting-hint--challenge">
+                        Invite sent · waiting to join
+                      </span>
+                    </div>
+                    <div className="pml-duel-rating pml-duel-spacer" aria-hidden />
+                    <div className="pml-duel-streak-wrap">
+                      <span className="pml-duel-challenge-pill">{pendingChallenge?.matchSummary}</span>
                     </div>
                   </>
                 ) : (

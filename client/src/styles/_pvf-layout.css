@@ -42,21 +42,6 @@
   padding-bottom: 40px !important; 
   width: 100%;
   box-sizing: border-box;
-  background:
-    /* Very faint off-centre secondary */
-    radial-gradient(
-      ellipse 40% 30% at 72% 32%,
-      rgba(22, 60, 130, 0.07) 0%,
-      transparent 54%
-    ),
-    /* Dark navy-black base — close to reference */
-    linear-gradient(
-      180deg,
-      #040b17 0%,
-      #050c18 24%,
-      #040912 56%,
-      #03080f 100%
-    );
   color: var(--pvf-text);
   font-family: var(--font-body);
   position: relative;
@@ -77,9 +62,7 @@
   overflow: hidden;
 }
 
-.home-bg__halo {
-  display: none; /* Removed center glow for PVF screen */
-}
+.home-bg__halo { display: none; }
 
 .home-bg__domino {
   position: absolute;
@@ -278,7 +261,8 @@
   width: 100%;
   flex: 1 !important; /* Take remaining vertical space */
   min-height: 0 !important; /* Allow shrinking */
-  background: #04070c;
+  background:
+    linear-gradient(180deg, rgba(16, 22, 34, 0.9), rgba(5, 8, 15, 0.94));
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   overflow: hidden;
@@ -675,4 +659,3 @@
   .pvf-layout { padding:12px 20px 32px; }
   .pvf-title { font-size:40px; }
 }
-

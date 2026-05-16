@@ -1888,7 +1888,6 @@
   width: 100%;
   height: 99.5dvh;
   overflow: hidden;
-  background: #050914; /* Deep midnight navy */
   color: #F4F0E8;
   display: flex;
   flex-direction: column;
@@ -2497,4 +2496,3 @@
     max-height: 440px;
   }
 }
-
