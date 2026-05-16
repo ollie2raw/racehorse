@@ -117,7 +117,6 @@ import {
   initScheduledTournaments,
   applyMatchResult as applyTournamentMatchResult,
 } from './scheduledTournament';
-import { startSimOpponentLoop } from './matchmaking/simBot';
 import {
   clearDisconnectGrace,
   onActivePlayerSocketDisconnect,
@@ -1119,6 +1118,27 @@ async function tryHydrateMatchmakingRoomShell(roomCode: string): Promise<'skippe
   } catch (err) {
     console.warn('[room:hydrate] failed', err instanceof Error ? err.message : err);
     return 'miss';
+  }
+}
+
+/** Matchmaking: allow the second client up to this long after both seats fill before attempting deal. */
+const MATCHMAKING_JOIN_SYNC_MAX_MS = 5000;
+
+/**
+ * Ensures both engine seat sockets have executed `socket.join(roomCode)` so the
+ * subsequent `broadcastStateUpdate` reliably reaches everyone.
+ */
+async function waitUntilMatchmakingRoomSocketsReady(
+  io: Server,
+  roomCode: string,
+  engineSeatSocketIds: string[],
+): Promise<void> {
+  if (engineSeatSocketIds.length < 2) return;
+  const deadline = Date.now() + MATCHMAKING_JOIN_SYNC_MAX_MS;
+  while (Date.now() < deadline) {
+    const members = io.sockets.adapter.rooms.get(roomCode);
+    if (members && engineSeatSocketIds.every((id) => members.has(id))) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
   }
 }
 
@@ -4505,8 +4525,8 @@ function maskStateForRecipient(state: GameState, recipientPlayerId: string | nul
 }
 
 /**
- * Derives a handCounts map from a (possibly masked) state.
- * The client uses this to render opponent hand sizes without seeing actual tiles.
+ * Tile counts per seat from authoritative hands (not masked / redacted state).
+ * Masked states clear opponent hands to [] — never pass those in here.
  */
 function getHandCounts(state: GameState): Record<string, number> {
   return Object.fromEntries(
@@ -4714,7 +4734,7 @@ function broadcastStateUpdate(roomCode: string) {
                     winnerId: winnerUserId,
                     playerARatingChange: ratingResult?.playerA?.delta ?? null,
                     playerBRatingChange: ratingResult?.playerB?.delta ?? null,
-                    isSim: room.matchmakingIsSim,
+                    isSim: false,
                   });
                 }
               } catch (err) {
@@ -4822,8 +4842,10 @@ function broadcastStateUpdate(roomCode: string) {
       const canDraw = isPlayer ? getRoomCanDraw(roomCode, socketId) : false;
 
       const maskedState = maskStateForRecipient(room.state, recipientPlayerId);
+      const broadcastHandCounts = getHandCounts(room.state);
       socket.emit('state:update', {
-        state: { ...maskedState, handCounts: getHandCounts(maskedState) },
+        state: { ...maskedState, handCounts: broadcastHandCounts },
+
         legalMoves,
         canDraw,
         eventMeta: getRoomMatchEventMeta(room.code),
@@ -4858,7 +4880,7 @@ function broadcastStateUpdate(roomCode: string) {
   // their own hand with the same sequence number.
   if (room.state) {
     const spectatorMasked = maskStateForRecipient(room.state, null);
-    const stateForSpectators = { ...spectatorMasked, handCounts: getHandCounts(spectatorMasked) };
+    const stateForSpectators = { ...spectatorMasked, handCounts: getHandCounts(room.state) };
     const spectatorPayload = {
       state: stateForSpectators,
       eventMeta: getRoomMatchEventMeta(room.code),
@@ -4915,12 +4937,8 @@ function broadcastStateUpdate(roomCode: string) {
 function buildMatchStartDeps(io: Server) {
   return {
     broadcastStateUpdate: (roomCode: string) => broadcastStateUpdate(roomCode),
-    onSimMatchStarted: (room: Room) => {
-      if (room.matchmakingIsSim && room.matchmakingSimSocketId) {
-        startSimOpponentLoop(io, room.code, room.matchmakingSimSocketId, (code) =>
-          broadcastStateUpdate(code),
-        );
-      }
+    onSimMatchStarted: (_room: Room) => {
+      // Sim matches removed from matchmaking path.
     },
   };
 }
@@ -5516,7 +5534,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       if (room.state) {
         const specMasked = maskStateForRecipient(room.state, null);
         socket.emit('state:update', {
-          state: { ...specMasked, handCounts: getHandCounts(specMasked) },
+          state: { ...specMasked, handCounts: getHandCounts(room.state) },
           legalMoves: [],
           canDraw: false,
           eventMeta: getRoomMatchEventMeta(code),
@@ -5679,34 +5697,37 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       // Matchmaking: seat sim before start checks; auto-ready the joining socket so
       // the deal is not blocked on a client player:ready race or countdown timing.
       if (room.matchmakingMatchId && !room.state) {
-        const needsSimSeat =
-          room.matchmakingIsSim &&
-          room.matchmakingSimSocketId &&
-          !room.players.includes(room.matchmakingSimSocketId);
-        if (needsSimSeat) {
-          room.players.push(room.matchmakingSimSocketId!);
-        }
         markMatchStartReady(room.code, socket.id);
-        try {
-          const startResult = await tryStartMatchIfReady(room.code, io, buildMatchStartDeps(io));
-          if (startResult.started) {
-            room = getRoom(room.code);
-            console.log('[room:join] matchmaking auto-started', {
-              roomCode: room.code,
-              socketId: socket.id,
-            });
+
+        console.log('[matchmaking] players in room:', room.players.length);
+
+        const mmSeatSockets = [...room.players];
+        if (mmSeatSockets.length >= 2) {
+          try {
+            await waitUntilMatchmakingRoomSocketsReady(io, room.code, mmSeatSockets);
+            const startResult = await tryStartMatchIfReady(room.code, io, buildMatchStartDeps(io));
+            if (startResult.started) {
+              room = getRoom(room.code);
+              console.log('[room:join] matchmaking auto-started', {
+                roomCode: room.code,
+                socketId: socket.id,
+              });
+            }
+          } catch (startErr) {
+            console.warn(
+              '[room:join] matchmaking auto-start failed',
+              startErr instanceof Error ? startErr.message : startErr,
+            );
           }
-        } catch (startErr) {
-          console.warn(
-            '[room:join] matchmaking auto-start failed',
-            startErr instanceof Error ? startErr.message : startErr,
-          );
         }
       }
 
       const recipientId = socket.data?.playerId ?? socket.id;
       const stateWithCounts = room.state
-        ? (() => { const m = maskStateForRecipient(room.state!, recipientId); return { ...m, handCounts: getHandCounts(m) }; })()
+        ? (() => {
+            const m = maskStateForRecipient(room.state!, recipientId);
+            return { ...m, handCounts: getHandCounts(room.state!) };
+          })()
         : null;
 
       const rejoinLegalMoves = room.state ? getRoomLegalMoves(room.code, socket.id) : [];

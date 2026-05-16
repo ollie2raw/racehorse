@@ -19,9 +19,8 @@ export function devModeEnabled(): boolean {
 export const SIM_TIMING = { SIM_JOIN_DELAY_MS, SIM_MOVE_MIN_MS, SIM_MOVE_MAX_MS };
 
 /**
- * Build a synthetic queue entry that mirrors a real player's rating so the
- * pairing window always allows the match. The fake socketId is never
- * dispatched to real sockets; it exists purely to drive the room turn-state.
+ * Synthetic opponent record (local tooling / experiments only).
+ * **Ranked quick match rejects these** via `forbiddenQueuePlayer` — do not wire this into `queue:join`.
  */
 export function makeSimPlayer(opponent: QueuedPlayer): QueuedPlayer {
   return {

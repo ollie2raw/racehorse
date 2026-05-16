@@ -172,6 +172,18 @@ const LearnPlayer = React.lazy(() =>
   import('./learn').then((module) => ({ default: module.LearnPlayer })),
 );
 
+function IconDominoes({ size = 16, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden style={style}>
+      <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" strokeWidth="2" />
+      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" />
+      <circle cx="9" cy="7" r="1.2" fill="currentColor" />
+      <circle cx="15" cy="7" r="1.2" fill="currentColor" />
+      <circle cx="12" cy="17" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+
 function tileEquals(a: Tile, b: Tile): boolean {
   return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
@@ -1648,13 +1660,11 @@ export default function App() {
       return;
     }
 
-    // Quick match deferral: if we joined a matchmaking room that isn't a sim,
-    // wait until both players are seated before emitting player:ready.
-    // This prevents the server from timing out or starting with a bot fallback
-    // before the real opponent has even finished their join handshake.
+    // Quick match deferral: wait until both players are seated before emitting player:ready.
+    // This prevents the server from timing out or starting a deal before the real opponent
+    // has even finished their join handshake.
     const isQuickMatch = appModeRef.current === 'multiplayer' && mpSubViewRef.current === 'quick';
-    const isSimMatch = joinedRoomResponseRef.current?.matchmakingIsSim === true;
-    if (isQuickMatch && !isSimMatch) {
+    if (isQuickMatch) {
       if (roomPlayersRef.current.length < 2) {
         return;
       }
@@ -2350,7 +2360,7 @@ export default function App() {
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const authoritativeOpponentTileCount =
     state && opponentId
-      ? (state.handCounts?.[opponentId] ?? state.players[opponentId]?.hand?.length ?? 0)
+      ? (state.handCounts?.[opponentId] ?? 0)
       : 0;
   const opponentTileCount = drawStepOpponentHandCount ?? authoritativeOpponentTileCount;
   const myScore = state?.players[you]?.score ?? 0;
@@ -3958,7 +3968,6 @@ export default function App() {
             onBackHome={() => setAppMode('home')}
             onOpenPrivateMatch={() => setMpSubView('private')}
             onAutoJoinRoom={handleMatchmakingAutoJoin}
-            onPlayBotFallback={() => setAppMode('botSetup')}
           />
         ) : mpSubView === 'quick' && joinedRoom && !state ? (
           <div
@@ -4243,6 +4252,7 @@ export default function App() {
               <button
                 type="button"
                 ref={opponentPillRef}
+                style={{ margin: 8 }}
                 className={`wl-player-pill wl-player-pill-btn score-card ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
@@ -4285,11 +4295,14 @@ export default function App() {
             >
               <button
                 type="button"
+                style={{ margin: 8 }}
                 className={`wl-player-pill wl-player-pill-btn score-card is-you ${isMyTurn ? 'is-active' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
               >
-                <span className="wl-player-label">{hudRightLabel}</span>
+                <div className="wl-pill-top">
+                  <span className="wl-player-label">{hudRightLabel}</span>
+                </div>
                 <AnimatedScore value={hudRightScore} className="wl-player-score" />
               </button>
             </div>

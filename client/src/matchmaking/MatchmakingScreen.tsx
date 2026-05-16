@@ -33,7 +33,6 @@ export interface MatchmakingScreenProps {
   onBackHome: () => void;
   onOpenPrivateMatch: () => void;
   onAutoJoinRoom: (payload: MatchFoundPayload) => void;
-  onPlayBotFallback: () => void;
 }
 
 function formatElapsed(ms: number): string {
@@ -504,17 +503,15 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                   className="mm-cta"
                   onClick={() => {
                     mm.acceptTimeoutBotFallback();
-                    props.onPlayBotFallback();
+                    mm.findMatch();
                   }}
                 >
-                  Play vs Fritz
+                  Search again
                   <span className="mm-cta-chevron" aria-hidden>
                     ›
                   </span>
                 </button>
-                <button type="button" className="mm-cta-secondary" onClick={mm.findMatch}>
-                  Try Again →
-                </button>
+                <p className="mm-help-text">No opponent joined within the wait window. You can keep searching.</p>
               </>
             ) : null}
               </div>

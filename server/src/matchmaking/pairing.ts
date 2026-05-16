@@ -1,27 +1,22 @@
 import type { MatchedPair, QueuedPlayer } from './types';
 
-/** Half-width of the rating band at t=0 (|Δrating| must be ≤ this to match). */
-const INITIAL_WINDOW = 100;
-const EXPANSION_STEP_MS = 30_000;
-const EXPANSION_STEP_RATING = 100;
-const UNBOUNDED_AFTER_MS = 90_000;
-
 function pairingDebugEnabled(): boolean {
   return process.env.MATCHMAKING_DEBUG === '1';
 }
 
 /**
  * Half-width of the rating window for a player who has waited `waitedMs`.
- *
- * 0–30s:  ±100
- * 30–60s: ±200
- * 60–90s: ±300
- * 90s+:   ±Infinity (the timeout fallback also fires at 90s in QueueService)
+ * Production schedule (per-player queue time):
+ * - 0–15s:  ±150
+ * - 15–30s: ±300
+ * - 30–60s: ±500
+ * - 60s+:   ±Infinity
  */
 export function ratingWindowMsAt(waitedMs: number): number {
-  if (waitedMs >= UNBOUNDED_AFTER_MS) return Infinity;
-  const steps = Math.floor(waitedMs / EXPANSION_STEP_MS);
-  return INITIAL_WINDOW + steps * EXPANSION_STEP_RATING;
+  if (waitedMs >= 60_000) return Infinity;
+  if (waitedMs >= 30_000) return 500;
+  if (waitedMs >= 15_000) return 300;
+  return 150;
 }
 
 /**

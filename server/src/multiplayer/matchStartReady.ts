@@ -7,10 +7,6 @@ export type MatchStartDeps = {
 };
 
 function requiredStartPlayers(room: Room): string[] {
-  if (room.matchmakingIsSim && room.matchmakingSimSocketId) {
-    const humans = room.players.filter((id) => id !== room.matchmakingSimSocketId);
-    return [...humans, room.matchmakingSimSocketId];
-  }
   return [...room.players];
 }
 
@@ -35,11 +31,6 @@ export async function tryStartMatchIfReady(
     return { started: false, waitingFor: required };
   }
 
-  // Sim seat is server-controlled — treat as ready once a human has joined it.
-  if (room.matchmakingIsSim && room.matchmakingSimSocketId) {
-    room.matchStartReady.add(room.matchmakingSimSocketId);
-  }
-
   const missing = required.filter((id) => !room.matchStartReady.has(id));
   if (missing.length > 0) {
     return { started: false, waitingFor: missing };
@@ -48,8 +39,5 @@ export async function tryStartMatchIfReady(
   const startedRoom = await startGame(roomCode, io);
   room.matchStartReady.clear();
   deps.broadcastStateUpdate(startedRoom.code);
-  if (startedRoom.matchmakingIsSim && startedRoom.matchmakingSimSocketId) {
-    deps.onSimMatchStarted?.(startedRoom);
-  }
   return { started: true };
 }

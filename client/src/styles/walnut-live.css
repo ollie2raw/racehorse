@@ -59,18 +59,20 @@ body {
 
 .wl-top-rail {
   display: grid;
-  width: calc(100vw - 20px);
+  width: 100%;
   max-width: none;
-  margin: 0 auto;
-  grid-template-columns: 220px 1fr 220px;
+  margin: 0;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 14px;
-  padding: 4px 2px 2px;
+  padding: 8px 8px 0;
+  box-sizing: border-box;
 }
 
 .wl-player-pill {
   display: grid;
-  width: 220px;
+  width: fit-content;
+  min-width: 64px;
   gap: 3px;
   border-radius: 18px;
   min-height: 48px;

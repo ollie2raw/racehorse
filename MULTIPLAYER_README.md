@@ -30,21 +30,6 @@ Game over         ◄──state:update─ broadcastStateUpdate()
                                   └─► processRealtimeMultiplayerGame()  → ratings update
 ```
 
-Sim opponent (dev mode):
-```
-queue:join (real)
-   │
-   └─(+5s)─► QueueService.join({ isSim: true, rating = real.rating })
-                            │
-                            └──tick──► findPairs() ──► onMatched
-                                                          │
-                                                          └─► sim joins room.players directly
-                                                                   │
-                                                                   └─► room:join (real) hits auto-start
-                                                                            │
-                                                                            └─► startSimOpponentLoop() makes random valid moves
-```
-
 ## Run locally
 
 1. **Apply the migration** (one-time):
@@ -55,7 +40,6 @@ queue:join (real)
    ```bash
    cd server && npm run dev
    ```
-   Dev mode is auto-enabled when `NODE_ENV !== 'production'`. Override explicitly with `MATCHMAKING_DEV_MODE=1` or `MATCHMAKING_DEV_MODE=0`.
 
 3. **Start the client**:
    ```bash
@@ -73,21 +57,11 @@ queue:join (real)
 | Match Found | Full-screen overlay, opponent name+rating, 3-2-1 countdown | Server emitted `queue:matched` |
 | In Match | Existing shared-board game screen | Server auto-started the game |
 | Post Match | Existing game-over UI; "Back" returns to MatchmakingScreen | Existing rating pipeline ran |
-| Timeout (90s) | "No opponent found" + "Play vs Bot" CTA | Server emitted `queue:timeout` |
+| Timeout (90s) | "Search again" (no bot bridge) | Server emitted `queue:timeout` |
 
-## Dev mode (sim opponent)
+## Quick match policy
 
-When dev mode is on, a sim opponent joins the queue ~5s after you press *Find Match*. It will:
-- Mirror your rating so the ELO window always matches
-- Be added directly to the reserved room's player roster server-side (no client involved)
-- Make random valid moves on a 0.7–1.5s per-move timer (`server/src/matchmaking/simBot.ts`)
-- Show the **vs Bot (sim)** badge in the Match Found overlay
-- NOT be persisted to `matchmaking_matches` (sim matches are intentionally not stored, since their userIds aren't in `auth.users`)
-
-Turn dev mode off:
-```bash
-MATCHMAKING_DEV_MODE=0 npm run dev
-```
+- **Humans only**: synthetic queue seats (`sim:…` IDs, `Bot (sim)` display name, or `isSim`) are rejected on `queue:join` and purged every queue tick so they cannot pair with a real player.
 
 ## ELO window expansion
 

@@ -53,10 +53,6 @@ export type Room = {
   events: RoomMatchEvent[];
   /** Set when room was created via matchmaking queue; used to update matchmaking_matches on game-end. */
   matchmakingMatchId?: string;
-  /** True when at least one paired player was a sim opponent. */
-  matchmakingIsSim?: boolean;
-  /** Socket id of the sim opponent, when matchmakingIsSim is true. */
-  matchmakingSimSocketId?: string;
   /** Set when the room is a scheduled-tournament match; used to advance the bracket on game-end. */
   scheduledTournamentMatchId?: string;
   /** Parent tournament id (denormalized for cheap lookups during game-over). */

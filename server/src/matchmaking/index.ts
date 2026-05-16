@@ -4,7 +4,7 @@ import { supabaseFetch } from '../supabaseUtils';
 import { QueueService } from './queueService';
 import type { MatchFoundPayload, QueuedPlayer } from './types';
 import { recordMatchStart } from './persistence';
-import { devModeEnabled, makeSimPlayer, SIM_TIMING } from './simBot';
+import { isForbiddenMatchmakingPlayer } from './forbiddenQueuePlayer';
 
 const MATCH_FOUND_COUNTDOWN_MS = 3000;
 const ONLINE_BROADCAST_INTERVAL_MS = 2000;
@@ -120,18 +120,6 @@ export function registerMatchmakingHandlers(
       // sees their own contribution to the count without waiting for the
       // 2s interval tick.
       io.emit('queue:online', { online: getOnlineCount(io), queued: service.size() });
-
-      if (devModeEnabled()) {
-        // Drop a sim opponent into the queue ~5s later if the player is
-        // still searching at that point.
-        const targetSocketId = socket.id;
-        setTimeout(() => {
-          const real = service.list().find((p) => p.socketId === targetSocketId);
-          if (!real) return; // already matched or cancelled
-          const simResult = service.join(makeSimPlayer(real));
-          if (simResult.ok) service.tick();
-        }, SIM_TIMING.SIM_JOIN_DELAY_MS);
-      }
     } catch (err) {
       console.warn('[matchmaking] queue:join failed', err instanceof Error ? err.message : err);
       ack?.({
@@ -189,7 +177,36 @@ function getOrCreateService(io: Server): QueueService {
   return serviceSingleton;
 }
 
+/** If a synthetic seat was ever paired (should not happen), put real humans back in the queue. */
+function tryRequeueHumanAfterAbortedMatch(p: QueuedPlayer): void {
+  if (!serviceSingleton || isForbiddenMatchmakingPlayer(p)) return;
+  const result = serviceSingleton.join({
+    socketId: p.socketId,
+    userId: p.userId,
+    username: p.username,
+    rating: p.rating,
+    isSim: false,
+  });
+  if (!result.ok && matchmakingDebugEnabled()) {
+    console.log('[matchmaking][debug] requeue after aborted synthetic pair failed', {
+      userId: p.userId,
+      reason: result.reason,
+    });
+  }
+}
+
 async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Promise<void> {
+  if (isForbiddenMatchmakingPlayer(a) || isForbiddenMatchmakingPlayer(b)) {
+    console.warn('[matchmaking] aborted quick match: synthetic seat in pair (humans-only queue)', {
+      a: { userId: a.userId, username: a.username, isSim: a.isSim },
+      b: { userId: b.userId, username: b.username, isSim: b.isSim },
+    });
+    tryRequeueHumanAfterAbortedMatch(a);
+    tryRequeueHumanAfterAbortedMatch(b);
+    serviceSingleton?.tick();
+    return;
+  }
+
   const code = makeRoomCode();
   createReservedRoom(code, { winningScore: 60 });
 
@@ -198,9 +215,6 @@ async function handleMatched(io: Server, a: QueuedPlayer, b: QueuedPlayer): Prom
     const room = getRoom(code);
     if (room) {
       room.matchmakingMatchId = record.id;
-      room.matchmakingIsSim = record.isSim;
-      if (a.isSim) room.matchmakingSimSocketId = a.socketId;
-      if (b.isSim) room.matchmakingSimSocketId = b.socketId;
     }
 
     const aPayload: MatchFoundPayload = {

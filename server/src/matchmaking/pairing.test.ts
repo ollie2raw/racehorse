@@ -15,17 +15,23 @@ function p(socketId: string, rating: number, secondsAgo: number, opts: Partial<Q
 }
 
 describe('ratingWindowMsAt', () => {
-  it('starts at 100 at 0s waited', () => {
-    expect(ratingWindowMsAt(0)).toBe(100);
+  it('starts at 150 before 15s waited', () => {
+    expect(ratingWindowMsAt(0)).toBe(150);
+    expect(ratingWindowMsAt(14_999)).toBe(150);
   });
 
-  it('expands by +100 every 30s', () => {
-    expect(ratingWindowMsAt(30_000)).toBe(200);
-    expect(ratingWindowMsAt(60_000)).toBe(300);
+  it('uses 300 during 15s–29.999…', () => {
+    expect(ratingWindowMsAt(15_000)).toBe(300);
+    expect(ratingWindowMsAt(29_999)).toBe(300);
   });
 
-  it('becomes unbounded after 90s', () => {
-    expect(ratingWindowMsAt(90_000)).toBe(Infinity);
+  it('uses 500 during 30s–59s', () => {
+    expect(ratingWindowMsAt(30_000)).toBe(500);
+    expect(ratingWindowMsAt(59_999)).toBe(500);
+  });
+
+  it('becomes unbounded after 60s', () => {
+    expect(ratingWindowMsAt(60_000)).toBe(Infinity);
     expect(ratingWindowMsAt(120_000)).toBe(Infinity);
   });
 });
@@ -37,9 +43,9 @@ describe('findPairs', () => {
     expect(findPairs([p('a', 1000, 5)], now)).toEqual([]);
   });
 
-  it('pairs two players whose ratings are within ±100 at 0s', () => {
+  it('pairs two players whose ratings are within ±150 at 0s', () => {
     const now = Date.now();
-    const pairs = findPairs([p('a', 1000, 0), p('b', 1099, 0)], now);
+    const pairs = findPairs([p('a', 1000, 0), p('b', 1149, 0)], now);
     expect(pairs).toHaveLength(1);
     const ids = [pairs[0].a.socketId, pairs[0].b.socketId].sort();
     expect(ids).toEqual(['a', 'b']);
@@ -47,14 +53,14 @@ describe('findPairs', () => {
 
   it('does NOT pair players outside their tighter window', () => {
     const now = Date.now();
-    const pairs = findPairs([p('a', 1000, 0), p('b', 1101, 0)], now);
+    const pairs = findPairs([p('a', 1000, 0), p('b', 1151, 0)], now);
     expect(pairs).toEqual([]);
   });
 
   it('pairs the same players once the window has expanded enough', () => {
     const now = Date.now();
-    // At 65s waited, half-width is 100 + 2*100 = 300; |1300-1000| = 300.
-    const pairs = findPairs([p('a', 1000, 65), p('b', 1300, 65)], now);
+    // After 30s waited, half-width is 500; |1500-1000| = 500.
+    const pairs = findPairs([p('a', 1000, 35), p('b', 1500, 35)], now);
     expect(pairs).toHaveLength(1);
   });
 

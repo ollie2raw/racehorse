@@ -40,6 +40,19 @@ describe('QueueService', () => {
     expect(service.size()).toBe(1);
   });
 
+  it('rejects synthetic / sim queue seats', () => {
+    expect(
+      service.join({ socketId: 's1', userId: 'u1', username: 'a', rating: 1000, isSim: true }).ok,
+    ).toBe(false);
+    expect(
+      service.join({ socketId: 's1', userId: 'sim:abc', username: 'a', rating: 1000, isSim: false }).ok,
+    ).toBe(false);
+    expect(
+      service.join({ socketId: 's1', userId: 'u1', username: 'Bot (sim)', rating: 1000, isSim: false }).ok,
+    ).toBe(false);
+    expect(service.size()).toBe(0);
+  });
+
   it('removes player on leave', () => {
     service.join({ socketId: 's1', userId: 'u1', username: 'a', rating: 1000, isSim: false });
     service.leave('s1');

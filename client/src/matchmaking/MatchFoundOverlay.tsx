@@ -209,9 +209,6 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElap
                   </span>
                   <span className="mm-found-seat__form">{formatForm(PLACEHOLDER_FORM_OPP)}</span>
                 </p>
-                {payload.opponent.isSim ? (
-                  <p className="mm-found-seat__sim">vs Bot (sim)</p>
-                ) : null}
                 <LastFivePills results={PLACEHOLDER_LAST_5_OPP} />
                 <div className="mm-found-badge mm-found-badge--blue">Skill-matched opponent</div>
               </div>

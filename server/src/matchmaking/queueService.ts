@@ -1,5 +1,6 @@
 import type { MatchedPair, QueuedPlayer, QueueStatusEvent } from './types';
 import { findPairs, ratingWindowMsAt } from './pairing';
+import { isForbiddenMatchmakingPlayer } from './forbiddenQueuePlayer';
 
 export type QueueServiceOptions = {
   onMatched: (a: QueuedPlayer, b: QueuedPlayer) => void;
@@ -12,7 +13,7 @@ export type JoinInput = Omit<QueuedPlayer, 'joinedAtMs'>;
 
 export type JoinResult =
   | { ok: true; player: QueuedPlayer }
-  | { ok: false; reason: 'already_queued' };
+  | { ok: false; reason: 'already_queued' | 'synthetic_forbidden' };
 
 /**
  * In-memory matchmaking queue. Single instance per server process.
@@ -32,7 +33,7 @@ export class QueueService {
 
   constructor(opts: QueueServiceOptions) {
     this.opts = {
-      tickIntervalMs: opts.tickIntervalMs ?? 1000,
+      tickIntervalMs: opts.tickIntervalMs ?? 2000,
       timeoutAfterMs: opts.timeoutAfterMs ?? 90_000,
       onMatched: opts.onMatched,
       onTimeout: opts.onTimeout,
@@ -60,6 +61,9 @@ export class QueueService {
   }
 
   join(input: JoinInput): JoinResult {
+    if (isForbiddenMatchmakingPlayer(input)) {
+      return { ok: false, reason: 'synthetic_forbidden' };
+    }
     if (this.byUserId.has(input.userId)) {
       return { ok: false, reason: 'already_queued' };
     }
@@ -92,6 +96,12 @@ export class QueueService {
   /** Exposed for test-driving; production code calls this on the interval. */
   tick(): void {
     const now = Date.now();
+    for (const socketId of [...this.players.keys()]) {
+      const p = this.players.get(socketId);
+      if (p && isForbiddenMatchmakingPlayer(p)) {
+        this.leave(socketId);
+      }
+    }
     const players = Array.from(this.players.values());
     if (process.env.MATCHMAKING_DEBUG === '1' && players.length > 0) {
       console.log('[matchmaking][debug] tick', {
