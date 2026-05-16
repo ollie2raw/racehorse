@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import './activityFeed.css';
@@ -16,6 +16,7 @@ interface ActivityFeedPanelProps {
   user: User | null;
   onViewProfile: (username: string) => void;
   emptyAction?: React.ReactNode;
+  onFeedChange?: (feed: FeedItem[]) => void;
 }
 
 function itemIcon(type: FeedItem['type']): string {
@@ -27,6 +28,30 @@ function itemIcon(type: FeedItem['type']): string {
     case 'puzzle': return '🧩';
     case 'daily_fritz': return '🤖';
     default: return '•';
+  }
+}
+
+function itemLabel(type: FeedItem['type']): string {
+  switch (type) {
+    case 'win': return 'Ranked Win';
+    case 'loss': return 'Ranked Loss';
+    case 'streak': return 'Streak';
+    case 'tournament': return 'Tournament';
+    case 'puzzle': return 'Puzzle';
+    case 'daily_fritz': return 'Daily Fritz';
+    default: return 'Activity';
+  }
+}
+
+function itemAccent(type: FeedItem['type']): string {
+  switch (type) {
+    case 'win': return '#4A8FD4';
+    case 'loss': return '#7C8AA6';
+    case 'streak': return '#19D8A2';
+    case 'tournament': return '#F2A63A';
+    case 'puzzle': return '#D7A64A';
+    case 'daily_fritz': return '#D7A64A';
+    default: return '#A9B4C9';
   }
 }
 
@@ -90,20 +115,28 @@ function filterItems(items: FeedItem[], filter: FilterTab): FeedItem[] {
   return items;
 }
 
-export default function ActivityFeedPanel({ user, onViewProfile }: ActivityFeedPanelProps) {
+export default function ActivityFeedPanel({ user, onViewProfile, emptyAction, onFeedChange }: ActivityFeedPanelProps) {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterTab>('all');
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      onFeedChange?.([]);
+      return;
+    }
     setLoading(true);
     const result = await fetchActivityFeed();
     setLoading(false);
-    if (result.error) { setError(result.error); return; }
+    if (result.error) {
+      setError(result.error);
+      onFeedChange?.([]);
+      return;
+    }
     setFeed(result.feed);
-  }, [user]);
+    onFeedChange?.(result.feed);
+  }, [onFeedChange, user]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -125,18 +158,39 @@ export default function ActivityFeedPanel({ user, onViewProfile }: ActivityFeedP
 
       <div className="rh-af-list">
         {loading && (
-          <div className="rh-af-state">Loading…</div>
+          <div className="rh-af-state rh-af-state--rich">
+            <div className="rh-af-state-card">
+              <span className="rh-af-state-kicker">Social</span>
+              <strong>Loading activity feed…</strong>
+              <span>Pulling in recent wins, streaks, and tournament moments.</span>
+            </div>
+          </div>
         )}
         {!loading && error && (
-          <div className="rh-af-state rh-af-state--error">{error}</div>
+          <div className="rh-af-state rh-af-state--rich">
+            <div className="rh-af-state-card rh-af-state-card--error">
+              <span className="rh-af-state-kicker">Feed unavailable</span>
+              <strong>{error}</strong>
+              <span>Try again in a moment.</span>
+            </div>
+          </div>
         )}
         {!loading && !error && visible.length === 0 && (
-          <div className="rh-af-state">
-            <span>No recent activity to show.</span>
+          <div className="rh-af-state rh-af-state--rich">
+            <div className="rh-af-state-card">
+              <span className="rh-af-state-kicker">Quiet board</span>
+              <strong>No recent activity to show.</strong>
+              <span>Add friends or finish a few matches to start building your social rail.</span>
+              {emptyAction ? <div className="rh-af-state-action">{emptyAction}</div> : null}
+            </div>
           </div>
         )}
         {!loading && !error && visible.map((item) => (
-          <div key={item.id} className="rh-af-item">
+          <div
+            key={item.id}
+            className="rh-af-item"
+            style={{ ['--rh-af-accent' as string]: itemAccent(item.type) } as CSSProperties}
+          >
             <button
               className="rh-af-avatar"
               onClick={() => onViewProfile(item.username)}
@@ -145,14 +199,22 @@ export default function ActivityFeedPanel({ user, onViewProfile }: ActivityFeedP
               {initials(item.username)}
             </button>
             <div className="rh-af-body">
-              <button
-                className="rh-af-username"
-                onClick={() => onViewProfile(item.username)}
-              >
-                {item.username}
-              </button>
-              <span className="rh-af-desc"> {itemDescription(item)}</span>
-              <span className="rh-af-type-icon" aria-hidden>{itemIcon(item.type)}</span>
+              <div className="rh-af-meta-row">
+                <span className="rh-af-chip" aria-hidden="true">
+                  <span className="rh-af-chip-icon">{itemIcon(item.type)}</span>
+                  <span>{itemLabel(item.type)}</span>
+                </span>
+                <span className="rh-af-time rh-af-time--mobile">{timeAgo(item.created_at)}</span>
+              </div>
+              <div className="rh-af-copy-row">
+                <button
+                  className="rh-af-username"
+                  onClick={() => onViewProfile(item.username)}
+                >
+                  {item.username}
+                </button>
+                <span className="rh-af-desc">{itemDescription(item)}</span>
+              </div>
             </div>
             <span className="rh-af-time">{timeAgo(item.created_at)}</span>
           </div>

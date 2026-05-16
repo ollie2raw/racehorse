@@ -13,7 +13,7 @@ import {
 import { MatchNblBoardFrame } from '../components/MatchNblBoardFrame';
 import TileRack from '../components/TileRack';
 import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
-import type { BoardState, BranchArm, HubDouble, Move, PlacedTile, PlacementPosition, Tile } from '../types';
+import type { AppMode, BoardState, BranchArm, HubDouble, Move, PlacedTile, PlacementPosition, Tile } from '../types';
 import {
   fetchDailyPuzzleLeaderboard,
   upsertDailyPuzzleBestScore,
@@ -148,6 +148,7 @@ import {
 
 interface BotMatchScreenProps {
   onBack: () => void;
+  onNavigate?: (mode: AppMode) => void;
   dealSize: BotDealSize;
   fritzTier?: FritzTier;
   mode?: 'bot' | 'ghost' | 'daily-fritz';
@@ -621,6 +622,7 @@ function parseGuidedTranscriptState(stateJson: string): BotMatchState | null {
 
 export default function BotMatchScreen({
   onBack,
+  onNavigate,
   dealSize,
   fritzTier = 'elite',
   mode = 'bot',
@@ -6633,7 +6635,7 @@ export default function BotMatchScreen({
       )}
 
       {isLessonLayoutMode ? (
-        <GlobalNav currentMode="learn" activeColor="#19D8A2" />
+        <GlobalNav currentMode="learn" activeColor="#19D8A2" onNavigate={onNavigate} />
       ) : (
         <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
           <div className="bot-hud-left-cluster" style={{ gridColumn: 1 }}>

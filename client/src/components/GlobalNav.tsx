@@ -30,10 +30,10 @@ interface GlobalNavProps {
 }
 
 const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
-  { label: 'Single Player', mode: 'singlePlayerHub', activeModes: ['singlePlayerHub', 'botSetup', 'ghostSetup', 'noBrainer', 'dailyFritz', 'daily'] },
   { label: 'Multiplayer', mode: 'multiplayer', activeModes: ['multiplayer'] },
-  { label: 'Learn', mode: 'learn', activeModes: ['learn'] },
+  { label: 'Single Player', mode: 'singlePlayerHub', activeModes: ['singlePlayerHub', 'botSetup', 'ghostSetup', 'noBrainer', 'dailyFritz', 'daily'] },
   { label: 'Tournament', mode: 'tournament', activeModes: ['tournament'] },
+  { label: 'Learn', mode: 'learn', activeModes: ['learn'] },
   { label: 'Social', mode: 'feed', activeModes: ['feed', 'friends', 'leaderboard', 'profile', 'stats'] },
 ];
 
@@ -136,7 +136,7 @@ export function GlobalNav({ onNavigate, onOpenAuth, onOpenAccount, currentMode, 
           <BrandLogo 
             iconSize={compactChrome ? 40 : 44} 
             showWordmark={false} 
-            borderColor={activeColor ? `${activeColor}99` : undefined} 
+            borderColor={activeColor ? `color-mix(in srgb, ${activeColor} 60%, transparent)` : undefined} 
           />
           <div 
             className="uppercase text-white"

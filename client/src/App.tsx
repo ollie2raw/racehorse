@@ -3314,6 +3314,7 @@ export default function App() {
         <Suspense fallback={<ScreenLoader label="Loading Learn Mode…" />}>
           <LearnHome
             onBack={() => setAppMode('home')}
+            onNavigate={setAppMode}
             isAdmin={isAdmin}
             showAdminView={Boolean(isAdmin && showLearnAdminView)}
             onStartGuidedGame={() => {
@@ -3386,6 +3387,7 @@ export default function App() {
               setIsGuidedV2Mode(false);
               setAppMode('home');
             }}
+            onNavigate={setAppMode}
             dealSize={botDealSize}
             fritzTier={botFritzTier}
             isGuidedMode={isGuidedMode}
@@ -3432,6 +3434,7 @@ export default function App() {
         <Suspense fallback={<ScreenLoader label="Loading Ghost Match…" />}>
           <BotMatchScreen
             onBack={() => setAppMode('home')}
+            onNavigate={setAppMode}
             dealSize={botDealSize}
             mode="ghost"
             userId={authUser?.id ?? null}
@@ -3547,6 +3550,7 @@ export default function App() {
             onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
             onClose={() => setAppMode('home')}
             onNavigateToFriends={() => setAppMode('friends')}
+            onNavigate={setAppMode}
           />
         </Suspense>
       </div>

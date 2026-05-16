@@ -26,7 +26,9 @@ export function BrandLogo({
   const gap = refGap * ratio;
 
   const finalBorderColor = borderColor || '#C8922A99'; // default to 60% opacity brass
-  const shadowColor = borderColor ? `${borderColor}22` : 'rgba(200,146,42,0.1)';
+  const shadowColor = borderColor
+    ? `color-mix(in srgb, ${borderColor} 22%, transparent)`
+    : 'rgba(200,146,42,0.1)';
 
   return (
     <div className={`flex items-center ${className}`} style={{ gap }}>

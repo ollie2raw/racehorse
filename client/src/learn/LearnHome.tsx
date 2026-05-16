@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react'
 import LayoutScreen from '../ui/LayoutScreen';
 import { GlobalNav } from '../components';
 import { Button } from '../components/primitives';
+import type { AppMode } from '../types';
 import '../screens/RacehorseHomeArt.css';
 import '../screens/SinglePlayerModes.css';
 import './learn.css';
@@ -96,6 +97,7 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
 
 interface LearnHomeProps {
   onBack: () => void;
+  onNavigate?: (mode: AppMode) => void;
   onStartGuidedGame?: () => void;
   onStartGuidedAuthoring?: () => void;
   onFreezeLesson?: () => void;
@@ -107,6 +109,7 @@ interface LearnHomeProps {
 
 export default function LearnHome({
   onBack,
+  onNavigate,
   onStartGuidedGame: _onStartGuidedGame,
   onStartGuidedAuthoring: _onStartGuidedAuthoring,
   onFreezeLesson: _onFreezeLesson,
@@ -156,7 +159,11 @@ export default function LearnHome({
             currentMode="learn"
             activeColor="#34D399"
             onNavigate={(mode) => {
-              if (mode === 'home') onBack();
+              if (mode === 'home') {
+                onBack();
+                return;
+              }
+              onNavigate?.(mode);
             }}
           />
 
@@ -172,7 +179,7 @@ export default function LearnHome({
 
             <div className="relative z-10 text-center">
               <h1
-                className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-[var(--rh-text)]"
+                className="text-[64px] font-black leading-[0.9] tracking-[-0.03em] text-[var(--rh-text)]"
                 style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}
               >
                 Learn
@@ -184,7 +191,7 @@ export default function LearnHome({
 
             <div className="relative z-10 mt-[42px] grid grid-cols-4 items-stretch gap-5 px-14">
               {LEARN_MODE_CARDS.map((mode) => {
-                const isLocked = !mode.unlocked;
+                const isLocked = !mode.unlocked || (mode.id === 'guided' && !isAdmin);
 
                 return (
                   <section

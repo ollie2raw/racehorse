@@ -44,11 +44,11 @@ function getDayVisualState(day: HomeDailySummaryWeekDay): DailyStripVisualState 
 }
 
 const tabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 'trophy' | 'medal'; mode: AppMode }[] = [
-  { label: 'Single Player', color: '#9B6CFF', icon: 'robot', mode: 'singlePlayerHub' },
   { label: 'Multiplayer', color: '#3FA7FF', icon: 'users', mode: 'multiplayer' },
-  { label: 'Learn', color: '#19D8A2', icon: 'cap', mode: 'learn' },
+  { label: 'Single Player', color: '#9B6CFF', icon: 'robot', mode: 'singlePlayerHub' },
   { label: 'Tournament', color: '#F5A524', icon: 'trophy', mode: 'tournament' },
-  { label: 'Leaderboard', color: '#B8C7DA', icon: 'medal', mode: 'stats' },
+  { label: 'Learn', color: '#19D8A2', icon: 'cap', mode: 'learn' },
+  { label: 'Social', color: '#B8C7DA', icon: 'medal', mode: 'feed' },
 ];
 
 function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon']; color: string; size?: number }) {
