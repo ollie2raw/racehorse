@@ -76,7 +76,7 @@ export function snapshotBoardState(board: BoardState | null): BoardSnapshotEntry
     for (let armIdx = 0; armIdx < hub.branches.length; armIdx++) {
       const arm = hub.branches[armIdx];
       if (!arm) continue;
-      for (const placed of arm.tiles) {
+      for (const placed of arm.tiles ?? []) {
         branches.push({
           tile: [placed.tile.low, placed.tile.high],
           position: `branch-${hubId}-${armIdx}`,

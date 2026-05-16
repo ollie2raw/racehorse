@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, Tile } from '../types';
-import { isRenderableMultiplayerSnapshot } from './boardSnapshotGuards';
+import { projectMultiplayerGameState } from './boardSnapshotGuards';
 import { hasHandIdentityMismatch } from './handIdentity';
 import { evaluateSequenceUpdate, wrapSocketHandler } from './socketGuards';
 
@@ -189,11 +189,15 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         maxSeqWatermarkBeforeMeta !== params.maxSequenceRef.current &&
         params.maxSequenceRef.current === -1;
 
-      const nextState = payload?.state ?? null;
-
-      if (nextState !== null && !isRenderableMultiplayerSnapshot(nextState)) {
-        void params.fetchGameState('invalid_state_projection');
-        return;
+      const rawState = payload?.state ?? null;
+      let nextState = rawState;
+      if (nextState !== null) {
+        const projected = projectMultiplayerGameState(nextState);
+        if (!projected) {
+          void params.fetchGameState('invalid_state_projection');
+          return;
+        }
+        nextState = projected;
       }
 
       /**
@@ -267,7 +271,7 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         params.showToast('No moves available — passing…', 1500);
       }
 
-      if (selfForcedRevealPending) {
+      if (selfForcedRevealPending && nextState) {
         if (params.drawSequenceTimeoutRef.current) {
           clearTimeout(params.drawSequenceTimeoutRef.current);
           params.drawSequenceTimeoutRef.current = null;
@@ -317,13 +321,18 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       (payload: { state?: GameState | null; eventMeta?: RoomEventMeta }) => {
         params.isSeatedPlayerRef.current = false;
         params.applyRoomEventMeta(payload?.eventMeta);
-        const nextState = payload?.state ?? null;
-        if (nextState?.playerIds?.includes(params.youRef.current)) {
+        const rawState = payload?.state ?? null;
+        if (rawState?.playerIds?.includes(params.youRef.current)) {
           return;
         }
-        if (nextState !== null && !isRenderableMultiplayerSnapshot(nextState)) {
-          void params.fetchGameState('invalid_spectator_snapshot');
-          return;
+        let nextState = rawState;
+        if (nextState !== null) {
+          const projected = projectMultiplayerGameState(nextState);
+          if (!projected) {
+            void params.fetchGameState('invalid_spectator_snapshot');
+            return;
+          }
+          nextState = projected;
         }
         if (
           nextState &&

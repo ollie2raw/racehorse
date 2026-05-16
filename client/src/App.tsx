@@ -44,7 +44,11 @@ import type { FritzTier } from './bot/fritzConfig';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
 import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
-import { isRenderableMultiplayerSnapshot } from './multiplayer/boardSnapshotGuards';
+import {
+  isRenderableMultiplayerSnapshot,
+  projectMultiplayerGameState,
+  projectRenderableBoard,
+} from './multiplayer/boardSnapshotGuards';
 import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
 import { useRenderProfiler } from './debug/renderProfiler';
@@ -1555,10 +1559,15 @@ export default function App() {
 
     const rawState = resp.state ?? null;
     let nextState = rawState;
-    if (rawState !== null && !isRenderableMultiplayerSnapshot(rawState)) {
-      console.warn('[mp] room:join handshake state failed projection validation — resync scheduled');
-      void fetchGameStateRef.current('join_ack_projection_invalid');
-      nextState = null;
+    if (rawState !== null) {
+      const projected = projectMultiplayerGameState(rawState);
+      if (!projected) {
+        console.warn('[mp] room:join handshake state failed projection validation — resync scheduled');
+        void fetchGameStateRef.current('join_ack_projection_invalid');
+        nextState = null;
+      } else {
+        nextState = projected;
+      }
     }
 
     if (nextState && typeof nextState.sequence === 'number') {
@@ -2903,10 +2912,13 @@ export default function App() {
     }
 
     if (state.board) {
-      frozenHandOverBoardRef.current = {
-        handNumber: state.handNumber,
-        board: state.board,
-      };
+      const projectedBoard = projectRenderableBoard(state.board);
+      if (projectedBoard) {
+        frozenHandOverBoardRef.current = {
+          handNumber: state.handNumber,
+          board: projectedBoard,
+        };
+      }
       return;
     }
 
@@ -2916,12 +2928,14 @@ export default function App() {
   }, [state]);
 
   const boardForDisplay = useMemo(() => {
-    if (state?.board) return state.board;
-    const frozenBoard = frozenHandOverBoardRef.current;
-    if (state?.handOver && frozenBoard && frozenBoard.handNumber === state.handNumber) {
-      return frozenBoard.board;
-    }
-    return null;
+    const rawBoard =
+      state?.board ??
+      (state?.handOver &&
+      frozenHandOverBoardRef.current?.handNumber === state.handNumber
+        ? frozenHandOverBoardRef.current.board
+        : null);
+    if (!rawBoard) return null;
+    return projectRenderableBoard(rawBoard);
   }, [state]);
 
   useEffect(() => {
