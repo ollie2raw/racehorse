@@ -11,6 +11,14 @@ type GraceEntry = {
 
 const graceTimersByRoom = new Map<string, GraceEntry>();
 
+type SeatSocketResolver = (roomCode: string, playerSeatId: string) => string | null;
+
+let resolveSeatSocket: SeatSocketResolver = () => null;
+
+export function configureDisconnectGraceSeatResolver(resolver: SeatSocketResolver): void {
+  resolveSeatSocket = resolver;
+}
+
 export function clearDisconnectGrace(roomCode: string): void {
   const entry = graceTimersByRoom.get(roomCode);
   if (!entry) return;
@@ -20,7 +28,7 @@ export function clearDisconnectGrace(roomCode: string): void {
 
 export function onActivePlayerSocketDisconnect(
   roomCode: string,
-  socketId: string,
+  playerSeatId: string,
   io: Server,
   broadcast: (roomCode: string) => void,
 ): void {
@@ -31,33 +39,33 @@ export function onActivePlayerSocketDisconnect(
     return;
   }
   if (!room.state || room.state.gameOver || room.state.handOver) return;
-  if (!room.players.includes(socketId)) return;
+  if (!room.players.includes(playerSeatId)) return;
 
   clearDisconnectGrace(roomCode);
 
   io.to(roomCode).emit('player:disconnected', {
-    playerId: socketId,
+    playerId: playerSeatId,
     graceMs: DISCONNECT_GRACE_MS,
   });
 
   const timer = setTimeout(() => {
-    void handleDisconnectGraceExpired(roomCode, socketId, io, broadcast);
+    void handleDisconnectGraceExpired(roomCode, playerSeatId, io, broadcast);
   }, DISCONNECT_GRACE_MS);
 
-  graceTimersByRoom.set(roomCode, { timer, playerId: socketId });
+  graceTimersByRoom.set(roomCode, { timer, playerId: playerSeatId });
 }
 
-export function onPlayerSocketRejoined(roomCode: string, io: Server, socketId: string): void {
+export function onPlayerSocketRejoined(roomCode: string, io: Server, playerSeatId: string): void {
   const hadGrace = graceTimersByRoom.has(roomCode);
   clearDisconnectGrace(roomCode);
   if (hadGrace) {
-    io.to(roomCode).emit('player:reconnected', { playerId: socketId });
+    io.to(roomCode).emit('player:reconnected', { playerId: playerSeatId });
   }
 }
 
 async function handleDisconnectGraceExpired(
   roomCode: string,
-  disconnectedPlayerId: string,
+  disconnectedPlayerSeatId: string,
   io: Server,
   broadcast: (roomCode: string) => void,
 ): Promise<void> {
@@ -67,33 +75,36 @@ async function handleDisconnectGraceExpired(
     if (!room.state || room.state.gameOver || room.state.handOver) return;
 
     const currentId = room.state.playerIds[room.state.currentPlayerIndex];
-    if (currentId !== disconnectedPlayerId) return;
+    if (currentId !== disconnectedPlayerSeatId) return;
 
-    const stillConnected = io.sockets.sockets.get(disconnectedPlayerId)?.connected;
+    const connectionId = resolveSeatSocket(roomCode, disconnectedPlayerSeatId);
+    const stillConnected = connectionId
+      ? io.sockets.sockets.get(connectionId)?.connected
+      : false;
     if (stillConnected) return;
 
-    const legalMoves = getLegalMoves(room.state, disconnectedPlayerId);
+    const legalMoves = getLegalMoves(room.state, disconnectedPlayerSeatId);
     const canPass = legalMoves.some((move) => move.type === 'pass');
-    const canDrawNow = canDraw(room.state, disconnectedPlayerId);
+    const canDrawNow = canDraw(room.state, disconnectedPlayerSeatId);
 
     if (canPass) {
-      await act(roomCode, disconnectedPlayerId, { type: 'PASS' }, io, broadcast);
+      await act(roomCode, disconnectedPlayerSeatId, { type: 'PASS' }, io, broadcast);
     } else if (canDrawNow) {
-      await act(roomCode, disconnectedPlayerId, { type: 'DRAW' }, io, broadcast);
+      await act(roomCode, disconnectedPlayerSeatId, { type: 'DRAW' }, io, broadcast);
     } else {
       console.warn('[disconnect-grace] no legal auto-action for disconnected turn', {
         roomCode,
-        disconnectedPlayerId,
+        disconnectedPlayerSeatId,
         legalMoveTypes: legalMoves.map((m) => m.type),
       });
     }
 
-    io.to(roomCode).emit('player:reconnect_timeout', { playerId: disconnectedPlayerId });
+    io.to(roomCode).emit('player:reconnect_timeout', { playerId: disconnectedPlayerSeatId });
     broadcast(roomCode);
   } catch (error) {
     console.error('[disconnect-grace] grace expiry failed', {
       roomCode,
-      disconnectedPlayerId,
+      disconnectedPlayerSeatId,
       error: error instanceof Error ? error.message : error,
     });
   }

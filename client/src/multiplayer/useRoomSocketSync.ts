@@ -7,6 +7,7 @@ import { hasHandIdentityMismatch } from './handIdentity';
 import { evaluateSequenceUpdate, wrapSocketHandler } from './socketGuards';
 
 export type StateUpdatePayload = {
+  you?: string;
   state?: GameState | null;
   legalMoves?: Move[];
   canDraw?: boolean;
@@ -235,6 +236,14 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
         ) {
           params.playerReadyEmittedRef.current = true;
         }
+      }
+
+      if (
+        typeof payload.you === 'string' &&
+        payload.you &&
+        (!nextState?.playerIds || nextState.playerIds.includes(payload.you))
+      ) {
+        params.youRef.current = payload.you;
       }
 
       params.setState(nextState);

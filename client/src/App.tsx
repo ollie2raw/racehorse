@@ -1546,9 +1546,7 @@ export default function App() {
     }
 
     const resolvedYou =
-      typeof resp?.you === 'string' && resp.you
-        ? resp.you
-        : socket?.id ?? '';
+      typeof resp?.you === 'string' && resp.you ? resp.you : '';
 
     if (resolvedYou) {
       setYou(resolvedYou);

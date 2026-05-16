@@ -230,8 +230,6 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       current.setRoomRecoveryState(current.joinedRoomRef.current ? 'resyncing' : 'idle');
       current.setRoomRecoveryMessage(current.joinedRoomRef.current ? 'Syncing room state…' : '');
       current.setIsConnected(true);
-      current.setYou(s.id ?? '');
-      current.youRef.current = s.id ?? '';
       current.setIsConnecting(false);
       current.setServerWaking(false);
 
@@ -494,7 +492,8 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       wrapSocketHandler('hand:ended', (payload: HandEndedPayload) => {
       const current = latestRef.current;
       const currentState = current.stateRef.current;
-      const myRemaining = currentState?.players[s.id ?? '']?.hand ?? [];
+      const myId = current.youRef.current;
+      const myRemaining = currentState?.players[myId]?.hand ?? [];
       const yourRemainingTiles = payload.yourRemainingTiles ?? myRemaining;
       const opponentRemainingTiles = payload.opponentRemainingTiles ?? [];
       const blocked = yourRemainingTiles.length > 0 && opponentRemainingTiles.length > 0;
@@ -503,7 +502,6 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       }
       const stateNow = current.stateRef.current;
       const target = stateNow?.config?.winningScore ?? 60;
-      const myId = s.id ?? '';
       const oppId = stateNow?.playerIds.find((pid) => pid !== myId) ?? null;
       const myAward = payload.pointsAwarded?.you ?? 0;
       const oppAward = payload.pointsAwarded?.opponent ?? 0;
@@ -537,7 +535,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         ? payload.readyPlayerIds.filter((id: unknown): id is string => typeof id === 'string')
         : [];
       latestRef.current.setRematchReadyIds(readyPlayerIds);
-      latestRef.current.setRematchRequested(readyPlayerIds.includes(s.id ?? ''));
+      latestRef.current.setRematchRequested(readyPlayerIds.includes(latestRef.current.youRef.current));
       }),
     );
 
@@ -561,7 +559,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     s.on(
       'player:dragging',
       wrapSocketHandler('player:dragging', (payload: { playerId?: string; dragging?: boolean }) => {
-      if (!payload?.playerId || payload.playerId === s.id) return;
+      if (!payload?.playerId || payload.playerId === latestRef.current.youRef.current) return;
       latestRef.current.setOpponentDragging(Boolean(payload.dragging));
       }),
     );

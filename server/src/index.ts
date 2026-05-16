@@ -119,6 +119,7 @@ import {
 } from './scheduledTournament';
 import {
   clearDisconnectGrace,
+  configureDisconnectGraceSeatResolver,
   onActivePlayerSocketDisconnect,
   onPlayerSocketRejoined,
 } from './multiplayer/disconnectGrace';
@@ -1076,22 +1077,67 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e6,
 });
 
-type RoomPlayer = { id: string; username: string; userId: string | null };
+type RoomPlayer = { id: string; socketId: string; username: string; userId: string | null };
 type RoomJoinConfig = { username?: string; userId?: string | null; authToken?: string | null };
 type AckFn = (payload: any) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
+configureDisconnectGraceSeatResolver((roomCode, playerSeatId) => {
+  const roster = roomPlayersByCode.get(roomCode) ?? [];
+  return roster.find((player) => player.id === playerSeatId)?.socketId ?? null;
+});
 const RECONNECT_GRACE_MS = 5 * 60_000;
 const parsedRoomCleanupGrace = Number.parseInt(process.env.ROOM_CLEANUP_GRACE_MS ?? '', 10);
 const ROOM_CLEANUP_GRACE_MS = Number.isFinite(parsedRoomCleanupGrace)
   ? Math.max(60_000, parsedRoomCleanupGrace)
   : 5 * 60_000;
 type ReconnectSeat = {
+  seatId: string;
   oldSocketId: string;
   username: string;
   userId: string | null;
   expiresAt: number;
 };
+
+function allocatePlayerSeatId(): string {
+  return randomUUID();
+}
+
+function getRoomRoster(roomCode: string): RoomPlayer[] {
+  return roomPlayersByCode.get(roomCode) ?? [];
+}
+
+function getSeatIdForSocket(roomCode: string, socketId: string): string | null {
+  const match = getRoomRoster(roomCode).find((player) => player.socketId === socketId);
+  return match?.id ?? null;
+}
+
+function getSocketForSeat(roomCode: string, seatId: string): string | null {
+  return getRoomRoster(roomCode).find((player) => player.id === seatId)?.socketId ?? null;
+}
+
+function ensureSocketDataSeat(socket: Socket, playerSeatId: string): void {
+  socket.data.playerId = playerSeatId;
+}
+
+function resolveActorSeatId(roomCode: string, socket: Socket): string {
+  const fromData = typeof socket.data?.playerId === 'string' ? socket.data.playerId : null;
+  if (fromData) {
+    const roster = getRoomRoster(roomCode);
+    if (roster.some((player) => player.id === fromData)) {
+      return fromData;
+    }
+  }
+  const fromRoster = getSeatIdForSocket(roomCode, socket.id);
+  if (fromRoster) return fromRoster;
+  throw new Error('Player seat not found for socket.');
+}
+
+function getEngineSeatSocketIds(roomCode: string, seatIds: string[]): string[] {
+  return seatIds
+    .map((seatId) => getSocketForSeat(roomCode, seatId))
+    .filter((socketId): socketId is string => Boolean(socketId));
+}
 const reconnectSeatsByCode = new Map<string, ReconnectSeat[]>();
 const socketsByUserId = new Map<string, Set<string>>();
 const roomCleanupTimersByCode = new Map<string, ReturnType<typeof setTimeout>>();
@@ -4157,10 +4203,12 @@ app.get('/api/room-events/:matchId', async (req, res) => {
   }
 });
 
-function getRoomPlayersWithFallback(roomCode: string, socketIds: string[]): RoomPlayer[] {
+function getRoomPlayersWithFallback(roomCode: string, seatIds: string[]): RoomPlayer[] {
   const existing = roomPlayersByCode.get(roomCode) ?? [];
   const byId = new Map(existing.map((p) => [p.id, p]));
-  const next = socketIds.map((id) => byId.get(id) ?? { id, username: 'Guest', userId: null });
+  const next = seatIds.map(
+    (id) => byId.get(id) ?? { id, socketId: '', username: 'Guest', userId: null },
+  );
   roomPlayersByCode.set(roomCode, next);
   return next;
 }
@@ -4203,7 +4251,10 @@ function scheduleRoomCleanup(roomCode: string) {
       clearRoomMetadata(roomCode);
       return;
     }
-    const activePlayers = room.players.filter((pid) => io.sockets.sockets.has(pid));
+    const activePlayers = room.players.filter((seatId) => {
+      const socketId = getSocketForSeat(roomCode, seatId);
+      return Boolean(socketId && io.sockets.sockets.has(socketId));
+    });
     if (activePlayers.length > 0) return;
     try {
       await persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
@@ -4226,7 +4277,10 @@ function evaluateRoomLifecycle(roomCode: string | undefined) {
     cancelRoomCleanup(roomCode);
     return;
   }
-  const activePlayers = room.players.filter((pid) => io.sockets.sockets.has(pid));
+  const activePlayers = room.players.filter((seatId) => {
+    const socketId = getSocketForSeat(roomCode, seatId);
+    return Boolean(socketId && io.sockets.sockets.has(socketId));
+  });
   if (activePlayers.length === 0 || room.state?.gameOver) {
     scheduleRoomCleanup(roomCode);
     return;
@@ -4271,57 +4325,12 @@ function identityMatchesReconnectSeat(
   return seat.username === identity.username;
 }
 
-function migrateRoomSeat(roomCode: string, oldSocketId: string, newSocketId: string) {
-  const room = getRoom(roomCode);
-  const idx = room.players.indexOf(oldSocketId);
-  if (idx < 0) return;
-  room.players[idx] = newSocketId;
-
-  if (room.state) {
-    const nextPlayerIds = room.state.playerIds.map((pid) =>
-      pid === oldSocketId ? newSocketId : pid,
-    );
-    const nextPlayers: Record<string, any> = { ...room.state.players };
-    if (nextPlayers[oldSocketId]) {
-      nextPlayers[newSocketId] = {
-        ...nextPlayers[oldSocketId],
-        id: newSocketId,
-      };
-      delete nextPlayers[oldSocketId];
-    }
-    room.state = {
-      ...room.state,
-      playerIds: nextPlayerIds,
-      players: nextPlayers,
-    } as any;
-    if (room.lastBroadcastScores[oldSocketId] !== undefined) {
-      room.lastBroadcastScores[newSocketId] = room.lastBroadcastScores[oldSocketId];
-      delete room.lastBroadcastScores[oldSocketId];
-    }
-  }
-  if (room.ghostMoveLogs[oldSocketId]) {
-    room.ghostMoveLogs[newSocketId] = room.ghostMoveLogs[oldSocketId];
-    delete room.ghostMoveLogs[oldSocketId];
-  }
-
-  if (room.nextHandReady.has(oldSocketId)) {
-    room.nextHandReady.delete(oldSocketId);
-    room.nextHandReady.add(newSocketId);
-  }
-  if (room.rematchReady.has(oldSocketId)) {
-    room.rematchReady.delete(oldSocketId);
-    room.rematchReady.add(newSocketId);
-    // Broadcast updated status so the opponent's "Waiting for…" UI reflects
-    // the migrated socket id without requiring another game:rematch event.
-    emitRematchStatus(roomCode);
-  }
-
+function migrateRoomSeat(roomCode: string, playerSeatId: string, newSocketId: string) {
   const roster = roomPlayersByCode.get(roomCode) ?? [];
-  const rosterIdx = roster.findIndex((p) => p.id === oldSocketId);
-  if (rosterIdx >= 0) {
-    roster[rosterIdx] = { ...roster[rosterIdx], id: newSocketId };
-    roomPlayersByCode.set(roomCode, roster);
-  }
+  const rosterIdx = roster.findIndex((player) => player.id === playerSeatId);
+  if (rosterIdx < 0) return;
+  roster[rosterIdx] = { ...roster[rosterIdx], socketId: newSocketId };
+  roomPlayersByCode.set(roomCode, roster);
 }
 
 function emitRematchStatus(roomCode: string) {
@@ -4352,7 +4361,9 @@ function emitForcedDrawAnimationPayload(
 ) {
   const hasPlayableFollowUp = getRoomLegalMoves(roomCode, payload.playerId).some((move) => move.type === 'play');
   const sequence = payload.finalState.sequence;
-  io.to(payload.playerId).emit('game:draw_animation', {
+  const targetSocketId = getSocketForSeat(roomCode, payload.playerId);
+  if (!targetSocketId) return;
+  io.to(targetSocketId).emit('game:draw_animation', {
     playerId: payload.playerId,
     sequence,
     mode: 'forced_draw',
@@ -4370,7 +4381,7 @@ function emitForcedDrawAnimationPayload(
     },
   });
 
-  io.to(roomCode).except(payload.playerId).emit('game:draw_animation', {
+  io.to(roomCode).except(targetSocketId).emit('game:draw_animation', {
     playerId: payload.playerId,
     sequence,
     mode: 'forced_draw',
@@ -4392,8 +4403,10 @@ function emitForcedDrawAnimationPayload(
 function clearSocketRematchReady(roomCode: string | undefined, socketId: string) {
   if (!roomCode) return;
   try {
+    const playerSeatId = getSeatIdForSocket(roomCode, socketId);
+    if (!playerSeatId) return;
     const room = getRoom(roomCode);
-    const changed = room.rematchReady.delete(socketId);
+    const changed = room.rematchReady.delete(playerSeatId);
     if (changed) emitRematchStatus(room.code);
   } catch {
     // room no longer exists
@@ -4573,8 +4586,8 @@ function broadcastStateUpdate(roomCode: string) {
       const byId = new Map(roster.map((p) => [p.id, p]));
       const aId = pids[0];
       const bId = pids[1];
-      const a = byId.get(aId) ?? { id: aId, username: "Guest", userId: null };
-      const b = byId.get(bId) ?? { id: bId, username: "Guest", userId: null };
+      const a = byId.get(aId) ?? { id: aId, socketId: '', username: 'Guest', userId: null };
+      const b = byId.get(bId) ?? { id: bId, socketId: '', username: 'Guest', userId: null };
       const scoreA = room.state.players[aId]?.score ?? 0;
       const scoreB = room.state.players[bId]?.score ?? 0;
       const winnerSocketId = room.state.winnerId ?? (scoreA >= scoreB ? aId : bId);
@@ -4806,14 +4819,16 @@ function broadcastStateUpdate(roomCode: string) {
   }
 
   // Self-heal Socket.IO room membership for active (human) match players.
-  for (const pid of room.state.playerIds) {
-    if (pid.startsWith('bot:fritz:')) continue;
-    const playerSocket = io.sockets.sockets.get(pid);
+  for (const seatId of room.state.playerIds) {
+    if (seatId.startsWith('bot:fritz:')) continue;
+    const connectionId = getSocketForSeat(roomCode, seatId);
+    if (!connectionId) continue;
+    const playerSocket = io.sockets.sockets.get(connectionId);
     if (!playerSocket) continue;
     if (!playerSocket.rooms.has(roomCode)) {
       playerSocket.join(roomCode);
       playerSocket.data.roomId = roomCode;
-      playerSocket.data.playerId = pid;
+      ensureSocketDataSeat(playerSocket, seatId);
     }
   }
 
@@ -4831,19 +4846,25 @@ function broadcastStateUpdate(roomCode: string) {
   );
   const previousScores = room.lastBroadcastScores;
 
-  for (const socketId of sockets) {
-    const socket = io.sockets.sockets.get(socketId);
+  for (const connectionId of sockets) {
+    const socket = io.sockets.sockets.get(connectionId);
     if (socket) {
-      const isPlayer = room.state.playerIds.includes(socketId);
-      const recipientPlayerId =
-        room.state.playerIds.includes(socketId)
-          ? socketId
-          : typeof socket.data?.playerId === 'string' && room.state.playerIds.includes(socket.data.playerId)
-            ? socket.data.playerId
-            : null;
+      const recipientPlayerId = (() => {
+        const fromData =
+          typeof socket.data?.playerId === 'string' ? socket.data.playerId : null;
+        if (fromData && room.state!.playerIds.includes(fromData)) {
+          return fromData;
+        }
+        const fromRoster = getSeatIdForSocket(roomCode, connectionId);
+        if (fromRoster && room.state!.playerIds.includes(fromRoster)) {
+          return fromRoster;
+        }
+        return null;
+      })();
+      const isPlayer = recipientPlayerId !== null;
 
-      const legalMoves = isPlayer ? getRoomLegalMoves(roomCode, socketId) : [];
-      const canDraw = isPlayer ? getRoomCanDraw(roomCode, socketId) : false;
+      const legalMoves = isPlayer ? getRoomLegalMoves(roomCode, recipientPlayerId) : [];
+      const canDraw = isPlayer ? getRoomCanDraw(roomCode, recipientPlayerId) : false;
 
       const maskedState = maskStateForRecipient(room.state, recipientPlayerId);
       const broadcastHandCounts = getHandCounts(room.state);
@@ -4852,6 +4873,7 @@ function broadcastStateUpdate(roomCode: string) {
 
         legalMoves,
         canDraw,
+        you: recipientPlayerId ?? undefined,
         eventMeta: getRoomMatchEventMeta(room.code),
         matchStarted: true,
         ...(pendingForcedDraw
@@ -4869,12 +4891,14 @@ function broadcastStateUpdate(roomCode: string) {
         room.lastHandEndedNotifiedHand !== room.state.handNumber
       ) {
         room.lastHandEndedNotifiedHand = room.state.handNumber;
-        for (const pid of room.state.playerIds) {
-          if (pid.startsWith('bot:fritz:')) continue;
-          const playerSocket = io.sockets.sockets.get(pid);
+        for (const seatId of room.state.playerIds) {
+          if (seatId.startsWith('bot:fritz:')) continue;
+          const connectionId = getSocketForSeat(roomCode, seatId);
+          if (!connectionId) continue;
+          const playerSocket = io.sockets.sockets.get(connectionId);
           if (!playerSocket) continue;
 
-          const payload = buildHandEndedPayload(room, pid);
+          const payload = buildHandEndedPayload(room, seatId);
           if (payload) {
             playerSocket.emit('hand:ended', payload);
           }
@@ -4905,16 +4929,15 @@ function broadcastStateUpdate(roomCode: string) {
     };
     const currentRoomSockets = io.sockets.adapter.rooms.get(room.code);
     if (currentRoomSockets) {
-      for (const socketId of currentRoomSockets) {
-        const recipient = io.sockets.sockets.get(socketId);
+      for (const connectionId of currentRoomSockets) {
+        const recipient = io.sockets.sockets.get(connectionId);
         if (!recipient) continue;
-        const playerId =
-          room.state.playerIds.includes(socketId)
-            ? socketId
-            : typeof recipient.data?.playerId === 'string' && room.state.playerIds.includes(recipient.data.playerId)
-              ? recipient.data.playerId
-              : null;
-        if (playerId) continue;
+        const playerSeatId =
+          typeof recipient.data?.playerId === 'string' &&
+          room.state.playerIds.includes(recipient.data.playerId)
+            ? recipient.data.playerId
+            : getSeatIdForSocket(room.code, connectionId);
+        if (playerSeatId && room.state.playerIds.includes(playerSeatId)) continue;
         recipient.emit('state:spectate', spectatorPayload);
       }
     }
@@ -5006,20 +5029,22 @@ io.on('connection', (socket: Socket) => {
       return;
     }
 
-    const wasPlayer = room.players.includes(socket.id);
+    const playerSeatId = getSeatIdForSocket(code, socket.id);
+    const wasPlayer = playerSeatId ? room.players.includes(playerSeatId) : false;
     clearSocketRematchReady(code, socket.id);
 
-    if (!preserveSeat && wasPlayer) {
+    if (!preserveSeat && wasPlayer && playerSeatId) {
       appendRoomEvent(room, {
         type: 'player_left',
         actorSocketId: socket.id,
         actorUserId: normalizeUserId(socket.data?.userId),
         payload: {
           preserveSeat,
+          playerSeatId,
         },
       });
-      room.players = room.players.filter((pid) => pid !== socket.id);
-      const nextRoster = (roomPlayersByCode.get(code) ?? []).filter((player) => player.id !== socket.id);
+      room.players = room.players.filter((pid) => pid !== playerSeatId);
+      const nextRoster = (roomPlayersByCode.get(code) ?? []).filter((player) => player.id !== playerSeatId);
       if (nextRoster.length > 0) {
         roomPlayersByCode.set(code, nextRoster);
       } else {
@@ -5256,7 +5281,9 @@ io.on('connection', (socket: Socket) => {
 
     // Create a normal 2-player room for this match with a 30-point winning score.
     // Attach tournament metadata so we can record results later on gameOver.
-    const room = createRoom(m.a, {
+    const seatA = allocatePlayerSeatId();
+    const seatB = allocatePlayerSeatId();
+    const room = createRoom(seatA, {
       winningScore: 30,
       tournamentId: t.id,
       tournamentMatchId: m.id,
@@ -5270,7 +5297,7 @@ io.on('connection', (socket: Socket) => {
     t.activeRoomCode = room.code;
 
     // Join the second player in the engine + socket room
-    joinRoom(room.code, m.b);
+    joinRoom(room.code, seatB);
     joinSocketToRoom(m.a, room.code, ['tourn:']);
     joinSocketToRoom(m.b, room.code, ['tourn:']);
 
@@ -5278,8 +5305,8 @@ io.on('connection', (socket: Socket) => {
     const pa = t.players.find((p) => p.socketId === m.a);
     const pb = t.players.find((p) => p.socketId === m.b);
     const roomPlayers = [
-      { id: m.a, username: pa?.username ?? 'Player', userId: pa?.userId ?? null },
-      { id: m.b, username: pb?.username ?? 'Player', userId: pb?.userId ?? null },
+      { id: seatA, socketId: m.a, username: pa?.username ?? 'Player', userId: pa?.userId ?? null },
+      { id: seatB, socketId: m.b, username: pb?.username ?? 'Player', userId: pb?.userId ?? null },
     ];
     roomPlayersByCode.set(room.code, roomPlayers);
     io.to(room.code).emit('room:update', { players: roomPlayers });
@@ -5492,13 +5519,14 @@ io.on('connection', (socket: Socket) => {
       const { username, userId } = await resolveSocketIdentity(config);
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
-      const room = createRoom(socket.id, roomConfig as Record<string, unknown>);
+      const playerSeatId = allocatePlayerSeatId();
+      const room = createRoom(playerSeatId, roomConfig as Record<string, unknown>);
       socket.join(room.code);
       socket.data.roomId = room.code;
       socket.data.username = username;
       socket.data.userId = userId;
-      socket.data.playerId = socket.id;
-      const roomPlayers: RoomPlayer[] = [{ id: socket.id, username, userId }];
+      ensureSocketDataSeat(socket, playerSeatId);
+      const roomPlayers: RoomPlayer[] = [{ id: playerSeatId, socketId: socket.id, username, userId }];
       roomPlayersByCode.set(room.code, roomPlayers);
       appendRoomEvent(room, {
         type: 'player_joined',
@@ -5513,7 +5541,7 @@ io.on('connection', (socket: Socket) => {
       cb?.({
         ok: true,
         roomCode: room.code,
-        you: socket.id,
+        you: playerSeatId,
         players: roomPlayers,
         eventMeta: getRoomMatchEventMeta(room.code),
         matchStarted: false,
@@ -5637,7 +5665,9 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       if (existingRoom && userId) {
         const existingPlayer = roster.find((player) => player.userId === userId);
         if (existingPlayer) {
-          const oldSocket = io.sockets.sockets.get(existingPlayer.id);
+          const oldSocket = existingPlayer.socketId
+            ? io.sockets.sockets.get(existingPlayer.socketId)
+            : undefined;
           if (oldSocket && oldSocket.id !== socket.id && oldSocket.connected) {
             console.log(`[room:join] FORCE-DISCONNECT: old socket ${oldSocket.id} for userId=${userId}, new socket ${socket.id} taking over`);
             oldSocket.emit('room:session:superseded', { reason: 'new_session', newSocketId: socket.id });
@@ -5645,15 +5675,16 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
             await new Promise(resolve => setTimeout(resolve, 50));
           }
 
-          console.log(`[room:join] RECONNECT: migrating ${existingPlayer.id} -> ${socket.id} for userId=${userId}`);
+          console.log(`[room:join] RECONNECT: migrating seat ${existingPlayer.id} socket -> ${socket.id} for userId=${userId}`);
           migrateRoomSeat(roomCode, existingPlayer.id, socket.id);
-          roster = roster
-            .map((player) =>
-              player.id === existingPlayer.id ? { ...player, id: socket.id, username, userId } : player,
-            );
+          roster = roster.map((player) =>
+            player.id === existingPlayer.id
+              ? { ...player, socketId: socket.id, username, userId }
+              : player,
+          );
           roomPlayersByCode.set(roomCode, roster);
           socket.data.roomId = roomCode;
-          socket.data.playerId = socket.id;
+          ensureSocketDataSeat(socket, existingPlayer.id);
           room = existingRoom;
           migratedByUserId = true;
           appendRoomEvent(room, {
@@ -5661,15 +5692,20 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
             actorSocketId: socket.id,
             actorUserId: userId,
             payload: {
-              previousSocketId: existingPlayer.id,
+              previousSocketId: existingPlayer.socketId,
+              playerSeatId: existingPlayer.id,
               username,
             },
           });
         }
       }
+      let joinedPlayerSeatId: string | null = migratedByUserId
+        ? roster.find((player) => player.userId === userId)?.id ?? null
+        : null;
       if (!migratedByUserId) {
         try {
-          room = joinRoom(roomCode, socket.id);
+          joinedPlayerSeatId = allocatePlayerSeatId();
+          room = joinRoom(roomCode, joinedPlayerSeatId);
         } catch (err) {
           const message = err instanceof Error ? err.message : 'unknown error';
           if (!message.toLowerCase().includes('room is full')) {
@@ -5683,30 +5719,45 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
             }),
           );
           if (!match) throw err;
-          migrateRoomSeat(roomCode, match.oldSocketId, socket.id);
+          joinedPlayerSeatId = match.seatId;
+          migrateRoomSeat(roomCode, match.seatId, socket.id);
           reconnectSeatsByCode.set(
             roomCode,
-            seats.filter((seat) => seat.oldSocketId !== match.oldSocketId),
+            seats.filter((seat) => seat.seatId !== match.seatId),
           );
-          roster = roster
-            .map((player) =>
-              player.id === match.oldSocketId ? { ...player, id: socket.id, username, userId } : player,
-            )
-            .filter((player) => player.id !== match.oldSocketId);
+          const rosterIdx = roster.findIndex((player) => player.id === match.seatId);
+          if (rosterIdx >= 0) {
+            roster[rosterIdx] = { ...roster[rosterIdx], socketId: socket.id, username, userId };
+          } else {
+            roster.push({
+              id: match.seatId,
+              socketId: socket.id,
+              username,
+              userId,
+            });
+          }
           room = getRoom(roomCode);
         }
       }
       if (!room) throw new Error('Room not found.');
+      if (!joinedPlayerSeatId) {
+        joinedPlayerSeatId = resolveActorSeatId(room.code, socket);
+      }
       socket.join(room.code);
       socket.data.roomId = room.code;
       socket.data.username = username;
       socket.data.userId = userId;
-      socket.data.playerId = socket.id;
-      const existingIdx = roster.findIndex((p) => p.id === socket.id);
+      ensureSocketDataSeat(socket, joinedPlayerSeatId);
+      const existingIdx = roster.findIndex((p) => p.id === joinedPlayerSeatId);
       if (existingIdx >= 0) {
-        roster[existingIdx] = { id: socket.id, username, userId };
+        roster[existingIdx] = {
+          id: joinedPlayerSeatId,
+          socketId: socket.id,
+          username,
+          userId,
+        };
       } else {
-        roster.push({ id: socket.id, username, userId });
+        roster.push({ id: joinedPlayerSeatId, socketId: socket.id, username, userId });
         appendRoomEvent(room, {
           type: 'player_joined',
           actorSocketId: socket.id,
@@ -5724,11 +5775,11 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       // Matchmaking: seat sim before start checks; auto-ready the joining socket so
       // the deal is not blocked on a client player:ready race or countdown timing.
       if (room.matchmakingMatchId && !room.state) {
-        markMatchStartReady(room.code, socket.id);
+        markMatchStartReady(room.code, joinedPlayerSeatId);
 
         console.log('[matchmaking] players in room:', room.players.length);
 
-        const mmSeatSockets = [...room.players];
+        const mmSeatSockets = getEngineSeatSocketIds(room.code, [...room.players]);
         if (mmSeatSockets.length >= 2) {
           try {
             await waitUntilMatchmakingRoomSocketsReady(io, room.code, mmSeatSockets);
@@ -5749,7 +5800,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         }
       }
 
-      const recipientId = socket.data?.playerId ?? socket.id;
+      const recipientId = joinedPlayerSeatId;
       const stateWithCounts = room.state
         ? (() => {
             const m = maskStateForRecipient(room.state!, recipientId);
@@ -5757,8 +5808,8 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
           })()
         : null;
 
-      const rejoinLegalMoves = room.state ? getRoomLegalMoves(room.code, socket.id) : [];
-      const rejoinCanDraw = room.state ? getRoomCanDraw(room.code, socket.id) : false;
+      const rejoinLegalMoves = room.state ? getRoomLegalMoves(room.code, joinedPlayerSeatId) : [];
+      const rejoinCanDraw = room.state ? getRoomCanDraw(room.code, joinedPlayerSeatId) : false;
 
       // ── Scheduled-tournament metadata ──────────────────────────────────
       // When the room belongs to a scheduled tournament, attach the match
@@ -5828,7 +5879,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       cb?.({
         ok: true,
         roomCode: room.code,
-        you: socket.id,
+        you: joinedPlayerSeatId,
         players: roster,
         state: stateWithCounts,
         legalMoves: rejoinLegalMoves,
@@ -5841,14 +5892,14 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       if (room.state) {
         // REPLAY hand:ended if rejoining into a handOver state
         if (room.state.handOver && !room.state.gameOver) {
-          const payload = buildHandEndedPayload(room, socket.id);
+          const payload = buildHandEndedPayload(room, joinedPlayerSeatId);
           if (payload) {
             socket.emit('hand:ended', payload);
           }
         }
       }
 
-      onPlayerSocketRejoined(room.code, io, socket.id);
+      onPlayerSocketRejoined(room.code, io, joinedPlayerSeatId);
 
       evaluateRoomLifecycle(room.code);
     } catch (err: unknown) {
@@ -5873,16 +5924,19 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     const roomCode = String(code ?? '').trim().toUpperCase();
     try {
       const room = getRoom(roomCode);
-      if (!room.players.includes(socket.id)) {
+      const playerSeatId = resolveActorSeatId(roomCode, socket);
+      if (!room.players.includes(playerSeatId)) {
         cb?.({ ok: false, error: 'Only room players can ready up.' });
         return;
       }
-      markMatchStartReady(roomCode, socket.id);
+      markMatchStartReady(roomCode, playerSeatId);
       const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
       if (startResult.started) {
         const started = getRoom(roomCode);
-        for (const socketId of started.players) {
-          const pSocket = io.sockets.sockets.get(socketId);
+        for (const seatId of started.players) {
+          const connectionId = getSocketForSeat(roomCode, seatId);
+          if (!connectionId) continue;
+          const pSocket = io.sockets.sockets.get(connectionId);
           const playerId = normalizeUserId(pSocket?.data?.userId);
           if (playerId) {
             void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
@@ -5909,11 +5963,12 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     console.log(`[game:start] socket=${socket.id}, code=${roomCode}`);
     try {
       const existingRoom = getRoom(roomCode);
-      if (!existingRoom.players.includes(socket.id)) {
+      const playerSeatId = resolveActorSeatId(roomCode, socket);
+      if (!existingRoom.players.includes(playerSeatId)) {
         if (typeof cb === 'function') cb({ ok: false, error: 'Only room players can start the game.' });
         return;
       }
-      if (existingRoom.players[0] !== socket.id) {
+      if (existingRoom.players[0] !== playerSeatId) {
         if (typeof cb === 'function') cb({ ok: false, error: 'Only the room host can start the game.' });
         return;
       }
@@ -5926,7 +5981,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         if (typeof cb === 'function') cb({ ok: false, error: 'waiting_for_players' });
         return;
       }
-      markMatchStartReady(roomCode, socket.id);
+      markMatchStartReady(roomCode, playerSeatId);
       const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
       if (!startResult.started) {
         if (typeof cb === 'function') {
@@ -5938,8 +5993,10 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       console.log(
         `[game:start] game started, handNumber=${room.state?.handNumber}, handOver=${room.state?.handOver}`,
       );
-      for (const socketId of room.players) {
-        const pSocket = io.sockets.sockets.get(socketId);
+      for (const seatId of room.players) {
+        const connectionId = getSocketForSeat(roomCode, seatId);
+        if (!connectionId) continue;
+        const pSocket = io.sockets.sockets.get(connectionId);
         const playerId = normalizeUserId(pSocket?.data?.userId);
         if (playerId) {
           void upsertPresence(playerId, 'in_game', roomCode).catch(() => {});
@@ -5974,7 +6031,8 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         return;
       }
       const existingRoom = getRoom(roomCode);
-      if (!existingRoom.players.includes(socket.id)) {
+      const playerSeatId = resolveActorSeatId(roomCode, socket);
+      if (!existingRoom.players.includes(playerSeatId)) {
         if (typeof cb === 'function') cb({ ok: false, error: 'Spectators cannot act.' });
         return;
       }
@@ -5986,7 +6044,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         if (typeof cb === 'function') cb({ ok: false, error: 'Game is over.' });
         return;
       }
-      const result = await act(roomCode, socket.id, action, io, (code) => broadcastStateUpdate(code));
+      const result = await act(roomCode, playerSeatId, action, io, (code) => broadcastStateUpdate(code));
       const room = result.room;
       room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
         ? {
@@ -6021,7 +6079,8 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     const handNumber = typeof arg2 === 'number' && Number.isFinite(arg2) ? arg2 : undefined;
     const cb = (typeof arg2 === 'function' ? arg2 : arg3) as AckFn | undefined;
     try {
-      const result = await readyForNextHand(roomCode, socket.id, io, handNumber, (code) => {
+      const playerSeatId = resolveActorSeatId(roomCode, socket);
+      const result = await readyForNextHand(roomCode, playerSeatId, io, handNumber, (code) => {
         broadcastStateUpdate(code);
       });
       if (result.started) {
@@ -6051,7 +6110,8 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
       if (cfg.tournamentId) {
         return cb?.({ ok: false, error: 'Rematch is unavailable in tournament rooms.' });
       }
-      if (!room.players.includes(socket.id)) {
+      const playerSeatId = resolveActorSeatId(roomCode, socket);
+      if (!room.players.includes(playerSeatId)) {
         return cb?.({ ok: false, error: 'Only room players can request rematch.' });
       }
       if (!room.state) {
@@ -6061,7 +6121,7 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
         return cb?.({ ok: false, error: 'Rematch is only available after game over.' });
       }
 
-      room.rematchReady.add(socket.id);
+      room.rematchReady.add(playerSeatId);
       appendRoomEvent(room, {
         type: 'rematch_requested',
         actorSocketId: socket.id,
@@ -6122,9 +6182,10 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     if (!roomCode) return;
     try {
       const room = getRoom(roomCode);
-      if (!room.players.includes(socket.id)) return;
+      const playerSeatId = resolveActorSeatId(roomCode, socket);
+      if (!room.players.includes(playerSeatId)) return;
       socket.to(roomCode).emit('player:dragging', {
-        playerId: socket.id,
+        playerId: playerSeatId,
         dragging: Boolean(payload?.dragging),
       });
     } catch {
@@ -6144,14 +6205,18 @@ socket.on('room:spectate', async (argCode: unknown, arg2?: unknown, arg3?: unkno
     if (roomCode) {
       try {
         const room = getRoom(roomCode);
-        if (room.players.includes(socket.id)) {
+        const playerSeatId = getSeatIdForSocket(roomCode, socket.id);
+        if (playerSeatId && room.players.includes(playerSeatId)) {
           wasActiveRoomPlayer = true;
           reserveReconnectSeat(roomCode, {
+            seatId: playerSeatId,
             oldSocketId: socket.id,
             username: normalizeUsername(socket.data?.username),
             userId,
           });
-          onActivePlayerSocketDisconnect(roomCode, socket.id, io, (code) => broadcastStateUpdate(code));
+          onActivePlayerSocketDisconnect(roomCode, playerSeatId, io, (code) =>
+            broadcastStateUpdate(code),
+          );
         }
       } catch {
         // room no longer exists

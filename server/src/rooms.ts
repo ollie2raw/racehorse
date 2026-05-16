@@ -33,13 +33,16 @@ export type LeadTracker = {
 
 export type Room = {
   code: RoomCode;
-  players: string[]; // socket ids in seat order
+  /** Stable `playerSeatId` values in engine seat order (never socket ids). */
+  players: string[];
   state: GameState | null; // null until game started
   config: Partial<Config>;
   asyncStateVersion: number;
+  /** `playerSeatId` values ready for the next hand. */
   nextHandReady: Set<string>;
+  /** `playerSeatId` values ready for rematch. */
   rematchReady: Set<string>;
-  /** Socket ids that have acked listeners ready before the first deal is broadcast. */
+  /** `playerSeatId` values that have acked listeners ready before the first deal is broadcast. */
   matchStartReady: Set<string>;
   lastHandEndedNotifiedHand: number | null;
   lastHandEndedAtMs: number | null;
@@ -147,8 +150,8 @@ function serializeGhostBoardState(board: BoardState | null): string {
   });
 }
 
-function appendGhostMove(room: Room, socketId: string, entry: GhostMoveLogEntry): void {
-  room.ghostMoveLogs[socketId] = [...(room.ghostMoveLogs[socketId] ?? []), entry];
+function appendGhostMove(room: Room, playerSeatId: string, entry: GhostMoveLogEntry): void {
+  room.ghostMoveLogs[playerSeatId] = [...(room.ghostMoveLogs[playerSeatId] ?? []), entry];
 }
 
 function currentGhostTurn(room: Room): number {
@@ -164,13 +167,13 @@ function makeCode(len = 5): string {
   return s;
 }
 
-export function createRoom(hostSocketId: string, config: Partial<Config> = {}): Room {
+export function createRoom(hostPlayerSeatId: string, config: Partial<Config> = {}): Room {
   let code = makeCode();
   while (rooms.has(code)) code = makeCode();
 
   const room: Room = {
     code,
-    players: [hostSocketId],
+    players: [hostPlayerSeatId],
     state: null,
     config,
     asyncStateVersion: 0,
@@ -188,9 +191,8 @@ export function createRoom(hostSocketId: string, config: Partial<Config> = {}): 
   };
   appendRoomEvent(room, {
     type: 'room_created',
-    actorSocketId: hostSocketId,
     payload: {
-      hostSocketId,
+      hostPlayerSeatId,
       config,
     },
   });
@@ -238,15 +240,15 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
   return room;
 }
 
-export function joinRoom(code: string, socketId: string): Room {
+export function joinRoom(code: string, playerSeatId: string): Room {
   const room = rooms.get(code);
   if (!room) throw new Error('Room not found.');
 
-  if (!room.players.includes(socketId)) {
+  if (!room.players.includes(playerSeatId)) {
     if (room.players.length >= 2) {
       throw new Error('Room is full (v1 supports 2 players).');
     }
-    room.players.push(socketId);
+    room.players.push(playerSeatId);
   }
 
   return room;
@@ -517,7 +519,7 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
 
 export async function readyForNextHand(
   code: string,
-  socketId: string,
+  playerSeatId: string,
   io: Server,
   handNumber?: number,
   onStateReady?: (roomCode: string) => void,
@@ -525,18 +527,18 @@ export async function readyForNextHand(
   const room = getRoom(code);
   if (!room.state) throw new Error('Game not started.');
   if (room.state.gameOver) return { started: false, room };
-  if (!room.players.includes(socketId)) throw new Error('Player not in room.');
+  if (!room.players.includes(playerSeatId)) throw new Error('Player not in room.');
   if (typeof handNumber === 'number' && handNumber !== room.state.handNumber) {
     return { started: false, room, ignored: true };
   }
   if (!room.state.handOver) return { started: false, room };
   const readyHandNumber = room.state.handNumber;
 
-  room.nextHandReady.add(socketId);
+  room.nextHandReady.add(playerSeatId);
   appendRoomEvent(room, {
     type: 'hand_ready',
-    actorSocketId: socketId,
     payload: {
+      playerSeatId,
       readyCount: room.nextHandReady.size,
       requiredCount: room.players.length,
       handNumber: room.state.handNumber,
@@ -622,7 +624,7 @@ function commitResolvedGameState(room: Room, assertLabel: string, nextState: Gam
  */
 export async function act(
   code: string,
-  socketId: string,
+  playerSeatId: string,
   action: ActionPayload,
   io: Server,
   onStateReady: (roomCode: string) => void,
@@ -645,9 +647,9 @@ export async function act(
   // DRAW
   // ─────────────────────────────
   if (type === 'DRAW') {
-    if (!canDraw(state, socketId)) {
+    if (!canDraw(state, playerSeatId)) {
       const currentId = state.playerIds[state.currentPlayerIndex];
-      if (currentId !== socketId) {
+      if (currentId !== playerSeatId) {
         throw new Error("It's not your turn.");
       }
       if (state.boneyard.length <= state.config.deadTileCount) {
@@ -657,19 +659,19 @@ export async function act(
     }
 
     const previousState = state;
-    const result = resolveDrawUntilPlayableAtomically(state, socketId);
-    const drawAutoPassExtras = result.passed ? [socketId] : [];
+    const result = resolveDrawUntilPlayableAtomically(state, playerSeatId);
+    const drawAutoPassExtras = result.passed ? [playerSeatId] : [];
     commitResolvedGameState(room, `act:DRAW:${code}`, result.state, drawAutoPassExtras);
     appendRoomEvent(room, {
       type: 'draw_requested',
-      actorSocketId: socketId,
       payload: {
+        playerSeatId,
         handNumber: state.handNumber,
       },
     });
     logMpDebug('mp-action', {
       roomCode: room.code,
-      playerId: socketId,
+      playerId: playerSeatId,
       action: 'DRAW',
       event: 'accepted',
       sequence: room.state.sequence,
@@ -679,7 +681,7 @@ export async function act(
     for (const step of result.animationSteps) {
       appendRoomEvent(room, {
         type: 'tile_drawn',
-        actorSocketId: socketId,
+        actorSocketId: playerSeatId,
         payload: {
           tile: normalizeTileKey(step.tile),
           boneyardCount: step.boneyardCount,
@@ -690,17 +692,17 @@ export async function act(
     if (result.passed) {
       appendRoomEvent(room, {
         type: 'turn_passed',
-        actorSocketId: socketId,
+        actorSocketId: playerSeatId,
         payload: {
           handNumber: room.state.handNumber,
         },
       });
     }
-    appendResolutionEvents(room, previousState, socketId);
+    appendResolutionEvents(room, previousState, playerSeatId);
     return {
       room,
       forcedDrawAnimation: {
-        playerId: socketId,
+        playerId: playerSeatId,
         sequence: room.state.sequence,
         steps: result.animationSteps,
         stoppedReason: result.stoppedReason,
@@ -724,11 +726,11 @@ export async function act(
       position,
     };
 
-    const handBefore = state.players[socketId]?.hand ?? [];
+    const handBefore = state.players[playerSeatId]?.hand ?? [];
     const scoreDelta = computePlayScore(simulatePlacement(state.board, move.tile, position), state.config);
     const previousState = state;
-    const { state: stateAfterMove, forcedDraw } = applyMove(state, socketId, move);
-    appendGhostMove(room, socketId, {
+    const { state: stateAfterMove, forcedDraw } = applyMove(state, playerSeatId, move);
+    appendGhostMove(room, playerSeatId, {
       turn: currentGhostTurn(room),
       hand_number: state.handNumber,
       actor: 'you',
@@ -742,7 +744,7 @@ export async function act(
     room.ghostTurnIndex += 1;
     appendRoomEvent(room, {
       type: 'tile_played',
-      actorSocketId: socketId,
+      actorSocketId: playerSeatId,
       payload: {
         tile: normalizeTileKey(move.tile),
         position,
@@ -754,7 +756,7 @@ export async function act(
     let authoritativeState = stateAfterMove;
     let resolvedForced: ResolveForcedDrawResult | null = null;
     if (forcedDraw) {
-      resolvedForced = resolveForcedDrawAtomically(stateAfterMove, socketId, forcedDraw);
+      resolvedForced = resolveForcedDrawAtomically(stateAfterMove, playerSeatId, forcedDraw);
       authoritativeState = resolvedForced.state;
     }
 
@@ -767,7 +769,7 @@ export async function act(
     if (forcedDraw && resolvedForced) {
       logMpDebug('mp-forced-draw', {
         roomCode: room.code,
-        playerId: socketId,
+        playerId: playerSeatId,
         action: 'MOVE',
         event: 'forced_draw_resolved_sync',
         sequence: room.state.sequence,
@@ -779,7 +781,7 @@ export async function act(
       for (const step of resolvedForced.animationSteps) {
         appendRoomEvent(room, {
           type: 'tile_drawn',
-          actorSocketId: socketId,
+          actorSocketId: playerSeatId,
           payload: {
             tile: normalizeTileKey(step.tile),
             boneyardCount: step.boneyardCount,
@@ -787,11 +789,11 @@ export async function act(
           },
         });
       }
-      appendResolutionEvents(room, previousState, socketId);
+      appendResolutionEvents(room, previousState, playerSeatId);
       return {
         room,
         forcedDrawAnimation: {
-          playerId: socketId,
+          playerId: playerSeatId,
           sequence: room.state.sequence,
           steps: resolvedForced.animationSteps,
           stoppedReason: resolvedForced.stoppedReason,
@@ -800,7 +802,7 @@ export async function act(
       };
     }
 
-    appendResolutionEvents(room, previousState, socketId);
+    appendResolutionEvents(room, previousState, playerSeatId);
     return { room };
   }
 
@@ -809,28 +811,28 @@ export async function act(
   // ─────────────────────────────
   if (type === 'PASS') {
     const previousState = state;
-    appendGhostMove(room, socketId, {
+    appendGhostMove(room, playerSeatId, {
       turn: currentGhostTurn(room),
       hand_number: state.handNumber,
       actor: 'you',
       board_state: serializeGhostBoardState(state.board),
       tile_played: null,
       branch: 'pass',
-      hand_before: (state.players[socketId]?.hand ?? []).map(normalizeTileKey),
+      hand_before: (state.players[playerSeatId]?.hand ?? []).map(normalizeTileKey),
       score_delta: 0,
       forced_draw: false,
     });
     room.ghostTurnIndex += 1;
-    const afterPass = applyMove(state, socketId, { type: 'pass' }).state;
+    const afterPass = applyMove(state, playerSeatId, { type: 'pass' }).state;
     commitResolvedGameState(room, `act:PASS:${code}`, afterPass);
     appendRoomEvent(room, {
       type: 'turn_passed',
-      actorSocketId: socketId,
+      actorSocketId: playerSeatId,
       payload: {
         handNumber: state.handNumber,
       },
     });
-    appendResolutionEvents(room, previousState, socketId);
+    appendResolutionEvents(room, previousState, playerSeatId);
     return { room };
   }
 

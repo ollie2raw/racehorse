@@ -133,6 +133,7 @@ function createClient(label, userId, username) {
     label,
     userId,
     username,
+    youSeatId: null,
     roomUpdates: [],
     stateUpdates: [],
     spectateUpdates: [],
@@ -141,7 +142,12 @@ function createClient(label, userId, username) {
   };
 
   socket.on('room:update', (payload) => state.roomUpdates.push(payload));
-  socket.on('state:update', (payload) => state.stateUpdates.push(payload));
+  socket.on('state:update', (payload) => {
+    state.stateUpdates.push(payload);
+    if (typeof payload?.you === 'string' && payload.you) {
+      state.youSeatId = payload.you;
+    }
+  });
   socket.on('state:spectate', (payload) => state.spectateUpdates.push(payload));
   socket.on('game:draw_animation', (payload) => state.drawAnimations.push(payload));
   socket.on('connect_error', (error) => state.connectErrors.push(error?.message || String(error)));
@@ -271,6 +277,22 @@ function getClientBySocketId(clients, socketId) {
   return clients.find((client) => client.socket.id === socketId) ?? null;
 }
 
+function captureJoinSeat(client, resp) {
+  if (typeof resp?.you === 'string' && resp.you) {
+    client.state.youSeatId = resp.you;
+  }
+}
+
+function seatIdFor(client) {
+  if (client.state.youSeatId) return client.state.youSeatId;
+  const fromUpdate = latestState(client)?.you;
+  if (typeof fromUpdate === 'string' && fromUpdate) {
+    client.state.youSeatId = fromUpdate;
+    return fromUpdate;
+  }
+  throw new Error(`${client.state.label} missing playerSeatId`);
+}
+
 function boardTileCount(board) {
   if (!board) return 0;
   const mainCount = Array.isArray(board.mainLine) ? board.mainLine.length : 0;
@@ -378,7 +400,7 @@ function computePlayScoreForMove(state, move) {
 function isForcedDrawCandidate(client, move) {
   const state = latestState(client)?.state;
   if (!state || !move?.tile) return false;
-  const ownHand = state.players?.[client.socket.id]?.hand ?? [];
+  const ownHand = state.players?.[seatIdFor(client)]?.hand ?? [];
   const drawableCount = Math.max(0, (state.boneyard?.length ?? 0) - (state.config?.deadTileCount ?? 0));
   if (ownHand.length !== 1 || drawableCount === 0) return false;
   return move.tile.low === move.tile.high || computePlayScoreForMove(state, move) > 0;
@@ -432,7 +454,7 @@ function findBlockedForcedDrawLikeMove(client) {
   const payload = latestState(client);
   const state = payload?.state;
   if (!state) return null;
-  const ownHand = state.players?.[client.socket.id]?.hand ?? [];
+  const ownHand = state.players?.[seatIdFor(client)]?.hand ?? [];
   const drawableCount = Math.max(0, (state.boneyard?.length ?? 0) - (state.config?.deadTileCount ?? 0));
   if (ownHand.length !== 1 || drawableCount === 0) return null;
 
@@ -651,8 +673,8 @@ async function startTwoPlayerGame(alpha, bravo, roomCode) {
   assert(alphaGameState?.state, 'alpha did not receive initial game state');
   assert(bravoGameState?.state, 'bravo did not receive initial game state');
 
-  const alphaId = alpha.socket.id;
-  const bravoId = bravo.socket.id;
+  const alphaId = seatIdFor(alpha);
+  const bravoId = seatIdFor(bravo);
   assert(alphaId && bravoId, 'socket ids missing after game start');
 
   assert(alphaGameState.state.players?.[alphaId]?.hand?.length === 7, 'alpha local hand was not revealed with 7 tiles');
@@ -689,6 +711,7 @@ async function scenarioLifecycleReconnect() {
         userId: alpha.state.userId,
       });
       assert(createResp?.ok, 'alpha failed to create room');
+      captureJoinSeat(alpha, createResp);
       const roomCode = createResp.roomCode;
       assert(roomCode, 'missing room code from create');
 
@@ -699,6 +722,7 @@ async function scenarioLifecycleReconnect() {
         { username: bravo.state.username, userId: bravo.state.userId },
       );
       assert(bravoJoin?.ok, 'bravo failed to join room');
+      captureJoinSeat(bravo, bravoJoin);
       await waitForRoomCount(alpha, 2);
 
       const leaveResp = await emitAck(bravo.socket, 'room:leave', roomCode);
@@ -770,7 +794,8 @@ async function scenarioLifecycleReconnect() {
           { username: bravoReconnect.state.username, userId: bravoReconnect.state.userId },
         );
         assert(rejoinResp?.ok, `rejoin after disconnect failed: ${rejoinResp?.error ?? 'unknown'}`);
-        assert(rejoinResp.you === bravoReconnect.socket.id, 'rejoined socket id mismatch');
+        assert(rejoinResp.you === bravoJoin.you, 'rejoined seat id mismatch');
+        captureJoinSeat(bravoReconnect, rejoinResp);
         assert(
           Array.isArray(rejoinResp.players) && rejoinResp.players.length === 2,
           'room did not remain at 2 players after reconnect',
@@ -782,8 +807,10 @@ async function scenarioLifecycleReconnect() {
         const latestAlphaRoster = latestRoomUpdate(alpha);
         assert(
           Array.isArray(latestAlphaRoster?.players) &&
-            latestAlphaRoster.players.some((player) => player.id === bravoReconnect.socket.id),
-          'alpha roster did not migrate to bravo reconnect socket',
+            latestAlphaRoster.players.some(
+              (player) => player.id === bravoJoin.you && player.socketId === bravoReconnect.socket.id,
+            ),
+          'alpha roster did not migrate reconnect socket onto stable seat',
         );
         assert(
           alpha.state.stateUpdates.length > 0 && spectator.state.spectateUpdates.length > 0,
@@ -893,6 +920,7 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
         userId: alpha.state.userId,
       });
       assert(createResp?.ok, 'alpha failed to create room');
+      captureJoinSeat(alpha, createResp);
       const roomCode = createResp.roomCode;
       assert(roomCode, 'missing room code');
 
@@ -903,6 +931,7 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
         { username: bravo.state.username, userId: bravo.state.userId },
       );
       assert(joinResp?.ok, 'bravo failed to join');
+      captureJoinSeat(bravo, joinResp);
       await waitForRoomCount(alpha, 2);
       await startTwoPlayerGame(alpha, bravo, roomCode);
 
@@ -937,14 +966,17 @@ async function scenarioSeatMigrationAndSpectatorRejection() {
           { username: bravoClone.state.username, userId: bravoClone.state.userId },
         );
         assert(migrateResp?.ok, `same-user seat migration failed: ${migrateResp?.error ?? 'unknown'}`);
-        assert(migrateResp.you === bravoClone.socket.id, 'migration did not bind new socket id');
+        assert(migrateResp.you === joinResp.you, 'migration did not preserve stable seat id');
+        captureJoinSeat(bravoClone, migrateResp);
 
         await waitForRoomCount(alpha, 2);
         const alphaRoster = latestRoomUpdate(alpha);
         assert(
           Array.isArray(alphaRoster?.players) &&
-            alphaRoster.players.some((player) => player.id === bravoClone.socket.id),
-          'room roster did not replace old bravo socket id during migration',
+            alphaRoster.players.some(
+              (player) => player.id === joinResp.you && player.socketId === bravoClone.socket.id,
+            ),
+          'room roster did not map reconnect socket onto stable seat during migration',
         );
 
         await waitForSequenceAtLeast(bravoClone, migrateResp.state?.sequence ?? 0);
@@ -980,6 +1012,7 @@ async function scenarioMidHandActionReliability() {
         userId: alpha.state.userId,
       });
       assert(createResp?.ok, 'alpha failed to create room');
+      captureJoinSeat(alpha, createResp);
       const roomCode = createResp.roomCode;
       assert(roomCode, 'missing room code');
 
@@ -988,6 +1021,7 @@ async function scenarioMidHandActionReliability() {
         userId: bravo.state.userId,
       });
       assert(joinResp?.ok, 'bravo failed to join');
+      captureJoinSeat(bravo, joinResp);
       await waitForRoomCount(alpha, 2);
       await startTwoPlayerGame(alpha, bravo, roomCode);
 
@@ -1006,7 +1040,7 @@ async function scenarioMidHandActionReliability() {
       const before = latestState(firstActive)?.state;
       const beforeSequence = before?.sequence ?? 0;
       const beforeBoardCount = boardTileCount(before?.board);
-      const beforeHand = before?.players?.[firstActive.socket.id]?.hand ?? [];
+      const beforeHand = before?.players?.[seatIdFor(firstActive)]?.hand ?? [];
       assert(beforeHand.some((tile) => tileEquals(tile, firstMove.tile)), 'played tile missing before action');
 
       const playResp = await emitAck(firstActive.socket, 'game:action', roomCode, {
@@ -1020,7 +1054,7 @@ async function scenarioMidHandActionReliability() {
       );
       const afterUpdate = await waitForSequenceAtLeast(firstActive, playResp.sequence);
       const after = afterUpdate.state;
-      const afterHand = after.players?.[firstActive.socket.id]?.hand ?? [];
+      const afterHand = after.players?.[seatIdFor(firstActive)]?.hand ?? [];
       assert(after.sequence > beforeSequence, 'state sequence did not increase after legal play');
       assert(boardTileCount(after.board) > beforeBoardCount, 'board did not change after legal play');
       assert(!afterHand.some((tile) => tileEquals(tile, firstMove.tile)), 'played tile remained in active hand');
@@ -1055,7 +1089,8 @@ async function scenarioMidHandActionReliability() {
           userId: reconnectUser.userId,
         });
         assert(rejoinResp?.ok, `rejoin before action failed: ${rejoinResp?.error ?? 'unknown'}`);
-        assert(rejoinResp.you === reconnected.socket.id, 'rejoin did not bind new socket id');
+        assert(rejoinResp.you === seatIdFor(reconnectTarget), 'rejoin did not preserve stable seat id');
+        captureJoinSeat(reconnected, rejoinResp);
         assert(Array.isArray(rejoinResp.legalMoves), 'rejoin response missing legalMoves');
 
         const liveClients = reconnectTarget === alpha ? [reconnected, bravo] : [alpha, reconnected];
@@ -1078,7 +1113,7 @@ async function scenarioMidHandActionReliability() {
         );
         const reconnectAfter = await waitForSequenceAtLeast(reconnected, reconnectResp.sequence);
         assert(
-          !((reconnectAfter.state.players?.[reconnected.socket.id]?.hand ?? []).some((tile) =>
+          !((reconnectAfter.state.players?.[seatIdFor(reconnected)]?.hand ?? []).some((tile) =>
             tileEquals(tile, reconnectMove.tile),
           )),
           'reconnected played tile remained in hand',
@@ -1456,20 +1491,20 @@ async function assertPostMoveState(clients, actor, move, beforeState, ackSequenc
     );
 
     if (client === actor) {
-      const ownHand = state.players?.[actor.socket.id]?.hand ?? [];
+      const ownHand = state.players?.[seatIdFor(actor)]?.hand ?? [];
       assert(!ownHand.some((tile) => tileEquals(tile, move.tile)), 'actor still sees played tile in own hand');
     } else if (!state.handOver && !state.gameOver) {
-      const actorHand = state.players?.[actor.socket.id]?.hand ?? [];
+      const actorHand = state.players?.[seatIdFor(actor)]?.hand ?? [];
       assert(actorHand.length === 0, `${client.state.label} received actor hand during active play`);
     }
 
     const currentId = state.playerIds[state.currentPlayerIndex];
     const legalMoves = Array.isArray(payload?.legalMoves) ? payload.legalMoves : [];
-    if (!state.handOver && !state.gameOver && client.socket.id !== currentId) {
+    if (!state.handOver && !state.gameOver && seatIdFor(client) !== currentId) {
       assert(legalMoves.length === 0, `${client.state.label} received legal moves while inactive`);
       assert(payload?.canDraw === false, `${client.state.label} canDraw true while inactive`);
     }
-    if (!state.handOver && !state.gameOver && client.socket.id === currentId) {
+    if (!state.handOver && !state.gameOver && seatIdFor(client) === currentId) {
       const hasPlay = legalMoves.some((legalMove) => legalMove?.type === 'play');
       const hasPass = legalMoves.some((legalMove) => legalMove?.type === 'pass');
       assert(!payload?.canDraw || !hasPlay, `${client.state.label} canDraw true while legal play exists`);
@@ -1512,9 +1547,9 @@ async function scenarioPostMoveStability() {
         assert(move, 'active player did not have a playable move during post-MOVE stability');
         const beforeState = latestState(actor)?.state;
         assert(beforeState, 'missing actor state before post-MOVE stability action');
-        assert(beforeState.playerIds[beforeState.currentPlayerIndex] === actor.socket.id, 'actor was not current player');
+        assert(beforeState.playerIds[beforeState.currentPlayerIndex] === seatIdFor(actor), 'actor was not current player');
         assert(
-          (beforeState.players?.[actor.socket.id]?.hand ?? []).some((tile) => tileEquals(tile, move.tile)),
+          (beforeState.players?.[seatIdFor(actor)]?.hand ?? []).some((tile) => tileEquals(tile, move.tile)),
           'actor did not have selected tile before post-MOVE stability action',
         );
 
@@ -1695,6 +1730,7 @@ async function scenarioGuestSeatReconnect() {
         userId: host.state.userId,
       });
       assert(createResp?.ok, 'guest host failed to create room');
+      captureJoinSeat(host, createResp);
       const roomCode = createResp.roomCode;
       assert(roomCode, 'missing room code');
 
@@ -1705,6 +1741,7 @@ async function scenarioGuestSeatReconnect() {
         { username: guest.state.username, userId: guest.state.userId },
       );
       assert(joinResp?.ok, 'generic guest failed initial join');
+      captureJoinSeat(guest, joinResp);
       await waitForRoomCount(host, 2);
       await startTwoPlayerGame(host, guest, roomCode);
 
@@ -1721,15 +1758,18 @@ async function scenarioGuestSeatReconnect() {
           { username: guestReconnect.state.username, userId: guestReconnect.state.userId },
         );
         assert(rejoinResp?.ok, `generic guest reconnect failed: ${rejoinResp?.error ?? 'unknown'}`);
-        assert(rejoinResp.you === guestReconnect.socket.id, 'generic guest reconnect socket id mismatch');
+        assert(rejoinResp.you === joinResp.you, 'generic guest reconnect seat id mismatch');
+        captureJoinSeat(guestReconnect, rejoinResp);
         assert(
           Array.isArray(rejoinResp.players) &&
-            rejoinResp.players.some((player) => player.id === guestReconnect.socket.id && player.userId === 'guest_smoke_player'),
-          'generic guest seat was not migrated to reconnect socket',
+            rejoinResp.players.some(
+              (player) => player.id === joinResp.you && player.userId === 'guest_smoke_player',
+            ),
+          'generic guest seat was not preserved on reconnect',
         );
         assert(
-          rejoinResp.state?.players?.[guestReconnect.socket.id]?.hand?.length === 7 ||
-            Array.isArray(rejoinResp.state?.players?.[guestReconnect.socket.id]?.hand),
+          rejoinResp.state?.players?.[joinResp.you]?.hand?.length === 7 ||
+            Array.isArray(rejoinResp.state?.players?.[joinResp.you]?.hand),
           'generic guest reconnect did not receive local player state',
         );
         return {
@@ -1899,6 +1939,7 @@ async function scenarioSameUserActiveSeatTakeover() {
         userId: alpha.state.userId,
       });
       assert(createResp?.ok, 'alpha failed to create room');
+      captureJoinSeat(alpha, createResp);
       const roomCode = createResp.roomCode;
 
       // 2. Bravo joins so room is full
@@ -1907,6 +1948,7 @@ async function scenarioSameUserActiveSeatTakeover() {
         userId: bravo.state.userId,
       });
       assert(joinResp?.ok, 'bravo failed to join room');
+      captureJoinSeat(bravo, joinResp);
       await waitForRoomCount(alpha, 2);
 
       await startTwoPlayerGame(alpha, bravo, roomCode);
@@ -1933,7 +1975,7 @@ async function scenarioSameUserActiveSeatTakeover() {
 
         // 7. Assert alpha is still connected and still receives/owns its seat
         const alphaState = latestState(alpha);
-        assert(alphaState?.state?.playerIds.includes(alpha.socket.id), 'alpha should still own its seat');
+        assert(alphaState?.state?.playerIds.includes(seatIdFor(alpha)), 'alpha should still own its seat');
 
         // 8. Disconnect alpha
         alpha.disconnect();
@@ -1947,7 +1989,8 @@ async function scenarioSameUserActiveSeatTakeover() {
 
         // 10. Assert response ok === true
         assert(join3Resp?.ok, `alpha2 should have successfully rejoined after alpha disconnected: ${join3Resp?.error}`);
-        assert(join3Resp.you === alpha2.socket.id, 'alpha2 should now own the seat');
+        assert(join3Resp.you === seatIdFor(alpha), 'alpha2 should inherit the stable host seat');
+        captureJoinSeat(alpha2, join3Resp);
       } finally {
         alpha2.disconnect();
       }
