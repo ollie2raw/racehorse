@@ -2080,6 +2080,22 @@ async function ensureDailyFritzRunForDate(
   }
 }
 
+function isTruthyEnvFlag(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+/** Off by default in production; set ENABLE_STARTUP_FRITZ_WARMUP=true to run on boot. */
+function isStartupDailyFritzWarmupEnabled(): boolean {
+  return isTruthyEnvFlag(process.env.ENABLE_STARTUP_FRITZ_WARMUP);
+}
+
+/** Off by default in production; set ENABLE_STARTUP_PUZZLE_WARMUP=true to run on boot. */
+function isStartupDailyPuzzleWarmupEnabled(): boolean {
+  return isTruthyEnvFlag(process.env.ENABLE_STARTUP_PUZZLE_WARMUP);
+}
+
 async function warmDailyFritzRuns(reason: 'startup' | 'scheduled', runDates: string[]): Promise<void> {
   const startedAt = Date.now();
   console.log('[daily-fritz-warmup] start', {
@@ -5081,19 +5097,31 @@ server.listen(PORT, () => {
   startRankingCron();
   scheduleDailyFritzWarmup();
   scheduleDailyPuzzleLadderWarmup();
-  // Defer CPU/DB-heavy daily warmups so cold-start HTTP (home, tournaments, Fritz) is not
-  // starved behind synchronous puzzle generation on the single Node event loop.
+  // Optional startup warmups (off unless ENABLE_STARTUP_*_WARMUP=true). Puzzle ladder seeding
+  // runs heavy Tactical Setup generation on the single Node event loop and can starve HTTP.
   const STARTUP_DAILY_WARMUP_DELAY_MS = 12_000;
+  const startupWarmupDates = [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)];
   setTimeout(() => {
-    void warmDailyFritzRuns('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]).catch(
-      (err) => {
+    if (isStartupDailyFritzWarmupEnabled()) {
+      void warmDailyFritzRuns('startup', startupWarmupDates).catch((err) => {
         console.warn('[daily-fritz-warmup] startup failed', err instanceof Error ? err.message : err);
-      },
-    );
-    void warmDailyPuzzleLadders('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]).catch(
-      (err) => {
-        console.warn('[daily-puzzle-ladder-warmup] startup failed', err instanceof Error ? err.message : err);
-      },
-    );
+      });
+    } else {
+      console.log('[daily-fritz-warmup] skipped on startup', {
+        hint: 'Set ENABLE_STARTUP_FRITZ_WARMUP=true to enable',
+      });
+    }
+    if (isStartupDailyPuzzleWarmupEnabled()) {
+      void warmDailyPuzzleLadders('startup', startupWarmupDates).catch((err) => {
+        console.warn(
+          '[daily-puzzle-ladder-warmup] startup failed',
+          err instanceof Error ? err.message : err,
+        );
+      });
+    } else {
+      console.log('[daily-puzzle-ladder-warmup] skipped on startup', {
+        hint: 'Set ENABLE_STARTUP_PUZZLE_WARMUP=true to enable',
+      });
+    }
   }, STARTUP_DAILY_WARMUP_DELAY_MS);
 });
