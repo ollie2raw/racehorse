@@ -32,9 +32,11 @@ import {
   ClaudeStatLine,
 } from '../ui/claudeMode';
 import DailyPuzzleLadderScreen from './DailyPuzzleLadderScreen';
+import { getDailyPuzzleStepPresentation } from './presentation';
 import './dailyPuzzle.css';
 
 function DailyPuzzleLoadingScreen({ onBack }: { onBack: () => void }) {
+  const loadingSteps = [1, 2, 3].map((slotIndex) => getDailyPuzzleStepPresentation(slotIndex));
   return (
     <div className="daily-puzzle-loading-root">
       <div className="home-bg" aria-hidden="true">
@@ -63,20 +65,15 @@ function DailyPuzzleLoadingScreen({ onBack }: { onBack: () => void }) {
             <p className="loading-subtitle">Three fixed puzzles. Same board for everyone.</p>
 
             <div className="loading-steps">
-              <div className="loading-step">
-                <div className="loading-step-chip is-active" />
-                <span className="loading-step-label">1 Quick Line</span>
-              </div>
-              <div className="loading-step-connector" />
-              <div className="loading-step">
-                <div className="loading-step-chip" />
-                <span className="loading-step-label">2 Tactical Setup</span>
-              </div>
-              <div className="loading-step-connector" />
-              <div className="loading-step">
-                <div className="loading-step-chip" />
-                <span className="loading-step-label">3 Master Chain</span>
-              </div>
+              {loadingSteps.map((step, index) => (
+                <div key={step.shortLabel} style={{ display: 'contents' }}>
+                  <div className="loading-step">
+                    <div className={`loading-step-chip ${index === 0 ? 'is-active' : ''}`} />
+                    <span className="loading-step-label">{`${step.title} · ${step.subtitle}`}</span>
+                  </div>
+                  {index < loadingSteps.length - 1 ? <div className="loading-step-connector" /> : null}
+                </div>
+              ))}
             </div>
           </div>
         </main>

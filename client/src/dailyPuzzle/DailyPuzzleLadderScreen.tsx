@@ -27,6 +27,7 @@ import type {
 import LeaderboardPageShell from '../ui/LeaderboardPageShell';
 import dailyLadderHeroImg from '../assets/dailyPuzzle/donedoneLADDER.png';
 import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
+import { getDailyPuzzleDisplayTitle, getDailyPuzzleStepPresentation } from './presentation';
 import '../dailyFritz/dailyFritz.css';
 
 interface DailyPuzzleLadderScreenProps {
@@ -106,7 +107,7 @@ function toCuratedPuzzle(slot: DailyPuzzleSlot): CuratedDailyPuzzle | null {
   return {
     id: slot.id,
     puzzleDate: slot.puzzleDate,
-    title: slot.slotTitle,
+    title: getDailyPuzzleDisplayTitle(slot.slotIndex, slot.slotTitle),
     startingBoard: slot.startingBoard,
     startingHand: slot.startingHand,
     maxMoves: slot.maxMoves,
@@ -436,9 +437,10 @@ export default function DailyPuzzleLadderScreen({
   const currentSlotBreakdown = useMemo(() => {
     return [1, 2, 3].map((slotIndex) => {
       const result = completedSlots.find((entry) => entry.slotIndex === slotIndex);
+      const step = getDailyPuzzleStepPresentation(slotIndex);
       return {
         slotIndex,
-        label: `P${slotIndex}`,
+        label: step.shortLabel,
         value: result ? `${result.awardedPoints}` : '—',
       };
     });
@@ -454,6 +456,7 @@ export default function DailyPuzzleLadderScreen({
       const isAvailable = !isCompleteRun && nextSlotIndex === slotIndex;
       const isLocked = !isCompleteRun && nextSlotIndex != null && nextSlotIndex < slotIndex;
       const rowVariant = slotResult ? 'done' : isAvailable ? 'active' : 'muted';
+      const step = getDailyPuzzleStepPresentation(slotIndex);
 
       let statusSub: string;
       let unlockHint: string | null = null;
@@ -472,6 +475,7 @@ export default function DailyPuzzleLadderScreen({
         slotIndex,
         slot,
         slotResult,
+        step,
         rowVariant,
         statusSub,
         unlockHint,
@@ -504,9 +508,9 @@ export default function DailyPuzzleLadderScreen({
             tone: 'neutral',
           },
           {
-            label: 'Master',
+            label: 'Puzzle 3',
             value: `${attempt?.masterChainScore ?? 0}`,
-            sublabel: 'Master Chain score',
+            sublabel: 'Final puzzle score',
             tone: 'neutral',
           },
         ]}
@@ -745,8 +749,8 @@ export default function DailyPuzzleLadderScreen({
                                     <p className="dpl-ladder-run-eyebrow">Stop {row.slotIndex}</p>
                                     <p className="dpl-ladder-run-status">{row.statusSub}</p>
                                     <p className="dpl-ladder-run-meta">
-                                      <strong>{slot.slotTitle}</strong>
-                                      <span> · {slot.slotMaxPoints} pts max</span>
+                                      <strong>{row.step.title}</strong>
+                                      <span>{` · ${row.step.subtitle} · ${slot.slotMaxPoints} pts max`}</span>
                                     </p>
                                   </div>
                                   <div className="dpl-ladder-run-aside">
@@ -844,7 +848,7 @@ export default function DailyPuzzleLadderScreen({
                   <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/3</span>
                 </div>
                 <div>
-                  <span className="rh-result__summary-label">Master Chain</span>
+                  <span className="rh-result__summary-label">Puzzle 3</span>
                   <span className="rh-result__summary-value">{finalOverlay.response.attempt.masterChainScore}</span>
                 </div>
                 <div>
@@ -878,7 +882,7 @@ export default function DailyPuzzleLadderScreen({
       <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
         <div className="wl-top-rail daily-top-rail" data-ui="hud">
           <div className="wl-player-pill is-active daily-hud-pill">
-            <span className="wl-player-label">{activeSlot.slotTitle}</span>
+            <span className="wl-player-label">{getDailyPuzzleDisplayTitle(activeSlot.slotIndex, activeSlot.slotTitle)}</span>
             <span className="wl-player-score">{displayScore}</span>
           </div>
           <div className="daily-center-zone">
@@ -964,7 +968,12 @@ export default function DailyPuzzleLadderScreen({
                   <span>{slotOverlay.response.slotResult.awardedPoints}</span>
                   <span className="rh-result__score-suffix">PTS</span>
                 </div>
-                <div className="rh-result__feedback">{slotOverlay.response.slotResult.slotTitle}</div>
+                <div className="rh-result__feedback">
+                  {getDailyPuzzleDisplayTitle(
+                    slotOverlay.response.slotResult.slotIndex,
+                    slotOverlay.response.slotResult.slotTitle,
+                  )}
+                </div>
               </header>
               <div className="rh-result__summary">
                 <div>
@@ -1006,7 +1015,9 @@ export default function DailyPuzzleLadderScreen({
                   <span>{practiceOverlay.rawScore}</span>
                   <span className="rh-result__score-suffix">PTS</span>
                 </div>
-                <div className="rh-result__feedback">{practiceOverlay.slotTitle}</div>
+                <div className="rh-result__feedback">
+                  {getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex, practiceOverlay.slotTitle)}
+                </div>
               </header>
               <div className="rh-result__summary">
                 <div>

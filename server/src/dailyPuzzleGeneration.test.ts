@@ -7,6 +7,10 @@ import {
   choosePuzzleForSlot,
   type LadderSlotGenerationProfile,
 } from './seedDailyPuzzleLadder';
+import {
+  getDailyPuzzleDisplayTitle,
+  getDailyPuzzleStepPresentation,
+} from '../../client/src/dailyPuzzle/presentation';
 
 const tacticalProfile: LadderSlotGenerationProfile = {
   slotIndex: 2,
@@ -196,6 +200,41 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
     expect(source).toContain('Today’s Puzzle Ladder is being prepared');
     expect(source).not.toContain('valid scoring metadata');
     expect(source).not.toContain('single-puzzle format is no longer offered');
+  });
+
+  it('maps ladder slot indexes to clean user-facing puzzle labels', () => {
+    expect(getDailyPuzzleStepPresentation(1)).toEqual({
+      title: 'Puzzle 1',
+      subtitle: 'Warm-up',
+      shortLabel: 'P1',
+    });
+    expect(getDailyPuzzleStepPresentation(2)).toEqual({
+      title: 'Puzzle 2',
+      subtitle: 'Challenge',
+      shortLabel: 'P2',
+    });
+    expect(getDailyPuzzleStepPresentation(3)).toEqual({
+      title: 'Puzzle 3',
+      subtitle: 'Final',
+      shortLabel: 'P3',
+    });
+  });
+
+  it('renders stored legacy slot titles with clean puzzle labels', () => {
+    expect(getDailyPuzzleDisplayTitle(1, 'Quick Line')).toBe('Puzzle 1');
+    expect(getDailyPuzzleDisplayTitle(2, 'Tactical Setup')).toBe('Puzzle 2');
+    expect(getDailyPuzzleDisplayTitle(3, 'Master Chain')).toBe('Puzzle 3');
+    expect(getDailyPuzzleDisplayTitle(2, 'Tactical Setup')).not.toBe('Tactical Setup');
+  });
+
+  it('allows fallback-published slots to keep clean product labels', () => {
+    const legacyFallbackSlot = slot({
+      slotIndex: 2,
+      slotTitle: 'Tactical Setup',
+      puzzleType: 'one_turn_high_score',
+      objectiveType: 'one_turn_high_score',
+    });
+    expect(getDailyPuzzleDisplayTitle(legacyFallbackSlot.slotIndex, legacyFallbackSlot.slotTitle)).toBe('Puzzle 2');
   });
 
   it('keeps request-time generation behind an explicit env flag', () => {
