@@ -239,10 +239,14 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.bot-match-screen .bot-hud-left-cluster,
+.bot-match-screen .bot-hud-left-cluster {
+  grid-column: 1 !important;
+  justify-self: start !important;
+}
+
 .bot-match-screen .bot-hud-right-cluster {
-  grid-column: auto !important;
-  justify-self: stretch !important;
+  grid-column: 3 !important;
+  justify-self: end !important;
 }
 
 @media (max-height: 860px) {
