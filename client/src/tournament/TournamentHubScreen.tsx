@@ -24,6 +24,8 @@ export interface TournamentHubScreenProps {
   onWithdraw: (tournamentId: string) => void | Promise<void>;
   onRetry: () => void | Promise<void>;
   onAttachAssignedMatch: (matchId: string) => void | Promise<void>;
+  attachJoinPhase?: 'idle' | 'pending' | 'failed';
+  attachJoinError?: string | null;
 }
 
 function pad(n: number): string {
@@ -212,16 +214,28 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                     {props.recoveryMatch.matchStatus === 'ready' ? 'Match Ready' : 'Match In Progress'}
                   </span>
                   <span className="th-recovery-banner__title">
-                    {props.recoveryMatch.matchStatus === 'ready'
-                      ? 'Your match is ready — Start Match'
-                      : 'Your match is in progress — Rejoin Match'}
+                    {props.attachJoinPhase === 'pending'
+                      ? 'Joining your assigned match…'
+                      : props.attachJoinPhase === 'failed'
+                        ? props.attachJoinError ?? 'Could not join match'
+                        : props.recoveryMatch.matchStatus === 'ready'
+                          ? 'Your match is ready — Start Match'
+                          : 'Your match is in progress — Rejoin Match'}
                   </span>
                 </div>
                 <button
                   className="th-cta"
+                  type="button"
+                  disabled={props.attachJoinPhase === 'pending'}
                   onClick={() => void props.onAttachAssignedMatch(props.recoveryMatch!.matchId)}
                 >
-                  {props.recoveryMatch.matchStatus === 'ready' ? 'Start Match' : 'Rejoin Match'}
+                  {props.attachJoinPhase === 'pending'
+                    ? 'Joining match…'
+                    : props.attachJoinPhase === 'failed'
+                      ? 'Retry Join Match'
+                      : props.recoveryMatch.matchStatus === 'ready'
+                        ? 'Start Match'
+                        : 'Rejoin Match'}
                 </button>
               </div>
             ) : null}

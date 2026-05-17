@@ -75,6 +75,7 @@ export type MatchReadyEvent = {
   matchId: string;
   round: 1 | 2 | 3;
   matchNumber: number;
+  roomCode: string;
   matchStatus: 'ready' | 'in_progress';
   readyAt: string | null;
   readyDeadlineAt: string | null;
@@ -88,6 +89,7 @@ export type TournamentMeResponse = {
     matchId: string;
     tournamentId: string;
     round: 1 | 2 | 3;
+    roomCode: string | null;
     opponentId: string | null;
     opponentUsername: string | null;
     matchStatus: 'ready' | 'in_progress';

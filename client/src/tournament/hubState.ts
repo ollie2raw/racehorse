@@ -4,6 +4,7 @@ export type TournamentRecoveryMatch = {
   matchId: string;
   tournamentId: string;
   round: 1 | 2 | 3;
+  roomCode: string | null;
   opponentId: string | null;
   opponentUsername: string | null;
   matchStatus: 'ready' | 'in_progress';

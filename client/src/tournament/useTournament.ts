@@ -38,7 +38,11 @@ export function useTournament({ socket, userId }: Args) {
           });
       setUpcoming(u);
       setRegistrations(me?.registrations ?? []);
-      setRecoveryMatch(me?.activeAssignedMatch ?? null);
+      const recovered = me?.activeAssignedMatch ?? null;
+      if (recovered) {
+        console.log('[tournament] recovery activeAssignedMatch received', recovered);
+      }
+      setRecoveryMatch(recovered);
       setError(null);
       setHasLoaded(true);
     } catch (err) {
@@ -66,6 +70,9 @@ export function useTournament({ socket, userId }: Args) {
     });
     if (!me) return;
     setRegistrations(me.registrations);
+    if (me.activeAssignedMatch) {
+      console.log('[tournament] recovery activeAssignedMatch received', me.activeAssignedMatch);
+    }
     setRecoveryMatch(me.activeAssignedMatch);
     setHasLoaded(true);
   }, [userId]);
@@ -80,7 +87,15 @@ export function useTournament({ socket, userId }: Args) {
     const onMatchUpdated = (payload: { tournamentId: string }) => {
       void api.fetchBracket(payload.tournamentId).then(setActiveBracket).catch(() => undefined);
     };
-    const onMatchReady = (payload: MatchReadyEvent) => { setPendingMatch(payload); };
+    const onMatchReady = (payload: MatchReadyEvent) => {
+      console.log('[tournament] match_ready received', {
+        matchId: payload.matchId,
+        tournamentId: payload.tournamentId,
+        roomCode: payload.roomCode,
+        matchStatus: payload.matchStatus,
+      });
+      setPendingMatch(payload);
+    };
     const onCompleted = (payload: { tournamentId: string }) => {
       void api.fetchBracket(payload.tournamentId).then(setActiveBracket).catch(() => undefined);
     };
