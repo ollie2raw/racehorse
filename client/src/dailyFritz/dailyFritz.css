@@ -27,7 +27,7 @@
   max-width: 1440px;
   margin: 0 auto;
   /* Match .pvf-layout horizontal rhythm (GlobalNav uses the same max-width) */
-  padding: 16px 36px 32px;
+  padding: 12px 36px 20px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -133,10 +133,22 @@
   padding-bottom: 8vh;
 }
 
+.df-fritz-loading-card {
+  width: min(520px, calc(100vw - 48px));
+  padding: 36px 32px 32px;
+  border-radius: var(--pvf-radius-lg);
+  background: rgba(7, 9, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 32px rgba(0, 0, 0, 0.28);
+  box-sizing: border-box;
+  animation: df-fritz-loading-fade-in 800ms var(--ease-premium) forwards;
+}
+
 .df-fritz-loading-lockup {
   text-align: center;
-  max-width: 600px;
-  animation: df-fritz-loading-fade-in 800ms var(--ease-premium) forwards;
+  max-width: 100%;
 }
 
 @keyframes df-fritz-loading-fade-in {
@@ -220,27 +232,14 @@
     background-color 300ms var(--ease-premium);
 }
 
-.df-fritz-loading-chip::after {
+.df-fritz-loading-chip.is-active::after {
   content: '';
   position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    135deg,
-    transparent 35%,
-    color-mix(in srgb, var(--tier-elite) 14%, transparent) 50%,
-    transparent 65%
-  );
-  background-size: 250% 250%;
-  animation: df-fritz-loading-shimmer 2.5s infinite linear;
-}
-
-@keyframes df-fritz-loading-shimmer {
-  0% {
-    background-position: 200% 200%;
-  }
-  100% {
-    background-position: -200% -200%;
-  }
+  inset: auto 10px 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--tier-elite);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tier-elite) 40%, transparent);
 }
 
 .df-fritz-loading-chip.is-active {
@@ -263,12 +262,7 @@
 .df-fritz-loading-step-connector {
   width: 28px;
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    var(--border-subtle),
-    color-mix(in srgb, var(--text-primary) 10%, transparent),
-    var(--border-subtle)
-  );
+  background: rgba(255, 255, 255, 0.1);
   margin-top: -24px;
 }
 
@@ -280,8 +274,116 @@
   margin-top: 32px;
 }
 
-.df-fritz-loading-retry {
+.df-fritz-loading-retry.rh-btn {
   min-width: 168px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 24px;
+  border-radius: var(--pvf-radius-sm);
+  border: none;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 800;
+  color: #1a1200;
+  background: var(--tier-elite);
+  box-shadow:
+    0 0 32px color-mix(in srgb, var(--tier-elite) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.df-fritz-loading-retry.rh-btn:hover:not(:disabled) {
+  background: var(--tier-elite);
+  border-color: transparent;
+  color: #1a1200;
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+/* Today's challenge card — matte PVF panel */
+.df-daily-challenge {
+  flex-shrink: 0;
+  padding: 16px 18px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.df-daily-challenge__eyebrow {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-dim));
+  margin-bottom: 6px;
+}
+
+.df-daily-challenge__date {
+  margin: 0 0 4px;
+  font-family: var(--font-body);
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--text-primary);
+}
+
+.df-daily-challenge__rule {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.df-daily-challenge__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.df-daily-challenge__pill {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.df-daily-challenge__pill--result {
+  border-color: color-mix(in srgb, var(--tier-elite) 32%, transparent);
+  background: color-mix(in srgb, var(--tier-elite) 8%, rgba(0, 0, 0, 0.2));
+}
+
+.df-daily-challenge__pill-key {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.df-daily-challenge__pill-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-fritz-empty {
+  padding: 20px 16px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 9, 16, 0.88);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .df-hub-error {
@@ -302,14 +404,12 @@
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  gap: 32px;
+  gap: 24px;
   width: 100%;
   flex: 1 1 0;
   min-height: 0;
-  padding-top: 24px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  padding-top: 12px;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -381,26 +481,35 @@
   z-index: 2;
   pointer-events: none;
   border-radius: var(--df-hero-inner-r);
-  /* Avoid `transparent` stops — interpolation reads as muddy gray (#c0c0c0-ish) on some engines */
-  background:
-    linear-gradient(180deg, #04070c 0%, rgba(4, 7, 12, 0.88) 7%, rgba(4, 7, 12, 0.35) 18%, rgba(4, 7, 12, 0) 32%),
-    radial-gradient(ellipse 110% 72% at 50% 108%, rgba(3, 6, 12, 0.82) 0%, rgba(3, 6, 12, 0) 55%),
-    radial-gradient(ellipse 72% 130% at -8% 48%, rgba(4, 8, 16, 0.58) 0%, rgba(4, 7, 12, 0) 52%),
-    radial-gradient(ellipse 65% 130% at 108% 42%, rgba(4, 7, 12, 0.52) 0%, rgba(4, 7, 12, 0) 48%),
-    radial-gradient(ellipse 130% 60% at 50% -12%, rgba(4, 8, 18, 0.45) 0%, rgba(4, 7, 12, 0) 55%),
-    radial-gradient(
-      ellipse 60% 45% at 30% 92%,
-      color-mix(in srgb, var(--tier-elite) 12%, rgba(4, 7, 12, 0)) 0%,
-      rgba(4, 7, 12, 0) 58%
-    ),
-    linear-gradient(to top, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.16) 40%, rgba(0, 0, 0, 0) 62%),
-    linear-gradient(
-      to right,
-      rgba(4, 7, 12, 0.58) 0%,
-      rgba(4, 9, 18, 0.1) 44%,
-      rgba(4, 7, 12, 0.48) 100%
-    ),
-    linear-gradient(180deg, rgba(4, 8, 18, 0.28) 0%, rgba(4, 7, 12, 0) 34%);
+  /* Bottom vignette only — left text zone uses .df-hero-fullbleed__text-scrim */
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.58) 0%,
+    rgba(0, 0, 0, 0.14) 40%,
+    rgba(0, 0, 0, 0) 62%
+  );
+}
+
+/* Matte left panel — strong readability for headline/body; robot stays open on the right */
+.df-hero-fullbleed__text-scrim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(54%, 22rem);
+  z-index: 3;
+  pointer-events: none;
+  border-radius: var(--df-hero-inner-r) 0 0 var(--df-hero-inner-r);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(
+    90deg,
+    rgba(3, 7, 14, 0.9) 0%,
+    rgba(4, 10, 20, 0.86) 38%,
+    rgba(4, 10, 20, 0.62) 68%,
+    rgba(4, 10, 20, 0) 100%
+  );
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
 /* Dedicated rim: empty layer so inset paint order is reliable (covers clip/filter fringe at corners). */
@@ -420,7 +529,7 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 3;
+  z-index: 4;
   padding: 22px 24px 0 22px;
   box-sizing: border-box;
   pointer-events: none;
@@ -438,6 +547,7 @@
 
 .df-hero-title.df-title--page {
   margin-bottom: 8px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.42);
 }
 
 .df-hero-subtitle {
@@ -447,11 +557,9 @@
   font-size: 15px;
   line-height: 1.45;
   font-weight: 400;
-  color: var(--text-secondary);
+  color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
   text-align: left;
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.38),
-    0 0 12px rgba(0, 0, 0, 0.24);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 /* Single semi-transparent bar over image bottom — inset inside hero rim */
@@ -970,7 +1078,7 @@
   flex-direction: column;
   width: 100%;
   box-sizing: border-box;
-  padding: 24px 32px;
+  padding: 16px 22px 14px;
   border-radius: var(--pvf-radius-lg);
   background: rgba(7, 9, 16, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -983,7 +1091,7 @@
 }
 
 .df-layout .df-control-panel .fritz-section-label {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   letter-spacing: 0.14em;
   color: var(--fritz-muted-label);
 }
@@ -1108,7 +1216,7 @@
   display: flex;
   flex-direction: column;
   /* Play vs Fritz control panel rhythm */
-  gap: 16px;
+  gap: 10px;
   flex: 1 1 0;
   min-height: 0;
   overflow-x: hidden;
@@ -1306,7 +1414,6 @@
 
 .df-section--games-spotlight {
   margin-top: 0;
-  /* Fill slack between overview and footer (mirrors .pvf-control-panel column flow) */
   flex: 1 1 0;
   min-height: 0;
   display: flex;
@@ -1316,7 +1423,7 @@
 
 .df-section--games-spotlight .fritz-section-label {
   flex-shrink: 0;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   padding-bottom: 0;
   border-bottom: none;
 }
@@ -1324,8 +1431,8 @@
 .df-overview-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px 4px;
-  padding: 2px 0 8px;
+  gap: 4px 4px;
+  padding: 0 0 4px;
   box-sizing: border-box;
 }
 
@@ -1339,13 +1446,13 @@
 }
 
 .df-overview-stat__icon.fritz-summary-icon {
-  width: 30px;
-  height: 30px;
-  border-width: 2px;
+  width: 26px;
+  height: 26px;
+  border-width: 1.5px;
   color: var(--tier-elite);
   border-color: var(--tier-elite);
   background: color-mix(in srgb, var(--tier-elite) 10%, transparent);
-  box-shadow: 0 0 20px color-mix(in srgb, var(--tier-elite) 30%, transparent);
+  box-shadow: none;
 }
 
 .df-overview-stat__value {
@@ -1369,7 +1476,7 @@
   color: rgba(255, 255, 255, 0.38);
 }
 
-/* Best-of-3 “arena” — grows with the games column; rows share extra height (PvF-style) */
+/* Best-of-3 arena — compact; flexes inside viewport-locked panel */
 .df-bof3-arena {
   position: relative;
   display: flex;
@@ -1379,7 +1486,7 @@
   padding: 8px 10px 10px;
   border-radius: var(--pvf-radius-md);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(8, 12, 24, 0.92);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
@@ -1395,7 +1502,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 4px 8px;
   margin-bottom: 6px;
   padding-bottom: 0;
   border-bottom: none;
@@ -1438,27 +1545,13 @@
   z-index: 1;
   flex: 1 1 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  grid-template-rows: repeat(3, minmax(52px, 1fr));
-  column-gap: 12px;
-  row-gap: 8px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(50px, auto));
+  column-gap: 10px;
+  row-gap: 6px;
   align-items: stretch;
-}
-
-.df-domino-tile {
-  display: block;
-  flex-shrink: 0;
-  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.38));
-}
-
-.df-domino-tile--elite {
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.38)) drop-shadow(0 0 10px rgba(231, 182, 74, 0.22));
-}
-
-.df-domino-tile--standard {
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.38)) drop-shadow(0 0 10px rgba(59, 130, 246, 0.18));
 }
 
 .df-bof3__rail {
@@ -1473,43 +1566,22 @@
 }
 
 .df-bof3__step {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--radius-pill);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   flex-shrink: 0;
-  border: 1.5px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.48);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 12, 22, 0.88);
+  color: rgba(255, 255, 255, 0.42);
   box-sizing: border-box;
-}
-
-.df-bof3__step--domino {
-  width: auto;
-  height: auto;
-  padding: 0;
-  border: none;
-  background: transparent;
-  border-radius: 0;
-}
-
-.df-bof3__step--domino.df-bof3__step--active .df-domino-tile {
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 12px rgba(231, 182, 74, 0.38));
-}
-
-.df-bof3__step--domino.df-bof3__step--won .df-domino-tile {
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 10px rgba(52, 211, 153, 0.28));
-}
-
-.df-bof3__step--domino.df-bof3__step--lost .df-domino-tile {
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 10px rgba(255, 77, 109, 0.22));
 }
 
 .df-bof3__step--locked {
@@ -1537,11 +1609,11 @@
 
 .df-bof3__connector {
   flex: 1 1 auto;
-  width: 2px;
-  min-height: 6px;
+  width: 1px;
+  min-height: 4px;
   margin: 2px 0 0;
   border-radius: 1px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Last game rail has no connector — center the step in the stretched row */
@@ -1551,12 +1623,18 @@
 
 /* Best-of-3 rows — same card padding + radius rhythm as .pvf-tier-card */
 .fritz-selectable-row.df-game-row.df-game-row--bof3.df-bof3-slot {
-  min-height: 48px;
-  height: 100%;
+  min-height: 50px;
+  height: auto;
   max-height: none;
-  gap: 12px;
-  padding: 0 12px;
+  gap: 10px;
+  padding: 7px 12px;
   border-radius: var(--pvf-radius-md);
+  align-items: center;
+  background: rgba(10, 13, 20, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
 .fritz-selectable-row.df-bof3-slot.df-game-row--bof3 .df-game-info h4 {
@@ -1588,7 +1666,7 @@
 
 .fritz-selectable-row.df-game-row--bof3.fritz-selectable-row--active {
   border-left-width: 1px;
-  border-left-color: color-mix(in srgb, var(--tier-elite) 32%, var(--border-subtle));
+  border-left-color: var(--tier-elite);
 }
 
 .df-game-row--bof3 {
@@ -1599,15 +1677,15 @@
 .fritz-selectable-row.df-game-row.df-game-row--bof3.df-bof3-slot.df-game-row--bof3-active.fritz-selectable-row--active {
   animation: none;
   /* Match .pvf-tier-card--selected: crisp gold frame, flat fill */
-  border: 2px solid var(--tier-elite);
-  background: color-mix(in srgb, var(--tier-elite) 7%, transparent);
+  border: 1px solid var(--tier-elite);
+  background: rgba(16, 21, 31, 0.96);
   box-shadow:
-    inset 0 0 20px color-mix(in srgb, var(--tier-elite) 8%, transparent),
-    0 0 16px color-mix(in srgb, var(--tier-elite) 6%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--tier-elite) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .fritz-selectable-row.df-bof3-slot.df-game-row--bof3 .df-game-status {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -1622,9 +1700,9 @@
 
 .df-game-play-btn.rh-btn {
   flex-shrink: 0;
-  height: 32px;
-  min-height: 32px;
-  padding: 0 16px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 14px;
   border-radius: var(--radius-pill);
   font-family: var(--font-body);
   font-size: 11px;
@@ -1644,13 +1722,15 @@
 }
 
 .df-bof3-play-btn.rh-btn {
-  height: 34px;
-  min-height: 34px;
-  padding: 0 20px;
+  height: 30px;
+  min-height: 30px;
+  min-width: 68px;
+  padding: 0 14px;
   font-size: 11px;
   letter-spacing: 0.08em;
+  justify-content: center;
   box-shadow:
-    0 0 22px color-mix(in srgb, var(--tier-elite) 28%, transparent),
+    0 0 18px color-mix(in srgb, var(--tier-elite) 18%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
@@ -1708,9 +1788,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-dim);
@@ -1725,11 +1805,11 @@
 .df-panel-footer {
   flex-shrink: 0;
   margin-top: 0;
-  padding: 16px 0 0;
+  padding: 8px 0 0;
   border-top: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   background: transparent;
   position: relative;
   z-index: 2;
@@ -1742,12 +1822,12 @@
 
 .df-start-match-btn.rh-btn {
   width: 100%;
-  height: 48px;
-  min-height: 48px;
-  padding: 0 24px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 20px;
   justify-content: center;
   font-family: var(--font-body);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
   letter-spacing: 0.01em;
   text-transform: none;
@@ -1885,6 +1965,10 @@
     object-position: 62% 52%;
   }
 
+  .df-hero-fullbleed__text-scrim {
+    width: min(62%, 26rem);
+  }
+
   .df-streak-card {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -1907,6 +1991,16 @@
   .df-opponent-card--pvf {
     min-height: 280px;
     max-height: min(420px, 50vh);
+  }
+
+  .df-section--games-spotlight {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .df-bof3-arena {
+    flex: 0 0 auto;
+    min-height: 0;
   }
 }
 
@@ -1942,6 +2036,30 @@
 
   .df-panel-surface {
     padding: 16px 18px 14px;
+  }
+
+  .df-bof3 {
+    grid-template-columns: 28px minmax(0, 1fr);
+    grid-template-rows: repeat(3, minmax(52px, auto));
+    column-gap: 10px;
+  }
+
+  .fritz-selectable-row.df-game-row.df-game-row--bof3.df-bof3-slot {
+    min-height: 52px;
+    padding: 8px 12px;
+    gap: 10px;
+  }
+
+  .df-game-right {
+    max-width: none;
+  }
+
+  .df-bof3-unlock-hint {
+    max-width: 58%;
+  }
+
+  .df-hero-fullbleed__text-scrim {
+    width: min(72%, 100%);
   }
 }
 
@@ -2143,17 +2261,36 @@
 }
 
 .daily-fritz-results-hub { display: grid; gap: 10px; }
-.daily-fritz-results-kicker { display: inline-flex; align-items: center; gap: 8px; color: rgba(225, 198, 133, 0.86); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; }
-.daily-fritz-results-kicker::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, rgba(229, 198, 124, 1), rgba(137, 210, 255, 0.7)); box-shadow: 0 0 16px rgba(229, 198, 124, 0.35); }
+.daily-fritz-results-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: color-mix(in srgb, var(--tier-elite) 78%, var(--text-secondary));
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.daily-fritz-results-kicker::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tier-elite);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tier-elite) 45%, transparent);
+}
 
 .daily-fritz-global-results {
   position: relative;
   padding: 12px 18px 16px;
   display: grid;
   gap: 10px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: radial-gradient(circle at top right, rgba(72, 132, 255, 0.08), transparent 34%), linear-gradient(180deg, rgba(9, 16, 28, 0.94), rgba(7, 12, 21, 0.98));
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(7, 9, 16, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .daily-fritz-global-results-head { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
@@ -2174,7 +2311,7 @@
 
 .daily-fritz-global-row.is-current-user {
   border-color: rgba(149, 240, 202, 0.2);
-  background: radial-gradient(circle at top left, rgba(149, 240, 202, 0.06), transparent 30%), rgba(4, 9, 17, 0.6);
+  background: color-mix(in srgb, var(--tier-rookie) 6%, rgba(4, 9, 17, 0.6));
 }
 
 .daily-fritz-standings-head {
@@ -2212,14 +2349,10 @@
 .daily-fritz-game-chip.is-win { color: #00f0b5; border-color: rgba(0, 212, 160, 0.35); background: rgba(0, 212, 160, 0.12); }
 .daily-fritz-game-chip.is-loss { color: #ff5c75; border-color: rgba(255, 69, 96, 0.3); background: rgba(255, 69, 96, 0.1); }
 .daily-fritz-game-chip.is-skunk {
-  color: #f6e7b8;
-  border-color: color-mix(in srgb, var(--tier-elite) 55%, rgba(59, 130, 246, 0.35));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--tier-standard) 22%, transparent),
-    color-mix(in srgb, var(--tier-elite) 18%, transparent)
-  );
-  box-shadow: 0 0 18px color-mix(in srgb, var(--tier-standard) 16%, transparent);
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--tier-elite) 42%, transparent);
+  background: color-mix(in srgb, var(--tier-elite) 12%, rgba(0, 0, 0, 0.28));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .daily-fritz-skunk-badge {
@@ -2229,19 +2362,15 @@
   min-height: 28px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--tier-elite) 48%, var(--tier-standard));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--tier-standard) 24%, rgba(8, 14, 28, 0.92)),
-    color-mix(in srgb, var(--tier-elite) 20%, rgba(8, 14, 28, 0.92))
-  );
-  color: #f8f4e8;
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 48%, transparent);
+  background: color-mix(in srgb, var(--tier-elite) 14%, rgba(8, 10, 18, 0.95));
+  color: color-mix(in srgb, var(--tier-elite) 92%, var(--text-primary));
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  box-shadow: 0 0 20px color-mix(in srgb, var(--tier-standard) 18%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .daily-fritz-skunk-badge--inline {

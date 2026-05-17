@@ -25,20 +25,20 @@
 .screen.game-screen .tmh .daily-fritz-progress-pill {
   width: auto;
   min-width: unset;
-  height: 48px;
-  padding: 0 20px;
-  gap: 10px;
+  height: 38px;
+  padding: 0 14px;
+  gap: 8px;
   border-radius: 999px;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  background: rgba(14, 26, 44, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(100, 140, 220, 0.22);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  background: rgba(9, 15, 27, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(231, 182, 74, 0.24);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
   color: #fff;
   z-index: 10;
   white-space: nowrap;
@@ -51,11 +51,12 @@
 
 .screen.game-screen .tmh .hud-pill-label {
   font-family: var(--font-display) !important;
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 800;
   opacity: 0.92;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: rgba(247, 226, 181, 0.96);
 }
 
 .screen.game-screen .tmh .wl-turn-label {
@@ -69,16 +70,16 @@
     left: auto !important;
     right: auto !important;
     transform: none !important;
-    height: 32px;
+    height: 30px;
     padding: 0 10px;
     gap: 6px;
     top: auto;
-    background: rgba(12, 22, 40, 0.95);
+    background: rgba(9, 15, 27, 0.96);
     margin-right: 10px;
   }
 
   .screen.game-screen .tmh .hud-pill-label {
-    font-size: 0.75rem;
-    letter-spacing: 0.04em;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
   }
 }

@@ -4,7 +4,7 @@
   --hub-bg: #05070a;
   --hub-panel-top: rgba(12, 15, 23, 0.97);
   --hub-panel-bottom: rgba(9, 12, 18, 0.97);
-  --hub-panel-bg: linear-gradient(180deg, var(--hub-panel-top), var(--hub-panel-bottom));
+  --hub-panel-bg: rgba(10, 13, 20, 0.96);
   --hub-panel-border: rgba(148, 163, 184, 0.11);
   --hub-panel-border-soft: rgba(148, 163, 184, 0.08);
   --hub-panel-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);

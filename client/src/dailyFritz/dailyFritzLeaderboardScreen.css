@@ -456,6 +456,12 @@
   box-shadow: none;
 }
 
+.dflb-game-chip.is-skunk {
+  color: color-mix(in srgb, var(--hub-gold) 88%, var(--hub-text));
+  border-color: color-mix(in srgb, var(--hub-gold) 40%, transparent);
+  background: color-mix(in srgb, var(--hub-gold) 12%, rgba(8, 10, 16, 0.88));
+}
+
 /* Sparse footer — polished empty band, no dead void */
 
 .dflb-standings-foot {

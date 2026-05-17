@@ -78,10 +78,16 @@ export default function DailyFritzLeaderboard({
     return <div className="daily-fritz-empty">Loading leaderboard…</div>;
   }
   if (error) {
-    return <div className="daily-fritz-empty">{error}</div>;
+    return <div className="daily-fritz-empty" role="alert">
+        Couldn&apos;t load the leaderboard.
+        <br />
+        Please try again.
+      </div>;
   }
   if (rows.length === 0) {
-    return <div className="daily-fritz-empty">No runs completed yet today.</div>;
+    return <div className="daily-fritz-empty">No completed sets yet today.
+        <br />
+        Play Daily Fritz to claim the first spot.</div>;
   }
 
   const pageVariant = variant === 'page';

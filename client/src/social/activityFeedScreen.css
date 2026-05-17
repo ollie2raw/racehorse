@@ -179,8 +179,10 @@
   max-width: 1440px;
   height: 100%;
   min-height: 0;
+  max-height: 100%;
   margin: 0 auto;
-  padding: 26px 32px 22px;
+  padding: 20px 32px 16px;
+  box-sizing: border-box;
   overflow: hidden;
 }
 
@@ -190,8 +192,9 @@
   grid-template-columns: minmax(0, 1fr) 360px;
   height: 100%;
   min-height: 0;
-  gap: 40px;
-  align-items: start;
+  max-height: 100%;
+  gap: 28px;
+  align-items: stretch;
   overflow: hidden;
 }
 
@@ -267,13 +270,21 @@
 .rh-sf-right-rail,
 .social-right-rail {
   display: flex;
-  align-self: start;
-  height: 100%;
   min-height: 0;
   max-height: 100%;
   flex-direction: column;
-  gap: 14px;
-  overflow: hidden;
+  gap: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
+}
+
+.rh-sf-sidebar > *,
+.rh-sf-right-rail > *,
+.social-right-rail > * {
+  flex-shrink: 0;
 }
 
 .rh-social-card,
@@ -288,10 +299,11 @@
 .rh-sf-widget {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 18px 18px 12px;
+  gap: 8px;
+  padding: 14px 16px 12px;
   overflow: hidden;
   min-height: 0;
+  flex-shrink: 0;
 }
 
 .rh-sf-widget-head {
@@ -757,8 +769,8 @@
 
 .rh-sf-widget--tournaments,
 .social-right-card.recent-tournaments {
-  flex: 1 1 0;
-  min-height: 160px;
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
 .rh-sf-ranked-list {
@@ -925,6 +937,8 @@
   .rh-sf-main-column,
   .social-main-column,
   .rh-sf-sidebar,
+  .rh-sf-right-rail,
+  .social-right-rail,
   .rh-sf-widget,
   .rh-sf-widget-list {
     overflow: visible;

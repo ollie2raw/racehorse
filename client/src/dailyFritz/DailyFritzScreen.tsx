@@ -109,17 +109,16 @@ function shouldClearStaleClientState(
 
 function friendlyDailyFritzInitError(error: unknown): string {
   if (error instanceof Error && error.message.trim()) {
-    const message = error.message.trim();
-    if (message.toLowerCase().includes('timed out') || message.toLowerCase().includes('longer than expected')) {
-      return 'The game server is taking longer than expected. Please try again.';
-    }
-    if (message.toLowerCase().includes('failed to fetch') || message.toLowerCase().includes('network')) {
-      return 'Could not reach the game server. Please check your connection and try again.';
-    }
-    if (message.toLowerCase().includes('unauthorized')) {
+    const message = error.message.trim().toLowerCase();
+    if (message.includes('unauthorized') || message.includes('sign in')) {
       return 'Please sign in again to play Daily Fritz.';
     }
-    return 'Please try again.';
+    if (message.includes('timed out') || message.includes('longer than expected') || message.includes('waking')) {
+      return 'The game server may be waking up.';
+    }
+    if (message.includes('failed to fetch') || message.includes('network')) {
+      return 'Please try again.';
+    }
   }
   return 'Please try again.';
 }
@@ -456,59 +455,6 @@ const DfLockIcon = () => (
   </svg>
 );
 
-const DOMINO_PIPS: Record<number, [number, number][]> = {
-  0: [],
-  1: [[12, 11]],
-  2: [[5, 5], [19, 17]],
-  3: [[5, 5], [12, 11], [19, 17]],
-  4: [[5, 5], [19, 5], [5, 17], [19, 17]],
-  5: [[5, 5], [19, 5], [12, 11], [5, 17], [19, 17]],
-  6: [[5, 4], [19, 4], [5, 11], [19, 11], [5, 18], [19, 18]],
-};
-
-const GAME_DOMINO_CONFIGS: [number, number][] = [
-  [5, 3],
-  [4, 6],
-  [2, 1],
-];
-
-type DominoAccent = 'elite' | 'standard' | 'neutral';
-
-function DominoTile({ index, accent }: { index: number; accent: DominoAccent }) {
-  const [top, bottom] = GAME_DOMINO_CONFIGS[index] ?? [0, 0];
-  const topPips = DOMINO_PIPS[top] ?? [];
-  const bottomPips = DOMINO_PIPS[bottom] ?? [];
-  const stroke =
-    accent === 'elite'
-      ? 'var(--tier-elite)'
-      : accent === 'standard'
-        ? 'var(--tier-standard)'
-        : 'var(--border-light)';
-  const pip =
-    accent === 'elite'
-      ? 'var(--tier-elite)'
-      : accent === 'standard'
-        ? 'var(--tier-standard)'
-        : 'var(--text-secondary)';
-  return (
-    <svg
-      viewBox="0 0 24 46"
-      width="22"
-      height="42"
-      className={`df-domino-tile df-domino-tile--${accent}`}
-      aria-hidden
-    >
-      <rect x="0.75" y="0.75" width="22.5" height="44.5" rx="3.5" fill="var(--bg-card)" stroke={stroke} strokeWidth="1.25" />
-      <line x1="1.5" y1="23" x2="22.5" y2="23" stroke="var(--border-subtle)" strokeWidth="0.75" />
-      {topPips.map(([x, y], i) => (
-        <circle key={`t${i}`} cx={x} cy={y} r="2" fill={pip} opacity={accent === 'neutral' ? 0.55 : 0.9} />
-      ))}
-      {bottomPips.map(([x, y], i) => (
-        <circle key={`b${i}`} cx={x} cy={y + 23} r="2" fill={pip} opacity={accent === 'neutral' ? 0.55 : 0.9} />
-      ))}
-    </svg>
-  );
-}
 
 function getLosAngelesHms(now: Date): { h: number; m: number; s: number } {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -559,7 +505,7 @@ function DailyFritzLoadingScreen({
   const subtitle = isFailed
     ? loadError ?? 'Please try again.'
     : isSlow || isRetrying
-      ? 'The game server may be waking up. This can take a moment.'
+      ? 'The game server may be waking up.'
       : 'Best of 3 vs Fritz. Same deal for everyone.';
   const showRetry = isFailed || isSlow;
   const busy = !isFailed && phase !== 'still-preparing';
@@ -584,11 +530,12 @@ function DailyFritzLoadingScreen({
 
         <main className="df-fritz-loading-main">
           <div
-            className="df-fritz-loading-lockup"
+            className="df-fritz-loading-card"
             role="status"
             aria-live="polite"
             aria-busy={busy || retryPending}
           >
+            <div className="df-fritz-loading-lockup">
             <div className="df-fritz-loading-eyebrow">
               <span className="df-fritz-loading-dot" aria-hidden />
               DAILY FRITZ
@@ -629,6 +576,7 @@ function DailyFritzLoadingScreen({
                 </Button>
               </div>
             ) : null}
+            </div>
           </div>
         </main>
       </div>
@@ -732,7 +680,7 @@ export default function DailyFritzScreen({
       persistTodayCache(response);
       setHubError(null);
     } catch (err) {
-      setHubError(err instanceof Error ? err.message : 'Failed to refresh Daily Fritz.');
+      setHubError(friendlyDailyFritzInitError(err));
     }
   }, [cacheKey, persistTodayCache, user?.id]);
 
@@ -808,9 +756,9 @@ export default function DailyFritzScreen({
         persistTodayCache(response);
         setInitPhase('ready');
         dfInitLog('state', { phase: 'ready' });
-      } catch (err) {
+      } catch {
         if (initRequestIdRef.current !== requestId) return;
-        setLoadError(friendlyDailyFritzInitError(err));
+        setLoadError('Please try again.');
         setInitPhase('failed');
         dfInitLog('state', { phase: 'failed' });
       } finally {
@@ -1202,9 +1150,9 @@ export default function DailyFritzScreen({
       return {
         ...base,
         kind: 'record-error' as const,
-        headline: 'Could not continue',
-        subheadline: setOverlay.error,
-        primaryLabel: 'Try again',
+        headline: 'Couldn’t save progress',
+        subheadline: 'Please try again.',
+        primaryLabel: 'Retry',
         primaryTone: 'default' as const,
         onPrimary: (): void => {
           void submitCompletedGame(setOverlay.game);
@@ -1246,9 +1194,9 @@ export default function DailyFritzScreen({
       return {
         ...base,
         kind: 'final-error' as const,
-        headline: 'Could not finalize',
-        subheadline: setOverlay.error,
-        primaryLabel: 'Return to Hub',
+        headline: 'Couldn’t finish Daily Fritz',
+        subheadline: 'Please try again.',
+        primaryLabel: 'Back Home',
         onPrimary: () => {
           setSetOverlay(null);
           setActiveRun(null);
@@ -1314,33 +1262,42 @@ export default function DailyFritzScreen({
           skunkLabel: getGameSkunkChipLabel(game),
         };
       });
+      const returnToHub = (): void => {
+        setSetOverlay(null);
+        setActiveRun(null);
+        void loadToday();
+      };
+      const openLeaderboard = (): void => {
+        setSetOverlay(null);
+        setActiveRun(null);
+        void loadToday();
+        const rd = activeRun?.run_date ?? setOverlay.setResult.run_date ?? today?.run_date ?? '';
+        if (rd) openLeaderboardForRunDate();
+      };
+      const setWonPlayer = sr.setWinner === 'player';
       return {
         ...base,
         kind: 'final' as const,
-        headline:
-          skunkCopy?.headline ??
-          (sr.setWinner === 'player' ? 'You win the set!' : 'Fritz wins the set'),
-        subheadline: skunkCopy?.subheadline ?? 'Today’s Best of 3 is complete.',
+        headline: skunkCopy?.headline ?? 'Daily Fritz Complete',
+        subheadline:
+          skunkCopy?.subheadline ??
+          (setWonPlayer
+            ? `You won the set ${sr.playerGamesWon}–${sr.fritzGamesWon}.`
+            : `Fritz won the set ${sr.fritzGamesWon}–${sr.playerGamesWon}.`),
         skunkBadge: getSetSkunkBadge(sr),
-        primaryTone: skunkCopy?.primaryTone ?? ('success' as const),
+        primaryTone: skunkCopy?.primaryTone ?? (setWonPlayer ? ('success' as const) : ('default' as const)),
         gameScoreLabel: 'Final game',
         gameScoreValue: `${Number.isFinite(g.playerScore) ? g.playerScore : 0}–${Number.isFinite(g.fritzScore) ? g.fritzScore : 0}`,
         setScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
         marginValue: margin,
         marginTone,
-        resultValue: sr.setWinner === 'player' ? 'Victory' : 'Defeat',
+        resultValue: setWonPlayer ? 'Victory' : 'Defeat',
         rankValue: formatOrdinalPlace(setOverlay.rank),
         games,
-        primaryLabel: 'Return to Hub',
-        onPrimary: () => { setSetOverlay(null); setActiveRun(null); void loadToday(); },
-        onSecondary: () => {
-          setSetOverlay(null);
-          setActiveRun(null);
-          void loadToday();
-          const rd = activeRun?.run_date ?? setOverlay.setResult.run_date ?? today?.run_date ?? '';
-          if (rd) openLeaderboardForRunDate();
-        },
-        secondaryLabel: setOverlay.canViewLeaderboard ? 'View Leaderboard' : null,
+        primaryLabel: setOverlay.canViewLeaderboard ? 'View Leaderboard' : 'Back Home',
+        onPrimary: setOverlay.canViewLeaderboard ? openLeaderboard : returnToHub,
+        onSecondary: setOverlay.canViewLeaderboard ? returnToHub : (): void => {},
+        secondaryLabel: setOverlay.canViewLeaderboard ? 'Back Home' : null,
       };
     }
 
@@ -1390,11 +1347,17 @@ export default function DailyFritzScreen({
   const dateLabel = today ? formatDateLabel(today.run_date) : '—';
   const tierLabel = today ? tierDisplayLabel(today.fritz_tier) : '—';
   const formatLabel = today ? 'Best of 3' : '—';
-  const streakLabel = today ? `${today.streak} days` : '0 days';
+  const streakLabel = today ? `${today.streak} day${today.streak === 1 ? '' : 's'}` : '0 days';
   const winTarget = today?.winning_score ?? 60;
 
   const isComplete = today?.attempt_status === 'completed';
   const isStarted = today?.attempt_status === 'started';
+
+  const primaryCtaLabel = isComplete
+    ? 'Set complete'
+    : isStarted
+      ? 'Resume Set'
+      : 'Play Daily Fritz';
 
   const matchClinched =
     todaySetResult != null &&
@@ -1429,7 +1392,6 @@ export default function DailyFritzScreen({
     }
 
     const scoreLine = res ? `${res.playerScore}–${res.fritzScore}` : null;
-    const dominoAccent: DominoAccent = n === 1 ? 'elite' : n === 2 ? 'standard' : 'neutral';
 
     return {
       n,
@@ -1440,7 +1402,6 @@ export default function DailyFritzScreen({
       rowVariant,
       outcome,
       isLocked,
-      dominoAccent,
     };
   });
 
@@ -1474,6 +1435,7 @@ export default function DailyFritzScreen({
             <div className="df-hero-fullbleed">
               <img src={dailyFritzHeroPng} className="df-hero-fullbleed__img" alt="Fritz at the domino table" />
               <div className="df-hero-fullbleed__overlay" aria-hidden />
+              <div className="df-hero-fullbleed__text-scrim" aria-hidden />
               <div className="df-hero-fullbleed__rim" aria-hidden />
               <div className="df-hero-fullbleed__copy">
                 <div className="df-hero-kicker">• DAILY FRITZ</div>
@@ -1600,13 +1562,12 @@ export default function DailyFritzScreen({
                       </span>
                     </div>
                   <div className="df-bof3">
-                    {games.map((game, idx) => (
+                    {games.map((game) => (
                       <Fragment key={game.n}>
                         <div className="df-bof3__rail">
                           <span
                             className={[
                               'df-bof3__step',
-                              'df-bof3__step--domino',
                               game.rowVariant === 'active' && 'df-bof3__step--active',
                               game.outcome === 'won' && 'df-bof3__step--won',
                               game.outcome === 'lost' && 'df-bof3__step--lost',
@@ -1615,9 +1576,9 @@ export default function DailyFritzScreen({
                               .filter(Boolean)
                               .join(' ')}
                           >
-                            <DominoTile index={idx} accent={game.dominoAccent} />
+                            {game.n}
                           </span>
-                          {idx < games.length - 1 ? <span className="df-bof3__connector" /> : null}
+                          {game.n < 3 ? <span className="df-bof3__connector" /> : null}
                         </div>
                         <div
                           className={[
@@ -1702,7 +1663,7 @@ export default function DailyFritzScreen({
                   onClick={() => void beginRun()}
                   disabled={startActionPending || isComplete}
                 >
-                  {isComplete ? 'Set complete' : isStarted ? 'Resume Set' : 'Start Set'}
+                  {primaryCtaLabel}
                   {!isComplete ? (
                     <span className="df-start-match-chevron" aria-hidden>
                       {' '}

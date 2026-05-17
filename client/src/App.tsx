@@ -548,31 +548,51 @@ function GameOverOverlay({
   onExtraAction,
 }: GameOverOverlayProps) {
   const winner = state.winnerId;
-  const iWon = winner === myId;
   const getName = (pid: string, idx: number) => {
     const p = players.find((pl) => pl.id === pid);
     if (p?.username) return `@${p.username}`;
     return pid === myId ? 'You' : `Player ${idx + 1}`;
   };
-  const winnerIdx = winner ? state.playerIds.indexOf(winner) : -1;
-  const victoryTitle = winner
-    ? `${getName(winner, winnerIdx >= 0 ? winnerIdx : 0)} wins!`
-    : iWon
-      ? 'You Win!'
-      : 'You Lose';
+  const playerScores = state.playerIds.map((pid, idx) => ({
+    pid,
+    name: getName(pid, idx),
+    score: state.players[pid]?.score ?? 0,
+  }));
+  const myScore = state.players[myId]?.score ?? 0;
+  const opponent = playerScores.find((entry) => entry.pid !== myId) ?? null;
+  const opponentScore = opponent?.score ?? 0;
+  const margin = Math.abs(myScore - opponentScore);
+  const didWin = winner === myId;
+  const victoryTitle = winner ? (didWin ? 'Victory' : 'Defeat') : 'Match Complete';
+  const resultLabel = winner ? (didWin ? 'Victory' : 'Defeat') : 'Complete';
+  const subtitle = opponent
+    ? didWin
+      ? `You finished ahead of ${opponent.name}.`
+      : winner
+        ? `${opponent.name} closed out the match.`
+        : `Final standings are locked in against ${opponent.name}.`
+    : 'Final multiplayer standings.';
 
   return (
     <GameOverModal
       open
       ariaLabel="Game over"
       matchKind="multiplayer"
+      primaryAccent="blue"
+      kicker="Multiplayer Result"
       title={victoryTitle}
-      subtitle="Final score"
-      scores={state.playerIds.map((pid, idx) => ({
-        label: getName(pid, idx),
-        value: state.players[pid]?.score ?? 0,
-        winner: pid === winner,
-        showCrown: pid === winner,
+      subtitle={subtitle}
+      tone={didWin ? 'blue' : 'red'}
+      stats={[
+        { label: 'Final Score', value: `${myScore}-${opponentScore}`, tone: winner ? (didWin ? 'blue' : 'red') : 'default' },
+        { label: 'Margin', value: winner ? `${didWin ? '+' : '-'}${margin}` : `${margin}`, tone: winner ? (didWin ? 'blue' : 'red') : 'default' },
+        { label: 'Result', value: resultLabel, tone: winner ? (didWin ? 'blue' : 'red') : 'default' },
+      ]}
+      scores={playerScores.map((row) => ({
+        label: row.name,
+        value: row.score,
+        winner: row.pid === winner,
+        showCrown: row.pid === winner,
       }))}
       primaryLabel={primaryLabel}
       onPrimary={onPrimary}
@@ -610,8 +630,8 @@ function TournamentGameOverOverlay({
   myDisplayName,
   opponentDisplayName,
   onViewBracket,
+  onViewFinalResult,
   onReturnToTournament,
-  onExtraAction,
 }: {
   state: GameState;
   myId: string;
@@ -619,8 +639,8 @@ function TournamentGameOverOverlay({
   myDisplayName: string;
   opponentDisplayName: string;
   onViewBracket: () => void;
+  onViewFinalResult: () => void;
   onReturnToTournament: () => void;
-  onExtraAction?: () => void;
 }) {
   const didWin = state.winnerId === myId;
   const isFinal = tournamentMatch.round === 3;
@@ -640,26 +660,39 @@ function TournamentGameOverOverlay({
     : didWin
       ? `You beat ${opponentDisplayName}. View the bracket while the next round prepares.`
       : `Eliminated by ${opponentDisplayName}. View the bracket or return to the tournament hub.`;
+  const myScore = state.players[myId]?.score ?? 0;
+  const opponentId = state.playerIds.find((pid) => pid !== myId) ?? null;
+  const opponentScore = opponentId ? (state.players[opponentId]?.score ?? 0) : 0;
+  const margin = Math.abs(myScore - opponentScore);
+  const roundLabel = tournamentEliminationLabel(tournamentMatch.round);
 
   return (
     <GameOverModal
       open
       ariaLabel="Tournament match complete"
       matchKind="multiplayer"
+      primaryAccent={isFinal ? 'gold' : 'blue'}
+      kicker={isFinal ? 'Tournament Final' : `Tournament ${roundLabel}`}
       title={title}
       subtitle={subtitle}
+      tone={didWin ? 'gold' : 'red'}
+      stats={[
+        { label: 'Final Score', value: `${myScore}-${opponentScore}`, tone: didWin ? 'gold' : 'red' },
+        { label: 'Margin', value: `${didWin ? '+' : '-'}${margin}`, tone: didWin ? 'gold' : 'red' },
+        { label: isFinal ? 'Result' : 'Round', value: isFinal ? (didWin ? 'Champion' : 'Runner-Up') : roundLabel, tone: didWin ? 'gold' : 'red' },
+      ]}
       scores={state.playerIds.map((pid) => ({
         label: pid === myId ? myDisplayName : opponentDisplayName,
         value: state.players[pid]?.score ?? 0,
         winner: pid === state.winnerId,
         showCrown: pid === state.winnerId,
       }))}
-      primaryLabel="View Bracket"
-      onPrimary={onViewBracket}
-      secondaryLabel="Return to Tournament"
-      onSecondary={onReturnToTournament}
-      extraActionLabel="Analyze Game"
-      onExtraAction={onExtraAction}
+      primaryLabel={isFinal ? 'View Final Result' : 'View Bracket'}
+      onPrimary={isFinal ? onViewFinalResult : onViewBracket}
+      secondaryLabel={isFinal ? 'View Bracket' : 'Return to Tournament'}
+      onSecondary={isFinal ? onViewBracket : onReturnToTournament}
+      extraActionLabel={isFinal ? 'Return to Tournament' : undefined}
+      onExtraAction={isFinal ? onReturnToTournament : undefined}
       onClose={onReturnToTournament}
     />
   );
@@ -3318,7 +3351,7 @@ export default function App() {
       const isLandscape = window.innerWidth > window.innerHeight;
       const isMobileWidth = window.innerWidth <= 900;
       const forceTwoRows = tileCount > 9;
-      const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 46 : 56);
+      const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 50 : 68);
       const containerWidth = trayCenterRef.current?.offsetWidth ?? window.innerWidth - 40;
       const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
       const tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
@@ -5232,8 +5265,8 @@ export default function App() {
                 myDisplayName={tournamentMyLabel}
                 opponentDisplayName={tournamentOpponentLabel ?? 'Opponent'}
                 onViewBracket={() => navigateAfterTournamentMatch('bracket')}
+                onViewFinalResult={() => navigateAfterTournamentMatch('result')}
                 onReturnToTournament={() => navigateAfterTournamentMatch('hub')}
-                onExtraAction={openMultiplayerAnalyzer}
               />
             )
           ) : state.gameOver ? (
@@ -5478,7 +5511,7 @@ export default function App() {
                 selectedTile={boardSelectedTile}
                 lastPlayedTile={lastPlayedTile}
                 onPositionClick={play}
-                tileSize={72}
+                tileSize={84}
                 showOpenEndGlow={boardShowOpenEndGlow}
               />
             </MatchNblBoardFrame>

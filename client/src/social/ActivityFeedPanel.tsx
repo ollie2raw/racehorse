@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { fetchActivityFeed, type FeedItem } from './socialApi';
 import {
@@ -244,14 +244,34 @@ export default function ActivityFeedPanel({
     <div className="rh-af-panel social-feed-panel">
       <div className="rh-af-feed-card rh-social-card">
         <div className="rh-af-feed social-feed-scroll">
-          {loading && <p className="rh-af-status">Loading activity…</p>}
-          {!loading && error && <p className="rh-af-status rh-af-status--error">{error}</p>}
+          {loading && (
+            <div className="rh-af-status rh-af-status--loading" aria-live="polite">
+              <span className="rh-af-status-kicker">Loading</span>
+              <strong>Building your social feed…</strong>
+              <p>Recent wins, rival updates, and tournament results will appear here.</p>
+            </div>
+          )}
+          {!loading && error && (
+            <div className="rh-af-status rh-af-status--error" role="alert">
+              <span className="rh-af-status-kicker">Feed unavailable</span>
+              <strong>{error}</strong>
+              <button type="button" className="rh-af-status-btn" onClick={() => void load()}>
+                Retry
+              </button>
+            </div>
+          )}
           {!loading && !error && filtered.length === 0 && (
             <div className="rh-af-empty">
+              <span className="rh-af-status-kicker">No activity yet</span>
+              <strong>
+                {filter === 'mentions'
+                  ? 'Mentions will show up here when rivals tag you.'
+                  : 'Play a match or follow rivals to start your feed.'}
+              </strong>
               <p>
                 {filter === 'mentions'
-                  ? 'Mentions will appear here when friends tag you in updates.'
-                  : 'No activity matches this filter yet.'}
+                  ? 'Follow active players to turn this into a real conversation.'
+                  : 'Wins, streaks, Daily Fritz runs, and tournament results will land here first.'}
               </p>
               {emptyAction}
             </div>
@@ -264,14 +284,11 @@ export default function ActivityFeedPanel({
                 <button
                   type="button"
                   className="rh-af-rich-avatar"
-                  style={{
-                    background: `linear-gradient(145deg, hsl(${hue} 42% 38%), hsl(${(hue + 48) % 360} 48% 24%))`,
-                  }}
+                  style={{ ['--rh-af-avatar-hue' as string]: String(hue) } as CSSProperties}
                   onClick={() => onViewProfile(item.username)}
                   aria-label={`View ${item.username}'s profile`}
                 >
                   {initials(item.username)}
-                  <span className="rh-af-rich-online" aria-hidden="true" />
                 </button>
                 <FeedCategoryIcon kind={vm.icon} />
                 <div className="rh-af-rich-main">
@@ -281,7 +298,12 @@ export default function ActivityFeedPanel({
                     </button>
                     <span className="rh-af-rich-action">{vm.action}</span>
                   </p>
-                  <p className="rh-af-rich-secondary">{vm.secondary}</p>
+                  <div className="rh-af-rich-meta">
+                    {vm.modeBadge ? (
+                      <span className={badgeClass(vm.modeBadge.tone)}>{vm.modeBadge.label}</span>
+                    ) : null}
+                    <p className="rh-af-rich-secondary">{vm.secondary}</p>
+                  </div>
                 </div>
                 <div className="rh-af-rich-stats">
                   {vm.scoreLine ? <span className="rh-af-rich-score">{vm.scoreLine}</span> : null}

@@ -39,9 +39,7 @@
   padding: 6px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: rgba(10, 13, 20, 0.94);
   color: var(--text-secondary);
   font-family: var(--font-body);
   font-size: 12px;
@@ -72,9 +70,8 @@
   min-width: 0;
   padding: 12px 20px;
   border-radius: var(--radius-card);
-  border: 1px solid color-mix(in srgb, var(--tb-accent) 38%, rgba(255, 255, 255, 0.1));
-  background: color-mix(in srgb, var(--tb-accent) 7%, rgba(8, 12, 22, 0.92));
-  box-shadow: 0 0 28px color-mix(in srgb, var(--tb-accent) 16%, transparent);
+  border: 1px solid rgba(245, 185, 55, 0.34);
+  background: rgba(10, 13, 20, 0.96);
   text-align: center;
 }
 
@@ -189,9 +186,7 @@
   padding: 10px 12px 8px;
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  background: rgba(10, 16, 28, 0.72);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: rgba(10, 13, 20, 0.94);
   position: relative;
   transition:
     border-color 140ms ease,
@@ -209,19 +204,17 @@
 }
 
 .tb-match.is-yours {
-  border-color: color-mix(in srgb, var(--tb-accent) 65%, rgba(255, 255, 255, 0.12));
-  background: color-mix(in srgb, var(--tb-accent) 6%, rgba(10, 16, 28, 0.82));
+  border-color: rgba(245, 185, 55, 0.62);
+  background: rgba(11, 14, 22, 0.96);
 }
 
 .tb-match.is-opponent-path {
-  border-color: color-mix(in srgb, var(--tb-accent) 32%, rgba(255, 255, 255, 0.1));
+  border-color: rgba(245, 185, 55, 0.22);
 }
 
 .tb-match.is-current {
   border-color: var(--tb-accent);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--tb-accent) 22%, transparent),
-    0 0 24px color-mix(in srgb, var(--tb-accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(245, 185, 55, 0.18);
 }
 
 .tb-match.is-completed {
@@ -302,8 +295,8 @@
   gap: 10px;
   min-height: 120px;
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--tb-accent) 55%, rgba(255, 255, 255, 0.1));
-  background: color-mix(in srgb, var(--tb-accent) 8%, rgba(10, 16, 28, 0.78));
+  border: 1px solid rgba(245, 185, 55, 0.42);
+  background: rgba(10, 13, 20, 0.96);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -328,8 +321,8 @@
   flex-shrink: 0;
   padding: 16px 20px;
   border-radius: var(--radius-card);
-  border: 1px solid var(--tb-accent);
-  background: color-mix(in srgb, var(--tb-accent) 8%, rgba(10, 16, 28, 0.88));
+  border: 1px solid rgba(245, 185, 55, 0.42);
+  background: rgba(10, 13, 20, 0.96);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -340,7 +333,7 @@
 .tb-your-banner--muted {
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: none;
-  background: rgba(10, 16, 28, 0.7);
+  background: rgba(10, 13, 20, 0.92);
 }
 
 .tb-your-banner__meta {
@@ -387,7 +380,7 @@
   font-weight: 800;
   background: var(--tb-accent);
   color: #1a1200;
-  box-shadow: 0 0 24px color-mix(in srgb, var(--tb-accent) 30%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
   transition: transform 120ms, filter 120ms;
 }
 
@@ -410,8 +403,8 @@
   gap: 16px;
   padding: 18px 20px;
   border-radius: var(--radius-card);
-  border: 1px solid color-mix(in srgb, var(--tb-accent) 32%, rgba(255, 255, 255, 0.1));
-  background: color-mix(in srgb, var(--tb-accent) 8%, rgba(8, 12, 22, 0.94));
+  border: 1px solid rgba(245, 185, 55, 0.34);
+  background: rgba(10, 13, 20, 0.96);
   flex-shrink: 0;
 }
 
@@ -464,6 +457,7 @@
   font-weight: 800;
   background: var(--tb-accent);
   color: #1a1200;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .tb-terminal-banner__secondary {

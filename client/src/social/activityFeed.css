@@ -76,9 +76,7 @@
   border-color: rgba(245, 197, 24, 0.5);
   background: rgba(245, 197, 24, 0.06);
   color: #f5c518;
-  box-shadow:
-    inset 0 0 0 1px rgba(245, 197, 24, 0.14),
-    0 0 18px rgba(245, 197, 24, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(245, 197, 24, 0.14);
 }
 
 .rh-af-feed-card,
@@ -97,19 +95,6 @@
   box-shadow:
     0 14px 36px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.025);
-}
-
-.rh-af-feed-card::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 28px;
-  pointer-events: none;
-  z-index: 2;
-  border-radius: 0 0 18px 18px;
-  background: linear-gradient(180deg, transparent, rgba(10, 13, 20, 0.96));
 }
 
 .rh-af-feed,
@@ -134,22 +119,65 @@
 }
 
 .rh-af-status {
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   margin: 0;
-  padding: 28px 16px;
+  padding: 28px 20px;
   text-align: center;
   color: var(--sf-text-muted, rgba(255, 255, 255, 0.45));
   font-size: 14px;
+}
+
+.rh-af-status strong,
+.rh-af-empty strong {
+  color: rgba(248, 250, 252, 0.96);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.rh-af-status p,
+.rh-af-empty p {
+  margin: 0;
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+.rh-af-status-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.72);
 }
 
 .rh-af-status--error {
   color: color-mix(in srgb, var(--accent-red) 80%, #ffffff);
 }
 
+.rh-af-status-btn {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 197, 24, 0.38);
+  background: rgba(14, 18, 28, 0.98);
+  color: #f3c969;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .rh-af-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 10px;
+  min-height: 220px;
   padding: 54px 20px;
   text-align: center;
   color: var(--sf-text-muted, rgba(255, 255, 255, 0.45));
@@ -163,26 +191,22 @@
   grid-template-columns: 44px 24px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px 12px;
-  min-height: 72px;
-  padding: 12px 16px;
-  border: none;
-  background: transparent;
+  min-height: 84px;
+  margin: 8px 12px 0;
+  padding: 14px 14px 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  border-radius: 14px;
+  background: rgba(8, 12, 24, 0.82);
   transition: background var(--duration-fast) var(--ease-premium);
 }
 
 .rh-af-rich-row + .rh-af-rich-row::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 16px;
-  right: 16px;
-  height: 1px;
-  background: rgba(148, 163, 184, 0.07);
-  pointer-events: none;
+  display: none;
 }
 
 .rh-af-rich-row:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(10, 15, 28, 0.92);
+  border-color: rgba(231, 182, 74, 0.18);
 }
 
 .rh-af-rich-avatar {
@@ -195,18 +219,10 @@
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
-}
-
-.rh-af-rich-online {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #0b121c;
-  border-radius: 50%;
-  background: #34d399;
+  background: hsl(var(--rh-af-avatar-hue, 216) 28% 18%);
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .rh-af-rich-cat {
@@ -226,6 +242,14 @@
 
 .rh-af-rich-main {
   min-width: 0;
+}
+
+.rh-af-rich-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
 }
 
 .rh-af-rich-line {
@@ -258,7 +282,7 @@
 }
 
 .rh-af-rich-secondary {
-  margin: 3px 0 0;
+  margin: 0;
   font-size: 11px;
   font-weight: 600;
   color: rgba(148, 163, 184, 0.72);
@@ -322,9 +346,9 @@
 }
 
 .rh-af-rich-badge--purple {
-  background: rgba(168, 85, 247, 0.14);
-  border: 1px solid rgba(168, 85, 247, 0.35);
-  color: #c4b5fd;
+  background: rgba(82, 116, 184, 0.12);
+  border: 1px solid rgba(82, 116, 184, 0.32);
+  color: #a5b4fc;
 }
 
 .rh-af-rich-badge--teal,
@@ -350,9 +374,9 @@
   height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  background: rgba(56, 189, 248, 0.08);
-  color: #38bdf8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(12, 16, 26, 0.98);
+  color: rgba(226, 232, 240, 0.82);
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
@@ -381,9 +405,7 @@
 .rh-af-load-more-wrap {
   display: flex;
   justify-content: center;
-  padding: 12px 16px 4px;
-  margin-top: 2px;
-  border-top: 1px solid rgba(148, 163, 184, 0.06);
+  padding: 16px 16px 12px;
 }
 
 .rh-af-load-more {
@@ -421,6 +443,7 @@
     grid-template-columns: 44px 24px minmax(0, 1fr);
     grid-template-rows: auto auto auto;
     row-gap: 6px;
+    margin-inline: 10px;
   }
 
   .rh-af-rich-stats {

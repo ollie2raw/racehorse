@@ -16,6 +16,7 @@ export interface FeedRowViewModel {
   icon: FeedIconKind;
   action: string;
   secondary: string;
+  modeBadge?: { label: string; tone: FeedBadgeTone };
   scoreLine?: string;
   pointsLine?: string;
   ratingDelta?: string;
@@ -24,13 +25,23 @@ export interface FeedRowViewModel {
   showViewButton?: boolean;
 }
 
+function normalizeName(value: unknown, fallback: string): string {
+  const name = typeof value === 'string' ? value.trim() : '';
+  if (!name) return fallback;
+  const lower = name.toLowerCase();
+  if (lower.includes('fritz') || lower.includes('bot')) return 'Fritz';
+  return name.replace(/^@/, '');
+}
+
 function formatMode(mode: unknown): string {
   const value = typeof mode === 'string' ? mode.toLowerCase() : '';
-  if (value.includes('fritz') || value === 'bot' || value === 'daily_fritz') return 'Play vs Fritz';
+  if (value === 'daily_fritz') return 'Daily Fritz';
+  if (value.includes('fritz') || value === 'bot') return 'Play vs Fritz';
   if (value.includes('puzzle')) return 'Daily Puzzle';
+  if (value.includes('quick')) return 'Quick Match';
   if (value.includes('ranked')) return 'Ranked';
   if (value.includes('tournament')) return 'Tournament';
-  if (value.includes('multi')) return 'Multiplayer';
+  if (value.includes('multi')) return 'Quick Match';
   if (!value) return 'Racehorse';
   return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -44,7 +55,7 @@ function tilesSuffix(meta: Record<string, unknown>): string {
 function placementBadge(placement: string | undefined): { label: string; tone: FeedBadgeTone } | undefined {
   if (!placement) return undefined;
   const lower = placement.toLowerCase();
-  if (lower.includes('winner') || lower.includes('1st')) return { label: 'Winner', tone: 'teal' };
+  if (lower.includes('winner') || lower.includes('1st')) return { label: 'Winner', tone: 'gold' };
   if (lower.includes('2nd')) return { label: '2nd Place', tone: 'gray' };
   if (lower.includes('3rd')) return { label: '3rd Place', tone: 'purple' };
   if (lower.includes('4th') || lower.includes('5th')) return { label: placement, tone: 'gray' };
@@ -58,37 +69,52 @@ function scorePair(meta: Record<string, unknown>, flip = false): string | undefi
   return flip ? `${b} - ${a}` : `${a} - ${b}`;
 }
 
+function tournamentAction(meta: Record<string, unknown>): string {
+  const name = String(meta.tournament_name ?? 'Tournament');
+  const placement = typeof meta.placement === 'string' ? meta.placement : '';
+  const lower = placement.toLowerCase();
+  if (!placement) return `played ${name}`;
+  if (lower.includes('winner') || lower.includes('1st')) return `won ${name}`;
+  if (lower.includes('final')) return 'advanced to the Final';
+  if (lower.includes('semi')) return 'advanced to the Semifinal';
+  return `finished ${placement} in ${name}`;
+}
+
 export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
   const meta = item.metadata;
 
   switch (item.type) {
     case 'win': {
-      const opp = meta.opponent_username as string | undefined;
+      const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
       return {
         icon: 'trophy',
-        action: opp ? `defeated ${opp}` : 'won a match',
-        secondary: `Online • ${mode}${tilesSuffix(meta)}`,
+        action: `won against ${opp}`,
+        secondary: `${mode}${tilesSuffix(meta)}`,
+        modeBadge: { label: mode, tone: 'green' },
         scoreLine: scorePair(meta),
         ratingDelta: meta.rating_change != null ? `+${meta.rating_change}` : '+22',
       };
     }
     case 'loss': {
-      const opp = meta.opponent_username as string | undefined;
+      const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
       return {
         icon: 'swords',
-        action: opp ? `lost to ${opp}` : 'lost a match',
-        secondary: `Online • ${mode}${tilesSuffix(meta)}`,
+        action: `lost to ${opp}`,
+        secondary: `${mode}${tilesSuffix(meta)}`,
+        modeBadge: { label: mode, tone: 'gray' },
         scoreLine: scorePair(meta, true),
       };
     }
     case 'streak': {
       const n = Number(meta.streak ?? 0);
+      const source = meta.source === 'puzzle' ? 'Daily Puzzle' : 'Play vs Fritz';
       return {
         icon: 'flame',
-        action: `${n || '?'} win streak`,
-        secondary: meta.source === 'puzzle' ? 'Daily Puzzle' : 'Play vs Fritz',
+        action: `hit a ${n || '?'}-match win streak`,
+        secondary: source,
+        modeBadge: { label: source, tone: 'gold' },
         streakCount: Math.min(Math.max(n, 1), 7),
         ratingDelta: '+18',
       };
@@ -98,8 +124,9 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
       const players = meta.player_count ?? meta.players;
       return {
         icon: 'medal',
-        action: String(meta.tournament_name ?? 'Tournament'),
-        secondary: players != null ? `${players} Players` : 'Tournament',
+        action: tournamentAction(meta),
+        secondary: players != null ? `${players} players` : 'Tournament bracket update',
+        modeBadge: { label: 'Tournament', tone: 'purple' },
         badge: placementBadge(placement),
       };
     }
@@ -107,15 +134,16 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
       const s = meta.score as number | undefined;
       return {
         icon: 'puzzle',
-        action: "won today's Daily Puzzle",
-        secondary: s != null ? `Score: ${s}` : 'Daily Puzzle',
+        action: 'won Daily Puzzle',
+        secondary: s != null ? `Solved with ${s} points` : 'Daily Puzzle complete',
+        modeBadge: { label: 'Daily Puzzle', tone: 'teal' },
         pointsLine: s != null ? `${s} pts` : undefined,
         ratingDelta: '+12',
       };
     }
     case 'daily_fritz': {
       const result = meta.result as string | undefined;
-      const opp = 'Daily Fritz';
+      const opp = 'Fritz';
       const playerScore = meta.player_score as number | undefined;
       const fritzScore = meta.fritz_score as number | undefined;
       const won = result === 'win';
@@ -129,9 +157,10 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
             : skunk && skunkBy === 'fritz'
               ? `was skunked by ${opp}`
               : won
-                ? `defeated ${opp}`
+                ? `won against ${opp}`
                 : `lost to ${opp}`,
-        secondary: 'Daily Fritz • Elite',
+        secondary: 'Elite run',
+        modeBadge: { label: 'Daily Fritz', tone: 'gold' },
         scoreLine:
           playerScore != null && fritzScore != null
             ? `${playerScore} - ${fritzScore}`

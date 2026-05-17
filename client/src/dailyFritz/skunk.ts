@@ -93,7 +93,7 @@ export function getSkunkOverlayCopy(
   if (completedGame.gameNumber === 1 && setResult.instantSkunk && playerWonGame && setWon) {
     return {
       eyebrow: 'Daily Fritz',
-      headline: 'SKUNK!',
+      headline: 'SKUNK',
       subheadline: 'You beat Fritz before he reached 30. Set won 2–0.',
       primaryTone: 'success',
     };

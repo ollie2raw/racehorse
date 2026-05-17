@@ -1,3 +1,7 @@
+/*
+ * Primary Racehorse hub pages are viewport-contained.
+ * Do not add page-level vertical overflow. Long content should scroll inside its panel.
+ */
 .app:has(.rh-hub-page) {
   background: transparent;
 }
@@ -9,15 +13,30 @@
   flex-direction: column;
 }
 
-.rh-hub-page {
+.rh-hub-page,
+.rh-hub-viewport-contained {
   display: flex;
   flex: 1 1 0;
   min-height: 0;
   max-height: 100%;
+  height: 100%;
   overflow: hidden;
   color: #fff;
   font-family: var(--font-body);
   background: var(--hub-bg);
+}
+
+.app:has(.rh-hub-viewport-contained) > * {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.app:has(.rh-hub-viewport-contained) > * > .rh-hub-viewport-contained {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .rh-hub-shell {
@@ -43,6 +62,7 @@
   max-width: 1440px;
   height: 100%;
   min-height: 0;
+  max-height: 100%;
   margin: 0 auto;
   padding: var(--hub-space-3) var(--hub-space-4) var(--hub-space-2);
   box-sizing: border-box;
@@ -68,16 +88,29 @@
 
 .rh-hub-rail {
   display: flex;
+  flex: 1 1 0;
   min-height: 0;
+  max-height: 100%;
   flex-direction: column;
   gap: var(--hub-space-2);
-  overflow: hidden auto;
-  scrollbar-width: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
+}
+
+.rh-hub-rail > * {
+  flex-shrink: 0;
 }
 
 .rh-hub-rail::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  width: 6px;
+}
+
+.rh-hub-rail::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
 }
 
 @media (max-width: 1080px) {

@@ -2190,6 +2190,11 @@ export default function BotMatchScreen({
     setMatch(createBotMatch(winningScore, dealSize));
   };
 
+  const goHome = useCallback(() => {
+    invalidateLocalRuns();
+    onNavigate?.('home');
+  }, [invalidateLocalRuns, onNavigate]);
+
   useEffect(() => {
     if (match.gameOver) return;
     if (currentGlickoRating == null) return;
@@ -5555,7 +5560,7 @@ export default function BotMatchScreen({
       const isLandscape = window.innerWidth > window.innerHeight;
       const isMobileWidth = window.innerWidth <= 900;
       const forceTwoRows = tileCount > 9;
-      const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 46 : 56);
+      const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 50 : 68);
       const containerWidth = window.innerWidth - 40;
       const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
       const tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
@@ -6132,7 +6137,7 @@ export default function BotMatchScreen({
           gameOver={match.gameOver}
           lastPlayedTile={lastPlayedTile}
           onPositionClick={onPositionClick}
-          tileSize={isLessonLayoutMode ? 54 : 72}
+          tileSize={isLessonLayoutMode ? 54 : 84}
           profileDailyFritz={enableDailyFritzProfiling}
           fitMode={isLessonLayoutMode ? 'guided' : 'default'}
         />
@@ -6406,8 +6411,43 @@ export default function BotMatchScreen({
           open
           ariaLabel={`${opponentLabel} match over`}
           matchKind="single-player"
-          title={isGhostMode ? 'Ghost Mode' : match.winnerId === 'you' ? 'Champion!' : `${opponentLabel} Wins`}
-          subtitle={`Final hand ${match.handNumber} · ${match.dealSize}-tile mode`}
+          kicker={isDailyFritzMode ? 'Daily Fritz Complete' : isGhostMode ? 'Ghost Match Result' : 'Play vs Fritz Result'}
+          title={
+            isGhostMode
+              ? match.winnerId === 'you'
+                ? 'Victory'
+                : 'Defeat'
+              : match.winnerId === 'you'
+                ? 'Victory'
+                : 'Defeat'
+          }
+          subtitle={
+            isGhostMode
+              ? match.winnerId === 'you'
+                ? `You finished ahead of ${opponentLabel}.`
+                : `${opponentLabel} closed out the match.`
+              : match.winnerId === 'you'
+                ? `You beat ${opponentLabel} in ${match.dealSize}-tile play.`
+                : `${opponentLabel} took the match in ${match.dealSize}-tile play.`
+          }
+          tone={match.winnerId === 'you' ? 'gold' : 'red'}
+          stats={[
+            {
+              label: 'Final Score',
+              value: `${match.players.you.score}-${match.players.bot.score}`,
+              tone: match.winnerId === 'you' ? 'gold' : 'red',
+            },
+            {
+              label: 'Margin',
+              value: `${match.winnerId === 'you' ? '+' : '-'}${Math.abs(match.players.you.score - match.players.bot.score)}`,
+              tone: match.winnerId === 'you' ? 'gold' : 'red',
+            },
+            {
+              label: isGhostMode ? 'Mode' : 'Deal',
+              value: isGhostMode ? 'Ghost' : `${match.dealSize}-Tile`,
+              tone: isGhostMode ? 'blue' : 'default',
+            },
+          ]}
           scores={[
             {
               label: 'You',
@@ -6434,13 +6474,13 @@ export default function BotMatchScreen({
             },
           ]}
           primaryLabel={
-            isDailyFritzMode ? 'Back to Daily Fritz' : isGhostMode ? 'Play Again' : 'New Match'
+            isDailyFritzMode ? 'Back Home' : isGhostMode ? 'Play Again' : 'Rematch'
           }
           onPrimary={startFreshMatch}
-          secondaryLabel="Home"
-          onSecondary={exitMatch}
-          extraActionLabel={isGuidedMode ? undefined : "Analyze Game"}
-          onExtraAction={isGuidedMode ? undefined : openAnalyzer}
+          secondaryLabel={isDailyFritzMode ? 'Back Home' : isGhostMode ? 'Home' : 'Change Setup'}
+          onSecondary={isDailyFritzMode ? exitMatch : isGhostMode ? goHome : exitMatch}
+          extraActionLabel={!isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate ? 'Home' : undefined}
+          onExtraAction={!isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate ? goHome : undefined}
           onClose={exitMatch}
         >
           {!isGuidedMode &&

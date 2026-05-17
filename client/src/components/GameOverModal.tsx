@@ -12,12 +12,20 @@ interface ScoreRow {
   showCrown?: boolean;
 }
 
+interface SummaryStat {
+  label: ReactNode;
+  value: ReactNode;
+  tone?: 'default' | 'gold' | 'blue' | 'red';
+}
+
 interface GameOverModalProps {
   open: boolean;
   ariaLabel: string;
   title: string;
   subtitle?: string;
+  kicker?: string;
   scores: ScoreRow[];
+  stats?: SummaryStat[];
   primaryLabel: string;
   onPrimary: () => void;
   secondaryLabel?: string;
@@ -28,6 +36,8 @@ interface GameOverModalProps {
   children?: ReactNode;
   /** Single-player / Fritz flows use brass; multiplayer uses electric blue. */
   matchKind?: GameOverMatchKind;
+  tone?: 'default' | 'gold' | 'blue' | 'red';
+  primaryAccent?: 'gold' | 'blue';
 }
 
 export default function GameOverModal({
@@ -35,7 +45,9 @@ export default function GameOverModal({
   ariaLabel,
   title,
   subtitle,
+  kicker,
   scores,
+  stats,
   primaryLabel,
   onPrimary,
   secondaryLabel,
@@ -45,12 +57,19 @@ export default function GameOverModal({
   onClose,
   children,
   matchKind = 'single-player',
+  tone = 'default',
+  primaryAccent,
 }: GameOverModalProps) {
   const actionCount = Number(Boolean(extraActionLabel && onExtraAction)) + 1 + Number(Boolean(secondaryLabel && onSecondary));
+  const resolvedPrimaryAccent = primaryAccent ?? (matchKind === 'multiplayer' ? 'blue' : 'gold');
   const themeClass = matchKind === 'multiplayer' ? 'rh-go--mp' : 'rh-go--sp';
-  const primaryVariant = matchKind === 'multiplayer' ? 'primary' : 'tier-elite';
+  const primaryVariant = resolvedPrimaryAccent === 'blue' ? 'primary' : 'tier-elite';
   const primaryMainClass =
-    matchKind === 'multiplayer' ? 'rh-go-btn-full rh-go-btn-main rh-go-btn-main--mp' : 'rh-go-btn-full rh-go-btn-main rh-go-btn-main--sp';
+    resolvedPrimaryAccent === 'blue'
+      ? 'rh-go-btn-full rh-go-btn-main rh-go-btn-main--blue'
+      : 'rh-go-btn-full rh-go-btn-main rh-go-btn-main--gold';
+  const toneClass =
+    tone === 'gold' ? 'rh-go--tone-gold' : tone === 'blue' ? 'rh-go--tone-blue' : tone === 'red' ? 'rh-go--tone-red' : '';
 
   useEffect(() => {
     if (!open || !onClose) return;
@@ -66,7 +85,7 @@ export default function GameOverModal({
   return (
     <GameOverlayPortal>
       <div
-        className={`game-over-overlay rh-go ${themeClass}`}
+        className={`game-over-overlay rh-go ${themeClass} ${toneClass}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
@@ -74,7 +93,7 @@ export default function GameOverModal({
       <div className="game-over-card rh-go-card" onClick={(e) => e.stopPropagation()}>
         <div className="game-over-header">
           <div className="game-over-title-block">
-            <span className="game-over-kicker">Match Complete</span>
+            <span className="game-over-kicker">{kicker ?? 'Match Complete'}</span>
             <h2 className="victory-title">{title}</h2>
           </div>
           {onClose && (
@@ -94,6 +113,20 @@ export default function GameOverModal({
         {subtitle && (
           <p className="game-over-meta">{subtitle}</p>
         )}
+
+        {stats?.length ? (
+          <div className="rh-go-stats" aria-label="Match summary">
+            {stats.map((stat, idx) => (
+              <div
+                key={idx}
+                className={`rh-go-stat rh-go-stat--${stat.tone ?? 'default'}`}
+              >
+                <span>{stat.label}</span>
+                <strong>{stat.value}</strong>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div className="final-scores">
           {scores.map((row, idx) => (

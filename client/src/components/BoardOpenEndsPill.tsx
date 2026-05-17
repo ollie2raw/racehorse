@@ -10,7 +10,7 @@ export function BoardOpenEndsPill({ openEndsSum, visible = true }: BoardOpenEnds
 
   return (
     <div className="open-ends-pill board-corner-pill board-corner-pill--tl" aria-label={`${openEndsSum} open ends`}>
-      <span className="open-ends-pill__label">Count</span>
+      <span className="open-ends-pill__label">Open</span>
       <span className="open-ends-count">{openEndsSum}</span>
     </div>
   );

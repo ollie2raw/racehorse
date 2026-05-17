@@ -11,6 +11,22 @@ export interface TournamentResultScreenProps {
 }
 
 export default function TournamentResultScreen(props: TournamentResultScreenProps) {
+  const normalizedPlacement = props.yourPlacement?.trim().toLowerCase() ?? '';
+  const isChampion = normalizedPlacement === '1st' || normalizedPlacement === 'champion';
+  const isRunnerUp = normalizedPlacement === '2nd' || normalizedPlacement === 'runner-up' || normalizedPlacement === 'runner up';
+  const resultTitle = isChampion
+    ? 'Tournament Champion'
+    : isRunnerUp
+      ? 'Runner-Up'
+      : 'Tournament Complete';
+  const resultCopy = isChampion
+    ? 'You finished on top of the bracket.'
+    : isRunnerUp
+      ? 'You reached the final and finished second.'
+      : props.yourPlacement
+        ? `You finished ${props.yourPlacement}.`
+        : 'The bracket is complete.';
+
   return (
     <div className="tr-page">
       <div className="tr-shell">
@@ -30,19 +46,23 @@ export default function TournamentResultScreen(props: TournamentResultScreenProp
           </div>
         ) : (
           <div className="tr-card">
-            <h1 className="tr-champion-title">Champion</h1>
-            <h2 className="tr-champion-name">{props.championName ?? '—'}</h2>
-            {props.yourPlacement ? (
-              <p className="tr-placement">
-                You finished: <strong>{props.yourPlacement}</strong>
-              </p>
-            ) : (
-              <p className="tr-subcopy">The bracket is complete.</p>
-            )}
-            <p className="tr-countdown">
-              Next tournament in <strong>{props.nextTournamentCountdown}</strong>
-            </p>
-            <button className="tr-back" onClick={props.onNextTournament}>Next Tournament</button>
+            <h1 className="tr-champion-title">{resultTitle}</h1>
+            <p className="tr-subcopy">{resultCopy}</p>
+            <div className="tr-stats" aria-label="Tournament result summary">
+              <div className="tr-stat tr-stat--gold">
+                <span>Champion</span>
+                <strong>{props.championName ?? '—'}</strong>
+              </div>
+              <div className={`tr-stat ${isChampion ? 'tr-stat--gold' : isRunnerUp ? 'tr-stat--blue' : ''}`.trim()}>
+                <span>Your Finish</span>
+                <strong>{props.yourPlacement ?? '—'}</strong>
+              </div>
+              <div className="tr-stat tr-stat--blue">
+                <span>Next Tournament</span>
+                <strong>{props.nextTournamentCountdown}</strong>
+              </div>
+            </div>
+            <button className="tr-back" onClick={props.onNextTournament}>Return to Tournament</button>
           </div>
         )}
       </div>

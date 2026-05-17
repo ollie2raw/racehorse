@@ -4,8 +4,8 @@
   justify-content: space-between;
   gap: 16px;
   padding: 10px 18px;
-  background: color-mix(in srgb, var(--accent-amber) 12%, rgba(7, 9, 16, 0.94));
-  border-bottom: 1px solid color-mix(in srgb, var(--accent-amber) 28%, var(--border-subtle));
+  background: rgba(10, 13, 20, 0.96);
+  border-bottom: 1px solid rgba(245, 185, 55, 0.24);
   font-family: var(--font-body);
   flex-shrink: 0;
 }

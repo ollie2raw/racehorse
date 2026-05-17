@@ -100,72 +100,6 @@ function tournamentPlacement(item: FeedItem): string {
   return String(item.metadata.placement ?? 'Placement posted');
 }
 
-const USE_SOCIAL_RAIL_FALLBACK = import.meta.env.DEV;
-
-type DemoTrendRow = {
-  id: string;
-  username: string;
-  detail: string;
-  detailClass: string;
-  mode: string;
-  icon: string;
-};
-
-type DemoTournamentRow = {
-  id: string;
-  title: string;
-  placement: string;
-  date: string;
-};
-
-const DEMO_TRENDING: DemoTrendRow[] = [
-  {
-    id: 'demo-trend-oliver',
-    username: 'oliver',
-    detail: '7 Win Streak',
-    detailClass: 'rh-sf-trend-detail--streak',
-    mode: 'Play vs Fritz',
-    icon: '🔥',
-  },
-  {
-    id: 'demo-trend-lloyd',
-    username: 'lloyd',
-    detail: '5 Win Streak',
-    detailClass: 'rh-sf-trend-detail--streak',
-    mode: 'Play vs Fritz',
-    icon: '🔥',
-  },
-  {
-    id: 'demo-trend-hafnerjan',
-    username: 'hafnerjan',
-    detail: 'Daily Fritz · 23 pts',
-    detailClass: 'rh-sf-trend-detail--fritz',
-    mode: 'Daily Fritz',
-    icon: '🤖',
-  },
-];
-
-const DEMO_TOURNAMENTS: DemoTournamentRow[] = [
-  {
-    id: 'demo-tourney-1',
-    title: 'Blitz Arena',
-    placement: 'Winner',
-    date: '2h ago',
-  },
-  {
-    id: 'demo-tourney-2',
-    title: 'Sunday Sprint',
-    placement: '3rd Place',
-    date: '1d ago',
-  },
-  {
-    id: 'demo-tourney-3',
-    title: 'Weekend Showdown',
-    placement: '2nd Place',
-    date: 'May 14',
-  },
-];
-
 function formatWeeklyReset(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
@@ -274,10 +208,7 @@ export default function ActivityFeedScreen({
     [feedItems],
   );
 
-  const useRailFallback = USE_SOCIAL_RAIL_FALLBACK && Boolean(user);
   const displayOnlineCount = onlineFriends.length;
-  const showDemoTrending = trendingMoments.length === 0 && useRailFallback;
-  const showDemoTournaments = recentTournaments.length === 0 && useRailFallback;
 
   const reachabilityUserIds = useMemo(
     () => onlineFriends.map((friend) => friend.userId),
@@ -338,6 +269,33 @@ export default function ActivityFeedScreen({
       .filter((friend) => !onlineIds.has(friend.userId))
       .slice(0, 3);
   }, [friends, onlineFriends]);
+
+  const socialHeroStats = useMemo(
+    () => [
+      {
+        label: 'Online',
+        value: String(displayOnlineCount),
+        note: displayOnlineCount > 0 ? 'friends live now' : 'quiet right now',
+      },
+      {
+        label: 'Rivals',
+        value: String(friends.length),
+        note: friends.length > 0 ? 'players in your circle' : 'add players to follow',
+      },
+      {
+        label: 'Recent Activity',
+        value: String(feedItems.length),
+        note: feedItems.length > 0 ? 'updates in your feed' : 'no updates yet',
+      },
+      {
+        label: 'Top Streak',
+        value: weeklyHighlights.topStreak?.value != null ? String(weeklyHighlights.topStreak.value) : '—',
+        note: weeklyHighlights.topStreak?.username ?? 'waiting on this week',
+        accent: true,
+      },
+    ],
+    [displayOnlineCount, feedItems.length, friends.length, weeklyHighlights.topStreak],
+  );
 
   const noopToast = useMemo(() => (_message: string) => undefined, []);
   const {
@@ -402,7 +360,21 @@ export default function ActivityFeedScreen({
           <main className="rh-hub-main rh-sf-main-column social-main-column">
             <SocialPageHero
               title="Social"
-              subtitle="Connect, compete, and celebrate every move together."
+              subtitle="Follow rivals, track wins, and see what’s happening across Racehorse."
+              meta={user ? (
+                <>
+                  {socialHeroStats.map((stat) => (
+                    <article
+                      key={stat.label}
+                      className={`social-hero__stat${stat.accent ? ' social-hero__stat--accent' : ''}`}
+                    >
+                      <span className="social-hero__stat-label">{stat.label}</span>
+                      <strong className="social-hero__stat-value">{stat.value}</strong>
+                      <span className="social-hero__stat-note">{stat.note}</span>
+                    </article>
+                  ))}
+                </>
+              ) : undefined}
               filters={user ? (
                 <ActivityFeedFilterTabs filter={feedFilter} onFilterChange={setFeedFilter} />
               ) : undefined}
@@ -433,7 +405,7 @@ export default function ActivityFeedScreen({
               <aside className="rh-hub-rail rh-sf-sidebar rh-sf-right-rail social-right-rail" aria-label="Social sidebar">
               <section className="rh-hub-panel rh-hub-rail-card rh-sf-widget rh-social-card rh-sf-widget--friends social-right-card online-friends">
                 <div className="rh-sf-widget-head">
-                  <h2 className="rh-sf-widget-title">Online Friends</h2>
+                  <h2 className="rh-sf-widget-title">Online Now</h2>
                   <span className={`rh-sf-widget-online${displayOnlineCount === 0 ? ' is-muted' : ''}`}>
                     {displayOnlineCount > 0 ? `${displayOnlineCount} online` : 'None online'}
                   </span>
@@ -474,6 +446,38 @@ export default function ActivityFeedScreen({
                     <span aria-hidden="true">›</span>
                   </button>
                 ) : null}
+              </section>
+
+              <section className="rh-sf-widget rh-social-card social-right-card">
+                <div className="rh-sf-widget-head">
+                  <h2 className="rh-sf-widget-title">Daily Fritz Highlights</h2>
+                  <span className="rh-sf-widget-online is-muted">Today</span>
+                </div>
+                <div className="rh-sf-widget-list">
+                  {trendingMoments.length > 0 ? trendingMoments.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="rh-sf-trend"
+                      onClick={() => onViewProfile(item.username)}
+                    >
+                      <span className={`rh-sf-trend-icon rh-sf-trend-icon--${item.type}`} aria-hidden="true">
+                        {trendingIcon(item)}
+                      </span>
+                      <span className="rh-sf-trend-copy">
+                        <strong>{item.username}</strong>
+                        <span className={trendDetailClass(item)}>{trendLabel(item)}</span>
+                      </span>
+                      <span className="rh-sf-trend-mode">{trendMode(item)}</span>
+                      <span className="rh-sf-row-chevron" aria-hidden="true">›</span>
+                    </button>
+                  )) : (
+                    <div className="rh-sf-widget-empty rh-sf-widget-empty--rich">
+                      <span className="rh-sf-widget-empty-icon" aria-hidden="true">🤖</span>
+                      <p>No standout Daily Fritz runs yet. Today’s best scores will surface here.</p>
+                    </div>
+                  )}
+                </div>
               </section>
 
               <SideRailCard
@@ -533,7 +537,7 @@ export default function ActivityFeedScreen({
 
 
               <section className="rh-sf-widget rh-social-card rh-sf-widget--tournaments social-right-card recent-tournaments">
-                <h2 className="rh-sf-widget-title rh-sf-widget-title--solo">Recent Tournaments</h2>
+                <h2 className="rh-sf-widget-title rh-sf-widget-title--solo">Recent Tournament Winners</h2>
                 <div className="rh-sf-widget-list">
                   {recentTournaments.length > 0 ? recentTournaments.map((item) => (
                     <div className="rh-sf-tournament" key={item.id}>
@@ -543,16 +547,6 @@ export default function ActivityFeedScreen({
                         <span className="rh-sf-trend-detail rh-sf-trend-detail--tournament">{tournamentPlacement(item)}</span>
                       </span>
                       <span className="rh-sf-tournament-date">{formatMonthDay(item.created_at)}</span>
-                      <span className="rh-sf-row-chevron" aria-hidden="true">›</span>
-                    </div>
-                  )) : showDemoTournaments ? DEMO_TOURNAMENTS.map((item) => (
-                    <div className="rh-sf-tournament" key={item.id}>
-                      <span className="rh-sf-trend-icon rh-sf-trend-icon--trophy" aria-hidden="true">🏆</span>
-                      <span className="rh-sf-trend-copy">
-                        <strong>{item.title}</strong>
-                        <span className="rh-sf-trend-detail rh-sf-trend-detail--tournament">{item.placement}</span>
-                      </span>
-                      <span className="rh-sf-tournament-date">{item.date}</span>
                       <span className="rh-sf-row-chevron" aria-hidden="true">›</span>
                     </div>
                   )) : (

@@ -15,6 +15,7 @@ interface HubViewportPageProps {
   className?: string;
 }
 
+/** Viewport-contained hub shell — scroll inside panels, not the page. */
 export default function HubViewportPage({
   children,
   currentMode = 'feed',
@@ -25,7 +26,9 @@ export default function HubViewportPage({
   className,
 }: HubViewportPageProps) {
   return (
-    <div className={`rh-hub-screen rh-hub-page${className ? ` ${className}` : ''}`}>
+    <div
+      className={`rh-hub-screen rh-hub-page rh-hub-viewport-contained${className ? ` ${className}` : ''}`}
+    >
       <div className="rh-hub-shell">
         <GlobalNav
           currentMode={currentMode}

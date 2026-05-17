@@ -10,6 +10,7 @@ import {
   type DailyFritzLeaderboardRow,
   type DailyFritzSetGameNumber,
 } from './api';
+import { getGameSkunkChipLabel } from './skunk';
 import { formatCountdownHms, secondsUntilNextPacificMidnight } from './format';
 import '../components/hub/hubDesignTokens.css';
 import '../social/hub/hubShared.css';
@@ -57,7 +58,16 @@ function formatDateLabel(dateText: string): string {
 }
 
 function formatGameChip(game: NonNullable<DailyFritzLeaderboardRow['games']>[number]): string {
-  return `G${game.gameNumber} ${game.playerScore}–${game.fritzScore}`;
+  return (
+    getGameSkunkChipLabel({
+      gameNumber: game.gameNumber,
+      playerWon: game.playerWon,
+      playerScore: game.playerScore,
+      fritzScore: game.fritzScore,
+      skunk: game.skunk,
+      skunkBy: game.skunkBy,
+    }) ?? `G${game.gameNumber} ${game.playerScore}–${game.fritzScore}`
+  );
 }
 
 function isCurrentUserRow(row: DailyFritzLeaderboardRow, currentUsername: string | null): boolean {
@@ -102,7 +112,7 @@ function GameBreakdown({ row }: { row: DailyFritzLeaderboardRow }) {
         return (
           <span
             key={`${row.username}-g${gameNumber}`}
-            className={`dflb-game-chip ${game.playerWon ? 'is-win' : 'is-loss'}`}
+            className={`dflb-game-chip ${game.playerWon ? 'is-win' : 'is-loss'} ${game.skunk ? 'is-skunk' : ''}`}
           >
             {formatGameChip(game)}
           </span>
@@ -292,7 +302,8 @@ export default function DailyFritzLeaderboardScreen({
       const data = await fetchDailyFritzLeaderboard(runDate);
       setRows(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load leaderboard.');
+      void err;
+      setError('Couldn’t load the leaderboard. Please try again.');
       setRows([]);
     } finally {
       setLoading(false);
@@ -500,7 +511,11 @@ export default function DailyFritzLeaderboardScreen({
                       .join(' ')}
                   >
                     {loading ? <p className="dflb-state">Loading leaderboard…</p> : null}
-                    {!loading && error ? <p className="dflb-state dflb-state--error">{error}</p> : null}
+                    {!loading && error ? (
+                      <p className="dflb-state dflb-state--error" role="alert">
+                        Couldn&apos;t load the leaderboard. Please try again.
+                      </p>
+                    ) : null}
                     {!loading && !error && filteredRows.length === 0 ? (
                       <div className="dflb-empty-board">
                         <p className="dflb-state">No runs match this filter yet.</p>
