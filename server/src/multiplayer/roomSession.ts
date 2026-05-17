@@ -17,6 +17,15 @@ import {
 import { chooseBotMoveServer, type ServerBotTier } from '../bot/serverBot';
 import { configureDisconnectGraceSeatResolver } from './disconnectGrace';
 import type { MatchStartDeps } from './matchStartReady';
+import { drawAudit } from './drawAudit';
+
+function drawAuditUpdateEmitted(roomCode: string, reason: string): void {
+  drawAudit('update-emitted', {
+    roomCode,
+    reason,
+    privateHandsIncluded: true,
+  });
+}
 
 export type PersistedRoomMatchLogStatus = 'completed' | 'abandoned';
 
@@ -347,6 +356,7 @@ export function emitForcedDrawAnimationPayload(
   io.to(targetSocketId).emit('game:draw_animation', {
     playerId: payload.playerId,
     sequence,
+    drawChainId: sequence,
     mode: 'forced_draw',
     steps: payload.steps.map((step) => ({
       tile: step.tile,
@@ -365,6 +375,7 @@ export function emitForcedDrawAnimationPayload(
   io.to(roomCode).except(targetSocketId).emit('game:draw_animation', {
     playerId: payload.playerId,
     sequence,
+    drawChainId: sequence,
     mode: 'forced_draw',
     steps: payload.steps.map((step) => ({
       tile: null,
@@ -775,6 +786,8 @@ export function broadcastStateUpdate(roomCode: string): void {
 
   room.pendingForcedDrawBroadcast = undefined;
   room.pendingAutoPassNotice = undefined;
+
+  drawAuditUpdateEmitted(roomCode, pendingForcedDraw ? 'forced_draw_chain' : 'state_sync');
 
   setImmediate(() => scheduleDeferredMatchPersist?.());
 

@@ -1099,7 +1099,16 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
             sequence: room.state?.sequence ?? null,
           });
         }
-        if (typeof cb === 'function') cb({ ok: true, sequence: room.state?.sequence ?? null });
+        const forcedMeta = result.forcedDrawAnimation
+          ? {
+              drewCount: result.forcedDrawAnimation.steps.length,
+              stoppedReason: result.forcedDrawAnimation.stoppedReason,
+              drawChainId: room.state?.sequence ?? null,
+            }
+          : undefined;
+        if (typeof cb === 'function') {
+          cb({ ok: true, sequence: room.state?.sequence ?? null, forcedDraw: forcedMeta });
+        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'unknown error';
         console.log(`[game:action] ERROR: ${message}`);

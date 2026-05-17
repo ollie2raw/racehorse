@@ -66,7 +66,7 @@ describe('Racehorse Engine Core Rules', () => {
     expect(total).toBe(28);
   });
 
-  it('cannot go out on a double when the boneyard has drawable tiles', () => {
+  it('last-tile double with drawable boneyard is legal and forces a draw', () => {
     const state = setupState({
       board: {
         mainLine: [pt(1, 2)],
@@ -87,14 +87,18 @@ describe('Racehorse Engine Core Rules', () => {
     });
 
     const moves = getLegalMoves(state, 'A');
-    expect(moves.some((m) => m.type === 'play' && m.position === 'right')).toBe(false);
-    expect(canDraw(state, 'A')).toBe(true);
+    expect(moves.some((m) => m.type === 'play' && m.position === 'right')).toBe(true);
+    expect(canDraw(state, 'A')).toBe(false);
 
-    expect(() => applyMove(state, 'A', {
+    const { state: next, forcedDraw } = applyMove(state, 'A', {
       type: 'play',
       tile: t(2, 2),
       position: 'right',
-    })).toThrow(/cannot go out/i);
+    });
+    expect(forcedDraw).not.toBeNull();
+    expect(next.handOver).toBe(false);
+    expect(next.players.A.hand.length).toBe(1);
+    expect(next.boneyard.length).toBe(0);
   });
 
   it('can go out on a double when the boneyard is locked or empty', () => {
@@ -129,7 +133,7 @@ describe('Racehorse Engine Core Rules', () => {
     expect(next.players.A.hand.length).toBe(0);
   });
 
-  it('cannot go out on a scoring play when the boneyard has drawable tiles', () => {
+  it('last-tile scoring play with drawable boneyard is legal and forces a draw', () => {
     // Board: [1|4], left=1, right=4
     // Playing [1|6] on left makes ends 6 + 4 = 10 → scores 2 points
     const state = setupState({
@@ -152,14 +156,18 @@ describe('Racehorse Engine Core Rules', () => {
     });
 
     const moves = getLegalMoves(state, 'A');
-    expect(moves.some((m) => m.type === 'play' && m.position === 'left')).toBe(false);
-    expect(canDraw(state, 'A')).toBe(true);
+    expect(moves.some((m) => m.type === 'play' && m.position === 'left')).toBe(true);
+    expect(canDraw(state, 'A')).toBe(false);
 
-    expect(() => applyMove(state, 'A', {
+    const { state: next, forcedDraw } = applyMove(state, 'A', {
       type: 'play',
       tile: t(1, 6),
       position: 'left',
-    })).toThrow(/cannot go out/i);
+    });
+    expect(forcedDraw).not.toBeNull();
+    expect(next.handOver).toBe(false);
+    expect(next.players.A.score).toBe(2);
+    expect(next.players.A.hand.length).toBe(1);
   });
 
   it('can go out on a scoring play when the boneyard is locked or empty', () => {
@@ -717,10 +725,9 @@ describe('Crossed Doubles and Branching', () => {
 });
 
 describe('Last-tile branch scoring behavior', () => {
-  it('branch scoring last tile is blocked while drawable boneyard tiles remain', () => {
+  it('branch scoring last tile is legal with drawable boneyard and forces draw', () => {
     // Setup: [3|3][3|5] with main ends 6 (double-3), 5
     // Playing [3|4] on branch makes sum 6 + 5 + 4 = 15 → scores
-    // If this is last tile, cannot play it
 
     const state = setupState({
       board: {
@@ -744,7 +751,7 @@ describe('Last-tile branch scoring behavior', () => {
       },
       currentPlayerIndex: 0,
       players: {
-        A: { id: 'A', hand: [t(3, 4)], score: 0 }, // Only tile, would score on branch (6+5+4=15)
+        A: { id: 'A', hand: [t(3, 4)], score: 0 },
         B: { id: 'B', hand: [t(0, 1)], score: 0 },
       },
       boneyard: [t(2, 2)],
@@ -753,15 +760,92 @@ describe('Last-tile branch scoring behavior', () => {
     });
 
     const moves = getLegalMoves(state, 'A');
-
     const branchMove = moves.find((m) => m.type === 'play' && m.position === 'branch-0-0');
-    expect(branchMove).toBeUndefined();
+    expect(branchMove).toBeDefined();
 
-    expect(() => applyMove(state, 'A', {
+    const { state: next, forcedDraw } = applyMove(state, 'A', {
       type: 'play',
       tile: t(3, 4),
       position: 'branch-0-0',
-    })).toThrow(/cannot go out/i);
+    });
+    expect(forcedDraw).not.toBeNull();
+    expect(next.handOver).toBe(false);
+    expect(next.players.A.hand.length).toBe(1);
+  });
+});
+
+describe('Last-tile scoring vs non-scoring placements', () => {
+  function lastTile32State(boneyard: Tile[]) {
+    // [8|3][3|2]: open 3 on left connection, open 2 on right
+    // Last tile 3-2 on left (match 3): open-ends sum 5 → scores 1 point
+    // Last tile 3-2 on right (match 2): no score
+    return setupState({
+      board: {
+        mainLine: [pt(8, 3), pt(3, 2)],
+        leftEnd: 8,
+        rightEnd: 2,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: 'A', hand: [t(3, 2)], score: 0 },
+        B: { id: 'B', hand: [t(0, 1)], score: 0 },
+      },
+      boneyard,
+      deadTiles: [],
+      config: { ...DEFAULT_CONFIG, deadTileCount: 0 },
+    });
+  }
+
+  it('exposes both scoring and non-scoring placements for last tile 3-2', () => {
+    const state = lastTile32State([t(5, 5)]);
+    const plays = getLegalMoves(state, 'A').filter((m) => m.type === 'play');
+    const positions = plays.map((m) => (m.type === 'play' ? m.position : ''));
+    expect(positions).toContain('left');
+    expect(positions).toContain('right');
+    expect(plays.length).toBe(2);
+  });
+
+  it('non-scoring last-tile placement goes out even when boneyard has tiles', () => {
+    const state = lastTile32State([t(5, 5)]);
+    const { state: next, forcedDraw } = applyMove(state, 'A', {
+      type: 'play',
+      tile: t(3, 2),
+      position: 'right',
+    });
+    expect(forcedDraw).toBeNull();
+    expect(next.handOver).toBe(true);
+    expect(next.players.A.hand.length).toBe(0);
+    expect(next.players.A.score).toBe(0);
+  });
+
+  it('scoring last-tile placement with drawable boneyard forces draw and continues hand', () => {
+    const state = lastTile32State([t(5, 5)]);
+    const { state: next, forcedDraw } = applyMove(state, 'A', {
+      type: 'play',
+      tile: t(3, 2),
+      position: 'left',
+    });
+    expect(forcedDraw).not.toBeNull();
+    expect(next.handOver).toBe(false);
+    expect(next.players.A.score).toBe(1);
+    expect(next.players.A.hand.length).toBe(1);
+    expect(next.currentPlayerIndex).toBe(0);
+  });
+
+  it('scoring last-tile placement with empty boneyard ends the hand', () => {
+    const state = lastTile32State([]);
+    const { state: next, forcedDraw } = applyMove(state, 'A', {
+      type: 'play',
+      tile: t(3, 2),
+      position: 'left',
+    });
+    expect(forcedDraw).toBeNull();
+    expect(next.handOver).toBe(true);
+    expect(next.players.A.hand.length).toBe(0);
+    expect(next.players.A.score).toBe(1);
   });
 });
 

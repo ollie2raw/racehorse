@@ -450,7 +450,8 @@ function listRawPlayablePositions(board, tile) {
   return [...new Set(positions)];
 }
 
-function findBlockedForcedDrawLikeMove(client) {
+/** Returns a last-tile scoring/double placement that matches the board but is missing from legalMoves (regression guard). */
+function findHiddenForcedDrawLikeMove(client) {
   const payload = latestState(client);
   const state = payload?.state;
   if (!state) return null;
@@ -1395,52 +1396,13 @@ async function scenarioForcedDrawAtomicBehavior() {
           };
         }
 
-        const blockedCandidateMove = findBlockedForcedDrawLikeMove(actor);
-        if (blockedCandidateMove) {
+        const hiddenForcedDrawMove = findHiddenForcedDrawLikeMove(actor);
+        if (hiddenForcedDrawMove) {
           blockedCandidateAttempts += 1;
-          const beforeState = latestState(actor)?.state;
-          assert(beforeState, 'missing actor state before blocked forced-draw-like MOVE');
-          const actorAnimCountBefore = actor.state.drawAnimations.length;
-          const other = actor === alpha ? bravo : alpha;
-          const otherAnimCountBefore = other.state.drawAnimations.length;
-
-          const moveResp = await emitAck(actor.socket, 'game:action', roomCode, {
-            type: 'MOVE',
-            move: { tile: blockedCandidateMove.tile, position: blockedCandidateMove.position },
-          });
-          assert(moveResp?.ok === false, 'blocked forced-draw-like MOVE unexpectedly succeeded');
           assert(
-            /cannot go out/i.test(String(moveResp?.error ?? '')),
-            `blocked forced-draw-like MOVE rejected with unexpected error: ${moveResp?.error ?? 'unknown'}`,
+            false,
+            `last-tile scoring/double placement hidden from legalMoves: ${hiddenForcedDrawMove.tile.low}|${hiddenForcedDrawMove.tile.high} @ ${hiddenForcedDrawMove.position}`,
           );
-          await delay(SETTLE_MS);
-
-          const actorStateAfter = latestState(actor)?.state;
-          const otherStateAfter = latestState(other)?.state;
-          assert(actorStateAfter && otherStateAfter, 'missing post-rejection state for blocked forced-draw-like MOVE');
-          assert(
-            actorStateAfter.sequence === beforeState.sequence &&
-              otherStateAfter.sequence === beforeState.sequence,
-            'blocked forced-draw-like MOVE changed authoritative sequence',
-          );
-          assert(
-            actor.state.drawAnimations.length === actorAnimCountBefore &&
-              other.state.drawAnimations.length === otherAnimCountBefore,
-            'blocked forced-draw-like MOVE unexpectedly emitted draw animation',
-          );
-
-          return {
-            roomCode,
-            checks: {
-              forcedDrawMoveReachableViaLegalMoves: false,
-              blockedLastTileScoringOrDoubleRejectedCleanly: true,
-              blockedMoveDidNotMutateSequence: true,
-              blockedMoveDidNotEmitForcedDrawAnimation: true,
-              legalCandidateAttempts,
-              blockedCandidateAttempts,
-              rematchAttempts,
-            },
-          };
         }
 
         const move = candidateMove ?? getPlayableMove(actor);

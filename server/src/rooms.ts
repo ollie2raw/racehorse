@@ -11,6 +11,7 @@ import {
   getOpenEnds,
   canDraw,
 } from './game/engine';
+import { drawAudit } from './multiplayer/drawAudit';
 import { computePlayScore, simulatePlacement } from './game/scoring';
 import type { GhostMoveLogEntry } from './ghost/service';
 import {
@@ -620,6 +621,7 @@ export async function readyForNextHand(
 
 export interface ActionPayload {
   type: 'DRAW' | 'MOVE' | 'PASS';
+  requestId?: string;
   move?: {
     tile: { high: number; low: number };
     position?: PlacementPosition;
@@ -668,6 +670,12 @@ export async function act(
   // DRAW
   // ─────────────────────────────
   if (type === 'DRAW') {
+    drawAudit('action-received', {
+      roomCode: code,
+      userId: playerSeatId,
+      actionType: 'DRAW',
+      requestId: (action as { requestId?: string }).requestId,
+    });
     if (!canDraw(state, playerSeatId)) {
       const currentId = state.playerIds[state.currentPlayerIndex];
       if (currentId !== playerSeatId) {
@@ -720,6 +728,14 @@ export async function act(
       });
     }
     appendResolutionEvents(room, previousState, playerSeatId);
+    drawAudit('forced-draw-resolved', {
+      roomCode: code,
+      playerId: playerSeatId,
+      drawnCount: result.animationSteps.length,
+      stoppedBecause: result.stoppedReason,
+      handCount: room.state.players[playerSeatId]?.hand.length ?? 0,
+      boneyardCount: room.state.boneyard.length,
+    });
     return {
       room,
       forcedDrawAnimation: {
@@ -736,6 +752,12 @@ export async function act(
   // MOVE
   // ─────────────────────────────
   if (type === 'MOVE') {
+    drawAudit('action-received', {
+      roomCode: code,
+      userId: playerSeatId,
+      actionType: 'MOVE',
+      requestId: (action as { requestId?: string }).requestId,
+    });
     if (!action.move) throw new Error('Move payload missing.');
 
     const { tile } = action.move;
@@ -788,6 +810,14 @@ export async function act(
     );
 
     if (forcedDraw && resolvedForced) {
+      drawAudit('forced-draw-resolved', {
+        roomCode: code,
+        playerId: playerSeatId,
+        drawnCount: resolvedForced.animationSteps.length,
+        stoppedBecause: resolvedForced.stoppedReason,
+        handCount: room.state.players[playerSeatId]?.hand.length ?? 0,
+        boneyardCount: room.state.boneyard.length,
+      });
       logMpDebug('mp-forced-draw', {
         roomCode: room.code,
         playerId: playerSeatId,
@@ -831,6 +861,17 @@ export async function act(
   // PASS
   // ─────────────────────────────
   if (type === 'PASS') {
+    drawAudit('action-received', {
+      roomCode: code,
+      userId: playerSeatId,
+      actionType: 'PASS',
+      requestId: (action as { requestId?: string }).requestId,
+    });
+    drawAudit('pass-applied', {
+      roomCode: code,
+      playerId: playerSeatId,
+      reason: 'client_pass',
+    });
     const previousState = state;
     appendGhostMove(room, playerSeatId, {
       turn: currentGhostTurn(room),

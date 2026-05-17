@@ -44,6 +44,7 @@ import type { BotDealSize } from './bot/botEngine';
 import type { FritzTier } from './bot/fritzConfig';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
+import { drawAudit, nextDrawRequestId } from './multiplayer/drawAudit';
 import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
 import {
   isRenderableMultiplayerSnapshot,
@@ -2791,7 +2792,6 @@ export default function App() {
       !socket ||
       !joinedRoom ||
       boneyardLockedNow ||
-      drawSequenceActive ||
       !canDraw ||
       isGameplayActionBlocked()
     ) {
@@ -2805,11 +2805,36 @@ export default function App() {
     const validMoves = legalMoves
       .filter((m) => m.type === 'play' && m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
+    const requestId = nextDrawRequestId();
+    const emitAt = Date.now();
+    drawAudit('forced-state-detected', {
+      roomCode: joinedRoom,
+      playerId: you,
+      handCount: handBefore.length,
+      boneyardCount: state?.boneyard.length ?? 0,
+      legalMoveCount: validMoves.length,
+      canDraw,
+      canPass: legalMoves.some((m) => m.type === 'pass'),
+      reason: 'no_legal_play_drawable_boneyard',
+    });
+    drawAudit('emit', { event: 'game:action', actionType: 'DRAW', roomCode: joinedRoom, requestId });
     try {
-      const resp = await emitWithAck<any>(socket, 'game:action', joinedRoom, { type: 'DRAW' });
+      const resp = await emitWithAck<any>(socket, 'game:action', joinedRoom, { type: 'DRAW', requestId });
+      drawAudit('ack', {
+        requestId,
+        ms: Date.now() - emitAt,
+        ok: Boolean(resp?.ok),
+        forcedDraw: resp?.forcedDraw?.drewCount ?? 0,
+        drawnCount: resp?.forcedDraw?.drewCount,
+        error: resp?.error,
+      });
       if (!resp?.ok) {
         setActionError(resp?.error ?? 'Unable to draw.');
         return;
+      }
+      if (joinedRoom && typeof resp.sequence === 'number' && Number.isFinite(resp.sequence)) {
+        mpAutoDrawSuppressUntilSequenceRef.current = resp.sequence;
+        autoTurnActionKeyRef.current = '';
       }
       appendMultiplayerMove({
         player: 'you',
@@ -2836,12 +2861,12 @@ export default function App() {
       setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
       pendingActionRef.current = false;
     }
-  }, [socket, joinedRoom, state, you, legalMoves, canDraw, appendMultiplayerMove, emitDraggingState, showToast, drawSequenceActive, isGameplayActionBlocked]);
+  }, [socket, joinedRoom, state, you, legalMoves, canDraw, appendMultiplayerMove, emitDraggingState, showToast, isGameplayActionBlocked]);
 
   const pass = useCallback(async () => {
     setActionError('');
     const hasPassMove = legalMoves.some((m) => m.type === 'pass');
-    if (!socket || !joinedRoom || drawSequenceActive || !hasPassMove || isGameplayActionBlocked()) return;
+    if (!socket || !joinedRoom || !hasPassMove || isGameplayActionBlocked()) return;
     emitDraggingState(false);
     setPendingUiAction('pass');
     pendingActionRef.current = true;
@@ -2881,7 +2906,7 @@ export default function App() {
       setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
       pendingActionRef.current = false;
     }
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, drawSequenceActive, isGameplayActionBlocked]);
+  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, isGameplayActionBlocked]);
 
   const play = useCallback(
     async (position: PlacementPosition) => {
@@ -2978,12 +3003,7 @@ export default function App() {
   const isMyTurn = currentTurnId === you;
   const authoritativeMyHand = state?.players[you]?.hand ?? [];
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-  const useDrawStepOverlayForMyHand =
-    drawSequenceActive && drawStepActorId === you;
-  const handForRenderBase =
-    drawStepMyHand != null && useDrawStepOverlayForMyHand
-      ? drawStepMyHand
-      : authoritativeMyHand;
+  const handForRenderBase = authoritativeMyHand;
   const myHand = handForRenderBase;
   const handCompactStacked = myHand.length > 9;
 
@@ -3063,8 +3083,8 @@ export default function App() {
     isSpectatingMatch && spectateRightPlayerId ? (state?.players[spectateRightPlayerId]?.score ?? 0) : myScore;
   const hudRightScorePulse = isSpectatingMatch && spectateRightPlayerId ? Boolean(hudScorePulse[spectateRightPlayerId]) : Boolean(hudScorePulse[you]);
   const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
-  const canDrawNow = canDraw && !drawSequenceActive && !hasPlayMoves;
-  const canPass = legalMoves.some((m) => m.type === 'pass') && !drawSequenceActive;
+  const canDrawNow = canDraw && !hasPlayMoves;
+  const canPass = legalMoves.some((m) => m.type === 'pass');
   const boneyardCount = boneyardDisplayCount ?? state?.boneyard.length ?? 0;
   const isBoneyardLocked = boneyardCount <= 2;
   const openEndsSum = getOpenEndsSum(state?.board ?? null);
@@ -3463,7 +3483,6 @@ export default function App() {
       !handActive ||
       !isMyTurn ||
       hasPlayMoves ||
-      drawSequenceActive ||
       roomRecoveryState !== 'idle' ||
       isRecoveringConnection ||
       pendingActionRef.current
@@ -3472,7 +3491,7 @@ export default function App() {
       return;
     }
 
-    const autoAction: 'draw' | 'pass' | null = canDrawNow ? 'draw' : canPass && !joinedRoom ? 'pass' : null;
+    const autoAction: 'draw' | 'pass' | null = canDrawNow ? 'draw' : canPass ? 'pass' : null;
     if (!autoAction) return;
 
     const turnKey = `${state?.handNumber ?? 0}:${state?.currentPlayerIndex ?? -1}:${myHand.length}:${boneyardCount}:${autoAction}`;
@@ -3480,8 +3499,24 @@ export default function App() {
 
     autoTurnActionKeyRef.current = turnKey;
     if (autoAction === 'draw') {
+      drawAudit('forced-state-detected', {
+        roomCode: joinedRoom ?? '',
+        playerId: you,
+        handCount: myHand.length,
+        boneyardCount,
+        legalMoveCount: legalMoves.filter((m) => m.type === 'play').length,
+        canDraw,
+        canPass,
+        reason: 'auto_turn_effect',
+      });
       draw();
     } else {
+      drawAudit('auto-pass', {
+        roomCode: joinedRoom ?? '',
+        playerId: you,
+        boneyardCount,
+        reason: 'auto_turn_effect_blocked',
+      });
       pass();
     }
   }, [
@@ -3495,7 +3530,6 @@ export default function App() {
     boneyardCount,
     draw,
     pass,
-    drawSequenceActive,
     roomRecoveryState,
     isRecoveringConnection,
   ]);

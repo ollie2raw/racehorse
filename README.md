@@ -7,7 +7,7 @@ A web-based multiplayer Racehorse Dominoes game with real-time gameplay, visual 
 - **Correct Racehorse Rules**: Full implementation of Racehorse Dominoes including:
   - Opening must be a double OR a scoring play
   - Extra turn on doubles and scoring plays (can chain)
-  - Cannot go out on a double or scoring play
+  - Last-tile scoring/double: legal; forces draw while boneyard is drawable, otherwise hand ends
   - Crossed-double branching (up to 2 branches per hub)
   - Dead tiles that cannot be drawn
   - Blocked hand resolution
@@ -124,9 +124,11 @@ npm run preview
 - Each hub can spawn up to 2 branch arms
 - Branch ends count toward the open ends sum for scoring
 
-### Cannot Go Out
-- You cannot play your last tile if it's a double
-- You cannot play your last tile if it would score
+### Last Tile on a Score or Double
+- Scoring plays and doubles keep your turn alive
+- If you empty your hand with one while the boneyard can still be drawn, you must draw and continue
+- If the boneyard is locked (only dead tiles remain), the hand can end
+- There is no manual draw or pass — drawing and passing only happen when the rules force them
 
 ### Blocked Hand
 - When all players pass consecutively, the hand is blocked

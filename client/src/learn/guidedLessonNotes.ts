@@ -359,9 +359,9 @@ Play: 0-4.`,
 
   88: `Now we play our last tile, the 4-4.
 
-Because you cannot go out on a score or a double, this forces us to draw.
+Scoring plays and doubles keep your turn alive. If you empty your hand with one while the boneyard can still be drawn, you must draw and continue. If the boneyard is locked, the hand can end.
 
-That may feel strange at first, but it is part of the game. Sometimes the correct move still forces a draw because the rules do not allow the hand to end that way.
+That may feel strange at first, but it is part of the game. Sometimes the correct move still forces a draw because drawable tiles remain.
 
 Play: 4-4.`,
 

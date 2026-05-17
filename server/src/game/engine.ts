@@ -75,27 +75,6 @@ function checkForGameWinner(state: GameState): string | null {
   );
 }
 
-/**
- * A player cannot legally empty their hand on a scoring play or double while
- * a draw is still available. Once the boneyard is locked/empty, the player is
- * allowed to go out because there is no draw-chain alternative.
- */
-function isGoingOutIllegal(
-  state: GameState,
-  playerId: string,
-  tile: Tile,
-  position: PlacementPosition,
-): boolean {
-  const hand = state.players[playerId].hand;
-  if (hand.length !== 1 || !tileEquals(hand[0], tile)) return false;
-  if (getDrawableBoneyardCount(state) === 0) return false;
-
-  const newBoard = simulatePlacement(state.board, tile, position);
-  const scoring = computePlayScore(newBoard, state.config) > 0;
-  const doublePlayed = isDouble(tile);
-  return scoring || doublePlayed;
-}
-
 function validateConfig(playerCount: number, cfg: Config): void {
   const total = totalTilesInSet(cfg.maxPips);
   const needed = playerCount * cfg.tilesPerPlayer + cfg.deadTileCount;
@@ -331,6 +310,15 @@ function getDrawableBoneyardCount(state: GameState): number {
   return Math.max(0, state.boneyard.length - state.config.deadTileCount);
 }
 
+/**
+ * Racehorse action invariants (authoritative):
+ * - No discretionary draw or pass: `canDraw` / legal `pass` only when the player has zero play moves.
+ * - Forced draw chains stop as soon as a legal play exists; if the boneyard locks while still blocked, pass is legal.
+ * - Opening requires a double or scoring tile; otherwise the player is in a forced-draw state until one appears or the boneyard locks.
+ * - Scoring plays and doubles keep the turn; if nothing is playable afterward and drawable tiles remain, `applyMove` seeds forced draw.
+ * - Last-tile scoring/double placements are always listed in `getLegalMoves`; going out on them requires a locked/empty drawable boneyard.
+ */
+
 export function getLegalMoves(state: GameState, playerId: string): Move[] {
   assertCurrentPlayer(state, playerId);
   if (state.handOver || state.gameOver) return [];
@@ -346,9 +334,7 @@ export function getLegalMoves(state: GameState, playerId: string): Move[] {
       const double = isDouble(tile);
 
       if (double || scores) {
-        if (!isGoingOutIllegal(state, playerId, tile, 'left')) {
-          moves.push({ type: 'play', tile, position: 'left' });
-        }
+        moves.push({ type: 'play', tile, position: 'left' });
       }
     }
   } else {
@@ -379,9 +365,7 @@ export function getLegalMoves(state: GameState, playerId: string): Move[] {
       const uniquePositions = [...new Set(matchingPositions)];
 
       for (const position of uniquePositions) {
-        if (!isGoingOutIllegal(state, playerId, tile, position)) {
-          moves.push({ type: 'play', tile, position });
-        }
+        moves.push({ type: 'play', tile, position });
       }
     }
 
@@ -598,14 +582,6 @@ export function applyMove(
           `(open-ends sum divisible by ${state.config.scoringMultiple}).`,
       );
     }
-    if (isGoingOutIllegal(state, playerId, tile, position)) {
-      throw new Error(
-        `Illegal move: cannot go out with ${tileId(tile)} because ` +
-          `${isDouble(tile) ? 'it is a double' : 'the play scores'}. ` +
-          `You must keep at least one tile in hand.`,
-      );
-    }
-
     const branchPos = parseBranchPosition(position);
     if (branchPos) {
       throw new Error(`Illegal move: ${tileId(tile)} cannot be placed on branch ${position}.`);
