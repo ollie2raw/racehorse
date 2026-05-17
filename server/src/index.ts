@@ -4657,15 +4657,17 @@ io.on('connection', (socket: Socket) => {
   console.log('Client connected:', socket.id);
 
   // TOURNAMENT_HELPERS
-  // Global in-memory tournament storage (per server process).
-  const tournamentsById = ((globalThis as any).__tournamentsById ??= new Map<string, Tournament>()) as Map<
-    string,
-    Tournament
-  >;
-  const tournamentsByCode = ((globalThis as any).__tournamentsByCode ??= new Map<string, string>()) as Map<
-    string,
-    string
-  >;
+  const ENABLE_LEGACY_TOURNAMENTS = process.env.ENABLE_LEGACY_TOURNAMENTS === '1';
+  if (ENABLE_LEGACY_TOURNAMENTS) {
+    // Global in-memory tournament storage (per server process).
+    const tournamentsById = ((globalThis as any).__tournamentsById ??= new Map<string, Tournament>()) as Map<
+      string,
+      Tournament
+    >;
+    const tournamentsByCode = ((globalThis as any).__tournamentsByCode ??= new Map<string, string>()) as Map<
+      string,
+      string
+    >;
 
   const emitTournament = (t: Tournament) => {
     const standings = sortedStandings(t.standings);
@@ -4895,7 +4897,7 @@ io.on('connection', (socket: Socket) => {
     cb?.({ ok: false, error: 'bots_disabled' });
   });
 
-  socket.on('tournament:start', (cb?: any) => {
+    socket.on('tournament:start', (cb?: any) => {
     try {
       const t = getTournamentForSocket();
       if (!t) return cb?.({ ok: false, error: 'no_tournament' });
@@ -4927,7 +4929,8 @@ io.on('connection', (socket: Socket) => {
     } catch (e) {
       cb?.({ ok: false, error: 'start_failed' });
     }
-  });
+    });
+  }
 
 
 

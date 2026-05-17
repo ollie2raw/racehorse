@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
 import type { Registration, ScheduledTournament } from './types';
+import { deriveTournamentHubViewModel, type TournamentRecoveryMatch } from './hubState';
 import './tournamentHub.css';
 
 type Identity = { userId: string; username: string } | null;
@@ -10,13 +11,19 @@ export interface TournamentHubScreenProps {
   identity: Identity;
   upcoming: ScheduledTournament[];
   registrations: Registration[];
+  recoveryMatch: TournamentRecoveryMatch;
   error: string | null;
+  isLoading: boolean;
+  hasLoaded: boolean;
+  activeBracketStatus?: ScheduledTournament['status'] | null;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
   onBackHome: () => void;
   onOpenBracket: (tournamentId: string) => void;
   onRegister: (tournamentId: string) => void | Promise<void>;
   onWithdraw: (tournamentId: string) => void | Promise<void>;
+  onRetry: () => void | Promise<void>;
+  onAttachAssignedMatch: (matchId: string) => void | Promise<void>;
 }
 
 function pad(n: number): string {
@@ -67,6 +74,14 @@ function Trophy() {
   );
 }
 
+function CheckBadgeArt() {
+  return (
+    <div className="th-confirmation-mark" aria-hidden>
+      <span>✓</span>
+    </div>
+  );
+}
+
 export default function TournamentHubScreen(props: TournamentHubScreenProps) {
   const userId = props.identity?.userId ?? null;
   const [now, setNow] = useState(Date.now());
@@ -77,10 +92,6 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
   }, []);
 
   const nextTournament = props.upcoming[0] ?? null;
-  const countdown = nextTournament
-    ? formatCountdown(Date.parse(nextTournament.scheduled_start) - now)
-    : '--:--:--';
-
   const isRegistered = useMemo(() => {
     const ids = new Set(
       props.registrations
@@ -89,6 +100,46 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
     );
     return (t: ScheduledTournament) => ids.has(t.id);
   }, [props.registrations]);
+
+  const hubState = useMemo(
+    () =>
+      deriveTournamentHubViewModel({
+        upcoming: props.upcoming,
+        registrations: props.registrations,
+        recoveryMatch: props.recoveryMatch,
+        activeBracketStatus: props.activeBracketStatus ?? null,
+        isLoading: props.isLoading,
+        hasLoaded: props.hasLoaded,
+        error: props.error,
+        nowMs: now,
+      }),
+    [
+      props.upcoming,
+      props.registrations,
+      props.recoveryMatch,
+      props.activeBracketStatus,
+      props.isLoading,
+      props.hasLoaded,
+      props.error,
+      now,
+    ],
+  );
+
+  const nextTournamentRegistered = nextTournament ? isRegistered(nextTournament) : false;
+  const countdownTargetMs = nextTournament
+    ? nextTournament.status === 'registration_open'
+      ? Date.parse(nextTournament.registration_close_at)
+      : Date.parse(nextTournament.scheduled_start)
+    : null;
+  const countdown = countdownTargetMs !== null
+    ? formatCountdown(countdownTargetMs - now)
+    : '--:--:--';
+  const countdownLabel = nextTournament?.status === 'registration_open'
+    ? 'Registration Closes In'
+    : 'Next Tournament In';
+  const countdownDetail = nextTournament?.status === 'registration_open'
+    ? 'Claim your seat before registration closes.'
+    : hubState.detail;
 
   return (
     <div className="th-page">
@@ -110,9 +161,25 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
             <div>
               <p className="th-kicker">Tournament</p>
               <h1 className="th-title">Compete</h1>
-              <p className="th-desc">8-player bracket. First to 30 wins. One champion every two hours.</p>
+              <p className="th-desc">8-player bracket. First to 30 wins. One champion every 30 minutes.</p>
             </div>
-            <div className="th-trophy-stage" aria-hidden><Trophy /></div>
+            <div
+              className={`th-trophy-stage${nextTournamentRegistered && nextTournament?.status !== 'completed' ? ' th-trophy-stage--confirmed' : ''}`}
+              aria-hidden
+            >
+              {nextTournamentRegistered && nextTournament?.status !== 'completed' ? (
+                <div className="th-confirmation-stage">
+                  <CheckBadgeArt />
+                  <div className="th-confirmation-copy">
+                    <span className="th-confirmation-eyebrow">Seat Confirmed</span>
+                    <strong>You're registered</strong>
+                    <span>Your entry is locked in for the next bracket.</span>
+                  </div>
+                </div>
+              ) : (
+                <Trophy />
+              )}
+            </div>
             <div className="th-features">
               <div className="th-feature">
                 <div className="th-feature__header">8 Players</div>
@@ -131,27 +198,88 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
 
           <div className="th-panel">
             <div className="th-countdown">
-              <span className="th-countdown__label">Next Tournament</span>
+              <span className="th-countdown__label">{nextTournament ? countdownLabel : hubState.title}</span>
               <span className="th-countdown__time" aria-live="polite">{countdown}</span>
               <span className="th-countdown__sub">
-                Tournaments run every 2 hours. Registration opens 30 minutes before start and closes 5 minutes before.
+                {nextTournament ? countdownDetail : hubState.detail}
               </span>
             </div>
 
+            {props.recoveryMatch ? (
+              <div className="th-recovery-banner">
+                <div className="th-recovery-banner__copy">
+                  <span className="th-recovery-banner__eyebrow">
+                    {props.recoveryMatch.matchStatus === 'ready' ? 'Match Ready' : 'Match In Progress'}
+                  </span>
+                  <span className="th-recovery-banner__title">
+                    {props.recoveryMatch.matchStatus === 'ready'
+                      ? 'Your match is ready — Start Match'
+                      : 'Your match is in progress — Rejoin Match'}
+                  </span>
+                </div>
+                <button
+                  className="th-cta"
+                  onClick={() => void props.onAttachAssignedMatch(props.recoveryMatch!.matchId)}
+                >
+                  {props.recoveryMatch.matchStatus === 'ready' ? 'Start Match' : 'Rejoin Match'}
+                </button>
+              </div>
+            ) : null}
+
             <div className="th-panel-body">
+              {hubState.state === 'loading' ? (
+                <div className="th-state-card" role="status" aria-live="polite">
+                  <div className="th-spinner" aria-hidden />
+                  <div className="th-state-card__text">
+                    <strong>{hubState.title}</strong>
+                    <span>{hubState.detail}</span>
+                  </div>
+                </div>
+              ) : null}
+              {hubState.state === 'api_error' ? (
+                <div className="th-state-card th-state-card--error">
+                  <div className="th-state-card__text">
+                    <strong>{hubState.title}</strong>
+                    <span>{hubState.detail}</span>
+                  </div>
+                  <button className="th-cta th-cta--ghost" onClick={() => void props.onRetry()}>
+                    Retry
+                  </button>
+                </div>
+              ) : null}
+              {hubState.state === 'cancelled' ? (
+                <div className="th-state-card th-state-card--cancelled">
+                  <div className="th-state-card__text">
+                    <strong>{hubState.title}</strong>
+                    <span>{hubState.detail}</span>
+                  </div>
+                </div>
+              ) : null}
               {props.upcoming.slice(0, 3).map((t) => {
                 const reg = isRegistered(t);
                 const open = t.status === 'registration_open';
                 const status = statusFor(t);
                 const count = t.registered_count ?? 0;
+                const isFull = count >= t.max_players;
+                const fillPct = Math.max(0, Math.min(100, (count / t.max_players) * 100));
+                const showFirstRegisterCopy = count === 0 && t.status === 'upcoming';
                 return (
                   <div className="th-card" key={t.id}>
                     <div className="th-card__time">{formatTimePst(t.scheduled_start)}</div>
                     <div className="th-card__middle">
-                      <div className="th-card__count">{count} / {t.max_players} Registered</div>
-                      <div className="th-card__bar">
-                        <span className="th-card__bar-fill" style={{ width: `${(count / t.max_players) * 100}%` }} />
+                      <div className="th-card__count">
+                        {showFirstRegisterCopy ? 'Be the first to register' : `${count} / ${t.max_players} Registered`}
                       </div>
+                      <div className="th-card__bar">
+                        <span className="th-card__bar-fill" style={{ width: `${fillPct}%` }} />
+                      </div>
+                      {!showFirstRegisterCopy ? (
+                        <div className="th-card__count-sub">
+                          {isFull ? 'All seats claimed' : `${t.max_players - count} seats remaining`}
+                        </div>
+                      ) : (
+                        <div className="th-card__count-sub">Registration opens 30 minutes before start.</div>
+                      )}
                       <span className={`th-card__status ${status.cls}`}>{status.label}</span>
                     </div>
                     <div className="th-card__actions">
@@ -159,22 +287,20 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                         <>
                           <span className="th-card__registered">Registered ✓</span>
                           <button
-                            className="th-cta th-cta--ghost"
+                            className="th-card__withdraw"
                             onClick={() => void props.onWithdraw(t.id)}
                           >
                             Withdraw
                           </button>
-                          <button
-                            className="th-cta th-cta--ghost"
-                            onClick={() => props.onOpenBracket(t.id)}
-                          >
-                            View Bracket
-                          </button>
                         </>
+                      ) : isFull ? (
+                        <span className="th-card__full">Full</span>
+                      ) : !open ? (
+                        <span className="th-card__soon">Opens soon</span>
                       ) : (
                         <button
                           className="th-cta"
-                          disabled={!open || !userId}
+                          disabled={!userId}
                           onClick={() => void props.onRegister(t.id)}
                         >
                           Register
@@ -184,10 +310,9 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                   </div>
                 );
               })}
-              {props.upcoming.length === 0 ? (
+              {props.hasLoaded && !props.error && props.upcoming.length === 0 ? (
                 <p className="th-empty">No upcoming tournaments. Check back soon.</p>
               ) : null}
-              {props.error ? <p className="th-err">{props.error}</p> : null}
             </div>
 
             <div className="th-summary-strip">
@@ -201,7 +326,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
               </div>
               <div className="th-summary-item">
                 <span className="th-summary-key">Cadence</span>
-                <span className="th-summary-value">Every 2 hours</span>
+                <span className="th-summary-value">Every 30 minutes</span>
               </div>
             </div>
           </div>

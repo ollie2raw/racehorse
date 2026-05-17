@@ -1,5 +1,5 @@
--- Scheduled hourly tournaments: 8-player single-elimination bracket
--- Runs every 2 hours on a fixed schedule (PST). See TOURNAMENT_README.md.
+-- Scheduled tournaments: 8-player single-elimination bracket
+-- Runs every 30 minutes on a fixed schedule (PST). See TOURNAMENT_README.md.
 
 -- ── Core tables ──────────────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ create policy "stm_select_all" on public.scheduled_tournament_matches
 -- backend; no client-side policy needed for those tables.
 
 -- ── Seed 30 days of slots ────────────────────────────────────────────────
--- Hourly slots every 2 hours starting midnight America/Los_Angeles.
+-- Half-hour slots all day in America/Los_Angeles.
 -- Idempotent — uses ON CONFLICT DO NOTHING via the unique scheduled_start.
 
 do $$
@@ -96,18 +96,23 @@ declare
   d date := (now() at time zone 'America/Los_Angeles')::date;
   end_d date := d + interval '30 days';
   hh integer;
+  mm integer;
   slot timestamptz;
 begin
   while d < end_d loop
-    foreach hh in array array[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
-    loop
-      slot := (d::text || ' ' || lpad(hh::text, 2, '0') || ':00:00')::timestamp
-              at time zone 'America/Los_Angeles';
-      insert into public.scheduled_tournaments
-        (scheduled_start, registration_open_at, registration_close_at, status)
-      values
-        (slot, slot - interval '30 minutes', slot - interval '5 minutes', 'upcoming')
-      on conflict (scheduled_start) do nothing;
+    for hh in 0..23 loop
+      foreach mm in array array[0, 30] loop
+        slot := (
+          d::text || ' ' ||
+          lpad(hh::text, 2, '0') || ':' ||
+          lpad(mm::text, 2, '0') || ':00'
+        )::timestamp at time zone 'America/Los_Angeles';
+        insert into public.scheduled_tournaments
+          (scheduled_start, registration_open_at, registration_close_at, status)
+        values
+          (slot, slot - interval '30 minutes', slot - interval '5 minutes', 'upcoming')
+        on conflict (scheduled_start) do nothing;
+      end loop;
     end loop;
     d := d + 1;
   end loop;

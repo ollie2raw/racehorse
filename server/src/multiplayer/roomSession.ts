@@ -3,15 +3,18 @@ import type { Server, Socket } from 'socket.io';
 import { assertValidGameState } from '../game/invariants';
 import type { BranchArm, GameState } from '../game/types';
 import {
+  act,
   deleteRoom,
   getRoom,
   getRoomCanDraw,
   getRoomLegalMoves,
   getRoomMatchEventMeta,
   readyForNextHand,
+  type ActionPayload,
   type DrawAnimationStep,
   type Room,
 } from '../rooms';
+import { chooseBotMoveServer, type ServerBotTier } from '../bot/serverBot';
 import { configureDisconnectGraceSeatResolver } from './disconnectGrace';
 import type { MatchStartDeps } from './matchStartReady';
 
@@ -39,6 +42,7 @@ export type RoomJoinConfig = { username?: string; userId?: string | null; authTo
 export type AckFn = (payload: unknown) => void;
 
 const roomPlayersByCode = new Map<string, RoomPlayer[]>();
+const botTurnTimersByRoom = new Map<string, ReturnType<typeof setTimeout>>();
 
 let ioRef: Server | null = null;
 
@@ -227,6 +231,9 @@ export function scheduleRoomCleanup(roomCode: string): void {
     } catch (error) {
       console.error('[room-match-logs] failed to archive room before cleanup:', error);
     }
+    const botTimer = botTurnTimersByRoom.get(roomCode);
+    if (botTimer) clearTimeout(botTimer);
+    botTurnTimersByRoom.delete(roomCode);
     deleteRoom(roomCode);
     clearRoomMetadata(roomCode);
   }, ROOM_CLEANUP_GRACE_MS);
@@ -431,6 +438,97 @@ export function buildHandEndedPayload(room: Room, playerId: string) {
   };
 }
 
+function isSyntheticBotSeatId(seatId: string | null | undefined): seatId is string {
+  return typeof seatId === 'string' && seatId.startsWith('bot:fritz:');
+}
+
+function currentPlayerSeatId(room: Room): string | null {
+  const state = room.state;
+  if (!state) return null;
+  return state.playerIds[state.currentPlayerIndex] ?? null;
+}
+
+function buildSyntheticBotAction(roomCode: string, botSeatId: string): ActionPayload {
+  const room = getRoom(roomCode);
+  if (!room.state) return { type: 'PASS' };
+  if (getRoomCanDraw(roomCode, botSeatId)) {
+    return { type: 'DRAW' };
+  }
+
+  const tier: ServerBotTier = room.scheduledTournamentBotTier ?? 'elite';
+  const move = chooseBotMoveServer(room.state, botSeatId, new Set<number>(), tier);
+  if (move.type !== 'play') {
+    return { type: 'PASS' };
+  }
+  return {
+    type: 'MOVE',
+    move: {
+      tile: move.tile,
+      position: move.position,
+    },
+  };
+}
+
+export function scheduleBotTurn(roomCode: string): void {
+  if (botTurnTimersByRoom.has(roomCode)) return;
+
+  let room: Room;
+  try {
+    room = getRoom(roomCode);
+  } catch {
+    return;
+  }
+  const botSeatId = currentPlayerSeatId(room);
+  if (
+    !room.state ||
+    room.state.handOver ||
+    room.state.gameOver ||
+    !isSyntheticBotSeatId(botSeatId)
+  ) {
+    return;
+  }
+
+  const delayMs = 800 + Math.floor(Math.random() * 701);
+  const timer = setTimeout(async () => {
+    botTurnTimersByRoom.delete(roomCode);
+    try {
+      const latest = getRoom(roomCode);
+      const latestBotSeatId = currentPlayerSeatId(latest);
+      if (
+        !latest.state ||
+        latest.state.handOver ||
+        latest.state.gameOver ||
+        latestBotSeatId !== botSeatId ||
+        !isSyntheticBotSeatId(latestBotSeatId)
+      ) {
+        return;
+      }
+
+      const result = await act(
+        roomCode,
+        latestBotSeatId,
+        buildSyntheticBotAction(roomCode, latestBotSeatId),
+        requireIo(),
+        (code) => broadcastStateUpdate(code),
+      );
+      result.room.pendingForcedDrawBroadcast = result.forcedDrawAnimation
+        ? {
+            playerId: result.forcedDrawAnimation.playerId,
+            count: result.forcedDrawAnimation.steps.length,
+          }
+        : undefined;
+      broadcastStateUpdate(result.room.code);
+      if (result.forcedDrawAnimation) {
+        emitForcedDrawAnimationPayload(result.room.code, result.forcedDrawAnimation);
+      }
+      setImmediate(() => requireDeps().maybeFinalizeTournamentMatch?.(result.room));
+    } catch (error) {
+      console.warn('[bot] turn failed', error);
+    }
+  }, delayMs);
+  botTurnTimersByRoom.set(roomCode, timer);
+}
+
 function warnIfMaskedSnapshotMalformed(state: GameState, ctx: string): void {
   if (!state.players || typeof state.players !== 'object') {
     console.warn(`[maskStateForRecipient:${ctx}] players dictionary missing`);
@@ -568,8 +666,7 @@ export function broadcastStateUpdate(roomCode: string): void {
     }
   }
 
-  const sockets = io.sockets.adapter.rooms.get(roomCode);
-  if (!sockets) return;
+  const sockets = io.sockets.adapter.rooms.get(roomCode) ?? new Set<string>();
 
   const pendingForcedDraw = room.pendingForcedDrawBroadcast;
   const pendingAutoPasses =
@@ -702,6 +799,8 @@ export function broadcastStateUpdate(roomCode: string): void {
     }
   }
 
+  scheduleBotTurn(room.code);
+
   if (room.state.gameOver) {
     const finRoom = room;
     const finCode = roomCode;
@@ -721,4 +820,3 @@ export function buildMatchStartDeps(_io: Server): MatchStartDeps {
     },
   };
 }
-

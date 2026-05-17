@@ -1,9 +1,44 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../social/activityWriter', () => ({
+  writeTournamentActivity: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('./matchDispatch', () => ({
+  dispatchTournamentMatch: vi.fn(async (_io, matchId: string, _opts, persistence) => {
+    const match = await persistence.fetchMatchById(matchId);
+    if (match) {
+      const readyAt = match.ready_at ?? new Date('2026-05-16T00:00:00Z').toISOString();
+      await persistence.updateMatch(matchId, {
+        room_code: match.room_code || `R-${matchId}`,
+        status: match.status === 'in_progress' ? 'in_progress' : 'ready',
+        ready_at: readyAt,
+        ready_deadline_at: match.ready_deadline_at ?? new Date('2026-05-16T00:02:00Z').toISOString(),
+      });
+    }
+    return {
+      ok: true,
+      matchId,
+      tournamentId: match?.tournament_id ?? 'tour-1',
+      roomCode: match?.room_code || `R-${matchId}`,
+      status: match?.status === 'in_progress' ? 'in_progress' : 'ready',
+      readyAt: match?.ready_at ?? new Date('2026-05-16T00:00:00Z').toISOString(),
+      readyDeadlineAt: match?.ready_deadline_at ?? new Date('2026-05-16T00:02:00Z').toISOString(),
+      recipients: [],
+      reusedExistingRoom: Boolean(match?.room_code),
+      emittedReady: true,
+    };
+  }),
+}));
+
+import { writeTournamentActivity } from '../social/activityWriter';
+
 import {
   generateBracket,
   applyMatchResult,
   closeRegistrationAndStart,
   cancelTournament,
+  reconcileExpiredReadyMatches,
 } from './engine';
 import type { EnginePersistence } from './persistenceInterface';
 import type {
@@ -19,7 +54,15 @@ type EmittedEvent = { target: 'global' | string; event: string; payload: unknown
 
 function makeIoMock() {
   const events: EmittedEvent[] = [];
-  const sockets: Array<{ id: string; data: { userId?: string }; emit: (e: string, p: unknown) => void }> = [];
+  const sockets: Array<{ id: string; data: { userId?: string }; emit: (e: string, p: unknown) => void }> = [
+    'u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8',
+  ].map((userId) => ({
+    id: `sock-${userId}`,
+    data: { userId },
+    emit: (event: string, payload: unknown) => {
+      events.push({ target: userId, event, payload });
+    },
+  }));
   const io = {
     emit: (event: string, payload: unknown) => {
       events.push({ target: 'global', event, payload });
@@ -43,6 +86,8 @@ function makePersistence(
   const persistence: EnginePersistence = {
     fetchTournamentById: async (id) =>
       store.tournament.id === id ? { ...store.tournament } : null,
+    fetchTournamentsByStatus: async (statuses) =>
+      statuses.includes(store.tournament.status) ? [{ ...store.tournament }] : [],
     fetchRegistrations: async (tid) =>
       store.tournament.id === tid ? store.regs.map((r) => ({ ...r })) : [],
     fetchRegistrationsWithProfile: async (tid) =>
@@ -77,8 +122,17 @@ function makePersistence(
         winner_id: null,
         room_code: input.roomCode,
         status: input.status,
+        ready_at: null,
+        ready_deadline_at: null,
         started_at: null,
         completed_at: null,
+        player1_joined_at: null,
+        player2_joined_at: null,
+        winner_source: null,
+        status_reason: null,
+        forfeit_user_id: null,
+        no_show_user_id: null,
+        bot_tier: input.botTier ?? null,
         player1_score: null,
         player2_score: null,
       };
@@ -95,6 +149,11 @@ function makePersistence(
       if (!r) return;
       r.status = status;
       if (seed !== undefined) r.seed = seed;
+    },
+    updateRegistrationPlacement: async (_tid, userId, placement) => {
+      const r = store.regs.find((x) => x.user_id === userId);
+      if (!r) return;
+      r.placement = placement;
     },
     updateTournamentStatus: async (_id, status, extra) => {
       store.tournament.status = status;
@@ -136,6 +195,7 @@ function makeReg(userId: string): RegistrationRow {
     user_id: userId,
     registered_at: new Date('2026-05-14T23:00:00Z').toISOString(),
     seed: null,
+    placement: null,
     status: 'registered',
   };
 }
@@ -145,10 +205,9 @@ function makeReg(userId: string): RegistrationRow {
 describe('closeRegistrationAndStart', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('cancels the tournament when fewer than 4 players are registered', async () => {
+  it('cancels the tournament only when zero humans are registered', async () => {
     const tournament = makeTournament();
-    const regs = [makeReg('u1'), makeReg('u2'), makeReg('u3')];
-    const { persistence, store } = makePersistence(tournament, regs);
+    const { persistence, store } = makePersistence(tournament, []);
     const { io, events } = makeIoMock();
 
     const result = await closeRegistrationAndStart(io, 'tour-1', persistence);
@@ -159,9 +218,9 @@ describe('closeRegistrationAndStart', () => {
     expect(store.matches).toHaveLength(0);
   });
 
-  it('starts the bracket when ≥ 4 players are registered', async () => {
+  it('starts with one human and fills the remaining slots with Fritz bots', async () => {
     const tournament = makeTournament();
-    const regs = [makeReg('u1'), makeReg('u2'), makeReg('u3'), makeReg('u4')];
+    const regs = [makeReg('u1')];
     const { persistence, store } = makePersistence(tournament, regs);
     const { io, events } = makeIoMock();
 
@@ -171,16 +230,27 @@ describe('closeRegistrationAndStart', () => {
     expect(store.tournament.status).toBe('in_progress');
     expect(store.matches).toHaveLength(7); // 4 QF + 2 SF + 1 Final
     expect(events.some((e) => e.event === 'tournament:bracket_generated')).toBe(true);
+
+    const qf = store.matches
+      .filter((m) => m.round === 1)
+      .sort((a, b) => a.match_number - b.match_number);
+    const qfPlayerIds = qf.flatMap((m) => [m.player1_id, m.player2_id]).filter(Boolean) as string[];
+    expect(qfPlayerIds.filter((id) => id === 'u1')).toHaveLength(1);
+    expect(qfPlayerIds.filter((id) => id.startsWith('bot:fritz:tour-1:'))).toHaveLength(7);
+    expect(qf[0].player1_id).toBe('u1');
+    expect(qf[0].player2_id).toMatch(/^bot:fritz:tour-1:/);
+    expect(qf.every((m) => m.status === 'ready')).toBe(true);
+    expect(qf.every((m) => m.bot_tier === 'standard')).toBe(true);
   });
 });
 
-describe('full bracket lifecycle (4 players)', () => {
+describe('full bracket lifecycle (8 players)', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('drives 4 players through QF → SF → Final, byes auto-advance, one tournament:completed fires', async () => {
-    // Ratings: u4=1400, u3=1300, u2=1200, u1=1100 → seeded u4,u3,u2,u1.
+  it('drives 8 players through QF → SF → Final, one tournament:completed fires', async () => {
+    // Ratings: u8=1800 ... u1=1100, so u8 is seed 1.
     const tournament = makeTournament();
-    const regs = [makeReg('u1'), makeReg('u2'), makeReg('u3'), makeReg('u4')];
+    const regs = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8'].map(makeReg);
     const { persistence, store } = makePersistence(tournament, regs);
     const { io, events } = makeIoMock();
 
@@ -191,102 +261,118 @@ describe('full bracket lifecycle (4 players)', () => {
     expect(store.matches.filter((m) => m.round === 2)).toHaveLength(2);
     expect(store.matches.filter((m) => m.round === 3)).toHaveLength(1);
 
-    // Seeding for 4 players: seeds 5,6,7,8 are byes.
-    //   QF1: seed1 (u4) vs seed8 (null) → bye   → u4 walks over → SF1.player1
-    //   QF2: seed4 (u1) vs seed5 (null) → bye   → u1 walks over → SF1.player2
-    //   QF3: seed3 (u2) vs seed6 (null) → bye   → u2 walks over → SF2.player1
-    //   QF4: seed2 (u3) vs seed7 (null) → bye   → u3 walks over → SF2.player2
     const qf = store.matches
       .filter((m) => m.round === 1)
       .sort((a, b) => a.match_number - b.match_number);
-    expect(qf[0].player1_id).toBe('u4');
-    expect(qf[0].player2_id).toBeNull();
-    expect(qf[1].player1_id).toBe('u1');
-    expect(qf[2].player1_id).toBe('u2');
-    expect(qf[3].player1_id).toBe('u3');
-
-    // All QFs should be completed via bye walkovers.
+    expect(qf[0].player1_id).toBe('u8');
+    expect(qf[0].player2_id).toBe('u1');
+    expect(qf[1].player1_id).toBe('u5');
+    expect(qf[1].player2_id).toBe('u4');
+    expect(qf[2].player1_id).toBe('u6');
+    expect(qf[2].player2_id).toBe('u3');
+    expect(qf[3].player1_id).toBe('u7');
+    expect(qf[3].player2_id).toBe('u2');
     for (const m of qf) {
-      expect(m.status).toBe('completed');
-      expect(m.winner_id).toBeTruthy();
+      expect(m.status).toBe('ready');
+      expect(m.winner_id).toBeNull();
     }
 
-    // Both SFs should be 'ready' with both slots filled.
+    await applyMatchResult(io, { matchId: qf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 20 }, persistence);
+    await applyMatchResult(io, { matchId: qf[1].id, winnerId: 'u5', player1Score: 30, player2Score: 18 }, persistence);
+    await applyMatchResult(io, { matchId: qf[2].id, winnerId: 'u6', player1Score: 30, player2Score: 22 }, persistence);
+    await applyMatchResult(io, { matchId: qf[3].id, winnerId: 'u7', player1Score: 30, player2Score: 16 }, persistence);
+
     const sf = store.matches
       .filter((m) => m.round === 2)
       .sort((a, b) => a.match_number - b.match_number);
-    expect(sf[0].player1_id).toBe('u4');
-    expect(sf[0].player2_id).toBe('u1');
+    expect(sf[0].player1_id).toBe('u8');
+    expect(sf[0].player2_id).toBe('u5');
     expect(sf[0].status).toBe('ready');
-    expect(sf[1].player1_id).toBe('u2');
-    expect(sf[1].player2_id).toBe('u3');
+    expect(sf[1].player1_id).toBe('u6');
+    expect(sf[1].player2_id).toBe('u7');
     expect(sf[1].status).toBe('ready');
+    expect(events.some((e) => e.event === 'tournament:round_completed' && (e.payload as any).round === 1)).toBe(true);
 
-    // Final still has no players, status waiting.
     const final = store.matches.find((m) => m.round === 3)!;
     expect(final.player1_id).toBeNull();
     expect(final.player2_id).toBeNull();
     expect(final.status).toBe('waiting');
 
-    // ── Play SF1: u4 beats u1 30–25 ──────────────────────────────────────
     await applyMatchResult(io, {
-      matchId: sf[0].id, winnerId: 'u4', player1Score: 30, player2Score: 25,
+      matchId: sf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 25,
     }, persistence);
 
     const finalAfterSf1 = store.matches.find((m) => m.round === 3)!;
-    expect(finalAfterSf1.player1_id).toBe('u4');
+    expect(finalAfterSf1.player1_id).toBe('u8');
     expect(finalAfterSf1.status).toBe('waiting'); // SF2 still pending
 
-    // u1 should be eliminated.
-    expect(store.regs.find((r) => r.user_id === 'u1')?.status).toBe('eliminated');
+    expect(store.regs.find((r) => r.user_id === 'u5')?.status).toBe('eliminated');
 
-    // ── Play SF2: u2 beats u3 30–18 ──────────────────────────────────────
     await applyMatchResult(io, {
-      matchId: sf[1].id, winnerId: 'u2', player1Score: 30, player2Score: 18,
+      matchId: sf[1].id, winnerId: 'u6', player1Score: 30, player2Score: 18,
     }, persistence);
 
     const finalReady = store.matches.find((m) => m.round === 3)!;
-    expect(finalReady.player1_id).toBe('u4');
-    expect(finalReady.player2_id).toBe('u2');
+    expect(finalReady.player1_id).toBe('u8');
+    expect(finalReady.player2_id).toBe('u6');
     expect(finalReady.status).toBe('ready');
-    expect(store.regs.find((r) => r.user_id === 'u3')?.status).toBe('eliminated');
+    expect(finalReady.ready_at).toBeTruthy();
+    expect(store.regs.find((r) => r.user_id === 'u7')?.status).toBe('eliminated');
+    expect(
+      events.filter(
+        (e) =>
+          e.event === 'tournament:match_completed' &&
+          (e.payload as { matchId?: string }).matchId === sf[1].id &&
+          (e.target === 'u6' || e.target === 'u7'),
+      ),
+    ).toHaveLength(2);
 
-    // ── Play Final: u4 beats u2 30–22 ────────────────────────────────────
     await applyMatchResult(io, {
-      matchId: finalReady.id, winnerId: 'u4', player1Score: 30, player2Score: 22,
+      matchId: finalReady.id, winnerId: 'u8', player1Score: 30, player2Score: 22,
     }, persistence);
 
     const finalDone = store.matches.find((m) => m.round === 3)!;
     expect(finalDone.status).toBe('completed');
-    expect(finalDone.winner_id).toBe('u4');
+    expect(finalDone.winner_id).toBe('u8');
     expect(store.tournament.status).toBe('completed');
-    expect(store.tournament.winner_id).toBe('u4');
-    expect(store.regs.find((r) => r.user_id === 'u4')?.status).toBe('winner');
-    expect(store.regs.find((r) => r.user_id === 'u2')?.status).toBe('eliminated');
+    expect(store.tournament.winner_id).toBe('u8');
+    expect(store.regs.find((r) => r.user_id === 'u8')?.status).toBe('winner');
+    expect(store.regs.find((r) => r.user_id === 'u6')?.status).toBe('eliminated');
+    expect(store.regs.find((r) => r.user_id === 'u8')?.placement).toBe(1);
+    expect(store.regs.find((r) => r.user_id === 'u6')?.placement).toBe(2);
+    expect(store.regs.find((r) => r.user_id === 'u5')?.placement).toBe(3);
+    expect(store.regs.find((r) => r.user_id === 'u7')?.placement).toBe(3);
+    expect(store.regs.find((r) => r.user_id === 'u1')?.placement).toBe(5);
+    expect(writeTournamentActivity).toHaveBeenCalledTimes(8);
 
-    // Exactly one tournament:completed event fired.
     const completed = events.filter((e) => e.event === 'tournament:completed');
     expect(completed).toHaveLength(1);
-    expect(completed[0].payload).toEqual({ tournamentId: 'tour-1', winnerId: 'u4' });
+    expect(completed[0].payload).toEqual({ tournamentId: 'tour-1', winnerId: 'u8' });
+    expect(events.some((e) => e.event === 'tournament:round_completed' && (e.payload as any).round === 2)).toBe(true);
   });
 
   it('applyMatchResult is idempotent — replay does not re-fire completed', async () => {
     const tournament = makeTournament();
-    const regs = [makeReg('u1'), makeReg('u2'), makeReg('u3'), makeReg('u4')];
+    const regs = ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8'].map(makeReg);
     const { persistence, store } = makePersistence(tournament, regs);
     const { io, events } = makeIoMock();
 
     await generateBracket(io, 'tour-1', persistence);
 
+    const qf = store.matches.filter((m) => m.round === 1).sort((a, b) => a.match_number - b.match_number);
+    await applyMatchResult(io, { matchId: qf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 20 }, persistence);
+    await applyMatchResult(io, { matchId: qf[1].id, winnerId: 'u5', player1Score: 30, player2Score: 18 }, persistence);
+    await applyMatchResult(io, { matchId: qf[2].id, winnerId: 'u6', player1Score: 30, player2Score: 22 }, persistence);
+    await applyMatchResult(io, { matchId: qf[3].id, winnerId: 'u7', player1Score: 30, player2Score: 16 }, persistence);
     const sf = store.matches.filter((m) => m.round === 2).sort((a, b) => a.match_number - b.match_number);
-    await applyMatchResult(io, { matchId: sf[0].id, winnerId: 'u4', player1Score: 30, player2Score: 25 }, persistence);
-    await applyMatchResult(io, { matchId: sf[1].id, winnerId: 'u2', player1Score: 30, player2Score: 18 }, persistence);
+    await applyMatchResult(io, { matchId: sf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 25 }, persistence);
+    await applyMatchResult(io, { matchId: sf[1].id, winnerId: 'u6', player1Score: 30, player2Score: 18 }, persistence);
     const final = store.matches.find((m) => m.round === 3)!;
-    await applyMatchResult(io, { matchId: final.id, winnerId: 'u4', player1Score: 30, player2Score: 22 }, persistence);
+    await applyMatchResult(io, { matchId: final.id, winnerId: 'u8', player1Score: 30, player2Score: 22 }, persistence);
 
     const before = events.filter((e) => e.event === 'tournament:completed').length;
     // Re-apply the final result — should be a no-op.
-    await applyMatchResult(io, { matchId: final.id, winnerId: 'u4', player1Score: 30, player2Score: 22 }, persistence);
+    await applyMatchResult(io, { matchId: final.id, winnerId: 'u8', player1Score: 30, player2Score: 22 }, persistence);
     const after = events.filter((e) => e.event === 'tournament:completed').length;
 
     expect(before).toBe(1);
@@ -307,26 +393,212 @@ describe('cancelTournament', () => {
   });
 });
 
-describe('bye-walkover edge cases', () => {
-  it('handles 5 players: top 3 seeds get byes, only 1 real QF match plays', async () => {
-    const tournament = makeTournament();
-    const regs = [makeReg('u1'), makeReg('u2'), makeReg('u3'), makeReg('u4'), makeReg('u5')];
+describe('bot tournament results', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('does not write placement or activity rows for Fritz bot ids', async () => {
+    const tournament = makeTournament({ status: 'in_progress' });
+    const regs = [makeReg('u1')];
+    regs[0].status = 'active';
     const { persistence, store } = makePersistence(tournament, regs);
     const { io } = makeIoMock();
+    store.matches.push({
+      id: 'm-final',
+      tournament_id: 'tour-1',
+      round: 3,
+      match_number: 1,
+      player1_id: 'u1',
+      player2_id: 'bot:fritz:tour-1:1',
+      winner_id: null,
+      room_code: 'RF',
+      status: 'in_progress',
+      ready_at: null,
+      ready_deadline_at: null,
+      started_at: null,
+      completed_at: null,
+      player1_joined_at: null,
+      player2_joined_at: null,
+      winner_source: null,
+      status_reason: null,
+      forfeit_user_id: null,
+      no_show_user_id: null,
+      bot_tier: 'master',
+      player1_score: null,
+      player2_score: null,
+    });
 
-    await generateBracket(io, 'tour-1', persistence);
+    await applyMatchResult(io, {
+      matchId: 'm-final',
+      winnerId: 'u1',
+      player1Score: 30,
+      player2Score: 18,
+    }, persistence);
 
-    const qf = store.matches.filter((m) => m.round === 1).sort((a, b) => a.match_number - b.match_number);
-    const realQfMatches = qf.filter((m) => m.player1_id !== null && m.player2_id !== null);
-    const byeQfMatches = qf.filter((m) => m.player1_id === null || m.player2_id === null);
+    expect(store.regs).toHaveLength(1);
+    expect(store.regs[0].placement).toBe(1);
+    expect(writeTournamentActivity).toHaveBeenCalledTimes(1);
+    expect(writeTournamentActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u1' }),
+    );
+  });
+});
 
-    expect(realQfMatches).toHaveLength(1);
-    expect(byeQfMatches).toHaveLength(3);
-    // The single real QF should be ready (not auto-completed).
-    expect(realQfMatches[0].status).toBe('ready');
-    // The bye QFs should all be completed via walkover.
-    for (const m of byeQfMatches) {
-      expect(m.status).toBe('completed');
-    }
+describe('ready-match reconciliation', () => {
+  it('advances the joined player when the opponent no-shows', async () => {
+    const tournament = makeTournament({ status: 'in_progress' });
+    const regs = [makeReg('u1'), makeReg('u2'), makeReg('u3'), makeReg('u4')];
+    regs[0].status = 'active'; regs[0].seed = 4;
+    regs[1].status = 'active'; regs[1].seed = 3;
+    regs[2].status = 'active'; regs[2].seed = 2;
+    regs[3].status = 'active'; regs[3].seed = 1;
+    const { persistence, store } = makePersistence(tournament, regs);
+    const expiredAt = new Date(Date.now() - 60_000).toISOString();
+    store.matches.push(
+      {
+        id: 'm-1',
+        tournament_id: 'tour-1',
+        round: 1,
+        match_number: 1,
+        player1_id: 'u4',
+        player2_id: 'u1',
+        winner_id: null,
+        room_code: 'R1',
+        status: 'ready',
+        ready_at: expiredAt,
+        ready_deadline_at: expiredAt,
+        started_at: null,
+        completed_at: null,
+        player1_joined_at: expiredAt,
+        player2_joined_at: null,
+        winner_source: null,
+        status_reason: null,
+        forfeit_user_id: null,
+        no_show_user_id: null,
+        bot_tier: null,
+        player1_score: null,
+        player2_score: null,
+      },
+      {
+        id: 'm-2',
+        tournament_id: 'tour-1',
+        round: 2,
+        match_number: 1,
+        player1_id: null,
+        player2_id: null,
+        winner_id: null,
+        room_code: '',
+        status: 'waiting',
+        ready_at: null,
+        ready_deadline_at: null,
+        started_at: null,
+        completed_at: null,
+        player1_joined_at: null,
+        player2_joined_at: null,
+        winner_source: null,
+        status_reason: null,
+        forfeit_user_id: null,
+        no_show_user_id: null,
+        bot_tier: null,
+        player1_score: null,
+        player2_score: null,
+      },
+    );
+    const { io } = makeIoMock();
+
+    const resolved = await reconcileExpiredReadyMatches(io, new Date(), persistence);
+
+    expect(resolved).toBe(1);
+    expect(store.matches[0].status).toBe('completed');
+    expect(store.matches[0].winner_id).toBe('u4');
+    expect(store.matches[0].winner_source).toBe('no_show');
+    expect(store.matches[0].no_show_user_id).toBe('u1');
+    expect(store.regs.find((reg) => reg.user_id === 'u1')?.status).toBe('eliminated');
+    expect(store.matches[1].player1_id).toBe('u4');
+  });
+
+  it('advances the higher seed when both players no-show', async () => {
+    const tournament = makeTournament({ status: 'in_progress' });
+    const regs = [makeReg('u1'), makeReg('u2'), makeReg('u3'), makeReg('u4')];
+    regs[0].status = 'active'; regs[0].seed = 4;
+    regs[1].status = 'active'; regs[1].seed = 3;
+    regs[2].status = 'active'; regs[2].seed = 2;
+    regs[3].status = 'active'; regs[3].seed = 1;
+    const { persistence, store } = makePersistence(tournament, regs);
+    const expiredAt = new Date(Date.now() - 60_000).toISOString();
+    store.matches.push({
+      id: 'm-1',
+      tournament_id: 'tour-1',
+      round: 1,
+      match_number: 1,
+      player1_id: 'u4',
+      player2_id: 'u1',
+      winner_id: null,
+      room_code: 'R1',
+      status: 'ready',
+      ready_at: expiredAt,
+      ready_deadline_at: expiredAt,
+      started_at: null,
+      completed_at: null,
+      player1_joined_at: null,
+      player2_joined_at: null,
+      winner_source: null,
+      status_reason: null,
+      forfeit_user_id: null,
+      no_show_user_id: null,
+      bot_tier: null,
+      player1_score: null,
+      player2_score: null,
+    });
+    const { io } = makeIoMock();
+
+    const resolved = await reconcileExpiredReadyMatches(io, new Date(), persistence);
+
+    expect(resolved).toBe(1);
+    expect(store.matches[0].winner_id).toBe('u4');
+    expect(store.matches[0].winner_source).toBe('no_show');
+    expect(store.matches[0].no_show_user_id).toBeNull();
+    expect(store.matches[0].status_reason).toBe('double_no_show_higher_seed_advanced');
+  });
+
+  it('advances the human by default when neither side joins a human-vs-bot match', async () => {
+    const tournament = makeTournament({ status: 'in_progress' });
+    const regs = [makeReg('u1')];
+    regs[0].status = 'active';
+    regs[0].seed = 1;
+    const { persistence, store } = makePersistence(tournament, regs);
+    const expiredAt = new Date(Date.now() - 60_000).toISOString();
+    store.matches.push({
+      id: 'm-1',
+      tournament_id: 'tour-1',
+      round: 1,
+      match_number: 1,
+      player1_id: 'u1',
+      player2_id: 'bot:fritz:tour-1:1',
+      winner_id: null,
+      room_code: 'R1',
+      status: 'ready',
+      ready_at: expiredAt,
+      ready_deadline_at: expiredAt,
+      started_at: null,
+      completed_at: null,
+      player1_joined_at: null,
+      player2_joined_at: null,
+      winner_source: null,
+      status_reason: null,
+      forfeit_user_id: null,
+      no_show_user_id: null,
+      bot_tier: 'standard',
+      player1_score: null,
+      player2_score: null,
+    });
+    const { io } = makeIoMock();
+
+    const resolved = await reconcileExpiredReadyMatches(io, new Date(), persistence);
+
+    expect(resolved).toBe(1);
+    expect(store.matches[0].status).toBe('completed');
+    expect(store.matches[0].winner_id).toBe('u1');
+    expect(store.matches[0].winner_source).toBe('no_show');
+    expect(store.matches[0].no_show_user_id).toBeNull();
   });
 });

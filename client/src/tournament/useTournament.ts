@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import * as api from './tournamentApi';
+import { bindTournamentRecoverySignals } from './recoverySignals';
 import type {
   BracketView,
   MatchReadyEvent,
   Registration,
   ScheduledTournament,
+  TournamentMeResponse,
 } from './types';
 
 type Args = { socket: Socket | null; userId: string | null };
@@ -15,23 +17,58 @@ export function useTournament({ socket, userId }: Args) {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [activeBracket, setActiveBracket] = useState<BracketView | null>(null);
   const [pendingMatch, setPendingMatch] = useState<MatchReadyEvent | null>(null);
+  const [recoveryMatch, setRecoveryMatch] = useState<TournamentMeResponse['activeAssignedMatch']>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const refresh = useCallback(async () => {
+    const cleanUserId = userId?.trim() || null;
+    setIsLoading(true);
     try {
-      const [u, r] = await Promise.all([
-        api.fetchUpcoming(),
-        userId ? api.fetchMyRegistrations(userId) : Promise.resolve([] as Registration[]),
-      ]);
+      const u = await api.fetchUpcoming();
+      const me = !cleanUserId
+        ? null
+        : await api.fetchMe().catch((err) => {
+            console.warn(
+              '[tournament] fetchMe failed during refresh',
+              err instanceof Error ? err.message : err,
+            );
+            return null;
+          });
       setUpcoming(u);
-      setRegistrations(r);
+      setRegistrations(me?.registrations ?? []);
+      setRecoveryMatch(me?.activeAssignedMatch ?? null);
       setError(null);
+      setHasLoaded(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tournaments');
+    } finally {
+      setIsLoading(false);
     }
   }, [userId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  const recover = useCallback(async () => {
+    const cleanUserId = userId?.trim() || null;
+    if (!cleanUserId) {
+      setRegistrations([]);
+      setRecoveryMatch(null);
+      return;
+    }
+    const me = await api.fetchMe().catch((err) => {
+      console.warn(
+        '[tournament] fetchMe failed during recover',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    });
+    if (!me) return;
+    setRegistrations(me.registrations);
+    setRecoveryMatch(me.activeAssignedMatch);
+    setHasLoaded(true);
+  }, [userId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -63,16 +100,49 @@ export function useTournament({ socket, userId }: Args) {
     };
   }, [socket, refresh]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    return bindTournamentRecoverySignals({
+      socket,
+      documentLike: document,
+      onRecover: () => {
+        void recover();
+      },
+    });
+  }, [socket, recover]);
+
   const register = useCallback(async (tournamentId: string) => {
-    if (!userId) throw new Error('Sign in to register');
-    await api.registerForTournament(tournamentId, userId);
-    await refresh();
+    const cleanUserId = userId?.trim() || null;
+    if (!cleanUserId) throw new Error('Sign in to register');
+    await api.registerForTournament(tournamentId, cleanUserId);
+    setRegistrations((prev) => {
+      if (prev.some((reg) => reg.tournament_id === tournamentId && (reg.status === 'registered' || reg.status === 'active'))) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: `local-${tournamentId}-${cleanUserId}`,
+          tournament_id: tournamentId,
+          user_id: cleanUserId,
+          registered_at: new Date().toISOString(),
+          seed: null,
+          placement: null,
+          status: 'registered',
+        },
+      ];
+    });
+    void refresh();
   }, [userId, refresh]);
 
   const withdraw = useCallback(async (tournamentId: string) => {
-    if (!userId) return;
-    await api.withdrawFromTournament(tournamentId, userId);
-    await refresh();
+    const cleanUserId = userId?.trim() || null;
+    if (!cleanUserId) return;
+    await api.withdrawFromTournament(tournamentId, cleanUserId);
+    setRegistrations((prev) =>
+      prev.filter((reg) => !(reg.tournament_id === tournamentId && reg.user_id === cleanUserId)),
+    );
+    void refresh();
   }, [userId, refresh]);
 
   const openBracket = useCallback(async (tournamentId: string) => {
@@ -81,17 +151,23 @@ export function useTournament({ socket, userId }: Args) {
   }, []);
 
   const clearPendingMatch = useCallback(() => setPendingMatch(null), []);
+  const clearRecoveryMatch = useCallback(() => setRecoveryMatch(null), []);
 
   return {
     upcoming,
     registrations,
     activeBracket,
     pendingMatch,
+    recoveryMatch,
     error,
+    isLoading,
+    hasLoaded,
     refresh,
+    recover,
     register,
     withdraw,
     openBracket,
     clearPendingMatch,
+    clearRecoveryMatch,
   };
 }

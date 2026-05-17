@@ -15,6 +15,13 @@ export const TABLES = {
   matches: 'scheduled_tournament_matches',
 } as const;
 
+const UUID_V4ISH_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isValidUuid(value: string | null | undefined): value is string {
+  return typeof value === 'string' && UUID_V4ISH_PATTERN.test(value.trim());
+}
+
 // ── Tournaments ──────────────────────────────────────────────────────────
 
 export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTournamentRow[]> {
@@ -96,6 +103,9 @@ export async function fetchActiveRegistration(
   tournamentId: string,
   userId: string,
 ): Promise<RegistrationRow | null> {
+  if (!isValidUuid(userId)) {
+    return null;
+  }
   const rows = await supabaseFetch<RegistrationRow[]>(
     `/rest/v1/${TABLES.registrations}` +
       `?select=*` +
@@ -107,6 +117,9 @@ export async function fetchActiveRegistration(
 }
 
 export async function fetchRegistrationsForUser(userId: string): Promise<RegistrationRow[]> {
+  if (!isValidUuid(userId)) {
+    return [];
+  }
   return supabaseFetch<RegistrationRow[]>(
     `/rest/v1/${TABLES.registrations}` +
       `?select=*` +
@@ -117,6 +130,9 @@ export async function fetchRegistrationsForUser(userId: string): Promise<Registr
 }
 
 export async function insertRegistration(tournamentId: string, userId: string): Promise<void> {
+  if (!isValidUuid(userId)) {
+    throw new Error('invalid_user');
+  }
   await supabaseFetch(`/rest/v1/${TABLES.registrations}`, {
     method: 'POST',
     body: JSON.stringify({ tournament_id: tournamentId, user_id: userId, status: 'registered' }),
@@ -124,6 +140,9 @@ export async function insertRegistration(tournamentId: string, userId: string): 
 }
 
 export async function withdrawRegistration(tournamentId: string, userId: string): Promise<void> {
+  if (!isValidUuid(userId)) {
+    throw new Error('invalid_user');
+  }
   await supabaseFetch(
     `/rest/v1/${TABLES.registrations}` +
       `?tournament_id=eq.${encodeURIComponent(tournamentId)}` +
@@ -145,6 +164,19 @@ export async function updateRegistrationStatus(
       `?tournament_id=eq.${encodeURIComponent(tournamentId)}` +
       `&user_id=eq.${encodeURIComponent(userId)}`,
     { method: 'PATCH', body: JSON.stringify(body) },
+  );
+}
+
+export async function updateRegistrationPlacement(
+  tournamentId: string,
+  userId: string,
+  placement: number | null,
+): Promise<void> {
+  await supabaseFetch(
+    `/rest/v1/${TABLES.registrations}` +
+      `?tournament_id=eq.${encodeURIComponent(tournamentId)}` +
+      `&user_id=eq.${encodeURIComponent(userId)}`,
+    { method: 'PATCH', body: JSON.stringify({ placement }) },
   );
 }
 
@@ -181,6 +213,7 @@ export async function insertMatch(input: {
   player2Id: string | null;
   roomCode: string;
   status: MatchStatus;
+  botTier?: MatchRow['bot_tier'];
 }): Promise<MatchRow> {
   const row = {
     tournament_id: input.tournamentId,
@@ -190,6 +223,7 @@ export async function insertMatch(input: {
     player2_id: input.player2Id,
     room_code: input.roomCode,
     status: input.status,
+    bot_tier: input.botTier ?? null,
   };
   const inserted = await supabaseFetch<MatchRow[]>(`/rest/v1/${TABLES.matches}`, {
     method: 'POST',
@@ -203,13 +237,51 @@ export async function updateMatch(
   matchId: string,
   patch: Partial<Pick<
     MatchRow,
-    'status' | 'winner_id' | 'started_at' | 'completed_at' | 'player1_score' | 'player2_score' | 'player1_id' | 'player2_id'
+    'status' | 'winner_id' | 'room_code' | 'ready_at' | 'ready_deadline_at' |
+    'started_at' | 'completed_at' | 'player1_joined_at' | 'player2_joined_at' |
+    'winner_source' | 'status_reason' | 'forfeit_user_id' | 'no_show_user_id' |
+    'bot_tier' | 'player1_score' | 'player2_score' | 'player1_id' | 'player2_id'
   >>,
 ): Promise<void> {
   await supabaseFetch(
     `/rest/v1/${TABLES.matches}?id=eq.${encodeURIComponent(matchId)}`,
     { method: 'PATCH', body: JSON.stringify(patch) },
   );
+}
+
+export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{
+  match: MatchRow;
+  tournament: ScheduledTournamentRow;
+  opponentUsername: string | null;
+} | null> {
+  if (!isValidUuid(userId)) {
+    return null;
+  }
+  const encUserId = encodeURIComponent(userId);
+  const rows = await supabaseFetch<MatchRow[]>(
+    `/rest/v1/${TABLES.matches}` +
+      `?select=*` +
+      `&or=(player1_id.eq.${encUserId},player2_id.eq.${encUserId})` +
+      `&status=in.(ready,in_progress)` +
+      `&order=round.asc,match_number.asc` +
+      `&limit=10`,
+  );
+  for (const match of rows) {
+    const tournament = await fetchTournamentById(match.tournament_id);
+    if (!tournament || (tournament.status !== 'in_progress' && tournament.status !== 'registration_open')) {
+      continue;
+    }
+    const opponentId = match.player1_id === userId ? match.player2_id : match.player1_id;
+    let opponentUsername: string | null = null;
+    if (opponentId) {
+      const profiles = await supabaseFetch<Array<{ username: string | null }>>(
+        `/rest/v1/profiles?select=username&id=eq.${encodeURIComponent(opponentId)}&limit=1`,
+      ).catch(() => []);
+      opponentUsername = profiles[0]?.username ?? null;
+    }
+    return { match, tournament, opponentUsername };
+  }
+  return null;
 }
 
 // ── Bracket aggregate ────────────────────────────────────────────────────

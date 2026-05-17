@@ -3,6 +3,7 @@ import type { Express } from 'express';
 import { registerTournamentSocketHandlers } from './socketHandlers';
 import { registerTournamentRoutes } from './routes';
 import { startTournamentScheduler } from './scheduler';
+import { recoverTournamentMatches } from './recovery';
 
 export { applyMatchResult, findTournamentMatchByRoom, TOURNAMENT_CONFIG } from './engine';
 export type { MatchRow, ScheduledTournamentRow, RegistrationRow, BracketView } from './types';
@@ -20,4 +21,12 @@ export function initScheduledTournaments(io: Server, app: Express, socket: Socke
   initialized = true;
   registerTournamentRoutes(app);
   startTournamentScheduler(io);
+  setTimeout(() => {
+    void recoverTournamentMatches(io).catch((error) => {
+      console.warn(
+        '[tournament:recovery] startup recovery failed',
+        error instanceof Error ? error.message : error,
+      );
+    });
+  }, 2_000);
 }

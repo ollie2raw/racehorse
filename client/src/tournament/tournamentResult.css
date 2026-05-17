@@ -24,6 +24,26 @@
   text-align: center;
   overflow: auto;
   gap: 12px;
+  justify-content: center;
+}
+
+.tr-card {
+  width: min(100%, 560px);
+  padding: 32px 30px 28px;
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(17, 22, 34, 0.92), rgba(7, 10, 16, 0.96));
+  border: 1px solid rgba(245, 185, 55, 0.18);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.tr-card--loading,
+.tr-card--error {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
 }
 
 .tr-kicker {
@@ -34,6 +54,15 @@
   text-transform: uppercase;
   color: var(--tr-accent);
   margin-bottom: 6px;
+}
+
+.tr-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 2px solid rgba(245, 185, 55, 0.18);
+  border-top-color: rgba(245, 185, 55, 0.92);
+  animation: tr-spin 0.9s linear infinite;
 }
 
 .tr-champion-title {
@@ -62,6 +91,12 @@
 
 .tr-placement strong { color: var(--text-primary); }
 
+.tr-subcopy {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
 .tr-countdown {
   color: var(--text-dim);
   font-size: 13px;
@@ -88,3 +123,8 @@
 }
 
 .tr-back:hover { border-color: var(--border-strong); }
+
+@keyframes tr-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

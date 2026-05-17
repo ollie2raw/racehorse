@@ -1,10 +1,10 @@
 import type { Server } from 'socket.io';
 import { fetchTournamentsByStatus } from './persistence';
-import { openRegistration, closeRegistrationAndStart } from './engine';
+import { openRegistration, closeRegistrationAndStart, reconcileExpiredReadyMatches } from './engine';
 import { supabaseFetch } from '../supabaseUtils';
 
-const TICK_INTERVAL_MS = 60_000;
-const SEED_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const TICK_INTERVAL_MS = 30_000;
+const SEED_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let seedTimer: ReturnType<typeof setInterval> | null = null;
@@ -15,7 +15,10 @@ let seedTimer: ReturnType<typeof setInterval> | null = null;
  *   - If now >= registration_close_at and status='registration_open' → closeRegistrationAndStart
  *
  * Idempotent: status transitions guarded by the current status check, so a slow
- * tick or a restart won't double-fire.
+ * tick or a restart won't double-fire. No-show resolution also runs off
+ * persisted deadlines here; this is acceptable for the current single-instance
+ * Render deployment, but multi-instance scale needs a DB-backed lease/lock so
+ * only one worker resolves expired matches.
  */
 export function startTournamentScheduler(io: Server): void {
   if (timer) return;
@@ -32,6 +35,7 @@ export function startTournamentScheduler(io: Server): void {
           await closeRegistrationAndStart(io, t.id);
         }
       }
+      await reconcileExpiredReadyMatches(io, new Date(now));
     } catch (err) {
       console.warn(
         '[tournament:scheduler] tick failed',
@@ -44,8 +48,8 @@ export function startTournamentScheduler(io: Server): void {
   timer = setInterval(() => { void tick(); }, TICK_INTERVAL_MS);
 
   // Fallback for deployments where pg_cron isn't enabled: call the seed RPC
-  // every 24 hours. Safe to run alongside pg_cron — both invocations are
-  // idempotent (ON CONFLICT DO NOTHING) and cheap when the window is full.
+  // every 6 hours. With 30-minute tournament cadence this shortens recovery
+  // time if the seed window drifts, while remaining cheap and idempotent.
   startSeedFallback();
 }
 
@@ -78,7 +82,7 @@ async function callEnsureSeedWindow(): Promise<void> {
 function startSeedFallback(): void {
   if (seedTimer) return;
   // Fire once at boot so a freshly-deployed instance tops up immediately if
-  // the table has drifted below 360 future slots.
+  // the table has drifted below the target future-slot window.
   void callEnsureSeedWindow();
   seedTimer = setInterval(() => { void callEnsureSeedWindow(); }, SEED_INTERVAL_MS);
 }

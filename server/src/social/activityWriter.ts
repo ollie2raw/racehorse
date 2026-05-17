@@ -89,9 +89,11 @@ export async function writeTournamentActivity(params: {
   userId: string;
   placement: string;
   tournamentId: string;
+  tournamentName?: string;
 }): Promise<void> {
   await writeActivity(params.userId, 'tournament', {
     placement: params.placement,
     tournament_id: params.tournamentId,
+    tournament_name: params.tournamentName ?? 'Scheduled Tournament',
   });
 }

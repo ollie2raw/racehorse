@@ -162,6 +162,12 @@
   filter: blur(14px);
 }
 
+.th-trophy-stage--confirmed::before {
+  background:
+    radial-gradient(circle at 50% 46%, rgba(245, 185, 55, 0.1) 0%, rgba(245, 185, 55, 0.04) 34%, transparent 62%),
+    radial-gradient(ellipse at 50% 88%, rgba(245, 185, 55, 0.07) 0%, transparent 54%);
+}
+
 .th-trophy-svg {
   position: relative;
   z-index: 1;
@@ -171,6 +177,64 @@
   filter:
     drop-shadow(0 0 26px color-mix(in srgb, var(--th-accent) 28%, transparent))
     drop-shadow(0 18px 28px rgba(0, 0, 0, 0.28));
+}
+
+.th-confirmation-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.th-confirmation-mark {
+  width: 112px;
+  height: 112px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.18), transparent 42%),
+    linear-gradient(180deg, rgba(245, 185, 55, 0.26), rgba(245, 158, 11, 0.12));
+  border: 1px solid rgba(245, 185, 55, 0.34);
+  box-shadow:
+    0 0 42px rgba(245, 185, 55, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.th-confirmation-mark span {
+  font-size: 54px;
+  line-height: 1;
+  font-weight: 900;
+  color: #f5c15b;
+  text-shadow: 0 0 24px rgba(245, 185, 55, 0.24);
+}
+
+.th-confirmation-copy {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+.th-confirmation-copy strong {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+}
+
+.th-confirmation-copy span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.th-confirmation-eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--th-accent);
 }
 
 .th-features {
@@ -214,6 +278,8 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   align-self: stretch;
@@ -234,14 +300,94 @@
 .th-panel-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
-  padding-bottom: 8px;
+  max-height: calc(100% - 128px);
+  overflow: visible;
+  padding-bottom: 4px;
+}
+
+.th-recovery-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.05));
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.th-recovery-banner__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.th-recovery-banner__eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--th-accent);
+}
+
+.th-recovery-banner__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.th-state-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+}
+
+.th-state-card--error {
+  border-color: rgba(248, 113, 113, 0.26);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.th-state-card--cancelled {
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.th-state-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.th-state-card__text strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.th-state-card__text span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.th-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(245, 158, 11, 0.18);
+  border-top-color: var(--th-accent);
+  animation: th-spin 900ms linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes th-spin {
+  to { transform: rotate(360deg); }
 }
 
 .th-countdown {
@@ -288,7 +434,7 @@
   grid-template-columns: auto 1fr auto;
   gap: 14px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 11px 16px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
@@ -315,22 +461,29 @@
 }
 
 .th-card__count {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.th-card__count-sub {
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .th-card__bar {
   width: 100%;
-  height: 4px;
+  height: 7px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
 .th-card__bar-fill {
   height: 100%;
-  background: var(--th-accent);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.82), rgba(245, 185, 55, 0.98));
+  box-shadow: 0 0 16px rgba(245, 185, 55, 0.16);
   transition: width 240ms;
 }
 
@@ -373,8 +526,53 @@
 
 .th-card__registered {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: #f7c867;
+  font-weight: 800;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 185, 55, 0.24);
+  background: rgba(245, 185, 55, 0.08);
+}
+
+.th-card__withdraw {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-body);
+  font-size: 12px;
   font-weight: 700;
+  padding: 2px 4px;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.th-card__withdraw:hover {
+  color: var(--text-primary);
+}
+
+.th-card__full,
+.th-card__soon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.th-card__full {
+  color: rgba(248, 174, 174, 0.9);
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  background: rgba(120, 34, 34, 0.18);
+}
+
+.th-card__soon {
+  color: var(--text-dim);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .th-cta {
@@ -460,4 +658,9 @@
   .th-layout { flex-direction: column; }
   .th-left { width: 100%; flex: 0 0 auto; }
   .th-panel { align-self: stretch; }
+  .th-recovery-banner,
+  .th-state-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

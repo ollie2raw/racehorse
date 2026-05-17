@@ -34,6 +34,7 @@ export type Registration = {
   user_id: string;
   registered_at: string;
   seed: number | null;
+  placement: number | null;
   status: RegistrationStatus;
   username?: string | null;
   rating?: number | null;
@@ -56,6 +57,7 @@ export type TournamentMatch = {
   winner_id: string | null;
   room_code: string | null;
   status: MatchStatus;
+  bot_tier?: 'standard' | 'elite' | 'master' | null;
   started_at: string | null;
   completed_at: string | null;
   player1_score: number | null;
@@ -73,6 +75,53 @@ export type MatchReadyEvent = {
   matchId: string;
   round: 1 | 2 | 3;
   matchNumber: number;
-  roomCode: string;
-  opponent: string | null;
+  matchStatus: 'ready' | 'in_progress';
+  readyAt: string | null;
+  readyDeadlineAt: string | null;
+  opponentId: string | null;
+  opponentUsername: string | null;
+};
+
+export type TournamentMeResponse = {
+  registrations: Registration[];
+  activeAssignedMatch: {
+    matchId: string;
+    tournamentId: string;
+    round: 1 | 2 | 3;
+    opponentId: string | null;
+    opponentUsername: string | null;
+    matchStatus: 'ready' | 'in_progress';
+    readyDeadlineAt: string | null;
+  } | null;
+};
+
+export type TournamentResultPlacement = {
+  userId: string;
+  username: string | null;
+  rating: number | null;
+  placement: number | null;
+  placementLabel: string | null;
+  seed: number | null;
+  status: RegistrationStatus;
+};
+
+export type TournamentResultView = {
+  tournamentId: string;
+  scheduledStart: string;
+  format: string;
+  winTarget: number;
+  championId: string | null;
+  championName: string | null;
+  placements: TournamentResultPlacement[];
+};
+
+export type TournamentHistoryEntry = {
+  tournamentId: string;
+  scheduledStart: string;
+  format: string;
+  winTarget: number;
+  placement: number | null;
+  placementLabel: string | null;
+  championId: string | null;
+  championName: string | null;
 };

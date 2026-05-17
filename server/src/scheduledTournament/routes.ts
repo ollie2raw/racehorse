@@ -1,14 +1,50 @@
 import type { Express, Request, Response } from 'express';
+import { supabaseFetch } from '../supabaseUtils';
+import { placementLabelForRank } from './engine';
 import {
+  fetchRegistrationsWithProfile,
   fetchUpcomingTournaments,
   fetchTournamentById,
   fetchBracketView,
+  fetchActiveAssignedMatchForUser,
   fetchRegistrationsForUser,
   fetchActiveRegistration,
   fetchRegistrations,
   insertRegistration,
+  isValidUuid,
   withdrawRegistration,
 } from './persistence';
+
+async function requireAuth(
+  req: Request,
+  res: Response,
+  opts: { allowAnonymous?: boolean } = {},
+): Promise<string | null> {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    if (opts.allowAnonymous) return null;
+    res.status(401).json({ ok: false, error: 'not_authenticated' });
+    return null;
+  }
+  try {
+    const userData = await supabaseFetch<{ id?: string }>(
+      '/auth/v1/user',
+      { headers: { Authorization: `Bearer ${token}` } } as RequestInit,
+    );
+    const userId = userData?.id ?? null;
+    if (!isValidUuid(userId)) {
+      if (opts.allowAnonymous) return null;
+      res.status(401).json({ ok: false, error: 'not_authenticated' });
+      return null;
+    }
+    return userId.trim();
+  } catch {
+    if (opts.allowAnonymous) return null;
+    res.status(401).json({ ok: false, error: 'not_authenticated' });
+    return null;
+  }
+}
 
 export function registerTournamentRoutes(app: Express): void {
   app.get('/api/tournaments/upcoming', async (_req: Request, res: Response) => {
@@ -28,11 +64,86 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/my', async (req: Request, res: Response) => {
-    const userId = typeof req.query.userId === 'string' ? req.query.userId : null;
+    const userId = typeof req.query.userId === 'string' ? req.query.userId.trim() : null;
     if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
+    if (!isValidUuid(userId)) { res.status(400).json({ ok: false, error: 'invalid_user' }); return; }
     try {
       const regs = await fetchRegistrationsForUser(userId);
       res.json({ ok: true, registrations: regs });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+    }
+  });
+
+  app.get('/api/tournaments/me', async (req: Request, res: Response) => {
+    const userId = await requireAuth(req, res, { allowAnonymous: true });
+    if (!userId) {
+      res.json({ ok: true, registrations: [], activeAssignedMatch: null });
+      return;
+    }
+    try {
+      const [regs, activeAssignedMatch] = await Promise.all([
+        fetchRegistrationsForUser(userId),
+        fetchActiveAssignedMatchForUser(userId),
+      ]);
+      res.json({
+        ok: true,
+        registrations: regs,
+        activeAssignedMatch: activeAssignedMatch
+          ? {
+              matchId: activeAssignedMatch.match.id,
+              tournamentId: activeAssignedMatch.tournament.id,
+              round: activeAssignedMatch.match.round,
+              opponentId:
+                activeAssignedMatch.match.player1_id === userId
+                  ? activeAssignedMatch.match.player2_id
+                  : activeAssignedMatch.match.player1_id,
+              opponentUsername: activeAssignedMatch.opponentUsername,
+              matchStatus: activeAssignedMatch.match.status,
+              readyDeadlineAt: activeAssignedMatch.match.ready_deadline_at,
+            }
+          : null,
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+    }
+  });
+
+  app.get('/api/tournaments/history', async (req: Request, res: Response) => {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+    try {
+      const regs = await fetchRegistrationsForUser(userId);
+      const completedRegs = regs.filter((reg) => reg.placement !== null);
+      const history = await Promise.all(
+        completedRegs.map(async (reg) => {
+          const [tournament, withProfiles] = await Promise.all([
+            fetchTournamentById(reg.tournament_id),
+            fetchRegistrationsWithProfile(reg.tournament_id),
+          ]);
+          if (!tournament) return null;
+          const champion = withProfiles.find((entry) => entry.user_id === tournament.winner_id) ?? null;
+          return {
+            tournamentId: tournament.id,
+            scheduledStart: tournament.scheduled_start,
+            format: tournament.format,
+            winTarget: tournament.win_target,
+            placement: reg.placement,
+            placementLabel: placementLabelForRank(reg.placement),
+            championId: tournament.winner_id,
+            championName: champion?.username ?? null,
+          };
+        }),
+      );
+      const filteredHistory = history.filter(
+        (entry): entry is NonNullable<typeof entry> => Boolean(entry),
+      );
+      res.json({
+        ok: true,
+        history: filteredHistory.sort(
+          (a, b) => Date.parse(b.scheduledStart) - Date.parse(a.scheduledStart),
+        ),
+      });
     } catch (err) {
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
     }
@@ -58,9 +169,47 @@ export function registerTournamentRoutes(app: Express): void {
     }
   });
 
+  app.get('/api/tournaments/:id/result', async (req: Request, res: Response) => {
+    try {
+      const view = await fetchBracketView(String(req.params.id));
+      if (!view) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
+      if (view.tournament.status !== 'completed') {
+        res.status(409).json({ ok: false, error: 'not_completed' });
+        return;
+      }
+      const champion = view.registrations.find((reg) => reg.user_id === view.tournament.winner_id) ?? null;
+      res.json({
+        ok: true,
+        result: {
+          tournamentId: view.tournament.id,
+          scheduledStart: view.tournament.scheduled_start,
+          format: view.tournament.format,
+          winTarget: view.tournament.win_target,
+          championId: view.tournament.winner_id,
+          championName: champion?.username ?? null,
+          placements: view.registrations
+            .filter((reg) => reg.placement !== null)
+            .sort((a, b) => (a.placement ?? Number.POSITIVE_INFINITY) - (b.placement ?? Number.POSITIVE_INFINITY))
+            .map((reg) => ({
+              userId: reg.user_id,
+              username: reg.username ?? null,
+              rating: reg.rating ?? null,
+              placement: reg.placement,
+              placementLabel: placementLabelForRank(reg.placement),
+              seed: reg.seed,
+              status: reg.status,
+            })),
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
+    }
+  });
+
   app.post('/api/tournaments/:id/register', async (req: Request, res: Response) => {
-    const userId = typeof req.body?.userId === 'string' ? req.body.userId : null;
+    const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : null;
     if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
+    if (!isValidUuid(userId)) { res.status(400).json({ ok: false, error: 'invalid_user' }); return; }
     try {
       const t = await fetchTournamentById(String(req.params.id));
       if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
@@ -86,8 +235,9 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.delete('/api/tournaments/:id/register', async (req: Request, res: Response) => {
-    const userId = typeof req.body?.userId === 'string' ? req.body.userId : null;
+    const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : null;
     if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
+    if (!isValidUuid(userId)) { res.status(400).json({ ok: false, error: 'invalid_user' }); return; }
     try {
       await withdrawRegistration(String(req.params.id), userId);
       res.json({ ok: true });

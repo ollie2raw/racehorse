@@ -12,6 +12,48 @@ const CHAIN_TREE_WIDTH = 3;
 const WIN_TARGET = 60;
 const BONEYARD_LOCK = 2;
 
+export type ServerBotTier = 'standard' | 'elite' | 'master';
+
+type TierSelectCfg = {
+  poolSize: number;
+  pBest: number;
+  rankDecay: number;
+};
+
+type TierSearchCfg = {
+  mcSamples: number;
+  chainDepth: number;
+  chainWidth: number;
+  endgameDepth: (totalTiles: number) => number;
+};
+
+const TIER_SELECT: Record<ServerBotTier, TierSelectCfg> = {
+  standard: { poolSize: 4, pBest: 0.82, rankDecay: 0.58 },
+  elite: { poolSize: 3, pBest: 0.94, rankDecay: 0.5 },
+  master: { poolSize: 1, pBest: 1, rankDecay: 1 },
+};
+
+const TIER_SEARCH: Record<ServerBotTier, TierSearchCfg> = {
+  standard: {
+    mcSamples: 4,
+    chainDepth: 3,
+    chainWidth: 2,
+    endgameDepth: (totalTiles) => (totalTiles <= 4 ? 7 : 5),
+  },
+  elite: {
+    mcSamples: MC_SAMPLES,
+    chainDepth: CHAIN_TREE_DEPTH,
+    chainWidth: CHAIN_TREE_WIDTH,
+    endgameDepth: (totalTiles) => (totalTiles <= 4 ? 14 : 10),
+  },
+  master: {
+    mcSamples: 20,
+    chainDepth: 7,
+    chainWidth: 5,
+    endgameDepth: (totalTiles) => (totalTiles <= 2 ? 16 : totalTiles <= 4 ? 14 : 12),
+  },
+};
+
 interface MovePreview {
   nextBoard: NonNullable<GameState['board']>;
   nextHand: Tile[];
@@ -468,6 +510,7 @@ function mcEvaluateMove(
   opponentId: string,
   pool: Tile[],
   holdWeights: Map<string, number>,
+  search: TierSearchCfg,
 ): number {
   const botScore = state.players[botId]?.score ?? 0;
   const oppScore = state.players[opponentId]?.score ?? 0;
@@ -477,7 +520,7 @@ function mcEvaluateMove(
   if (!preview) return -Infinity;
   if (botScore + preview.immediateScore >= WIN_TARGET) return 1_000_000;
 
-  const chain = searchChainTree(state, botId, move);
+  const chain = searchChainTree(state, botId, move, search.chainDepth, search.chainWidth);
   if (!chain) return -Infinity;
 
   const { totalPoints, chainLength, finalHand, finalOpenEnds, finalOpenSum, drawCostAccum } = chain;
@@ -501,7 +544,7 @@ function mcEvaluateMove(
     oppProximity >= 0.5 ? 1.2 : 1.0;
 
   const opponentHandSize = (state.players[opponentId]?.hand ?? []).length;
-  const sampledHands = sampleOpponentHands(pool, holdWeights, opponentHandSize, MC_SAMPLES);
+  const sampledHands = sampleOpponentHands(pool, holdWeights, opponentHandSize, search.mcSamples);
 
   let totalThreat = 0;
   let totalThreatBefore = 0;
@@ -530,27 +573,50 @@ function mcEvaluateMove(
   );
 }
 
-function weightedSelect<T extends { score: number }>(scored: T[]): T {
-  if (scored.length === 1) return scored[0];
-  const top = scored.slice(0, Math.min(3, scored.length));
-  const best = top[0].score;
-  if (best >= 500_000 || (top.length > 1 && best - top[1].score > 200)) return top[0];
-
-  const weights = [0.65, 0.25, 0.10].slice(0, top.length);
-  const totalW = weights.reduce((s, w) => s + w, 0);
-  const rand = Math.random() * totalW;
-  let cumulative = 0;
-  for (let i = 0; i < top.length; i++) {
-    cumulative += weights[i];
-    if (rand <= cumulative) return top[i];
+function weightedSelectFromPool<T>(pool: T[], rankDecay: number): T {
+  if (pool.length <= 1) return pool[0];
+  const weights = pool.map((_, idx) => Math.pow(rankDecay, idx));
+  const totalW = weights.reduce((sum, weight) => sum + weight, 0);
+  let roll = Math.random() * totalW;
+  for (let i = 0; i < pool.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return pool[i];
   }
-  return top[0];
+  return pool[pool.length - 1];
+}
+
+function tierSelect<T extends { score: number }>(scored: T[], tier: ServerBotTier): T {
+  if (scored.length === 1) return scored[0];
+  const cfg = TIER_SELECT[tier];
+  const pool = scored.slice(0, Math.min(cfg.poolSize, scored.length));
+  if (pool.length <= 1 || Math.random() < cfg.pBest) return pool[0];
+  return weightedSelectFromPool(pool.slice(1), cfg.rankDecay);
+}
+
+function standardScoreMove(
+  move: Move,
+  state: GameState,
+  botId: string,
+  holdWeights: Map<string, number>,
+): number {
+  if (move.type !== 'play') return -Infinity;
+  const preview = previewPlayMove(state, botId, move);
+  if (!preview) return -Infinity;
+  const threat = opponentThreat(preview.openEnds, preview.openSum, holdWeights);
+  return (
+    preview.immediateScore * 60 +
+    selfOpportunity(preview.openEnds, preview.openSum, preview.nextHand) * 10 -
+    threat * 8 +
+    handMobility(preview.nextHand, preview.openEnds) * 5 +
+    tilePips(move.tile) * 0.5
+  );
 }
 
 export function chooseBotMoveServer(
   state: GameState,
   botId: string,
   opponentKnownMissing: Set<number>,
+  tier: ServerBotTier = 'elite',
 ): Move {
   const aligned = setCurrentPlayer(state, botId);
   const candidates = getLegalMoves(aligned, botId).filter((m) => m.type === 'play');
@@ -563,9 +629,17 @@ export function chooseBotMoveServer(
 
   const totalTiles = (aligned.players[botId]?.hand?.length ?? 0) + (aligned.players[opponentId]?.hand?.length ?? 0);
 
+  if (tier === 'standard') {
+    const scored = candidates
+      .map((move) => ({ move, score: standardScoreMove(move, aligned, botId, weights) }))
+      .sort((a, b) => b.score - a.score);
+    return tierSelect(scored, tier).move;
+  }
+
   if (totalTiles <= 6) {
     let bestMove: Move = candidates[0];
     let bestVal = -Infinity;
+    const search = TIER_SEARCH[tier];
 
     for (const move of candidates) {
       const p = previewPlayMove(aligned, botId, move);
@@ -582,7 +656,7 @@ export function chooseBotMoveServer(
         },
         p.turnContinues ? botId : opponentId,
       );
-      const depth = totalTiles <= 4 ? 14 : 10;
+      const depth = search.endgameDepth(totalTiles);
       const val = p.immediateScore * 100 + minimax(next, botId, opponentId, depth, p.turnContinues, -Infinity, Infinity, p.immediateScore);
       if (val > bestVal) {
         bestVal = val;
@@ -596,9 +670,9 @@ export function chooseBotMoveServer(
   const scored = candidates
     .map((move) => ({
       move,
-      score: mcEvaluateMove(move, aligned, botId, opponentId, pool, weights),
+      score: mcEvaluateMove(move, aligned, botId, opponentId, pool, weights, TIER_SEARCH[tier]),
     }))
     .sort((a, b) => b.score - a.score);
 
-  return weightedSelect(scored).move;
+  return tierSelect(scored, tier).move;
 }

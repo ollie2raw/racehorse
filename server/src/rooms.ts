@@ -61,6 +61,8 @@ export type Room = {
   scheduledTournamentMatchId?: string;
   /** Parent tournament id (denormalized for cheap lookups during game-over). */
   scheduledTournamentId?: string;
+  /** Fritz strength tier for synthetic scheduled-tournament bot seats. */
+  scheduledTournamentBotTier?: 'standard' | 'elite' | 'master';
   /** One-shot metadata for the next `state:update` after resolving forced-draw steps (cleared after emit). */
   pendingForcedDrawBroadcast?: { playerId: string; count: number };
   /** One-shot: socket ids that auto-passed this resolution (cleared after `state:update`). */

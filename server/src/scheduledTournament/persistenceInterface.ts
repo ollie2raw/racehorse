@@ -1,5 +1,6 @@
 import type { Server } from 'socket.io';
 import {
+  fetchTournamentsByStatus,
   fetchMatchById,
   fetchMatches,
   fetchMatchByRoomCode,
@@ -8,6 +9,7 @@ import {
   fetchTournamentById,
   insertMatch,
   updateMatch,
+  updateRegistrationPlacement,
   updateRegistrationStatus,
   updateTournamentStatus,
 } from './persistence';
@@ -26,6 +28,7 @@ import type { MatchRow, RegistrationRow, ScheduledTournamentRow, MatchStatus } f
  */
 export interface EnginePersistence {
   fetchTournamentById(id: string): Promise<ScheduledTournamentRow | null>;
+  fetchTournamentsByStatus?(statuses: ScheduledTournamentRow['status'][]): Promise<ScheduledTournamentRow[]>;
   fetchRegistrations(tournamentId: string): Promise<RegistrationRow[]>;
   fetchRegistrationsWithProfile(
     tournamentId: string,
@@ -41,12 +44,15 @@ export interface EnginePersistence {
     player2Id: string | null;
     roomCode: string;
     status: MatchStatus;
+    botTier?: MatchRow['bot_tier'];
   }): Promise<MatchRow>;
   updateMatch(
     matchId: string,
     patch: Partial<Pick<MatchRow,
-      'status' | 'winner_id' | 'started_at' | 'completed_at' |
-      'player1_score' | 'player2_score' | 'player1_id' | 'player2_id'
+      'status' | 'winner_id' | 'room_code' | 'ready_at' | 'ready_deadline_at' |
+      'started_at' | 'completed_at' | 'player1_joined_at' | 'player2_joined_at' |
+      'winner_source' | 'status_reason' | 'forfeit_user_id' | 'no_show_user_id' |
+      'bot_tier' | 'player1_score' | 'player2_score' | 'player1_id' | 'player2_id'
     >>,
   ): Promise<void>;
   updateRegistrationStatus(
@@ -54,6 +60,11 @@ export interface EnginePersistence {
     userId: string,
     status: RegistrationRow['status'],
     seed?: number,
+  ): Promise<void>;
+  updateRegistrationPlacement(
+    tournamentId: string,
+    userId: string,
+    placement: number | null,
   ): Promise<void>;
   updateTournamentStatus(
     id: string,
@@ -67,6 +78,7 @@ export interface EnginePersistence {
 /** Real Supabase + in-memory rooms implementation used in production. */
 export const defaultEnginePersistence: EnginePersistence = {
   fetchTournamentById,
+  fetchTournamentsByStatus,
   fetchRegistrations,
   fetchRegistrationsWithProfile,
   fetchMatches,
@@ -75,6 +87,7 @@ export const defaultEnginePersistence: EnginePersistence = {
   insertMatch,
   updateMatch,
   updateRegistrationStatus,
+  updateRegistrationPlacement,
   updateTournamentStatus,
   createReservedRoom,
   getRoom,

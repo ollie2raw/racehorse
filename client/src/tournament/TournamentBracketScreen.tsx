@@ -13,7 +13,7 @@ export interface TournamentBracketScreenProps {
   onLoadBracket: (tournamentId: string) => void;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
-  onJoinMatch: (roomCode: string) => void;
+  onAttachAssignedMatch: (matchId: string) => void;
 }
 
 function nameFor(userId: string | null, regs: Registration[]): string {
@@ -146,7 +146,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
             </div>
             <button
               className="tb-your-cta"
-              onClick={() => yourReadyMatch.room_code && props.onJoinMatch(yourReadyMatch.room_code)}
+              onClick={() => props.onAttachAssignedMatch(yourReadyMatch.id)}
             >
               Join Match ›
             </button>

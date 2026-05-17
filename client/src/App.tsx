@@ -69,6 +69,8 @@ import TournamentBracketScreen from './tournament/TournamentBracketScreen';
 import TournamentResultScreen from './tournament/TournamentResultScreen';
 import TournamentMatchBanner from './tournament/TournamentMatchBanner';
 import { useTournament } from './tournament/useTournament';
+import * as tournamentApi from './tournament/tournamentApi';
+import type { TournamentResultView } from './tournament/types';
 import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
 import IncomingFriendChallengeCard from './multiplayer/IncomingFriendChallengeCard';
 import type { OutboundChallenge } from './multiplayer/friendChallenge';
@@ -824,6 +826,9 @@ export default function App() {
     opponentRating: number | null;
   } | null>(null);
   const [completedTournamentId, setCompletedTournamentId] = useState<string | null>(null);
+  const [tournamentResult, setTournamentResult] = useState<TournamentResultView | null>(null);
+  const [tournamentResultLoading, setTournamentResultLoading] = useState(false);
+  const [tournamentResultError, setTournamentResultError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('racehorse_muted') === '1';
@@ -3236,25 +3241,18 @@ export default function App() {
     });
   }, [state, joinedRoom, players, supabaseEnabled, authUser, you, multiplayerMoveLog]);
 
-  // Join a tournament room by code — hoisted so effects and render both use it.
-  const joinTournamentRoom = useCallback((code: string) => {
-    setRoomCode(code);
+  const attachAssignedTournamentMatch = useCallback((matchId: string) => {
     if (socket?.connected) {
       socket.emit(
-        'room:join',
-        code.trim().toUpperCase(),
-        {
-          username: authProfile?.username ?? 'Guest',
-          userId: multiplayerIdentityUserId,
-          authToken: multiplayerAuthToken,
-        },
+        'tournament:attach_assigned_match',
+        { matchId },
         (resp: { ok: boolean; error?: string } & Record<string, unknown>) => {
           if (resp?.ok) applyJoinedRoomResponse(resp);
           else showToast(resp?.error ?? 'Could not join tournament match.', 2500);
         },
       );
     }
-  }, [socket, authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, applyJoinedRoomResponse, showToast]);
+  }, [socket, applyJoinedRoomResponse, showToast]);
 
   // Drain a pending tournament:match_ready signal — auto-join the reserved room.
   // Must be an effect (not render-path logic) so React StrictMode double-invoke
@@ -3263,7 +3261,7 @@ export default function App() {
     if (!tournament.pendingMatch) return;
     const p = tournament.pendingMatch;
     setActiveTournamentId(p.tournamentId);
-    if (p.roomCode) joinTournamentRoom(p.roomCode);
+    attachAssignedTournamentMatch(p.matchId);
     tournament.clearPendingMatch();
   }, [tournament.pendingMatch]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3273,6 +3271,33 @@ export default function App() {
       void tournament.openBracket(activeTournamentId);
     }
   }, [tournamentSubView, activeTournamentId, tournament.activeBracket, tournament.openBracket]);
+
+  useEffect(() => {
+    if (tournamentSubView !== 'result' || !activeTournamentId) {
+      setTournamentResult(null);
+      setTournamentResultError(null);
+      setTournamentResultLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTournamentResultLoading(true);
+    setTournamentResultError(null);
+    void tournamentApi.fetchResult(activeTournamentId)
+      .then((result) => {
+        if (cancelled) return;
+        setTournamentResult(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTournamentResultError(err instanceof Error ? err.message : 'Failed to load tournament result');
+      })
+      .finally(() => {
+        if (!cancelled) setTournamentResultLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tournamentSubView, activeTournamentId]);
 
   // ─── Render ───────────────────────────────────────────────
   const appRootClassName = 'app large-mode';
@@ -3682,9 +3707,7 @@ export default function App() {
     if (completedTournamentId) {
       const ours =
         completedTournamentId === activeTournamentId ||
-        tournament.registrations.some(
-          (r) => r.tournament_id === completedTournamentId && (r.status === 'active' || r.status === 'winner'),
-        );
+        tournament.registrations.some((r) => r.tournament_id === completedTournamentId);
       if (ours) {
         setActiveTournamentId(completedTournamentId);
         setTournamentSubView('result');
@@ -3704,45 +3727,17 @@ export default function App() {
           onLoadBracket={(id) => { void tournament.openBracket(id); }}
           onBack={() => setTournamentSubView('hub')}
           onNavigate={setAppMode}
-          onJoinMatch={joinTournamentRoom}
+          onAttachAssignedMatch={attachAssignedTournamentMatch}
         />
       );
     }
 
     if (tournamentSubView === 'result' && activeTournamentId) {
-      // Derive live champion + your-placement from the active bracket view.
-      const bracket =
-        tournament.activeBracket?.tournament.id === activeTournamentId
-          ? tournament.activeBracket
-          : null;
-      const final = bracket?.matches.find((m) => m.round === 3) ?? null;
-      const championId = final?.winner_id ?? null;
-      const championReg = championId
-        ? bracket?.registrations.find((r) => r.user_id === championId) ?? null
-        : null;
-      const championName = championReg?.username ?? null;
-
       const myUserId = authUser?.id ?? null;
-      let yourPlacement: string | null = null;
-      if (myUserId && bracket) {
-        const myReg = bracket.registrations.find((r) => r.user_id === myUserId);
-        if (myReg?.status === 'winner') yourPlacement = 'Champion';
-        else if (final?.player1_id === myUserId || final?.player2_id === myUserId) {
-          yourPlacement = 'Runner-up';
-        } else if (
-          bracket.matches.some(
-            (m) => m.round === 2 && (m.player1_id === myUserId || m.player2_id === myUserId),
-          )
-        ) {
-          yourPlacement = 'Semifinalist';
-        } else if (
-          bracket.matches.some(
-            (m) => m.round === 1 && (m.player1_id === myUserId || m.player2_id === myUserId),
-          )
-        ) {
-          yourPlacement = 'Quarterfinalist';
-        }
-      }
+      const yourPlacement =
+        (myUserId
+          ? tournamentResult?.placements.find((placement) => placement.userId === myUserId)?.placementLabel
+          : null) ?? null;
 
       const nextSlot = tournament.upcoming[0];
       const nextCountdown = nextSlot
@@ -3759,12 +3754,29 @@ export default function App() {
 
       return (
         <TournamentResultScreen
-          championName={championName}
+          isLoading={tournamentResultLoading}
+          error={tournamentResultError}
+          championName={tournamentResult?.championName ?? null}
           yourPlacement={yourPlacement}
           nextTournamentCountdown={nextCountdown}
-          onBack={() => {
+          onRetry={() => {
+            if (activeTournamentId) {
+              setTournamentResultLoading(true);
+              void tournamentApi.fetchResult(activeTournamentId)
+                .then((result) => {
+                  setTournamentResult(result);
+                  setTournamentResultError(null);
+                })
+                .catch((err) => {
+                  setTournamentResultError(err instanceof Error ? err.message : 'Failed to load tournament result');
+                })
+                .finally(() => setTournamentResultLoading(false));
+            }
+          }}
+          onNextTournament={() => {
             setTournamentSubView('hub');
             setActiveTournamentId(null);
+            setTournamentResult(null);
           }}
         />
       );
@@ -3775,7 +3787,11 @@ export default function App() {
         identity={tIdentity}
         upcoming={tournament.upcoming}
         registrations={tournament.registrations}
+        recoveryMatch={tournament.recoveryMatch}
         error={tournament.error}
+        isLoading={tournament.isLoading}
+        hasLoaded={tournament.hasLoaded}
+        activeBracketStatus={tournament.activeBracket?.tournament.status ?? null}
         onNavigate={setAppMode}
         onOpenAuth={() => setAuthModalOpen(true)}
         onBackHome={() => setAppMode('home')}
@@ -3785,6 +3801,8 @@ export default function App() {
         }}
         onRegister={(id) => tournament.register(id)}
         onWithdraw={(id) => tournament.withdraw(id)}
+        onRetry={() => tournament.refresh()}
+        onAttachAssignedMatch={attachAssignedTournamentMatch}
       />
     );
   }

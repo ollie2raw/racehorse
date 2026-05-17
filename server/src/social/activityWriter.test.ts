@@ -139,5 +139,6 @@ describe('writeTournamentActivity', () => {
     expect(body.type).toBe('tournament');
     expect(body.metadata.placement).toBe('Champion');
     expect(body.metadata.tournament_id).toBe('t-123');
+    expect(body.metadata.tournament_name).toBe('Scheduled Tournament');
   });
 });
