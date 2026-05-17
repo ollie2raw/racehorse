@@ -272,6 +272,30 @@
   margin-top: -24px;
 }
 
+.df-fritz-loading-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.df-fritz-loading-retry {
+  min-width: 168px;
+}
+
+.df-hub-error {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--tier-elite) 8%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
 /* ── Two-column layout (Play vs Fritz family) ── */
 
 .df-layout {

@@ -1,38 +1,30 @@
-/* Hand-over / between-hands modal — blue-first platform identity */
+/* Shared hand-over modal: compact, wide, blue-first transition overlay */
 
 .hand-over-modal-overlay {
   z-index: 1500;
-  background: color-mix(in srgb, var(--bg-obsidian) 84%, transparent);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: rgba(2, 5, 10, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .hand-over-modal {
   --ho-accent: var(--tier-standard);
-  --ho-accent-soft: color-mix(in srgb, var(--tier-standard) 18%, transparent);
-  --ho-accent-glow: color-mix(in srgb, var(--accent-blue) 42%, transparent);
   --ho-score-gold: var(--tier-elite);
 
-  width: min(680px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px);
-  padding: clamp(22px, 4vw, 36px);
-  display: flex;
-  flex-direction: column;
-  gap: clamp(16px, 2.8vh, 22px);
+  width: min(860px, calc(100vw - 48px));
+  max-height: calc(100vh - 120px);
+  padding: 24px 26px 20px;
+  display: grid;
+  gap: 18px;
   position: relative;
   overflow: auto;
-  background:
-    radial-gradient(circle at top, rgba(73, 160, 255, 0.18), transparent 34%),
-    linear-gradient(180deg, rgba(7, 17, 40, 0.96), rgba(5, 12, 29, 0.94));
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-radius: clamp(24px, 3vw, 30px);
-  border: 1px solid color-mix(in srgb, var(--tier-standard) 42%, var(--border-light));
+  background: rgba(8, 12, 24, 0.96);
+  border-radius: clamp(22px, 3vw, 28px);
+  border: 1px solid rgba(148, 163, 184, 0.14);
   box-shadow:
-    var(--shadow-lg),
-    0 0 68px color-mix(in srgb, var(--tier-standard) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  animation: hand-over-modal-enter 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    0 18px 44px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: hand-over-modal-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .hand-over-modal::before {
@@ -41,34 +33,24 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -8%, var(--ho-accent-soft), transparent 58%),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 0%, transparent 38%);
+  background: none;
 }
 
 .hand-over-modal::after {
   content: '';
   position: absolute;
   top: 0;
-  left: 12%;
-  right: 12%;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--ho-accent) 22%,
-    color-mix(in srgb, var(--accent-teal) 70%, var(--ho-accent)) 50%,
-    var(--ho-accent) 78%,
-    transparent
-  );
+  left: 14%;
+  right: 14%;
+  height: 1px;
+  background: rgba(76, 201, 240, 0.14);
   pointer-events: none;
 }
 
 @keyframes hand-over-modal-enter {
   from {
     opacity: 0;
-    transform: translateY(14px) scale(0.98);
+    transform: translateY(12px) scale(0.985);
   }
   to {
     opacity: 1;
@@ -81,17 +63,20 @@
   z-index: 1;
 }
 
+.hand-over-modal__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 20px;
+}
+
 .hand-over-modal__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  display: block;
 }
 
 .hand-over-modal__title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -105,7 +90,7 @@
   font-weight: 700;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--ho-accent) 88%, var(--text-primary));
+  color: color-mix(in srgb, var(--ho-accent) 82%, var(--text-primary));
 }
 
 .hand-over-modal__kicker::before {
@@ -114,155 +99,125 @@
   height: 6px;
   border-radius: 50%;
   background: var(--ho-accent);
-  box-shadow: 0 0 10px var(--ho-accent-glow);
   flex-shrink: 0;
 }
 
 .hand-over-modal__title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(30px, 5vw, 44px);
+  font-size: clamp(30px, 4.8vw, 44px);
   font-weight: 800;
   letter-spacing: 0.05em;
-  line-height: 0.95;
+  line-height: 0.94;
   text-transform: uppercase;
   color: var(--text-primary);
-}
-
-.hand-over-modal__award {
-  display: grid;
-  gap: 10px;
-  justify-items: center;
-  text-align: center;
-  padding: clamp(18px, 3vw, 24px) clamp(18px, 4vw, 30px);
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--ho-accent) 44%, var(--border-subtle));
-  background:
-    radial-gradient(circle at top, rgba(102, 194, 255, 0.14), transparent 52%),
-    linear-gradient(
-      165deg,
-      rgba(13, 34, 78, 0.92) 0%,
-      rgba(8, 21, 49, 0.92) 56%,
-      rgba(4, 10, 24, 0.88) 100%
-    );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 38px color-mix(in srgb, var(--ho-accent) 14%, transparent);
-}
-
-.hand-over-modal__award-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent-teal) 42%, transparent);
-  background: rgba(7, 22, 51, 0.72);
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--accent-teal) 72%, var(--text-primary));
-}
-
-.hand-over-modal__award-value {
-  font-family: var(--font-display);
-  font-size: clamp(52px, 9vw, 72px);
-  font-weight: 800;
-  line-height: 0.85;
-  letter-spacing: 0.02em;
-  color: var(--text-primary);
-  text-shadow:
-    0 0 28px color-mix(in srgb, var(--ho-accent) 38%, transparent),
-    0 2px 12px rgba(0, 0, 0, 0.35);
-}
-
-.hand-over-modal__award-label {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--ho-score-gold) 74%, var(--text-primary));
 }
 
 .hand-over-modal__reason {
   margin: 0;
+  max-width: 46ch;
   font-family: var(--font-body);
-  font-size: clamp(14px, 2.4vw, 16px);
-  line-height: 1.55;
+  font-size: clamp(14px, 2vw, 15px);
+  line-height: 1.45;
   color: var(--text-secondary);
-  text-align: center;
 }
 
-.hand-over-modal__outcome {
+.hand-over-modal__award {
+  min-width: 156px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  align-content: center;
+  justify-items: end;
+  gap: 4px;
+  padding: 10px 0 0;
+  text-align: right;
 }
 
-.hand-over-modal__outcome-card {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, rgba(11, 23, 49, 0.82), rgba(7, 16, 34, 0.78));
+.hand-over-modal__award-value {
+  font-family: var(--font-display);
+  font-size: clamp(42px, 7vw, 58px);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: 0.02em;
+  color: var(--ho-score-gold);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.28);
 }
 
-.hand-over-modal__outcome-card.is-winner {
-  border-color: color-mix(in srgb, var(--ho-accent) 38%, var(--border-subtle));
-  background:
-    linear-gradient(135deg, var(--ho-accent-soft), transparent 62%),
-    color-mix(in srgb, var(--text-primary) 4%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.hand-over-modal__outcome-card.is-loser {
-  opacity: 0.88;
-}
-
-.hand-over-modal__outcome-label {
+.hand-over-modal__award-label {
   font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ho-accent) 72%, var(--text-primary));
+}
+
+.hand-over-modal__middle {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.hand-over-modal__summary {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(9, 13, 24, 0.94);
+}
+
+.hand-over-modal__summary-row {
+  display: grid;
+  gap: 4px;
+}
+
+.hand-over-modal__summary-row--muted {
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--ho-accent) 14%, transparent);
+}
+
+.hand-over-modal__summary-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
-.hand-over-modal__outcome-card.is-winner .hand-over-modal__outcome-label {
-  color: color-mix(in srgb, var(--ho-accent) 75%, var(--text-dim));
-}
-
-.hand-over-modal__outcome-name {
+.hand-over-modal__summary-value {
   font-family: var(--font-display);
-  font-size: clamp(18px, 3.2vw, 22px);
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-size: clamp(17px, 2.6vw, 21px);
+  font-weight: 700;
+  letter-spacing: 0.03em;
   color: var(--text-primary);
   text-transform: uppercase;
 }
 
-.hand-over-modal__outcome-note {
+.hand-over-modal__summary-sep {
+  color: rgba(76, 201, 240, 0.7);
+}
+
+.hand-over-modal__summary-note {
   font-family: var(--font-body);
   font-size: 12px;
-  font-weight: 600;
+  line-height: 1.45;
   color: var(--text-secondary);
 }
 
 .hand-over-modal__tiles-section {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .hand-over-modal__tiles-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -284,25 +239,26 @@
 .hand-over-modal__tiles-panel {
   display: grid;
   gap: 10px;
-  padding: 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--ho-accent) 16%, var(--border-subtle));
-  background: linear-gradient(180deg, rgba(8, 18, 39, 0.86), rgba(5, 12, 28, 0.82));
+  padding: 14px 14px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(9, 13, 24, 0.94);
 }
 
 .hand-over-modal__tiles-panel.is-scored {
-  border-color: color-mix(in srgb, var(--ho-accent) 42%, var(--border-subtle));
-  background:
-    linear-gradient(160deg, rgba(36, 120, 219, 0.24), transparent 56%),
-    linear-gradient(180deg, rgba(9, 24, 53, 0.9), rgba(5, 12, 28, 0.84));
-  box-shadow: 0 12px 24px rgba(14, 44, 96, 0.28);
+  border-color: rgba(76, 201, 240, 0.2);
+  background: rgba(10, 15, 28, 0.96);
+}
+
+.hand-over-modal__tiles-panel--secondary {
+  padding-top: 12px;
 }
 
 .hand-over-modal__tiles-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -313,11 +269,7 @@
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.hand-over-modal__tiles-panel.is-scored .hand-over-modal__tiles-owner {
-  color: color-mix(in srgb, var(--ho-accent) 82%, var(--text-primary));
+  color: var(--text-primary);
 }
 
 .hand-over-modal__tiles-meta {
@@ -332,17 +284,15 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  justify-content: flex-start;
+  justify-content: center;
   align-items: center;
-  min-height: 72px;
-  max-height: 210px;
+  min-height: 84px;
+  max-height: 184px;
   overflow: auto;
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  background:
-    linear-gradient(180deg, rgba(3, 10, 24, 0.8), rgba(7, 15, 34, 0.78)),
-    radial-gradient(circle at top, rgba(84, 196, 255, 0.08), transparent 60%);
+  padding: 12px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(5, 9, 18, 0.96);
 }
 
 .hand-over-modal__tile-grid .hand-over-modal-tile .domino-body {
@@ -350,22 +300,11 @@
   opacity: 1;
 }
 
-.hand-over-modal__tile-empty {
-  margin: 0;
-  width: 100%;
-  text-align: center;
-  font-family: var(--font-body);
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
 .hand-over-modal__footer {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 2px;
-  padding: 12px 14px 0;
-  border-top: 1px solid color-mix(in srgb, var(--ho-accent) 22%, transparent);
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--ho-accent) 16%, transparent);
 }
 
 .hand-over-modal .learning-hand-recap {
@@ -374,18 +313,18 @@
 
 .hand-over-modal__next-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
 
 .hand-over-modal__next-label {
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--ho-accent) 82%, var(--text-primary));
+  color: color-mix(in srgb, var(--ho-accent) 80%, var(--text-primary));
 }
 
 .hand-over-modal__next-hint {
@@ -396,11 +335,10 @@
 
 .hand-over-modal__progress-track {
   width: 100%;
-  height: 8px;
+  height: 7px;
   border-radius: var(--radius-pill);
-  background:
-    linear-gradient(180deg, rgba(5, 11, 24, 0.9), rgba(12, 25, 53, 0.86));
-  border: 1px solid color-mix(in srgb, var(--ho-accent) 18%, transparent);
+  background: rgba(5, 9, 18, 0.96);
+  border: 1px solid rgba(76, 201, 240, 0.1);
   overflow: hidden;
   position: relative;
 }
@@ -408,37 +346,50 @@
 .hand-over-modal__progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--accent-teal) 88%, var(--ho-accent)),
-    color-mix(in srgb, var(--accent-blue) 92%, white 8%)
-  );
-  box-shadow:
-    0 0 16px var(--ho-accent-glow),
-    0 0 28px color-mix(in srgb, var(--accent-teal) 18%, transparent);
+  background: #4cc9f0;
   transition: width 100ms linear;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 760px), (max-height: 760px) {
   .hand-over-modal {
-    width: min(100%, calc(100vw - 20px));
-    padding: 18px 16px 16px;
+    width: min(100vw - 24px, 720px);
+    max-height: calc(100vh - 40px);
+    padding: 18px 18px 16px;
     gap: 14px;
   }
 
-  .hand-over-modal__top {
-    flex-direction: column;
-    align-items: stretch;
+  .hand-over-modal__hero,
+  .hand-over-modal__middle {
+    grid-template-columns: 1fr;
   }
 
-  .hand-over-modal__outcome {
-    grid-template-columns: 1fr;
+  .hand-over-modal__award {
+    min-width: 0;
+    justify-items: start;
+    text-align: left;
+    padding: 0;
+  }
+
+  .hand-over-modal__tile-grid {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .hand-over-modal {
+    width: min(100vw - 16px, 100%);
+    max-height: calc(100vh - 20px);
+    padding: 16px 14px 14px;
   }
 
   .hand-over-modal__next-row {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+
+  .hand-over-modal__section-note {
+    width: 100%;
   }
 }
 

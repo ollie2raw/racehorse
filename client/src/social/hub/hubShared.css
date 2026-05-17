@@ -44,10 +44,8 @@
   inset: 72px 0 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.5;
-  background:
-    radial-gradient(circle at 24% 14%, rgba(59, 130, 246, 0.05), transparent 36%),
-    radial-gradient(circle at 78% 20%, rgba(231, 182, 74, 0.04), transparent 30%);
+  opacity: 0.16;
+  background: none;
 }
 
 .rh-hub-inner {

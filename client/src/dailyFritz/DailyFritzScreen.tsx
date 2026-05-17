@@ -11,7 +11,10 @@ import '../screens/RacehorseHomeArt.css';
 
 import {
   buildDailyFritzCompletionHash,
+  clearDailyFritzClientStorage,
   completeDailyFritz,
+  DAILY_FRITZ_INIT_TIMEOUT_MS,
+  DAILY_FRITZ_TODAY_CACHE_PREFIX,
   getTodayDailyFritz,
   recordDailyFritzGame,
   startDailyFritz,
@@ -67,8 +70,59 @@ interface OverlayGameItem {
   skunkLabel?: string | null;
 }
 
-const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
 const DAILY_FRITZ_SET_VERSION = 2;
+const DAILY_FRITZ_INIT_SLOW_MS = 10_000;
+
+const DAILY_FRITZ_INIT_DEBUG =
+  import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
+
+type DailyFritzInitPhase = 'preparing' | 'still-preparing' | 'failed' | 'retrying' | 'ready';
+
+function dfInitLog(event: string, payload?: Record<string, unknown>): void {
+  if (DAILY_FRITZ_INIT_DEBUG) {
+    console.log(`[daily-fritz:init] ${event}`, payload ?? {});
+  }
+}
+
+function readTodayCache(cacheKey: string | null): DailyFritzTodayResponse | null {
+  if (!cacheKey || typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(cacheKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DailyFritzTodayResponse;
+    if (!parsed || parsed.ok !== true || typeof parsed.run_date !== 'string') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function shouldClearStaleClientState(
+  cached: DailyFritzTodayResponse,
+  server: DailyFritzTodayResponse,
+): boolean {
+  if (cached.run_date !== server.run_date) return true;
+  if (cached.attempt_status === 'started' && server.attempt_status !== 'started') return true;
+  if (cached.attempt_status === 'completed' && server.attempt_status === 'none') return true;
+  return false;
+}
+
+function friendlyDailyFritzInitError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    const message = error.message.trim();
+    if (message.toLowerCase().includes('timed out') || message.toLowerCase().includes('longer than expected')) {
+      return 'The game server is taking longer than expected. Please try again.';
+    }
+    if (message.toLowerCase().includes('failed to fetch') || message.toLowerCase().includes('network')) {
+      return 'Could not reach the game server. Please check your connection and try again.';
+    }
+    if (message.toLowerCase().includes('unauthorized')) {
+      return 'Please sign in again to play Daily Fritz.';
+    }
+    return 'Please try again.';
+  }
+  return 'Please try again.';
+}
 
 interface DailyFritzScreenProps {
   user: User | null;
@@ -481,7 +535,35 @@ function formatCountdownHms(totalSeconds: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
-function DailyFritzLoadingScreen({ onBack }: { onBack: () => void }) {
+function DailyFritzLoadingScreen({
+  phase,
+  loadError,
+  onBack,
+  onRetry,
+  retryPending,
+}: {
+  phase: Exclude<DailyFritzInitPhase, 'ready'>;
+  loadError: string | null;
+  onBack: () => void;
+  onRetry: () => void;
+  retryPending: boolean;
+}) {
+  const isFailed = phase === 'failed';
+  const isSlow = phase === 'still-preparing';
+  const isRetrying = phase === 'retrying';
+  const title = isFailed
+    ? 'Couldn’t load Daily Fritz'
+    : isSlow || isRetrying
+      ? 'Still preparing…'
+      : 'Preparing today’s set';
+  const subtitle = isFailed
+    ? loadError ?? 'Please try again.'
+    : isSlow || isRetrying
+      ? 'The game server may be waking up. This can take a moment.'
+      : 'Best of 3 vs Fritz. Same deal for everyone.';
+  const showRetry = isFailed || isSlow;
+  const busy = !isFailed && phase !== 'still-preparing';
+
   return (
     <div className="df-fritz-loading-root">
       <div className="home-bg" aria-hidden="true">
@@ -501,30 +583,52 @@ function DailyFritzLoadingScreen({ onBack }: { onBack: () => void }) {
         </nav>
 
         <main className="df-fritz-loading-main">
-          <div className="df-fritz-loading-lockup" role="status" aria-live="polite" aria-busy="true">
+          <div
+            className="df-fritz-loading-lockup"
+            role="status"
+            aria-live="polite"
+            aria-busy={busy || retryPending}
+          >
             <div className="df-fritz-loading-eyebrow">
               <span className="df-fritz-loading-dot" aria-hidden />
               DAILY FRITZ
             </div>
-            <h1 className="df-fritz-loading-title">Preparing today’s set</h1>
-            <p className="df-fritz-loading-subtitle">Best of 3 vs Fritz. Same deal for everyone.</p>
+            <h1 className="df-fritz-loading-title">{title}</h1>
+            <p className="df-fritz-loading-subtitle">{subtitle}</p>
 
-            <div className="df-fritz-loading-steps">
-              <div className="df-fritz-loading-step">
-                <div className="df-fritz-loading-chip is-active" />
-                <span className="df-fritz-loading-step-label">1 Game one</span>
+            {!isFailed ? (
+              <div className="df-fritz-loading-steps">
+                <div className="df-fritz-loading-step">
+                  <div className="df-fritz-loading-chip is-active" />
+                  <span className="df-fritz-loading-step-label">1 Game one</span>
+                </div>
+                <div className="df-fritz-loading-step-connector" aria-hidden />
+                <div className="df-fritz-loading-step">
+                  <div className="df-fritz-loading-chip" />
+                  <span className="df-fritz-loading-step-label">2 Game two</span>
+                </div>
+                <div className="df-fritz-loading-step-connector" aria-hidden />
+                <div className="df-fritz-loading-step">
+                  <div className="df-fritz-loading-chip" />
+                  <span className="df-fritz-loading-step-label">3 Decider</span>
+                </div>
               </div>
-              <div className="df-fritz-loading-step-connector" aria-hidden />
-              <div className="df-fritz-loading-step">
-                <div className="df-fritz-loading-chip" />
-                <span className="df-fritz-loading-step-label">2 Game two</span>
+            ) : null}
+
+            {showRetry ? (
+              <div className="df-fritz-loading-actions">
+                <Button
+                  type="button"
+                  variant="tier-elite"
+                  size="md"
+                  className="df-fritz-loading-retry"
+                  disabled={retryPending}
+                  onClick={onRetry}
+                >
+                  {retryPending ? 'Retrying…' : 'Retry'}
+                </Button>
               </div>
-              <div className="df-fritz-loading-step-connector" aria-hidden />
-              <div className="df-fritz-loading-step">
-                <div className="df-fritz-loading-chip" />
-                <span className="df-fritz-loading-step-label">3 Decider</span>
-              </div>
-            </div>
+            ) : null}
           </div>
         </main>
       </div>
@@ -546,8 +650,10 @@ export default function DailyFritzScreen({
 }: DailyFritzScreenProps) {
 
   const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [, setError] = useState<string | null>(null);
+  const [initPhase, setInitPhase] = useState<DailyFritzInitPhase>('preparing');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [initRetryPending, setInitRetryPending] = useState(false);
+  const [hubError, setHubError] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(null);
   const [setOverlay, setSetOverlay] = useState<DailyFritzOverlayState | null>(null);
   const [, setSetSubmitError] = useState<string | null>(null);
@@ -561,6 +667,9 @@ export default function DailyFritzScreen({
   );
   const todayRef = useRef<DailyFritzTodayResponse | null>(today);
   const activeRunRef = useRef<DailyFritzStartResponse | null>(activeRun);
+  const initRequestIdRef = useRef(0);
+  const initInFlightRef = useRef(false);
+  const initSlowTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     todayRef.current = today;
@@ -599,32 +708,141 @@ export default function DailyFritzScreen({
     setPeakDailyFritzStreak(next);
   }, [today, user?.id]);
 
-  const loadToday = useCallback(async () => {
-    const hadCachedToday = Boolean(todayRef.current);
-    setLoading((prev) => !hadCachedToday && prev !== false ? true : !hadCachedToday);
-    setError(null);
+  const persistTodayCache = useCallback(
+    (response: DailyFritzTodayResponse) => {
+      if (!cacheKey || typeof window === 'undefined') return;
+      try {
+        window.sessionStorage.setItem(cacheKey, JSON.stringify(response));
+      } catch {
+        /* noop */
+      }
+    },
+    [cacheKey],
+  );
+
+  const refreshToday = useCallback(async () => {
+    if (!user?.id) return;
     try {
       const response = await getTodayDailyFritz();
-      setToday(response);
-      if (cacheKey && typeof window !== 'undefined') {
-        window.sessionStorage.setItem(cacheKey, JSON.stringify(response));
+      const cached = readTodayCache(cacheKey);
+      if (cached && shouldClearStaleClientState(cached, response)) {
+        clearDailyFritzClientStorage(user.id);
       }
+      setToday(response);
+      persistTodayCache(response);
+      setHubError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Daily Fritz.');
-    } finally {
-      setLoading(false);
+      setHubError(err instanceof Error ? err.message : 'Failed to refresh Daily Fritz.');
     }
-  }, [cacheKey]);
+  }, [cacheKey, persistTodayCache, user?.id]);
+
+  const clearInitSlowTimer = useCallback(() => {
+    if (initSlowTimerRef.current != null) {
+      window.clearTimeout(initSlowTimerRef.current);
+      initSlowTimerRef.current = null;
+    }
+  }, []);
+
+  const runInit = useCallback(
+    async (options?: { clearStale?: boolean; isRetry?: boolean }) => {
+      if (!user?.id) return;
+      if (initInFlightRef.current) return;
+
+      initInFlightRef.current = true;
+      const requestId = ++initRequestIdRef.current;
+      const retryAttempt = options?.isRetry ? initRequestIdRef.current : null;
+
+      setInitRetryPending(Boolean(options?.isRetry));
+      setLoadError(null);
+      setHubError(null);
+      setInitPhase((phase) => {
+        const next: DailyFritzInitPhase =
+          options?.isRetry || phase === 'failed' || phase === 'still-preparing' ? 'retrying' : 'preparing';
+        dfInitLog('state', { phase: next });
+        return next;
+      });
+
+      if (options?.clearStale) {
+        clearDailyFritzClientStorage(user.id);
+      } else {
+        const corruptCache = readTodayCache(cacheKey);
+        if (corruptCache === null && cacheKey && typeof window !== 'undefined') {
+          try {
+            const raw = window.sessionStorage.getItem(cacheKey);
+            if (raw) clearDailyFritzClientStorage(user.id);
+          } catch {
+            /* noop */
+          }
+        }
+      }
+
+      const runDateHint = todayRef.current?.run_date ?? readTodayCache(cacheKey)?.run_date ?? null;
+      dfInitLog('start', { date: runDateHint, userId: user.id });
+      if (retryAttempt != null) {
+        dfInitLog('retry', { attempt: retryAttempt });
+      }
+
+      clearInitSlowTimer();
+      initSlowTimerRef.current = window.setTimeout(() => {
+        if (initRequestIdRef.current !== requestId) return;
+        setInitPhase((phase) => {
+          if (phase === 'preparing' || phase === 'retrying') {
+            dfInitLog('timeout', { ms: DAILY_FRITZ_INIT_SLOW_MS });
+            dfInitLog('state', { phase: 'still-preparing' });
+            return 'still-preparing';
+          }
+          return phase;
+        });
+      }, DAILY_FRITZ_INIT_SLOW_MS);
+
+      try {
+        const response = await getTodayDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
+        if (initRequestIdRef.current !== requestId) return;
+
+        const cached = readTodayCache(cacheKey);
+        if (cached && shouldClearStaleClientState(cached, response)) {
+          clearDailyFritzClientStorage(user.id);
+        }
+
+        setToday(response);
+        persistTodayCache(response);
+        setInitPhase('ready');
+        dfInitLog('state', { phase: 'ready' });
+      } catch (err) {
+        if (initRequestIdRef.current !== requestId) return;
+        setLoadError(friendlyDailyFritzInitError(err));
+        setInitPhase('failed');
+        dfInitLog('state', { phase: 'failed' });
+      } finally {
+        if (initRequestIdRef.current === requestId) {
+          initInFlightRef.current = false;
+          setInitRetryPending(false);
+          clearInitSlowTimer();
+        }
+      }
+    },
+    [cacheKey, clearInitSlowTimer, persistTodayCache, user?.id],
+  );
+
+  useEffect(() => {
+    return () => {
+      clearInitSlowTimer();
+    };
+  }, [clearInitSlowTimer]);
 
   useEffect(() => {
     if (!user) {
       setToday(null);
-      setLoading(false);
-      setError('Sign in to play Daily Fritz.');
+      setInitPhase('ready');
+      setLoadError(null);
+      setHubError('Sign in to play Daily Fritz.');
       return;
     }
-    void loadToday();
-  }, [loadToday, user]);
+    setHubError(null);
+    void runInit();
+  }, [runInit, user?.id]);
+
+  const loadToday = refreshToday;
 
   const openLeaderboard = useCallback(() => {
     onNavigate?.('leaderboard');
@@ -731,7 +949,7 @@ export default function DailyFritzScreen({
             }
           : current,
       );
-      setError(null);
+      setHubError(null);
       return completion;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to finalize Daily Fritz set.';
@@ -790,14 +1008,14 @@ export default function DailyFritzScreen({
   const beginRun = useCallback(async () => {
     if (startActionPending) return;
     setStartActionPending(true);
-    setError(null);
+    setHubError(null);
     setSetSubmitError(null);
     setSetOverlay(null);
     try {
-      const started = await startDailyFritz();
+      const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
       await handleStartResponse(started, normalizeSetResult(today?.set_result ?? today?.result));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start Daily Fritz.');
+      setHubError(friendlyDailyFritzInitError(err));
     } finally {
       setStartActionPending(false);
     }
@@ -806,18 +1024,18 @@ export default function DailyFritzScreen({
   const continueSet = useCallback(async () => {
     if (startActionPending) return;
     setStartActionPending(true);
-    setError(null);
+    setHubError(null);
     setSetSubmitError(null);
     const fallbackSetResult =
       setOverlay != null && 'setResult' in setOverlay
         ? setOverlay.setResult
         : normalizeSetResult(today?.set_result ?? today?.result);
     try {
-      const started = await startDailyFritz();
+      const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
       setSetOverlay(null);
       await handleStartResponse(started, fallbackSetResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to continue Daily Fritz.');
+      setHubError(friendlyDailyFritzInitError(err));
     } finally {
       setStartActionPending(false);
     }
@@ -831,7 +1049,7 @@ export default function DailyFritzScreen({
     const gameNumber = getNextGameNumberFromSetResult(priorSet);
     const fallbackCompletedGame = buildCompletedGame(run, game, gameNumber);
     setSetSubmitError(null);
-    setError(null);
+    setHubError(null);
     setSetOverlay({
       kind: 'saving',
       completedGame: fallbackCompletedGame,
@@ -1153,8 +1371,20 @@ export default function DailyFritzScreen({
     );
   }
 
-  if (loading) {
-    return <DailyFritzLoadingScreen onBack={onBack} />;
+  const showInitScreen = Boolean(user?.id) && initPhase !== 'ready';
+
+  if (showInitScreen) {
+    return (
+      <DailyFritzLoadingScreen
+        phase={initPhase as Exclude<DailyFritzInitPhase, 'ready'>}
+        loadError={loadError}
+        onBack={onBack}
+        onRetry={() => {
+          void runInit({ clearStale: true, isRetry: true });
+        }}
+        retryPending={initRetryPending}
+      />
+    );
   }
 
   const dateLabel = today ? formatDateLabel(today.run_date) : '—';
@@ -1457,6 +1687,11 @@ export default function DailyFritzScreen({
               </div>
 
               <div className="df-panel-footer">
+                {hubError ? (
+                  <p className="df-hub-error" role="alert">
+                    {hubError}
+                  </p>
+                ) : null}
                 <Button
                   variant="tier-elite"
                   size="lg"

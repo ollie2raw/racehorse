@@ -32,10 +32,6 @@ function tileKey(tile: Tile, index: number): string {
 }
 
 function RemainingTileGrid({ tiles }: { tiles: Tile[] }) {
-  if (tiles.length === 0) {
-    return <p className="hand-over-modal__tile-empty">No tiles remaining</p>;
-  }
-
   const size = handOverTileSize(tiles.length);
 
   return (
@@ -71,12 +67,21 @@ export function HandOverModal({
 }: HandOverModalProps) {
   const showAutoAdvance = typeof progress === 'number';
   const clampedProgress = showAutoAdvance ? Math.max(0, Math.min(1, progress)) : 0;
-  const isTie = winnerSide === 'tie' || winnerSide === 'none';
   const pointsLabel = `Point${pointsAwarded === 1 ? '' : 's'} awarded`;
   const loserPipsLabel =
     typeof loserPips === 'number'
       ? `${loserPips} pip${loserPips === 1 ? '' : 's'} left`
       : 'Hand complete';
+  const scoredReveal = tileReveals.find((reveal) => reveal.isScoredHand && reveal.tiles.length > 0) ?? null;
+  const secondaryReveal = tileReveals.find(
+    (reveal) => reveal !== scoredReveal && reveal.tiles.length > 0,
+  ) ?? null;
+  const clearedReveal = tileReveals.find((reveal) => reveal.tiles.length === 0) ?? null;
+  const summaryBits = [
+    `Winner: ${winnerLabel}`,
+    `${loserLabel} · ${loserPipsLabel}`,
+    clearedReveal ? `${clearedReveal.ownerLabel} cleared hand` : null,
+  ].filter(Boolean) as string[];
 
   return (
     <div
@@ -86,62 +91,83 @@ export function HandOverModal({
       aria-labelledby="hand-over-modal-title"
     >
       <div
-        className={`game-over-card hand-over-modal hand-over-modal--${variant}`}
+        className={`game-over-card hand-over-modal hand-over-modal--${variant} hand-over-modal--winner-${winnerSide}`}
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="hand-over-modal__top">
-          <div className="hand-over-modal__title-block">
-            <p className="hand-over-modal__kicker">Hand Complete</p>
-            <h3 id="hand-over-modal-title" className="hand-over-modal__title">
-              Hand Over
-            </h3>
-          </div>
-        </header>
+        <div className="hand-over-modal__hero">
+          <header className="hand-over-modal__top">
+            <div className="hand-over-modal__title-block">
+              <p className="hand-over-modal__kicker">Hand Complete</p>
+              <h3 id="hand-over-modal-title" className="hand-over-modal__title">
+                Hand Over
+              </h3>
+              <p className="hand-over-modal__reason">{reasonCopy}</p>
+            </div>
+          </header>
 
-        <section className="hand-over-modal__award" aria-label="Points awarded this hand">
-          <div className="hand-over-modal__award-badge">{pointsLabel}</div>
-          <div className="hand-over-modal__award-value">+{pointsAwarded}</div>
-          <div className="hand-over-modal__award-label">{pointsLabel}</div>
-        </section>
+          <section className="hand-over-modal__award" aria-label="Points awarded this hand">
+            <div className="hand-over-modal__award-value">+{pointsAwarded}</div>
+            <div className="hand-over-modal__award-label">{pointsLabel}</div>
+          </section>
+        </div>
 
-        <p className="hand-over-modal__reason">{reasonCopy}</p>
-
-        <section className="hand-over-modal__outcome" aria-label="Hand outcome">
-          <div className={`hand-over-modal__outcome-card ${!isTie ? 'is-winner' : ''}`}>
-            <span className="hand-over-modal__outcome-label">Winner</span>
-            <span className="hand-over-modal__outcome-name">{winnerLabel}</span>
-            <span className="hand-over-modal__outcome-note">Takes +{pointsAwarded}</span>
-          </div>
-          <div className={`hand-over-modal__outcome-card ${!isTie ? 'is-loser' : ''}`}>
-            <span className="hand-over-modal__outcome-label">Remaining pips</span>
-            <span className="hand-over-modal__outcome-name">{loserLabel}</span>
-            <span className="hand-over-modal__outcome-note">{loserPipsLabel}</span>
-          </div>
-        </section>
-
-        <section className="hand-over-modal__tiles-section" aria-label="Remaining tiles">
-          <div className="hand-over-modal__tiles-header">
-            <span className="hand-over-modal__section-kicker">Remaining tiles</span>
-            <span className="hand-over-modal__section-note">All hands revealed</span>
-          </div>
-          {tileReveals.map((reveal, revealIndex) => (
-            <article
-              key={`${reveal.ownerLabel}-${revealIndex}`}
-              className={`hand-over-modal__tiles-panel ${reveal.isScoredHand ? 'is-scored' : ''}`}
-            >
-              <div className="hand-over-modal__tiles-head">
-                <h4 className="hand-over-modal__tiles-owner">
-                  {reveal.ownerLabel}
-                </h4>
-                <span className="hand-over-modal__tiles-meta">
-                  {reveal.isScoredHand ? 'Scored hand' : 'Cleared hand'} · {reveal.tiles.length} tile
-                  {reveal.tiles.length === 1 ? '' : 's'} · {reveal.pipTotal} pip
-                  {reveal.pipTotal === 1 ? '' : 's'}
-                </span>
+        <section className="hand-over-modal__middle" aria-label="Hand outcome and remaining tiles">
+          <div className="hand-over-modal__summary">
+            <div className="hand-over-modal__summary-row">
+              <span className="hand-over-modal__summary-label">Winner</span>
+              <span className="hand-over-modal__summary-value">{winnerLabel}</span>
+            </div>
+            <div className="hand-over-modal__summary-row">
+              <span className="hand-over-modal__summary-label">Remaining pips</span>
+              <span className="hand-over-modal__summary-value">
+                {loserLabel} <span className="hand-over-modal__summary-sep">·</span> {loserPipsLabel}
+              </span>
+            </div>
+            {clearedReveal ? (
+              <div className="hand-over-modal__summary-row hand-over-modal__summary-row--muted">
+                <span className="hand-over-modal__summary-label">Cleared hand</span>
+                <span className="hand-over-modal__summary-value">{clearedReveal.ownerLabel}</span>
               </div>
-              <RemainingTileGrid tiles={reveal.tiles} />
-            </article>
-          ))}
+            ) : null}
+            {secondaryReveal && !clearedReveal ? (
+              <div className="hand-over-modal__summary-note">
+                {secondaryReveal.ownerLabel} also shows {secondaryReveal.tiles.length} tile
+                {secondaryReveal.tiles.length === 1 ? '' : 's'}.
+              </div>
+            ) : null}
+          </div>
+
+          <section className="hand-over-modal__tiles-section" aria-label="Remaining tiles">
+            <div className="hand-over-modal__tiles-header">
+              <span className="hand-over-modal__section-kicker">Remaining tiles</span>
+              <span className="hand-over-modal__section-note">{summaryBits.join('  •  ')}</span>
+            </div>
+            {scoredReveal ? (
+              <article className="hand-over-modal__tiles-panel is-scored">
+                <div className="hand-over-modal__tiles-head">
+                  <h4 className="hand-over-modal__tiles-owner">{scoredReveal.ownerLabel}</h4>
+                  <span className="hand-over-modal__tiles-meta">
+                    Scored hand · {scoredReveal.tiles.length} tile{scoredReveal.tiles.length === 1 ? '' : 's'} ·{' '}
+                    {scoredReveal.pipTotal} pip{scoredReveal.pipTotal === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <RemainingTileGrid tiles={scoredReveal.tiles} />
+              </article>
+            ) : null}
+            {secondaryReveal ? (
+              <article className="hand-over-modal__tiles-panel hand-over-modal__tiles-panel--secondary">
+                <div className="hand-over-modal__tiles-head">
+                  <h4 className="hand-over-modal__tiles-owner">{secondaryReveal.ownerLabel}</h4>
+                  <span className="hand-over-modal__tiles-meta">
+                    {secondaryReveal.isScoredHand ? 'Scored hand' : 'Also revealed'} · {secondaryReveal.tiles.length} tile
+                    {secondaryReveal.tiles.length === 1 ? '' : 's'} · {secondaryReveal.pipTotal} pip
+                    {secondaryReveal.pipTotal === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <RemainingTileGrid tiles={secondaryReveal.tiles} />
+              </article>
+            ) : null}
+          </section>
         </section>
 
         {learningRecap}

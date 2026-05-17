@@ -122,9 +122,9 @@
   --rh-panel-fill-bottom: rgba(9, 12, 18, 0.97);
   --rh-panel-border: rgba(148, 163, 184, 0.11);
   --rh-panel-border-soft: rgba(148, 163, 184, 0.08);
-  --rh-panel-bg: linear-gradient(180deg, var(--rh-panel-fill-top), var(--rh-panel-fill-bottom));
-  --rh-panel-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
-  --rh-panel-inset: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  --rh-panel-bg: rgba(10, 13, 20, 0.96);
+  --rh-panel-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  --rh-panel-inset: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 
   --sf-surface: var(--rh-panel-fill);
   --sf-surface-raised: rgba(12, 15, 22, 0.97);
@@ -148,10 +148,8 @@
   inset: 80px 0 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.42;
-  background:
-    radial-gradient(circle at 28% 18%, rgba(59, 130, 246, 0.03), transparent 34%),
-    radial-gradient(circle at 78% 24%, rgba(245, 185, 55, 0.02), transparent 28%);
+  opacity: 0.14;
+  background: none;
 }
 
 .rh-sf-shell {
@@ -544,11 +542,9 @@
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, rgba(22, 24, 30, 0.98), rgba(14, 16, 22, 0.98));
+  background: rgba(12, 16, 24, 0.98);
   border: 1px solid var(--rh-panel-border);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 6px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   color: white;
   font-family: var(--font-display);
   font-weight: 900;

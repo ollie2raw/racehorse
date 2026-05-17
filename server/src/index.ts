@@ -3339,6 +3339,8 @@ app.get('/api/daily-fritz/today', async (req, res) => {
   const requestStartedAt = Date.now();
   const requestId = randomUUID().slice(0, 8);
   const isDevLike = process.env.NODE_ENV !== 'production';
+  let initUserId: string | null = null;
+  let initRunDate: string | null = null;
   const mark = (label: string, startedAt: number, extra?: Record<string, unknown>) => {
     const now = Date.now();
     console.log('[daily-fritz-server] today', {
@@ -3377,6 +3379,9 @@ app.get('/api/daily-fritz/today', async (req, res) => {
       return;
     }
     const runDate = requestedDebugDate || getPacificDateKey();
+    initUserId = authenticatedUserId;
+    initRunDate = runDate;
+    console.log('[daily-fritz:init] request', { userId: authenticatedUserId, date: runDate });
     mark('dateKey', dateCalcStartedAt, {
       runDate,
       usedDebugDate: Boolean(requestedDebugDate),
@@ -3415,6 +3420,9 @@ app.get('/api/daily-fritz/today', async (req, res) => {
         runDate,
         generated: Boolean(generated),
       });
+      if (generated) {
+        console.log('[daily-fritz:init] created-new', { userId: authenticatedUserId, date: runDate });
+      }
       run = generated
         ? {
             runDate: generated.runDate,
@@ -3454,6 +3462,13 @@ app.get('/api/daily-fritz/today', async (req, res) => {
       }),
     ]);
     mark('userStateCombined', userStateStartedAt, { runDate });
+    if (attempt) {
+      console.log('[daily-fritz:init] loaded-existing', {
+        userId: authenticatedUserId,
+        date: runDate,
+        phase: attempt.status,
+      });
+    }
     const attemptSetResult = attempt ? normalizeDailyFritzSetResult(attempt.result) : null;
     const needsCompletion = attempt?.status === 'started' && Boolean(attemptSetResult?.setWinner);
     let ownRank: number | null = null;
@@ -3501,6 +3516,11 @@ app.get('/api/daily-fritz/today', async (req, res) => {
     });
     res.json(payload);
   } catch (error) {
+    console.error('[daily-fritz:init] error', {
+      userId: initUserId,
+      date: initRunDate ?? getPacificDateKey(),
+      error: error instanceof Error ? error.message : String(error),
+    });
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to load today’s Daily Fritz run.',
     });
@@ -3516,6 +3536,7 @@ app.post('/api/daily-fritz/start', async (req, res) => {
     }
 
     const runDate = getPacificDateKey();
+    console.log('[daily-fritz:init] request', { userId: authenticatedUserId, date: runDate });
     const run = await ensureDailyFritzRunForDate(runDate);
     if (!run) {
       res.status(500).json({ error: 'Daily Fritz storage is not available.' });
@@ -3570,6 +3591,11 @@ app.post('/api/daily-fritz/start', async (req, res) => {
       first_hand: handDeal,
     });
   } catch (error) {
+    console.error('[daily-fritz:init] error', {
+      userId: null,
+      date: getPacificDateKey(),
+      error: error instanceof Error ? error.message : String(error),
+    });
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to start Daily Fritz.',
     });

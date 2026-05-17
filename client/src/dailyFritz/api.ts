@@ -8,8 +8,43 @@ const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
 const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
   import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
 
+/** Init/today/start requests — 8–12s window before the UI leaves infinite loading. */
+export const DAILY_FRITZ_INIT_TIMEOUT_MS = 10_000;
+
+export const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
+
 function dfClientDebug(...args: unknown[]): void {
   if (DAILY_FRITZ_CLIENT_DEBUG_LOGS) console.log(...args);
+}
+
+function dfInitLog(event: string, payload?: Record<string, unknown>): void {
+  if (DAILY_FRITZ_CLIENT_DEBUG_LOGS) {
+    console.log(`[daily-fritz:init] ${event}`, payload ?? {});
+  }
+}
+
+function isDailyFritzInitPath(path: string): boolean {
+  return path === '/api/daily-fritz/today' || path === '/api/daily-fritz/start';
+}
+
+/** Clears Daily Fritz–specific browser storage (today cache + in-match saves). */
+export function clearDailyFritzClientStorage(userId: string): void {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    window.sessionStorage.removeItem(`${DAILY_FRITZ_TODAY_CACHE_PREFIX}${userId}`);
+  } catch {
+    /* noop */
+  }
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (key?.startsWith('racehorse:daily-fritz:')) keysToRemove.push(key);
+    }
+    keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    /* noop */
+  }
 }
 
 function resolveServerBaseUrl(): string {
@@ -45,48 +80,100 @@ async function authHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+type RequestJsonOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
+async function requestJson<T>(path: string, init?: RequestJsonOptions): Promise<T> {
   const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const headers = {
-    ...(await authHeaders()),
-    ...(init?.headers ?? {}),
-  };
-  const fetchStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const response = await fetch(`${resolveServerBaseUrl()}${path}`, {
-    credentials: 'include',
-    ...init,
-    headers,
-  });
-  const fetchEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const text = await response.text().catch(() => '');
-  const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  dfClientDebug('[daily-fritz-client] requestJson', {
-    path,
-    status: response.status,
-    authMs: Number((fetchStartedAt - startedAt).toFixed(1)),
-    fetchMs: Number((fetchEndedAt - fetchStartedAt).toFixed(1)),
-    parseMs: Number((endedAt - fetchEndedAt).toFixed(1)),
-    totalMs: Number((endedAt - startedAt).toFixed(1)),
-  });
-  let parsed: any = null;
-  if (text) {
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      if (!response.ok) {
-        throw new Error(
-          text.startsWith('<!DOCTYPE') || text.startsWith('<html')
-            ? `Daily Fritz backend returned HTML for ${path}. Check production API routing / VITE_SERVER_URL.`
-            : `${path} failed with ${response.status}`,
-        );
+  const timeoutMs =
+    init?.timeoutMs ??
+    (isDailyFritzInitPath(path) ? DAILY_FRITZ_INIT_TIMEOUT_MS : undefined);
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+
+  if (isDailyFritzInitPath(path)) {
+    dfInitLog('request-start', { endpoint: path });
+  }
+
+  const run = async (): Promise<T> => {
+    const headers = {
+      ...(await authHeaders()),
+      ...(init?.headers ?? {}),
+    };
+    const fetchStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const response = await fetch(`${resolveServerBaseUrl()}${path}`, {
+      credentials: 'include',
+      ...init,
+      headers,
+      signal: controller?.signal ?? init?.signal,
+    });
+    const fetchEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const text = await response.text().catch(() => '');
+    const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    dfClientDebug('[daily-fritz-client] requestJson', {
+      path,
+      status: response.status,
+      authMs: Number((fetchStartedAt - startedAt).toFixed(1)),
+      fetchMs: Number((fetchEndedAt - fetchStartedAt).toFixed(1)),
+      parseMs: Number((endedAt - fetchEndedAt).toFixed(1)),
+      totalMs: Number((endedAt - startedAt).toFixed(1)),
+    });
+    let parsed: any = null;
+    if (text) {
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        if (!response.ok) {
+          throw new Error(
+            text.startsWith('<!DOCTYPE') || text.startsWith('<html')
+              ? `Daily Fritz backend returned HTML for ${path}. Check production API routing / VITE_SERVER_URL.`
+              : `${path} failed with ${response.status}`,
+          );
+        }
+        throw new Error(`Invalid JSON response from ${path}`);
       }
-      throw new Error(`Invalid JSON response from ${path}`);
     }
+    if (!response.ok) {
+      throw new Error(parsed?.error ?? `${path} failed with ${response.status}`);
+    }
+    if (isDailyFritzInitPath(path)) {
+      const initPayload = parsed as Record<string, unknown> | null;
+      dfInitLog('request-success', {
+        ms: Number((endedAt - startedAt).toFixed(1)),
+        status: response.status,
+        hasSet: Boolean(initPayload?.set_result ?? initPayload?.result),
+        gameNumber: initPayload?.current_game_number ?? null,
+        phase: initPayload?.attempt_status ?? null,
+      });
+    }
+    return parsed as T;
+  };
+
+  try {
+    if (timeoutMs && controller) {
+      timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+    }
+    return await run();
+  } catch (error) {
+    const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const ms = Number((endedAt - startedAt).toFixed(1));
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      if (isDailyFritzInitPath(path)) {
+        dfInitLog('timeout', { ms: timeoutMs ?? ms, endpoint: path });
+      }
+      throw new Error('The game server is taking longer than expected. Please try again.');
+    }
+    if (isDailyFritzInitPath(path)) {
+      dfInitLog('request-error', {
+        ms,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId);
   }
-  if (!response.ok) {
-    throw new Error(parsed?.error ?? `${path} failed with ${response.status}`);
-  }
-  return parsed as T;
 }
 
 export interface DailyFritzLeaderboardRow {
@@ -210,14 +297,22 @@ export interface DailyFritzLeaderboardResponse {
   leaderboard: DailyFritzLeaderboardRow[];
 }
 
-export async function getTodayDailyFritz(): Promise<DailyFritzTodayResponse> {
-  return requestJson<DailyFritzTodayResponse>('/api/daily-fritz/today', { method: 'GET' });
+export async function getTodayDailyFritz(options?: {
+  timeoutMs?: number;
+}): Promise<DailyFritzTodayResponse> {
+  return requestJson<DailyFritzTodayResponse>('/api/daily-fritz/today', {
+    method: 'GET',
+    timeoutMs: options?.timeoutMs,
+  });
 }
 
-export async function startDailyFritz(): Promise<DailyFritzStartResponse> {
+export async function startDailyFritz(options?: {
+  timeoutMs?: number;
+}): Promise<DailyFritzStartResponse> {
   return requestJson<DailyFritzStartResponse>('/api/daily-fritz/start', {
     method: 'POST',
     body: JSON.stringify({}),
+    timeoutMs: options?.timeoutMs,
   });
 }
 

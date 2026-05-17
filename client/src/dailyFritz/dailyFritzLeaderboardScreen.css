@@ -18,10 +18,8 @@
 
 /* Tame shared hub ambient wash on this screen */
 .dflb-page .rh-hub-body::before {
-  opacity: 0.22;
-  background:
-    radial-gradient(circle at 24% 14%, rgba(59, 130, 246, 0.04), transparent 32%),
-    radial-gradient(circle at 78% 20%, rgba(231, 182, 74, 0.03), transparent 28%);
+  opacity: 0.12;
+  background: none;
 }
 
 .dflb-inner {
@@ -53,7 +51,7 @@
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: var(--dflb-panel);
   box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.32),
+    0 10px 24px rgba(0, 0, 0, 0.26),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
@@ -63,15 +61,9 @@
   position: absolute;
   inset: 0 0 auto;
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(76, 201, 240, 0.22) 42%,
-    rgba(231, 182, 74, 0.16) 58%,
-    transparent
-  );
+  background: rgba(76, 201, 240, 0.12);
   pointer-events: none;
-  opacity: 0.65;
+  opacity: 1;
 }
 
 .dflb-command-hero::after {
@@ -216,7 +208,7 @@
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: var(--dflb-panel);
   box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.34),
+    0 10px 24px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -291,27 +283,25 @@
 }
 
 .dflb-row:hover {
-  background: rgba(59, 130, 246, 0.06);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .dflb-row--rank-1 {
-  background: rgba(231, 182, 74, 0.05);
-  box-shadow:
-    inset 4px 0 0 rgba(231, 182, 74, 0.92),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: rgba(245, 185, 55, 0.04);
+  box-shadow: inset 4px 0 0 rgba(231, 182, 74, 0.9);
 }
 
 .dflb-row--rank-1:hover {
-  background: rgba(231, 182, 74, 0.08);
+  background: rgba(245, 185, 55, 0.06);
 }
 
 .dflb-row--rank-2 {
-  background: rgba(59, 130, 246, 0.04);
+  background: rgba(255, 255, 255, 0.02);
   box-shadow: inset 3px 0 0 rgba(148, 163, 184, 0.72);
 }
 
 .dflb-row--rank-3 {
-  background: rgba(201, 123, 63, 0.04);
+  background: rgba(255, 255, 255, 0.02);
   box-shadow: inset 3px 0 0 rgba(201, 123, 63, 0.68);
 }
 
@@ -326,7 +316,7 @@
   gap: 5px;
 }
 
-.dflb-crown--gold { color: var(--hub-gold); filter: drop-shadow(0 0 6px rgba(245, 185, 55, 0.4)); }
+.dflb-crown--gold { color: var(--hub-gold); }
 .dflb-crown--silver { color: #94a3b8; }
 .dflb-crown--bronze { color: #c97b3f; }
 
@@ -339,7 +329,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.dflb-rank-num.is-1 { color: var(--hub-gold); text-shadow: 0 0 16px rgba(245, 185, 55, 0.3); }
+.dflb-rank-num.is-1 { color: var(--hub-gold); }
 .dflb-rank-num.is-2 { color: #cbd5e1; }
 .dflb-rank-num.is-3 { color: #c97b3f; }
 
@@ -475,7 +465,7 @@
   flex: 0 0 auto;
   margin: 0;
   padding: 16px 20px;
-  border-top: 1px solid rgba(76, 201, 240, 0.12);
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
   background: var(--dflb-panel-inset);
 }
 
@@ -487,8 +477,8 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  border: 1px solid rgba(76, 201, 240, 0.22);
-  background: rgba(76, 201, 240, 0.08);
+  border: 1px solid rgba(76, 201, 240, 0.16);
+  background: rgba(8, 12, 20, 0.92);
   color: var(--hub-cyan);
 }
 
@@ -530,7 +520,7 @@
   border: 1px solid rgba(231, 182, 74, 0.18);
   background: var(--dflb-panel);
   box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.32),
+    0 10px 24px rgba(0, 0, 0, 0.26),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
@@ -591,11 +581,9 @@
   min-height: 132px;
   padding-top: 14px;
   padding-bottom: 16px;
-  background: rgba(231, 182, 74, 0.08);
+  background: rgba(8, 12, 20, 0.96);
   border: 1px solid rgba(231, 182, 74, 0.32);
-  box-shadow:
-    0 8px 20px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .dflb-podium-slot.place-2 {
@@ -723,17 +711,17 @@
   padding: 11px 11px 10px;
   border-radius: 11px;
   border: 1px solid rgba(148, 163, 184, 0.12);
-  background: rgba(0, 0, 0, 0.24);
+  background: rgba(8, 12, 20, 0.92);
 }
 
 .dflb-insight-stat.is-blue {
   border-color: rgba(76, 201, 240, 0.22);
-  background: rgba(76, 201, 240, 0.06);
+  background: rgba(8, 12, 20, 0.92);
 }
 
 .dflb-insight-stat.is-gold {
   border-color: rgba(231, 182, 74, 0.24);
-  background: rgba(231, 182, 74, 0.06);
+  background: rgba(8, 12, 20, 0.92);
 }
 
 .dflb-insight-stat__head {
