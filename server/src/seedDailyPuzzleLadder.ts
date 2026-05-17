@@ -359,6 +359,7 @@ export async function ensureDailyPuzzleLadderForDate(
     }> = [];
 
     for (const profile of LADDER_PROFILES) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
       const result = choosePuzzleForSlot(date, profile);
       await upsertSlot(
         date,

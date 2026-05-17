@@ -121,6 +121,7 @@ import { appendRoomEvent, resetRoomEventLog } from './roomEvents';
 import { registerMatchmakingHandlers } from './matchmaking';
 import { recordMatchEnd } from './matchmaking/persistence';
 import {
+  bootstrapScheduledTournamentInfrastructure,
   initScheduledTournaments,
   applyMatchResult as applyTournamentMatchResult,
 } from './scheduledTournament';
@@ -253,12 +254,27 @@ async function getAuthenticatedUserIdFromToken(token: string | null): Promise<st
     throw new Error('Supabase auth configuration is required.');
   }
 
-  const response = await fetch(new URL('/auth/v1/user', supabaseUrl), {
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const controller = new AbortController();
+  const authTimeoutMs = 12_000;
+  const authTimeout = setTimeout(() => controller.abort(), authTimeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(new URL('/auth/v1/user', supabaseUrl), {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn('[auth] token validation timed out', { authTimeoutMs });
+      return null;
+    }
+    throw error;
+  } finally {
+    clearTimeout(authTimeout);
+  }
   if (!response.ok) {
     authenticatedUserIdCache.set(token, { userId: null, expiresAt: Date.now() + 10_000 });
     return null;
@@ -292,9 +308,9 @@ app.get('/api/mp-stats', (_req, res) => {
 });
 
 app.get('/api/home/daily-summary', async (req, res) => {
+  const today = getPacificDateKey();
   try {
     const authenticatedUserId = await getAuthenticatedUserId(req);
-    const today = getPacificDateKey();
 
     if (!authenticatedUserId) {
       res.json({
@@ -318,9 +334,18 @@ app.get('/api/home/daily-summary', async (req, res) => {
       ...buildHomeDailySummary(today, completionMap, new Date()),
     });
   } catch (error) {
-    res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to load homepage daily summary.',
-    });
+    const message = error instanceof Error ? error.message : 'Failed to load homepage daily summary.';
+    const timedOut = error instanceof Error && /timed out|aborted/i.test(message);
+    if (timedOut) {
+      console.warn('[home:daily-summary] upstream timeout; returning anonymous fallback', { message });
+      res.json({
+        ok: true,
+        warning: 'completion_history_unavailable',
+        ...buildHomeDailySummary(today, {}, new Date()),
+      });
+      return;
+    }
+    res.status(500).json({ error: message });
   }
 });
 
@@ -2099,12 +2124,17 @@ function scheduleDailyFritzWarmup(): void {
   }, delayMs);
 }
 
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 async function warmDailyPuzzleLadders(reason: 'startup' | 'scheduled', runDates: string[]): Promise<void> {
   const startedAt = Date.now();
   console.log('[daily-puzzle-ladder-warmup] start', { reason, runDates });
   try {
     const results: Array<{ runDate: string; ms: number; outcome: 'skipped' | 'seeded' | 'failed' }> = [];
     for (const runDate of runDates) {
+      await yieldEventLoop();
       const slotStartedAt = Date.now();
       const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false });
       results.push({ runDate, ms: Date.now() - slotStartedAt, outcome });
@@ -5040,6 +5070,7 @@ const PORT = Number.parseInt(process.env.PORT ?? '3001', 10) || 3001;
 
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
+  bootstrapScheduledTournamentInfrastructure(io, app);
   const serverUrl = process.env.SERVER_URL?.trim();
   if (serverUrl) {
     const pingUrl = `${serverUrl.replace(/\/$/, '')}/ping`;
@@ -5048,18 +5079,21 @@ server.listen(PORT, () => {
     }, 10 * 60 * 1000);
   }
   startRankingCron();
-  // Run warmups only after the HTTP server is accepting connections so dev clients (Vite proxy)
-  // never hit a live port while heavy startup work is still racing the accept queue.
-  void warmDailyFritzRuns('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]).catch(
-    (err) => {
-      console.warn('[daily-fritz-warmup] startup failed', err instanceof Error ? err.message : err);
-    },
-  );
   scheduleDailyFritzWarmup();
-  void warmDailyPuzzleLadders('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]).catch(
-    (err) => {
-      console.warn('[daily-puzzle-ladder-warmup] startup failed', err instanceof Error ? err.message : err);
-    },
-  );
   scheduleDailyPuzzleLadderWarmup();
+  // Defer CPU/DB-heavy daily warmups so cold-start HTTP (home, tournaments, Fritz) is not
+  // starved behind synchronous puzzle generation on the single Node event loop.
+  const STARTUP_DAILY_WARMUP_DELAY_MS = 12_000;
+  setTimeout(() => {
+    void warmDailyFritzRuns('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]).catch(
+      (err) => {
+        console.warn('[daily-fritz-warmup] startup failed', err instanceof Error ? err.message : err);
+      },
+    );
+    void warmDailyPuzzleLadders('startup', [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)]).catch(
+      (err) => {
+        console.warn('[daily-puzzle-ladder-warmup] startup failed', err instanceof Error ? err.message : err);
+      },
+    );
+  }, STARTUP_DAILY_WARMUP_DELAY_MS);
 });

@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from 'express';
-import { supabaseFetch } from '../supabaseUtils';
+import { isSupabaseTimeoutError, supabaseFetch } from '../supabaseUtils';
 import { placementLabelForRank } from './engine';
 import {
   fetchRegistrationsWithProfile,
@@ -61,6 +61,7 @@ function requireTournamentId(req: Request, res: Response): string | null {
 export function registerTournamentRoutes(app: Express): void {
   // Static paths must be registered before /:id so "me", "upcoming", etc. are not captured.
   app.get('/api/tournaments/upcoming', async (_req: Request, res: Response) => {
+    const startedAt = Date.now();
     try {
       const tournaments = await fetchUpcomingTournaments(5);
       const enriched = await Promise.all(
@@ -72,6 +73,14 @@ export function registerTournamentRoutes(app: Express): void {
       );
       res.json({ ok: true, tournaments: enriched });
     } catch (err) {
+      if (isSupabaseTimeoutError(err)) {
+        console.warn('[tournament:upcoming] upstream timeout', {
+          ms: Date.now() - startedAt,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        res.status(503).json({ ok: false, error: 'upstream_timeout', tournaments: [] });
+        return;
+      }
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
     }
   });
