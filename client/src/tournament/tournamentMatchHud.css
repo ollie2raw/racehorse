@@ -1,63 +1,84 @@
+/* Tournament center HUD — Daily Fritz game pill + turn pill (horizontal row) */
+
 .tmh {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
+  flex-direction: row;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  position: relative;
   pointer-events: none;
-  max-width: min(92vw, 360px);
+  z-index: 8;
+  max-width: min(92vw, 420px);
 }
 
-.tmh__pill {
+.screen.game-screen .wl-center-status:has(.tmh) {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
-  gap: 6px;
-  padding: 5px 14px;
+  justify-content: center;
+  gap: 0;
+  padding-top: 0;
+  overflow: visible;
+  z-index: 8;
+}
+
+.screen.game-screen .tmh .daily-fritz-progress-pill {
+  width: auto;
+  min-width: unset;
+  height: 48px;
+  padding: 0 20px;
+  gap: 10px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent-amber, #e8a93a) 42%, rgba(255, 255, 255, 0.1));
-  background: color-mix(in srgb, var(--accent-amber, #e8a93a) 10%, rgba(6, 10, 20, 0.88));
-  box-shadow:
-    0 0 20px color-mix(in srgb, var(--accent-amber, #e8a93a) 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  background: rgba(14, 26, 44, 0.88);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-}
-
-.tmh__pill-kicker {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--accent-amber, #e8a93a) 88%, #fff);
-}
-
-.tmh__pill-dot,
-.tmh__meta-sep {
-  color: rgba(255, 255, 255, 0.35);
-  font-weight: 700;
-}
-
-.tmh__pill-stage {
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--text-primary, rgba(255, 255, 255, 0.95));
-}
-
-.tmh__meta {
-  margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary, rgba(255, 255, 255, 0.62));
+  border: 1px solid rgba(100, 140, 220, 0.22);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  color: #fff;
+  z-index: 10;
   white-space: nowrap;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 10px);
+  transform: translateY(-50%);
 }
 
-.wl-center-status:has(.tmh) {
-  flex-direction: column;
-  gap: 6px;
+.screen.game-screen .tmh .hud-pill-label {
+  font-family: var(--font-display) !important;
+  font-size: 1rem;
+  font-weight: 700;
+  opacity: 0.92;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.screen.game-screen .tmh .wl-turn-label {
+  position: relative;
+  z-index: 9;
+}
+
+@media (max-width: 600px) {
+  .screen.game-screen .tmh .daily-fritz-progress-pill {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    height: 32px;
+    padding: 0 10px;
+    gap: 6px;
+    top: auto;
+    background: rgba(12, 22, 40, 0.95);
+    margin-right: 10px;
+  }
+
+  .screen.game-screen .tmh .hud-pill-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+  }
 }

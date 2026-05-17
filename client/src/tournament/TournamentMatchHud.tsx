@@ -3,30 +3,22 @@ import './tournamentMatchHud.css';
 
 export interface TournamentMatchHudProps {
   round: 1 | 2 | 3;
-  opponentName: string;
-  winTarget?: number;
+  turnLabel?: string | null;
+  turnVariant?: 'your-turn' | 'opp-turn';
 }
 
 export default function TournamentMatchHud(props: TournamentMatchHudProps) {
   const stage = tournamentStageShortLabel(props.round);
-  const target = props.winTarget ?? 30;
+  const hasTurnLabel = Boolean(props.turnLabel);
 
   return (
     <div className="tmh" role="status" aria-live="polite">
-      <div className="tmh__pill">
-        <span className="tmh__pill-kicker">Tournament</span>
-        <span className="tmh__pill-dot" aria-hidden>
-          ·
-        </span>
-        <span className="tmh__pill-stage">{stage}</span>
+      <div className="daily-fritz-progress-pill" data-has-turn-label={hasTurnLabel}>
+        <span className="hud-pill-label">{stage}</span>
       </div>
-      <p className="tmh__meta">
-        <span>vs {props.opponentName}</span>
-        <span className="tmh__meta-sep" aria-hidden>
-          ·
-        </span>
-        <span>First to {target}</span>
-      </p>
+      {hasTurnLabel ? (
+        <span className={`wl-turn-label ${props.turnVariant ?? 'your-turn'}`}>{props.turnLabel}</span>
+      ) : null}
     </div>
   );
 }

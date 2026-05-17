@@ -5335,7 +5335,8 @@ export default function App() {
               style={{
                 position: 'absolute',
                 left: '50%',
-                transform: 'translateX(-50%)',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
                 display: isHandActive || tournamentMatch ? 'flex' : 'none',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -5344,10 +5345,16 @@ export default function App() {
               {tournamentMatch ? (
                 <TournamentMatchHud
                   round={tournamentMatch.round}
-                  opponentName={tournamentOpponentLabel ?? 'Opponent'}
+                  turnLabel={
+                    isHandActive
+                      ? isMyTurn
+                        ? 'Your move'
+                        : 'Opponent thinking'
+                      : null
+                  }
+                  turnVariant={isMyTurn ? 'your-turn' : 'opp-turn'}
                 />
-              ) : null}
-              {isHandActive ? (
+              ) : isHandActive ? (
                 <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
                   {isMyTurn ? 'Your move' : 'Opponent thinking'}
                 </span>
