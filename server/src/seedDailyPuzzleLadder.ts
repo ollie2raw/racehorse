@@ -1,5 +1,4 @@
 import './loadEnv';
-import { spawnSync } from 'child_process';
 import {
   isDailyPuzzleLadderReady,
   normalizeDailyPuzzleSlot,
@@ -15,7 +14,21 @@ import {
 const LADDER_SLOT_SELECT =
   'id,puzzle_date,title,starting_board,starting_hand,max_moves,target_score,puzzle_type,deal_size,slot_index,slot_title,tier,slot_max_points,objective_type,objective_payload,set_version,published';
 
-type LadderSlotGenerationProfile = {
+export type DailyPuzzleGenerationPurpose = 'request' | 'scheduled' | 'startup' | 'manual';
+
+export type DailyPuzzleGenerationRejectionReason =
+  | 'null_candidate'
+  | 'missing_tiles'
+  | 'illegal_start'
+  | 'insufficient_playable_options'
+  | 'score_below_threshold'
+  | 'no_solution'
+  | 'validation_exception'
+  | 'structural_failure'
+  | 'timeout'
+  | 'attempt_limit';
+
+export type LadderSlotGenerationProfile = {
   slotIndex: 1 | 2 | 3;
   tier: 'quick_line' | 'tactical_setup' | 'master_chain';
   slotTitle: string;
@@ -56,6 +69,101 @@ const LADDER_PROFILES: LadderSlotGenerationProfile[] = [
 
 type CuratedDailyPuzzle = ReturnType<typeof createHighScorePuzzle>;
 
+type PuzzleBuilder = (
+  seed: string,
+  attempt: number,
+  minHandSize: number,
+  maxHandSize: number,
+  minBestScore: number,
+) => CuratedDailyPuzzle | null;
+
+type PuzzleBuilders = {
+  oneTurnHighScore: PuzzleBuilder;
+  setupAndStrike: PuzzleBuilder;
+};
+
+type GenerationBudgetConfig = {
+  purpose: DailyPuzzleGenerationPurpose;
+  maxAttemptsPerSlot: number;
+  maxMsPerSlot: number;
+  setupAndStrikeAttempts: number;
+  highScoreAttempts: number;
+  structuralFailureThreshold: number;
+  yieldEveryAttempts: number;
+};
+
+export type SlotGenerationSuccess = {
+  ok: true;
+  puzzle: CuratedDailyPuzzle;
+  bestPossibleScore: number;
+  attemptsTried: number;
+  elapsedMs: number;
+  strategy: string;
+  topRejectionReasons: Array<{ reason: string; count: number }>;
+};
+
+export type SlotGenerationFailure = {
+  ok: false;
+  reason: DailyPuzzleGenerationRejectionReason;
+  attemptsTried: number;
+  elapsedMs: number;
+  strategy: string | null;
+  topRejectionReasons: Array<{ reason: string; count: number }>;
+  message: string;
+};
+
+export type SlotGenerationOutcome = SlotGenerationSuccess | SlotGenerationFailure;
+
+const GENERATION_BUDGETS: Record<DailyPuzzleGenerationPurpose, GenerationBudgetConfig> = {
+  request: {
+    purpose: 'request',
+    maxAttemptsPerSlot: 18,
+    maxMsPerSlot: 1_200,
+    setupAndStrikeAttempts: 8,
+    highScoreAttempts: 10,
+    structuralFailureThreshold: 4,
+    yieldEveryAttempts: 3,
+  },
+  scheduled: {
+    purpose: 'scheduled',
+    maxAttemptsPerSlot: 90,
+    maxMsPerSlot: 8_000,
+    setupAndStrikeAttempts: 30,
+    highScoreAttempts: 60,
+    structuralFailureThreshold: 8,
+    yieldEveryAttempts: 5,
+  },
+  startup: {
+    purpose: 'startup',
+    maxAttemptsPerSlot: 45,
+    maxMsPerSlot: 4_000,
+    setupAndStrikeAttempts: 15,
+    highScoreAttempts: 30,
+    structuralFailureThreshold: 6,
+    yieldEveryAttempts: 5,
+  },
+  manual: {
+    purpose: 'manual',
+    maxAttemptsPerSlot: 2_100,
+    maxMsPerSlot: 60_000,
+    setupAndStrikeAttempts: 100,
+    highScoreAttempts: 2_000,
+    structuralFailureThreshold: 25,
+    yieldEveryAttempts: 10,
+  },
+};
+
+function defaultPuzzleBuilders(): PuzzleBuilders {
+  return {
+    oneTurnHighScore: createHighScorePuzzle,
+    setupAndStrike: generateSetupAndStrikePuzzle,
+  };
+}
+
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 function isIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -95,92 +203,178 @@ function clonePuzzleForDate(
   };
 }
 
-function summarizeErrors(errors: string[]): string {
-  const counts = new Map<string, number>();
-  for (const error of errors) {
-    counts.set(error, (counts.get(error) ?? 0) + 1);
-  }
+function topRejectionReasons(counts: Map<string, number>): Array<{ reason: string; count: number }> {
   return Array.from(counts.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([message, count]) => `${count}x ${message}`)
-    .join(' | ');
+    .map(([reason, count]) => ({ reason, count }));
 }
 
-function choosePuzzleForSlot(
+function classifyGenerationError(error: unknown): DailyPuzzleGenerationRejectionReason {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/Cannot read properties of (null|undefined) \(reading 'tiles'\)/.test(message)) return 'missing_tiles';
+  if (/missing|tiles|pool|hand/i.test(message)) return 'missing_tiles';
+  if (/Playable options|legal|open end|start/i.test(message)) return 'illegal_start';
+  if (/Best score|below|score/i.test(message)) return 'score_below_threshold';
+  if (/Unable to find|Could not synthesize|No setup\+strike|construct/i.test(message)) return 'no_solution';
+  return 'validation_exception';
+}
+
+function isCuratedPuzzle(value: unknown): value is CuratedDailyPuzzle {
+  if (!value || typeof value !== 'object') return false;
+  const puzzle = value as Partial<CuratedDailyPuzzle>;
+  return (
+    Array.isArray(puzzle.startingHand) &&
+    Boolean(puzzle.startingBoard) &&
+    typeof puzzle.maxMoves === 'number' &&
+    typeof puzzle.targetScore === 'number' &&
+    (puzzle.puzzleType === 'one_turn_high_score' || puzzle.puzzleType === 'setup_and_strike')
+  );
+}
+
+function minScoreForProfile(profile: LadderSlotGenerationProfile): number {
+  if (profile.slotIndex === 1) return 15;
+  if (profile.slotIndex === 2) return 25;
+  return 35;
+}
+
+export async function choosePuzzleForSlot(
   date: string,
   profile: LadderSlotGenerationProfile,
-): {
-  puzzle: CuratedDailyPuzzle;
-  bestPossibleScore: number;
-  attemptsTried: number;
-  strategy: string;
-} {
-  const errors: string[] = [];
+  options?: {
+    purpose?: DailyPuzzleGenerationPurpose;
+    budget?: Partial<GenerationBudgetConfig>;
+    builders?: Partial<PuzzleBuilders>;
+    now?: () => number;
+  },
+): Promise<SlotGenerationOutcome> {
+  const budget = {
+    ...GENERATION_BUDGETS[options?.purpose ?? 'scheduled'],
+    ...(options?.budget ?? {}),
+  };
+  const builders = {
+    ...defaultPuzzleBuilders(),
+    ...(options?.builders ?? {}),
+  };
+  const now = options?.now ?? Date.now;
+  const startedAt = now();
+  const rejectionCounts = new Map<string, number>();
   let attemptsTried = 0;
+  let lastStrategy: string | null = null;
+
+  const recordRejection = (reason: DailyPuzzleGenerationRejectionReason): void => {
+    rejectionCounts.set(reason, (rejectionCounts.get(reason) ?? 0) + 1);
+  };
+
+  const elapsedMs = (): number => Math.max(0, now() - startedAt);
+
+  const fail = (
+    reason: DailyPuzzleGenerationRejectionReason,
+    message: string,
+  ): SlotGenerationFailure => ({
+    ok: false,
+    reason,
+    attemptsTried,
+    elapsedMs: elapsedMs(),
+    strategy: lastStrategy,
+    topRejectionReasons: topRejectionReasons(rejectionCounts),
+    message,
+  });
 
   for (const puzzleType of profile.preferredPuzzleTypes) {
-    const maxAttempts = puzzleType === 'setup_and_strike' ? 100 : 2000;
+    const maxAttempts = Math.min(
+      puzzleType === 'setup_and_strike'
+        ? budget.setupAndStrikeAttempts
+        : budget.highScoreAttempts,
+      budget.maxAttemptsPerSlot - attemptsTried,
+    );
+    if (maxAttempts <= 0) break;
+
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (elapsedMs() >= budget.maxMsPerSlot) {
+        recordRejection('timeout');
+        return fail('timeout', `${profile.slotTitle} generation timed out after ${elapsedMs()}ms.`);
+      }
+      if (attemptsTried >= budget.maxAttemptsPerSlot) {
+        recordRejection('attempt_limit');
+        return fail('attempt_limit', `${profile.slotTitle} generation hit attempt limit.`);
+      }
+      if (attemptsTried > 0 && attemptsTried % budget.yieldEveryAttempts === 0) {
+        await yieldEventLoop();
+      }
+
       attemptsTried += 1;
+      lastStrategy = puzzleType;
       try {
-        let puzzle: CuratedDailyPuzzle;
-
-        // Ladder-specific score targets
-        let minScore = 35; // Default global MIN_BEST_SCORE
-        if (profile.slotIndex === 1) minScore = 15;
-        else if (profile.slotIndex === 2) minScore = 25;
-
-        if (puzzleType === 'setup_and_strike') {
-          puzzle = generateSetupAndStrikePuzzle(
-            `${date}:slot${profile.slotIndex}`,
-            attempt,
-            profile.targetHandSizeRange[0],
-            profile.targetHandSizeRange[1],
-            minScore,
-          );
-        } else {
-          puzzle = createHighScorePuzzle(
-            `${date}:slot${profile.slotIndex}`,
-            attempt,
-            profile.targetHandSizeRange[0],
-            profile.targetHandSizeRange[1],
-            minScore,
-          );
+        const seed = `${date}:slot${profile.slotIndex}`;
+        const minScore = minScoreForProfile(profile);
+        const builder =
+          puzzleType === 'setup_and_strike'
+            ? builders.setupAndStrike
+            : builders.oneTurnHighScore;
+        const puzzle = builder(
+          seed,
+          attempt,
+          profile.targetHandSizeRange[0],
+          profile.targetHandSizeRange[1],
+          minScore,
+        );
+        if (!isCuratedPuzzle(puzzle)) {
+          recordRejection('null_candidate');
+          if ((rejectionCounts.get('null_candidate') ?? 0) >= budget.structuralFailureThreshold) {
+            return fail('structural_failure', `${profile.slotTitle} produced repeated null candidates.`);
+          }
+          continue;
         }
 
         const bestPossibleScore = computeBestPossiblePuzzleScore(puzzle);
 
-        // Ladder-specific validation (moved from global generator)
         const handSize = puzzle.startingHand.length;
         const [minH, maxH] = profile.targetHandSizeRange;
-        if (handSize < minH || handSize > maxH) continue;
+        if (handSize < minH || handSize > maxH) {
+          recordRejection('missing_tiles');
+          continue;
+        }
 
-        // If specific target range is defined in profile, try to stay within it
         if (profile.targetBestScoreRange) {
           const [min, max] = profile.targetBestScoreRange;
           if (bestPossibleScore < min || bestPossibleScore > max) {
-            // Keep trying if we have attempts left
             if (attempt < maxAttempts - 20) {
+              recordRejection('score_below_threshold');
               continue;
             }
           }
         }
 
         return {
+          ok: true,
           puzzle: clonePuzzleForDate(puzzle, date, profile.slotTitle),
           bestPossibleScore,
           attemptsTried,
+          elapsedMs: elapsedMs(),
           strategy: puzzleType,
+          topRejectionReasons: topRejectionReasons(rejectionCounts),
         };
       } catch (error) {
-        errors.push(error instanceof Error ? error.message : String(error));
+        const reason = classifyGenerationError(error);
+        recordRejection(reason);
+        if (
+          (reason === 'missing_tiles' || reason === 'validation_exception') &&
+          (rejectionCounts.get(reason) ?? 0) >= budget.structuralFailureThreshold
+        ) {
+          return fail(
+            'structural_failure',
+            `${profile.slotTitle} aborted after repeated ${reason} failures.`,
+          );
+        }
       }
     }
   }
 
-  throw new Error(
-    `Unable to generate ${profile.slotTitle} candidate after ${attemptsTried} attempts. ${summarizeErrors(errors)}`,
+  recordRejection('attempt_limit');
+  return fail(
+    'attempt_limit',
+    `Unable to generate ${profile.slotTitle} candidate after ${attemptsTried} attempts.`,
   );
 }
 
@@ -191,63 +385,18 @@ type PostgrestResponseLike = {
   json(): Promise<unknown>;
 };
 
-function curlPostgrestFallback(
-  url: string,
-  serviceKey: string,
+async function postgrestFetch(
+  path: string,
   init?: RequestInit,
-): PostgrestResponseLike {
-  const args = [
-    '-sS',
-    '-X',
-    init?.method ?? 'GET',
-    '-H',
-    `apikey: ${serviceKey}`,
-    '-H',
-    `Authorization: Bearer ${serviceKey}`,
-    '-H',
-    'Content-Type: application/json',
-  ];
-  const preferHeader =
-    init?.headers && typeof init.headers === 'object' && 'Prefer' in init.headers
-      ? (init.headers as Record<string, string>).Prefer
-      : undefined;
-  if (preferHeader) {
-    args.push('-H', `Prefer: ${preferHeader}`);
-  }
-  if (typeof init?.body === 'string') {
-    args.push('--data', init.body);
-  }
-  args.push(url, '-w', '\n__STATUS__:%{http_code}');
-
-  const result = spawnSync('curl', args, { encoding: 'utf8' });
-  if (result.status !== 0) {
-    throw new Error(result.stderr?.trim() || result.stdout?.trim() || 'curl fallback failed');
-  }
-
-  const stdout = result.stdout ?? '';
-  const markerIndex = stdout.lastIndexOf('\n__STATUS__:');
-  const bodyText = markerIndex >= 0 ? stdout.slice(0, markerIndex) : stdout;
-  const statusText = markerIndex >= 0 ? stdout.slice(markerIndex + '\n__STATUS__:'.length).trim() : '0';
-  const status = Number.parseInt(statusText, 10) || 0;
-
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    async text() {
-      return bodyText;
-    },
-    async json() {
-      return bodyText ? JSON.parse(bodyText) : null;
-    },
-  };
-}
-
-async function postgrestFetch(path: string, init?: RequestInit): Promise<PostgrestResponseLike> {
+  timeoutMs = 5_000,
+): Promise<PostgrestResponseLike> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supabaseUrl) throw new Error('SUPABASE_URL is required.');
   if (!serviceKey) throw new Error('SUPABASE_SERVICE_KEY is required.');
   const url = new URL(path, supabaseUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, {
       ...init,
@@ -258,15 +407,15 @@ async function postgrestFetch(path: string, init?: RequestInit): Promise<Postgre
         Prefer: 'resolution=merge-duplicates,return=representation',
         ...(init?.headers ?? {}),
       },
+      signal: init?.signal ?? controller.signal,
     });
-  } catch {
-    return curlPostgrestFallback(url.toString(), serviceKey, {
-      ...init,
-      headers: {
-        Prefer: 'resolution=merge-duplicates,return=representation',
-        ...(init?.headers ?? {}),
-      },
-    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Supabase request timed out after ${timeoutMs}ms: ${path}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -339,8 +488,10 @@ async function upsertSlot(
  */
 export async function ensureDailyPuzzleLadderForDate(
   date: string,
-  options?: { force?: boolean },
+  options?: { force?: boolean; purpose?: DailyPuzzleGenerationPurpose },
 ): Promise<'skipped' | 'seeded' | 'failed'> {
+  const purpose = options?.purpose ?? 'scheduled';
+  const startedAt = Date.now();
   try {
     if (!isIsoDate(date)) {
       console.warn('[daily-puzzle-ladder-seed] invalid date key', date);
@@ -350,17 +501,38 @@ export async function ensureDailyPuzzleLadderForDate(
       return 'skipped';
     }
 
+    console.log('[daily-puzzle-ladder] generation-start', {
+      date,
+      purpose,
+      budget: GENERATION_BUDGETS[purpose],
+    });
+
     const results: Array<{
       profile: LadderSlotGenerationProfile;
       puzzle: CuratedDailyPuzzle;
       bestPossibleScore: number;
       attemptsTried: number;
+      elapsedMs: number;
       strategy: string;
+      topRejectionReasons: Array<{ reason: string; count: number }>;
     }> = [];
 
     for (const profile of LADDER_PROFILES) {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      const result = choosePuzzleForSlot(date, profile);
+      await yieldEventLoop();
+      const result = await choosePuzzleForSlot(date, profile, { purpose });
+      if (!result.ok) {
+        console.warn('[daily-puzzle-ladder] generation-failed', {
+          date,
+          purpose,
+          slotIndex: profile.slotIndex,
+          slotTitle: profile.slotTitle,
+          reason: result.reason,
+          attempts: result.attemptsTried,
+          elapsedMs: result.elapsedMs,
+          topRejectionReasons: result.topRejectionReasons,
+        });
+        return 'failed';
+      }
       await upsertSlot(
         date,
         {
@@ -376,17 +548,28 @@ export async function ensureDailyPuzzleLadderForDate(
       results.push({ ...result, profile });
     }
 
-    console.log(`[daily-puzzle-ladder] seeded ${date}`);
-    for (const res of results) {
-      const handSize = res.puzzle.startingHand.length;
-      console.log(
-        `[daily-puzzle-ladder] slot ${res.profile.slotIndex} | ${res.profile.slotTitle} | ${res.puzzle.puzzleType} | hand=${handSize} | best=${res.bestPossibleScore} | attempts=${res.attemptsTried} | strategy=${res.strategy}`,
-      );
-    }
+    console.log('[daily-puzzle-ladder] seeded', {
+      date,
+      purpose,
+      totalMs: Date.now() - startedAt,
+      slots: results.map((res) => ({
+        slotIndex: res.profile.slotIndex,
+        slotTitle: res.profile.slotTitle,
+        puzzleType: res.puzzle.puzzleType,
+        handSize: res.puzzle.startingHand.length,
+        bestPossibleScore: res.bestPossibleScore,
+        attempts: res.attemptsTried,
+        elapsedMs: res.elapsedMs,
+        strategy: res.strategy,
+        topRejectionReasons: res.topRejectionReasons,
+      })),
+    });
     return 'seeded';
   } catch (error) {
     console.warn('[daily-puzzle-ladder-seed] ensure failed', {
       date,
+      purpose,
+      totalMs: Date.now() - startedAt,
       error: error instanceof Error ? error.message : String(error),
     });
     return 'failed';
@@ -395,7 +578,7 @@ export async function ensureDailyPuzzleLadderForDate(
 
 async function main(): Promise<void> {
   const { date, force } = parseCliArgs(process.argv.slice(2));
-  const outcome = await ensureDailyPuzzleLadderForDate(date, { force });
+  const outcome = await ensureDailyPuzzleLadderForDate(date, { force, purpose: 'manual' });
   if (outcome === 'skipped') {
     console.log(`Daily Puzzle Ladder already ready for ${date}, skipping.`);
     return;

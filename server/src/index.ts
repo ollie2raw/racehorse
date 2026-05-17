@@ -2152,7 +2152,7 @@ async function warmDailyPuzzleLadders(reason: 'startup' | 'scheduled', runDates:
     for (const runDate of runDates) {
       await yieldEventLoop();
       const slotStartedAt = Date.now();
-      const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false });
+      const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false, purpose: reason });
       results.push({ runDate, ms: Date.now() - slotStartedAt, outcome });
     }
     console.log('[daily-puzzle-ladder-warmup] success', {
@@ -2328,9 +2328,24 @@ async function listDailyPuzzleSlotsForDateWithAutoSeed(runDate: string): Promise
   try {
     let slots = await listDailyPuzzleSlotsForDate(runDate);
     if (isDailyPuzzleLadderReady(slots)) return slots;
-    const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false });
+    if (!isTruthyEnvFlag(process.env.ENABLE_REQUEST_PUZZLE_GENERATION)) {
+      console.warn('[daily-puzzle-ladder] request-time generation skipped', {
+        runDate,
+        reason: 'disabled',
+      });
+      return slots;
+    }
+    const outcome = await ensureDailyPuzzleLadderForDate(runDate, {
+      force: false,
+      purpose: 'request',
+    });
     if (outcome === 'seeded') {
       slots = await listDailyPuzzleSlotsForDate(runDate);
+    } else {
+      console.warn('[daily-puzzle-ladder] request-time generation unavailable', {
+        runDate,
+        outcome,
+      });
     }
     return slots;
   } catch (error) {
@@ -3367,7 +3382,10 @@ const handleDailyPuzzleLadderCronWarm: express.RequestHandler = async (_req, res
     const runDates = [getPacificDateKeyDaysFromNow(0), getPacificDateKeyDaysFromNow(1)];
     const results: Array<{ runDate: string; outcome: 'skipped' | 'seeded' | 'failed' }> = [];
     for (const runDate of runDates) {
-      const outcome = await ensureDailyPuzzleLadderForDate(runDate, { force: false });
+      const outcome = await ensureDailyPuzzleLadderForDate(runDate, {
+        force: false,
+        purpose: 'scheduled',
+      });
       results.push({ runDate, outcome });
     }
     res.json({ ok: true, results });

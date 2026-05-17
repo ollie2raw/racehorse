@@ -36,7 +36,7 @@ interface HubDouble {
   leftSideFilled?: boolean;
   rightSideFilled?: boolean;
   isCrossed: boolean;
-  branches: BranchArm[];
+  branches: Array<BranchArm | null>;
 }
 
 interface BoardState {
@@ -83,6 +83,7 @@ const BOT_ID = 'bot';
 const MAX_PIPS = 6;
 const DEAL_SIZE = 14;
 const MAX_ATTEMPTS_PER_DATE = 300;
+const LEGACY_GENERATOR_MAX_MS_PER_PUZZLE = 60_000;
 const MIN_BEST_SCORE = 35;
 const SETUP_STRIKE_MIN_SCORE = 5;
 function parseCliArgs(argv: string[]): CliOptions {
@@ -173,6 +174,19 @@ function normalizeTile(a: number, b: number): Tile {
   return { low: Math.min(a, b), high: Math.max(a, b) };
 }
 
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function summarizeRejections(counts: Map<string, number>): string {
+  const summary = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([reason, count]) => `${reason}:${count}`)
+    .join(' ');
+  return summary || 'none';
+}
+
 function cloneTile(tile: Tile): Tile {
   return { low: tile.low, high: tile.high };
 }
@@ -186,13 +200,17 @@ function cloneBoard(board: BoardState): BoardState {
     })),
     hubDoubles: board.hubDoubles.map((hub) => ({
       ...hub,
-      branches: hub.branches.map((branch) => ({
-        ...branch,
-        tiles: branch.tiles.map((placed) => ({
-          tile: cloneTile(placed.tile),
-          orientation: placed.orientation,
-        })),
-      })),
+      branches: hub.branches.map((branch) =>
+        branch
+          ? {
+              ...branch,
+              tiles: branch.tiles.map((placed) => ({
+                tile: cloneTile(placed.tile),
+                orientation: placed.orientation,
+              })),
+            }
+          : null,
+      ),
     })),
   };
 }
@@ -363,7 +381,12 @@ function countBoardTiles(board: BoardState): number {
   return (
     board.mainLine.length +
     board.hubDoubles.reduce(
-      (sum, hub) => sum + hub.branches.reduce((branchSum, branch) => branchSum + branch.tiles.length, 0),
+      (sum, hub) =>
+        sum +
+        hub.branches.reduce(
+          (branchSum, branch) => branchSum + (branch?.tiles.length ?? 0),
+          0,
+        ),
       0,
     )
   );
@@ -599,6 +622,7 @@ function boardKey(board: BoardState | null): string {
       const hubId = hub.hubId ?? hubIdx;
       const branches = hub.branches
         .map((branch, branchIdx) => {
+          if (!branch) return `${branchIdx}:empty`;
           const tiles = branch.tiles
             .map((placed) => `${tileKey(placed.tile)}:${placed.orientation}`)
             .join('/');
@@ -1730,9 +1754,18 @@ async function main(): Promise<void> {
       let generated: CuratedDailyPuzzle | null = null;
       let bestScore = 0;
       let openEnds: number[] = [];
+      const startedAt = Date.now();
+      const rejectionCounts = new Map<string, number>();
 
       const maxAttempts = MAX_ATTEMPTS_PER_DATE;
       for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (Date.now() - startedAt >= LEGACY_GENERATOR_MAX_MS_PER_PUZZLE) {
+          rejectionCounts.set('timeout', (rejectionCounts.get('timeout') ?? 0) + 1);
+          break;
+        }
+        if (attempt > 0 && attempt % 10 === 0) {
+          await yieldEventLoop();
+        }
         try {
           generated = generator.build(dateSeed, attempt);
           const validation = validateGeneratedPuzzle(generated);
@@ -1745,7 +1778,9 @@ async function main(): Promise<void> {
           }
 
           break;
-        } catch {
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          rejectionCounts.set(reason, (rejectionCounts.get(reason) ?? 0) + 1);
           generated = null;
         }
       }
@@ -1753,7 +1788,7 @@ async function main(): Promise<void> {
       if (!generated) {
         hadFailures = true;
         console.error(
-          `${dateSeed} | ${generator.puzzleType} | failed after ${maxAttempts} attempts`,
+          `${dateSeed} | ${generator.puzzleType} | failed after ${maxAttempts} attempts | ${Date.now() - startedAt}ms | ${summarizeRejections(rejectionCounts)}`,
         );
         continue;
       }
