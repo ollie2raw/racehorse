@@ -269,6 +269,14 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                   </div>
                 </div>
               ) : null}
+              {hubState.state === 'eliminated' ? (
+                <div className="th-state-card th-state-card--cancelled">
+                  <div className="th-state-card__text">
+                    <strong>{hubState.title}</strong>
+                    <span>{hubState.detail}</span>
+                  </div>
+                </div>
+              ) : null}
               {props.upcoming.slice(0, 3).map((t) => {
                 const reg = isRegistered(t);
                 const open = t.status === 'registration_open';

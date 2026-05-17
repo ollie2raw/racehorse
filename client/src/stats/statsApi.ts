@@ -149,9 +149,28 @@ type MatchSummaryRow = {
   winner_user_id: string | null;
   loser_user_id: string | null;
   mode: string | null;
+  winner_score?: number | null;
+  loser_score?: number | null;
+  room_code?: string | null;
   avg_move_quality?: number | null;
   created_at?: string | null;
 };
+
+function dedupeOnlineMatchRows<T extends MatchSummaryRow>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const roomCode = row.room_code?.trim();
+    const createdAt = row.created_at ?? '';
+    const key = roomCode
+      ? `room:${roomCode}:${row.winner_user_id ?? ''}:${row.loser_user_id ?? ''}:${row.winner_score ?? ''}:${row.loser_score ?? ''}`
+      : `match:${row.winner_user_id ?? ''}:${row.loser_user_id ?? ''}:${row.winner_score ?? ''}:${row.loser_score ?? ''}:${createdAt.slice(0, 19)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
 
 type GhostGameSummaryRow = {
   final_score: number | null;
@@ -387,9 +406,9 @@ function derivePuzzleSummary(
 }
 
 function buildStatsSummary(userId: string, rows: MatchSummaryRow[]): StatsSummary {
-  const onlineRows = rows
-    .filter((row) => row.mode === 'online')
-    .sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
+  const onlineRows = dedupeOnlineMatchRows(
+    rows.filter((row) => row.mode === 'online'),
+  ).sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
 
   const wins = onlineRows.filter((row) => row.winner_user_id === userId).length;
   const losses = onlineRows.filter((row) => row.loser_user_id === userId).length;
@@ -638,7 +657,7 @@ export async function fetchUserStatsByUserId(
 
   let historyResp: { data: unknown[] | null; error: { message?: string; code?: string } | null } = await supabase
     .from('matches')
-    .select('winner_user_id, loser_user_id, mode, avg_move_quality, created_at')
+    .select('winner_user_id, loser_user_id, mode, winner_score, loser_score, room_code, avg_move_quality, created_at')
     .or(`winner_user_id.eq.${userId},loser_user_id.eq.${userId}`);
 
   // Backward-compatible retry for deployments where avg_move_quality column is not added yet.
@@ -650,7 +669,7 @@ export async function fetchUserStatsByUserId(
   ) {
     historyResp = await supabase
       .from('matches')
-      .select('winner_user_id, loser_user_id, mode, created_at')
+      .select('winner_user_id, loser_user_id, mode, winner_score, loser_score, room_code, created_at')
       .or(`winner_user_id.eq.${userId},loser_user_id.eq.${userId}`);
   }
 

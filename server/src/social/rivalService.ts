@@ -1,4 +1,5 @@
 import { supabaseFetch } from '../supabaseUtils';
+import { dedupeMatchRows } from '../stats/dedupeMatchRows';
 
 export interface RivalEntry {
   userId: string;
@@ -13,15 +14,21 @@ export async function getAutoRivals(userId: string): Promise<RivalEntry[]> {
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const enc = encodeURIComponent(userId);
 
-  const matches = await supabaseFetch<Array<{
-    winner_user_id: string | null;
-    loser_user_id: string | null;
-  }>>(
-    `/rest/v1/matches` +
-    `?or=(winner_user_id.eq.${enc},loser_user_id.eq.${enc})` +
-    `&created_at=gte.${encodeURIComponent(since)}` +
-    `&mode=eq.online` +
-    `&select=winner_user_id,loser_user_id`,
+  const matches = dedupeMatchRows(
+    await supabaseFetch<Array<{
+      winner_user_id: string | null;
+      loser_user_id: string | null;
+      winner_score: number | null;
+      loser_score: number | null;
+      created_at: string;
+      room_code: string | null;
+    }>>(
+      `/rest/v1/matches` +
+      `?or=(winner_user_id.eq.${enc},loser_user_id.eq.${enc})` +
+      `&created_at=gte.${encodeURIComponent(since)}` +
+      `&mode=eq.online` +
+      `&select=winner_user_id,loser_user_id,winner_score,loser_score,room_code,created_at`,
+    ),
   );
 
   const tally = new Map<string, { wins: number; losses: number }>();

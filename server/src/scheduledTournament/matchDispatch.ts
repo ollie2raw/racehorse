@@ -3,9 +3,7 @@ import { supabaseFetch } from '../supabaseUtils';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
 import type { MatchRow } from './types';
 import type { Room } from '../rooms';
-import { startGame } from '../rooms';
 import { seatSyntheticBotInRoom } from '../multiplayer/botSeating';
-import { broadcastStateUpdate } from '../multiplayer/roomSession';
 
 export const TOURNAMENT_MATCH_READY_WINDOW_MS = 2 * 60_000;
 
@@ -35,8 +33,49 @@ function makeTournamentRoomCode(match: MatchRow): string {
   return `T${short}R${match.round}M${match.match_number}`;
 }
 
-function isBotUserId(userId: string | null | undefined): boolean {
+export function isBotUserId(userId: string | null | undefined): boolean {
   return typeof userId === 'string' && userId.startsWith('bot:fritz:');
+}
+
+export function isBotOnlyMatch(match: Pick<MatchRow, 'player1_id' | 'player2_id'>): boolean {
+  return isBotUserId(match.player1_id) && isBotUserId(match.player2_id);
+}
+
+export function humanJoinedAt(match: MatchRow, userId: string): string | null {
+  if (isBotUserId(userId)) return null;
+  if (match.player1_id === userId) return match.player1_joined_at;
+  if (match.player2_id === userId) return match.player2_joined_at;
+  return null;
+}
+
+/** True when every non-bot assigned player has a joined_at timestamp. */
+export function allHumanPlayersJoined(match: MatchRow): boolean {
+  const humanIds = [match.player1_id, match.player2_id].filter(
+    (id): id is string => Boolean(id && !isBotUserId(id)),
+  );
+  if (humanIds.length === 0) return false;
+  return humanIds.every((id) => Boolean(humanJoinedAt(match, id)));
+}
+
+export async function promoteScheduledMatchToInProgress(
+  matchId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
+  startedAt: string = new Date().toISOString(),
+  humanUserId?: string | null,
+): Promise<void> {
+  const match = await persistence.fetchMatchById(matchId);
+  if (!match || match.status === 'completed' || match.status === 'bye') return;
+  if (match.status === 'in_progress') return;
+  await persistence.updateMatch(matchId, {
+    status: 'in_progress',
+    started_at: match.started_at ?? startedAt,
+    status_reason: null,
+  });
+  console.log('[tournament:match] promoted in_progress only after human attach', {
+    matchId,
+    roomCode: match.room_code,
+    humanUserId: humanUserId ?? null,
+  });
 }
 
 function botLabel(tier: MatchRow['bot_tier']): string {
@@ -93,23 +132,22 @@ export async function dispatchTournamentMatch(
     Boolean(match.ready_deadline_at);
 
   let room: Room;
+  let reusedExistingRoom = Boolean(match.room_code);
   try {
     room = persistence.getRoom(roomCode);
   } catch {
+    reusedExistingRoom = false;
     room = persistence.createReservedRoom(roomCode, { winningScore: tournament.win_target });
   }
   room.scheduledTournamentMatchId = match.id;
   room.scheduledTournamentId = tournament.id;
   room.scheduledTournamentBotTier = match.bot_tier ?? undefined;
 
-  const botJoinedPatch: Partial<Pick<MatchRow, 'player1_joined_at' | 'player2_joined_at'>> = {};
   if (isBotUserId(match.player1_id)) {
     seatSyntheticBotInRoom(roomCode, match.player1_id, botLabel(match.bot_tier));
-    botJoinedPatch.player1_joined_at = match.player1_joined_at ?? readyAt;
   }
   if (isBotUserId(match.player2_id)) {
     seatSyntheticBotInRoom(roomCode, match.player2_id, botLabel(match.bot_tier));
-    botJoinedPatch.player2_joined_at = match.player2_joined_at ?? readyAt;
   }
 
   if (!alreadyReady) {
@@ -119,10 +157,15 @@ export async function dispatchTournamentMatch(
       ready_at: readyAt,
       ready_deadline_at: readyDeadlineAt,
       status_reason: null,
-      ...botJoinedPatch,
     });
-  } else if (Object.keys(botJoinedPatch).length > 0) {
-    await persistence.updateMatch(match.id, botJoinedPatch);
+    const humanUserIds = [match.player1_id, match.player2_id].filter(
+      (id): id is string => Boolean(id && !isBotUserId(id)),
+    );
+    console.log('[tournament:dispatch] match ready', {
+      matchId: match.id,
+      roomCode,
+      humanUserIds,
+    });
   }
 
   const shouldEmit = !alreadyReady || opts.emitIfAlreadyReady === true || opts.reason === 'recovery';
@@ -147,12 +190,13 @@ export async function dispatchTournamentMatch(
       if (!userId) continue;
       recipients.push(userId);
       const opponentId = userId === match.player1_id ? match.player2_id : match.player1_id;
-      sock.emit('tournament:match_ready', {
+      const payload = {
         tournamentId: match.tournament_id,
         matchId: match.id,
         round: match.round,
         matchNumber: match.match_number,
-        matchStatus: match.status === 'in_progress' ? 'in_progress' : 'ready',
+        roomCode,
+        matchStatus: match.status === 'in_progress' ? 'in_progress' as const : 'ready' as const,
         readyAt,
         readyDeadlineAt,
         opponentId,
@@ -161,18 +205,15 @@ export async function dispatchTournamentMatch(
             ? botLabel(match.bot_tier)
             : usernames.get(opponentId) ?? null
           : null,
+      };
+      sock.emit('tournament:match_ready', payload);
+    }
+    if (recipientSockets.length === 0) {
+      console.log('[tournament:match_ready] skipped — no connected assigned sockets', {
+        matchId: match.id,
+        roomCode,
       });
     }
-  }
-
-  if (isBotUserId(match.player1_id) && isBotUserId(match.player2_id) && !room.state) {
-    await startGame(room.code, io);
-    await persistence.updateMatch(match.id, {
-      status: 'in_progress',
-      started_at: readyAt,
-      status_reason: null,
-    });
-    broadcastStateUpdate(room.code);
   }
 
   return {
@@ -184,7 +225,7 @@ export async function dispatchTournamentMatch(
     readyAt,
     readyDeadlineAt,
     recipients,
-    reusedExistingRoom: Boolean(match.room_code),
-    emittedReady: shouldEmit,
+    reusedExistingRoom,
+    emittedReady: shouldEmit && recipients.length > 0,
   };
 }

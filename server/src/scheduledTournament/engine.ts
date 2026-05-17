@@ -3,7 +3,13 @@ import { supabaseFetch } from '../supabaseUtils';
 import { writeTournamentActivity } from '../social/activityWriter';
 import { QF_SEED_PAIRS, advanceSlot } from './bracket';
 import { defaultEnginePersistence, type EnginePersistence } from './persistenceInterface';
-import { dispatchTournamentMatch } from './matchDispatch';
+import {
+  TOURNAMENT_MATCH_READY_WINDOW_MS,
+  allHumanPlayersJoined,
+  dispatchTournamentMatch,
+  isBotOnlyMatch,
+  isBotUserId,
+} from './matchDispatch';
 import type { MatchRow, SeededPlayer } from './types';
 
 const MIN_HUMANS_TO_START = 1;
@@ -13,10 +19,6 @@ type TournamentEntrant = SeededPlayer & { isBot?: boolean; botTier?: BotTier };
 
 /** Roughly 800 = Glicko default for players without a profile rating. */
 const DEFAULT_RATING = 800;
-
-function isBotUserId(userId: string | null | undefined): boolean {
-  return typeof userId === 'string' && userId.startsWith(BOT_ID_PREFIX);
-}
 
 function botTierForRound(round: 1 | 2 | 3): BotTier {
   if (round === 3) return 'master';
@@ -125,6 +127,44 @@ async function selectHigherSeedWinner(
   const player1Seed = regs.find((reg) => reg.user_id === player1Id)?.seed ?? Number.POSITIVE_INFINITY;
   const player2Seed = regs.find((reg) => reg.user_id === player2Id)?.seed ?? Number.POSITIVE_INFINITY;
   return player1Seed <= player2Seed ? player1Id : player2Id;
+}
+
+function playerNoShowReason(match: MatchRow, noShowUserId: string | null): string {
+  if (!noShowUserId) return 'double_no_show';
+  if (match.player1_id === noShowUserId) return 'player1_no_show';
+  if (match.player2_id === noShowUserId) return 'player2_no_show';
+  return 'no_show';
+}
+
+async function resolveBotOnlyMatch(
+  io: Server,
+  match: MatchRow,
+  persistence: EnginePersistence,
+): Promise<boolean> {
+  if (!isBotOnlyMatch(match) || !match.player1_id || !match.player2_id) return false;
+  if (match.status === 'completed' || match.status === 'bye') return false;
+  const tournament = await persistence.fetchTournamentById(match.tournament_id);
+  if (!tournament) return false;
+
+  const winnerId = await selectHigherSeedWinner(
+    match.tournament_id,
+    match.player1_id,
+    match.player2_id,
+    persistence,
+  );
+  console.log('[tournament:bot-match] auto-resolved', {
+    matchId: match.id,
+    winnerId,
+  });
+  await applyMatchResult(io, {
+    matchId: match.id,
+    winnerId,
+    player1Score: match.player1_id === winnerId ? tournament.win_target : 0,
+    player2Score: match.player2_id === winnerId ? tournament.win_target : 0,
+    winnerSource: 'game_over',
+    statusReason: 'bot_simulated',
+  }, persistence);
+  return true;
 }
 
 async function persistTournamentPlacements(
@@ -271,6 +311,10 @@ export async function generateBracket(
   for (const m of matches) {
     if (m.status !== 'completed' && m.player1_id && m.player2_id) {
       await dispatchTournamentMatch(io, m.id, { reason: 'bracket_generated' }, persistence);
+      const updated = await persistence.fetchMatchById(m.id);
+      if (updated) {
+        await resolveBotOnlyMatch(io, updated, persistence);
+      }
     }
   }
 
@@ -371,6 +415,10 @@ export async function applyMatchResult(
   io.emit('tournament:match_updated', { tournamentId: match.tournament_id, matchId: target.id });
   if (updated && updated.status === 'ready') {
     await dispatchTournamentMatch(io, updated.id, { reason: 'winner_advanced' }, persistence);
+    const refreshed = await persistence.fetchMatchById(updated.id);
+    if (refreshed) {
+      await resolveBotOnlyMatch(io, refreshed, persistence);
+    }
   }
 }
 
@@ -452,15 +500,44 @@ export async function reconcileExpiredReadyMatches(
     const matches = await persistence.fetchMatches(tournament.id);
     for (const match of matches) {
       if (match.status !== 'ready' || !match.ready_deadline_at) continue;
+      if (await resolveBotOnlyMatch(io, match, persistence)) {
+        resolvedCount += 1;
+        continue;
+      }
       if (Date.parse(match.ready_deadline_at) >= now.getTime()) continue;
       if (!match.player1_id || !match.player2_id) continue;
-      if (match.player1_joined_at && match.player2_joined_at) {
-        await persistence.updateMatch(match.id, {
-          status: 'in_progress',
-          started_at: match.started_at ?? now.toISOString(),
-          status_reason: null,
-        });
-        continue;
+      if (allHumanPlayersJoined(match) && match.room_code) {
+        try {
+          const room = persistence.getRoom(match.room_code);
+          if (room.state) {
+            await persistence.updateMatch(match.id, {
+              status: 'in_progress',
+              started_at: match.started_at ?? now.toISOString(),
+              status_reason: null,
+            });
+            continue;
+          }
+        } catch {
+          /* room missing — fall through to no-show resolution */
+        }
+      }
+
+      const hasHumanPlayer = !isBotOnlyMatch(match);
+      if (hasHumanPlayer && match.room_code) {
+        try {
+          persistence.getRoom(match.room_code);
+        } catch {
+          await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true }, persistence);
+          await persistence.updateMatch(match.id, {
+            ready_deadline_at: new Date(now.getTime() + TOURNAMENT_MATCH_READY_WINDOW_MS).toISOString(),
+            status_reason: 'room_rehydrated_deadline_extended',
+          });
+          console.log('[tournament:recovery] ready room missing; rehydrated before no-show', {
+            matchId: match.id,
+            roomCode: match.room_code,
+          });
+          continue;
+        }
       }
 
       let winnerId: string;
@@ -484,6 +561,12 @@ export async function reconcileExpiredReadyMatches(
         );
       }
 
+      console.log('[tournament:no-show] marking loss', {
+        matchId: match.id,
+        userId: noShowUserId,
+        reason: playerNoShowReason(match, noShowUserId),
+      });
+
       await applyMatchResult(
         io,
         {
@@ -492,7 +575,9 @@ export async function reconcileExpiredReadyMatches(
           player1Score: match.player1_id === winnerId ? tournament.win_target : 0,
           player2Score: match.player2_id === winnerId ? tournament.win_target : 0,
           winnerSource: 'no_show',
-          statusReason: noShowUserId ? 'opponent_no_show' : 'double_no_show_higher_seed_advanced',
+          statusReason: noShowUserId
+            ? playerNoShowReason(match, noShowUserId)
+            : 'double_no_show_higher_seed_advanced',
           noShowUserId,
         },
         persistence,

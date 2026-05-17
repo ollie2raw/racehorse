@@ -50,4 +50,29 @@ describe('deriveTournamentHubViewModel', () => {
     expect(vm.canRetry).toBe(true);
     expect(vm.detail).toBe('boom');
   });
+
+  it('returns eliminated state instead of retry join when registration is eliminated and no active match exists', () => {
+    const vm = deriveTournamentHubViewModel({
+      upcoming: [makeTournament()],
+      registrations: [
+        {
+          id: 'reg-1',
+          tournament_id: 'tour-1',
+          user_id: 'u1',
+          registered_at: new Date().toISOString(),
+          seed: 1,
+          placement: null,
+          status: 'eliminated',
+        },
+      ] as Registration[],
+      recoveryMatch: null,
+      activeBracketStatus: 'in_progress',
+      isLoading: false,
+      hasLoaded: true,
+      error: null,
+      nowMs: Date.now(),
+    });
+    expect(vm.state).toBe('eliminated');
+    expect(vm.title).toBe('Eliminated');
+  });
 });

@@ -3381,6 +3381,14 @@ export default function App() {
         setTournamentAttachPhase('failed');
         setTournamentAttachError(errorMessage);
         console.log('[tournament:attach-client] ack/error', { matchId, error: errorMessage });
+        if (
+          errorMessage === 'match_completed' ||
+          errorMessage === 'match_not_ready' ||
+          errorMessage === 'tournament_not_assigned'
+        ) {
+          tournament.clearRecoveryMatch();
+          void tournament.recover();
+        }
         showToast(errorMessage, 2500);
         return false;
       } catch (err) {

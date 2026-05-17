@@ -14,6 +14,7 @@ import {
   isValidUuid,
   withdrawRegistration,
 } from './persistence';
+import { humanJoinedAt, isBotUserId } from './matchDispatch';
 
 async function requireAuth(
   req: Request,
@@ -46,7 +47,17 @@ async function requireAuth(
   }
 }
 
+function requireTournamentId(req: Request, res: Response): string | null {
+  const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+  if (!isValidUuid(id)) {
+    res.status(400).json({ ok: false, error: 'invalid_tournament_id' });
+    return null;
+  }
+  return id;
+}
+
 export function registerTournamentRoutes(app: Express): void {
+  // Static paths must be registered before /:id so "me", "upcoming", etc. are not captured.
   app.get('/api/tournaments/upcoming', async (_req: Request, res: Response) => {
     try {
       const tournaments = await fetchUpcomingTournaments(5);
@@ -86,23 +97,52 @@ export function registerTournamentRoutes(app: Express): void {
         fetchRegistrationsForUser(userId),
         fetchActiveAssignedMatchForUser(userId),
       ]);
+      const activeAssignedPayload = activeAssignedMatch
+        ? (() => {
+            const { match, tournament, opponentUsername } = activeAssignedMatch;
+            if (match.status !== 'ready' && match.status !== 'in_progress') {
+              return null;
+            }
+            const humanAttached = Boolean(humanJoinedAt(match, userId));
+            const matchStatus =
+              match.status === 'in_progress' && !humanAttached
+                ? 'ready'
+                : match.status === 'ready' || match.status === 'in_progress'
+                  ? match.status
+                  : 'ready';
+            const opponentId =
+              match.player1_id === userId ? match.player2_id : match.player1_id;
+            return {
+              matchId: match.id,
+              tournamentId: tournament.id,
+              round: match.round,
+              roomCode: match.room_code,
+              opponentId,
+              opponentUsername:
+                opponentId && isBotUserId(opponentId)
+                  ? opponentUsername ?? 'Fritz'
+                  : opponentUsername,
+              matchStatus,
+              readyDeadlineAt: match.ready_deadline_at,
+            };
+          })()
+        : null;
+
+      if (activeAssignedPayload) {
+        console.log('[tournament:recovery] activeAssignedMatch', {
+          userId,
+          matchId: activeAssignedPayload.matchId,
+          status: activeAssignedPayload.matchStatus,
+          roomCodeExists: Boolean(activeAssignedPayload.roomCode),
+          round: activeAssignedPayload.round,
+          deadline: activeAssignedPayload.readyDeadlineAt,
+        });
+      }
+
       res.json({
         ok: true,
         registrations: regs,
-        activeAssignedMatch: activeAssignedMatch
-          ? {
-              matchId: activeAssignedMatch.match.id,
-              tournamentId: activeAssignedMatch.tournament.id,
-              round: activeAssignedMatch.match.round,
-              opponentId:
-                activeAssignedMatch.match.player1_id === userId
-                  ? activeAssignedMatch.match.player2_id
-                  : activeAssignedMatch.match.player1_id,
-              opponentUsername: activeAssignedMatch.opponentUsername,
-              matchStatus: activeAssignedMatch.match.status,
-              readyDeadlineAt: activeAssignedMatch.match.ready_deadline_at,
-            }
-          : null,
+        activeAssignedMatch: activeAssignedPayload,
       });
     } catch (err) {
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });
@@ -150,8 +190,10 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/:id/bracket', async (req: Request, res: Response) => {
+    const tournamentId = requireTournamentId(req, res);
+    if (!tournamentId) return;
     try {
-      const view = await fetchBracketView(String(req.params.id));
+      const view = await fetchBracketView(tournamentId);
       if (!view) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       res.json({ ok: true, view });
     } catch (err) {
@@ -160,8 +202,10 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/:id', async (req: Request, res: Response) => {
+    const tournamentId = requireTournamentId(req, res);
+    if (!tournamentId) return;
     try {
-      const t = await fetchTournamentById(String(req.params.id));
+      const t = await fetchTournamentById(tournamentId);
       if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       res.json({ ok: true, tournament: t });
     } catch (err) {
@@ -170,8 +214,10 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/:id/result', async (req: Request, res: Response) => {
+    const tournamentId = requireTournamentId(req, res);
+    if (!tournamentId) return;
     try {
-      const view = await fetchBracketView(String(req.params.id));
+      const view = await fetchBracketView(tournamentId);
       if (!view) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       if (view.tournament.status !== 'completed') {
         res.status(409).json({ ok: false, error: 'not_completed' });
@@ -207,11 +253,13 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.post('/api/tournaments/:id/register', async (req: Request, res: Response) => {
+    const tournamentId = requireTournamentId(req, res);
+    if (!tournamentId) return;
     const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : null;
     if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
     if (!isValidUuid(userId)) { res.status(400).json({ ok: false, error: 'invalid_user' }); return; }
     try {
-      const t = await fetchTournamentById(String(req.params.id));
+      const t = await fetchTournamentById(tournamentId);
       if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
       if (t.status !== 'registration_open') {
         res.status(409).json({ ok: false, error: 'registration_closed' });
@@ -235,11 +283,13 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.delete('/api/tournaments/:id/register', async (req: Request, res: Response) => {
+    const tournamentId = requireTournamentId(req, res);
+    if (!tournamentId) return;
     const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : null;
     if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
     if (!isValidUuid(userId)) { res.status(400).json({ ok: false, error: 'invalid_user' }); return; }
     try {
-      await withdrawRegistration(String(req.params.id), userId);
+      await withdrawRegistration(tournamentId, userId);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });

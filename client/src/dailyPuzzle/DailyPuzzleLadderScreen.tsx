@@ -260,8 +260,6 @@ export default function DailyPuzzleLadderScreen({
       const containerWidth = window.innerWidth - 40;
       const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
       const tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
-      const trayHeight = forceTwoRows ? 138 : (isLandscape && isMobileWidth ? 70 : 120);
-      document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
       setHandTileSize(tileWidth);
       setHandCompactStacked(forceTwoRows);
     };

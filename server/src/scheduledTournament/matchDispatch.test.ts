@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { dispatchTournamentMatch } from './matchDispatch';
+import { allHumanPlayersJoined, dispatchTournamentMatch, humanJoinedAt } from './matchDispatch';
 import type { EnginePersistence } from './persistenceInterface';
 import type { MatchRow, RegistrationRow, ScheduledTournamentRow } from './types';
 
@@ -131,6 +131,18 @@ function makeIo() {
   };
 }
 
+describe('tournament match lifecycle helpers', () => {
+  it('treats bot joined_at as absent for human attach checks', () => {
+    const match = makeMatch();
+    match.player2_id = 'bot:fritz:tour-1:1';
+    match.player2_joined_at = '2026-05-16T00:00:00Z';
+    expect(humanJoinedAt(match, 'u1')).toBeNull();
+    expect(allHumanPlayersJoined(match)).toBe(false);
+    match.player1_joined_at = '2026-05-16T00:01:00Z';
+    expect(allHumanPlayersJoined(match)).toBe(true);
+  });
+});
+
 describe('dispatchTournamentMatch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -154,8 +166,7 @@ describe('dispatchTournamentMatch', () => {
         matchId: 'm-1',
       }),
     );
-    expect((emitted[0]?.payload as Record<string, unknown>).roomCode).toBeUndefined();
-    expect((emitted[0]?.payload as Record<string, unknown>)._internalRoomCode).toBeUndefined();
+    expect((emitted[0]?.payload as Record<string, unknown>).roomCode).toEqual(store.match.room_code);
   });
 
   it('is idempotent and reuses the existing room for an already-ready match', async () => {
@@ -191,14 +202,17 @@ describe('dispatchTournamentMatch', () => {
       'bot:fritz:tour-1:1',
       'Elite Fritz',
     );
-    expect(store.match.player2_joined_at).toBeTruthy();
+    expect(store.match.player2_joined_at).toBeNull();
+    expect(store.match.status).toBe('ready');
     const readyEvents = emitted.filter((entry) => entry.event === 'tournament:match_ready');
     expect(readyEvents).toHaveLength(1);
     expect(readyEvents[0].socketId).toBe('s1');
     expect(readyEvents[0].payload).toEqual(
       expect.objectContaining({
+        roomCode: store.match.room_code,
         opponentId: 'bot:fritz:tour-1:1',
         opponentUsername: 'Elite Fritz',
+        matchStatus: 'ready',
       }),
     );
   });

@@ -30,9 +30,7 @@ export async function recoverTournamentMatches(
         try {
           persistence.getRoom(match.room_code);
         } catch {
-          const room = persistence.createReservedRoom(match.room_code, { winningScore: tournament.win_target });
-          room.scheduledTournamentMatchId = match.id;
-          room.scheduledTournamentId = tournament.id;
+          await dispatchTournamentMatch(io, match.id, { reason: 'recovery', emitIfAlreadyReady: true }, persistence);
           inProgressRecovered += 1;
           console.log('[tournament:recovery] in-progress room recreated', {
             tournamentId: tournament.id,

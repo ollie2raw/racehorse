@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { recoverTournamentMatches } from './recovery';
+import { dispatchTournamentMatch } from './matchDispatch';
 import type { EnginePersistence } from './persistenceInterface';
 import type { MatchRow, RegistrationRow, ScheduledTournamentRow } from './types';
 
@@ -98,6 +99,17 @@ describe('recoverTournamentMatches', () => {
     const result = await recoverTournamentMatches({ sockets: { sockets: new Map() } } as any, persistence);
 
     expect(result).toEqual({ readyRecovered: 1, inProgressRecovered: 1 });
-    expect((persistence.createReservedRoom as any).mock.calls[0][0]).toBe('LIVE1');
+    expect(dispatchTournamentMatch).toHaveBeenCalledWith(
+      expect.anything(),
+      'm-ready',
+      expect.objectContaining({ reason: 'recovery', emitIfAlreadyReady: true }),
+      persistence,
+    );
+    expect(dispatchTournamentMatch).toHaveBeenCalledWith(
+      expect.anything(),
+      'm-live',
+      expect.objectContaining({ reason: 'recovery', emitIfAlreadyReady: true }),
+      persistence,
+    );
   });
 });

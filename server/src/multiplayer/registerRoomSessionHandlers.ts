@@ -15,7 +15,12 @@ import {
 } from '../rooms';
 import { supabaseFetch } from '../supabaseUtils';
 import { fetchMatchById, updateMatch } from '../scheduledTournament/persistence';
-import { dispatchTournamentMatch } from '../scheduledTournament/matchDispatch';
+import {
+  dispatchTournamentMatch,
+  humanJoinedAt,
+  promoteScheduledMatchToInProgress,
+} from '../scheduledTournament/matchDispatch';
+import { defaultEnginePersistence } from '../scheduledTournament/persistenceInterface';
 import {
   onActivePlayerSocketDisconnect,
   onPlayerSocketRejoined,
@@ -540,36 +545,62 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
     });
 
     socket.on('tournament:attach_assigned_match', async (payload: unknown, cb?: AckFn) => {
+      let acked = false;
+      const ackOnce: AckFn = (response) => {
+        if (acked) return;
+        acked = true;
+        cb?.(response);
+      };
+
+      const matchIdFromPayload =
+        payload && typeof payload === 'object' && !Array.isArray(payload) &&
+        typeof (payload as { matchId?: unknown }).matchId === 'string'
+          ? (payload as { matchId: string }).matchId
+          : null;
+
+      console.log('[tournament:attach-server] received', {
+        socketId: socket.id,
+        userId: handlerDeps.normalizeUserId(socket.data?.userId),
+        matchId: matchIdFromPayload,
+      });
+      console.log('[tournament:attach] request', {
+        socketId: socket.id,
+        userId: handlerDeps.normalizeUserId(socket.data?.userId),
+        matchId: matchIdFromPayload,
+      });
+
       try {
         const authenticatedUserId = handlerDeps.normalizeUserId(socket.data?.userId);
         if (!authenticatedUserId) {
-          cb?.({ ok: false, error: 'not_authenticated' });
+          console.log('[tournament:attach-server] rejected/no-user', { socketId: socket.id });
+          ackOnce({ ok: false, error: 'not_authenticated' });
           return;
         }
-        const matchId =
-          payload && typeof payload === 'object' && !Array.isArray(payload) &&
-          typeof (payload as { matchId?: unknown }).matchId === 'string'
-            ? (payload as { matchId: string }).matchId
-            : null;
+        const matchId = matchIdFromPayload;
         if (!matchId) {
-          cb?.({ ok: false, error: 'missing_matchId' });
+          ackOnce({ ok: false, error: 'missing_matchId' });
           return;
         }
         let match = await fetchMatchById(matchId);
         if (!match) {
-          cb?.({ ok: false, error: 'match_not_found' });
+          console.log('[tournament:attach-server] rejected/no-match', { matchId, userId: authenticatedUserId });
+          ackOnce({ ok: false, error: 'match_not_found' });
           return;
         }
         if (match.status === 'completed' || match.status === 'bye') {
-          cb?.({ ok: false, error: 'match_completed' });
+          ackOnce({ ok: false, error: 'match_completed' });
           return;
         }
         if (match.player1_id !== authenticatedUserId && match.player2_id !== authenticatedUserId) {
-          cb?.({ ok: false, error: 'tournament_not_assigned' });
+          console.log('[tournament:attach-server] rejected/not-participant', {
+            matchId,
+            userId: authenticatedUserId,
+          });
+          ackOnce({ ok: false, error: 'tournament_not_assigned' });
           return;
         }
         if (match.status !== 'ready' && match.status !== 'in_progress') {
-          cb?.({ ok: false, error: 'match_not_ready' });
+          ackOnce({ ok: false, error: 'match_not_ready' });
           return;
         }
         if (!match.room_code) {
@@ -577,9 +608,44 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
           match = await fetchMatchById(matchId);
         }
         if (!match?.room_code) {
-          cb?.({ ok: false, error: 'room_unavailable' });
+          ackOnce({ ok: false, error: 'room_unavailable' });
           return;
         }
+        if (peekRoom(match.room_code)) {
+          console.log('[tournament:attach-server] room-found', {
+            matchId: match.id,
+            roomCode: match.room_code,
+          });
+        } else {
+          console.log('[tournament:attach-server] room-missing', {
+            matchId: match.id,
+            roomCode: match.room_code,
+          });
+          await dispatchTournamentMatch(io, match.id, { reason: 'repair', emitIfAlreadyReady: true });
+          match = await fetchMatchById(matchId);
+          if (!match?.room_code || !peekRoom(match.room_code)) {
+            ackOnce({ ok: false, error: 'room_unavailable' });
+            return;
+          }
+          console.log('[tournament:attach-server] rehydrated', {
+            matchId: match.id,
+            roomCode: match.room_code,
+          });
+        }
+
+        const seat =
+          match.player1_id === authenticatedUserId
+            ? 'player1'
+            : match.player2_id === authenticatedUserId
+              ? 'player2'
+              : null;
+        console.log('[tournament:attach-server] joining-room', {
+          matchId: match.id,
+          roomCode: match.room_code,
+          userId: authenticatedUserId,
+          seat,
+        });
+
         const attached = await attachSocketToTrackedRoom({
           roomCode: match.room_code,
           username: typeof socket.data?.username === 'string' ? socket.data.username : 'Player',
@@ -588,40 +654,116 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
           hydrateMatchmakingRoom: false,
         });
         const nowIso = new Date().toISOString();
-        const patch =
-          match.player1_id === authenticatedUserId
-            ? { player1_joined_at: match.player1_joined_at ?? nowIso }
-            : { player2_joined_at: match.player2_joined_at ?? nowIso };
-        await updateMatch(match.id, patch);
-        const refreshed = await fetchMatchById(match.id);
-        if (
-          refreshed &&
-          refreshed.status === 'ready' &&
-          refreshed.player1_joined_at &&
-          refreshed.player2_joined_at
-        ) {
-          await updateMatch(match.id, {
-            status: 'in_progress',
-            started_at: refreshed.started_at ?? nowIso,
-            status_reason: null,
-          });
+        if (!humanJoinedAt(match, authenticatedUserId)) {
+          const patch =
+            match.player1_id === authenticatedUserId
+              ? { player1_joined_at: nowIso }
+              : { player2_joined_at: nowIso };
+          await updateMatch(match.id, patch);
         }
-        cb?.({
+
+        let room = attached.room;
+        let stateWithCounts = attached.stateWithCounts;
+        let rejoinLegalMoves = attached.rejoinLegalMoves;
+        let rejoinCanDraw = attached.rejoinCanDraw;
+
+        if (room.scheduledTournamentMatchId && attached.joinedPlayerSeatId && !room.state) {
+          markMatchStartReady(room.code, attached.joinedPlayerSeatId);
+          const startResult = await tryStartMatchIfReady(room.code, io, buildMatchStartDeps(io));
+          if (startResult.started) {
+            room = getRoom(room.code);
+            await promoteScheduledMatchToInProgress(
+              room.scheduledTournamentMatchId!,
+              defaultEnginePersistence,
+              nowIso,
+              authenticatedUserId,
+            );
+            handlerDeps.notifyRoomPlayersInGame(room.code);
+            await handlerDeps.onAfterMatchStarted(room);
+            const recipientId = attached.joinedPlayerSeatId;
+            stateWithCounts = room.state
+              ? (() => {
+                  const m = maskStateForRecipient(room.state!, recipientId);
+                  return { ...m, handCounts: getHandCounts(room.state!) };
+                })()
+              : null;
+            rejoinLegalMoves = [];
+            rejoinCanDraw = false;
+          }
+        } else if (room.state && attached.joinedPlayerSeatId) {
+          const recipientId = attached.joinedPlayerSeatId;
+          stateWithCounts = (() => {
+            const m = maskStateForRecipient(room.state!, recipientId);
+            return { ...m, handCounts: getHandCounts(room.state!) };
+          })();
+          rejoinLegalMoves = getRoomLegalMoves(room.code, attached.joinedPlayerSeatId);
+          rejoinCanDraw = getRoomCanDraw(room.code, attached.joinedPlayerSeatId);
+        }
+
+        const refreshed = await fetchMatchById(match.id);
+        const humanAttached = Boolean(humanJoinedAt(refreshed ?? match, authenticatedUserId));
+        const matchStatus =
+          refreshed?.status === 'in_progress' && humanAttached
+            ? 'in_progress'
+            : 'ready';
+        const youSeat = attached.joinedPlayerSeatId;
+        const handCount =
+          youSeat && stateWithCounts?.players?.[youSeat]?.hand
+            ? stateWithCounts.players[youSeat].hand.length
+            : 0;
+        console.log('[tournament:attach-server] ack/success', {
+          matchId: match.id,
+          roomCode: room.code,
+          userId: authenticatedUserId,
+          seat,
+          handCount,
+          matchStatus,
+        });
+        console.log('[tournament:attach-server] accepted', {
+          matchId: match.id,
+          roomCode: room.code,
+          userId: authenticatedUserId,
+          seat,
+        });
+        console.log('[tournament:attach] accepted', {
+          matchId: match.id,
+          roomCode: room.code,
+          userId: authenticatedUserId,
+          seat,
+        });
+        ackOnce({
           ok: true,
           tournamentId: match.tournament_id,
           matchId: match.id,
-          matchStatus:
-            refreshed?.player1_joined_at && refreshed?.player2_joined_at
-              ? 'in_progress'
-              : match.status,
-          roomCode: attached.room.code,
+          matchStatus,
+          roomCode: room.code,
+          you: attached.joinedPlayerSeatId,
+          players: attached.roster,
+          state: stateWithCounts,
+          legalMoves: rejoinLegalMoves,
+          canDraw: rejoinCanDraw,
+          eventMeta: getRoomMatchEventMeta(room.code),
           tournamentMatch: attached.tournamentMatchMeta,
+          matchStarted: Boolean(room.state),
         });
       } catch (err) {
-        cb?.({
-          ok: false,
-          error: err instanceof Error ? err.message : 'attach_failed',
+        const message = err instanceof Error ? err.message : 'attach_failed';
+        console.log('[tournament:attach-server] ack/error', {
+          matchId: matchIdFromPayload,
+          error: message,
         });
+        ackOnce({
+          ok: false,
+          error: message,
+        });
+      } finally {
+        if (!acked) {
+          console.log('[tournament:attach-server] ack/error', {
+            matchId: matchIdFromPayload,
+            error: 'attach_ack_missing',
+          });
+          ackOnce({ ok: false, error: 'attach_ack_missing' });
+        }
       }
     });
 
@@ -649,6 +791,15 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
         if (startResult.started) {
           const started = getRoom(roomCode);
+          if (started.scheduledTournamentMatchId) {
+            const readyUserId = handlerDeps.normalizeUserId(socket.data?.userId);
+            await promoteScheduledMatchToInProgress(
+              started.scheduledTournamentMatchId,
+              defaultEnginePersistence,
+              new Date().toISOString(),
+              readyUserId,
+            );
+          }
           handlerDeps.notifyRoomPlayersInGame(roomCode);
           await handlerDeps.onAfterMatchStarted(started);
         }

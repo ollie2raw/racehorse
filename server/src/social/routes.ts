@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { supabaseFetch } from '../supabaseUtils';
+import { dedupeMatchRows } from '../stats/dedupeMatchRows';
 import { getAutoRivals } from './rivalService';
 import { getPresenceBatch } from './presence';
 
@@ -492,11 +493,14 @@ socialRouter.get('/:username', async (req, res) => {
     const globalRank = rankIndex >= 0 ? rankIndex + 1 : null;
 
     // Win/loss record
-    const matchRows = await supabaseFetch<Array<{
-      winner_user_id: string | null; loser_user_id: string | null; created_at: string;
-    }>>(
-      `/rest/v1/matches?or=(winner_user_id.eq.${enc},loser_user_id.eq.${enc})` +
-      `&mode=eq.online&select=winner_user_id,loser_user_id,created_at`,
+    const matchRows = dedupeMatchRows(
+      await supabaseFetch<Array<{
+        winner_user_id: string | null; loser_user_id: string | null; created_at: string;
+        winner_score: number | null; loser_score: number | null; room_code: string | null;
+      }>>(
+        `/rest/v1/matches?or=(winner_user_id.eq.${enc},loser_user_id.eq.${enc})` +
+        `&mode=eq.online&select=winner_user_id,loser_user_id,winner_score,loser_score,room_code,created_at`,
+      ),
     );
     const wins = matchRows.filter((m) => m.winner_user_id === targetId).length;
     const losses = matchRows.filter((m) => m.loser_user_id === targetId).length;
@@ -504,15 +508,17 @@ socialRouter.get('/:username', async (req, res) => {
     const winRate = total > 0 ? Math.round((wins / total) * 1000) / 10 : 0;
 
     // Recent 10 matches with opponent username
-    const recentRows = await supabaseFetch<Array<{
-      winner_user_id: string | null; loser_user_id: string | null;
-      winner_score: number | null; loser_score: number | null;
-      mode: string; created_at: string;
-    }>>(
-      `/rest/v1/matches?or=(winner_user_id.eq.${enc},loser_user_id.eq.${enc})` +
-      `&order=created_at.desc&limit=10` +
-      `&select=winner_user_id,loser_user_id,winner_score,loser_score,mode,created_at`,
-    );
+    const recentRows = dedupeMatchRows(
+      await supabaseFetch<Array<{
+        winner_user_id: string | null; loser_user_id: string | null;
+        winner_score: number | null; loser_score: number | null;
+        mode: string; created_at: string; room_code: string | null;
+      }>>(
+        `/rest/v1/matches?or=(winner_user_id.eq.${enc},loser_user_id.eq.${enc})` +
+        `&order=created_at.desc&limit=20` +
+        `&select=winner_user_id,loser_user_id,winner_score,loser_score,mode,created_at,room_code`,
+      ),
+    ).slice(0, 10);
     const opponentIds = [...new Set(
       recentRows
         .map((m) => (m.winner_user_id === targetId ? m.loser_user_id : m.winner_user_id))

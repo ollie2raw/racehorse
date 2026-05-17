@@ -788,10 +788,7 @@ export default function DailyPuzzleScreen({
       const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
       
       tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
-      
-      const trayHeight = forceTwoRows ? 138 : (isLandscape && isMobileWidth ? 70 : 120);
-      document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
-      
+
       setHandTileSize(tileWidth);
       setHandCompactStacked(forceTwoRows);
     };

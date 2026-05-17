@@ -34,6 +34,7 @@ import {
 } from './tournament/tournament';
 import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
+import { recordPublicOnlineMatch } from './stats/recordPublicMatch';
 import { socialRouter } from './social/routes';
 import { upsertPresence } from './social/presence';
 import { writeMatchActivity, writePuzzleActivity, writeDailyFritzActivity } from './social/activityWriter';
@@ -4247,6 +4248,21 @@ function createGameOverPersistScheduler(input: GameOverPersistInput): () => void
           winnerScore: winnerSeatId === aId ? scoreA : scoreB,
           loserScore: winnerSeatId === aId ? scoreB : scoreA,
         }).catch(() => {});
+
+        if (a.userId && b.userId && !fritzActivityCtx) {
+          const winnerUserId = winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
+          const loserUserId = winnerSeatId === a.id ? b.userId : winnerSeatId === a.id ? a.userId : null;
+          if (winnerUserId && loserUserId) {
+            void recordPublicOnlineMatch({
+              roomCode: room.code,
+              roomMatchId: room.matchId,
+              winnerUserId,
+              loserUserId,
+              winnerScore: winnerSeatId === a.id ? scoreA : scoreB,
+              loserScore: winnerSeatId === a.id ? scoreB : scoreA,
+            });
+          }
+        }
 
         const rankingParticipants = [
           { me: a, opp: b, myScore: scoreA, oppScore: scoreB },

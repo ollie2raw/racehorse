@@ -20,6 +20,7 @@ export type TournamentHubUiState =
   | 'full'
   | 'registration_closed'
   | 'in_progress'
+  | 'eliminated'
   | 'completed'
   | 'cancelled';
 
@@ -89,6 +90,16 @@ export function deriveTournamentHubViewModel(params: Params): TournamentHubViewM
         params.recoveryMatch.matchStatus === 'ready'
           ? 'Return to your assigned tournament match.'
           : 'Rejoin your assigned tournament match.',
+      canRetry: false,
+    };
+  }
+
+  const eliminated = params.registrations.find((r) => r.status === 'eliminated');
+  if (eliminated) {
+    return {
+      state: 'eliminated',
+      title: 'Eliminated',
+      detail: 'You missed your assigned match and were eliminated by no-show. View the bracket or enter the next tournament.',
       canRetry: false,
     };
   }

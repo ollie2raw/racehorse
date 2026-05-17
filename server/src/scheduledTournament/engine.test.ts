@@ -4,8 +4,11 @@ vi.mock('../social/activityWriter', () => ({
   writeTournamentActivity: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('./matchDispatch', () => ({
-  dispatchTournamentMatch: vi.fn(async (_io, matchId: string, _opts, persistence) => {
+vi.mock('./matchDispatch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./matchDispatch')>();
+  return {
+    ...actual,
+    dispatchTournamentMatch: vi.fn(async (_io, matchId: string, _opts, persistence) => {
     const match = await persistence.fetchMatchById(matchId);
     if (match) {
       const readyAt = match.ready_at ?? new Date('2026-05-16T00:00:00Z').toISOString();
@@ -29,7 +32,8 @@ vi.mock('./matchDispatch', () => ({
       emittedReady: true,
     };
   }),
-}));
+  };
+});
 
 import { writeTournamentActivity } from '../social/activityWriter';
 
@@ -239,8 +243,28 @@ describe('closeRegistrationAndStart', () => {
     expect(qfPlayerIds.filter((id) => id.startsWith('bot:fritz:tour-1:'))).toHaveLength(7);
     expect(qf[0].player1_id).toBe('u1');
     expect(qf[0].player2_id).toMatch(/^bot:fritz:tour-1:/);
-    expect(qf.every((m) => m.status === 'ready')).toBe(true);
+    expect(qf[0].status).toBe('ready');
+    expect(qf.slice(1).every((m) => m.status === 'completed')).toBe(true);
+    expect(qf.slice(1).every((m) => m.winner_source === 'game_over')).toBe(true);
+    expect(qf.slice(1).every((m) => m.status_reason === 'bot_simulated')).toBe(true);
+    expect(store.matches.filter((m) => m.player1_id?.startsWith('bot:fritz:') && m.player2_id?.startsWith('bot:fritz:') && m.status === 'in_progress')).toHaveLength(0);
     expect(qf.every((m) => m.bot_tier === 'standard')).toBe(true);
+  });
+
+  it('does not leave bot-vs-bot matches stuck in_progress in a one-human bracket', async () => {
+    const tournament = makeTournament();
+    const regs = [makeReg('u1')];
+    const { persistence, store } = makePersistence(tournament, regs);
+    const { io } = makeIoMock();
+
+    await closeRegistrationAndStart(io, 'tour-1', persistence);
+
+    const botOnlyMatches = store.matches.filter(
+      (m) => m.player1_id?.startsWith('bot:fritz:') && m.player2_id?.startsWith('bot:fritz:'),
+    );
+    expect(botOnlyMatches.length).toBeGreaterThan(0);
+    expect(botOnlyMatches.every((m) => m.status === 'completed')).toBe(true);
+    expect(botOnlyMatches.every((m) => m.winner_id?.startsWith('bot:fritz:'))).toBe(true);
   });
 });
 
@@ -503,6 +527,7 @@ describe('ready-match reconciliation', () => {
         player2_score: null,
       },
     );
+    (persistence.getRoom as any).mockReturnValue({ code: 'R1', players: [], state: null });
     const { io } = makeIoMock();
 
     const resolved = await reconcileExpiredReadyMatches(io, new Date(), persistence);
@@ -512,6 +537,7 @@ describe('ready-match reconciliation', () => {
     expect(store.matches[0].winner_id).toBe('u4');
     expect(store.matches[0].winner_source).toBe('no_show');
     expect(store.matches[0].no_show_user_id).toBe('u1');
+    expect(store.matches[0].status_reason).toBe('player2_no_show');
     expect(store.regs.find((reg) => reg.user_id === 'u1')?.status).toBe('eliminated');
     expect(store.matches[1].player1_id).toBe('u4');
   });
@@ -549,6 +575,7 @@ describe('ready-match reconciliation', () => {
       player1_score: null,
       player2_score: null,
     });
+    (persistence.getRoom as any).mockReturnValue({ code: 'R1', players: [], state: null });
     const { io } = makeIoMock();
 
     const resolved = await reconcileExpiredReadyMatches(io, new Date(), persistence);
@@ -591,6 +618,7 @@ describe('ready-match reconciliation', () => {
       player1_score: null,
       player2_score: null,
     });
+    (persistence.getRoom as any).mockReturnValue({ code: 'R1', players: [], state: null });
     const { io } = makeIoMock();
 
     const resolved = await reconcileExpiredReadyMatches(io, new Date(), persistence);
@@ -600,5 +628,47 @@ describe('ready-match reconciliation', () => {
     expect(store.matches[0].winner_id).toBe('u1');
     expect(store.matches[0].winner_source).toBe('no_show');
     expect(store.matches[0].no_show_user_id).toBeNull();
+  });
+
+  it('extends the deadline instead of no-showing a human when the ready room is missing', async () => {
+    const tournament = makeTournament({ status: 'in_progress' });
+    const regs = [makeReg('u1'), makeReg('u2')];
+    regs[0].status = 'active'; regs[0].seed = 1;
+    regs[1].status = 'active'; regs[1].seed = 2;
+    const { persistence, store } = makePersistence(tournament, regs);
+    const expiredAt = new Date(Date.now() - 60_000).toISOString();
+    store.matches.push({
+      id: 'm-missing-room',
+      tournament_id: 'tour-1',
+      round: 1,
+      match_number: 1,
+      player1_id: 'u1',
+      player2_id: 'u2',
+      winner_id: null,
+      room_code: 'RMISS',
+      status: 'ready',
+      ready_at: expiredAt,
+      ready_deadline_at: expiredAt,
+      started_at: null,
+      completed_at: null,
+      player1_joined_at: null,
+      player2_joined_at: null,
+      winner_source: null,
+      status_reason: null,
+      forfeit_user_id: null,
+      no_show_user_id: null,
+      bot_tier: null,
+      player1_score: null,
+      player2_score: null,
+    });
+    const { io } = makeIoMock();
+
+    const resolved = await reconcileExpiredReadyMatches(io, new Date(), persistence);
+
+    expect(resolved).toBe(0);
+    expect(store.matches[0].status).toBe('ready');
+    expect(store.matches[0].winner_id).toBeNull();
+    expect(store.matches[0].status_reason).toBe('room_rehydrated_deadline_extended');
+    expect(Date.parse(store.matches[0].ready_deadline_at!)).toBeGreaterThan(Date.now());
   });
 });
