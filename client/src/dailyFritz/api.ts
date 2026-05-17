@@ -104,6 +104,8 @@ export interface DailyFritzLeaderboardRow {
     fritzScore: number;
     playerWon: boolean;
     pointDiff: number;
+    skunk?: boolean;
+    skunkBy?: 'player' | 'fritz';
   }>;
   is_current_user?: boolean;
 }
@@ -120,6 +122,8 @@ export interface DailyFritzSetGameResult {
   movesUsed?: number;
   handsPlayed?: number;
   completedAt: string;
+  skunk?: boolean;
+  skunkBy?: 'player' | 'fritz';
 }
 
 export interface DailyFritzSetResult {
@@ -130,6 +134,10 @@ export interface DailyFritzSetResult {
   totalPointDiff: number;
   games: DailyFritzSetGameResult[];
   setWinner?: 'player' | 'fritz';
+  hasSkunk?: boolean;
+  instantSkunk?: boolean;
+  skunkGameNumber?: DailyFritzSetGameNumber | null;
+  skunkBy?: 'player' | 'fritz' | null;
   run_date?: string;
   final_score?: number;
   opponent_score?: number;

@@ -64,6 +64,8 @@ export async function writeDailyFritzActivity(params: {
     playerWon: boolean;
     playerScore: number;
     fritzScore: number;
+    skunk?: boolean;
+    skunkBy?: 'player' | 'fritz';
   }>;
 }): Promise<void> {
   if (params.games?.length) {
@@ -74,6 +76,8 @@ export async function writeDailyFritzActivity(params: {
           game_number: game.gameNumber,
           player_score: game.playerScore,
           fritz_score: game.fritzScore,
+          ...(game.skunk ? { skunk: true } : {}),
+          ...(game.skunkBy ? { skunk_by: game.skunkBy } : {}),
         }),
       ),
     );

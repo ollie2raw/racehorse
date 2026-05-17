@@ -1,0 +1,40 @@
+/* Hub pages — tokens extracted from leaderboard + social mockups */
+
+.rh-hub-page {
+  --hub-bg: #05070a;
+  --hub-panel: rgba(10, 13, 20, 0.96);
+  --hub-panel-top: rgba(12, 15, 23, 0.97);
+  --hub-panel-bottom: rgba(9, 12, 18, 0.97);
+  --hub-panel-bg: linear-gradient(180deg, var(--hub-panel-top), var(--hub-panel-bottom));
+  --hub-border: rgba(148, 163, 184, 0.11);
+  --hub-border-soft: rgba(148, 163, 184, 0.08);
+  --hub-text-muted: rgba(148, 163, 184, 0.72);
+  --hub-text-subtle: rgba(203, 213, 225, 0.54);
+
+  --hub-gold: #f5b937;
+  --hub-gold-dim: rgba(245, 185, 55, 0.12);
+  --hub-gold-border: rgba(245, 185, 55, 0.42);
+  --hub-cyan: #4cc9f0;
+  --hub-cyan-dim: rgba(76, 201, 240, 0.14);
+  --hub-green: #4ade80;
+  --hub-green-dim: rgba(74, 222, 128, 0.12);
+  --hub-red: #f87171;
+  --hub-red-dim: rgba(248, 113, 113, 0.12);
+  --hub-purple: #a855f7;
+  --hub-purple-dim: rgba(168, 85, 247, 0.14);
+  --hub-blue: #3b82f6;
+
+  --hub-radius-sm: 8px;
+  --hub-radius-md: 12px;
+  --hub-radius-lg: 16px;
+  --hub-radius-pill: 999px;
+
+  --hub-space-1: 8px;
+  --hub-space-2: 16px;
+  --hub-space-3: 24px;
+  --hub-space-4: 32px;
+
+  --hub-shadow-panel: 0 10px 30px rgba(0, 0, 0, 0.24);
+  --hub-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  --hub-glow-gold: 0 0 24px rgba(245, 185, 55, 0.18);
+}

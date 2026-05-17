@@ -1,0 +1,69 @@
+.rh-hub-rail-card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--hub-radius-lg);
+  border: 1px solid var(--hub-border);
+  background: var(--hub-panel-bg);
+  box-shadow: var(--hub-shadow-panel), var(--hub-shadow-inset);
+}
+
+.rh-hub-rail-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rh-hub-rail-card-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.rh-hub-rail-card-action {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rh-hub-rail-card-action button,
+.rh-hub-rail-card-action a {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--hub-cyan);
+  font: inherit;
+  cursor: pointer;
+}
+
+.rh-hub-rail-card-body {
+  min-width: 0;
+}
+
+.rh-hub-rail-card-footer {
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.rh-hub-rail-link {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--hub-text-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rh-hub-rail-link:hover {
+  color: #fff;
+}

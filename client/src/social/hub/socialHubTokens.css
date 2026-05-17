@@ -1,0 +1,30 @@
+/* Shared social / leaderboard hub tokens — mockup-aligned */
+
+.rh-hub-screen {
+  --hub-bg: #05070a;
+  --hub-panel-top: rgba(12, 15, 23, 0.97);
+  --hub-panel-bottom: rgba(9, 12, 18, 0.97);
+  --hub-panel-bg: linear-gradient(180deg, var(--hub-panel-top), var(--hub-panel-bottom));
+  --hub-panel-border: rgba(148, 163, 184, 0.11);
+  --hub-panel-border-soft: rgba(148, 163, 184, 0.08);
+  --hub-panel-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
+  --hub-panel-inset: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+
+  --hub-gold: var(--tier-elite);
+  --hub-gold-dim: rgba(231, 182, 74, 0.14);
+  --hub-gold-border: rgba(231, 182, 74, 0.42);
+  --hub-blue: var(--tier-standard);
+  --hub-cyan: var(--accent-blue);
+  --hub-win: #34d399;
+  --hub-loss: #ff4d6d;
+  --hub-bronze: #c97b3f;
+  --hub-text: #f8fafc;
+  --hub-muted: rgba(203, 213, 225, 0.54);
+  --hub-subtle: rgba(226, 232, 240, 0.72);
+
+  --hub-radius-panel: 16px;
+  --hub-radius-row: 12px;
+  --hub-radius-pill: 999px;
+  --hub-gap: 14px;
+  --hub-gap-lg: 30px;
+}

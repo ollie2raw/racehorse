@@ -1,0 +1,52 @@
+.rh-hub-pills {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--hub-space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.rh-hub-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.rh-hub-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--hub-radius-pill);
+  border: 1px solid var(--hub-border);
+  background: rgba(10, 13, 20, 0.94);
+  color: var(--hub-text-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.rh-hub-pill:hover {
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(245, 185, 55, 0.22);
+}
+
+.rh-hub-pill--active {
+  border-color: var(--hub-gold-border);
+  background: var(--hub-gold-dim);
+  color: var(--hub-gold);
+  box-shadow: var(--hub-glow-gold), inset 0 0 0 1px rgba(245, 185, 55, 0.1);
+}
+
+.rh-hub-pill-icon {
+  display: inline-flex;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.9;
+}

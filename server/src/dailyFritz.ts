@@ -34,12 +34,16 @@ export interface DailyFritzLeaderboardEntry {
   pointDiff: number;
   movesUsed: number;
   completedAt: string;
+  skunkWinRank?: number;
+  skunkLossRank?: number;
   games?: Array<{
     gameNumber: DailyFritzSetGameNumber;
     playerScore: number;
     fritzScore: number;
     playerWon: boolean;
     pointDiff: number;
+    skunk?: boolean;
+    skunkBy?: 'player' | 'fritz';
   }>;
   rank?: number;
 }
@@ -56,6 +60,8 @@ export interface DailyFritzSetGameResult {
   movesUsed?: number;
   handsPlayed?: number;
   completedAt: string;
+  skunk?: boolean;
+  skunkBy?: 'player' | 'fritz';
 }
 
 export interface DailyFritzSetResult {
@@ -66,6 +72,10 @@ export interface DailyFritzSetResult {
   totalPointDiff: number;
   games: DailyFritzSetGameResult[];
   setWinner?: 'player' | 'fritz';
+  hasSkunk?: boolean;
+  instantSkunk?: boolean;
+  skunkGameNumber?: DailyFritzSetGameNumber | null;
+  skunkBy?: 'player' | 'fritz' | null;
 }
 
 function hashSeedToUint32(seed: string): number {
@@ -227,6 +237,15 @@ export function sortDailyFritzLeaderboard<T extends DailyFritzLeaderboardEntry>(
     if (a.won !== b.won) return a.won ? -1 : 1;
     if (a.finalScore !== b.finalScore) return b.finalScore - a.finalScore;
     if (a.opponentScore !== b.opponentScore) return a.opponentScore - b.opponentScore;
+    if (a.won) {
+      const skunkA = a.skunkWinRank ?? 0;
+      const skunkB = b.skunkWinRank ?? 0;
+      if (skunkA !== skunkB) return skunkB - skunkA;
+    } else {
+      const skunkA = a.skunkLossRank ?? 0;
+      const skunkB = b.skunkLossRank ?? 0;
+      if (skunkA !== skunkB) return skunkB - skunkA;
+    }
     if (a.pointDiff !== b.pointDiff) return b.pointDiff - a.pointDiff;
     return new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime();
   });

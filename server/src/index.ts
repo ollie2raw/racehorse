@@ -56,6 +56,12 @@ import {
   type DailyFritzTier,
 } from './dailyFritz';
 import {
+  appendDailyFritzGameToSet,
+  getDailyFritzSkunkLossRank,
+  getDailyFritzSkunkWinRank,
+  normalizeDailyFritzSetSkunkFields,
+} from './dailyFritzSkunk';
+import {
   buildDailyPuzzleLeaderboard,
   calculateDailyPuzzleAwardedPoints,
   findReadyDailyPuzzleLadderSlots,
@@ -1847,6 +1853,9 @@ function normalizeDailyFritzSetGameResult(value: unknown): DailyFritzSetGameResu
   const handsPlayed = rec.handsPlayed == null ? undefined : Number(rec.handsPlayed);
   const safeMovesUsed = movesUsed == null || !Number.isFinite(movesUsed) ? undefined : Math.round(movesUsed);
   const safeHandsPlayed = handsPlayed == null || !Number.isFinite(handsPlayed) ? undefined : Math.round(handsPlayed);
+  const skunk = rec.skunk === true;
+  const skunkByRaw = rec.skunkBy ?? rec.skunk_by;
+  const skunkBy = skunkByRaw === 'player' || skunkByRaw === 'fritz' ? skunkByRaw : undefined;
   return {
     gameNumber,
     seed,
@@ -1857,6 +1866,8 @@ function normalizeDailyFritzSetGameResult(value: unknown): DailyFritzSetGameResu
     ...(safeMovesUsed != null ? { movesUsed: safeMovesUsed } : {}),
     ...(safeHandsPlayed != null ? { handsPlayed: safeHandsPlayed } : {}),
     completedAt,
+    ...(skunk ? { skunk: true } : {}),
+    ...(skunkBy ? { skunkBy } : {}),
   };
 }
 
@@ -1872,19 +1883,14 @@ function normalizeDailyFritzSetResult(value: unknown): DailyFritzSetResult | nul
   for (let index = 0; index < games.length; index += 1) {
     if (games[index].gameNumber !== index + 1) return null;
   }
-  const playerGamesWon = games.filter((game) => game.playerWon).length;
-  const fritzGamesWon = games.length - playerGamesWon;
   const totalPointDiff = games.reduce((sum, game) => sum + game.pointDiff, 0);
-  const setWinner =
-    playerGamesWon >= 2 ? 'player' : fritzGamesWon >= 2 ? 'fritz' : undefined;
+  const skunkFields = normalizeDailyFritzSetSkunkFields(games, rec);
   return {
     version: 2,
     format: 'best_of_3',
-    playerGamesWon,
-    fritzGamesWon,
     totalPointDiff,
     games,
-    ...(setWinner ? { setWinner } : {}),
+    ...skunkFields,
   };
 }
 
@@ -2237,6 +2243,12 @@ async function buildDailyFritzLeaderboard(
           pointDiff,
           movesUsed: attempt.movesUsed,
           completedAt: attempt.completedAt,
+          ...(setResult
+            ? {
+                skunkWinRank: getDailyFritzSkunkWinRank(setResult),
+                skunkLossRank: getDailyFritzSkunkLossRank(setResult),
+              }
+            : {}),
           ...(setResult?.games.length
             ? {
                 games: setResult.games.map((game) => ({
@@ -2245,6 +2257,8 @@ async function buildDailyFritzLeaderboard(
                   fritzScore: game.fritzScore,
                   playerWon: game.playerWon,
                   pointDiff: game.pointDiff,
+                  ...(game.skunk ? { skunk: true } : {}),
+                  ...(game.skunkBy ? { skunkBy: game.skunkBy } : {}),
                 })),
               }
             : {}),
@@ -3772,24 +3786,10 @@ app.post('/api/daily-fritz/record-game', async (req, res) => {
       handsPlayed: Math.round(handsPlayed),
       completedAt: new Date().toISOString(),
     };
-    const games = [...currentSetResult.games, gameResult];
-    const playerGamesWon = games.filter((game) => game.playerWon).length;
-    const fritzGamesWon = games.length - playerGamesWon;
-    const totalPointDiff = games.reduce((sum, game) => sum + game.pointDiff, 0);
-    const setWinner =
-      playerGamesWon >= 2 ? 'player' : fritzGamesWon >= 2 ? 'fritz' : undefined;
-    const setResult: DailyFritzSetResult = {
-      version: 2,
-      format: 'best_of_3',
-      playerGamesWon,
-      fritzGamesWon,
-      totalPointDiff,
-      games,
-      ...(setWinner ? { setWinner } : {}),
-    };
+    const setResult = appendDailyFritzGameToSet(currentSetResult, gameResult);
 
     attempt.result = setResult as unknown as Record<string, unknown>;
-    if (!setWinner) {
+    if (!setResult.setWinner) {
       attempt.currentHandIndex = 0;
     }
     const saved = await upsertDailyFritzAttempt(attempt);
@@ -3797,7 +3797,7 @@ app.post('/api/daily-fritz/record-game', async (req, res) => {
     res.json({
       ok: true,
       set_result: savedSetResult ?? setResult,
-      next_game_number: setWinner ? null : Math.min(games.length + 1, 3),
+      next_game_number: setResult.setWinner ? null : Math.min(setResult.games.length + 1, 3),
     });
   } catch (error) {
     res.status(500).json({
@@ -3950,7 +3950,14 @@ app.post('/api/daily-fritz/complete', async (req, res) => {
       userId: authenticatedUserId,
       finalScore: attempt.finalScore ?? null,
       won: attempt.won,
-      games: setResult?.games,
+      games: setResult?.games.map((game) => ({
+        gameNumber: game.gameNumber,
+        playerWon: game.playerWon,
+        playerScore: game.playerScore,
+        fritzScore: game.fritzScore,
+        ...(game.skunk ? { skunk: true } : {}),
+        ...(game.skunkBy ? { skunkBy: game.skunkBy } : {}),
+      })),
     }).catch(() => {});
     res.json({
       ok: true,

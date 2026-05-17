@@ -27,6 +27,7 @@ export interface DailyFritzSetOverlayViewModel {
   marginTone: 'win' | 'loss' | 'idle';
   resultValue: string | null;
   rankValue: string | null;
+  skunkBadge: string | null;
   tracker: Array<{
     gameNumber: DailyFritzSetGameNumber;
     label: string;
@@ -36,6 +37,7 @@ export interface DailyFritzSetOverlayViewModel {
     gameNumber: DailyFritzSetGameNumber;
     value: string;
     tone: 'win' | 'loss';
+    skunkLabel?: string | null;
   }>;
   onPrimary: () => void;
   onSecondary: () => void;

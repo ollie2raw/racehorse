@@ -1,0 +1,74 @@
+.rh-hub-avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.rh-hub-avatar-inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--hub-border);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.rh-hub-avatar--sm .rh-hub-avatar-inner {
+  width: 32px;
+  height: 32px;
+  font-size: 10px;
+}
+
+.rh-hub-avatar--md .rh-hub-avatar-inner {
+  width: 40px;
+  height: 40px;
+  font-size: 11px;
+}
+
+.rh-hub-avatar--lg .rh-hub-avatar-inner {
+  width: 52px;
+  height: 52px;
+  font-size: 13px;
+}
+
+.rh-hub-avatar--ring-gold::before,
+.rh-hub-avatar--ring-silver::before,
+.rh-hub-avatar--ring-bronze::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  z-index: 0;
+}
+
+.rh-hub-avatar--ring-gold::before {
+  background: linear-gradient(135deg, rgba(245, 185, 55, 0.85), rgba(245, 185, 55, 0.2));
+  box-shadow: 0 0 16px rgba(245, 185, 55, 0.35);
+}
+
+.rh-hub-avatar--ring-silver::before {
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.85), rgba(59, 130, 246, 0.35));
+  box-shadow: 0 0 14px rgba(59, 130, 246, 0.28);
+}
+
+.rh-hub-avatar--ring-bronze::before {
+  background: linear-gradient(135deg, rgba(201, 123, 63, 0.9), rgba(168, 85, 247, 0.35));
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.28);
+}
+
+.rh-hub-avatar-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--hub-bg);
+  border-radius: 50%;
+  background: var(--hub-green);
+}

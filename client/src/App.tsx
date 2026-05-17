@@ -17,6 +17,14 @@ import {
 import { MatchNblBoardFrame } from './components/MatchNblBoardFrame';
 import LeaveGameModal from './components/LeaveGameModal';
 import { GameOverlayPortal } from './components/GameOverlayPortal';
+import HandOverModal from './components/handOver/HandOverModal';
+import {
+  buildHandOverReasonCopy,
+  buildMultiplayerHandOverReveals,
+  loserDisplayLabel,
+  resolveWinnerSide,
+  winnerDisplayLabel,
+} from './components/handOver/handOverCopy';
 import TileRack from './components/TileRack';
 import {
   playDrawSound,
@@ -193,7 +201,7 @@ const AuthModal = React.lazy(() => import('./auth/AuthModal'));
 const UsernameModal = React.lazy(() => import('./auth/UsernameModal'));
 const StatsScreen = React.lazy(() => import('./stats/StatsScreen'));
 const FriendsScreen = React.lazy(() => import('./friends/FriendsScreen'));
-const LeaderboardScreen = React.lazy(() => import('./social/LeaderboardScreen'));
+const DailyFritzLeaderboardRoute = React.lazy(() => import('./dailyFritz/DailyFritzLeaderboardRoute'));
 const PublicProfileScreen = React.lazy(() => import('./social/PublicProfileScreen'));
 const ActivityFeedScreen = React.lazy(() => import('./social/ActivityFeedScreen'));
 const LearnHome = React.lazy(() =>
@@ -935,11 +943,6 @@ export default function App() {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('racehorse_muted') === '1';
   });
-  const [uiTheme, setUiTheme] = useState<'green' | 'brown'>(() => {
-    if (typeof window === 'undefined') return 'green';
-    const stored = window.localStorage.getItem('racehorse_ui_theme');
-    return stored === 'brown' ? 'brown' : 'green';
-  });
   const [botDealSize, setBotDealSize] = useState<BotDealSize>(() => {
     if (typeof window === 'undefined') return 7;
     const stored = window.localStorage.getItem('racehorse_bot_deal_size');
@@ -1376,11 +1379,6 @@ export default function App() {
     const hasSeen = window.localStorage.getItem('hasSeenWelcome');
     if (!hasSeen) setWelcomeOpen(true);
   }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('racehorse_ui_theme', uiTheme);
-  }, [uiTheme]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -4615,10 +4613,13 @@ export default function App() {
     return (
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Leaderboard…" />}>
-          <LeaderboardScreen
+          <DailyFritzLeaderboardRoute
             user={authUser}
-            onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
+            profile={authProfile}
             onClose={() => setAppMode('home')}
+            onNavigate={setAppMode}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAccount={() => setUsernameModalOpen(true)}
           />
         </Suspense>
       </div>
@@ -5130,7 +5131,7 @@ export default function App() {
       {(isConnected || isRecoveringConnection) && joinedRoom && state && (
         <>
           <RotateOverlay />
-          <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
+          <div className="screen game-screen walnut-live theme-green">
           {opponentDisconnected && opponentDisconnectMessage && roomRecoveryState === 'idle' && (
             <div
               style={{
@@ -5252,95 +5253,49 @@ export default function App() {
           ) : null}
           {handReveal && !state.gameOver && (
             <GameOverlayPortal>
-            <div className="game-over-overlay hand-over-upgraded-overlay">
-              <div className="game-over-card hand-over-upgraded-card hand-over--mp">
-                {(() => {
-                  const youPoints = handReveal.pointsAwarded.you;
-                  const opponentPoints = handReveal.pointsAwarded.opponent;
-                  const winner =
-                    youPoints > opponentPoints ? 'you' : opponentPoints > youPoints ? 'opponent' : 'none';
-                  const pointsAwarded = Math.max(youPoints, opponentPoints, 0);
-                  const yourCount = handReveal.yourRemainingTiles.length;
-                  const oppCount = handReveal.opponentRemainingTiles.length;
-                  const whoWentOutRaw =
-                    handReveal.whoWentOut ?? handReveal.winnerId ?? handReveal.handWinnerId ?? null;
-                  const youWentOut =
-                    whoWentOutRaw === 'you' || whoWentOutRaw === you || (whoWentOutRaw == null && yourCount === 0);
-                  const oppWentOut =
-                    whoWentOutRaw === 'opponent' ||
-                    (Boolean(opponentId) && whoWentOutRaw === opponentId) ||
-                    (whoWentOutRaw == null && oppCount === 0);
-                  const scoredTiles =
-                    winner === 'you'
-                      ? handReveal.opponentRemainingTiles
-                      : winner === 'opponent'
-                        ? handReveal.yourRemainingTiles
-                        : [...handReveal.yourRemainingTiles, ...handReveal.opponentRemainingTiles];
-                  const scoredPips = scoredTiles.reduce((sum, tile) => sum + tile.low + tile.high, 0);
-                  const summarySentence =
-                    youWentOut
-                      ? `You cleared your hand. ${oppCount} remaining pips rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`
-                      : oppWentOut
-                        ? `${opponentName} cleared their hand. ${yourCount} remaining pips rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`
-                        : `Hand ended blocked. ${scoredPips} remaining pips rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`;
+              {(() => {
+                const youPoints = handReveal.pointsAwarded.you;
+                const opponentPoints = handReveal.pointsAwarded.opponent;
+                const winner =
+                  youPoints > opponentPoints ? 'you' : opponentPoints > youPoints ? 'opponent' : 'none';
+                const pointsAwarded = Math.max(youPoints, opponentPoints, 0);
+                const yourCount = handReveal.yourRemainingTiles.length;
+                const oppCount = handReveal.opponentRemainingTiles.length;
+                const whoWentOutRaw =
+                  handReveal.whoWentOut ?? handReveal.winnerId ?? handReveal.handWinnerId ?? null;
+                const youWentOut =
+                  whoWentOutRaw === 'you' || whoWentOutRaw === you || (whoWentOutRaw == null && yourCount === 0);
+                const oppWentOut =
+                  whoWentOutRaw === 'opponent' ||
+                  (Boolean(opponentId) && whoWentOutRaw === opponentId) ||
+                  (whoWentOutRaw == null && oppCount === 0);
+                const winnerSide = resolveWinnerSide(winner);
 
-                  return (
-                    <>
-                      <div className="hand-over-premium-header">
-                        <div className="hand-over-premium-title-group">
-                          <span className="hand-over-premium-kicker">Hand Complete</span>
-                          <h3 className="hand-over-premium-title">Hand Over</h3>
-                        </div>
-                        <div className="hand-over-premium-score-group">
-                          <div className="hand-over-premium-score">+{pointsAwarded}</div>
-                          <div className="hand-over-premium-score-label">POINT{pointsAwarded === 1 ? '' : 'S'} AWARDED</div>
-                        </div>
-                      </div>
-
-                      <p className="hand-over-premium-sentence">
-                        {summarySentence}
-                      </p>
-
-                      <div className="hand-over-premium-metadata">
-                        <div className="hand-over-premium-meta-block">
-                          <span className="hand-over-premium-meta-label">WINNER</span>
-                          <span className="hand-over-premium-meta-value">{winner === 'you' ? 'You' : winner === 'opponent' ? opponentName : 'Tie'}</span>
-                        </div>
-                        <div className="hand-over-premium-meta-divider" />
-                        <div className="hand-over-premium-meta-block">
-                          <span className="hand-over-premium-meta-label">{winner === 'you' ? 'OPP. PIPS' : winner === 'opponent' ? 'YOUR PIPS' : 'TOTAL PIPS'}</span>
-                          <span className="hand-over-premium-meta-value">{winner === 'you' ? scoredPips : winner === 'opponent' ? scoredPips : scoredPips}</span>
-                        </div>
-                        <div className="hand-over-premium-meta-divider" />
-                        <div className="hand-over-premium-meta-block">
-                          <div className="hand-over-premium-meta-user-group">
-                            <span className="hand-over-premium-meta-handle">@{winner === 'you' ? opponentName.toUpperCase() : 'YOU'}</span>
-                            <div className="hand-over-premium-tile-preview">
-                              {scoredTiles.slice(0, 2).map((tile, idx) => (
-                                <DominoTile key={idx} tile={tile} size={40} />
-                              ))}
-                              {scoredTiles.length > 2 && (
-                                <div className="hand-over-tile-more">+{scoredTiles.length - 2}</div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
-
-                <div className="hand-over-premium-footer">
-                  <span className="hand-over-premium-next-label">Next hand starting...</span>
-                  <div className="hand-over-premium-progress-track">
-                    <div
-                      className="hand-over-premium-progress-fill"
-                      style={{ width: `${Math.max(0, Math.min(1, handRevealAutoProgress)) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+                return (
+                  <HandOverModal
+                    variant="mp"
+                    pointsAwarded={pointsAwarded}
+                    winnerSide={winnerSide}
+                    winnerLabel={winnerDisplayLabel(winnerSide, opponentName)}
+                    loserLabel={loserDisplayLabel(winnerSide, opponentName)}
+                    reasonCopy={buildHandOverReasonCopy({
+                      youWentOut,
+                      opponentWentOut: oppWentOut,
+                      isBlocked: !youWentOut && !oppWentOut,
+                      opponentName,
+                      pointsAwarded,
+                    })}
+                    tileReveals={buildMultiplayerHandOverReveals(
+                      handReveal,
+                      winner,
+                      youWentOut,
+                      oppWentOut,
+                      opponentName,
+                    )}
+                    progress={handRevealAutoProgress}
+                  />
+                );
+              })()}
             </GameOverlayPortal>
           )}
           <div className="walnut-match-layout game-layout-layer">

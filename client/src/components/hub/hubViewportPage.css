@@ -1,0 +1,108 @@
+.app:has(.rh-hub-page) {
+  background: transparent;
+}
+
+.app:has(.rh-hub-page) > * {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.rh-hub-page {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--font-body);
+  background: var(--hub-bg);
+}
+
+.rh-hub-shell {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  flex-direction: column;
+  width: 100%;
+}
+
+.rh-hub-body {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  justify-content: center;
+}
+
+.rh-hub-inner {
+  width: 100%;
+  max-width: 1440px;
+  height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  padding: var(--hub-space-3) var(--hub-space-4) var(--hub-space-2);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.rh-hub-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: var(--hub-space-3);
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.rh-hub-main {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rh-hub-rail {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--hub-space-2);
+  overflow: hidden auto;
+  scrollbar-width: none;
+}
+
+.rh-hub-rail::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 1080px) {
+  .rh-hub-body {
+    overflow-y: auto;
+  }
+
+  .rh-hub-inner {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    padding: var(--hub-space-2) 20px 24px;
+  }
+
+  .rh-hub-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .rh-hub-main,
+  .rh-hub-rail {
+    overflow: visible;
+    height: auto;
+    max-height: none;
+  }
+}

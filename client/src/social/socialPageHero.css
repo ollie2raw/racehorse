@@ -1,0 +1,30 @@
+.social-hero {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+}
+
+.social-hero__head {
+  max-width: 560px;
+}
+
+.social-hero__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(30px, 2.8vw, 40px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+
+.social-hero__subtitle {
+  margin: 8px 0 0;
+  max-width: 520px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(148, 163, 184, 0.78);
+}
+
+.social-hero__filters {
+  margin-top: 16px;
+}

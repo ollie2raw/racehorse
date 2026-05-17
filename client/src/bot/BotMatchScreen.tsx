@@ -107,6 +107,14 @@ import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
 import LessonCoachPanel from '../learn/LessonCoachPanel';
 import LeaveGameModal from '../components/LeaveGameModal';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
+import HandOverModal from '../components/handOver/HandOverModal';
+import {
+  buildBotHandOverReveals,
+  buildHandOverReasonCopy,
+  loserDisplayLabel,
+  resolveWinnerSide,
+  winnerDisplayLabel,
+} from '../components/handOver/handOverCopy';
 import { logLayoutDebug } from '../match/layoutDebug';
 import {
   AUTHORING_GAME_ID,
@@ -1170,17 +1178,6 @@ export default function BotMatchScreen({
     },
     [activeLocalMatchId, isStandaloneFritzMatch, postLocalBotMatch, userId],
   );
-
-  const [uiTheme, setUiTheme] = useState<'green' | 'brown'>(() => {
-    if (typeof window === 'undefined') return 'green';
-    const stored = window.localStorage.getItem('racehorse_ui_theme');
-    return stored === 'brown' ? 'brown' : 'green';
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('racehorse_ui_theme', uiTheme);
-  }, [uiTheme]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -5675,12 +5672,6 @@ export default function BotMatchScreen({
     );
   }
 
-  const handRevealScoredTiles = handReveal
-    ? handReveal.winner === 'you'
-      ? handReveal.botRemainingTiles
-      : handReveal.yourRemainingTiles
-    : [];
-  const handRevealScoredPips = sumTilePips(handRevealScoredTiles);
 
   const isFullscreenReady = true;
   const isLessonLayoutMode = lessonLayoutMode;
@@ -6187,7 +6178,7 @@ export default function BotMatchScreen({
       <RotateOverlay />
       <div
         ref={rootRef}
-        className={`screen game-screen walnut-live theme-${isLessonLayoutMode ? 'green' : uiTheme} bot-match-screen bot-match-mode-${mode} ${isLessonLayoutMode ? 'learn-lesson-screen claude-mode-screen-shell' : ''}`}
+        className={`screen game-screen walnut-live theme-green bot-match-screen bot-match-mode-${mode} ${isLessonLayoutMode ? 'learn-lesson-screen claude-mode-screen-shell' : ''}`}
       >
       {isLessonLayoutMode && (
         <div className="home-bg" aria-hidden="true">
@@ -6213,121 +6204,62 @@ export default function BotMatchScreen({
       {false && toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
         <GameOverlayPortal>
-        <div className="game-over-overlay hand-over-upgraded-overlay">
-          <div className="game-over-card hand-over-upgraded-card hand-over--sp">
-            {(() => {
-              const pointsAwarded = handReveal.pointsAwarded;
-              const winner = handReveal.winner;
-              const youWentOut = handReveal.reason !== 'blocked' && winner === 'you';
-              const oppWentOut = handReveal.reason !== 'blocked' && winner === 'bot';
-              const scoredTiles =
-                winner === 'you'
-                  ? handReveal.botRemainingTiles
-                  : winner === 'bot'
-                    ? handReveal.yourRemainingTiles
-                    : [...handReveal.yourRemainingTiles, ...handReveal.botRemainingTiles];
-
-              const scoredPips = sumTilePips(scoredTiles);
-              const summarySentence = youWentOut
-                ? `You cleared your hand. ${scoredPips} remaining pip${scoredPips === 1 ? '' : 's'} rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`
-                : oppWentOut
-                  ? `${opponentLabel} cleared their hand. ${scoredPips} remaining pip${scoredPips === 1 ? '' : 's'} rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`
-                  : `Hand ended blocked. ${scoredPips} remaining pip${scoredPips === 1 ? '' : 's'} rounded to ${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}.`;
-
-              return (
-                <>
-                  <div className="hand-over-premium-header">
-                    <div className="hand-over-premium-title-group">
-                      <span className="hand-over-premium-kicker">Hand Complete</span>
-                      <h3 className="hand-over-premium-title">Hand Over</h3>
-                    </div>
-                    <div className="hand-over-premium-score-group">
-                      <div className="hand-over-premium-score">+{pointsAwarded}</div>
-                      <div className="hand-over-premium-score-label">POINT{pointsAwarded === 1 ? '' : 'S'} AWARDED</div>
-                    </div>
+          <HandOverModal
+            variant="sp"
+            pointsAwarded={handReveal.pointsAwarded}
+            winnerSide={resolveWinnerSide(handReveal.winner)}
+            winnerLabel={winnerDisplayLabel(resolveWinnerSide(handReveal.winner), opponentLabel)}
+            loserLabel={loserDisplayLabel(resolveWinnerSide(handReveal.winner), opponentLabel)}
+            reasonCopy={buildHandOverReasonCopy({
+              youWentOut: handReveal.reason !== 'blocked' && handReveal.winner === 'you',
+              opponentWentOut: handReveal.reason !== 'blocked' && handReveal.winner === 'bot',
+              isBlocked: handReveal.reason === 'blocked',
+              opponentName: opponentLabel,
+              pointsAwarded: handReveal.pointsAwarded,
+            })}
+            tileReveals={buildBotHandOverReveals(handReveal, opponentLabel)}
+            progress={isGuidedMode || isGuidedV2Mode ? undefined : handRevealProgress}
+            progressTransitionMs={
+              isGuidedMode || isGuidedV2Mode ? undefined : DAILY_FRITZ_AUTO_ADVANCE_MS
+            }
+            learningRecap={
+              isGuidedMode && coach.handSummary ? (
+                <LearningHandRecap summary={coach.handSummary} />
+              ) : undefined
+            }
+            footer={
+              ghostResultError ? (
+                <footer className="hand-over-modal__footer">
+                  <div className="hand-over-error-zone">
+                    <span className="hand-over-error-text" title={ghostResultError}>
+                      {ghostResultError}
+                    </span>
+                    <button
+                      type="button"
+                      className="mode-inline-btn"
+                      onClick={() => {
+                        setGhostResultError(null);
+                        advanceHand();
+                      }}
+                    >
+                      Retry
+                    </button>
                   </div>
-
-                  <p className="hand-over-premium-sentence">{summarySentence}</p>
-
-                  <div className="hand-over-premium-metadata">
-                    <div className="hand-over-premium-meta-block">
-                      <span className="hand-over-premium-meta-label">WINNER</span>
-                      <span className="hand-over-premium-meta-value">
-                        {winner === 'you' ? 'You' : winner === 'bot' ? opponentLabel : 'Tie'}
-                      </span>
-                    </div>
-                    <div className="hand-over-premium-meta-divider" />
-                    <div className="hand-over-premium-meta-block">
-                      <span className="hand-over-premium-meta-label">
-                        {winner === 'you' ? 'OPP. PIPS' : winner === 'bot' ? 'YOUR PIPS' : 'TOTAL PIPS'}
-                      </span>
-                      <span className="hand-over-premium-meta-value">{handRevealScoredPips}</span>
-                    </div>
-                    <div className="hand-over-premium-divider-flex" style={{ flex: 1 }} />
-                    <div className="hand-over-premium-meta-block">
-                      <div className="hand-over-premium-meta-user-group">
-                        <span className="hand-over-premium-meta-handle">
-                          @{winner === 'you' ? opponentLabel.toUpperCase() : 'YOU'}
-                        </span>
-                        <div className="hand-over-premium-tile-preview">
-                          {scoredTiles.slice(0, 2).map((tile, idx) => (
-                            <DominoTile key={idx} tile={tile} size={40} />
-                          ))}
-                          {scoredTiles.length > 2 && (
-                            <div className="hand-over-tile-more">+{scoredTiles.length - 2}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-
-            {isGuidedMode && coach.handSummary && <LearningHandRecap summary={coach.handSummary} />}
-
-            <div className="hand-over-premium-footer">
-              {ghostResultError ? (
-                <div className="hand-over-error-zone">
-                  <span className="hand-over-error-text" title={ghostResultError}>
-                    {ghostResultError}
-                  </span>
+                </footer>
+              ) : isGuidedMode || isGuidedV2Mode ? (
+                <footer className="hand-over-modal__footer">
                   <button
                     type="button"
-                    className="mode-inline-btn"
-                    onClick={() => {
-                      setGhostResultError(null);
-                      advanceHand();
-                    }}
+                    className="mode-inline-btn guided-next-hand-btn"
+                    onClick={advanceHand}
+                    style={{ position: 'relative', zIndex: 2 }}
                   >
-                    Retry
+                    Next Hand →
                   </button>
-                </div>
-              ) : isGuidedMode || isGuidedV2Mode ? (
-                <button
-                  className="mode-inline-btn guided-next-hand-btn"
-                  onClick={advanceHand}
-                  style={{ position: 'relative', zIndex: 2 }}
-                >
-                  Next Hand →
-                </button>
-              ) : (
-                <>
-                  <span className="hand-over-premium-next-label">Next hand starting...</span>
-                  <div className="hand-over-premium-progress-track">
-                    <div
-                      className="hand-over-premium-progress-fill"
-                      style={{
-                        width: `${Math.max(0, Math.min(1, handRevealProgress)) * 100}%`,
-                        transition: `width ${DAILY_FRITZ_AUTO_ADVANCE_MS}ms linear`,
-                      }}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+                </footer>
+              ) : undefined
+            }
+          />
         </GameOverlayPortal>
       )}
       {match.gameOver && isDailyFritzMode && dailyFritzSetOverlay && (
@@ -6336,6 +6268,11 @@ export default function BotMatchScreen({
           <div className="game-over-card daily-fritz-set-overlay-card" onClick={(event) => event.stopPropagation()}>
             <div className="daily-fritz-set-overlay-hero">
               <span className="daily-fritz-set-overlay-kicker">{dailyFritzSetOverlay.eyebrow}</span>
+              {dailyFritzSetOverlay.skunkBadge ? (
+                <span className="daily-fritz-skunk-badge" aria-label="Skunk result">
+                  {dailyFritzSetOverlay.skunkBadge}
+                </span>
+              ) : null}
               <h2 className="daily-fritz-set-overlay-title">{dailyFritzSetOverlay.headline}</h2>
               <p className="daily-fritz-set-overlay-copy">{dailyFritzSetOverlay.subheadline}</p>
             </div>
@@ -6396,7 +6333,7 @@ export default function BotMatchScreen({
                 {dailyFritzSetOverlay.games.map((game) => (
                   <div key={game.gameNumber} className="daily-fritz-set-overlay-game-row">
                     <span>Game {game.gameNumber}</span>
-                    <strong className={`is-${game.tone}`}>{game.value}</strong>
+                    <strong className={`is-${game.tone}`}>{game.skunkLabel ?? game.value}</strong>
                   </div>
                 ))}
               </div>

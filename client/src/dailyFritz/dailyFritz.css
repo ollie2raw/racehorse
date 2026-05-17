@@ -1416,11 +1416,25 @@
   min-height: 0;
   overflow: hidden;
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  grid-template-rows: repeat(3, minmax(48px, 1fr));
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(52px, 1fr));
   column-gap: 12px;
   row-gap: 8px;
   align-items: stretch;
+}
+
+.df-domino-tile {
+  display: block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.38));
+}
+
+.df-domino-tile--elite {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.38)) drop-shadow(0 0 10px rgba(231, 182, 74, 0.22));
+}
+
+.df-domino-tile--standard {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.38)) drop-shadow(0 0 10px rgba(59, 130, 246, 0.18));
 }
 
 .df-bof3__rail {
@@ -1451,6 +1465,27 @@
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.48);
   box-sizing: border-box;
+}
+
+.df-bof3__step--domino {
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+}
+
+.df-bof3__step--domino.df-bof3__step--active .df-domino-tile {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 12px rgba(231, 182, 74, 0.38));
+}
+
+.df-bof3__step--domino.df-bof3__step--won .df-domino-tile {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 10px rgba(52, 211, 153, 0.28));
+}
+
+.df-bof3__step--domino.df-bof3__step--lost .df-domino-tile {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 10px rgba(255, 77, 109, 0.22));
 }
 
 .df-bof3__step--locked {
@@ -2152,3 +2187,46 @@
 
 .daily-fritz-game-chip.is-win { color: #00f0b5; border-color: rgba(0, 212, 160, 0.35); background: rgba(0, 212, 160, 0.12); }
 .daily-fritz-game-chip.is-loss { color: #ff5c75; border-color: rgba(255, 69, 96, 0.3); background: rgba(255, 69, 96, 0.1); }
+.daily-fritz-game-chip.is-skunk {
+  color: #f6e7b8;
+  border-color: color-mix(in srgb, var(--tier-elite) 55%, rgba(59, 130, 246, 0.35));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--tier-standard) 22%, transparent),
+    color-mix(in srgb, var(--tier-elite) 18%, transparent)
+  );
+  box-shadow: 0 0 18px color-mix(in srgb, var(--tier-standard) 16%, transparent);
+}
+
+.daily-fritz-skunk-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 48%, var(--tier-standard));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--tier-standard) 24%, rgba(8, 14, 28, 0.92)),
+    color-mix(in srgb, var(--tier-elite) 20%, rgba(8, 14, 28, 0.92))
+  );
+  color: #f8f4e8;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--tier-standard) 18%, transparent);
+}
+
+.daily-fritz-skunk-badge--inline {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+.daily-fritz-set-overlay-hero .daily-fritz-skunk-badge {
+  margin-top: 4px;
+}

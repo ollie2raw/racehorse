@@ -1,4 +1,5 @@
 import type { DailyFritzLeaderboardRow } from './api';
+import { getGameSkunkChipLabel, getSetSkunkBadgeFromLeaderboardRow } from './skunk';
 
 interface DailyFritzLeaderboardProps {
   rows: DailyFritzLeaderboardRow[];
@@ -35,7 +36,7 @@ function getInitials(username: string): string {
 }
 
 function formatGameChip(game: NonNullable<DailyFritzLeaderboardRow['games']>[number]): string {
-  return `G${game.gameNumber} ${game.playerWon ? 'W' : 'L'} ${game.playerScore}–${game.fritzScore}`;
+  return getGameSkunkChipLabel(game) ?? `G${game.gameNumber} ${game.playerWon ? 'W' : 'L'} ${game.playerScore}–${game.fritzScore}`;
 }
 
 function isCurrentUserRow(
@@ -57,7 +58,7 @@ function renderGameBreakdown(row: DailyFritzLeaderboardRow, compact = false) {
       {row.games.map((game) => (
         <span
           key={`${row.username}-${row.rank}-${game.gameNumber}`}
-          className={`daily-fritz-game-chip ${game.playerWon ? 'is-win' : 'is-loss'}`}
+          className={`daily-fritz-game-chip ${game.playerWon ? 'is-win' : 'is-loss'} ${game.skunk ? 'is-skunk' : ''}`}
         >
           {formatGameChip(game)}
         </span>
@@ -127,7 +128,7 @@ export default function DailyFritzLeaderboard({
           <div>
             <span className="daily-fritz-results-kicker">Today’s Daily Fritz Board</span>
             <p className="daily-fritz-standings-note">
-              Ranked by set result, set score, total point margin, then completion time.
+              Ranked by set result, set score, skunk quality, total point margin, then completion time.
             </p>
           </div>
           <span className="daily-fritz-global-results-count">
@@ -168,6 +169,11 @@ export default function DailyFritzLeaderboard({
                     <strong className="daily-fritz-player-name">
                       {row.username}
                       {isCurrentUser ? <span className="daily-fritz-you-pill">YOU</span> : null}
+                      {bestOfThree && getSetSkunkBadgeFromLeaderboardRow(row) ? (
+                        <span className="daily-fritz-skunk-badge daily-fritz-skunk-badge--inline">
+                          {getSetSkunkBadgeFromLeaderboardRow(row)}
+                        </span>
+                      ) : null}
                     </strong>
                     {!bestOfThree ? <span className="daily-fritz-legacy-pill">Legacy</span> : null}
                   </div>
