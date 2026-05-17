@@ -40,6 +40,31 @@ body {
   box-sizing: border-box;
 }
 
+/* Match tray height is fixed for the whole session — never tied to hand.length (prevents draw/stack reflow). */
+.screen.game-screen.walnut-live,
+.walnut-live.game-screen {
+  --tray-height: 138px;
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .screen.game-screen.walnut-live:not(.learn-lesson-screen),
+  .walnut-live.game-screen:not(.learn-lesson-screen) {
+    --tray-height: 70px;
+  }
+}
+
+.screen.game-screen.walnut-live.learn-lesson-screen,
+.walnut-live.game-screen.learn-lesson-screen {
+  --tray-height: 74px;
+}
+
+@media (max-width: 768px) {
+  .screen.game-screen.walnut-live.learn-lesson-screen,
+  .walnut-live.game-screen.learn-lesson-screen {
+    --tray-height: 84px;
+  }
+}
+
 .walnut-live::before {
   content: '';
   position: absolute;
@@ -414,11 +439,14 @@ body {
     0 -8px 20px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: visible;
-  height: var(--tray-height, 120px);
-  min-height: 120px;
+  height: var(--tray-height, 138px);
+  min-height: var(--tray-height, 138px);
+  max-height: var(--tray-height, 138px);
+  flex: 0 0 var(--tray-height, 138px);
   padding: 0 10px;
   display: flex;
   align-items: center;
+  box-sizing: border-box;
 }
 
 .walnut-live .board-tile-wrapper {

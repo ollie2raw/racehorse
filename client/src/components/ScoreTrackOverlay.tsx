@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { ScoreBoard } from './ScoreBoard';
+import { GameOverlayPortal } from './GameOverlayPortal';
 
 interface TrackPlayer {
   label: string;
@@ -27,6 +28,7 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
   if (!open) return null;
 
   return (
+    <GameOverlayPortal>
     <div className="score-track-overlay" role="dialog" aria-modal="true" aria-label="Score track">
       <button className="score-track-backdrop" onClick={onClose} aria-label="Close score track" />
       <div className="score-track-card">
@@ -42,6 +44,7 @@ export function ScoreTrackOverlay({ open, onClose, players, target = 60 }: Score
         <ScoreBoard players={players} target={target} />
       </div>
     </div>
+    </GameOverlayPortal>
   );
 }
 

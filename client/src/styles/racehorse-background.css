@@ -171,7 +171,9 @@
 .rh-lb-screen > *,
 .leaderboard-screen > *,
 .practice-lab > *,
-.screen.game-screen.walnut-live > *,
+/* Stack only match layout flex children — not portaled/fixed overlays or fly tiles. */
+.screen.game-screen.walnut-live > .game-layout-layer > *:not(.game-board-animation-layer),
+.screen.game-screen.walnut-live > *:not(.rh-leave-overlay):not(.score-track-overlay):not(.game-over-overlay):not(.flying-tile-overlay):not(.game-board-animation-layer):not(.game-layout-layer):not(.home-bg),
 .claude-mode-page > *,
 .daily-dash > * {
   position: relative;

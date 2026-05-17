@@ -4705,6 +4705,24 @@ button:hover:not(:disabled) {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
   }
 
+  .screen.game-screen.walnut-live .wl-hand-area,
+  .screen.game-screen.walnut-live .hand-area.wl-hand-area {
+    height: var(--tray-height, 138px) !important;
+    min-height: var(--tray-height, 138px) !important;
+    max-height: var(--tray-height, 138px) !important;
+    flex: 0 0 var(--tray-height, 138px) !important;
+  }
+
+  .screen.game-screen.walnut-live .wl-hand-area .hand-container,
+  .screen.game-screen.walnut-live .wl-hand-area .hand-container.is-stacked {
+    height: 100% !important;
+    max-height: 100% !important;
+  }
+
+  .screen.game-screen.walnut-live .wl-hand-area .hand-row {
+    display: flex !important;
+  }
+
   .hand-container {
     display: flex !important;
     flex-wrap: wrap !important;

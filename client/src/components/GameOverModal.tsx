@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Button } from './primitives';
+import { GameOverlayPortal } from './GameOverlayPortal';
 import './GameOverModal.css';
 
 export type GameOverMatchKind = 'single-player' | 'multiplayer';
@@ -63,12 +64,13 @@ export default function GameOverModal({
   if (!open) return null;
 
   return (
-    <div
-      className={`game-over-overlay rh-go ${themeClass}`}
-      role="dialog"
-      aria-modal="true"
-      aria-label={ariaLabel}
-    >
+    <GameOverlayPortal>
+      <div
+        className={`game-over-overlay rh-go ${themeClass}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+      >
       <div className="game-over-card rh-go-card" onClick={(e) => e.stopPropagation()}>
         <div className="game-over-header">
           <div className="game-over-title-block">
@@ -127,5 +129,6 @@ export default function GameOverModal({
         </div>
       </div>
     </div>
+    </GameOverlayPortal>
   );
 }

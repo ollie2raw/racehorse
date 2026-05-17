@@ -1,4 +1,5 @@
 /* Leave-game confirmation — Racehorse glass HUD (tokens + auth overlay rhythm) */
+/* Game overlays must be portaled/fixed outside the match layout so they never reflow the rack. */
 
 .rh-leave-overlay {
   position: fixed;

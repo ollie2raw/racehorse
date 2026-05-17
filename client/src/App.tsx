@@ -16,6 +16,7 @@ import {
 } from './components';
 import { MatchNblBoardFrame } from './components/MatchNblBoardFrame';
 import LeaveGameModal from './components/LeaveGameModal';
+import { GameOverlayPortal } from './components/GameOverlayPortal';
 import TileRack from './components/TileRack';
 import {
   playDrawSound,
@@ -71,6 +72,10 @@ import TournamentMatchBanner from './tournament/TournamentMatchBanner';
 import { useTournament } from './tournament/useTournament';
 import * as tournamentApi from './tournament/tournamentApi';
 import type { TournamentResultView } from './tournament/types';
+import {
+  evaluateTournamentAttachGuard,
+  localHandCountFromJoinResponse,
+} from './tournament/tournamentAttachGuard';
 import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
 import IncomingFriendChallengeCard from './multiplayer/IncomingFriendChallengeCard';
 import type { OutboundChallenge } from './multiplayer/friendChallenge';
@@ -1057,6 +1062,11 @@ export default function App() {
   const preventAutoRejoinRef = useRef(false);
   const autoJoinAttemptedRef = useRef(false);
   const joinInFlightRef = useRef(false);
+  const pendingTournamentAttachMatchIdRef = useRef<string | null>(null);
+  const attachedTournamentMatchIdRef = useRef<string | null>(null);
+  const failedTournamentAttachByMatchIdRef = useRef<Record<string, number>>({});
+  const [tournamentAttachPhase, setTournamentAttachPhase] = useState<'idle' | 'pending' | 'failed'>('idle');
+  const [tournamentAttachError, setTournamentAttachError] = useState<string | null>(null);
   const createInFlightRef = useRef(false);
   const inviteJoinInFlightRef = useRef(false);
   const rejoinInFlightRef = useRef(false);
@@ -1080,7 +1090,6 @@ export default function App() {
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(44);
-  const [handCompactStacked, setHandCompactStacked] = useState(false);
   const autoTurnActionKeyRef = useRef<string>('');
   /** Multiplayer: block auto draw/pass until `state:update` reaches the server ack sequence (avoids duplicate DRAW after MOVE). */
   const mpAutoDrawSuppressUntilSequenceRef = useRef<number | null>(null);
@@ -2466,6 +2475,7 @@ export default function App() {
       ? drawStepMyHand
       : authoritativeMyHand;
   const myHand = handForRenderBase;
+  const handCompactStacked = myHand.length > 9;
 
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const authoritativeOpponentTileCount =
@@ -2762,26 +2772,12 @@ export default function App() {
       const tileCount = Math.max(1, myHand.length);
       const isLandscape = window.innerWidth > window.innerHeight;
       const isMobileWidth = window.innerWidth <= 900;
-      
-      // Split into two rows if hand is large
       const forceTwoRows = tileCount > 9;
-      
-      // Shrink tiles if hand is large or in mobile landscape
       const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 46 : 56);
-      let tileWidth = maxTileSize;
-      
-      // Calculate available width for hand
       const containerWidth = trayCenterRef.current?.offsetWidth ?? window.innerWidth - 40;
       const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
-      
-      // Dynamic tile width based on available space
-      tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
-      
-      const trayHeight = forceTwoRows ? 138 : (isLandscape && isMobileWidth ? 70 : 120);
-      document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
-      
+      const tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
       setHandTileSize(tileWidth);
-      setHandCompactStacked(forceTwoRows);
     };
 
     updateHandTileSize();
@@ -3195,6 +3191,9 @@ export default function App() {
     // than a corrupted one.
     if (winnerUserId !== authUser.id && loserUserId !== authUser.id) return;
 
+    // Server records authenticated online H2H once on game over; both clients used to insert.
+    if (winnerUserId && loserUserId) return;
+
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
     const matchAnalysis = analyzeMoveLog(multiplayerMoveLog, true);
@@ -3241,29 +3240,222 @@ export default function App() {
     });
   }, [state, joinedRoom, players, supabaseEnabled, authUser, you, multiplayerMoveLog]);
 
-  const attachAssignedTournamentMatch = useCallback((matchId: string) => {
-    if (socket?.connected) {
-      socket.emit(
-        'tournament:attach_assigned_match',
-        { matchId },
-        (resp: { ok: boolean; error?: string } & Record<string, unknown>) => {
-          if (resp?.ok) applyJoinedRoomResponse(resp);
-          else showToast(resp?.error ?? 'Could not join tournament match.', 2500);
-        },
-      );
-    }
-  }, [socket, applyJoinedRoomResponse, showToast]);
+  const attemptTournamentAttach = useCallback(
+    async (
+      matchId: string,
+      opts?: { manual?: boolean; tournamentId?: string; matchStatus?: string },
+    ): Promise<boolean> => {
+      const socketConnected = Boolean(socketRef.current?.connected);
+      const guard = evaluateTournamentAttachGuard({
+        matchId,
+        socketConnected,
+        appMode: appModeRef.current,
+        pendingMatchId: pendingTournamentAttachMatchIdRef.current,
+        attachedMatchId: attachedTournamentMatchIdRef.current,
+        failedAtByMatchId: failedTournamentAttachByMatchIdRef.current,
+        manual: opts?.manual,
+      });
 
-  // Drain a pending tournament:match_ready signal — auto-join the reserved room.
-  // Must be an effect (not render-path logic) so React StrictMode double-invoke
-  // doesn't clear the pending match before it can be acted on.
+      if (guard.reason === 'no-match') {
+        console.log('[tournament:attach-client] skip/no-match');
+        return false;
+      }
+      if (guard.reason === 'socket-disconnected') {
+        console.log('[tournament:attach-client] skip/socket-disconnected', { matchId });
+        if (!opts?.manual) {
+          connectRef.current();
+        }
+        return false;
+      }
+      if (guard.reason === 'already-pending') {
+        console.log('[tournament:attach-client] skip/already-pending', { matchId });
+        return false;
+      }
+      if (guard.reason === 'already-attached') {
+        console.log('[tournament:attach-client] skip/already-attached', {
+          matchId,
+          appMode: appModeRef.current,
+        });
+        return false;
+      }
+      if (guard.reason === 'backoff') {
+        console.log('[tournament:attach-client] skip/backoff', { matchId });
+        return false;
+      }
+
+      pendingTournamentAttachMatchIdRef.current = matchId;
+      setTournamentAttachPhase('pending');
+      setTournamentAttachError(null);
+
+      console.log('[tournament:attach-client] start', {
+        matchId,
+        tournamentId: opts?.tournamentId ?? null,
+        status: opts?.matchStatus ?? null,
+        socketId: socketRef.current?.id ?? null,
+      });
+
+      try {
+        const activeSocket = socketRef.current;
+        if (!activeSocket?.connected) {
+          throw new Error('socket_not_connected');
+        }
+
+        const resp = await emitWithAck<
+          { ok: boolean; error?: string; tournamentId?: string; roomCode?: string } & Record<string, unknown>
+        >(activeSocket, 'tournament:attach_assigned_match', { matchId });
+
+        pendingTournamentAttachMatchIdRef.current = null;
+
+        if (resp?.ok) {
+          const handCount = localHandCountFromJoinResponse({
+            you: resp.you,
+            state: resp.state as { players?: Record<string, { hand?: unknown[] }> },
+          });
+          const roster = Array.isArray(resp.players) ? resp.players : [];
+          const localPlayerId = typeof resp.you === 'string' ? resp.you : '';
+          console.log('[tournament:attach-client] ack/success', {
+            matchId,
+            roomCode: resp.roomCode,
+            matchStatus: resp.matchStatus ?? opts?.matchStatus ?? null,
+            hasRoom: Boolean(resp.roomCode),
+            hasPlayers: roster.length > 0,
+            localPlayerId,
+            handCount,
+          });
+          attachedTournamentMatchIdRef.current = matchId;
+          const nextFailed = { ...failedTournamentAttachByMatchIdRef.current };
+          delete nextFailed[matchId];
+          failedTournamentAttachByMatchIdRef.current = nextFailed;
+          if (typeof resp.tournamentId === 'string') {
+            setActiveTournamentId(resp.tournamentId);
+          } else if (opts?.tournamentId) {
+            setActiveTournamentId(opts.tournamentId);
+          }
+          console.log('[tournament:attach-client] applying join response', {
+            roomCode: resp.roomCode,
+            handCount,
+          });
+          applyJoinedRoomResponse(resp);
+          const hydratedState = joinedRoomResponseRef.current?.state ?? resp.state;
+          const hydratedYou =
+            typeof joinedRoomResponseRef.current?.you === 'string'
+              ? joinedRoomResponseRef.current.you
+              : localPlayerId;
+          const hydratedHandCount = localHandCountFromJoinResponse({
+            you: hydratedYou,
+            state: hydratedState,
+          });
+          const playerIds = (hydratedState as { playerIds?: string[] } | null | undefined)?.playerIds;
+          console.log('[tournament:hydrate-check]', {
+            roomCode: resp.roomCode,
+            localUserId: multiplayerIdentityUserId,
+            localPlayerSeat: hydratedYou,
+            player1Id: playerIds?.[0] ?? null,
+            player2Id: playerIds?.[1] ?? null,
+            handCount: hydratedHandCount,
+            boneyardCount: (hydratedState as { boneyard?: unknown[] } | null | undefined)?.boneyard?.length ?? null,
+            currentTurnPlayerId:
+              typeof (hydratedState as { currentPlayerIndex?: number } | null)?.currentPlayerIndex === 'number' &&
+              playerIds
+                ? playerIds[(hydratedState as { currentPlayerIndex: number }).currentPlayerIndex] ?? null
+                : null,
+            appMode: appModeRef.current,
+          });
+          console.log('[tournament:attach-client] switching-to-multiplayer', {
+            matchId,
+            roomCode: resp.roomCode,
+          });
+          setAppMode('multiplayer');
+          setTournamentAttachPhase('idle');
+          setTournamentAttachError(null);
+          tournament.clearRecoveryMatch();
+          void tournament.recover();
+          return true;
+        }
+
+        const errorMessage = resp?.error ?? 'Could not join tournament match.';
+        failedTournamentAttachByMatchIdRef.current = {
+          ...failedTournamentAttachByMatchIdRef.current,
+          [matchId]: Date.now(),
+        };
+        setTournamentAttachPhase('failed');
+        setTournamentAttachError(errorMessage);
+        console.log('[tournament:attach-client] ack/error', { matchId, error: errorMessage });
+        showToast(errorMessage, 2500);
+        return false;
+      } catch (err) {
+        pendingTournamentAttachMatchIdRef.current = null;
+        const message = err instanceof Error ? err.message : String(err);
+        const isTimeout = message.includes('timed out');
+        failedTournamentAttachByMatchIdRef.current = {
+          ...failedTournamentAttachByMatchIdRef.current,
+          [matchId]: Date.now(),
+        };
+        setTournamentAttachPhase('failed');
+        setTournamentAttachError(isTimeout ? 'Join timed out. Try again.' : message);
+        if (isTimeout) {
+          console.log('[tournament:attach-client] ack/timeout', { matchId });
+        } else {
+          console.log('[tournament:attach-client] ack/error', { matchId, error: message });
+        }
+        showToast(isTimeout ? 'Join timed out. Try again.' : message, 2500);
+        return false;
+      }
+    },
+    [applyJoinedRoomResponse, showToast, tournament.clearRecoveryMatch, tournament.recover, multiplayerIdentityUserId],
+  );
+
+  const attachAssignedTournamentMatch = useCallback(
+    (matchId: string) => {
+      void attemptTournamentAttach(matchId, { manual: true });
+    },
+    [attemptTournamentAttach],
+  );
+
+  // Auto-attach from recovery payload (stable matchId — object identity changes do not retrigger).
   useEffect(() => {
-    if (!tournament.pendingMatch) return;
-    const p = tournament.pendingMatch;
-    setActiveTournamentId(p.tournamentId);
-    attachAssignedTournamentMatch(p.matchId);
-    tournament.clearPendingMatch();
-  }, [tournament.pendingMatch]); // eslint-disable-line react-hooks/exhaustive-deps
+    const matchId = tournament.recoveryMatch?.matchId;
+    if (!matchId) return;
+    void attemptTournamentAttach(matchId, {
+      tournamentId: tournament.recoveryMatch?.tournamentId,
+      matchStatus: tournament.recoveryMatch?.matchStatus,
+    });
+  }, [
+    tournament.recoveryMatch?.matchId,
+    tournament.recoveryMatch?.tournamentId,
+    tournament.recoveryMatch?.matchStatus,
+    socket?.connected,
+    appMode,
+    attemptTournamentAttach,
+  ]);
+
+  // Drain tournament:match_ready — single-flight attach; keep pending until attach starts.
+  useEffect(() => {
+    const pending = tournament.pendingMatch;
+    if (!pending?.matchId) return;
+    console.log('[tournament] match_ready received', {
+      matchId: pending.matchId,
+      tournamentId: pending.tournamentId,
+      roomCode: pending.roomCode,
+      source: 'pending_drain',
+    });
+    setActiveTournamentId(pending.tournamentId);
+    void attemptTournamentAttach(pending.matchId, {
+      tournamentId: pending.tournamentId,
+      matchStatus: pending.matchStatus,
+    }).then((started) => {
+      if (started) {
+        tournament.clearPendingMatch();
+      }
+    });
+  }, [
+    tournament.pendingMatch?.matchId,
+    tournament.pendingMatch?.tournamentId,
+    tournament.pendingMatch?.matchStatus,
+    socket?.connected,
+    attemptTournamentAttach,
+    tournament.clearPendingMatch,
+  ]);
 
   // Load bracket when the result screen is shown without a prior bracket visit.
   useEffect(() => {
@@ -3803,6 +3995,8 @@ export default function App() {
         onWithdraw={(id) => tournament.withdraw(id)}
         onRetry={() => tournament.refresh()}
         onAttachAssignedMatch={attachAssignedTournamentMatch}
+        attachJoinPhase={tournamentAttachPhase}
+        attachJoinError={tournamentAttachError}
       />
     );
   }
@@ -4282,6 +4476,7 @@ export default function App() {
             />
           )}
           {handReveal && !state.gameOver && (
+            <GameOverlayPortal>
             <div className="game-over-overlay hand-over-upgraded-overlay">
               <div className="game-over-card hand-over-upgraded-card hand-over--mp">
                 {(() => {
@@ -4371,14 +4566,16 @@ export default function App() {
                 </div>
               </div>
             </div>
+            </GameOverlayPortal>
           )}
+          <div className="walnut-match-layout game-layout-layer">
           <div className="wl-top-rail" data-ui="hud" style={{ position: 'relative' }}>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <button
                 type="button"
                 ref={opponentPillRef}
                 style={{ margin: 8 }}
-                className={`wl-player-pill wl-player-pill-btn score-card ${!isMyTurn ? 'is-active' : ''} ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
+                className={`wl-player-pill wl-player-pill-btn score-card ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
               >
@@ -4421,7 +4618,7 @@ export default function App() {
               <button
                 type="button"
                 style={{ margin: 8 }}
-                className={`wl-player-pill wl-player-pill-btn score-card is-you ${isMyTurn ? 'is-active' : ''} ${hudRightScorePulse ? 'score-hit' : ''}`}
+                className={`wl-player-pill wl-player-pill-btn score-card is-you ${hudRightScorePulse ? 'score-hit' : ''}`}
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
               >
@@ -4539,6 +4736,33 @@ export default function App() {
                 tileSize={72}
                 showOpenEndGlow={boardShowOpenEndGlow}
               />
+            </MatchNblBoardFrame>
+          </div>
+
+          <div
+            ref={handAreaRef}
+            className="hand-area wl-hand-area"
+            data-ui="tray"
+          >
+            <div className="tray-rail">
+              <div className="tray-center" ref={trayCenterRef}>
+                <HandView
+                  hand={myHand}
+                  selectedTile={handSelectedTile}
+                  onSelect={handleTileTap}
+                  isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
+                  legalMoves={legalMoves}
+                  tileSize={handTileSize}
+                  compactStacked={handCompactStacked}
+                  drawPulseIndex={drawPulseIndex}
+                />
+              </div>
+            </div>
+          </div>
+          </div>
+
+          {flyingTiles.length > 0 && (
+            <GameOverlayPortal>
               {flyingTiles.map((ft) => (
                 <div
                   key={ft.id}
@@ -4553,28 +4777,11 @@ export default function App() {
                   }
                 />
               ))}
-            </MatchNblBoardFrame>
+            </GameOverlayPortal>
+          )}
           </div>
-
-          <div ref={handAreaRef} className="hand-area wl-hand-area" data-ui="tray">
-            <div className="tray-rail">
-              <div className="tray-center" ref={trayCenterRef}>
-                <HandView
-                  hand={myHand}
-                  selectedTile={handSelectedTile}
-                  onSelect={handleTileTap}
-                  isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
-                  legalMoves={legalMoves}
-                  tileSize={handTileSize}
-                  compactStacked={handCompactStacked}
-                  drawPulseIndex={drawPulseIndex}
-                  />
-                  </div>
-                  </div>
-                  </div>
-                  </div>
-                  </>
-                  )}
+        </>
+      )}
 
       <Suspense fallback={null}>
         <GameReviewer

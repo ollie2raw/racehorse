@@ -106,6 +106,8 @@ import LearningHandRecap from '../learning/LearningHandRecap';
 import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
 import LessonCoachPanel from '../learn/LessonCoachPanel';
 import LeaveGameModal from '../components/LeaveGameModal';
+import { GameOverlayPortal } from '../components/GameOverlayPortal';
+import { logLayoutDebug } from '../match/layoutDebug';
 import {
   AUTHORING_GAME_ID,
   AUTHORING_LESSON_ID,
@@ -704,6 +706,7 @@ export default function BotMatchScreen({
 
   const fritzConfig = FRITZ_TIERS[fritzTier];
   const rootRef = useRef<HTMLDivElement>(null);
+  const boardStageRef = useRef<HTMLDivElement>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
@@ -846,6 +849,14 @@ export default function BotMatchScreen({
   });
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+
+  useEffect(() => {
+    logLayoutDebug(showLeaveConfirm ? 'leave-open' : 'leave-close', {
+      rootRef,
+      boardStageRef,
+      handAreaRef,
+    });
+  }, [showLeaveConfirm]);
   const [movesUsed, setMovesUsed] = useState(
     initialPersistedDailyFritzMatch?.movesUsed ?? 0,
   );
@@ -857,7 +868,6 @@ export default function BotMatchScreen({
   );
   const [ghostMoveLog, setGhostMoveLog] = useState<GhostMoveLogEntry[]>([]);
   const [handTileSize, setHandTileSize] = useState(56);
-  const [handCompactStacked, setHandCompactStacked] = useState(false);
   const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
   const [drawSequenceActive, setDrawSequenceActive] = useState(false);
   const drawSequenceActiveRef = useRef(false);
@@ -3287,6 +3297,14 @@ export default function BotMatchScreen({
       },
     ]);
     setTimeout(() => setFlyingTiles((prev) => prev.filter((tile) => tile.id !== id)), 1800);
+    logLayoutDebug(drawer === 'you' ? 'player-draw' : 'fritz-draw', {
+      rootRef,
+      boardStageRef,
+      handAreaRef,
+      flyingTileParent: typeof document !== 'undefined'
+        ? document.body.querySelector('.flying-tile-overlay')
+        : null,
+    });
   }, []);
 
   const runDrawSequenceLocal = useCallback(
@@ -5504,36 +5522,19 @@ export default function BotMatchScreen({
         const mobile = viewportWidth <= 768;
         const tablet = viewportWidth <= 1180;
         const lessonSize = mobile ? 32 : tablet ? 38 : 44;
-        document.documentElement.style.setProperty('--tray-height', mobile ? '84px' : '74px');
         setHandTileSize(lessonSize);
-        setHandCompactStacked(false);
         return;
       }
 
       const tileCount = Math.max(1, match.players.you.hand.length);
       const isLandscape = window.innerWidth > window.innerHeight;
       const isMobileWidth = window.innerWidth <= 900;
-      
-      // Split into two rows if hand is large
       const forceTwoRows = tileCount > 9;
-      
-      // Shrink tiles if hand is large or in mobile landscape
       const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 46 : 56);
-      let tileWidth = maxTileSize;
-      
-      // Calculate available width for hand
       const containerWidth = window.innerWidth - 40;
       const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
-      
-      tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
-      
-      const trayHeight = forceTwoRows 
-        ? 138 
-        : (isLandscape && isMobileWidth ? 70 : 120);
-        
-      document.documentElement.style.setProperty('--tray-height', `${trayHeight}px`);
+      const tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
       setHandTileSize(tileWidth);
-      setHandCompactStacked(forceTwoRows);
     };
 
     updateHandTileSize();
@@ -5715,6 +5716,8 @@ export default function BotMatchScreen({
   const showLessonCoachPanel =
     isLessonLayoutMode &&
     !match.gameOver;
+  const youHandTileCount = match.players.you.hand.length;
+  const handCompactStacked = youHandTileCount > 9;
   const normalHandRows = isLessonLayoutMode
     ? (() => {
         const tiles = match.players.you.hand;
@@ -6163,7 +6166,7 @@ export default function BotMatchScreen({
   );
 
   const boardStage = (
-    <div className={`wl-stage-shell ${isLessonLayoutMode ? 'learn-lesson-stage-shell' : ''}`}>
+    <div ref={boardStageRef} className={`wl-stage-shell ${isLessonLayoutMode ? 'learn-lesson-stage-shell' : ''}`}>
       {isLessonLayoutMode ? (
         <div
           className={`board-area wl-board-area ${ghostBoardPulse ? 'ghost-board-pulse' : ''} learn-lesson-board-area`}
@@ -6209,6 +6212,7 @@ export default function BotMatchScreen({
       />
       {false && toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
+        <GameOverlayPortal>
         <div className="game-over-overlay hand-over-upgraded-overlay">
           <div className="game-over-card hand-over-upgraded-card hand-over--sp">
             {(() => {
@@ -6324,8 +6328,10 @@ export default function BotMatchScreen({
             </div>
           </div>
         </div>
+        </GameOverlayPortal>
       )}
       {match.gameOver && isDailyFritzMode && dailyFritzSetOverlay && (
+        <GameOverlayPortal>
         <div className="game-over-overlay daily-fritz-set-overlay" role="dialog" aria-label="Daily Fritz set interstitial">
           <div className="game-over-card daily-fritz-set-overlay-card" onClick={(event) => event.stopPropagation()}>
             <div className="daily-fritz-set-overlay-hero">
@@ -6425,6 +6431,7 @@ export default function BotMatchScreen({
             </div>
           </div>
         </div>
+        </GameOverlayPortal>
       )}
       {match.gameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
         <GameOverModal
@@ -6634,6 +6641,7 @@ export default function BotMatchScreen({
         </GameOverModal>
       )}
 
+      <div className="walnut-match-layout game-layout-layer">
       {isLessonLayoutMode ? (
         <GlobalNav currentMode="learn" activeColor="#19D8A2" onNavigate={onNavigate} />
       ) : (
@@ -6642,7 +6650,7 @@ export default function BotMatchScreen({
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <button
                 type="button"
-                className={`wl-player-pill wl-player-pill-btn score-card ${botTurn ? 'is-active' : ''}`}
+                className="wl-player-pill wl-player-pill-btn score-card"
                 ref={opponentPillRef}
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
@@ -6720,7 +6728,7 @@ export default function BotMatchScreen({
           <div className="bot-hud-right-cluster" style={{ gridColumn: 3, justifySelf: 'end' }}>
             <button
               type="button"
-              className={`wl-player-pill wl-player-pill-btn score-card is-you ${!botTurn && handActive ? 'is-active' : ''}`}
+              className="wl-player-pill wl-player-pill-btn score-card is-you"
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
             >
@@ -6767,9 +6775,11 @@ export default function BotMatchScreen({
         </>
       )}
 
+      </div>
 
-
-      {flyingTiles.map((ft) => (
+      {flyingTiles.length > 0 && (
+        <GameOverlayPortal>
+          {flyingTiles.map((ft) => (
         <div
           key={ft.id}
           className="flying-tile-overlay"
@@ -6780,7 +6790,9 @@ export default function BotMatchScreen({
             '--fly-to-y': `${ft.toY}px`,
           } as React.CSSProperties}
         />
-      ))}
+          ))}
+        </GameOverlayPortal>
+      )}
 
       <GameReviewer
         open={analyzerOpen}

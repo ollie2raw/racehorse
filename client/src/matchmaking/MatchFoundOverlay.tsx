@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import type { MatchFoundPayload } from './types';
 import './matchFoundOverlay.css';
 
@@ -114,6 +115,7 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElap
   const winStreak = PLACEHOLDER_WIN_STREAK;
 
   return (
+    <GameOverlayPortal>
     <div className="mm-found-overlay" role="dialog" aria-modal="true" aria-label="Match found">
       <div className="mm-found-shell">
         <header className="mm-found-top">
@@ -270,5 +272,6 @@ export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElap
         </footer>
       </div>
     </div>
+    </GameOverlayPortal>
   );
 }

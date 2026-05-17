@@ -183,3 +183,16 @@
 .wl-top-rail {
   grid-template-columns: auto 1fr auto;
 }
+
+/* Match board: borderless visually; keep 12px structural inset for corner-pill / fly geometry */
+.screen.game-screen .nbl-board-frame {
+  border: none;
+  padding: 12px;
+  border-radius: 0;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.5);
+}
+
+.screen.game-screen .nbl-board-frame::after {
+  content: none;
+  display: none;
+}
