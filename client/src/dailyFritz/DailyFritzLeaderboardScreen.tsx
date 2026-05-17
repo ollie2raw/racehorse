@@ -387,18 +387,34 @@ export default function DailyFritzLeaderboardScreen({
                     Global ranking · Compete daily against Fritz and the world.
                   </p>
                 </div>
-                <div className="dflb-command__meta" aria-label="Daily board status">
-                  <div className="dflb-meta-chip">
-                    <span className="dflb-meta-chip__label">Date</span>
-                    <span className="dflb-meta-chip__value">{formatDateLabel(runDate)}</span>
-                  </div>
-                  <div className="dflb-meta-chip dflb-meta-chip--board">
-                    <span className="dflb-meta-chip__label">Board</span>
-                    <span className="dflb-meta-chip__value">{playerCountLabel}</span>
-                  </div>
-                  <div className="dflb-meta-chip dflb-meta-chip--reset">
-                    <span className="dflb-meta-chip__label">Resets in</span>
-                    <span className="dflb-meta-chip__value is-cyan">{resetLabel}</span>
+                <div className="dflb-command__aside">
+                  <button
+                    type="button"
+                    className="dflb-back-link rh-back-button"
+                    onClick={() => {
+                      if (onNavigate) {
+                        onNavigate('dailyFritz');
+                        return;
+                      }
+                      onBack();
+                    }}
+                  >
+                    <span aria-hidden>←</span>
+                    Back to Daily Fritz
+                  </button>
+                  <div className="dflb-command__meta" aria-label="Daily board status">
+                    <div className="dflb-meta-chip">
+                      <span className="dflb-meta-chip__label">Date</span>
+                      <span className="dflb-meta-chip__value">{formatDateLabel(runDate)}</span>
+                    </div>
+                    <div className="dflb-meta-chip dflb-meta-chip--board">
+                      <span className="dflb-meta-chip__label">Board</span>
+                      <span className="dflb-meta-chip__value">{playerCountLabel}</span>
+                    </div>
+                    <div className="dflb-meta-chip dflb-meta-chip--reset">
+                      <span className="dflb-meta-chip__label">Resets in</span>
+                      <span className="dflb-meta-chip__value is-cyan">{resetLabel}</span>
+                    </div>
                   </div>
                 </div>
               </div>

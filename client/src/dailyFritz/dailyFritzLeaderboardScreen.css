@@ -113,6 +113,21 @@
   flex-shrink: 0;
 }
 
+.dflb-command__aside {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.dflb-back-link.rh-back-button {
+  align-self: flex-end;
+}
+
 .dflb-meta-chip {
   display: flex;
   flex-direction: column;
@@ -930,6 +945,15 @@
     flex-direction: column;
     align-items: stretch;
     padding: 18px 16px 16px;
+  }
+
+  .dflb-command__aside {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .dflb-back-link.rh-back-button {
+    align-self: flex-start;
   }
 
   .dflb-command__meta {
