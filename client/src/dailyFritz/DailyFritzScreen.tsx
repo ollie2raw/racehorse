@@ -403,7 +403,7 @@ function DailyFritzLoadingScreen({ onBack }: { onBack: () => void }) {
               DAILY FRITZ
             </div>
             <h1 className="df-fritz-loading-title">Preparing today’s set</h1>
-            <p className="df-fritz-loading-subtitle">Best-of-3 vs Fritz. Same deal for everyone.</p>
+            <p className="df-fritz-loading-subtitle">Best of 3 vs Fritz. Same deal for everyone.</p>
 
             <div className="df-fritz-loading-steps">
               <div className="df-fritz-loading-step">
@@ -1032,7 +1032,7 @@ export default function DailyFritzScreen({
         ...base,
         kind: 'final' as const,
         headline: sr.setWinner === 'player' ? 'You win the set!' : 'Fritz wins the set',
-        subheadline: 'Today’s best-of-3 is complete.',
+        subheadline: 'Today’s Best of 3 is complete.',
         gameScoreLabel: 'Final game',
         gameScoreValue: `${Number.isFinite(g.playerScore) ? g.playerScore : 0}–${Number.isFinite(g.fritzScore) ? g.fritzScore : 0}`,
         setScoreValue: `${sr.playerGamesWon}–${sr.fritzGamesWon}`,
@@ -1113,7 +1113,7 @@ export default function DailyFritzScreen({
 
   const dateLabel = today ? formatDateLabel(today.run_date) : '—';
   const tierLabel = today ? tierDisplayLabel(today.fritz_tier) : '—';
-  const formatLabel = today ? 'Best-of-3' : '—';
+  const formatLabel = today ? 'Best of 3' : '—';
   const streakLabel = today ? `${today.streak} days` : '0 days';
   const winTarget = today?.winning_score ?? 60;
 
@@ -1201,7 +1201,7 @@ export default function DailyFritzScreen({
                 <div className="df-hero-kicker">• DAILY FRITZ</div>
                 <h1 className="df-title df-title--page df-hero-title">Daily Fritz</h1>
                 <p className="df-hero-subtitle">
-                  Best-of-3 games. Same deal for everyone.
+                  Best of 3 games. Same deal for everyone.
                   <br />
                   Beat Fritz today and climb the leaderboard.
                 </p>
@@ -1311,7 +1311,7 @@ export default function DailyFritzScreen({
                 </div>
 
                 <div className="df-section df-section--games-spotlight">
-                  <div className="fritz-section-label">2. BEST-OF-3 GAMES</div>
+                  <div className="fritz-section-label">2. BEST OF 3 GAMES</div>
                   <div className="df-bof3-arena">
                     <div className="df-bof3-arena__chrome" aria-hidden />
                     <div className="df-bof3-arena__head">

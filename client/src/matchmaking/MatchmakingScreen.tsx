@@ -142,6 +142,14 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
     return () => window.clearTimeout(t);
   }, [props.isConnected, isConnecting]);
 
+  useEffect(() => {
+    if (!showDisconnectedHint || import.meta.env.PROD) return;
+    console.info('[matchmaking] game server not connected yet', {
+      serverUrl: serverUrl || '(page origin)',
+      sameOriginAsPage: serverUrl ? isGameServerSameOriginAsPage(serverUrl) : false,
+    });
+  }, [showDisconnectedHint, serverUrl]);
+
   const handleMatchReady = useCallback(
     (payload: MatchFoundPayload) => {
       // Join the match room immediately so both players are seated before the
@@ -517,23 +525,17 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                 ) : props.isConnected ? (
                   <p className="mm-help-text">First to 60 · 7-Tile · Ranked</p>
                 ) : isConnecting || !showDisconnectedHint ? (
-                  <p className="mm-help-text">Connecting to game server…</p>
+                  <p className="mm-help-text">Connecting…</p>
                 ) : (
                   <div className="mm-connect-hint">
-                    <p className="mm-error">Multiplayer backend unreachable.</p>
+                    <h2 className="mm-connect-hint__title">Waking up game server…</h2>
                     <p className="mm-help-text">
-                      {import.meta.env.PROD && isGameServerSameOriginAsPage(serverUrl)
-                        ? 'VITE_SERVER_URL is set to this same website, but the game server (Node + Socket.io from the server folder) must run on a separate host. Deploy that API (e.g. Render, Railway, Fly.io), set VITE_SERVER_URL in Vercel to that https origin, redeploy the client, then retry.'
-                        : 'Deploy the Node game server and set VITE_SERVER_URL in Vercel to its https origin (not this page). Redeploy the client after changing env vars.'}
+                      The game server is starting up. This can take up to 60 seconds.
                     </p>
-                    {serverUrl ? (
-                      <p className="mm-help-text mm-help-text--mono" title="Socket.io base URL">
-                        Trying: {serverUrl}
-                      </p>
-                    ) : null}
+                    <p className="mm-help-text mm-help-text--muted">Retrying automatically…</p>
                     {props.onRetryConnect ? (
                       <button type="button" className="mm-cta-secondary mm-connect-retry" onClick={props.onRetryConnect}>
-                        Retry connection
+                        Retry now
                       </button>
                     ) : null}
                   </div>

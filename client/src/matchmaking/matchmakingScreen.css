@@ -394,6 +394,20 @@
   width: 100%;
 }
 
+.mm-connect-hint__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+}
+
+.mm-help-text--muted {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
+}
+
 .mm-help-text--mono {
   font-variant-numeric: tabular-nums;
   font-size: 11px;
