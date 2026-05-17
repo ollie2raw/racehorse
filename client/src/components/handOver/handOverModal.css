@@ -21,14 +21,16 @@
   gap: clamp(16px, 2.8vh, 22px);
   position: relative;
   overflow: auto;
-  background: var(--glass-bg);
+  background:
+    radial-gradient(circle at top, rgba(73, 160, 255, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(7, 17, 40, 0.96), rgba(5, 12, 29, 0.94));
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-radius: var(--radius-card);
-  border: 1px solid color-mix(in srgb, var(--tier-standard) 28%, var(--border-light));
+  border-radius: clamp(24px, 3vw, 30px);
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 42%, var(--border-light));
   box-shadow:
     var(--shadow-lg),
-    0 0 48px color-mix(in srgb, var(--tier-standard) 12%, transparent),
+    0 0 68px color-mix(in srgb, var(--tier-standard) 18%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   animation: hand-over-modal-enter 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -129,22 +131,40 @@
 
 .hand-over-modal__award {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   justify-items: center;
   text-align: center;
-  padding: clamp(16px, 3vw, 22px) clamp(18px, 4vw, 28px);
+  padding: clamp(18px, 3vw, 24px) clamp(18px, 4vw, 30px);
   border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--ho-accent) 34%, var(--border-subtle));
+  border: 1px solid color-mix(in srgb, var(--ho-accent) 44%, var(--border-subtle));
   background:
+    radial-gradient(circle at top, rgba(102, 194, 255, 0.14), transparent 52%),
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--ho-accent) 14%, transparent) 0%,
-      color-mix(in srgb, var(--bg-card) 88%, transparent) 48%,
-      rgba(4, 10, 22, 0.55) 100%
+      rgba(13, 34, 78, 0.92) 0%,
+      rgba(8, 21, 49, 0.92) 56%,
+      rgba(4, 10, 24, 0.88) 100%
     );
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 12px 32px color-mix(in srgb, var(--ho-accent) 10%, transparent);
+    0 18px 38px color-mix(in srgb, var(--ho-accent) 14%, transparent);
+}
+
+.hand-over-modal__award-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-teal) 42%, transparent);
+  background: rgba(7, 22, 51, 0.72);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent-teal) 72%, var(--text-primary));
 }
 
 .hand-over-modal__award-value {
@@ -153,19 +173,19 @@
   font-weight: 800;
   line-height: 0.85;
   letter-spacing: 0.02em;
-  color: var(--ho-score-gold);
+  color: var(--text-primary);
   text-shadow:
-    0 0 28px color-mix(in srgb, var(--ho-score-gold) 42%, transparent),
+    0 0 28px color-mix(in srgb, var(--ho-accent) 38%, transparent),
     0 2px 12px rgba(0, 0, 0, 0.35);
 }
 
 .hand-over-modal__award-label {
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--ho-accent) 70%, var(--text-dim));
+  color: color-mix(in srgb, var(--ho-score-gold) 74%, var(--text-primary));
 }
 
 .hand-over-modal__reason {
@@ -185,11 +205,11 @@
 
 .hand-over-modal__outcome-card {
   display: grid;
-  gap: 4px;
-  padding: 12px 14px;
+  gap: 6px;
+  padding: 14px 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: linear-gradient(180deg, rgba(11, 23, 49, 0.82), rgba(7, 16, 34, 0.78));
 }
 
 .hand-over-modal__outcome-card.is-winner {
@@ -226,9 +246,39 @@
   text-transform: uppercase;
 }
 
+.hand-over-modal__outcome-note {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .hand-over-modal__tiles-section {
   display: grid;
   gap: 12px;
+}
+
+.hand-over-modal__tiles-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hand-over-modal__section-kicker {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ho-accent) 84%, var(--text-primary));
+}
+
+.hand-over-modal__section-note {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 .hand-over-modal__tiles-panel {
@@ -236,15 +286,16 @@
   gap: 10px;
   padding: 14px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ho-accent) 16%, var(--border-subtle));
+  background: linear-gradient(180deg, rgba(8, 18, 39, 0.86), rgba(5, 12, 28, 0.82));
 }
 
 .hand-over-modal__tiles-panel.is-scored {
-  border-color: color-mix(in srgb, var(--ho-accent) 30%, var(--border-subtle));
+  border-color: color-mix(in srgb, var(--ho-accent) 42%, var(--border-subtle));
   background:
-    linear-gradient(160deg, var(--ho-accent-soft), transparent 55%),
-    color-mix(in srgb, var(--bg-card) 80%, transparent);
+    linear-gradient(160deg, rgba(36, 120, 219, 0.24), transparent 56%),
+    linear-gradient(180deg, rgba(9, 24, 53, 0.9), rgba(5, 12, 28, 0.84));
+  box-shadow: 0 12px 24px rgba(14, 44, 96, 0.28);
 }
 
 .hand-over-modal__tiles-head {
@@ -280,14 +331,18 @@
 .hand-over-modal__tile-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
+  gap: 10px;
+  justify-content: flex-start;
   align-items: center;
-  min-height: 52px;
-  padding: 10px;
+  min-height: 72px;
+  max-height: 210px;
+  overflow: auto;
+  padding: 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
-  background: rgba(0, 0, 0, 0.22);
+  background:
+    linear-gradient(180deg, rgba(3, 10, 24, 0.8), rgba(7, 15, 34, 0.78)),
+    radial-gradient(circle at top, rgba(84, 196, 255, 0.08), transparent 60%);
 }
 
 .hand-over-modal__tile-grid .hand-over-modal-tile .domino-body {
@@ -307,9 +362,10 @@
 .hand-over-modal__footer {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin-top: 2px;
-  padding-top: 4px;
+  padding: 12px 14px 0;
+  border-top: 1px solid color-mix(in srgb, var(--ho-accent) 22%, transparent);
 }
 
 .hand-over-modal .learning-hand-recap {
@@ -325,24 +381,26 @@
 
 .hand-over-modal__next-label {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--ho-accent) 68%, var(--text-dim));
+  color: color-mix(in srgb, var(--ho-accent) 82%, var(--text-primary));
 }
 
 .hand-over-modal__next-hint {
   font-family: var(--font-body);
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--text-secondary);
 }
 
 .hand-over-modal__progress-track {
   width: 100%;
-  height: 4px;
+  height: 8px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background:
+    linear-gradient(180deg, rgba(5, 11, 24, 0.9), rgba(12, 25, 53, 0.86));
+  border: 1px solid color-mix(in srgb, var(--ho-accent) 18%, transparent);
   overflow: hidden;
   position: relative;
 }
@@ -352,10 +410,12 @@
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--accent-teal) 80%, var(--ho-accent)),
-    var(--ho-accent)
+    color-mix(in srgb, var(--accent-teal) 88%, var(--ho-accent)),
+    color-mix(in srgb, var(--accent-blue) 92%, white 8%)
   );
-  box-shadow: 0 0 12px var(--ho-accent-glow);
+  box-shadow:
+    0 0 16px var(--ho-accent-glow),
+    0 0 28px color-mix(in srgb, var(--accent-teal) 18%, transparent);
   transition: width 100ms linear;
 }
 

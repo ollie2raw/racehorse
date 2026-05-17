@@ -76,6 +76,12 @@ export function buildBotHandOverReveals(
   if (handReveal.winner === 'you') {
     return [
       {
+        ownerLabel: 'You',
+        tiles: yourTiles,
+        pipTotal: sumHandPips(yourTiles),
+        isScoredHand: false,
+      },
+      {
         ownerLabel: opponentLabel,
         tiles: oppTiles,
         pipTotal: sumHandPips(oppTiles),
@@ -87,6 +93,12 @@ export function buildBotHandOverReveals(
   if (handReveal.winner === 'bot') {
     return [
       {
+        ownerLabel: opponentLabel,
+        tiles: oppTiles,
+        pipTotal: sumHandPips(oppTiles),
+        isScoredHand: false,
+      },
+      {
         ownerLabel: 'You',
         tiles: yourTiles,
         pipTotal: sumHandPips(yourTiles),
@@ -97,9 +109,15 @@ export function buildBotHandOverReveals(
 
   return [
     {
-      ownerLabel: 'Both players',
-      tiles: [...yourTiles, ...oppTiles],
-      pipTotal: sumHandPips([...yourTiles, ...oppTiles]),
+      ownerLabel: 'You',
+      tiles: yourTiles,
+      pipTotal: sumHandPips(yourTiles),
+      isScoredHand: true,
+    },
+    {
+      ownerLabel: opponentLabel,
+      tiles: oppTiles,
+      pipTotal: sumHandPips(oppTiles),
       isScoredHand: true,
     },
   ];
@@ -139,6 +157,12 @@ export function buildMultiplayerHandOverReveals(
   if (winner === 'you') {
     return [
       {
+        ownerLabel: 'You',
+        tiles: yourTiles,
+        pipTotal: sumHandPips(yourTiles),
+        isScoredHand: false,
+      },
+      {
         ownerLabel: opponentName,
         tiles: oppTiles,
         pipTotal: sumHandPips(oppTiles),
@@ -150,6 +174,12 @@ export function buildMultiplayerHandOverReveals(
   if (winner === 'opponent') {
     return [
       {
+        ownerLabel: opponentName,
+        tiles: oppTiles,
+        pipTotal: sumHandPips(oppTiles),
+        isScoredHand: false,
+      },
+      {
         ownerLabel: 'You',
         tiles: yourTiles,
         pipTotal: sumHandPips(yourTiles),
@@ -160,9 +190,15 @@ export function buildMultiplayerHandOverReveals(
 
   return [
     {
-      ownerLabel: 'Both players',
-      tiles: [...yourTiles, ...oppTiles],
-      pipTotal: sumHandPips([...yourTiles, ...oppTiles]),
+      ownerLabel: 'You',
+      tiles: yourTiles,
+      pipTotal: sumHandPips(yourTiles),
+      isScoredHand: true,
+    },
+    {
+      ownerLabel: opponentName,
+      tiles: oppTiles,
+      pipTotal: sumHandPips(oppTiles),
       isScoredHand: true,
     },
   ];

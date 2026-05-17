@@ -248,17 +248,22 @@ export async function nextDailyFritzHand(input: {
   gameNumber?: DailyFritzSetGameNumber;
   completedHandIndex: number;
   completedHandScores: { you: number; fritz: number };
+  timeoutMs?: number;
 }): Promise<DailyFritzNextHandResponse> {
   // Use a manual fetch so we can inspect the status code before throwing.
   // requestJson treats all non-2xx responses identically; we need to
   // distinguish the terminal 409 "no hands remain" from retryable errors.
   const headers = await authHeaders();
+  const timeoutMs = Math.max(1000, input.timeoutMs ?? 6500);
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   const response = await fetch(
     `${resolveServerBaseUrl()}/api/daily-fritz/next-hand`,
     {
       method: 'POST',
       credentials: 'include',
       headers,
+      signal: controller.signal,
       body: JSON.stringify({
         attempt_id: input.attemptId,
         verified_match_id: input.verifiedMatchId,
@@ -268,7 +273,14 @@ export async function nextDailyFritzHand(input: {
         completed_hand_scores: input.completedHandScores,
       }),
     },
-  );
+  ).catch((error) => {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`Timed out loading the next Daily Fritz hand after ${timeoutMs}ms.`);
+    }
+    throw error;
+  }).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
 
   const text = await response.text().catch(() => '');
   let parsed: any = null;

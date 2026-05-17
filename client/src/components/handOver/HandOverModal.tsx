@@ -18,6 +18,9 @@ export type HandOverModalProps = {
   loserLabel: string;
   winnerSide: HandOverWinnerSide;
   tileReveals: HandOverTileReveal[];
+  loserPips?: number | null;
+  nextHandLabel?: string;
+  nextHandHint?: string;
   progress?: number;
   progressTransitionMs?: number;
   footer?: ReactNode;
@@ -58,6 +61,9 @@ export function HandOverModal({
   loserLabel,
   winnerSide,
   tileReveals,
+  loserPips,
+  nextHandLabel = 'Next hand starting...',
+  nextHandHint = 'Dealing automatically',
   progress,
   progressTransitionMs,
   footer,
@@ -66,6 +72,11 @@ export function HandOverModal({
   const showAutoAdvance = typeof progress === 'number';
   const clampedProgress = showAutoAdvance ? Math.max(0, Math.min(1, progress)) : 0;
   const isTie = winnerSide === 'tie' || winnerSide === 'none';
+  const pointsLabel = `Point${pointsAwarded === 1 ? '' : 's'} awarded`;
+  const loserPipsLabel =
+    typeof loserPips === 'number'
+      ? `${loserPips} pip${loserPips === 1 ? '' : 's'} left`
+      : 'Hand complete';
 
   return (
     <div
@@ -88,10 +99,9 @@ export function HandOverModal({
         </header>
 
         <section className="hand-over-modal__award" aria-label="Points awarded this hand">
+          <div className="hand-over-modal__award-badge">{pointsLabel}</div>
           <div className="hand-over-modal__award-value">+{pointsAwarded}</div>
-          <div className="hand-over-modal__award-label">
-            Point{pointsAwarded === 1 ? '' : 's'} awarded
-          </div>
+          <div className="hand-over-modal__award-label">{pointsLabel}</div>
         </section>
 
         <p className="hand-over-modal__reason">{reasonCopy}</p>
@@ -100,14 +110,20 @@ export function HandOverModal({
           <div className={`hand-over-modal__outcome-card ${!isTie ? 'is-winner' : ''}`}>
             <span className="hand-over-modal__outcome-label">Winner</span>
             <span className="hand-over-modal__outcome-name">{winnerLabel}</span>
+            <span className="hand-over-modal__outcome-note">Takes +{pointsAwarded}</span>
           </div>
           <div className={`hand-over-modal__outcome-card ${!isTie ? 'is-loser' : ''}`}>
-            <span className="hand-over-modal__outcome-label">Other player</span>
+            <span className="hand-over-modal__outcome-label">Remaining pips</span>
             <span className="hand-over-modal__outcome-name">{loserLabel}</span>
+            <span className="hand-over-modal__outcome-note">{loserPipsLabel}</span>
           </div>
         </section>
 
         <section className="hand-over-modal__tiles-section" aria-label="Remaining tiles">
+          <div className="hand-over-modal__tiles-header">
+            <span className="hand-over-modal__section-kicker">Remaining tiles</span>
+            <span className="hand-over-modal__section-note">All hands revealed</span>
+          </div>
           {tileReveals.map((reveal, revealIndex) => (
             <article
               key={`${reveal.ownerLabel}-${revealIndex}`}
@@ -115,10 +131,11 @@ export function HandOverModal({
             >
               <div className="hand-over-modal__tiles-head">
                 <h4 className="hand-over-modal__tiles-owner">
-                  {reveal.isScoredHand ? 'Tiles counted' : 'Remaining hand'} · {reveal.ownerLabel}
+                  {reveal.ownerLabel}
                 </h4>
                 <span className="hand-over-modal__tiles-meta">
-                  {reveal.tiles.length} tile{reveal.tiles.length === 1 ? '' : 's'} · {reveal.pipTotal} pip
+                  {reveal.isScoredHand ? 'Scored hand' : 'Cleared hand'} · {reveal.tiles.length} tile
+                  {reveal.tiles.length === 1 ? '' : 's'} · {reveal.pipTotal} pip
                   {reveal.pipTotal === 1 ? '' : 's'}
                 </span>
               </div>
@@ -133,8 +150,8 @@ export function HandOverModal({
           (showAutoAdvance ? (
             <footer className="hand-over-modal__footer">
               <div className="hand-over-modal__next-row">
-                <span className="hand-over-modal__next-label">Next hand starting</span>
-                <span className="hand-over-modal__next-hint">Dealing automatically</span>
+                <span className="hand-over-modal__next-label">{nextHandLabel}</span>
+                <span className="hand-over-modal__next-hint">{nextHandHint}</span>
               </div>
               <div
                 className="hand-over-modal__progress-track"

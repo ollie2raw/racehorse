@@ -914,6 +914,7 @@ export default function BotMatchScreen({
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const handAutoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
   const gameOverSoundKeyRef = useRef('');
@@ -3154,6 +3155,7 @@ export default function BotMatchScreen({
               you: result.state.players.you.score,
               fritz: result.state.players.bot.score,
             },
+            timeoutMs: 4500,
           }),
           result: null,
           error: null,
@@ -4899,6 +4901,11 @@ export default function BotMatchScreen({
 
     if (isDailyFritzMode && dailyFritzPackage) {
       handTransitionInFlightRef.current = true;
+      if (handAutoAdvanceTimerRef.current) {
+        window.clearTimeout(handAutoAdvanceTimerRef.current);
+        handAutoAdvanceTimerRef.current = null;
+        console.log('[hand-over] timer-cleared', { reason: 'advance-start' });
+      }
       const cache = dailyFritzNextHandRef.current;
       dailyFritzNextHandRef.current = null;
 
@@ -4924,11 +4931,13 @@ export default function BotMatchScreen({
 
       // ── Early exit: prefetch already resolved with end-of-run error ──────
       if (cache?.error instanceof DailyFritzEndOfRunError) {
+        console.log('[hand-over] skipped-game-complete', { reason: cache.error.message });
         handleEndOfRun(cache.error.message);
         return;
       }
 
       if (cache?.result) {
+        console.log('[hand-over] advancing-next-hand', { source: 'prefetch-hit' });
         // Prefetch already settled — instant hand transition, no network wait needed.
         lastDailyFlowLabelRef.current = 'next-hand-start';
         console.log('[daily-fritz-hand] applying next hand', {
@@ -4953,41 +4962,41 @@ export default function BotMatchScreen({
         // guard against double-advancing (prev.handOver check inside it).
         handTransitionInFlightRef.current = false;
       } else {
-        // Prefetch still in-flight or not started — await the promise.
+        // Prefetch still in-flight or not started — issue a fresh guarded request
+        // so a stale unresolved promise cannot stall the hand transition.
         // IMPORTANT: do NOT call setGhostResultLoading(true) here. The Daily Fritz
         // completion effect calls setGhostResultLoading(false) on every render where
         // !match.gameOver, immediately overriding the true we set here and producing
         // a spurious "Submitting..." flash in the completion overlay.
-        const handPromise =
-          cache?.promise ??
-          (() => {
-            const gameNumber = dailyFritzPackage.current_game_number ?? 1;
-            console.log('[daily-fritz-hand] requesting next hand', {
-              source: 'advance',
-              gameNumber,
-              completedHandIndex: dailyFritzHandIndex,
-              yourScore: match.players.you.score,
-              fritzScore: match.players.bot.score,
-            });
-            const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-            dailyFritzNextHandRef.current = {
-              promise: Promise.resolve().then(() => nextDailyFritzHand({
-                attemptId: dailyFritzPackage.attempt_id,
-                verifiedMatchId: dailyFritzPackage.verified_match_id,
-                runDate: dailyFritzPackage.run_date,
-                gameNumber,
-                completedHandIndex: dailyFritzHandIndex,
-                completedHandScores: {
-                  you: match.players.you.score,
-                  fritz: match.players.bot.score,
-                },
-              })),
-              result: null,
-              error: null,
-              startedAt: requestStartedAt,
-            };
-            return dailyFritzNextHandRef.current.promise;
-          })();
+        const gameNumber = dailyFritzPackage.current_game_number ?? 1;
+        const source = cache?.promise ? 'advance-refresh' : 'advance';
+        console.log('[daily-fritz-hand] requesting next hand', {
+          source,
+          gameNumber,
+          completedHandIndex: dailyFritzHandIndex,
+          yourScore: match.players.you.score,
+          fritzScore: match.players.bot.score,
+        });
+        const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        dailyFritzNextHandRef.current = {
+          promise: Promise.resolve().then(() => nextDailyFritzHand({
+            attemptId: dailyFritzPackage.attempt_id,
+            verifiedMatchId: dailyFritzPackage.verified_match_id,
+            runDate: dailyFritzPackage.run_date,
+            gameNumber,
+            completedHandIndex: dailyFritzHandIndex,
+            completedHandScores: {
+              you: match.players.you.score,
+              fritz: match.players.bot.score,
+            },
+            timeoutMs: 4500,
+          })),
+          result: null,
+          error: null,
+          startedAt: requestStartedAt,
+        };
+        const handPromise = dailyFritzNextHandRef.current.promise;
+        console.log('[hand-over] advancing-next-hand', { source });
         console.log('[daily-flow] next hand start (awaiting fetch)', {
           hadCachedPromise: cache?.promise != null,
         });
@@ -4995,19 +5004,19 @@ export default function BotMatchScreen({
           .then((response) => {
             lastDailyFlowLabelRef.current = 'next-hand-start';
             const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-            if (!cache?.promise && dailyFritzNextHandRef.current) {
+            if (dailyFritzNextHandRef.current) {
               dailyFritzNextHandRef.current.result = response;
             }
             console.log('[daily-fritz-hand] next hand response', {
-              source: cache?.promise ? 'cached-promise' : 'advance',
+              source,
               gameNumber: response.game_number ?? dailyFritzPackage.current_game_number ?? 1,
               currentHandIndex: response.current_hand_index,
               replayed: Boolean(response.replayed),
               ignored: Boolean(response.ignored),
-              durationMs: Number((requestEndedAt - (cache?.startedAt ?? dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
+              durationMs: Number((requestEndedAt - (dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
             });
             console.log('[daily-fritz-hand] applying next hand', {
-              source: cache?.promise ? 'cached-promise' : 'advance',
+              source,
               gameNumber: response.game_number ?? dailyFritzPackage.current_game_number ?? 1,
               currentHandIndex: response.current_hand_index,
               nextHandNumber: matchRef.current.handNumber + 1,
@@ -5029,6 +5038,7 @@ export default function BotMatchScreen({
           .catch((err) => {
             // Terminal end-of-run: server says no hands remain — not a retryable error.
             if (err instanceof DailyFritzEndOfRunError) {
+              console.log('[hand-over] skipped-game-complete', { reason: err.message });
               handleEndOfRun(err.message);
               return;
             }
@@ -5037,16 +5047,16 @@ export default function BotMatchScreen({
             // The watchdog will retry after 10 s if still stuck.
             const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
             const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-            if (!cache?.promise && dailyFritzNextHandRef.current) {
+            if (dailyFritzNextHandRef.current) {
               dailyFritzNextHandRef.current.error = err;
             }
             handTransitionInFlightRef.current = false;
             console.warn('[daily-fritz-hand] next hand error', {
-              source: cache?.promise ? 'cached-promise' : 'advance',
+              source,
               gameNumber: dailyFritzPackage.current_game_number ?? 1,
               error: errMsg,
               handNumber: matchRef.current.handNumber,
-              durationMs: Number((requestEndedAt - (cache?.startedAt ?? dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
+              durationMs: Number((requestEndedAt - (dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
             });
             // handReveal intentionally NOT cleared here — keep the reveal visible
             // so the player sees the score while the watchdog queues a retry.
@@ -5109,8 +5119,20 @@ export default function BotMatchScreen({
   useEffect(() => {
     if (!handReveal || match.gameOver) {
       setHandRevealProgress(1);
+      if (handAutoAdvanceTimerRef.current) {
+        window.clearTimeout(handAutoAdvanceTimerRef.current);
+        handAutoAdvanceTimerRef.current = null;
+        console.log('[hand-over] timer-cleared', { reason: handReveal ? 'game-complete' : 'hidden' });
+      }
       return;
     }
+    console.log('[hand-over] shown', {
+      mode,
+      handWinner: handReveal.winner,
+      pointsAwarded: handReveal.pointsAwarded,
+      gameComplete: match.gameOver,
+      setComplete: false,
+    });
     setHandRevealProgress(1);
     // In guided / V2 guided modes the player taps "Next Hand →" manually
     if (isGuidedMode || isGuidedV2Mode) return;
@@ -5122,13 +5144,19 @@ export default function BotMatchScreen({
         prefetchReady: dailyFritzNextHandRef.current?.result != null,
       });
     }
+    console.log('[hand-over] timer-start', { delayMs: DAILY_FRITZ_AUTO_ADVANCE_MS });
     const rafId = requestAnimationFrame(() => setHandRevealProgress(0));
-    const timer = setTimeout(() => {
+    handAutoAdvanceTimerRef.current = window.setTimeout(() => {
+      handAutoAdvanceTimerRef.current = null;
       advanceHand();
     }, DAILY_FRITZ_AUTO_ADVANCE_MS);
     return () => {
       cancelAnimationFrame(rafId);
-      clearTimeout(timer);
+      if (handAutoAdvanceTimerRef.current) {
+        window.clearTimeout(handAutoAdvanceTimerRef.current);
+        handAutoAdvanceTimerRef.current = null;
+        console.log('[hand-over] timer-cleared', { reason: 'effect-cleanup' });
+      }
     };
   }, [handReveal, match.gameOver, advanceHand, isGuidedMode, isGuidedV2Mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -6210,6 +6238,7 @@ export default function BotMatchScreen({
             winnerSide={resolveWinnerSide(handReveal.winner)}
             winnerLabel={winnerDisplayLabel(resolveWinnerSide(handReveal.winner), opponentLabel)}
             loserLabel={loserDisplayLabel(resolveWinnerSide(handReveal.winner), opponentLabel)}
+            loserPips={handReveal.loserPips}
             reasonCopy={buildHandOverReasonCopy({
               youWentOut: handReveal.reason !== 'blocked' && handReveal.winner === 'you',
               opponentWentOut: handReveal.reason !== 'blocked' && handReveal.winner === 'bot',
@@ -6218,6 +6247,8 @@ export default function BotMatchScreen({
               pointsAwarded: handReveal.pointsAwarded,
             })}
             tileReveals={buildBotHandOverReveals(handReveal, opponentLabel)}
+            nextHandLabel="Next hand starting..."
+            nextHandHint="Daily Fritz is dealing the next race"
             progress={isGuidedMode || isGuidedV2Mode ? undefined : handRevealProgress}
             progressTransitionMs={
               isGuidedMode || isGuidedV2Mode ? undefined : DAILY_FRITZ_AUTO_ADVANCE_MS
