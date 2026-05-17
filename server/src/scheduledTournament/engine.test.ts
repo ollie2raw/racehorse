@@ -182,7 +182,7 @@ function makeTournament(overrides: Partial<ScheduledTournamentRow> = {}): Schedu
     id: 'tour-1',
     scheduled_start: new Date('2026-05-15T00:00:00Z').toISOString(),
     registration_open_at: new Date('2026-05-14T23:30:00Z').toISOString(),
-    registration_close_at: new Date('2026-05-14T23:55:00Z').toISOString(),
+    registration_close_at: new Date('2026-05-14T23:58:00Z').toISOString(),
     status: 'registration_open',
     format: '7-tile',
     win_target: 30,

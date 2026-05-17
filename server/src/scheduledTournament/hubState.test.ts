@@ -7,7 +7,7 @@ function makeTournament(overrides: Partial<ScheduledTournament> = {}): Scheduled
     id: 'tour-1',
     scheduled_start: new Date(Date.now() + 60 * 60_000).toISOString(),
     registration_open_at: new Date(Date.now() + 30 * 60_000).toISOString(),
-    registration_close_at: new Date(Date.now() + 55 * 60_000).toISOString(),
+    registration_close_at: new Date(Date.now() + 58 * 60_000).toISOString(),
     status: 'upcoming',
     format: '7-tile',
     win_target: 30,

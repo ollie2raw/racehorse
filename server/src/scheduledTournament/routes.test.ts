@@ -192,7 +192,7 @@ describe('scheduled tournament routes auth/user guards', () => {
       id: 'tour-1',
       status: 'in_progress',
       scheduled_start: new Date('2026-05-15T23:50:00Z').toISOString(),
-      registration_close_at: new Date('2026-05-15T23:45:00Z').toISOString(),
+      registration_close_at: new Date('2026-05-15T23:48:00Z').toISOString(),
     });
     mocks.fetchMatches.mockResolvedValue([]);
     mocks.fetchActiveAssignedMatchForUser.mockResolvedValue({
@@ -258,7 +258,7 @@ describe('scheduled tournament routes auth/user guards', () => {
       id: 'tour-1',
       status: 'in_progress',
       scheduled_start: new Date('2026-05-15T23:50:00Z').toISOString(),
-      registration_close_at: new Date('2026-05-15T23:45:00Z').toISOString(),
+      registration_close_at: new Date('2026-05-15T23:48:00Z').toISOString(),
     });
     mocks.fetchMatches.mockResolvedValue([]);
     mocks.fetchActiveAssignedMatchForUser.mockResolvedValue({

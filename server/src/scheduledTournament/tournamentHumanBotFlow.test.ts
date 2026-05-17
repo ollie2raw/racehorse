@@ -83,7 +83,7 @@ function makeHumanVsBotPersistence(): {
     id: tournamentId,
     scheduled_start: new Date('2026-05-16T01:00:00Z').toISOString(),
     registration_open_at: new Date('2026-05-16T00:30:00Z').toISOString(),
-    registration_close_at: new Date('2026-05-16T00:55:00Z').toISOString(),
+    registration_close_at: new Date('2026-05-16T00:58:00Z').toISOString(),
     status: 'in_progress',
     format: '7-tile',
     win_target: 30,

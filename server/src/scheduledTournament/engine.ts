@@ -658,8 +658,38 @@ export const TOURNAMENT_CONFIG = {
   MIN_HUMANS_TO_START,
   DEFAULT_RATING,
   REGISTRATION_OPEN_LEAD_MIN: 30,
-  REGISTRATION_CLOSE_LEAD_MIN: 5,
+  REGISTRATION_CLOSE_LEAD_MIN: 2,
 } as const;
+
+/** Registration window timestamps aligned with seed SQL and TOURNAMENT_CONFIG. */
+export function computeTournamentRegistrationTimestamps(scheduledStartMs: number): {
+  registration_open_at: string;
+  registration_close_at: string;
+} {
+  const { REGISTRATION_OPEN_LEAD_MIN, REGISTRATION_CLOSE_LEAD_MIN } = TOURNAMENT_CONFIG;
+  return {
+    registration_open_at: new Date(scheduledStartMs - REGISTRATION_OPEN_LEAD_MIN * 60_000).toISOString(),
+    registration_close_at: new Date(scheduledStartMs - REGISTRATION_CLOSE_LEAD_MIN * 60_000).toISOString(),
+  };
+}
+
+export function isTournamentRegistrationWindowOpen(input: {
+  status: string;
+  registration_close_at: string;
+  nowMs: number;
+}): boolean {
+  return input.status === 'registration_open' && input.nowMs < Date.parse(input.registration_close_at);
+}
+
+export function isTournamentBracketLobbyPhase(input: {
+  registration_close_at: string;
+  scheduled_start: string;
+  nowMs: number;
+}): boolean {
+  const closeMs = Date.parse(input.registration_close_at);
+  const startMs = Date.parse(input.scheduled_start);
+  return input.nowMs >= closeMs && input.nowMs < startMs;
+}
 
 /** Look up the tournament-match record (if any) associated with a room code. */
 export async function findTournamentMatchByRoom(roomCode: string): Promise<MatchRow | null> {

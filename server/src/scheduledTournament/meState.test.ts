@@ -64,7 +64,13 @@ function makeMatch(overrides: Partial<MatchRow> = {}): MatchRow {
 
 describe('buildTournamentMeState', () => {
   it('returns bracket_lobby between registration close and scheduled_start', () => {
-    const tournament = makeTournament();
+    const startMs = Date.parse('2026-05-17T12:00:00.000Z');
+    const closeMs = startMs - 2 * 60_000;
+    const tournament = makeTournament({
+      scheduled_start: new Date(startMs).toISOString(),
+      registration_open_at: new Date(startMs - 30 * 60_000).toISOString(),
+      registration_close_at: new Date(closeMs).toISOString(),
+    });
     const reg = makeReg();
     const match = makeMatch();
     const state = buildTournamentMeState({
@@ -73,9 +79,10 @@ describe('buildTournamentMeState', () => {
       tournamentsById: new Map([[tournamentId, tournament]]),
       matchesByTournamentId: new Map([[tournamentId, [match]]]),
       opponentUsernameByUserId: new Map(),
-      now: new Date(Date.now()),
+      now: new Date(closeMs + 60_000),
     });
 
+    expect(startMs - closeMs).toBe(2 * 60_000);
     expect(state.currentTournamentPhase).toBe('bracket_lobby');
     expect(state.activeTournamentId).toBe(tournamentId);
     expect(state.assignedMatch).toEqual(

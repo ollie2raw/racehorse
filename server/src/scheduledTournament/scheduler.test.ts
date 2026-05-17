@@ -39,7 +39,7 @@ describe('startTournamentScheduler stale cleanup', () => {
           id: 'tour-stale',
           scheduled_start: '2026-05-15T00:00:00.000Z',
           registration_open_at: '2026-05-14T23:30:00.000Z',
-          registration_close_at: '2026-05-14T23:55:00.000Z',
+          registration_close_at: '2026-05-14T23:58:00.000Z',
           status: 'in_progress',
           format: 'single_elimination',
           win_target: 30,
