@@ -655,23 +655,12 @@ export async function fetchUserStatsByUserId(
 ): Promise<{ data: StatsSummary | null; error: string | null }> {
   if (!supabase) return { data: null, error: 'Supabase not configured.' };
 
-  let historyResp: { data: unknown[] | null; error: { message?: string; code?: string } | null } = await supabase
+  // Production `matches` does not expose `avg_move_quality` yet. Keep the browser read path on
+  // the stable column set so optional stats/history loads do not emit a failing 400 first.
+  const historyResp: { data: unknown[] | null; error: { message?: string; code?: string } | null } = await supabase
     .from('matches')
-    .select('winner_user_id, loser_user_id, mode, winner_score, loser_score, room_code, avg_move_quality, created_at')
+    .select('winner_user_id, loser_user_id, mode, winner_score, loser_score, room_code, created_at')
     .or(`winner_user_id.eq.${userId},loser_user_id.eq.${userId}`);
-
-  // Backward-compatible retry for deployments where avg_move_quality column is not added yet.
-  if (
-    historyResp.error &&
-    (((historyResp.error.message ?? '').toLowerCase().includes('avg_move_quality') ||
-      (historyResp.error.message ?? '').toLowerCase().includes('column')) ||
-      String((historyResp.error as { code?: string }).code ?? '') === '42703')
-  ) {
-    historyResp = await supabase
-      .from('matches')
-      .select('winner_user_id, loser_user_id, mode, winner_score, loser_score, room_code, created_at')
-      .or(`winner_user_id.eq.${userId},loser_user_id.eq.${userId}`);
-  }
 
   if (historyResp.error) {
     const message = historyResp.error.message ?? 'Stats unavailable.';
