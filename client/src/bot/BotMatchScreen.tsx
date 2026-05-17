@@ -5953,7 +5953,7 @@ export default function BotMatchScreen({
           </div>
         )}
         {!match.gameOver && !isLessonLayoutMode && (
-          <>
+          <div className="rh-board-meta-bar" data-ui="board-meta">
             <BoardOpenEndsPill openEndsSum={openEndsSum} />
             <div
               ref={boneyardRef}
@@ -5965,7 +5965,7 @@ export default function BotMatchScreen({
                 <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
               ) : null}
             </div>
-          </>
+          </div>
         )}
         {isGhostMode && ghostAgreementType && (
           <div className={`ghost-agreement-indicator ${ghostAgreementType}`}>

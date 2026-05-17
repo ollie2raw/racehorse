@@ -52,10 +52,10 @@
 .df-fritz-loading-root {
   position: relative;
   width: 100%;
-  height: 100dvh;
+  height: 99.5dvh;
   max-height: 100%;
   overflow: hidden;
-  color: var(--text-primary);
+  color: #f4f0e8;
   display: flex;
   flex-direction: column;
   font-family: var(--font-body);
@@ -133,22 +133,10 @@
   padding-bottom: 8vh;
 }
 
-.df-fritz-loading-card {
-  width: min(520px, calc(100vw - 48px));
-  padding: 36px 32px 32px;
-  border-radius: var(--pvf-radius-lg);
-  background: rgba(7, 9, 16, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 8px 32px rgba(0, 0, 0, 0.28);
-  box-sizing: border-box;
-  animation: df-fritz-loading-fade-in 800ms var(--ease-premium) forwards;
-}
-
 .df-fritz-loading-lockup {
   text-align: center;
-  max-width: 100%;
+  max-width: 600px;
+  animation: df-fritz-loading-fade-in 800ms ease-out forwards;
 }
 
 @keyframes df-fritz-loading-fade-in {
@@ -181,6 +169,7 @@
   border-radius: 50%;
   flex-shrink: 0;
   box-shadow: 0 0 12px color-mix(in srgb, var(--tier-elite) 90%, transparent);
+  animation: df-fritz-loading-dot-pulse 2s ease-in-out infinite;
 }
 
 .df-fritz-loading-title {
@@ -232,21 +221,38 @@
     background-color 300ms var(--ease-premium);
 }
 
-.df-fritz-loading-chip.is-active::after {
+.df-fritz-loading-chip::after {
   content: '';
   position: absolute;
-  inset: auto 10px 8px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--tier-elite);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--tier-elite) 40%, transparent);
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    transparent 35%,
+    color-mix(in srgb, var(--tier-elite) 14%, transparent) 50%,
+    transparent 65%
+  );
+  background-size: 250% 250%;
+  animation: df-fritz-loading-shimmer 2.5s infinite linear;
+}
+
+@keyframes df-fritz-loading-shimmer {
+  0% {
+    background-position: 200% 200%;
+  }
+  100% {
+    background-position: -200% -200%;
+  }
 }
 
 .df-fritz-loading-chip.is-active {
   background: color-mix(in srgb, var(--tier-elite) 8%, transparent);
-  border-color: color-mix(in srgb, var(--tier-elite) 45%, var(--border-light));
+  border-color: color-mix(in srgb, var(--tier-elite) 45%, rgba(255, 255, 255, 0.2));
   box-shadow: 0 0 25px color-mix(in srgb, var(--tier-elite) 18%, transparent);
   transform: scale(1.05);
+}
+
+.df-fritz-loading-step-label.is-active {
+  color: color-mix(in srgb, var(--tier-elite) 88%, white);
 }
 
 .df-fritz-loading-step-label {
@@ -262,8 +268,37 @@
 .df-fritz-loading-step-connector {
   width: 28px;
   height: 1px;
-  background: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.04)
+  );
   margin-top: -24px;
+}
+
+@keyframes df-fritz-loading-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.82;
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .df-fritz-loading-lockup,
+  .df-fritz-loading-chip::after,
+  .df-fritz-loading-dot {
+    animation: none;
+  }
+
+  .df-fritz-loading-chip.is-active {
+    transform: none;
+  }
 }
 
 .df-fritz-loading-actions {

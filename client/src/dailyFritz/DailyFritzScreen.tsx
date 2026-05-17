@@ -481,6 +481,12 @@ function formatCountdownHms(totalSeconds: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
+const DF_LOADING_STEPS = [
+  { label: '1 Game one' },
+  { label: '2 Game two' },
+  { label: '3 Decider' },
+] as const;
+
 function DailyFritzLoadingScreen({
   phase,
   loadError,
@@ -494,9 +500,18 @@ function DailyFritzLoadingScreen({
   onRetry: () => void;
   retryPending: boolean;
 }) {
+  const [activeStep, setActiveStep] = useState(0);
   const isFailed = phase === 'failed';
   const isSlow = phase === 'still-preparing';
   const isRetrying = phase === 'retrying';
+
+  useEffect(() => {
+    if (isFailed) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % DF_LOADING_STEPS.length);
+    }, 1400);
+    return () => window.clearInterval(timer);
+  }, [isFailed]);
   const title = isFailed
     ? 'Couldn’t load Daily Fritz'
     : isSlow || isRetrying
@@ -530,12 +545,11 @@ function DailyFritzLoadingScreen({
 
         <main className="df-fritz-loading-main">
           <div
-            className="df-fritz-loading-card"
+            className="df-fritz-loading-lockup"
             role="status"
             aria-live="polite"
             aria-busy={busy || retryPending}
           >
-            <div className="df-fritz-loading-lockup">
             <div className="df-fritz-loading-eyebrow">
               <span className="df-fritz-loading-dot" aria-hidden />
               DAILY FRITZ
@@ -545,20 +559,21 @@ function DailyFritzLoadingScreen({
 
             {!isFailed ? (
               <div className="df-fritz-loading-steps">
-                <div className="df-fritz-loading-step">
-                  <div className="df-fritz-loading-chip is-active" />
-                  <span className="df-fritz-loading-step-label">1 Game one</span>
-                </div>
-                <div className="df-fritz-loading-step-connector" aria-hidden />
-                <div className="df-fritz-loading-step">
-                  <div className="df-fritz-loading-chip" />
-                  <span className="df-fritz-loading-step-label">2 Game two</span>
-                </div>
-                <div className="df-fritz-loading-step-connector" aria-hidden />
-                <div className="df-fritz-loading-step">
-                  <div className="df-fritz-loading-chip" />
-                  <span className="df-fritz-loading-step-label">3 Decider</span>
-                </div>
+                {DF_LOADING_STEPS.map((step, index) => (
+                  <Fragment key={step.label}>
+                    {index > 0 ? <div className="df-fritz-loading-step-connector" aria-hidden /> : null}
+                    <div className="df-fritz-loading-step">
+                      <div
+                        className={`df-fritz-loading-chip${activeStep === index ? ' is-active' : ''}`}
+                      />
+                      <span
+                        className={`df-fritz-loading-step-label${activeStep === index ? ' is-active' : ''}`}
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                  </Fragment>
+                ))}
               </div>
             ) : null}
 
@@ -576,7 +591,6 @@ function DailyFritzLoadingScreen({
                 </Button>
               </div>
             ) : null}
-            </div>
           </div>
         </main>
       </div>

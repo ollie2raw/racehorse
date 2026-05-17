@@ -1,0 +1,262 @@
+/* Match board architecture — structural hierarchy (HUD → status → playfield → tray) */
+
+.screen.game-screen.walnut-live .walnut-match-layout {
+  gap: 0;
+}
+
+/* ─── Top HUD: two score zones ─── */
+.screen.game-screen.walnut-live .rh-match-hud,
+.screen.game-screen.walnut-live .wl-top-rail.rh-match-hud {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  position: relative;
+  min-height: var(--match-hud-min-height, 92px);
+  padding: 12px 14px 10px !important;
+  border-bottom: 1px solid rgba(148, 170, 204, 0.14);
+  background: rgba(7, 12, 22, 0.98) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.screen.game-screen.walnut-live .rh-match-hud__zone {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.screen.game-screen.walnut-live .rh-match-hud__zone--opp {
+  justify-content: flex-start;
+}
+
+.screen.game-screen.walnut-live .rh-match-hud__zone--you {
+  justify-content: flex-end;
+}
+
+.screen.game-screen.walnut-live .rh-match-player-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.screen.game-screen.walnut-live .rh-match-hand-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.screen.game-screen.walnut-live .rh-match-hand-block__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(210, 224, 244, 0.88);
+  line-height: 1;
+}
+
+/* ─── Turn status bridge (between HUD and table) ─── */
+.screen.game-screen.walnut-live .rh-match-status-bridge {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px 0;
+  z-index: 4;
+}
+
+.screen.game-screen.walnut-live .rh-match-turn-module {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: min(100%, 520px);
+  padding: 10px 20px 12px;
+  border-radius: 14px 14px 0 0;
+  border: 1px solid rgba(148, 170, 204, 0.18);
+  border-bottom: none;
+  background: rgba(12, 20, 34, 0.98);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 -4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.screen.game-screen.walnut-live .rh-match-turn-module__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(196, 212, 232, 0.82);
+  line-height: 1;
+}
+
+.screen.game-screen.walnut-live .rh-match-turn-module .wl-turn-label,
+.screen.game-screen.walnut-live .rh-match-turn-module__label {
+  margin: 0;
+  width: 100%;
+  text-align: center;
+  border-radius: 10px;
+}
+
+.screen.game-screen.walnut-live .rh-match-turn-module .daily-fritz-progress-pill {
+  margin-bottom: 2px;
+}
+
+/* ─── Playfield card: framed table + integrated tray ─── */
+.screen.game-screen.walnut-live .rh-match-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.screen.game-screen.walnut-live .rh-match-playfield-card {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0 10px;
+  border: 1px solid rgba(148, 170, 204, 0.16);
+  border-radius: 0 0 16px 16px;
+  background: rgba(8, 13, 24, 0.98);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 32px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+}
+
+.screen.game-screen.walnut-live .rh-match-playfield-card .wl-stage-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.screen.game-screen.walnut-live .rh-match-playfield-card .walnut-nbl-stage,
+.screen.game-screen.walnut-live .rh-match-playfield-card .nbl-stage {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.screen.game-screen.walnut-live .rh-match-playfield-card .nbl-board-frame {
+  border: none;
+  border-radius: 0;
+  padding: 4px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.screen.game-screen.walnut-live .rh-match-playfield-card .nbl-board-frame::after {
+  inset: 6px;
+  border-radius: 10px;
+}
+
+/* ─── Board meta bar (open / boneyard counters) ─── */
+.screen.game-screen.walnut-live .rh-board-meta-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  pointer-events: none;
+}
+
+.screen.game-screen.walnut-live .rh-board-meta-bar > * {
+  pointer-events: auto;
+}
+
+.screen.game-screen.walnut-live .rh-board-meta-bar .board-corner-pill {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+}
+
+/* ─── Integrated tray cap ─── */
+.screen.game-screen.walnut-live .rh-match-tray-shell {
+  flex: 0 0 auto;
+  border-top: 1px solid rgba(148, 170, 204, 0.16);
+  background: rgba(10, 17, 30, 0.98);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.screen.game-screen.walnut-live .rh-match-tray-shell .wl-hand-area {
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  width: 100% !important;
+}
+
+/* ─── Board toolbar (controls + zoom alignment) ─── */
+.screen.game-screen.walnut-live .rh-board-toolbar {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 12;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.screen.game-screen.walnut-live .rh-board-toolbar > * {
+  pointer-events: auto;
+}
+
+.screen.game-screen.walnut-live .rh-board-toolbar .board-zoom-tray.control-pill {
+  position: static;
+  bottom: auto;
+  left: auto;
+}
+
+.screen.game-screen.walnut-live .nbl-board-toolbar {
+  position: absolute;
+  inset: auto 10px 10px auto;
+  z-index: 12;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.screen.game-screen.walnut-live .nbl-board-toolbar > * {
+  pointer-events: auto;
+}
+
+/* Bot match: align with architecture grid */
+.bot-match-screen.rh-match-hud-active .bot-top-rail.rh-match-hud {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.bot-match-screen .bot-hud-left-cluster,
+.bot-match-screen .bot-hud-right-cluster {
+  grid-column: auto !important;
+  justify-self: stretch !important;
+}
+
+@media (max-height: 860px) {
+  .screen.game-screen.walnut-live .rh-match-hud,
+  .screen.game-screen.walnut-live .wl-top-rail.rh-match-hud {
+    min-height: var(--match-hud-min-height, 86px);
+    padding-bottom: 8px !important;
+  }
+
+  .screen.game-screen.walnut-live .rh-match-turn-module {
+    padding: 8px 16px 10px;
+  }
+
+  .screen.game-screen.walnut-live .rh-match-playfield-card {
+    margin: 0 8px;
+  }
+}
