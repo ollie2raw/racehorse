@@ -25,6 +25,7 @@ describe('deriveTournamentHubViewModel', () => {
       upcoming: [makeTournament()],
       registrations: [] as Registration[],
       recoveryMatch: null,
+      tournamentPhase: null,
       activeBracketStatus: 'cancelled',
       isLoading: false,
       hasLoaded: true,
@@ -40,6 +41,7 @@ describe('deriveTournamentHubViewModel', () => {
       upcoming: [],
       registrations: [] as Registration[],
       recoveryMatch: null,
+      tournamentPhase: null,
       activeBracketStatus: null,
       isLoading: false,
       hasLoaded: false,
@@ -49,6 +51,32 @@ describe('deriveTournamentHubViewModel', () => {
     expect(vm.state).toBe('api_error');
     expect(vm.canRetry).toBe(true);
     expect(vm.detail).toBe('boom');
+  });
+
+  it('returns bracket_lobby when server phase is bracket_lobby', () => {
+    const vm = deriveTournamentHubViewModel({
+      upcoming: [makeTournament({ status: 'in_progress' })],
+      registrations: [
+        {
+          id: 'reg-1',
+          tournament_id: 'tour-1',
+          user_id: 'u1',
+          registered_at: new Date().toISOString(),
+          seed: 1,
+          placement: null,
+          status: 'active',
+        },
+      ] as Registration[],
+      recoveryMatch: null,
+      tournamentPhase: 'bracket_lobby',
+      activeBracketStatus: 'in_progress',
+      isLoading: false,
+      hasLoaded: true,
+      error: null,
+      nowMs: Date.now(),
+    });
+    expect(vm.state).toBe('bracket_lobby');
+    expect(vm.title).toContain('Bracket locked');
   });
 
   it('returns eliminated state instead of retry join when registration is eliminated and no active match exists', () => {
@@ -66,6 +94,7 @@ describe('deriveTournamentHubViewModel', () => {
         },
       ] as Registration[],
       recoveryMatch: null,
+      tournamentPhase: null,
       activeBracketStatus: 'in_progress',
       isLoading: false,
       hasLoaded: true,

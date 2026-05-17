@@ -19,18 +19,19 @@ vi.mock('./matchDispatch', () => ({
   })),
 }));
 
-function makeTournament(): ScheduledTournamentRow {
+function makeTournament(overrides: Partial<ScheduledTournamentRow> = {}): ScheduledTournamentRow {
   return {
     id: 'tour-1',
-    scheduled_start: new Date('2026-05-15T00:00:00Z').toISOString(),
-    registration_open_at: new Date('2026-05-14T23:30:00Z').toISOString(),
-    registration_close_at: new Date('2026-05-14T23:55:00Z').toISOString(),
+    scheduled_start: new Date('2026-05-15T02:30:00Z').toISOString(),
+    registration_open_at: new Date('2026-05-15T02:00:00Z').toISOString(),
+    registration_close_at: new Date('2026-05-15T02:25:00Z').toISOString(),
     status: 'in_progress',
     format: '7-tile',
     win_target: 30,
     max_players: 8,
     winner_id: null,
-    created_at: new Date('2026-05-01T00:00:00Z').toISOString(),
+    created_at: new Date('2026-05-15T00:00:00Z').toISOString(),
+    ...overrides,
   };
 }
 
@@ -65,9 +66,12 @@ function makeMatch(overrides: Partial<MatchRow>): MatchRow {
 describe('recoverTournamentMatches', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('recreates a missing in-progress room and re-dispatches ready matches', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T03:00:00Z'));
     const rooms = new Map<string, any>();
     const readyMatch = makeMatch({ id: 'm-ready', status: 'ready' });
     const liveMatch = makeMatch({ id: 'm-live', status: 'in_progress', room_code: 'LIVE1' });
@@ -111,5 +115,71 @@ describe('recoverTournamentMatches', () => {
       expect.objectContaining({ reason: 'recovery', emitIfAlreadyReady: true }),
       persistence,
     );
+    vi.useRealTimers();
+  });
+
+  it('skips completed matches during recovery', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T03:00:00Z'));
+    const persistence: EnginePersistence = {
+      fetchTournamentById: async () => makeTournament(),
+      fetchTournamentsByStatus: async () => [makeTournament()],
+      fetchRegistrations: async () => [] as RegistrationRow[],
+      fetchRegistrationsWithProfile: async () => [],
+      fetchMatches: async () => [
+        makeMatch({
+          id: 'm-done',
+          status: 'completed',
+          completed_at: new Date('2026-05-15T02:50:00Z').toISOString(),
+          winner_id: 'u2',
+        }),
+      ],
+      fetchMatchById: async () => null,
+      fetchMatchByRoomCode: async () => null,
+      insertMatch: vi.fn(),
+      updateMatch: vi.fn(),
+      updateRegistrationPlacement: vi.fn(),
+      updateRegistrationStatus: vi.fn(),
+      updateTournamentStatus: vi.fn(),
+      createReservedRoom: vi.fn(),
+      getRoom: vi.fn(),
+    };
+
+    const result = await recoverTournamentMatches({ sockets: { sockets: new Map() } } as any, persistence);
+
+    expect(result).toEqual({ readyRecovered: 0, inProgressRecovered: 0 });
+    expect(dispatchTournamentMatch).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('skips tournaments that are past the active window', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T03:30:00Z'));
+    const persistence: EnginePersistence = {
+      fetchTournamentById: async () => makeTournament(),
+      fetchTournamentsByStatus: async () => [makeTournament({
+        scheduled_start: new Date('2026-05-15T00:00:00Z').toISOString(),
+      })],
+      fetchRegistrations: async () => [] as RegistrationRow[],
+      fetchRegistrationsWithProfile: async () => [],
+      fetchMatches: async () => [makeMatch({ id: 'm-ready', status: 'ready' })],
+      fetchMatchById: async () => null,
+      fetchMatchByRoomCode: async () => null,
+      insertMatch: vi.fn(async () => makeMatch({ id: 'm-ready', status: 'ready' })),
+      updateMatch: vi.fn(async () => undefined),
+      updateRegistrationPlacement: vi.fn(async () => undefined),
+      updateRegistrationStatus: vi.fn(async () => undefined),
+      updateTournamentStatus: vi.fn(async () => undefined),
+      createReservedRoom: vi.fn((_code: string) => ({ code: _code } as any)),
+      getRoom: vi.fn((_code: string) => {
+        throw new Error('not_found');
+      }),
+    };
+
+    const result = await recoverTournamentMatches({ sockets: { sockets: new Map() } } as any, persistence);
+
+    expect(result).toEqual({ readyRecovered: 0, inProgressRecovered: 0 });
+    expect(dispatchTournamentMatch).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

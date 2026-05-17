@@ -1,6 +1,13 @@
 import type { Server } from 'socket.io';
+import { isTournamentPastActiveWindow } from './activeWindow';
 import { fetchTournamentsByStatus } from './persistence';
-import { openRegistration, closeRegistrationAndStart, reconcileExpiredReadyMatches } from './engine';
+import {
+  openRegistration,
+  closeRegistrationAndStart,
+  reconcileExpiredReadyMatches,
+  dispatchScheduledStartMatches,
+  cancelTournament,
+} from './engine';
 import { supabaseFetch } from '../supabaseUtils';
 
 const TICK_INTERVAL_MS = 30_000;
@@ -13,6 +20,7 @@ let seedTimer: ReturnType<typeof setInterval> | null = null;
  * Polls every minute. For each upcoming tournament:
  *   - If now >= registration_open_at and status='upcoming' → openRegistration
  *   - If now >= registration_close_at and status='registration_open' → closeRegistrationAndStart
+ *   - If now >= scheduled_start and status='in_progress' → dispatchScheduledStartMatches
  *
  * Idempotent: status transitions guarded by the current status check, so a slow
  * tick or a restart won't double-fire. No-show resolution also runs off
@@ -33,6 +41,23 @@ export function startTournamentScheduler(io: Server): void {
           await openRegistration(io, t.id);
         } else if (t.status === 'registration_open' && now >= closeAt) {
           await closeRegistrationAndStart(io, t.id);
+        }
+      }
+      const inProgress = await fetchTournamentsByStatus(['in_progress']);
+      for (const t of inProgress) {
+        if (isTournamentPastActiveWindow(t, now)) {
+          console.log('[tournament:stale] cancelling expired in-progress tournament', {
+            tournamentId: t.id,
+            scheduledStart: t.scheduled_start,
+            ageMs: now - Date.parse(t.scheduled_start),
+            reason: 'past_active_window',
+          });
+          await cancelTournament(io, t.id);
+          continue;
+        }
+        const startAt = Date.parse(t.scheduled_start);
+        if (now >= startAt) {
+          await dispatchScheduledStartMatches(io, t.id, undefined, new Date(now));
         }
       }
       await reconcileExpiredReadyMatches(io, new Date(now));

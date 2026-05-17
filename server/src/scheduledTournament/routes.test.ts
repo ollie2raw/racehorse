@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   fetchActiveRegistration: vi.fn(),
   fetchRegistrations: vi.fn(),
   fetchRegistrationsWithProfile: vi.fn(),
+  fetchMatches: vi.fn(),
   insertRegistration: vi.fn(),
   withdrawRegistration: vi.fn(),
 }));
@@ -33,6 +34,7 @@ vi.mock('./persistence', async () => {
     fetchActiveRegistration: (...args: unknown[]) => mocks.fetchActiveRegistration(...args),
     fetchRegistrations: (...args: unknown[]) => mocks.fetchRegistrations(...args),
     fetchRegistrationsWithProfile: (...args: unknown[]) => mocks.fetchRegistrationsWithProfile(...args),
+    fetchMatches: (...args: unknown[]) => mocks.fetchMatches(...args),
     insertRegistration: (...args: unknown[]) => mocks.insertRegistration(...args),
     withdrawRegistration: (...args: unknown[]) => mocks.withdrawRegistration(...args),
   };
@@ -102,7 +104,15 @@ describe('scheduled tournament express route ordering', () => {
     const response = await request('GET', '/api/tournaments/me');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, registrations: [], activeAssignedMatch: null });
+    expect(response.body).toEqual({
+      ok: true,
+      registrations: [],
+      activeAssignedMatch: null,
+      currentTournamentPhase: null,
+      activeTournamentId: null,
+      assignedMatch: null,
+      countdown: null,
+    });
     expect(mocks.fetchTournamentById).not.toHaveBeenCalled();
     expect(mocks.fetchBracketView).not.toHaveBeenCalled();
   });
@@ -148,6 +158,8 @@ describe('scheduled tournament express route ordering', () => {
 describe('scheduled tournament routes auth/user guards', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fetchMatches.mockResolvedValue([]);
+    mocks.fetchTournamentById.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -159,7 +171,15 @@ describe('scheduled tournament routes auth/user guards', () => {
     const response = await request('GET', '/api/tournaments/me');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, registrations: [], activeAssignedMatch: null });
+    expect(response.body).toEqual({
+      ok: true,
+      registrations: [],
+      activeAssignedMatch: null,
+      currentTournamentPhase: null,
+      activeTournamentId: null,
+      assignedMatch: null,
+      countdown: null,
+    });
     expect(mocks.fetchRegistrationsForUser).not.toHaveBeenCalled();
     expect(mocks.fetchActiveAssignedMatchForUser).not.toHaveBeenCalled();
   });
@@ -168,6 +188,13 @@ describe('scheduled tournament routes auth/user guards', () => {
     const { request } = makeHarness();
     mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
     mocks.fetchRegistrationsForUser.mockResolvedValue([]);
+    mocks.fetchTournamentById.mockResolvedValue({
+      id: 'tour-1',
+      status: 'in_progress',
+      scheduled_start: new Date('2026-05-15T23:50:00Z').toISOString(),
+      registration_close_at: new Date('2026-05-15T23:45:00Z').toISOString(),
+    });
+    mocks.fetchMatches.mockResolvedValue([]);
     mocks.fetchActiveAssignedMatchForUser.mockResolvedValue({
       match: {
         id: 'match-1',
@@ -209,12 +236,17 @@ describe('scheduled tournament routes auth/user guards', () => {
         matchId: 'match-1',
         tournamentId: 'tour-1',
         round: 1,
+        matchNumber: 1,
         roomCode: 'T128FFFR1M1',
         opponentId: 'bot:fritz:tour-1:1',
         opponentUsername: 'Elite Fritz',
         matchStatus: 'ready',
         readyDeadlineAt: expect.any(String),
       },
+      currentTournamentPhase: null,
+      activeTournamentId: null,
+      assignedMatch: null,
+      countdown: null,
     });
   });
 
@@ -222,6 +254,13 @@ describe('scheduled tournament routes auth/user guards', () => {
     const { request } = makeHarness();
     mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
     mocks.fetchRegistrationsForUser.mockResolvedValue([]);
+    mocks.fetchTournamentById.mockResolvedValue({
+      id: 'tour-1',
+      status: 'in_progress',
+      scheduled_start: new Date('2026-05-15T23:50:00Z').toISOString(),
+      registration_close_at: new Date('2026-05-15T23:45:00Z').toISOString(),
+    });
+    mocks.fetchMatches.mockResolvedValue([]);
     mocks.fetchActiveAssignedMatchForUser.mockResolvedValue({
       match: {
         id: 'match-ready',
@@ -259,6 +298,7 @@ describe('scheduled tournament routes auth/user guards', () => {
     expect(response.body.activeAssignedMatch).toEqual(
       expect.objectContaining({
         matchId: 'match-ready',
+        matchNumber: 1,
         matchStatus: 'ready',
         roomCode: 'TREADYR1M1',
       }),
@@ -329,6 +369,14 @@ describe('scheduled tournament routes auth/user guards', () => {
     };
     mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
     mocks.fetchRegistrationsForUser.mockResolvedValue([registration]);
+    mocks.fetchTournamentById.mockResolvedValue({
+      id: registration.tournament_id,
+      status: 'registration_open',
+      scheduled_start: new Date(Date.now() + 60 * 60_000).toISOString(),
+      registration_close_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+      registration_open_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+    });
+    mocks.fetchMatches.mockResolvedValue([]);
     mocks.fetchActiveAssignedMatchForUser.mockResolvedValue(null);
 
     const response = await request('GET', '/api/tournaments/me', {
@@ -336,10 +384,12 @@ describe('scheduled tournament routes auth/user guards', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
+    expect(response.body).toMatchObject({
       ok: true,
       registrations: [registration],
       activeAssignedMatch: null,
+      currentTournamentPhase: 'registered',
+      activeTournamentId: registration.tournament_id,
     });
     expect(mocks.fetchRegistrationsForUser).toHaveBeenCalledWith(validUserId);
   });

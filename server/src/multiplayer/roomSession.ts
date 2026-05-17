@@ -196,6 +196,10 @@ export function clearReconnectSeatsForSocket(roomCode: string, socketId: string)
   else reconnectSeatsByCode.delete(roomCode);
 }
 
+export function clearReconnectSeatsForRoom(roomCode: string): void {
+  reconnectSeatsByCode.delete(roomCode);
+}
+
 export function clearRoomMetadata(roomCode: string): void {
   deleteRoomRoster(roomCode);
   reconnectSeatsByCode.delete(roomCode);

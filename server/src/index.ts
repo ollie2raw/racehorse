@@ -4197,6 +4197,17 @@ function createGameOverPersistScheduler(input: GameOverPersistInput): () => void
           const winnerUserId =
             winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
           if (winnerUserId) {
+            console.log('[tournament:game-over] detected', {
+              roomCode: room.code,
+              matchId: room.scheduledTournamentMatchId,
+              tournamentId: room.scheduledTournamentId ?? null,
+              winnerId: winnerUserId,
+              scores: { player1: scoreA, player2: scoreB },
+            });
+            console.log('[tournament:game-over] applying result', {
+              matchId: room.scheduledTournamentMatchId,
+              winnerId: winnerUserId,
+            });
             await applyTournamentMatchResult(io, {
               matchId: room.scheduledTournamentMatchId,
               winnerId: winnerUserId,

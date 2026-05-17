@@ -291,12 +291,21 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             });
             current.reconnectAttemptCountRef.current = 0; // Success! Reset backoff.
             current.applyJoinedRoomResponse(resp);
+            const terminalTournamentJoin =
+              Boolean(resp?.tournamentMatch?.matchId) &&
+              Boolean((resp?.state as { gameOver?: boolean } | null | undefined)?.gameOver);
             current.reconnectShouldJoinRef.current = false;
-            current.reconnectRoomCodeRef.current = resp.roomCode;
+            current.reconnectRoomCodeRef.current = terminalTournamentJoin ? null : resp.roomCode;
             current.setIsRecoveringConnection(false);
             current.setRoomRecoveryState('idle');
             current.setRoomRecoveryMessage('');
-            
+            if (terminalTournamentJoin) {
+              current.preventAutoRejoinRef.current = true;
+              if (typeof window !== 'undefined') {
+                window.localStorage.removeItem(current.lastRoomStorageKey);
+              }
+              return;
+            }
             if (isRecoveryAttempt) {
               current.showToast('Reconnected to room.', 1200);
             } else {
@@ -307,7 +316,17 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           
           // Failed with response
           const errorText = String(resp?.error ?? '').toLowerCase();
-          if (errorText.includes('not found')) {
+          if (errorText.includes('abandoned') || errorText.includes('completed')) {
+            if (typeof window !== 'undefined') {
+              window.localStorage.removeItem(current.lastRoomStorageKey);
+            }
+            current.preventAutoRejoinRef.current = true;
+            current.reconnectShouldJoinRef.current = false;
+            current.reconnectRoomCodeRef.current = null;
+            current.setIsRecoveringConnection(false);
+            current.setRoomRecoveryState('failed');
+            current.setRoomRecoveryMessage('Match is no longer available.');
+          } else if (errorText.includes('not found')) {
             if (isRecoveryAttempt && typeof window !== 'undefined') {
               window.localStorage.removeItem(current.lastRoomStorageKey);
             }
@@ -350,8 +369,12 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             authToken: current.authAccessTokenRef.current,
           });
           if (!resp?.ok) {
+            const errorText = String(resp?.error ?? '').toLowerCase();
             if (typeof window !== 'undefined') {
               window.localStorage.removeItem(current.lastRoomStorageKey);
+            }
+            if (errorText.includes('completed')) {
+              current.preventAutoRejoinRef.current = true;
             }
             current.showToast('Saved room is no longer available.', 2000);
             return;

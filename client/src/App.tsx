@@ -68,7 +68,11 @@ import { TournamentScreen } from './screens/TournamentScreen';
 import TournamentHubScreen from './tournament/TournamentHubScreen';
 import TournamentBracketScreen from './tournament/TournamentBracketScreen';
 import TournamentResultScreen from './tournament/TournamentResultScreen';
-import TournamentMatchBanner from './tournament/TournamentMatchBanner';
+import TournamentMatchHud from './tournament/TournamentMatchHud';
+import {
+  resolveTournamentOpponentLabel,
+  tournamentStageShortLabel,
+} from './tournament/displayNames';
 import { useTournament } from './tournament/useTournament';
 import * as tournamentApi from './tournament/tournamentApi';
 import type { TournamentResultView } from './tournament/types';
@@ -76,6 +80,18 @@ import {
   evaluateTournamentAttachGuard,
   localHandCountFromJoinResponse,
 } from './tournament/tournamentAttachGuard';
+import {
+  deriveBracketTerminalState,
+  isTournamentBracketTerminal,
+  msUntilBracketAutoKick,
+} from './tournament/bracketTerminal';
+import {
+  isTerminalTournamentMatch,
+  markTerminalTournamentMatch,
+  markTournamentTerminal,
+  readTerminalTournamentMatchIds,
+  tournamentSubViewAfterMatchComplete,
+} from './tournament/terminalMatches';
 import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
 import IncomingFriendChallengeCard from './multiplayer/IncomingFriendChallengeCard';
 import type { OutboundChallenge } from './multiplayer/friendChallenge';
@@ -477,6 +493,25 @@ interface GameOverOverlayProps {
   onExtraAction?: () => void;
 }
 
+type TournamentMatchContext = {
+  tournamentId: string;
+  matchId: string;
+  round: 1 | 2 | 3;
+  matchNumber: number;
+  roomCode: string | null;
+  stageLabel: 'Quarterfinal' | 'Semifinal' | 'Final';
+  isTournament: true;
+  opponentUserId: string | null;
+  opponentUsername: string | null;
+  opponentRating: number | null;
+};
+
+function getTournamentStageLabel(round: 1 | 2 | 3): TournamentMatchContext['stageLabel'] {
+  if (round === 3) return 'Final';
+  if (round === 2) return 'Semifinal';
+  return 'Quarterfinal';
+}
+
 interface HandEndedPayload {
   handNumber: number;
   opponentRemainingTiles: Tile[];
@@ -552,6 +587,72 @@ function GameOverOverlay({
       )}
       {waitingText && <p className="rh-go-waiting">{waitingText}</p>}
     </GameOverModal>
+  );
+}
+
+function tournamentEliminationLabel(round: 1 | 2 | 3): string {
+  return tournamentStageShortLabel(round);
+}
+
+function TournamentGameOverOverlay({
+  state,
+  myId,
+  tournamentMatch,
+  myDisplayName,
+  opponentDisplayName,
+  onViewBracket,
+  onReturnToTournament,
+  onExtraAction,
+}: {
+  state: GameState;
+  myId: string;
+  tournamentMatch: TournamentMatchContext;
+  myDisplayName: string;
+  opponentDisplayName: string;
+  onViewBracket: () => void;
+  onReturnToTournament: () => void;
+  onExtraAction?: () => void;
+}) {
+  const didWin = state.winnerId === myId;
+  const isFinal = tournamentMatch.round === 3;
+  const title = isFinal
+    ? didWin
+      ? 'Tournament Champion'
+      : 'Runner-up'
+    : didWin
+      ? tournamentMatch.round === 1
+        ? 'You advanced to the Semifinal'
+        : 'You advanced to the Final'
+      : `Eliminated in the ${tournamentEliminationLabel(tournamentMatch.round)}`;
+  const subtitle = isFinal
+    ? didWin
+      ? 'You won the tournament. View the bracket or final standings.'
+      : 'Strong run — view the bracket or return to the tournament hub.'
+    : didWin
+      ? `You beat ${opponentDisplayName}. View the bracket while the next round prepares.`
+      : `Eliminated by ${opponentDisplayName}. View the bracket or return to the tournament hub.`;
+
+  return (
+    <GameOverModal
+      open
+      ariaLabel="Tournament match complete"
+      matchKind="multiplayer"
+      title={title}
+      subtitle={subtitle}
+      scores={state.playerIds.map((pid) => ({
+        label: pid === myId ? myDisplayName : opponentDisplayName,
+        value: state.players[pid]?.score ?? 0,
+        winner: pid === state.winnerId,
+        showCrown: pid === state.winnerId,
+      }))}
+      primaryLabel="View Bracket"
+      onPrimary={onViewBracket}
+      secondaryLabel="Return to Tournament"
+      onSecondary={onReturnToTournament}
+      extraActionLabel="Analyze Game"
+      onExtraAction={onExtraAction}
+      onClose={onReturnToTournament}
+    />
   );
 }
 
@@ -822,15 +923,10 @@ export default function App() {
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [tournamentSubView, setTournamentSubView] = useState<'hub' | 'bracket' | 'result'>('hub');
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
-  const [tournamentMatch, setTournamentMatch] = useState<{
-    tournamentId: string;
-    matchId: string;
-    round: 1 | 2 | 3;
-    opponentUserId: string | null;
-    opponentUsername: string | null;
-    opponentRating: number | null;
-  } | null>(null);
+  const [tournamentMatch, setTournamentMatch] = useState<TournamentMatchContext | null>(null);
   const [completedTournamentId, setCompletedTournamentId] = useState<string | null>(null);
+  const consumedTournamentGameOverMatchIdsRef = useRef<Set<string>>(new Set(readTerminalTournamentMatchIds()));
+  const dismissedTournamentIdsRef = useRef<Set<string>>(new Set());
   const [tournamentResult, setTournamentResult] = useState<TournamentResultView | null>(null);
   const [tournamentResultLoading, setTournamentResultLoading] = useState(false);
   const [tournamentResultError, setTournamentResultError] = useState<string | null>(null);
@@ -943,6 +1039,12 @@ export default function App() {
   const [rematchReadyIds, setRematchReadyIds] = useState<string[]>([]);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [abandonedMatchNotice, setAbandonedMatchNotice] = useState<{
+    context: 'tournament' | 'multiplayer';
+    title: string;
+    detail: string;
+    tournamentId?: string | null;
+  } | null>(null);
   const [multiplayerMoveLog, setMultiplayerMoveLog] = useState<MoveEntry[]>([]);
   const multiplayerMoveCounterRef = useRef(1);
   const previousStateForAnalysisRef = useRef<GameState | null>(null);
@@ -994,6 +1096,7 @@ export default function App() {
     socket.on('tournament:completed', handler);
     return () => { socket.off('tournament:completed', handler); };
   }, [socket]);
+
   const authUserRef = useRef(authUser);
   const authProfileRef = useRef(authProfile);
   const authAccessTokenRef = useRef<string | null>(authAccessToken);
@@ -1367,10 +1470,12 @@ export default function App() {
   useEffect(() => {
     joinedRoomRef.current = joinedRoom;
     if (typeof window === 'undefined') return;
-    if (joinedRoom) {
-      window.localStorage.setItem(LAST_ROOM_STORAGE_KEY, joinedRoom);
-    }
-  }, [joinedRoom]);
+    if (!joinedRoom) return;
+    if (preventAutoRejoinRef.current) return;
+    if (state?.gameOver) return;
+    if (tournamentMatch?.matchId && isTerminalTournamentMatch(tournamentMatch.matchId)) return;
+    window.localStorage.setItem(LAST_ROOM_STORAGE_KEY, joinedRoom);
+  }, [joinedRoom, state?.gameOver, tournamentMatch?.matchId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1424,6 +1529,8 @@ export default function App() {
     playerReadyEmittedRef.current = false;
     matchStartedRef.current = false;
     rematchAwaitingStateRef.current = false;
+    pendingTournamentAttachMatchIdRef.current = null;
+    attachedTournamentMatchIdRef.current = null;
     resyncBufferedUpdateRef.current = null;
     setOpponentDisconnected(false);
     setOpponentDisconnectMessage('');
@@ -1462,6 +1569,210 @@ export default function App() {
     setRoomRecoveryState('idle');
     setRoomRecoveryMessage('');
   }, []);
+
+  const clearRecoverableRoomState = useCallback(() => {
+    resetRoomRecoveryState();
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
+    }
+    rejoinInFlightRef.current = false;
+    reconnectAttemptCountRef.current = 0;
+    tournament.clearPendingMatch();
+    tournament.clearRecoveryMatch();
+  }, [resetRoomRecoveryState, tournament]);
+
+  const finalizeTournamentMatchSession = useCallback(
+    (input: {
+      matchId: string;
+      tournamentId: string;
+      roomCode?: string | null;
+      round?: number;
+      routeView?: 'hub' | 'bracket' | 'result';
+      tournamentCompleted?: boolean;
+    }) => {
+      const { matchId, tournamentId, roomCode, round, routeView, tournamentCompleted } = input;
+      markTerminalTournamentMatch({ matchId, tournamentId, roomCode });
+      consumedTournamentGameOverMatchIdsRef.current.add(matchId);
+      attachedTournamentMatchIdRef.current = null;
+      pendingTournamentAttachMatchIdRef.current = null;
+      console.log('[tournament:complete] clearing live room state', {
+        roomCode: roomCode ?? joinedRoomRef.current,
+      });
+      clearRecoverableRoomState();
+      const activeSocket = socketRef.current;
+      const activeRoom = joinedRoomRef.current;
+      if (activeSocket?.connected && activeRoom) {
+        activeSocket.emit('room:leave', activeRoom);
+      }
+      resetMultiplayerRoomState({ keepPlayers: true });
+      const nextView =
+        routeView ?? tournamentSubViewAfterMatchComplete({ round, tournamentCompleted });
+      if (tournamentCompleted || round === 3) {
+        markTournamentTerminal({ tournamentId });
+      }
+      console.log('[tournament:complete] routing to result', {
+        tournamentId,
+        matchId,
+        nextView,
+      });
+      setActiveTournamentId(tournamentId);
+      if (nextView !== 'hub') {
+        void tournament.openBracket(tournamentId);
+      }
+      setTournamentSubView(nextView);
+      setAppMode('tournament');
+      tournament.clearPendingMatch();
+      tournament.clearRecoveryMatch();
+      void tournament.refresh();
+    },
+    [clearRecoverableRoomState, resetMultiplayerRoomState, tournament],
+  );
+
+  const exitToTournamentHub = useCallback(
+    (reason: string) => {
+      const tid = activeTournamentId ?? tournament.activeTournamentId ?? null;
+      console.log('[tournament:exit] back-to-tournament clicked', { reason, tournamentId: tid });
+      if (tid) {
+        dismissedTournamentIdsRef.current.add(tid);
+        markTournamentTerminal({ tournamentId: tid });
+      }
+      setActiveTournamentId(null);
+      tournament.clearPendingMatch();
+      tournament.clearRecoveryMatch();
+      attachedTournamentMatchIdRef.current = null;
+      pendingTournamentAttachMatchIdRef.current = null;
+      clearRecoverableRoomState();
+      const activeSocket = socketRef.current;
+      const activeRoom = joinedRoomRef.current;
+      if (activeSocket?.connected && activeRoom) {
+        activeSocket.emit('room:leave', activeRoom);
+      }
+      resetMultiplayerRoomState({ keepPlayers: true });
+      setTournamentSubView('hub');
+      setAppMode('tournament');
+      setTournamentResult(null);
+      setTournamentResultError(null);
+      if (typeof window !== 'undefined' && window.location.hash !== '#/tournament') {
+        window.location.hash = '#/tournament';
+      }
+      console.log('[tournament:exit] cleared stale tournament state', {
+        reason,
+        tournamentId: tid,
+      });
+      void tournament.refresh();
+    },
+    [
+      activeTournamentId,
+      clearRecoverableRoomState,
+      resetMultiplayerRoomState,
+      tournament,
+    ],
+  );
+
+  useEffect(() => {
+    if (!socket) return;
+    const onMatchCompleted = (payload: {
+      tournamentId?: string;
+      matchId?: string;
+      roomCode?: string | null;
+      round?: number;
+    }) => {
+      if (!payload?.tournamentId || !payload?.matchId) return;
+      if (isTerminalTournamentMatch(payload.matchId)) return;
+      finalizeTournamentMatchSession({
+        matchId: payload.matchId,
+        tournamentId: payload.tournamentId,
+        roomCode: payload.roomCode,
+        round: payload.round,
+        tournamentCompleted: payload.round === 3,
+      });
+    };
+    socket.on('tournament:match_completed', onMatchCompleted);
+    return () => {
+      socket.off('tournament:match_completed', onMatchCompleted);
+    };
+  }, [socket, finalizeTournamentMatchSession]);
+
+  useEffect(() => {
+    if (!completedTournamentId) return;
+    const ours =
+      completedTournamentId === activeTournamentId ||
+      tournament.registrations.some((r) => r.tournament_id === completedTournamentId);
+    if (ours) {
+      clearRecoverableRoomState();
+      resetMultiplayerRoomState({ keepPlayers: true });
+      setActiveTournamentId(completedTournamentId);
+      setTournamentSubView('result');
+      setAppMode('tournament');
+    }
+    setCompletedTournamentId(null);
+  }, [
+    completedTournamentId,
+    activeTournamentId,
+    tournament.registrations,
+    clearRecoverableRoomState,
+    resetMultiplayerRoomState,
+  ]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onMatchAbandoned = (payload: {
+      roomCode?: string;
+      abandonedUserId?: string | null;
+      abandonedUsername?: string | null;
+      winnerId?: string | null;
+      message?: string;
+      tournamentId?: string | null;
+      isTournament?: boolean;
+    }) => {
+      const currentUserId = authUser?.id ?? multiplayerIdentityUserId;
+      if (!payload?.roomCode || normalizeRoomCode(payload.roomCode) !== normalizeRoomCode(joinedRoomRef.current)) {
+        return;
+      }
+      if (payload.abandonedUserId && payload.abandonedUserId === currentUserId) {
+        return;
+      }
+      console.log('[leave-game] received opponent abandoned', {
+        roomCode: payload.roomCode,
+        abandonedUserId: payload.abandonedUserId ?? null,
+      });
+      clearRecoverableRoomState();
+      resetMultiplayerRoomState({ keepPlayers: true });
+      setActionError('');
+      if (payload.isTournament && payload.tournamentId) {
+        setActiveTournamentId(payload.tournamentId);
+        setTournamentSubView('bracket');
+        setAppMode('tournament');
+        void tournament.openBracket(payload.tournamentId);
+        void tournament.refresh();
+        setAbandonedMatchNotice({
+          context: 'tournament',
+          title: 'Opponent left the tournament match',
+          detail: `${payload.abandonedUsername ?? 'Your opponent'} left the game. You advance by forfeit.`,
+          tournamentId: payload.tournamentId,
+        });
+        return;
+      }
+      setAppMode('multiplayer');
+      setAbandonedMatchNotice({
+        context: 'multiplayer',
+        title: 'Opponent left the game',
+        detail: payload.message ?? `${payload.abandonedUsername ?? 'Your opponent'} left the game. You win by forfeit.`,
+      });
+    };
+    socket.on('room:match_abandoned', onMatchAbandoned);
+    return () => {
+      socket.off('room:match_abandoned', onMatchAbandoned);
+    };
+  }, [
+    socket,
+    authUser?.id,
+    multiplayerIdentityUserId,
+    clearRecoverableRoomState,
+    normalizeRoomCode,
+    resetMultiplayerRoomState,
+    tournament,
+  ]);
 
   /** Leave the current private room, stay connected, and return to Private Match create/join (not Quick Match). */
   const leavePrivateLobbyRoom = useCallback(() => {
@@ -1610,7 +1921,23 @@ export default function App() {
     setRoomRecoveryState('idle');
     setRoomRecoveryMessage('');
     // Tournament match metadata supplied by the server (replaces fragile regex).
-    setTournamentMatch(resp.tournamentMatch ?? null);
+    if (resp.tournamentMatch && typeof resp.tournamentMatch.round === 'number') {
+      setTournamentMatch({
+        ...resp.tournamentMatch,
+        matchNumber:
+          typeof resp.tournamentMatch.matchNumber === 'number' ? resp.tournamentMatch.matchNumber : 1,
+        roomCode:
+          typeof resp.tournamentMatch.roomCode === 'string'
+            ? resp.tournamentMatch.roomCode
+            : typeof resp.roomCode === 'string'
+              ? resp.roomCode
+              : null,
+        stageLabel: getTournamentStageLabel(resp.tournamentMatch.round),
+        isTournament: true,
+      });
+    } else {
+      setTournamentMatch(null);
+    }
 
     const roster = normalizeRoomPlayers(resp.players);
     const seated =
@@ -1630,9 +1957,42 @@ export default function App() {
     } else if (seated && !matchStartedRef.current) {
       trySchedulePlayerReadyRef.current();
     }
+
+    const tournamentMeta = resp.tournamentMatch;
+    const completedMatchId =
+      tournamentMeta && typeof tournamentMeta.matchId === 'string' ? tournamentMeta.matchId : null;
+    if (nextState?.gameOver && completedMatchId) {
+      const tournamentId =
+        typeof tournamentMeta.tournamentId === 'string' ? tournamentMeta.tournamentId : '';
+      if (
+        isTerminalTournamentMatch(completedMatchId) ||
+        consumedTournamentGameOverMatchIdsRef.current.has(completedMatchId)
+      ) {
+        if (tournamentId) {
+          finalizeTournamentMatchSession({
+            matchId: completedMatchId,
+            tournamentId,
+            roomCode: resp.roomCode ?? tournamentMeta.roomCode ?? null,
+            round: typeof tournamentMeta.round === 'number' ? tournamentMeta.round : undefined,
+          });
+        } else {
+          clearRecoverableRoomState();
+          resetMultiplayerRoomState({ keepPlayers: true });
+          setAppMode('tournament');
+        }
+        return;
+      }
+      preventAutoRejoinRef.current = true;
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
+      }
+    }
   }, [
     applyRoomEventMeta,
     clearTransientRoomUi,
+    clearRecoverableRoomState,
+    finalizeTournamentMatchSession,
+    resetMultiplayerRoomState,
     socket?.id,
     authProfile?.username,
     multiplayerIdentityUserId,
@@ -2159,27 +2519,177 @@ export default function App() {
     setBotDealSize(7);
   }, [appMode]);
 
+  const currentTournamentContext = tournamentMatch;
 
+  useEffect(() => {
+    if (!state?.gameOver || !tournamentMatch?.matchId) return;
+    preventAutoRejoinRef.current = true;
+    reconnectShouldJoinRef.current = false;
+    reconnectRoomCodeRef.current = null;
+    markTerminalTournamentMatch({
+      matchId: tournamentMatch.matchId,
+      tournamentId: tournamentMatch.tournamentId,
+      roomCode: tournamentMatch.roomCode ?? joinedRoom,
+    });
+    consumedTournamentGameOverMatchIdsRef.current.add(tournamentMatch.matchId);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
+    }
+  }, [
+    state?.gameOver,
+    tournamentMatch?.matchId,
+    tournamentMatch?.tournamentId,
+    tournamentMatch?.roomCode,
+    joinedRoom,
+  ]);
+
+  const navigateAfterTournamentMatch = useCallback((nextView: 'hub' | 'bracket' | 'result') => {
+    if (nextView === 'hub') {
+      exitToTournamentHub('postgame_hub');
+      return;
+    }
+    if (currentTournamentContext?.matchId) {
+      markTerminalTournamentMatch({
+        matchId: currentTournamentContext.matchId,
+        tournamentId: currentTournamentContext.tournamentId,
+        roomCode: currentTournamentContext.roomCode ?? joinedRoom,
+      });
+      consumedTournamentGameOverMatchIdsRef.current.add(currentTournamentContext.matchId);
+      console.log('[tournament:postgame] cleared gameover state', {
+        roomCode: currentTournamentContext.roomCode ?? joinedRoom,
+        matchId: currentTournamentContext.matchId,
+      });
+      if (nextView === 'result') {
+        console.log('[tournament:postgame] final result clicked', {
+          tournamentId: currentTournamentContext.tournamentId,
+          matchId: currentTournamentContext.matchId,
+        });
+      } else {
+        console.log('[tournament:postgame] returning to bracket', {
+          tournamentId: currentTournamentContext.tournamentId,
+          matchId: currentTournamentContext.matchId,
+        });
+      }
+    }
+    console.log('[app:navigation] tournament match close/home', {
+      fromMode: appModeRef.current,
+      toMode: 'tournament',
+      hash: typeof window !== 'undefined' ? window.location.hash : '',
+      hasRoom: Boolean(joinedRoom),
+      hasTournamentContext: Boolean(currentTournamentContext),
+      nextView,
+    });
+    clearRecoverableRoomState();
+    if (socket && joinedRoom) {
+      socket.emit('room:leave', joinedRoom);
+    }
+    if (currentTournamentContext?.tournamentId) {
+      setActiveTournamentId(currentTournamentContext.tournamentId);
+      void tournament.openBracket(currentTournamentContext.tournamentId);
+    }
+    tournament.clearPendingMatch();
+    tournament.clearRecoveryMatch();
+    resetMultiplayerRoomState({ keepPlayers: true });
+    setActionError('');
+    setTournamentSubView(nextView);
+    setAppMode('tournament');
+    void tournament.refresh();
+  }, [
+    currentTournamentContext,
+    clearRecoverableRoomState,
+    joinedRoom,
+    resetMultiplayerRoomState,
+    socket,
+    tournament,
+    exitToTournamentHub,
+  ]);
 
   const handlePostGame = useCallback(() => {
     resetRoomRecoveryState();
     // Tournament matches should return to tournament lobby, not disconnect to Home.
-    const inTournament = Boolean(tournamentId) || tournamentState?.status === 'running';
+    const inTournament = Boolean(currentTournamentContext) || Boolean(tournamentId) || tournamentState?.status === 'running';
+    if (currentTournamentContext) {
+      navigateAfterTournamentMatch('bracket');
+      return;
+    }
     if (!inTournament) return disconnect('post-game to home');
     resetMultiplayerRoomState({ keepPlayers: true });
     setActionError('');
     setAppMode('tournament');
-  }, [disconnect, tournamentId, tournamentState?.status, resetMultiplayerRoomState, resetRoomRecoveryState]);
+  }, [
+    currentTournamentContext,
+    disconnect,
+    navigateAfterTournamentMatch,
+    tournamentId,
+    tournamentState?.status,
+    resetMultiplayerRoomState,
+    resetRoomRecoveryState,
+  ]);
 
   const _backToTournamentHub = useCallback(() => {
-    resetRoomRecoveryState();
-    if (socket && joinedRoom) {
-      socket.emit('room:leave', joinedRoom);
+    navigateAfterTournamentMatch('hub');
+  }, [navigateAfterTournamentMatch]);
+
+  const abandonCurrentMatch = useCallback(async () => {
+    const activeSocket = socketRef.current;
+    const activeRoomCode = normalizeRoomCode(joinedRoomRef.current);
+    if (!activeSocket?.connected || !activeRoomCode) {
+      setActionError('Could not leave the match right now.');
+      return;
     }
-    resetMultiplayerRoomState({ keepPlayers: true });
-    setActionError('');
-    setAppMode('tournament');
-  }, [socket, joinedRoom, resetMultiplayerRoomState, resetRoomRecoveryState]);
+    console.log('[leave-game] confirm', {
+      mode: currentTournamentContext ? 'tournament' : 'multiplayer',
+      roomCode: activeRoomCode,
+      tournamentMatchId: currentTournamentContext?.matchId ?? null,
+    });
+    try {
+      const resp = await emitWithAck<any>(activeSocket, 'room:abandon_match', {
+        roomCode: activeRoomCode,
+        tournamentMatchId: currentTournamentContext?.matchId ?? null,
+      });
+      if (!resp?.ok) {
+        const errorMessage = resp?.error ?? 'Could not leave the match.';
+        console.log('[leave-game] ack/error', {
+          roomCode: activeRoomCode,
+          error: errorMessage,
+        });
+        setActionError(errorMessage);
+        showToast(errorMessage, 2200);
+        return;
+      }
+      console.log('[leave-game] ack/success', {
+        roomCode: activeRoomCode,
+      });
+      clearRecoverableRoomState();
+      resetMultiplayerRoomState({ keepPlayers: true });
+      setActionError('');
+      if (currentTournamentContext?.tournamentId) {
+        setActiveTournamentId(currentTournamentContext.tournamentId);
+        setTournamentSubView('bracket');
+        setAppMode('tournament');
+        void tournament.openBracket(currentTournamentContext.tournamentId);
+        void tournament.refresh();
+      } else {
+        setAppMode('multiplayer');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not leave the match.';
+      console.log('[leave-game] ack/error', {
+        roomCode: activeRoomCode,
+        error: message,
+      });
+      setActionError(message);
+      showToast(message, 2200);
+    }
+  }, [
+    clearRecoverableRoomState,
+    currentTournamentContext,
+    emitWithAck,
+    normalizeRoomCode,
+    resetMultiplayerRoomState,
+    showToast,
+    tournament,
+  ]);
 
   const startGame = useCallback(async () => {
     setError('');
@@ -2486,7 +2996,24 @@ export default function App() {
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
   const opponent = players.find((pl) => pl.id !== you) ?? null;
-  const opponentName = opponent?.username ? `@${opponent.username}` : 'Rival';
+  const tournamentOpponentLabel = tournamentMatch
+    ? resolveTournamentOpponentLabel({
+        opponentUserId: tournamentMatch.opponentUserId,
+        opponentUsername: tournamentMatch.opponentUsername,
+        round: tournamentMatch.round,
+        roomOpponentUsername: opponent?.username ?? null,
+      })
+    : null;
+  const tournamentMyLabel = authProfile?.username
+    ? authProfile.username.replace(/^@/, '')
+    : 'You';
+  const opponentName = tournamentMatch
+    ? tournamentOpponentLabel ?? 'Opponent'
+    : opponent?.username
+      ? opponent.username.startsWith('@')
+        ? opponent.username
+        : `@${opponent.username}`
+      : 'Rival';
   const myName = authProfile?.username ? `@${authProfile.username}` : 'you';
   const myHandle = authProfile?.username
     ? `@${authProfile.username}`
@@ -2526,7 +3053,7 @@ export default function App() {
   const inGame = Boolean(isConnected && joinedRoom && state);
   useRenderProfiler(inGame ? 'MultiplayerGameShell' : 'AppNonGame');
   const isSpectatingMatch = Boolean(tournamentId && joinedRoom && state && !state.playerIds.includes(you));
-  const isTournamentMatch = Boolean(tournamentId || tournamentState?.status === 'running');
+  const isTournamentMatch = Boolean(tournamentMatch?.isTournament || tournamentId || tournamentState?.status === 'running');
   const spectateRightPlayerId = isSpectatingMatch ? (state?.playerIds?.[1] ?? null) : null;
   const spectateRightPlayer = spectateRightPlayerId ? players.find((pl) => pl.id === spectateRightPlayerId) ?? null : null;
   const hudRightLabel = isSpectatingMatch
@@ -3253,6 +3780,7 @@ export default function App() {
         pendingMatchId: pendingTournamentAttachMatchIdRef.current,
         attachedMatchId: attachedTournamentMatchIdRef.current,
         failedAtByMatchId: failedTournamentAttachByMatchIdRef.current,
+        terminalMatchIds: readTerminalTournamentMatchIds(),
         manual: opts?.manual,
       });
 
@@ -3280,6 +3808,11 @@ export default function App() {
       }
       if (guard.reason === 'backoff') {
         console.log('[tournament:attach-client] skip/backoff', { matchId });
+        return false;
+      }
+      if (guard.reason === 'match-completed') {
+        console.log('[tournament:recovery] ignored completed match', { matchId });
+        tournament.clearRecoveryMatch();
         return false;
       }
 
@@ -3361,6 +3894,23 @@ export default function App() {
                 : null,
             appMode: appModeRef.current,
           });
+          const hydratedGameOver = Boolean(
+            (hydratedState as { gameOver?: boolean } | null | undefined)?.gameOver,
+          );
+          if (hydratedGameOver && typeof resp.tournamentId === 'string') {
+            finalizeTournamentMatchSession({
+              matchId,
+              tournamentId: resp.tournamentId,
+              roomCode: resp.roomCode ?? null,
+              round:
+                resp.tournamentMatch && typeof (resp.tournamentMatch as { round?: number }).round === 'number'
+                  ? (resp.tournamentMatch as { round: number }).round
+                  : undefined,
+            });
+            setTournamentAttachPhase('idle');
+            setTournamentAttachError(null);
+            return true;
+          }
           console.log('[tournament:attach-client] switching-to-multiplayer', {
             matchId,
             roomCode: resp.roomCode,
@@ -3368,6 +3918,7 @@ export default function App() {
           setAppMode('multiplayer');
           setTournamentAttachPhase('idle');
           setTournamentAttachError(null);
+          tournament.clearPendingMatch();
           tournament.clearRecoveryMatch();
           void tournament.recover();
           return true;
@@ -3381,11 +3932,31 @@ export default function App() {
         setTournamentAttachPhase('failed');
         setTournamentAttachError(errorMessage);
         console.log('[tournament:attach-client] ack/error', { matchId, error: errorMessage });
-        if (
-          errorMessage === 'match_completed' ||
+        if (errorMessage === 'match_completed') {
+          const tournamentId = opts?.tournamentId ?? activeTournamentId ?? null;
+          if (tournamentId) {
+            markTerminalTournamentMatch({ matchId, tournamentId, roomCode: null });
+            consumedTournamentGameOverMatchIdsRef.current.add(matchId);
+            finalizeTournamentMatchSession({
+              matchId,
+              tournamentId,
+              tournamentCompleted: tournament.tournamentPhase === 'completed',
+            });
+          } else {
+            tournament.clearPendingMatch();
+            tournament.clearRecoveryMatch();
+            clearRecoverableRoomState();
+            resetMultiplayerRoomState({ keepPlayers: true });
+            setAppMode('tournament');
+            void tournament.recover();
+          }
+        } else if (
           errorMessage === 'match_not_ready' ||
-          errorMessage === 'tournament_not_assigned'
+          errorMessage === 'tournament_not_assigned' ||
+          errorMessage === 'room_unavailable' ||
+          errorMessage === 'invalid_room'
         ) {
+          tournament.clearPendingMatch();
           tournament.clearRecoveryMatch();
           void tournament.recover();
         }
@@ -3410,7 +3981,18 @@ export default function App() {
         return false;
       }
     },
-    [applyJoinedRoomResponse, showToast, tournament.clearRecoveryMatch, tournament.recover, multiplayerIdentityUserId],
+    [
+      activeTournamentId,
+      applyJoinedRoomResponse,
+      clearRecoverableRoomState,
+      finalizeTournamentMatchSession,
+      resetMultiplayerRoomState,
+      showToast,
+      tournament.clearRecoveryMatch,
+      tournament.recover,
+      tournament.tournamentPhase,
+      multiplayerIdentityUserId,
+    ],
   );
 
   const attachAssignedTournamentMatch = useCallback(
@@ -3420,10 +4002,133 @@ export default function App() {
     [attemptTournamentAttach],
   );
 
+  // Route registered players into the bracket lobby / ready state without manual navigation.
+  useEffect(() => {
+    if (appMode !== 'tournament') return;
+    const tid = tournament.activeTournamentId;
+    const phase = tournament.tournamentPhase;
+    if (!tid || !phase) return;
+    if (dismissedTournamentIdsRef.current.has(tid)) return;
+
+    const bracket =
+      tournament.activeBracket?.tournament.id === tid ? tournament.activeBracket : null;
+    const terminal = deriveBracketTerminalState({
+      bracket,
+      userId: authUser?.id ?? null,
+      tournamentPhase: phase,
+      assignedMatch:
+        tournament.assignedMatch?.tournamentId === tid ? tournament.assignedMatch : null,
+    });
+    if (isTournamentBracketTerminal(terminal)) {
+      if (tournamentSubView === 'bracket') {
+        exitToTournamentHub('terminal_guard');
+      }
+      return;
+    }
+
+    if (phase === 'bracket_lobby' || phase === 'match_ready' || phase === 'in_match') {
+      setActiveTournamentId(tid);
+      if (tournamentSubView === 'hub') {
+        if (phase === 'bracket_lobby') {
+          console.log('[tournament:hub] bracket lobby detected, routing', { tournamentId: tid });
+        }
+        setTournamentSubView('bracket');
+      }
+      if (!tournament.activeBracket || tournament.activeBracket.tournament.id !== tid) {
+        void tournament.openBracket(tid);
+      }
+    }
+  }, [
+    appMode,
+    authUser?.id,
+    exitToTournamentHub,
+    tournament.activeTournamentId,
+    tournament.tournamentPhase,
+    tournament.activeBracket,
+    tournament.assignedMatch,
+    tournament.openBracket,
+    tournamentSubView,
+  ]);
+
+  useEffect(() => {
+    if (appMode !== 'tournament' || tournamentSubView !== 'bracket' || !activeTournamentId) return;
+    const bracket =
+      tournament.activeBracket?.tournament.id === activeTournamentId
+        ? tournament.activeBracket
+        : null;
+    if (!bracket) return;
+
+    const scheduleKick = () => {
+      const terminal = deriveBracketTerminalState({
+        bracket,
+        userId: authUser?.id ?? null,
+        tournamentPhase: tournament.tournamentPhase,
+        assignedMatch:
+          tournament.assignedMatch?.tournamentId === activeTournamentId
+            ? tournament.assignedMatch
+            : null,
+      });
+      if (!isTournamentBracketTerminal(terminal)) return null;
+      if (terminal.shouldAutoKickToHub) return 0;
+      return msUntilBracketAutoKick(terminal.completedAtMs);
+    };
+
+    const kick = () => {
+      const waitMs = scheduleKick();
+      if (waitMs == null) return;
+      console.log('[tournament:exit] final completed, routing hub', {
+        tournamentId: activeTournamentId,
+        waitMs,
+      });
+      exitToTournamentHub('auto_kick');
+    };
+
+    const initialWait = scheduleKick();
+    if (initialWait == null) return undefined;
+    if (initialWait === 0) {
+      kick();
+      return undefined;
+    }
+    const timer = window.setTimeout(kick, initialWait);
+    const interval = window.setInterval(() => {
+      const waitMs = scheduleKick();
+      if (waitMs === 0) kick();
+    }, 15_000);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+    };
+  }, [
+    activeTournamentId,
+    appMode,
+    authUser?.id,
+    exitToTournamentHub,
+    tournament.activeBracket,
+    tournament.assignedMatch,
+    tournament.tournamentPhase,
+    tournamentSubView,
+  ]);
+
   // Auto-attach from recovery payload (stable matchId — object identity changes do not retrigger).
   useEffect(() => {
     const matchId = tournament.recoveryMatch?.matchId;
     if (!matchId) return;
+    if (isTerminalTournamentMatch(matchId)) {
+      console.log('[tournament:recovery] ignored completed match', {
+        matchId,
+        roomCode: tournament.recoveryMatch?.roomCode ?? null,
+      });
+      tournament.clearRecoveryMatch();
+      return;
+    }
+    if (
+      tournament.tournamentPhase === 'completed' ||
+      tournament.tournamentPhase === 'eliminated'
+    ) {
+      tournament.clearRecoveryMatch();
+      return;
+    }
+    if (tournament.tournamentPhase === 'bracket_lobby') return;
     void attemptTournamentAttach(matchId, {
       tournamentId: tournament.recoveryMatch?.tournamentId,
       matchStatus: tournament.recoveryMatch?.matchStatus,
@@ -3432,6 +4137,7 @@ export default function App() {
     tournament.recoveryMatch?.matchId,
     tournament.recoveryMatch?.tournamentId,
     tournament.recoveryMatch?.matchStatus,
+    tournament.tournamentPhase,
     socket?.connected,
     appMode,
     attemptTournamentAttach,
@@ -3441,6 +4147,7 @@ export default function App() {
   useEffect(() => {
     const pending = tournament.pendingMatch;
     if (!pending?.matchId) return;
+    if (tournament.tournamentPhase === 'bracket_lobby') return;
     console.log('[tournament] match_ready received', {
       matchId: pending.matchId,
       tournamentId: pending.tournamentId,
@@ -3460,6 +4167,7 @@ export default function App() {
     tournament.pendingMatch?.matchId,
     tournament.pendingMatch?.tournamentId,
     tournament.pendingMatch?.matchStatus,
+    tournament.tournamentPhase,
     socket?.connected,
     attemptTournamentAttach,
     tournament.clearPendingMatch,
@@ -3471,6 +4179,17 @@ export default function App() {
       void tournament.openBracket(activeTournamentId);
     }
   }, [tournamentSubView, activeTournamentId, tournament.activeBracket, tournament.openBracket]);
+
+  useEffect(() => {
+    if (appMode !== 'tournament') return;
+    if (tournamentSubView === 'bracket' && !activeTournamentId) {
+      console.log('[app:navigation] invalid state fallback', {
+        appMode,
+        hash: typeof window !== 'undefined' ? window.location.hash : '',
+      });
+      setTournamentSubView('hub');
+    }
+  }, [appMode, tournamentSubView, activeTournamentId]);
 
   useEffect(() => {
     if (tournamentSubView !== 'result' || !activeTournamentId) {
@@ -3903,17 +4622,6 @@ export default function App() {
     const tIdentity = authUser?.id
       ? { userId: authUser.id, username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player' }
       : null;
-    // Auto-route to result screen for a tournament we care about.
-    if (completedTournamentId) {
-      const ours =
-        completedTournamentId === activeTournamentId ||
-        tournament.registrations.some((r) => r.tournament_id === completedTournamentId);
-      if (ours) {
-        setActiveTournamentId(completedTournamentId);
-        setTournamentSubView('result');
-      }
-      setCompletedTournamentId(null);
-    }
 
     // Reference legacy screen so the import isn't flagged as unused.
     void TournamentScreen;
@@ -3924,10 +4632,25 @@ export default function App() {
           identity={tIdentity}
           tournamentId={activeTournamentId}
           bracket={tournament.activeBracket}
+          tournamentPhase={tournament.tournamentPhase}
+          assignedMatch={
+            tournament.assignedMatch?.tournamentId === activeTournamentId
+              ? tournament.assignedMatch
+              : null
+          }
+          countdownAt={tournament.countdown?.at ?? null}
           onLoadBracket={(id) => { void tournament.openBracket(id); }}
-          onBack={() => setTournamentSubView('hub')}
+          onBack={() => exitToTournamentHub('bracket_back')}
+          onExitToHub={() => exitToTournamentHub('bracket_back')}
+          onViewResult={() => {
+            if (!activeTournamentId) return;
+            setTournamentSubView('result');
+            void tournament.openBracket(activeTournamentId);
+          }}
           onNavigate={setAppMode}
           onAttachAssignedMatch={attachAssignedTournamentMatch}
+          attachJoinPhase={tournamentAttachPhase}
+          attachJoinError={tournamentAttachError}
         />
       );
     }
@@ -3988,10 +4711,12 @@ export default function App() {
         upcoming={tournament.upcoming}
         registrations={tournament.registrations}
         recoveryMatch={tournament.recoveryMatch}
+        tournamentPhase={tournament.tournamentPhase}
         error={tournament.error}
         isLoading={tournament.isLoading}
         hasLoaded={tournament.hasLoaded}
         activeBracketStatus={tournament.activeBracket?.tournament.status ?? null}
+        activeTournamentId={tournament.activeTournamentId}
         onNavigate={setAppMode}
         onOpenAuth={() => setAuthModalOpen(true)}
         onBackHome={() => setAppMode('home')}
@@ -4001,7 +4726,9 @@ export default function App() {
         }}
         onRegister={(id) => tournament.register(id)}
         onWithdraw={(id) => tournament.withdraw(id)}
-        onRetry={() => tournament.refresh()}
+        onRetry={() => {
+          void tournament.refresh();
+        }}
         onAttachAssignedMatch={attachAssignedTournamentMatch}
         attachJoinPhase={tournamentAttachPhase}
         attachJoinError={tournamentAttachError}
@@ -4368,13 +5095,6 @@ export default function App() {
       {/* Game Screen */}
       {(isConnected || isRecoveringConnection) && joinedRoom && state && (
         <>
-          {tournamentMatch ? (
-            <TournamentMatchBanner
-              round={tournamentMatch.round}
-              opponentName={tournamentMatch.opponentUsername}
-              opponentRating={tournamentMatch.opponentRating}
-            />
-          ) : null}
           <RotateOverlay />
           <div className={`screen game-screen walnut-live theme-${uiTheme}`}>
           {opponentDisconnected && opponentDisconnectMessage && roomRecoveryState === 'idle' && (
@@ -4468,7 +5188,20 @@ export default function App() {
             }}
           />
           {/* Game Over Overlay */}
-          {state.gameOver && (
+          {state.gameOver && tournamentMatch ? (
+            consumedTournamentGameOverMatchIdsRef.current.has(tournamentMatch.matchId) ? null : (
+              <TournamentGameOverOverlay
+                state={state}
+                myId={you}
+                tournamentMatch={tournamentMatch}
+                myDisplayName={tournamentMyLabel}
+                opponentDisplayName={tournamentOpponentLabel ?? 'Opponent'}
+                onViewBracket={() => navigateAfterTournamentMatch('bracket')}
+                onReturnToTournament={() => navigateAfterTournamentMatch('hub')}
+                onExtraAction={openMultiplayerAnalyzer}
+              />
+            )
+          ) : state.gameOver ? (
             <GameOverOverlay
               state={state}
               myId={you}
@@ -4482,7 +5215,7 @@ export default function App() {
               extraActionLabel="Analyze Game"
               onExtraAction={openMultiplayerAnalyzer}
             />
-          )}
+          ) : null}
           {handReveal && !state.gameOver && (
             <GameOverlayPortal>
             <div className="game-over-overlay hand-over-upgraded-overlay">
@@ -4603,14 +5336,22 @@ export default function App() {
                 position: 'absolute',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                display: isHandActive ? 'flex' : 'none',
+                display: isHandActive || tournamentMatch ? 'flex' : 'none',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
-                {isMyTurn ? 'Your move' : 'Opponent thinking'}
-              </span>
+              {tournamentMatch ? (
+                <TournamentMatchHud
+                  round={tournamentMatch.round}
+                  opponentName={tournamentOpponentLabel ?? 'Opponent'}
+                />
+              ) : null}
+              {isHandActive ? (
+                <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
+                  {isMyTurn ? 'Your move' : 'Opponent thinking'}
+                </span>
+              ) : null}
             </div>
             <div
               className="hud-right-cluster"
@@ -4849,12 +5590,52 @@ export default function App() {
       {showLeaveConfirm && (
         <LeaveGameModal
           onCancel={() => setShowLeaveConfirm(false)}
+          title={currentTournamentContext ? 'Forfeit Tournament Match?' : 'Leave Match?'}
+          copy={
+            currentTournamentContext
+              ? 'Leaving will forfeit this tournament match. You will be eliminated from the bracket.'
+              : 'Leaving will forfeit this match. Your opponent will be notified.'
+          }
+          confirmLabel={currentTournamentContext ? 'Forfeit Match' : 'Leave Match'}
           onLeave={() => {
             setShowLeaveConfirm(false);
-            disconnect('user leave game');
+            void abandonCurrentMatch();
           }}
         />
       )}
+
+      {abandonedMatchNotice ? (
+        <GameOverModal
+          open
+          ariaLabel="Match abandoned"
+          matchKind="multiplayer"
+          title={abandonedMatchNotice.title}
+          subtitle={abandonedMatchNotice.detail}
+          scores={[]}
+          primaryLabel={abandonedMatchNotice.context === 'tournament' ? 'Back to Bracket' : 'Back to Multiplayer'}
+          onPrimary={() => {
+            if (abandonedMatchNotice.context === 'tournament' && abandonedMatchNotice.tournamentId) {
+              setActiveTournamentId(abandonedMatchNotice.tournamentId);
+              setTournamentSubView('bracket');
+              setAppMode('tournament');
+            } else {
+              setAppMode('multiplayer');
+            }
+            setAbandonedMatchNotice(null);
+          }}
+          secondaryLabel={abandonedMatchNotice.context === 'tournament' ? 'Tournament Lobby' : 'Home'}
+          onSecondary={() => {
+            if (abandonedMatchNotice.context === 'tournament') {
+              setTournamentSubView('hub');
+              setAppMode('tournament');
+            } else {
+              setAppMode('home');
+            }
+            setAbandonedMatchNotice(null);
+          }}
+          onClose={() => setAbandonedMatchNotice(null)}
+        />
+      ) : null}
 
       {overlayPayload && (
         <MatchFoundOverlay

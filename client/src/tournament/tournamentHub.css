@@ -303,9 +303,16 @@
   gap: 8px;
   flex: 1 1 auto;
   min-height: 0;
-  max-height: calc(100% - 128px);
-  overflow: visible;
-  padding-bottom: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.th-panel-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .th-recovery-banner {
@@ -613,7 +620,7 @@
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-subtle);
   border-radius: var(--fritz-summary-radius);
-  margin-top: 12px;
+  margin-top: 10px;
   flex-shrink: 0;
 }
 

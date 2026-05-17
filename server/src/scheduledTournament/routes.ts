@@ -10,11 +10,13 @@ import {
   fetchRegistrationsForUser,
   fetchActiveRegistration,
   fetchRegistrations,
+  fetchMatches,
   insertRegistration,
   isValidUuid,
   withdrawRegistration,
 } from './persistence';
 import { humanJoinedAt, isBotUserId } from './matchDispatch';
+import { buildTournamentMeState } from './meState';
 
 async function requireAuth(
   req: Request,
@@ -89,18 +91,70 @@ export function registerTournamentRoutes(app: Express): void {
   app.get('/api/tournaments/me', async (req: Request, res: Response) => {
     const userId = await requireAuth(req, res, { allowAnonymous: true });
     if (!userId) {
-      res.json({ ok: true, registrations: [], activeAssignedMatch: null });
+      res.json({
+        ok: true,
+        registrations: [],
+        activeAssignedMatch: null,
+        currentTournamentPhase: null,
+        activeTournamentId: null,
+        assignedMatch: null,
+        countdown: null,
+      });
       return;
     }
     try {
-      const [regs, activeAssignedMatch] = await Promise.all([
-        fetchRegistrationsForUser(userId),
-        fetchActiveAssignedMatchForUser(userId),
-      ]);
+      const regs = await fetchRegistrationsForUser(userId);
+      const tournamentIds = [...new Set(regs.map((reg) => reg.tournament_id))];
+      const tournamentsById = new Map(
+        (await Promise.all(tournamentIds.map((id) => fetchTournamentById(id))))
+          .filter((t): t is NonNullable<typeof t> => Boolean(t))
+          .map((t) => [t.id, t] as const),
+      );
+      const matchesByTournamentId = new Map(
+        await Promise.all(
+          tournamentIds.map(async (id) => [id, await fetchMatches(id)] as const),
+        ),
+      );
+      const opponentIds = new Set<string>();
+      for (const matches of matchesByTournamentId.values()) {
+        for (const match of matches) {
+          for (const pid of [match.player1_id, match.player2_id]) {
+            if (pid && !isBotUserId(pid)) opponentIds.add(pid);
+          }
+        }
+      }
+      const opponentUsernameByUserId = new Map<string, string | null>();
+      if (opponentIds.size > 0) {
+        const inClause = [...opponentIds].map((id) => `"${id}"`).join(',');
+        const profiles = await supabaseFetch<Array<{ id: string; username: string | null }>>(
+          `/rest/v1/profiles?select=id,username&id=in.(${inClause})`,
+        ).catch(() => []);
+        for (const profile of profiles) {
+          opponentUsernameByUserId.set(profile.id, profile.username ?? null);
+        }
+      }
+
+      const meState = buildTournamentMeState({
+        userId,
+        registrations: regs,
+        tournamentsById,
+        matchesByTournamentId,
+        opponentUsernameByUserId,
+      });
+
+      const activeAssignedMatch = await fetchActiveAssignedMatchForUser(userId);
       const activeAssignedPayload = activeAssignedMatch
         ? (() => {
             const { match, tournament, opponentUsername } = activeAssignedMatch;
-            if (match.status !== 'ready' && match.status !== 'in_progress') {
+            if (
+              tournament.status !== 'in_progress' ||
+              (match.status !== 'ready' && match.status !== 'in_progress') ||
+              match.completed_at ||
+              match.winner_id
+            ) {
+              return null;
+            }
+            if (Date.parse(tournament.scheduled_start) > Date.now()) {
               return null;
             }
             const humanAttached = Boolean(humanJoinedAt(match, userId));
@@ -116,6 +170,7 @@ export function registerTournamentRoutes(app: Express): void {
               matchId: match.id,
               tournamentId: tournament.id,
               round: match.round,
+              matchNumber: match.match_number,
               roomCode: match.room_code,
               opponentId,
               opponentUsername:
@@ -139,10 +194,29 @@ export function registerTournamentRoutes(app: Express): void {
         });
       }
 
+      if (meState.currentTournamentPhase === 'completed' && meState.activeTournamentId) {
+        const completedMatch = [...matchesByTournamentId.values()]
+          .flat()
+          .filter(
+            (match) =>
+              (match.player1_id === userId || match.player2_id === userId) &&
+              (match.status === 'completed' || match.completed_at || match.winner_id),
+          )
+          .sort((a, b) => Date.parse(b.completed_at ?? '') - Date.parse(a.completed_at ?? ''))[0];
+        console.log('[tournament:me] completed result state', {
+          tournamentId: meState.activeTournamentId,
+          matchId: completedMatch?.id ?? null,
+        });
+      }
+
       res.json({
         ok: true,
         registrations: regs,
         activeAssignedMatch: activeAssignedPayload,
+        currentTournamentPhase: meState.currentTournamentPhase,
+        activeTournamentId: meState.activeTournamentId,
+        assignedMatch: meState.assignedMatch,
+        countdown: meState.countdown,
       });
     } catch (err) {
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : 'internal' });

@@ -63,6 +63,11 @@ export type Room = {
   scheduledTournamentId?: string;
   /** Fritz strength tier for synthetic scheduled-tournament bot seats. */
   scheduledTournamentBotTier?: 'standard' | 'elite' | 'master';
+  /** Terminal intentional leave marker; abandoned rooms are not recoverable. */
+  abandonedAt?: string;
+  abandonedByUserId?: string | null;
+  abandonedWinnerUserId?: string | null;
+  abandonedReason?: 'forfeit' | 'abandon';
   /** One-shot metadata for the next `state:update` after resolving forced-draw steps (cleared after emit). */
   pendingForcedDrawBroadcast?: { playerId: string; count: number };
   /** One-shot: socket ids that auto-passed this resolution (cleared after `state:update`). */
@@ -189,6 +194,10 @@ export function createRoom(hostPlayerSeatId: string, config: Partial<Config> = {
     ghostTurnIndex: 0,
     matchLogged: false,
     leadTracker: null,
+    abandonedAt: undefined,
+    abandonedByUserId: null,
+    abandonedWinnerUserId: null,
+    abandonedReason: undefined,
     ...createRoomEventState(),
   };
   appendRoomEvent(room, {
@@ -245,6 +254,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
 export function joinRoom(code: string, playerSeatId: string): Room {
   const room = rooms.get(code);
   if (!room) throw new Error('Room not found.');
+  if (room.abandonedAt) throw new Error('match_abandoned');
 
   if (!room.players.includes(playerSeatId)) {
     if (room.players.length >= 2) {
@@ -431,6 +441,9 @@ export async function startGame(
   options: { allowRestart?: boolean } = {},
 ): Promise<Room> {
   const room = getRoom(code);
+  if (room.abandonedAt) {
+    throw new Error('match_abandoned');
+  }
 
   if (room.players.length !== 2) {
     throw new Error('Need exactly 2 players to start.');
@@ -487,6 +500,9 @@ export async function startGame(
 
 export async function nextHand(code: string, io: Server): Promise<Room> {
   const room = getRoom(code);
+  if (room.abandonedAt) {
+    throw new Error('match_abandoned');
+  }
   if (!room.state) throw new Error('Game not started.');
 
   if (!room.state.handOver) {
@@ -632,6 +648,9 @@ export async function act(
   onStateReady: (roomCode: string) => void,
 ): Promise<ActResult> {
   const room = getRoom(code);
+  if (room.abandonedAt) {
+    throw new Error('match_abandoned');
+  }
   if (!room.state) throw new Error('Game not started.');
 
   let state = room.state;

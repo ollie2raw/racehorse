@@ -5,9 +5,18 @@ import './leaveGameModal.css';
 interface Props {
   onCancel: () => void;
   onLeave: () => void;
+  title?: string;
+  copy?: string;
+  confirmLabel?: string;
 }
 
-export default function LeaveGameModal({ onCancel, onLeave }: Props) {
+export default function LeaveGameModal({
+  onCancel,
+  onLeave,
+  title = 'Leave Game?',
+  copy = "Your progress in this hand will be lost. The match will be marked as abandoned and won't count toward your streak.",
+  confirmLabel = 'Leave Game',
+}: Props) {
   return (
     <GameOverlayPortal>
       <div
@@ -18,11 +27,8 @@ export default function LeaveGameModal({ onCancel, onLeave }: Props) {
         onClick={onCancel}
       >
         <div className="rh-leave-card" onClick={(e) => e.stopPropagation()}>
-          <h2 className="rh-leave-modal__title">Leave Game?</h2>
-          <p className="rh-leave-modal__copy">
-            Your progress in this hand will be lost. The match will be marked as
-            abandoned and won't count toward your streak.
-          </p>
+          <h2 className="rh-leave-modal__title">{title}</h2>
+          <p className="rh-leave-modal__copy">{copy}</p>
           <div className="rh-leave-modal__buttons">
             <Button
               type="button"
@@ -40,7 +46,7 @@ export default function LeaveGameModal({ onCancel, onLeave }: Props) {
               className="rh-leave-modal__btn rh-leave-modal__btn--leave"
               onClick={onLeave}
             >
-              Leave Game
+              {confirmLabel}
             </Button>
           </div>
         </div>

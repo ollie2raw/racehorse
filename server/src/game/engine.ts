@@ -76,10 +76,9 @@ function checkForGameWinner(state: GameState): string | null {
 }
 
 /**
- * A player cannot legally empty their hand on a scoring play or double when
- * the boneyard has no drawable tiles—those plays must chain into draws when
- * the boneyard is non-empty (applyMove forcedDraw), otherwise the move cannot
- * be represented as legal go-out state.
+ * A player cannot legally empty their hand on a scoring play or double while
+ * a draw is still available. Once the boneyard is locked/empty, the player is
+ * allowed to go out because there is no draw-chain alternative.
  */
 function isGoingOutIllegal(
   state: GameState,
@@ -89,7 +88,7 @@ function isGoingOutIllegal(
 ): boolean {
   const hand = state.players[playerId].hand;
   if (hand.length !== 1 || !tileEquals(hand[0], tile)) return false;
-  if (getDrawableBoneyardCount(state) > 0) return false;
+  if (getDrawableBoneyardCount(state) === 0) return false;
 
   const newBoard = simulatePlacement(state.board, tile, position);
   const scoring = computePlayScore(newBoard, state.config) > 0;
@@ -660,12 +659,6 @@ export function applyMove(
   }
 
   if (newHand.length === 0) {
-    if (extraTurnEligible) {
-      throw new Error(
-        'Invariant: emptied hand with scoring/double—should be unreachable ' +
-          'when drawable boneyard is empty (see isGoingOutIllegal).',
-      );
-    }
     return { state: resolveGoOut(newState, playerId), forcedDraw: null };
   }
 

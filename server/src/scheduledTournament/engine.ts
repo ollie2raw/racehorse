@@ -141,7 +141,17 @@ async function resolveBotOnlyMatch(
   match: MatchRow,
   persistence: EnginePersistence,
 ): Promise<boolean> {
-  if (!isBotOnlyMatch(match) || !match.player1_id || !match.player2_id) return false;
+  if (!match.player1_id || !match.player2_id) return false;
+  if (!isBotOnlyMatch(match)) {
+    if (isBotUserId(match.player1_id) || isBotUserId(match.player2_id)) {
+      console.log('[tournament:bot-match] skipped auto-resolve because human participant exists', {
+        matchId: match.id,
+        player1Id: match.player1_id,
+        player2Id: match.player2_id,
+      });
+    }
+    return false;
+  }
   if (match.status === 'completed' || match.status === 'bye') return false;
   const tournament = await persistence.fetchTournamentById(match.tournament_id);
   if (!tournament) return false;
@@ -152,7 +162,7 @@ async function resolveBotOnlyMatch(
     match.player2_id,
     persistence,
   );
-  console.log('[tournament:bot-match] auto-resolved', {
+  console.log('[tournament:bot-match] auto-resolved bot-vs-bot', {
     matchId: match.id,
     winnerId,
   });
@@ -303,14 +313,13 @@ export async function generateBracket(
     }, persistence);
   }
 
-  // Broadcast.
+  // Broadcast — rooms dispatch at scheduled_start (humans) or immediately for bot-only pairs.
   io.emit('tournament:bracket_generated', { tournamentId });
 
-  // For each ready match with both players assigned, dispatch the hidden room.
   const matches = await persistence.fetchMatches(tournamentId);
   for (const m of matches) {
-    if (m.status !== 'completed' && m.player1_id && m.player2_id) {
-      await dispatchTournamentMatch(io, m.id, { reason: 'bracket_generated' }, persistence);
+    if (m.status === 'completed' || m.status === 'bye' || !m.player1_id || !m.player2_id) continue;
+    if (isBotOnlyMatch(m)) {
       const updated = await persistence.fetchMatchById(m.id);
       if (updated) {
         await resolveBotOnlyMatch(io, updated, persistence);
@@ -319,6 +328,51 @@ export async function generateBracket(
   }
 
   return matches;
+}
+
+function matchHasHuman(match: Pick<MatchRow, 'player1_id' | 'player2_id'>): boolean {
+  return !isBotOnlyMatch(match);
+}
+
+/**
+ * At scheduled_start, dispatch waiting matches that involve at least one human.
+ * Idempotent: skips matches already ready/in_progress/completed.
+ */
+export async function dispatchScheduledStartMatches(
+  io: Server,
+  tournamentId: string,
+  persistence: EnginePersistence = defaultEnginePersistence,
+  now: Date = new Date(),
+): Promise<number> {
+  const tournament = await persistence.fetchTournamentById(tournamentId);
+  if (!tournament || tournament.status !== 'in_progress') return 0;
+  if (Date.parse(tournament.scheduled_start) > now.getTime()) return 0;
+
+  const matches = await persistence.fetchMatches(tournamentId);
+  let dispatched = 0;
+  for (const match of matches) {
+    if (!match.player1_id || !match.player2_id) continue;
+    if (match.status === 'completed' || match.status === 'bye') continue;
+    if (!matchHasHuman(match)) continue;
+    if (match.status === 'ready' || match.status === 'in_progress') continue;
+    if (match.status !== 'waiting') continue;
+    await dispatchTournamentMatch(io, match.id, { reason: 'bracket_generated', now }, persistence);
+    if (isBotUserId(match.player1_id) || isBotUserId(match.player2_id)) {
+      console.log('[tournament:dispatch] human-vs-bot playable match ready', {
+        tournamentId,
+        matchId: match.id,
+      });
+    }
+    dispatched += 1;
+    const updated = await persistence.fetchMatchById(match.id);
+    if (updated) {
+      await resolveBotOnlyMatch(io, updated, persistence);
+    }
+  }
+  if (dispatched > 0) {
+    console.log('[tournament:dispatch] scheduled_start batch', { tournamentId, dispatched });
+  }
+  return dispatched;
 }
 
 /**
@@ -371,6 +425,7 @@ export async function applyMatchResult(
     tournamentId: match.tournament_id,
     matchId: match.id,
     round: match.round,
+    roomCode: match.room_code,
     winnerId: params.winnerId,
     winnerSource: params.winnerSource ?? (params.byeWalkover ? 'game_over' : 'game_over'),
   });
@@ -409,6 +464,12 @@ export async function applyMatchResult(
     status: newStatus,
     bot_tier: matchBotTier(next.nextRound, targetPlayer1Id, targetPlayer2Id),
   });
+  console.log('[tournament:advance] winner advanced', {
+    fromMatchId: match.id,
+    nextMatchId: target.id,
+    slot: next.slot,
+    winnerId: params.winnerId,
+  });
 
   // Re-fetch and broadcast.
   const updated = await persistence.fetchMatchById(target.id);
@@ -434,6 +495,10 @@ export async function completeTournament(
     await persistence.updateRegistrationStatus(tournamentId, winnerUserId, 'winner');
   }
   await writeTournamentCompletionActivity(tournamentId, placements);
+  console.log('[tournament:complete] champion', {
+    tournamentId,
+    winnerId: winnerUserId,
+  });
   io.emit('tournament:completed', { tournamentId, winnerId: winnerUserId });
 }
 
@@ -500,6 +565,7 @@ export async function reconcileExpiredReadyMatches(
     const matches = await persistence.fetchMatches(tournament.id);
     for (const match of matches) {
       if (match.status !== 'ready' || !match.ready_deadline_at) continue;
+      if (Date.parse(tournament.scheduled_start) > now.getTime()) continue;
       if (await resolveBotOnlyMatch(io, match, persistence)) {
         resolvedCount += 1;
         continue;

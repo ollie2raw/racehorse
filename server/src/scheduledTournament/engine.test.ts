@@ -43,6 +43,7 @@ import {
   closeRegistrationAndStart,
   cancelTournament,
   reconcileExpiredReadyMatches,
+  dispatchScheduledStartMatches,
 } from './engine';
 import type { EnginePersistence } from './persistenceInterface';
 import type {
@@ -243,12 +244,138 @@ describe('closeRegistrationAndStart', () => {
     expect(qfPlayerIds.filter((id) => id.startsWith('bot:fritz:tour-1:'))).toHaveLength(7);
     expect(qf[0].player1_id).toBe('u1');
     expect(qf[0].player2_id).toMatch(/^bot:fritz:tour-1:/);
-    expect(qf[0].status).toBe('ready');
+    expect(qf[0].status).toBe('waiting');
     expect(qf.slice(1).every((m) => m.status === 'completed')).toBe(true);
     expect(qf.slice(1).every((m) => m.winner_source === 'game_over')).toBe(true);
     expect(qf.slice(1).every((m) => m.status_reason === 'bot_simulated')).toBe(true);
     expect(store.matches.filter((m) => m.player1_id?.startsWith('bot:fritz:') && m.player2_id?.startsWith('bot:fritz:') && m.status === 'in_progress')).toHaveLength(0);
     expect(qf.every((m) => m.bot_tier === 'standard')).toBe(true);
+  });
+
+  it('does not no-show humans before scheduled_start even when ready deadline passed', async () => {
+    const tournament = makeTournament({
+      status: 'in_progress',
+      scheduled_start: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
+    const regs = [makeReg('u1')];
+    regs[0].status = 'active';
+    regs[0].seed = 1;
+    const { persistence, store } = makePersistence(tournament, regs);
+    const expiredAt = new Date(Date.now() - 60_000).toISOString();
+    store.matches.push({
+      id: 'm-early-ready',
+      tournament_id: 'tour-1',
+      round: 1,
+      match_number: 1,
+      player1_id: 'u1',
+      player2_id: 'bot:fritz:tour-1:1',
+      winner_id: null,
+      room_code: 'REARLY',
+      status: 'ready',
+      ready_at: expiredAt,
+      ready_deadline_at: expiredAt,
+      started_at: null,
+      completed_at: null,
+      player1_joined_at: null,
+      player2_joined_at: null,
+      winner_source: null,
+      status_reason: null,
+      forfeit_user_id: null,
+      no_show_user_id: null,
+      bot_tier: 'standard',
+      player1_score: null,
+      player2_score: null,
+    });
+    const { io } = makeIoMock();
+
+    const resolved = await reconcileExpiredReadyMatches(io, new Date(), persistence);
+
+    expect(resolved).toBe(0);
+    expect(store.matches[0].status).toBe('ready');
+    expect(store.matches[0].winner_id).toBeNull();
+  });
+
+  it('dispatches human quarterfinals at scheduled_start without advancing before then', async () => {
+    const tournament = makeTournament({
+      status: 'in_progress',
+      scheduled_start: new Date('2026-05-15T00:00:00Z').toISOString(),
+    });
+    const regs = [makeReg('u1'), makeReg('u2')];
+    const { persistence, store } = makePersistence(tournament, regs);
+    const { io } = makeIoMock();
+
+    await closeRegistrationAndStart(io, 'tour-1', persistence);
+    const humanQf = store.matches.find(
+      (m) => m.round === 1 && (m.player1_id === 'u1' || m.player2_id === 'u1'),
+    );
+    expect(humanQf?.status).toBe('waiting');
+    expect(humanQf?.room_code).toBeFalsy();
+
+    const beforeStart = await dispatchScheduledStartMatches(
+      io,
+      'tour-1',
+      persistence,
+      new Date('2026-05-14T23:59:00Z'),
+    );
+    expect(beforeStart).toBe(0);
+    expect(store.matches.find((m) => m.id === humanQf?.id)?.status).toBe('waiting');
+
+    const atStart = await dispatchScheduledStartMatches(
+      io,
+      'tour-1',
+      persistence,
+      new Date('2026-05-15T00:00:01Z'),
+    );
+    expect(atStart).toBeGreaterThan(0);
+    expect(store.matches.find((m) => m.id === humanQf?.id)?.status).toBe('ready');
+    expect(store.matches.find((m) => m.id === humanQf?.id)?.room_code).toBeTruthy();
+  });
+
+  it('keeps human-vs-bot semifinal and final matches playable instead of auto-simulating them', async () => {
+    const tournament = makeTournament({
+      status: 'in_progress',
+      scheduled_start: new Date('2026-05-15T00:00:00Z').toISOString(),
+    });
+    const regs = [makeReg('u1')];
+    const { persistence, store } = makePersistence(tournament, regs);
+    const { io } = makeIoMock();
+
+    await closeRegistrationAndStart(io, 'tour-1', persistence);
+    await dispatchScheduledStartMatches(io, 'tour-1', persistence, new Date('2026-05-15T00:00:01Z'));
+
+    const qf = store.matches.find(
+      (m) => m.round === 1 && (m.player1_id === 'u1' || m.player2_id === 'u1'),
+    );
+    expect(qf?.status).toBe('ready');
+    await applyMatchResult(io, {
+      matchId: qf!.id,
+      winnerId: 'u1',
+      player1Score: qf!.player1_id === 'u1' ? 30 : 18,
+      player2Score: qf!.player2_id === 'u1' ? 30 : 18,
+    }, persistence);
+
+    const sf = store.matches.find(
+      (m) => m.round === 2 && (m.player1_id === 'u1' || m.player2_id === 'u1'),
+    );
+    expect(sf).toBeDefined();
+    expect(sf?.status).toBe('ready');
+    expect(sf?.winner_id).toBeNull();
+    expect([sf?.player1_id, sf?.player2_id].some((id) => id?.startsWith('bot:fritz:'))).toBe(true);
+
+    await applyMatchResult(io, {
+      matchId: sf!.id,
+      winnerId: 'u1',
+      player1Score: sf!.player1_id === 'u1' ? 30 : 20,
+      player2Score: sf!.player2_id === 'u1' ? 30 : 20,
+    }, persistence);
+
+    const final = store.matches.find(
+      (m) => m.round === 3 && (m.player1_id === 'u1' || m.player2_id === 'u1'),
+    );
+    expect(final).toBeDefined();
+    expect(final?.status).toBe('ready');
+    expect(final?.winner_id).toBeNull();
+    expect([final?.player1_id, final?.player2_id].some((id) => id?.startsWith('bot:fritz:'))).toBe(true);
   });
 
   it('does not leave bot-vs-bot matches stuck in_progress in a one-human bracket', async () => {
@@ -297,8 +424,13 @@ describe('full bracket lifecycle (8 players)', () => {
     expect(qf[3].player1_id).toBe('u7');
     expect(qf[3].player2_id).toBe('u2');
     for (const m of qf) {
-      expect(m.status).toBe('ready');
+      expect(m.status).toBe('waiting');
       expect(m.winner_id).toBeNull();
+    }
+
+    await dispatchScheduledStartMatches(io, 'tour-1', persistence, new Date('2026-05-15T00:00:01Z'));
+    for (const m of qf) {
+      expect(m.status).toBe('ready');
     }
 
     await applyMatchResult(io, { matchId: qf[0].id, winnerId: 'u8', player1Score: 30, player2Score: 20 }, persistence);

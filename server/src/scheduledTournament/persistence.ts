@@ -1,4 +1,6 @@
 import { supabaseFetch } from '../supabaseUtils';
+import { isTournamentPastActiveWindow } from './activeWindow';
+import { humanJoinedAt } from './matchDispatch';
 import type {
   BracketView,
   MatchRow,
@@ -26,14 +28,31 @@ export function isValidUuid(value: string | null | undefined): value is string {
 
 export async function fetchUpcomingTournaments(limit = 5): Promise<ScheduledTournamentRow[]> {
   const nowIso = new Date().toISOString();
-  return supabaseFetch<ScheduledTournamentRow[]>(
-    `/rest/v1/${TABLES.tournaments}` +
-      `?select=*` +
-      `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
-      `&status=in.(upcoming,registration_open)` +
-      `&order=scheduled_start.asc` +
-      `&limit=${limit}`,
-  );
+  const [preStart, bracketLobby] = await Promise.all([
+    supabaseFetch<ScheduledTournamentRow[]>(
+      `/rest/v1/${TABLES.tournaments}` +
+        `?select=*` +
+        `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
+        `&status=in.(upcoming,registration_open)` +
+        `&order=scheduled_start.asc` +
+        `&limit=${limit}`,
+    ),
+    supabaseFetch<ScheduledTournamentRow[]>(
+      `/rest/v1/${TABLES.tournaments}` +
+        `?select=*` +
+        `&scheduled_start=gte.${encodeURIComponent(nowIso)}` +
+        `&status=eq.in_progress` +
+        `&order=scheduled_start.asc` +
+        `&limit=${limit}`,
+    ),
+  ]);
+  const byId = new Map<string, ScheduledTournamentRow>();
+  for (const row of [...preStart, ...bracketLobby]) {
+    byId.set(row.id, row);
+  }
+  return [...byId.values()]
+    .sort((a, b) => Date.parse(a.scheduled_start) - Date.parse(b.scheduled_start))
+    .slice(0, limit);
 }
 
 export async function fetchTournamentById(id: string): Promise<ScheduledTournamentRow | null> {
@@ -263,25 +282,117 @@ export async function fetchActiveAssignedMatchForUser(userId: string): Promise<{
       `?select=*` +
       `&or=(player1_id.eq.${encUserId},player2_id.eq.${encUserId})` +
       `&status=in.(ready,in_progress)` +
-      `&order=round.asc,match_number.asc` +
       `&limit=10`,
   );
-  for (const match of rows) {
-    const tournament = await fetchTournamentById(match.tournament_id);
-    if (!tournament || (tournament.status !== 'in_progress' && tournament.status !== 'registration_open')) {
-      continue;
+  const tournamentsById = new Map(
+    (await Promise.all(
+      [...new Set(rows.map((match) => match.tournament_id))].map(async (tournamentId) => [
+        tournamentId,
+        await fetchTournamentById(tournamentId),
+      ] as const),
+    ))
+      .filter((entry): entry is [string, ScheduledTournamentRow] => Boolean(entry[1])),
+  );
+
+  const nowMs = Date.now();
+  const candidateRows = rows
+    .map((match) => ({ match, tournament: tournamentsById.get(match.tournament_id) ?? null }))
+    .filter(
+      (entry): entry is { match: MatchRow; tournament: ScheduledTournamentRow } => Boolean(entry.tournament),
+    );
+
+  console.log('[tournament:recovery] candidates', {
+    userId,
+    count: candidateRows.length,
+    matches: candidateRows.map(({ match, tournament }) => ({
+      tournamentId: tournament.id,
+      matchId: match.id,
+      status: match.status,
+      scheduledStart: tournament.scheduled_start,
+      roomCode: match.room_code,
+    })),
+  });
+
+  const filtered = candidateRows.filter(({ match, tournament }) => {
+    if (isTournamentPastActiveWindow(tournament, nowMs)) {
+      console.log('[tournament:recovery] skipped-stale', {
+        tournamentId: tournament.id,
+        matchId: match.id,
+        reason: 'tournament_past_active_window',
+      });
+      return false;
     }
-    const opponentId = match.player1_id === userId ? match.player2_id : match.player1_id;
-    let opponentUsername: string | null = null;
-    if (opponentId) {
-      const profiles = await supabaseFetch<Array<{ username: string | null }>>(
-        `/rest/v1/profiles?select=username&id=eq.${encodeURIComponent(opponentId)}&limit=1`,
-      ).catch(() => []);
-      opponentUsername = profiles[0]?.username ?? null;
+    if (tournament.status !== 'in_progress') {
+      console.log('[tournament:recovery] skipped-stale', {
+        tournamentId: tournament.id,
+        matchId: match.id,
+        reason: `tournament_${tournament.status}`,
+      });
+      return false;
     }
-    return { match, tournament, opponentUsername };
+    if (match.status !== 'ready' && match.status !== 'in_progress') {
+      console.log('[tournament:recovery] skipped-stale', {
+        tournamentId: tournament.id,
+        matchId: match.id,
+        reason: `match_${match.status}`,
+      });
+      return false;
+    }
+    if (match.completed_at || match.winner_id) {
+      console.log('[tournament:recovery] skipped-completed', {
+        tournamentId: tournament.id,
+        matchId: match.id,
+        roomCode: match.room_code,
+      });
+      return false;
+    }
+    if (
+      match.status === 'ready' &&
+      match.ready_deadline_at &&
+      Date.parse(match.ready_deadline_at) < nowMs &&
+      !humanJoinedAt(match, userId)
+    ) {
+      console.log('[tournament:recovery] skipped-stale', {
+        tournamentId: tournament.id,
+        matchId: match.id,
+        reason: 'ready_deadline_expired',
+      });
+      return false;
+    }
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    const scheduledDiff =
+      Date.parse(b.tournament.scheduled_start) - Date.parse(a.tournament.scheduled_start);
+    if (scheduledDiff !== 0) return scheduledDiff;
+    const statusWeight = (status: MatchRow['status']) => (status === 'in_progress' ? 0 : 1);
+    const statusDiff = statusWeight(a.match.status) - statusWeight(b.match.status);
+    if (statusDiff !== 0) return statusDiff;
+    const roundDiff = a.match.round - b.match.round;
+    if (roundDiff !== 0) return roundDiff;
+    return a.match.match_number - b.match.match_number;
+  });
+
+  const selected = filtered[0];
+  if (!selected) {
+    return null;
   }
-  return null;
+  console.log('[tournament:recovery] selected', {
+    tournamentId: selected.tournament.id,
+    matchId: selected.match.id,
+    reason: 'latest_in_progress_attachable_match',
+  });
+  const opponentId =
+    selected.match.player1_id === userId ? selected.match.player2_id : selected.match.player1_id;
+  let opponentUsername: string | null = null;
+  if (opponentId) {
+    const profiles = await supabaseFetch<Array<{ username: string | null }>>(
+      `/rest/v1/profiles?select=username&id=eq.${encodeURIComponent(opponentId)}&limit=1`,
+    ).catch(() => []);
+    opponentUsername = profiles[0]?.username ?? null;
+  }
+  return { match: selected.match, tournament: selected.tournament, opponentUsername };
 }
 
 // ── Bracket aggregate ────────────────────────────────────────────────────

@@ -87,10 +87,18 @@ export async function fetchMe(): Promise<TournamentMeResponse> {
     ok: boolean;
     registrations: Registration[];
     activeAssignedMatch: TournamentMeResponse['activeAssignedMatch'];
+    currentTournamentPhase: TournamentMeResponse['currentTournamentPhase'];
+    activeTournamentId: TournamentMeResponse['activeTournamentId'];
+    assignedMatch: TournamentMeResponse['assignedMatch'];
+    countdown: TournamentMeResponse['countdown'];
   }>('/api/tournaments/me');
   return {
     registrations: r.registrations,
     activeAssignedMatch: r.activeAssignedMatch,
+    currentTournamentPhase: r.currentTournamentPhase ?? null,
+    activeTournamentId: r.activeTournamentId ?? null,
+    assignedMatch: r.assignedMatch ?? null,
+    countdown: r.countdown ?? null,
   };
 }
 

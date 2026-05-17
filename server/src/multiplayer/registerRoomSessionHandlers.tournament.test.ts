@@ -3,13 +3,46 @@ import { createReservedRoom } from '../rooms';
 import { initRoomSession } from './roomSession';
 import { registerRoomSessionHandlers } from './registerRoomSessionHandlers';
 
+const {
+  fetchMatchByIdMock,
+  updateMatchMock,
+  fetchTournamentByIdMock,
+} = vi.hoisted(() => ({
+  fetchMatchByIdMock: vi.fn(),
+  updateMatchMock: vi.fn(),
+  fetchTournamentByIdMock: vi.fn(),
+}));
+
 vi.mock('../supabaseUtils', () => ({
   supabaseFetch: vi.fn(async () => []),
 }));
 
-const fetchMatchByIdMock = vi.fn();
-const updateMatchMock = vi.fn();
-const fetchTournamentByIdMock = vi.fn();
+vi.mock('../scheduledTournament/matchDispatch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../scheduledTournament/matchDispatch')>();
+  return {
+    ...actual,
+    dispatchTournamentMatch: vi.fn(async (_io, matchId: string) => {
+      const match = await fetchMatchByIdMock(matchId);
+      if (!match?.room_code) {
+        throw new Error('match_not_found');
+      }
+      createReservedRoom(match.room_code, { winningScore: 30 });
+      return {
+        ok: true,
+        matchId,
+        tournamentId: match.tournament_id,
+        roomCode: match.room_code,
+        status: 'ready' as const,
+        readyAt: match.ready_at,
+        readyDeadlineAt: match.ready_deadline_at,
+        recipients: [],
+        reusedExistingRoom: false,
+        emittedReady: false,
+      };
+    }),
+  };
+});
+
 vi.mock('../scheduledTournament/persistence', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../scheduledTournament/persistence')>();
   return {
@@ -308,6 +341,105 @@ describe('tournament:attach_assigned_match', () => {
     const handLen = body.you && body.state?.players?.[body.you]?.hand?.length;
     expect(typeof handLen).toBe('number');
     expect(handLen).toBeGreaterThan(0);
+  });
+
+  it('rejects room:join for a completed tournament room', async () => {
+    const roomCode = 'TDONE1';
+    createReservedRoom(roomCode, { winningScore: 30 });
+    const { getRoom, joinRoom } = await import('../rooms');
+    const room = getRoom(roomCode);
+    room.scheduledTournamentMatchId = 'm-done';
+    room.scheduledTournamentId = 'tour-1';
+    joinRoom(roomCode, 'p1');
+    joinRoom(roomCode, 'p2');
+    room.state = {
+      ...(room.state ?? {
+        playerIds: ['p1', 'p2'],
+        players: {
+          p1: { hand: [], score: 40 },
+          p2: { hand: [], score: 0 },
+        },
+        board: { tiles: [], leftEnd: null, rightEnd: null },
+        boneyard: [],
+        currentPlayerIndex: 0,
+        handOver: true,
+        handNumber: 1,
+        sequence: 1,
+      }),
+      gameOver: true,
+      winnerId: 'p1',
+      handOver: true,
+    } as any;
+
+    const { socket, handlers } = makeSocket('u1');
+    const io = makeIo(socket);
+    registerRoomSessionHandlers(io, socket);
+
+    const ack = vi.fn();
+    await handlers.get('room:join')?.(roomCode, { username: 'human', userId: 'u1' }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ ok: false, error: 'match_completed' });
+  });
+
+  it('rejects attach when the reserved room is already game over', async () => {
+    const roomCode = 'TDONE2';
+    createReservedRoom(roomCode, { winningScore: 30 });
+    const { getRoom, joinRoom } = await import('../rooms');
+    const room = getRoom(roomCode);
+    joinRoom(roomCode, 'p1');
+    joinRoom(roomCode, 'p2');
+    room.state = {
+      ...(room.state ?? {
+        playerIds: ['p1', 'p2'],
+        players: {
+          p1: { hand: [], score: 40 },
+          p2: { hand: [], score: 0 },
+        },
+        board: { tiles: [], leftEnd: null, rightEnd: null },
+        boneyard: [],
+        currentPlayerIndex: 0,
+        handOver: true,
+        handNumber: 1,
+        sequence: 1,
+      }),
+      gameOver: true,
+      winnerId: 'p1',
+      handOver: true,
+    } as any;
+
+    fetchMatchByIdMock.mockResolvedValue({
+      id: 'm-done',
+      tournament_id: 'tour-1',
+      round: 3,
+      match_number: 1,
+      player1_id: 'u1',
+      player2_id: 'u2',
+      winner_id: 'u1',
+      room_code: roomCode,
+      status: 'in_progress',
+      ready_at: null,
+      ready_deadline_at: null,
+      started_at: new Date('2026-05-16T00:00:00Z').toISOString(),
+      completed_at: null,
+      player1_joined_at: null,
+      player2_joined_at: null,
+      winner_source: null,
+      status_reason: null,
+      forfeit_user_id: null,
+      no_show_user_id: null,
+      bot_tier: null,
+      player1_score: 40,
+      player2_score: 0,
+    });
+
+    const { socket, handlers } = makeSocket('u1');
+    const io = makeIo(socket);
+    registerRoomSessionHandlers(io, socket);
+
+    const ack = vi.fn();
+    await handlers.get('tournament:attach_assigned_match')?.({ matchId: 'm-done' }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ ok: false, error: 'match_completed' });
   });
 
   it('always invokes callback once on handler error', async () => {

@@ -83,18 +83,50 @@ export type MatchReadyEvent = {
   opponentUsername: string | null;
 };
 
+export type TournamentUserPhase =
+  | 'registered'
+  | 'bracket_lobby'
+  | 'match_ready'
+  | 'in_match'
+  | 'eliminated'
+  | 'completed';
+
+export type TournamentCountdownKind =
+  | 'registration_close'
+  | 'scheduled_start'
+  | 'ready_deadline';
+
+export type TournamentAssignedMatch = {
+  matchId: string;
+  tournamentId: string;
+  round: 1 | 2 | 3;
+  matchNumber: number;
+  opponentId: string | null;
+  opponentUsername: string | null;
+  roomCode: string | null;
+  matchStatus: MatchStatus;
+  scheduledStart: string;
+  matchStartsAt: string | null;
+  readyDeadlineAt: string | null;
+};
+
 export type TournamentMeResponse = {
   registrations: Registration[];
   activeAssignedMatch: {
     matchId: string;
     tournamentId: string;
     round: 1 | 2 | 3;
+    matchNumber: number;
     roomCode: string | null;
     opponentId: string | null;
     opponentUsername: string | null;
     matchStatus: 'ready' | 'in_progress';
     readyDeadlineAt: string | null;
   } | null;
+  currentTournamentPhase: TournamentUserPhase | null;
+  activeTournamentId: string | null;
+  assignedMatch: TournamentAssignedMatch | null;
+  countdown: { kind: TournamentCountdownKind; at: string } | null;
 };
 
 export type TournamentResultPlacement = {

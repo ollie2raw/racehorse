@@ -3,6 +3,7 @@ import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
 import type { Registration, ScheduledTournament } from './types';
 import { deriveTournamentHubViewModel, type TournamentRecoveryMatch } from './hubState';
+import { isTerminalTournamentMatch } from './terminalMatches';
 import './tournamentHub.css';
 
 type Identity = { userId: string; username: string } | null;
@@ -12,6 +13,8 @@ export interface TournamentHubScreenProps {
   upcoming: ScheduledTournament[];
   registrations: Registration[];
   recoveryMatch: TournamentRecoveryMatch;
+  tournamentPhase?: import('./types').TournamentUserPhase | null;
+  activeTournamentId?: string | null;
   error: string | null;
   isLoading: boolean;
   hasLoaded: boolean;
@@ -109,6 +112,8 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
         upcoming: props.upcoming,
         registrations: props.registrations,
         recoveryMatch: props.recoveryMatch,
+        tournamentPhase: props.tournamentPhase ?? null,
+        activeTournamentId: props.activeTournamentId ?? null,
         activeBracketStatus: props.activeBracketStatus ?? null,
         isLoading: props.isLoading,
         hasLoaded: props.hasLoaded,
@@ -119,6 +124,8 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
       props.upcoming,
       props.registrations,
       props.recoveryMatch,
+      props.tournamentPhase,
+      props.activeTournamentId,
       props.activeBracketStatus,
       props.isLoading,
       props.hasLoaded,
@@ -207,7 +214,28 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
               </span>
             </div>
 
-            {props.recoveryMatch ? (
+            {props.tournamentPhase === 'bracket_lobby' && props.activeTournamentId ? (
+              <div className="th-recovery-banner">
+                <div className="th-recovery-banner__copy">
+                  <span className="th-recovery-banner__eyebrow">Bracket locked</span>
+                  <span className="th-recovery-banner__title">View your bracket and opponent</span>
+                </div>
+                <button
+                  className="th-cta"
+                  type="button"
+                  onClick={() => props.onOpenBracket(props.activeTournamentId!)}
+                >
+                  View Bracket ›
+                </button>
+              </div>
+            ) : null}
+
+            {props.recoveryMatch &&
+            props.tournamentPhase !== 'bracket_lobby' &&
+            props.tournamentPhase !== 'completed' &&
+            props.activeBracketStatus !== 'completed' &&
+            props.activeBracketStatus !== 'cancelled' &&
+            !isTerminalTournamentMatch(props.recoveryMatch.matchId) ? (
               <div className="th-recovery-banner">
                 <div className="th-recovery-banner__copy">
                   <span className="th-recovery-banner__eyebrow">
@@ -308,12 +336,14 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                       {reg ? (
                         <>
                           <span className="th-card__registered">Registered ✓</span>
-                          <button
-                            className="th-card__withdraw"
-                            onClick={() => void props.onWithdraw(t.id)}
-                          >
-                            Withdraw
-                          </button>
+                          {open ? (
+                            <button
+                              className="th-card__withdraw"
+                              onClick={() => void props.onWithdraw(t.id)}
+                            >
+                              Withdraw
+                            </button>
+                          ) : null}
                         </>
                       ) : isFull ? (
                         <span className="th-card__full">Full</span>

@@ -51,6 +51,19 @@ describe('evaluateTournamentAttachGuard', () => {
     expect(second).toEqual({ proceed: false, reason: 'already-pending' });
   });
 
+  it('blocks attach for terminal completed tournament matches', () => {
+    const result = evaluateTournamentAttachGuard({
+      matchId: 'm-done',
+      socketConnected: true,
+      appMode: 'tournament',
+      pendingMatchId: null,
+      attachedMatchId: null,
+      failedAtByMatchId: {},
+      terminalMatchIds: new Set(['m-done']),
+    });
+    expect(result).toEqual({ proceed: false, reason: 'match-completed' });
+  });
+
   it('respects failure backoff unless manual retry', () => {
     const now = Date.now();
     const blocked = evaluateTournamentAttachGuard({

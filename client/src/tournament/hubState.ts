@@ -1,4 +1,5 @@
-import type { Registration, ScheduledTournament } from './types';
+import { isTerminalTournamentMatch } from './terminalMatches';
+import type { Registration, ScheduledTournament, TournamentUserPhase } from './types';
 
 export type TournamentRecoveryMatch = {
   matchId: string;
@@ -19,6 +20,7 @@ export type TournamentHubUiState =
   | 'registered_waiting'
   | 'full'
   | 'registration_closed'
+  | 'bracket_lobby'
   | 'in_progress'
   | 'eliminated'
   | 'completed'
@@ -35,6 +37,8 @@ type Params = {
   upcoming: ScheduledTournament[];
   registrations: Registration[];
   recoveryMatch: TournamentRecoveryMatch;
+  tournamentPhase: TournamentUserPhase | null;
+  activeTournamentId: string | null;
   activeBracketStatus: ScheduledTournament['status'] | null;
   isLoading: boolean;
   hasLoaded: boolean;
@@ -79,7 +83,20 @@ export function deriveTournamentHubViewModel(params: Params): TournamentHubViewM
     };
   }
 
-  if (params.recoveryMatch) {
+  if (params.tournamentPhase === 'bracket_lobby') {
+    return {
+      state: 'bracket_lobby',
+      title: 'Bracket locked',
+      detail: 'Your quarterfinal opponent is set. The match room opens at tournament start.',
+      canRetry: false,
+    };
+  }
+
+  if (
+    params.recoveryMatch &&
+    !isTerminalTournamentMatch(params.recoveryMatch.matchId) &&
+    params.tournamentPhase !== 'completed'
+  ) {
     return {
       state: 'in_progress',
       title:
@@ -94,18 +111,27 @@ export function deriveTournamentHubViewModel(params: Params): TournamentHubViewM
     };
   }
 
-  const eliminated = params.registrations.find((r) => r.status === 'eliminated');
-  if (eliminated) {
-    return {
-      state: 'eliminated',
-      title: 'Eliminated',
-      detail: 'You missed your assigned match and were eliminated by no-show. View the bracket or enter the next tournament.',
-      canRetry: false,
-    };
-  }
-
   const nextTournament = params.upcoming[0] ?? null;
+  const registeredIds = new Set(
+    params.registrations
+      .filter((r) => r.status === 'registered' || r.status === 'active' || r.status === 'winner')
+      .map((r) => r.tournament_id),
+  );
+  const isRegisteredForNextTournament = nextTournament ? registeredIds.has(nextTournament.id) : false;
+  const currentTournamentId = params.activeTournamentId ?? nextTournament?.id ?? null;
+  const eliminated = params.registrations.find(
+    (r) => r.status === 'eliminated' && r.tournament_id === currentTournamentId,
+  );
+
   if (!nextTournament) {
+    if (eliminated) {
+      return {
+        state: 'eliminated',
+        title: 'Eliminated',
+        detail: 'You missed your assigned match and were eliminated by no-show. View the bracket or enter the next tournament.',
+        canRetry: false,
+      };
+    }
     return {
       state: 'registration_opens_soon',
       title: 'Checking the next tournament',
@@ -114,12 +140,7 @@ export function deriveTournamentHubViewModel(params: Params): TournamentHubViewM
     };
   }
 
-  const registeredIds = new Set(
-    params.registrations
-      .filter((r) => r.status === 'registered' || r.status === 'active' || r.status === 'winner')
-      .map((r) => r.tournament_id),
-  );
-  const isRegistered = registeredIds.has(nextTournament.id);
+  const isRegistered = isRegisteredForNextTournament;
   const startMs = Date.parse(nextTournament.scheduled_start);
   const count = nextTournament.registered_count ?? 0;
   const isFull = count >= nextTournament.max_players;
@@ -149,11 +170,23 @@ export function deriveTournamentHubViewModel(params: Params): TournamentHubViewM
     };
   }
 
-  if (isRegistered && startMs <= params.nowMs) {
+  if (isRegistered && params.tournamentPhase === 'registered') {
+    const closeMs = Date.parse(nextTournament.registration_close_at);
+    if (closeMs <= params.nowMs && startMs > params.nowMs) {
+      return {
+        state: 'bracket_lobby',
+        title: 'Bracket locked',
+        detail: 'View your bracket and opponent while the tournament counts down to start.',
+        canRetry: false,
+      };
+    }
+  }
+
+  if (isRegistered && startMs <= params.nowMs && nextTournament.status === 'in_progress') {
     return {
       state: 'registration_closed',
-      title: 'Registration closed. Bracket generating.',
-      detail: 'Your seat is locked. The bracket is being prepared.',
+      title: 'Tournament starting',
+      detail: 'Your match room is opening now.',
       canRetry: false,
     };
   }
@@ -163,6 +196,15 @@ export function deriveTournamentHubViewModel(params: Params): TournamentHubViewM
       state: 'registered_waiting',
       title: "You're in. Waiting for tournament to start.",
       detail: 'Registration has not opened yet, but your active tournament entry is preserved.',
+      canRetry: false,
+    };
+  }
+
+  if (eliminated) {
+    return {
+      state: 'eliminated',
+      title: 'Eliminated',
+      detail: 'You missed your assigned match and were eliminated by no-show. View the bracket or enter the next tournament.',
       canRetry: false,
     };
   }

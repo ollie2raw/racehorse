@@ -3,7 +3,8 @@ export type TournamentAttachSkipReason =
   | 'socket-disconnected'
   | 'already-pending'
   | 'already-attached'
-  | 'backoff';
+  | 'backoff'
+  | 'match-completed';
 
 export const TOURNAMENT_ATTACH_FAILURE_BACKOFF_MS = 30_000;
 
@@ -14,12 +15,16 @@ export function evaluateTournamentAttachGuard(input: {
   pendingMatchId: string | null;
   attachedMatchId: string | null;
   failedAtByMatchId: Record<string, number>;
+  terminalMatchIds?: ReadonlySet<string>;
   manual?: boolean;
   nowMs?: number;
 }): { proceed: boolean; reason: TournamentAttachSkipReason | null } {
   const matchId = input.matchId?.trim() || null;
   if (!matchId) {
     return { proceed: false, reason: 'no-match' };
+  }
+  if (input.terminalMatchIds?.has(matchId)) {
+    return { proceed: false, reason: 'match-completed' };
   }
   if (!input.socketConnected) {
     return { proceed: false, reason: 'socket-disconnected' };
