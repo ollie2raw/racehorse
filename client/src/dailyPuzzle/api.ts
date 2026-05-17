@@ -1,5 +1,6 @@
 import type { BoardState, Tile, TileOrientation } from '../types';
 import { supabase } from '../lib/supabase';
+import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import type {
   CuratedDailyPuzzle,
   CuratedDailyPuzzleRow,
@@ -14,9 +15,6 @@ import type {
 } from './types';
 import { getLocalDateKey, normalizeDateInputToLocalKey } from './date';
 
-const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
-const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
-
 const DAILY_PUZZLE_TYPE_ORDER: DailyPuzzleType[] = [
   'one_turn_high_score',
   'setup_and_strike',
@@ -25,14 +23,7 @@ const DAILY_PUZZLE_TYPE_ORDER: DailyPuzzleType[] = [
 ];
 
 function resolveServerBaseUrl(): string {
-  const configured = DEFAULT_SERVER_URL.trim();
-  if (configured) return configured.replace(/\/$/, '');
-  if (typeof window !== 'undefined') {
-    const { hostname, port } = window.location;
-    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
-    return '';
-  }
-  return DEFAULT_SERVER_ORIGIN;
+  return resolveGameServerUrl();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {

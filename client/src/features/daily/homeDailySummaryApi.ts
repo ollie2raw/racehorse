@@ -1,17 +1,8 @@
 import { supabase } from '../../lib/supabase';
-
-const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
-const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
+import { resolveGameServerUrl } from '../../lib/gameServerUrl';
 
 function resolveServerBaseUrl(): string {
-  const configured = DEFAULT_SERVER_URL.trim();
-  if (configured) return configured.replace(/\/$/, '');
-  if (typeof window !== 'undefined') {
-    const { hostname, port } = window.location;
-    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
-    return '';
-  }
-  return DEFAULT_SERVER_ORIGIN;
+  return resolveGameServerUrl();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {

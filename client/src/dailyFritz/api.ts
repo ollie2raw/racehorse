@@ -1,9 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
-
-const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
-const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
+import { resolveGameServerUrl } from '../lib/gameServerUrl';
 
 const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
   import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
@@ -48,14 +46,7 @@ export function clearDailyFritzClientStorage(userId: string): void {
 }
 
 function resolveServerBaseUrl(): string {
-  const configured = DEFAULT_SERVER_URL.trim();
-  if (configured) return configured.replace(/\/$/, '');
-  if (typeof window !== 'undefined') {
-    const { hostname, port } = window.location;
-    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
-    return '';
-  }
-  return DEFAULT_SERVER_ORIGIN;
+  return resolveGameServerUrl();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {

@@ -3,16 +3,33 @@
  *
  * - Prefer `VITE_SERVER_URL` (set in CI / Vercel for production).
  * - In local `vite` dev, default to `http://localhost:3001`.
- * - In production builds without env, fall back to the page origin so same-host
- *   deploys (or reverse-proxy setups) work; pure static hosts still need `VITE_SERVER_URL`.
+ * - In known static production on Vercel, fall back to the Render origin so a
+ *   missing env var does not send `/api/*` traffic to Vercel and hard-fail.
+ * - Otherwise, fall back to the page origin so same-host deploys (or reverse-proxy
+ *   setups) still work.
  */
 let warnedMissingViteServerUrl = false;
+const KNOWN_PRODUCTION_GAME_SERVER_URL = 'https://racehorse.onrender.com';
+
+function isLocalBrowserHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
 
 export function resolveGameServerUrl(): string {
   const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim() ?? '';
   if (configured) return configured.replace(/\/$/, '');
   if (import.meta.env.DEV) return 'http://localhost:3001';
   if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'racehorsedoms.vercel.app') {
+      if (import.meta.env.PROD && !warnedMissingViteServerUrl) {
+        warnedMissingViteServerUrl = true;
+        console.warn(
+          '[racehorse] VITE_SERVER_URL was not set at build time. Falling back to the production Render server for Socket.io / API.',
+        );
+      }
+      return KNOWN_PRODUCTION_GAME_SERVER_URL;
+    }
+    if (isLocalBrowserHost(window.location.hostname)) return '';
     if (import.meta.env.PROD && !warnedMissingViteServerUrl) {
       warnedMissingViteServerUrl = true;
       console.warn(

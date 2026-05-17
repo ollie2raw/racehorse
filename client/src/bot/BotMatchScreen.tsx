@@ -12,6 +12,7 @@ import {
 } from '../components';
 import { MatchNblBoardFrame } from '../components/MatchNblBoardFrame';
 import TileRack from '../components/TileRack';
+import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
 import type { AppMode, BoardState, BranchArm, HubDouble, Move, PlacedTile, PlacementPosition, Tile } from '../types';
 import {
@@ -669,14 +670,7 @@ export default function BotMatchScreen({
   const wantsOriginalGuidedRecordMode = false;
 
   const resolveServerBaseUrl = () => {
-    const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim() ?? '';
-    if (configured) return configured.replace(/\/$/, '');
-    if (typeof window !== 'undefined') {
-      const { hostname, port } = window.location;
-      if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
-      return '';
-    }
-    return 'http://localhost:3001';
+    return resolveGameServerUrl();
   };
   const createLocalMatchId = () =>
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'

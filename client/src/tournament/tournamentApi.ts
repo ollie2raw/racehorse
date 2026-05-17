@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import type {
   BracketView,
   Registration,
@@ -9,7 +10,7 @@ import type {
 } from './types';
 
 function serverUrl(): string {
-  return (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
+  return resolveGameServerUrl();
 }
 
 async function getJson<T>(path: string): Promise<T> {

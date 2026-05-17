@@ -1,9 +1,8 @@
 import { supabase } from '../lib/supabase';
+import { resolveGameServerUrl } from '../lib/gameServerUrl';
 
 function resolveBaseUrl(): string {
-  const configured = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim() ?? '';
-  if (configured) return configured.replace(/\/$/, '');
-  return '';
+  return resolveGameServerUrl();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {

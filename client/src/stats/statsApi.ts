@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { fetchRatingHistory } from '../ranking/api';
 import {
   FRITZ_ELITE_ID,
@@ -7,9 +8,6 @@ import {
   FRITZ_ROOKIE_ID,
   FRITZ_STANDARD_ID,
 } from '../bot/fritzConfig';
-
-const DEFAULT_SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
-const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
 
 export type MatchMode = 'bot' | 'online' | 'practice';
 
@@ -479,14 +477,7 @@ export interface RankingProfile {
 }
 
 function resolveBaseUrl(): string {
-  const configured = DEFAULT_SERVER_URL.trim();
-  if (configured) return configured.replace(/\/$/, '');
-  if (typeof window !== 'undefined') {
-    const { hostname, port } = window.location;
-    if (port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') return '';
-    return '';
-  }
-  return DEFAULT_SERVER_ORIGIN;
+  return resolveGameServerUrl();
 }
 
 export async function fetchRankingProfile(
