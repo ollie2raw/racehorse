@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import { isDailyPuzzleLadderReady, type DailyPuzzleSlot } from './dailyPuzzle';
+import { createHighScorePuzzle } from './generatePuzzles';
 import {
   choosePuzzleForSlot,
   type LadderSlotGenerationProfile,
@@ -33,8 +37,8 @@ describe('Daily Puzzle ladder generation budgets', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('structural_failure');
-    expect(result.attemptsTried).toBe(3);
-    expect(result.topRejectionReasons).toContainEqual({ reason: 'null_candidate', count: 3 });
+    expect(result.attemptsTried).toBe(5);
+    expect(result.topRejectionReasons).toContainEqual({ reason: 'null_candidate', count: 5 });
   });
 
   it('aborts on maxAttempts without throwing repeated validation exceptions', async () => {
@@ -109,7 +113,94 @@ describe('Daily Puzzle ladder generation budgets', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('structural_failure');
-    expect(result.attemptsTried).toBe(2);
-    expect(result.topRejectionReasons).toContainEqual({ reason: 'missing_tiles', count: 2 });
+    expect(result.attemptsTried).toBe(4);
+    expect(result.topRejectionReasons).toContainEqual({ reason: 'missing_tiles', count: 4 });
+  });
+
+  it('uses a reported fallback tier when primary Tactical Setup fails but fallback type succeeds', async () => {
+    const result = await choosePuzzleForSlot('2026-05-17', {
+      ...tacticalProfile,
+      preferredPuzzleTypes: ['setup_and_strike', 'one_turn_high_score'],
+    }, {
+      purpose: 'manual',
+      budget: {
+        maxAttemptsPerSlot: 20,
+        setupAndStrikeAttempts: 1,
+        highScoreAttempts: 10,
+        structuralFailureThreshold: 10,
+        maxMsPerSlot: 10_000,
+      },
+      builders: {
+        setupAndStrike: () => {
+          throw new Error('Unable to find setup-and-strike sequence.');
+        },
+        oneTurnHighScore: createHighScorePuzzle,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.strategy).toBe('one_turn_high_score');
+    expect(result.fallbackTier).toBe('fallback_type');
+    expect(result.topRejectionReasons).toContainEqual({ reason: 'no_solution', count: 3 });
+  });
+});
+
+function slot(overrides: Partial<DailyPuzzleSlot>): DailyPuzzleSlot {
+  return {
+    id: `slot-${overrides.slotIndex ?? 1}`,
+    puzzleDate: '2026-05-17',
+    slotIndex: 1,
+    slotTitle: 'Quick Line',
+    tier: 'quick_line',
+    puzzleType: 'one_turn_high_score',
+    maxMoves: 1,
+    targetScore: 999,
+    dealSize: 14,
+    slotMaxPoints: 150,
+    bestPossibleScore: 25,
+    startingBoard: {},
+    startingHand: [{ low: 1, high: 1 }],
+    objectiveType: 'one_turn_high_score',
+    objectivePayload: { best_possible_score: 25 },
+    setVersion: 1,
+    published: true,
+    ...overrides,
+  };
+}
+
+describe('Daily Puzzle ladder readiness and unavailable copy', () => {
+  it('returns false when fewer than three slots exist', () => {
+    expect(isDailyPuzzleLadderReady([slot({ slotIndex: 1 }), slot({ slotIndex: 2 })])).toBe(false);
+  });
+
+  it('returns false when scoring metadata is missing', () => {
+    expect(isDailyPuzzleLadderReady([
+      slot({ slotIndex: 1, slotTitle: 'Quick Line', tier: 'quick_line' }),
+      slot({
+        slotIndex: 2,
+        slotTitle: 'Tactical Setup',
+        tier: 'tactical_setup',
+        slotMaxPoints: 250,
+        bestPossibleScore: null,
+      }),
+      slot({ slotIndex: 3, slotTitle: 'Master Chain', tier: 'master_chain', slotMaxPoints: 400 }),
+    ])).toBe(false);
+  });
+
+  it('keeps unavailable copy product-facing', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../../client/src/dailyPuzzle/DailyPuzzleScreen.tsx'),
+      'utf8',
+    );
+    expect(source).toContain('Today’s Puzzle Ladder is being prepared');
+    expect(source).not.toContain('valid scoring metadata');
+    expect(source).not.toContain('single-puzzle format is no longer offered');
+  });
+
+  it('keeps request-time generation behind an explicit env flag', () => {
+    const source = readFileSync(resolve(__dirname, 'index.ts'), 'utf8');
+    expect(source).toContain('ENABLE_REQUEST_PUZZLE_GENERATION');
+    expect(source).toContain('request-time generation skipped');
   });
 });

@@ -1082,13 +1082,13 @@ export default function DailyPuzzleScreen({
     return (
       <LayoutScreen
         className="screen lobby-screen mode-home-screen"
-        title={stableDailyTitle}
-        subtitle="Today’s Daily Puzzle is a three-step ladder for everyone."
+        title="Today’s Puzzle Ladder is being prepared"
+        subtitle="Three fixed puzzles. Same ladder for everyone."
         contentClassName="screen-shell"
       >
         <p style={{ color: 'rgba(232,245,240,0.88)', lineHeight: 1.5 }}>
-          The ladder for <strong>{ladderToday.runDate}</strong> is not published yet (needs three live puzzles with
-          valid scoring metadata). Check back soon — the single-puzzle format is no longer offered for today.
+          We couldn’t publish today’s full three-step ladder yet. Please check back soon, or refresh in a few
+          minutes.
         </p>
         <button
           type="button"
@@ -1098,10 +1098,20 @@ export default function DailyPuzzleScreen({
             setLadderFetchNonce((n) => n + 1);
           }}
         >
-          Refresh status
+          Refresh
         </button>
-        <button type="button" className="mode-inline-btn rh-back-button" onClick={handleBackHome}>
-          ← Back to Home
+        <button
+          type="button"
+          className="mode-inline-btn rh-back-button"
+          onClick={() => {
+            if (onNavigate) {
+              onNavigate('learn');
+              return;
+            }
+            handleBackHome();
+          }}
+        >
+          ← Back to Learn
         </button>
         {import.meta.env.DEV ? (
           <p className="lobby-server" style={{ marginTop: '1rem', maxWidth: '42rem' }}>
