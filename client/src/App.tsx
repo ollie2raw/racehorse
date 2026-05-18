@@ -8,7 +8,7 @@ import {
   AnimatedScore,
   Board,
   BoardOpenEndsPill,
-  BoneyardStackIcon,
+  BoneyardCountPill,
   BrandLogo,
   DominoTile,
   RotateOverlay,
@@ -49,6 +49,10 @@ import { fetchUserStatsByUserId, fetchWeeklyRecap, recordMatchResult } from './s
 import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api';
 import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
 import type { BotDealSize } from './bot/botEngine';
+import {
+  assertDisplayedOpenCountMatchesCanonical,
+  computeOpenEndsSum,
+} from './game/openEndsGeometry';
 import type { FritzTier } from './bot/fritzConfig';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
@@ -356,24 +360,6 @@ function findPlacedTile(
   return null;
 }
 
-function getOpenEndsSum(board: GameState['board']): number {
-  if (!board || board.mainLine.length === 0) return 0;
-  if (board.mainLine.length === 1) {
-    const tile = board.mainLine[0]?.tile;
-    return tile ? tile.low + tile.high : 0;
-  }
-
-  let sum = 0;
-  sum += board.leftEndIsDouble ? board.leftEnd * 2 : board.leftEnd;
-  sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
-  for (const hub of board.hubDoubles) {
-    for (const branch of hub.branches) {
-      if (!branch) continue;
-      sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
-    }
-  }
-  return sum;
-}
 
 const LEARN_MODE_VISIBLE = true;
 
@@ -3117,8 +3103,10 @@ export default function App() {
   const canDrawNow = canDraw && !hasPlayMoves;
   const canPass = legalMoves.some((m) => m.type === 'pass');
   const boneyardCount = boneyardDisplayCount ?? state?.boneyard.length ?? 0;
-  const isBoneyardLocked = boneyardCount <= 2;
-  const openEndsSum = getOpenEndsSum(state?.board ?? null);
+  const openEndsSum = state?.board ? computeOpenEndsSum(state.board) : 0;
+  if (state?.board) {
+    assertDisplayedOpenCountMatchesCanonical(state.board, openEndsSum, 'multiplayer');
+  }
   const canUseRematch = Boolean(
     state?.gameOver && joinedRoom && !isSpectatingMatch && !isTournamentMatch && state.playerIds.includes(you),
   );
@@ -3436,6 +3424,9 @@ export default function App() {
     setHandReveal(null);
   }, [socket, joinedRoom, handReveal?.handNumber, state?.handNumber]);
 
+  const continueAfterHandRevealRef = useRef(continueAfterHandReveal);
+  continueAfterHandRevealRef.current = continueAfterHandReveal;
+
   // Recover lost hand:ready on reconnect — if the server says the hand is over but
   // we're not in a reveal window, the hand:ready was lost during disconnect. Re-emit it.
   const handReadyRecoveryRef = useRef(false);
@@ -3485,14 +3476,14 @@ export default function App() {
     }, 50);
 
     handRevealAutoTimeoutRef.current = setTimeout(() => {
-      continueAfterHandReveal();
+      continueAfterHandRevealRef.current();
     }, durationMs);
 
     return () => {
       if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
       if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
     };
-  }, [handReveal, state?.gameOver, continueAfterHandReveal]);
+  }, [handReveal, state?.gameOver]);
 
   useEffect(() => {
     const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
@@ -5448,19 +5439,10 @@ export default function App() {
                 </div>
               )}
               {!state.gameOver && (
-                <>
-                  <BoardOpenEndsPill openEndsSum={openEndsSum} />
-                  <div
-                  ref={boneyardRef}
-                  className={`boneyard-pill board-corner-pill board-corner-pill--tr${isBoneyardLocked ? ' locked' : ''}`}
-                >
-                  <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
-                  <span className="boneyard-count">{boneyardCount}</span>
-                  {isBoneyardLocked && boneyardCount > 0 ? (
-                    <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
-                  ) : null}
+                <div className="rh-board-meta-bar" data-ui="board-meta">
+                  <BoardOpenEndsPill board={state.board} openEndsSum={openEndsSum} />
+                  <BoneyardCountPill ref={boneyardRef} count={boneyardCount} />
                 </div>
-                </>
               )}              <div
                 className="wl-controls-tray control-pill"
                 style={{

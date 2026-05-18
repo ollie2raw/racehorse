@@ -7,6 +7,7 @@ import type {
   Move,
   TileOrientation,
 } from '../types';
+import { computeOpenEndsSum } from '../game/openEndsGeometry';
 
 export interface NoBrainerPracticeState {
   status: 'playing' | 'won' | 'failed';
@@ -200,11 +201,11 @@ function placeTileOnBranch(
 
   const tileIsDouble = isDouble(tile);
   const laneRef = `branch-${hubRef}-${armIndex}`;
-  let newBranches: BranchArm[];
+  let newBranches: (BranchArm | null)[];
   let newHubDoubles = [...board.hubDoubles];
 
-  if (hub.branches[armIndex]) {
-    const existingBranch = hub.branches[armIndex];
+  const existingBranch = hub.branches[armIndex];
+  if (existingBranch && existingBranch.tiles.length > 0) {
     const branchMatchValue = existingBranch.openEnd;
     const branchNewEnd = exposedPip(tile, branchMatchValue);
     const depthBeforeAppend = existingBranch.tiles.length;
@@ -217,7 +218,7 @@ function placeTileOnBranch(
     newBranches = hub.branches.map((b, i) =>
       i === armIndex
         ? {
-            tiles: [...b.tiles, placedTile],
+            tiles: [...existingBranch.tiles, placedTile],
             openEnd: branchNewEnd,
             openEndIsDouble: tileIsDouble,
           }
@@ -395,27 +396,6 @@ function getMatchableOpenEnds(
     }
     return end;
   });
-}
-
-function computeOpenEndsSum(board: BoardState): number {
-  if (board.mainLine.length === 1) {
-    const t = board.mainLine[0].tile;
-    return t.high + t.low;
-  }
-
-  let sum = 0;
-  sum += board.leftEndIsDouble ? board.leftEnd * 2 : board.leftEnd;
-  sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
-
-  for (const hub of board.hubDoubles) {
-    if (!hub.isCrossed) continue;
-    for (let i = 0; i < 2; i++) {
-      const branch = hub.branches[i];
-      if (!branch) continue;
-      sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
-    }
-  }
-  return sum;
 }
 
 function computePlayScore(board: BoardState): number {

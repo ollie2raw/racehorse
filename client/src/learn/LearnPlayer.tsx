@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
 import DominoTile from '../components/DominoTile';
 import { computeOpenEndsSum } from '../bot/botEngine';
+import { getScoringOpenEndPips } from '../game/openEndsGeometry';
 import { learnLessons } from './data';
 import LearnBoard from './components/LearnBoard';
 import { getMatchableOpenEnds, isTilePlayable, toBoardState, toTile } from './engine/rulesAdapter';
@@ -286,7 +287,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     if (board.mainLine.some((placement) => matches(placement.tile))) return true;
     for (const hub of board.hubDoubles ?? []) {
       for (const branch of hub.branches ?? []) {
-        if (branch.tiles.some((placement) => matches(placement.tile))) return true;
+        if (branch?.tiles.some((placement) => matches(placement.tile))) return true;
       }
     }
     return false;
@@ -311,23 +312,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
 
   const getScoringContributors = (board: typeof quizBoard): number[] => {
     if (!board) return [];
-    if (board.mainLine.length === 1) {
-      const tile = board.mainLine[0]?.tile;
-      return tile ? [tile.low, tile.high] : [];
-    }
-    const contributors: number[] = [];
-    contributors.push(board.leftEnd);
-    if (board.leftEndIsDouble) contributors.push(board.leftEnd);
-    contributors.push(board.rightEnd);
-    if (board.rightEndIsDouble) contributors.push(board.rightEnd);
-    for (const hub of board.hubDoubles ?? []) {
-      for (const branch of hub.branches ?? []) {
-        if (!branch) continue;
-        contributors.push(branch.openEnd);
-        if (branch.openEndIsDouble) contributors.push(branch.openEnd);
-      }
-    }
-    return contributors;
+    return getScoringOpenEndPips(board);
   };
 
   const getCorrectTiles = (step: QuizTileStep): LearnTile[] => {

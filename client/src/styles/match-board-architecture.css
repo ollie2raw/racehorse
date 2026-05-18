@@ -182,6 +182,20 @@
   right: auto !important;
 }
 
+.screen.game-screen.walnut-live .rh-board-meta-bar .open-ends-count,
+.screen.game-screen.walnut-live .rh-board-meta-bar .boneyard-count {
+  font-size: var(--match-counter-value-size, max(1.1rem, calc(var(--match-score-size, 38px) * 0.52)));
+}
+
+.screen.game-screen.walnut-live .rh-board-meta-bar--count-only {
+  justify-content: flex-end;
+}
+
+.screen.game-screen.walnut-live.daily-puzzle-screen .board-area.wl-board-area,
+.screen.game-screen.walnut-live.bot-match-screen .learn-lesson-board-area {
+  position: relative;
+}
+
 /* ─── Integrated tray cap ─── */
 .screen.game-screen.walnut-live .rh-match-tray-shell {
   flex: 0 0 auto;

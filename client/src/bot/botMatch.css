@@ -22,10 +22,22 @@
   letter-spacing: 0.1em;
 }
 
-.bot-match-screen .rh-tile-rack__tile {
-  width: 32px;
-  height: 48px;
-  border-radius: 6px;
+/* Opponent hand rack in HUD — compact (75% of default match rack tile size) */
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-left-cluster .rh-tile-rack {
+  padding: 5px 8px;
+  gap: 5px;
+  border-radius: 12px;
+  max-width: none;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-left-cluster .rh-tile-rack__tile {
+  width: 19px;
+  height: 30px;
+  border-radius: 5px;
+  border-width: 1px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 4px 9px rgba(0, 0, 0, 0.28);
 }
 
 .bot-match-screen .bot-top-rail {
@@ -1048,4 +1060,69 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Board meta — OPEN and boneyard pills match size/weight */
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .board-corner-pill {
+  box-sizing: border-box;
+  min-height: 52px;
+  min-width: 104px;
+  padding: 12px 18px !important;
+  border-radius: 18px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid rgba(88, 166, 255, 0.2) !important;
+  background: rgba(3, 9, 18, 0.78) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 18px 48px rgba(0, 0, 0, 0.34) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .open-ends-pill.board-corner-pill {
+  border-color: rgba(231, 182, 74, 0.26) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .open-ends-pill__label,
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .boneyard-meta {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: 0.9rem !important;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+  opacity: 0.92;
+  color: rgba(216, 226, 241, 0.92) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .open-ends-pill__label {
+  font-size: calc(1rem + 3px) !important;
+  letter-spacing: 0.12em !important;
+  opacity: 1 !important;
+  color: rgba(238, 244, 255, 0.95) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .open-ends-count,
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .boneyard-count {
+  font-size: clamp(1.55rem, 2.15vw, 2rem) !important;
+  font-weight: 950 !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .open-ends-count,
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .boneyard-count {
+  flex: 0 0 auto;
+  font-family: 'Barlow Condensed', var(--font-display);
+  font-size: clamp(1.35rem, 2vw, 1.9rem) !important;
+  font-weight: 900;
+  line-height: 1;
+  color: #fffaf0;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .boneyard-icon {
+  width: clamp(18px, 1.1em, 24px);
+  height: clamp(18px, 1.1em, 24px);
+  opacity: 0.85;
+  flex: 0 0 auto;
 }

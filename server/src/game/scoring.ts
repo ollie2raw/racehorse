@@ -11,6 +11,24 @@ import {
   parseBranchPosition,
   tileMatchesEnd,
 } from './types';
+import {
+  branchHasPlayableTiles,
+  branchTipPipFromGeometry,
+  computeOpenEndsSum,
+  endpointPipFromOrientation,
+  isHubCrossedGeometrically,
+  warnOpenEndsBoardIssues,
+} from './openEndsGeometry';
+export {
+  auditOpenEndsBoard,
+  assertOpenEndsSumConsistent,
+  computeOpenEndsSum,
+  getScoringOpenEndPips,
+  hydrateBoardForOpenEnds,
+  reconcileBoardOpenEndsMetadata,
+  sanitizeBoardBranchSlots,
+  warnOpenEndsBoardIssues,
+} from './openEndsGeometry';
 
 function hubIdAt(hub: BoardState['hubDoubles'][number], fallbackIdx: number): number {
   return hub.hubId ?? fallbackIdx;
@@ -90,63 +108,6 @@ function exposedPip(tile: Tile, matchValue: number): number {
   return tile.high;
 }
 
-// ─── Open Ends Sum ───────────────────────────────────────────
-
-/**
- * Compute the sum of all open ends on the board.
- *
- * IMPORTANT: Doubles at open ends count as 2*value (both pips are exposed).
- *
- * Open ends include:
- * - The main line left end
- * - The main line right end
- * - Each branch arm's open end
- *
- * Special case: If the board has only 1 tile (a double),
- * that tile counts as both ends (2 * value).
- */
-export function computeOpenEndsSum(board: BoardState): number {
-  // Single tile case
-  if (board.mainLine.length === 1) {
-    const t = board.mainLine[0].tile;
-    // A single double counts as 2*value (both ends open)
-    // A single non-double counts as high + low
-    return t.high + t.low;
-  }
-
-  // Main line ends - doubles count twice
-  let sum = 0;
-
-  if (board.leftEndIsDouble) {
-    sum += board.leftEnd * 2;
-  } else {
-    sum += board.leftEnd;
-  }
-
-  if (board.rightEndIsDouble) {
-    sum += board.rightEnd * 2;
-  } else {
-    sum += board.rightEnd;
-  }
-
-  // Branch ends - doubles count twice. Empty branch arms are playable but do not
-  // contribute to the scoring total until a tile is actually placed there.
-  for (const hub of board.hubDoubles) {
-    if (!hub.isCrossed) continue;
-    for (let i = 0; i < 2; i++) {
-      const branch = hub.branches[i];
-      if (!branch) continue;
-      if (branch.openEndIsDouble) {
-        sum += branch.openEnd * 2;
-      } else {
-        sum += branch.openEnd;
-      }
-    }
-  }
-
-  return sum;
-}
-
 // ─── Scoring ─────────────────────────────────────────────────
 
 /**
@@ -154,6 +115,7 @@ export function computeOpenEndsSum(board: BoardState): number {
  * if sum divisible by scoringMultiple (5), points = sum / 5, else 0
  */
 export function computePlayScore(board: BoardState, config: Config = DEFAULT_CONFIG): number {
+  warnOpenEndsBoardIssues(board, 'computePlayScore');
   const sum = computeOpenEndsSum(board);
   return sum % config.scoringMultiple === 0 ? sum / config.scoringMultiple : 0;
 }
@@ -481,24 +443,26 @@ export function getOpenEnds(board: BoardState | null): OpenEnd[] {
   }
 
   const ends: OpenEnd[] = [
-    { position: 'left', matchValue: board.leftEnd },
-    { position: 'right', matchValue: board.rightEnd },
+    { position: 'left', matchValue: endpointPipFromOrientation(board.mainLine[0], 'left') },
+    {
+      position: 'right',
+      matchValue: endpointPipFromOrientation(board.mainLine[board.mainLine.length - 1], 'right'),
+    },
   ];
 
-  // Add branch ends
   for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
     const hub = board.hubDoubles[hubIdx];
     const hubId = hubIdAt(hub, hubIdx);
+    if (!isHubCrossedGeometrically(hub, board)) continue;
 
-    if (hub.isCrossed) {
-      // Expose both branch arms on crossed hubs.
-      for (let armIdx = 0; armIdx < 2; armIdx++) {
-        const branch = hub.branches[armIdx];
-        ends.push({
-          position: `branch-${hubId}-${armIdx}`,
-          matchValue: branch ? branch.openEnd : hub.hubValue,
-        });
-      }
+    for (let armIdx = 0; armIdx < 2; armIdx++) {
+      const branch = hub.branches[armIdx];
+      ends.push({
+        position: `branch-${hubId}-${armIdx}`,
+        matchValue: branchHasPlayableTiles(branch)
+          ? branchTipPipFromGeometry(hub.hubValue, branch)
+          : hub.hubValue,
+      });
     }
   }
 

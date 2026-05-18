@@ -386,6 +386,55 @@ describe('Crossed Doubles and Branching', () => {
     expect(computeOpenEndsSum(board)).toBe(7);
   });
 
+  it('image 1: uncrossed double-1 with open 3 sums to 5', () => {
+    let board = simulatePlacement(null, t(1, 1), 'left');
+    board = simulatePlacement(board, t(1, 3), 'right');
+    expect(computeOpenEndsSum(board)).toBe(5);
+    expect(board.hubDoubles[0]?.isCrossed).toBe(false);
+  });
+
+  it('image 2: crossed double-1 with open 4 and double-3 sums to 10', () => {
+    let board = simulatePlacement(null, t(1, 1), 'left');
+    board = simulatePlacement(board, t(1, 3), 'right');
+    board = simulatePlacement(board, t(4, 1), 'left');
+    board = simulatePlacement(board, t(3, 3), 'right');
+    expect(computeOpenEndsSum(board)).toBe(10);
+    expect(board.hubDoubles[0]?.isCrossed).toBe(true);
+  });
+
+  it('image 2 + 1-5 on top branch increases open count to 15', () => {
+    let board = simulatePlacement(null, t(1, 1), 'left');
+    board = simulatePlacement(board, t(1, 3), 'right');
+    board = simulatePlacement(board, t(4, 1), 'left');
+    board = simulatePlacement(board, t(3, 3), 'right');
+    board = simulatePlacement(board, t(1, 5), 'branch-0-0');
+    expect(computeOpenEndsSum(board)).toBe(15);
+  });
+
+  it('crossed hub empty branch slots do not inflate open count', () => {
+    let board = simulatePlacement(null, t(1, 1), 'left');
+    board = simulatePlacement(board, t(1, 3), 'right');
+    board = simulatePlacement(board, t(4, 1), 'left');
+    board = simulatePlacement(board, t(3, 3), 'right');
+
+    const inflated: BoardState = {
+      ...board,
+      hubDoubles: board.hubDoubles.map((hub) =>
+        hub.isCrossed
+          ? {
+              ...hub,
+              branches: [
+                { tiles: [], openEnd: hub.hubValue, openEndIsDouble: false },
+                { tiles: [], openEnd: hub.hubValue, openEndIsDouble: false },
+              ],
+            }
+          : hub,
+      ),
+    };
+
+    expect(computeOpenEndsSum(inflated)).toBe(10);
+  });
+
   it('crossed double contributes zero until a branch tile is played', () => {
     let board = simulatePlacement(null, t(3, 3), 'left');
     board = simulatePlacement(board, t(3, 4), 'left');
@@ -726,32 +775,17 @@ describe('Crossed Doubles and Branching', () => {
 
 describe('Last-tile branch scoring behavior', () => {
   it('branch scoring last tile is legal with drawable boneyard and forces draw', () => {
-    // Setup: [3|3][3|5] with main ends 6 (double-3), 5
-    // Playing [3|4] on branch makes sum 6 + 5 + 4 = 15 → scores
+    // Case B + branch [1|5] → open sum 10 + 5 = 15 (scores)
+    let board = simulatePlacement(null, t(1, 1), 'left');
+    board = simulatePlacement(board, t(1, 3), 'right');
+    board = simulatePlacement(board, t(4, 1), 'left');
+    board = simulatePlacement(board, t(3, 3), 'right');
 
     const state = setupState({
-      board: {
-        mainLine: [pt(3, 3), pt(3, 5)],
-        leftEnd: 3,
-        rightEnd: 5,
-        leftEndIsDouble: true,
-        rightEndIsDouble: false,
-        hubDoubles: [
-          {
-            hubId: 0,
-            tileIndex: 0,
-            mainlineIndex: 0,
-            hubValue: 3,
-            leftSideFilled: true,
-            rightSideFilled: true,
-            isCrossed: true,
-            branches: [],
-          },
-        ],
-      },
+      board,
       currentPlayerIndex: 0,
       players: {
-        A: { id: 'A', hand: [t(3, 4)], score: 0 },
+        A: { id: 'A', hand: [t(1, 5)], score: 0 },
         B: { id: 'B', hand: [t(0, 1)], score: 0 },
       },
       boneyard: [t(2, 2)],
@@ -765,7 +799,7 @@ describe('Last-tile branch scoring behavior', () => {
 
     const { state: next, forcedDraw } = applyMove(state, 'A', {
       type: 'play',
-      tile: t(3, 4),
+      tile: t(1, 5),
       position: 'branch-0-0',
     });
     expect(forcedDraw).not.toBeNull();
@@ -776,18 +810,12 @@ describe('Last-tile branch scoring behavior', () => {
 
 describe('Last-tile scoring vs non-scoring placements', () => {
   function lastTile32State(boneyard: Tile[]) {
-    // [8|3][3|2]: open 3 on left connection, open 2 on right
-    // Last tile 3-2 on left (match 3): open-ends sum 5 → scores 1 point
-    // Last tile 3-2 on right (match 2): no score
+    // [8|3][3|2] via engine placement: open ends 3 and 3 (sum 5 before last play)
+    // Last tile 3|2 on right scores; on left does not change sum to a multiple of 5
+    let board = simulatePlacement(null, t(8, 3), 'left');
+    board = simulatePlacement(board, t(3, 2), 'right');
     return setupState({
-      board: {
-        mainLine: [pt(8, 3), pt(3, 2)],
-        leftEnd: 8,
-        rightEnd: 2,
-        leftEndIsDouble: false,
-        rightEndIsDouble: false,
-        hubDoubles: [],
-      },
+      board,
       currentPlayerIndex: 0,
       players: {
         A: { id: 'A', hand: [t(3, 2)], score: 0 },
@@ -813,7 +841,7 @@ describe('Last-tile scoring vs non-scoring placements', () => {
     const { state: next, forcedDraw } = applyMove(state, 'A', {
       type: 'play',
       tile: t(3, 2),
-      position: 'right',
+      position: 'left',
     });
     expect(forcedDraw).toBeNull();
     expect(next.handOver).toBe(true);
@@ -826,7 +854,7 @@ describe('Last-tile scoring vs non-scoring placements', () => {
     const { state: next, forcedDraw } = applyMove(state, 'A', {
       type: 'play',
       tile: t(3, 2),
-      position: 'left',
+      position: 'right',
     });
     expect(forcedDraw).not.toBeNull();
     expect(next.handOver).toBe(false);
@@ -840,7 +868,7 @@ describe('Last-tile scoring vs non-scoring placements', () => {
     const { state: next, forcedDraw } = applyMove(state, 'A', {
       type: 'play',
       tile: t(3, 2),
-      position: 'left',
+      position: 'right',
     });
     expect(forcedDraw).toBeNull();
     expect(next.handOver).toBe(true);

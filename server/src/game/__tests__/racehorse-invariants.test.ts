@@ -323,15 +323,10 @@ describe('Racehorse opening and continuation invariants', () => {
   });
 
   it('continuation with no playable tile and drawable boneyard seeds forced draw after last-tile score', () => {
+    let board = simulatePlacement(null, t(8, 3), 'left');
+    board = simulatePlacement(board, t(3, 2), 'right');
     const state = setupState({
-      board: {
-        mainLine: [pt(8, 3), pt(3, 2)],
-        leftEnd: 8,
-        rightEnd: 2,
-        leftEndIsDouble: false,
-        rightEndIsDouble: false,
-        hubDoubles: [],
-      },
+      board,
       players: {
         A: { id: 'A', hand: [t(3, 2)], score: 0 },
         B: { id: 'B', hand: [t(0, 1)], score: 0 },
@@ -344,7 +339,7 @@ describe('Racehorse opening and continuation invariants', () => {
     const { state: afterLastScore, forcedDraw: lastForced } = applyMove(state, 'A', {
       type: 'play',
       tile: t(3, 2),
-      position: 'left',
+      position: 'right',
     });
 
     expect(lastForced).not.toBeNull();
@@ -355,15 +350,10 @@ describe('Racehorse opening and continuation invariants', () => {
 
 describe('Racehorse last-tile scoring/double legality (regression)', () => {
   function lastTile32State(boneyard: Tile[]) {
+    let board = simulatePlacement(null, t(8, 3), 'left');
+    board = simulatePlacement(board, t(3, 2), 'right');
     return setupState({
-      board: {
-        mainLine: [pt(8, 3), pt(3, 2)],
-        leftEnd: 8,
-        rightEnd: 2,
-        leftEndIsDouble: false,
-        rightEndIsDouble: false,
-        hubDoubles: [],
-      },
+      board,
       players: {
         A: { id: 'A', hand: [t(3, 2)], score: 0 },
         B: { id: 'B', hand: [t(0, 1)], score: 0 },
@@ -387,7 +377,7 @@ describe('Racehorse last-tile scoring/double legality (regression)', () => {
     const { forcedDraw, state: next } = applyMove(lastTile32State([t(5, 5)]), 'A', {
       type: 'play',
       tile: t(3, 2),
-      position: 'left',
+      position: 'right',
     });
     expect(forcedDraw).not.toBeNull();
     expect(next.handOver).toBe(false);

@@ -1,6 +1,15 @@
+import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import net from 'node:net';
 import { io } from 'socket.io-client';
+
+/**
+ * Canonical open-ends scoring (server build). Run `npm run build --prefix server`
+ * before socket smoke if this import fails.
+ */
+const require = createRequire(import.meta.url);
+const { computeOpenEndsSum } = require('../../server/dist/game/openEndsGeometry.js');
+const { computePlayScore, simulatePlacement } = require('../../server/dist/game/scoring.js');
 
 const SERVER_URL = process.env.SMOKE_SERVER_URL || 'http://127.0.0.1:3001';
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
@@ -324,77 +333,15 @@ function parseBranchPosition(position) {
   };
 }
 
-function pipContribution(value, isDouble) {
-  return isDouble ? value * 2 : value;
-}
-
-function computeOpenEndsSum(board) {
-  if (!board) return 0;
-  if (Array.isArray(board.mainLine) && board.mainLine.length === 1) {
-    const tile = board.mainLine[0]?.tile;
-    return tile ? tile.low + tile.high : 0;
-  }
-
-  let sum = pipContribution(board.leftEnd, Boolean(board.leftEndIsDouble));
-  sum += pipContribution(board.rightEnd, Boolean(board.rightEndIsDouble));
-
-  if (Array.isArray(board.hubDoubles)) {
-    for (const hub of board.hubDoubles) {
-      if (!hub?.isCrossed || !Array.isArray(hub.branches)) continue;
-      for (const branch of hub.branches) {
-        if (!branch) continue;
-        sum += pipContribution(branch.openEnd, Boolean(branch.openEndIsDouble));
-      }
-    }
-  }
-
-  return sum;
-}
-
 function computePlayScoreForMove(state, move) {
   if (!state || !move?.tile || !move?.position) return 0;
-  const tile = move.tile;
   const scoringMultiple = state.config?.scoringMultiple ?? 5;
-  const board = state.board;
-
-  if (!board) {
-    const sum = tile.low + tile.high;
+  if (!state.board) {
+    const sum = move.tile.low + move.tile.high;
     return sum % scoringMultiple === 0 ? sum / scoringMultiple : 0;
   }
-
-  let nextSum = computeOpenEndsSum(board);
-  let matchValue = null;
-  let previousContribution = 0;
-
-  if (move.position === 'left') {
-    matchValue = board.leftEnd;
-    previousContribution = pipContribution(board.leftEnd, Boolean(board.leftEndIsDouble));
-  } else if (move.position === 'right') {
-    matchValue = board.rightEnd;
-    previousContribution = pipContribution(board.rightEnd, Boolean(board.rightEndIsDouble));
-  } else {
-    const parsed = parseBranchPosition(move.position);
-    if (!parsed) return 0;
-    const hub = board.hubDoubles?.[parsed.hubIndex];
-    if (!hub) return 0;
-    const branch = hub.branches?.[parsed.armIndex] ?? null;
-    if (branch) {
-      matchValue = branch.openEnd;
-      previousContribution = pipContribution(branch.openEnd, Boolean(branch.openEndIsDouble));
-    } else {
-      matchValue = hub.hubValue;
-      previousContribution = 0;
-    }
-  }
-
-  if (matchValue == null) return 0;
-  nextSum -= previousContribution;
-
-  const isDouble = tile.low === tile.high;
-  const exposedValue = tile.high === matchValue ? tile.low : tile.high;
-  nextSum += isDouble ? tile.high * 2 : exposedValue;
-
-  return nextSum % scoringMultiple === 0 ? nextSum / scoringMultiple : 0;
+  const nextBoard = simulatePlacement(state.board, move.tile, move.position);
+  return computePlayScore(nextBoard, { scoringMultiple, winningScore: 100, maxPips: 6, deadTileCount: 0, tilesPerPlayer: 7 });
 }
 
 function isForcedDrawCandidate(client, move) {

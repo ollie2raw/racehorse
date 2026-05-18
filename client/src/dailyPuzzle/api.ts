@@ -1,3 +1,4 @@
+import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import type { BoardState, Tile, TileOrientation } from '../types';
 import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
@@ -246,7 +247,10 @@ export function normalizeBoardState(raw: unknown): BoardState | null {
       ...hub,
       tileIndex: Number.isInteger(hub.tileIndex) ? Number(hub.tileIndex) : hubIdx,
       hubValue: typeof hub.hubValue === 'number' ? hub.hubValue : hubValueFallback,
-      isCrossed: typeof hub.isCrossed === 'boolean' ? hub.isCrossed : branches.length > 0,
+      isCrossed:
+        typeof hub.isCrossed === 'boolean'
+          ? hub.isCrossed
+          : Boolean(hub.leftSideFilled && hub.rightSideFilled),
       branches: branches as BoardState['hubDoubles'][number]['branches'],
     } as BoardState['hubDoubles'][number];
   });
@@ -275,7 +279,7 @@ export function normalizeBoardState(raw: unknown): BoardState | null {
     hubDoubles: hubDoubles as BoardState['hubDoubles'],
   };
 
-  return isBoardState(normalized) ? normalized : null;
+  return isBoardState(normalized) ? hydrateBoardForOpenEnds(normalized) : null;
 }
 
 function coercePuzzleRow(row: CuratedDailyPuzzleRow): CuratedDailyPuzzle {

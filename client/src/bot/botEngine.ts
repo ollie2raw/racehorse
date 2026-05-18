@@ -1,3 +1,15 @@
+import {
+  assertDisplayedOpenCountMatchesCanonical,
+  assertOpenEndsSumConsistent,
+  branchHasPlayableTiles,
+  branchTipPipFromGeometry,
+  computeOpenEndsSum,
+  endpointPipFromOrientation,
+  getScoringOpenEndPips,
+  isHubCrossedGeometrically,
+  reconcileBoardOpenEndsMetadata,
+  warnOpenEndsBoardIssues,
+} from '../game/openEndsGeometry.ts';
 import type {
   BoardState,
   BranchArm,
@@ -7,6 +19,18 @@ import type {
   Tile,
   TileOrientation,
 } from '../types.ts';
+
+export {
+  assertDisplayedOpenCountMatchesCanonical,
+  assertOpenEndsSumConsistent,
+  auditOpenEndsBoard,
+  computeOpenEndsSum,
+  getScoringOpenEndPips,
+  reconcileBoardOpenEndsMetadata,
+  hydrateBoardForOpenEnds,
+  sanitizeBoardBranchSlots,
+  warnOpenEndsBoardIssues,
+} from '../game/openEndsGeometry.ts';
 
 export type BotPlayerId = 'you' | 'bot';
 export type BotHandEndReason = 'domino' | 'blocked';
@@ -407,11 +431,11 @@ function placeTileOnBranch(
 
   const tileIsDouble = isDouble(tile);
   const laneRef = `branch-${hubRef}-${armIndex}`;
-  let newBranches: BranchArm[];
+  let newBranches: (BranchArm | null)[];
   let newHubDoubles = [...board.hubDoubles];
 
-  if (hub.branches[armIndex]) {
-    const existingBranch = hub.branches[armIndex];
+  const existingBranch = hub.branches[armIndex];
+  if (existingBranch && existingBranch.tiles.length > 0) {
     const branchMatchValue = existingBranch.openEnd;
     const branchNewEnd = exposedPip(tile, branchMatchValue);
     const depthBeforeAppend = existingBranch.tiles.length;
@@ -424,7 +448,7 @@ function placeTileOnBranch(
     newBranches = hub.branches.map((b, i) =>
       i === armIndex
         ? {
-            tiles: [...b.tiles, placedTile],
+            tiles: [...existingBranch.tiles, placedTile],
             openEnd: branchNewEnd,
             openEndIsDouble: tileIsDouble,
           }
@@ -499,36 +523,9 @@ function placeTileOnBranch(
 }
 
 export function recomputeBoardEnds(board: BoardState): BoardState {
-  const mainLine = board.mainLine;
-  return {
-    ...board,
-    leftEnd: endpointMatchFromOrientation(board, 'left'),
-    rightEnd: endpointMatchFromOrientation(board, 'right'),
-    leftEndIsDouble: board.mainLine[0] ? isDouble(board.mainLine[0].tile) : false,
-    rightEndIsDouble: board.mainLine[board.mainLine.length - 1]
-      ? isDouble(board.mainLine[board.mainLine.length - 1].tile)
-      : false,
-    hubDoubles: board.hubDoubles.map((hub) => {
-      let isCrossed = hub.isCrossed;
-      if (hub.laneType === 'mainline') {
-        const idx = hub.mainlineIndex ?? hub.tileIndex;
-        isCrossed = idx > 0 && idx < mainLine.length - 1;
-      }
-      return {
-        ...hub,
-        isCrossed,
-        branches: hub.branches.map((branch) => {
-          if (!branch) return branch;
-          return {
-            ...branch,
-            openEnd: branchEndMatch(hub.hubValue, branch),
-            openEndIsDouble:
-              branch.tiles.length > 0 ? isDouble(branch.tiles[branch.tiles.length - 1].tile) : false,
-          };
-        }),
-      };
-    }),
-  };
+  const reconciled = reconcileBoardOpenEndsMetadata(board);
+  assertOpenEndsSumConsistent(reconciled, 'recomputeBoardEnds');
+  return reconciled;
 }
 
 export function simulatePlacement(
@@ -586,36 +583,8 @@ export function simulatePlacement(
 export function endpointMatchFromOrientation(board: BoardState, side: 'left' | 'right'): number {
   const mainLine = board.mainLine;
   if (!mainLine || mainLine.length === 0) return side === 'left' ? board.leftEnd : board.rightEnd;
-
   const placed = side === 'left' ? mainLine[0] : mainLine[mainLine.length - 1];
-  const tile = placed.tile;
-  if (isDouble(tile)) return tile.high;
-
-  if (side === 'left') {
-    // Use the stored orientation to determine which pip faces outward.
-    // Previously this used value-matching against the adjacent tile, which
-    // produced the wrong pip when tile.low happened to equal a neighbour pip
-    // for an unrelated reason.  Orientation is the authoritative source.
-    return placed.orientation === 'horizontal-normal' ? tile.low : tile.high;
-  } else {
-    return placed.orientation === 'horizontal-normal' ? tile.high : tile.low;
-  }
-}
-
-function branchEndMatch(hubValue: number, branch: BranchArm): number {
-  if (branch.tiles.length === 0) return hubValue;
-  const lastPlaced = branch.tiles[branch.tiles.length - 1];
-  const tile = lastPlaced.tile;
-  if (isDouble(tile)) return tile.low;
-
-  // The pip that DOES NOT match the predecessor
-  const penult =
-    branch.tiles.length > 1
-      ? branch.tiles[branch.tiles.length - 2].tile
-      : { low: hubValue, high: hubValue }; // Hub acts as predecessor for first tile
-
-  const lowMatches = tile.low === penult.low || tile.low === penult.high;
-  return lowMatches ? tile.high : tile.low;
+  return endpointPipFromOrientation(placed, side);
 }
 
 function getOpenEnds(
@@ -625,29 +594,20 @@ function getOpenEnds(
     return [{ position: 'left', matchValue: -1 }];
   }
   const ends: Array<{ position: PlacementPosition; matchValue: number }> = [
-    { position: 'left', matchValue: board.leftEnd },
-    { position: 'right', matchValue: board.rightEnd },
+    { position: 'left', matchValue: endpointMatchFromOrientation(board, 'left') },
+    { position: 'right', matchValue: endpointMatchFromOrientation(board, 'right') },
   ];
 
   for (let hubIdx = 0; hubIdx < board.hubDoubles.length; hubIdx++) {
     const hub = board.hubDoubles[hubIdx];
     const hubId = hubIdAt(hub, hubIdx);
+    if (!isHubCrossedGeometrically(hub, board)) continue;
 
-    // Authoritative crossed check: a mainline double is crossed if it has
-    // neighbors on both sides in the mainline.
-    let isCrossed = hub.isCrossed;
-    if (hub.laneType === 'mainline') {
-      const idx = hub.mainlineIndex ?? hub.tileIndex;
-      isCrossed = idx > 0 && idx < board.mainLine.length - 1;
-    }
-
-    if (!isCrossed) continue;
-
-    // Always expose both arms (index 0 and 1) for every crossed double.
     for (let armIdx = 0; armIdx < 2; armIdx++) {
       const branch = hub.branches[armIdx];
-      // If branch doesn't exist yet, it's an empty arm with the hub's value.
-      const matchValue = branch ? branchEndMatch(hub.hubValue, branch) : hub.hubValue;
+      const matchValue = branchHasPlayableTiles(branch)
+        ? branchTipPipFromGeometry(hub.hubValue, branch)
+        : hub.hubValue;
 
       ends.push({
         position: `branch-${hubId}-${armIdx}`,
@@ -692,58 +652,16 @@ export function placeTileOnBoard(
   return simulatePlacement(board, tile, position);
 }
 
-export function computeOpenEndsSum(board: BoardState): number {
-  if (board.mainLine.length === 1) {
-    const t = board.mainLine[0].tile;
-    return t.low + t.high;
-  }
-
-  let sum = 0;
-  sum += board.leftEndIsDouble ? board.leftEnd * 2 : board.leftEnd;
-  sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
-
-  for (const hub of board.hubDoubles) {
-    if (!hub.isCrossed) continue;
-    for (let i = 0; i < 2; i++) {
-      const branch = hub.branches[i];
-      if (!branch) continue;
-      sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
-    }
-  }
-  return sum;
-}
-
-export function getScoringOpenEnds(board: BoardState | null): number[] {
-  if (!board) return [];
-  if (board.mainLine.length === 1) {
-    const t = board.mainLine[0].tile;
-    return [t.low, t.high];
-  }
-
-  const ends: number[] = [];
-  ends.push(board.leftEnd);
-  if (board.leftEndIsDouble) ends.push(board.leftEnd);
-  ends.push(board.rightEnd);
-  if (board.rightEndIsDouble) ends.push(board.rightEnd);
-
-  for (const hub of board.hubDoubles) {
-    if (!hub.isCrossed) continue;
-    for (let i = 0; i < 2; i++) {
-      const branch = hub.branches[i];
-      if (!branch) continue;
-      ends.push(branch.openEnd);
-      if (branch.openEndIsDouble) ends.push(branch.openEnd);
-    }
-  }
-
-  return ends;
-}
-
 export function computePlayScore(board: BoardState): number {
+  warnOpenEndsBoardIssues(board, 'computePlayScore');
   const sum = computeOpenEndsSum(board);
   return sum !== 0 && sum % 5 === 0 ? sum / 5 : 0;
 }
 
+/**
+ * Playable match pip values for chips / legality / coaching copy.
+ * Do NOT use this for the Open Ends count pill — use `computeOpenEndsSum(board)`.
+ */
 export function getDisplayOpenEnds(state: BotMatchState): number[] {
   if (!state.board) return [];
   return getMatchableOpenEnds(state.board).map((end) => end.matchValue);

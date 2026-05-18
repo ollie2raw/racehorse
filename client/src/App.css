@@ -4126,6 +4126,41 @@ button:hover:not(:disabled) {
   line-height: 1;
   font-weight: 700;
   letter-spacing: 0.01em;
+  font-size: var(--match-counter-value-size, max(1.1rem, calc(var(--match-score-size, 38px) * 0.52)));
+}
+
+.board-corner-pill-debug {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 8;
+  max-width: min(360px, 42vw);
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(5, 9, 18, 0.96);
+  color: rgba(255, 255, 255, 0.92);
+  font: 11px/1.35 var(--font-body);
+  pointer-events: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.board-corner-pill-debug summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(84, 165, 255, 0.9);
+}
+
+.board-corner-pill-debug pre {
+  margin: 8px 0 0;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .boneyard-pill,
@@ -4150,6 +4185,7 @@ button:hover:not(:disabled) {
   line-height: 1;
   font-weight: 700;
   letter-spacing: 0.01em;
+  font-size: var(--match-counter-value-size, max(1.1rem, calc(var(--match-score-size, 38px) * 0.52)));
 }
 
 .boneyard-meta {

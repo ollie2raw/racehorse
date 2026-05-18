@@ -1,4 +1,5 @@
 import { applyMove, getLegalMoves } from './game/engine';
+import { computeOpenEndsSum } from './game/openEndsGeometry';
 import type { GameState, Move, PlayMove, PlacementPosition } from './game/types';
 
 type DailyPuzzleType = 'one_turn_high_score' | 'setup_and_strike';
@@ -419,28 +420,6 @@ function getOpenEnds(board: BoardState): Array<{ value: number; isDouble: boolea
   }
 
   return ends;
-}
-
-function computeOpenEndsSum(board: BoardState): number {
-  if (board.mainLine.length === 1) {
-    const tile = board.mainLine[0]?.tile;
-    return tile ? tile.low + tile.high : 0;
-  }
-
-  let sum = 0;
-  sum += board.leftEndIsDouble ? board.leftEnd * 2 : board.leftEnd;
-  sum += board.rightEndIsDouble ? board.rightEnd * 2 : board.rightEnd;
-
-  for (const hub of board.hubDoubles) {
-    if (!hub.isCrossed) continue;
-    for (let armIdx = 0; armIdx < 2; armIdx += 1) {
-      const branch = hub.branches[armIdx];
-      if (!branch) continue;
-      sum += branch.openEndIsDouble ? branch.openEnd * 2 : branch.openEnd;
-    }
-  }
-
-  return sum;
 }
 
 function chooseMatchingNonDouble(

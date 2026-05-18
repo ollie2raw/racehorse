@@ -2330,3 +2330,35 @@
     padding: 16px 16px 24px;
   }
 }
+
+
+/* Quick Match: equal compact duel cards, matching Private Match proportions */
+.pml-room-stage--quick .pml-matchup {
+  align-items: center !important;
+}
+
+.pml-room-stage--quick .pml-matchup > .pml-duel-card {
+  align-self: center !important;
+  height: 260px !important;
+  min-height: 260px !important;
+  max-height: 260px !important;
+  justify-content: center !important;
+  overflow: visible !important;
+}
+
+.pml-room-stage--quick .pml-vs-column {
+  align-self: center !important;
+}
+
+
+/* Quick Match: align awaiting opponent text baseline with Private Match */
+.pml-room-stage--quick .pml-duel-card--awaiting .pml-duel-name--awaiting {
+  transform: translateY(-6px);
+}
+
+
+/* Private Match: bring host profile text down to match Quick Match */
+.pml-room-stage:not(.pml-room-stage--quick) .pml-duel-card--host .pml-duel-name,
+.pml-room-stage:not(.pml-room-stage--quick) .pml-duel-card--host .pml-duel-rating {
+  transform: translateY(6px);
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './authModal.css';
 
 const AUTH_MODAL_SUBMIT_TIMEOUT_MS = 16000;
@@ -55,6 +55,21 @@ export default function AuthModal({
     return () => window.clearTimeout(timeoutId);
   }, [open, submitting]);
 
+  const handleClose = useCallback(() => {
+    resetFormState();
+    setMode('signin');
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) handleClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, submitting, handleClose]);
+
   const canSubmit = useMemo(() => {
     if (!supabaseEnabled) return false;
     if (submitting) return false;
@@ -63,12 +78,6 @@ export default function AuthModal({
   }, [supabaseEnabled, submitting, mode, username, email, password]);
 
   if (!open) return null;
-
-  const handleClose = () => {
-    resetFormState();
-    setMode('signin');
-    onClose();
-  };
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -109,16 +118,27 @@ export default function AuthModal({
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Sign in" onClick={handleClose} className="auth-modal-overlay">
-      <div onClick={(e) => e.stopPropagation()} className="auth-modal-card">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={mode === 'verify' ? 'Verify email' : mode === 'signup' ? 'Create account' : 'Sign in'}
+      onClick={handleClose}
+      className="auth-modal-overlay"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`auth-modal-card${mode === 'signup' ? ' auth-modal-card--wide' : ''}`}
+      >
         <div className="auth-modal-head">
           <p className="auth-modal-label">Account</p>
-          <button className="auth-modal-close" onClick={handleClose} aria-label="Close authentication modal">
+          <button type="button" className="auth-modal-close" onClick={handleClose} aria-label="Close authentication modal">
             ×
           </button>
         </div>
 
-        <h3 className="auth-modal-title">{mode === 'signin' ? 'Sign in' : 'Create account'}</h3>
+        <h3 className="auth-modal-title">
+          {mode === 'verify' ? 'Check your email' : mode === 'signup' ? 'Create account' : 'Sign in'}
+        </h3>
         <p className="auth-modal-subtitle">
           {mode === 'verify'
             ? 'Finish account setup from your inbox.'
@@ -138,6 +158,7 @@ export default function AuthModal({
                 `Check your email — we sent a confirmation link to ${email.trim()}. Click it to activate your account.`}
             </p>
             <button
+              type="button"
               className="auth-modal-submit"
               onClick={async () => {
                 if (submitting) return;
@@ -250,8 +271,9 @@ export default function AuthModal({
         {mode !== 'verify' && (
           <>
             <button
+              type="button"
               className="auth-modal-submit"
-              onClick={submit}
+              onClick={() => void submit()}
               disabled={!canSubmit}
             >
               {submitting ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}

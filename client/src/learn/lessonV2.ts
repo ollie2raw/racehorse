@@ -15,6 +15,7 @@
  * endpointMatchFromOrientation() orientation bug entirely.
  */
 
+import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import type { BoardState, PlacedTile, TileOrientation } from '../types.ts';
 import type { BotActionResult, BotMatchState, BotPlayerId } from '../bot/botEngine';
 import { serializeGhostBoardState } from '../ghost/logic';
@@ -205,29 +206,27 @@ export function parseLessonV2BoardState(boardState: string): BoardState | null {
       leftSideFilled: Boolean(hub.leftSideFilled),
       rightSideFilled: Boolean(hub.rightSideFilled),
       isCrossed: Boolean(hub.isCrossed),
-      branches: (hub.branches ?? []).map((branch) =>
-        branch
-          ? {
-              openEnd: branch.openEnd ?? 0,
-              openEndIsDouble: Boolean(branch.openEndIsDouble),
-              tiles: (branch.tiles ?? []).map(parsePlaced),
-            }
-          : {
-              openEnd: hub.hubValue,
-              openEndIsDouble: false,
-              tiles: [],
-            },
-      ),
+      branches: [0, 1].map((armIdx) => {
+        const branch = (hub.branches ?? [])[armIdx];
+        if (!branch) return null;
+        const tiles = (branch.tiles ?? []).map(parsePlaced);
+        if (tiles.length === 0) return null;
+        return {
+          openEnd: branch.openEnd ?? hub.hubValue,
+          openEndIsDouble: Boolean(branch.openEndIsDouble),
+          tiles,
+        };
+      }),
     }));
 
-    return {
+    return hydrateBoardForOpenEnds({
       mainLine,
       leftEnd: raw.leftEnd ?? -1,
       rightEnd: raw.rightEnd ?? -1,
       leftEndIsDouble: Boolean(raw.leftEndIsDouble),
       rightEndIsDouble: Boolean(raw.rightEndIsDouble),
       hubDoubles,
-    };
+    });
   } catch {
     return null;
   }

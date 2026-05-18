@@ -87,6 +87,11 @@
     font-size: 26px !important;
     font-weight: 800 !important;
   }
+
+  .bot-match-screen {
+    --match-score-size: 26px;
+    --match-counter-value-size: max(1.1rem, calc(var(--match-score-size) * 0.52));
+  }
 }
 
 /* Viewport-tight desktops: preserve readable HUD, trim tray/playfield slack */
@@ -97,7 +102,7 @@
     --match-hud-min-height: 86px;
     --match-score-size: 36px;
     --match-turn-size: clamp(1rem, 1.7vw, 1.2rem);
-    --match-counter-value-size: 1.25rem;
+    --match-counter-value-size: max(1.1rem, calc(var(--match-score-size) * 0.52));
   }
 
   .screen.game-screen.walnut-live .wl-top-rail,

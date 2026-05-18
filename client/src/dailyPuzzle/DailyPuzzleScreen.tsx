@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { Board, BrandLogo, DominoTile, RotateOverlay } from '../components';
+import { Board, BoneyardCountPill, BrandLogo, DominoTile, RotateOverlay } from '../components';
 import {
   applyPlayMove,
   getDisplayOpenEnds,
@@ -1547,6 +1547,11 @@ export default function DailyPuzzleScreen({
 
       <div className="wl-stage-shell">
         <div className="board-area wl-board-area" data-ui="board">
+          {!runtimeState.gameOver && (
+            <div className="rh-board-meta-bar rh-board-meta-bar--count-only" data-ui="board-meta">
+              <BoneyardCountPill count={runtimeState.boneyard.length} />
+            </div>
+          )}
           <Board
             board={runtimeState.board}
             legalMoves={legalMoves}

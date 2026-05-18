@@ -36,7 +36,7 @@ export interface HubDouble {
   leftSideFilled?: boolean;
   rightSideFilled?: boolean;
   isCrossed: boolean;
-  branches: BranchArm[];
+  branches: (BranchArm | null)[];
 }
 
 export interface BoardState {

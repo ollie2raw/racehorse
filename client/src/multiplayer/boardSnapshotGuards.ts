@@ -1,3 +1,4 @@
+import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import type { BoardState, BranchArm, GameState, HubDouble, PlacedTile } from '../types';
 
 function isPlacedTile(value: unknown): value is PlacedTile {
@@ -38,20 +39,23 @@ export function projectRenderableBoard(board: unknown): BoardState | null {
     .map((hub) => {
       const hubValue = typeof hub.hubValue === 'number' ? hub.hubValue : 0;
       const branchesRaw = Array.isArray(hub.branches) ? hub.branches : [];
-      const branches: BranchArm[] = [0, 1].map((armIdx) =>
-        coerceBranchArm(branchesRaw[armIdx], hubValue),
-      );
+      const branches: (BranchArm | null)[] = [0, 1].map((armIdx) => {
+        const raw = branchesRaw[armIdx];
+        if (raw == null) return null;
+        const coerced = coerceBranchArm(raw, hubValue);
+        return coerced.tiles.length > 0 ? coerced : null;
+      });
       return { ...hub, branches };
     });
 
-  return {
+  return hydrateBoardForOpenEnds({
     mainLine: b.mainLine,
     leftEnd: typeof b.leftEnd === 'number' ? b.leftEnd : 0,
     rightEnd: typeof b.rightEnd === 'number' ? b.rightEnd : 0,
     leftEndIsDouble: Boolean(b.leftEndIsDouble),
     rightEndIsDouble: Boolean(b.rightEndIsDouble),
     hubDoubles,
-  };
+  });
 }
 
 /** Non-null boards must expose mainLine/hubDoubles and every branch arm must own a tiles array (Racehorse projection contract). */
@@ -67,10 +71,11 @@ function isRenderableNonNullBoardShape(board: BoardState): boolean {
   for (const hub of board.hubDoubles) {
     if (!hub || typeof hub !== 'object') return false;
     if (!Array.isArray(hub.branches) || hub.branches.length < 2) return false;
+    if (hub.branches.length < 2) return false;
     for (let armIdx = 0; armIdx < 2; armIdx += 1) {
       const arm = hub.branches[armIdx];
-      if (arm == null || typeof arm !== 'object') return false;
-      if (!Array.isArray(arm.tiles)) return false;
+      if (arm == null) continue;
+      if (typeof arm !== 'object' || !Array.isArray(arm.tiles)) return false;
     }
   }
 

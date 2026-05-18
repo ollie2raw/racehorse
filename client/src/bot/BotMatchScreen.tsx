@@ -4,9 +4,8 @@ import {
   AnimatedScore,
   Board,
   BoardOpenEndsPill,
-  BoneyardStackIcon,
+  BoneyardCountPill,
   DominoTile,
-  GlobalNav,
   ScoreTrackOverlay,
   RotateOverlay,
 } from '../components';
@@ -32,6 +31,7 @@ import {
 } from '../analyzer/moveLogger';
 import {
   applyPlayMove,
+  assertDisplayedOpenCountMatchesCanonical,
   computeOpenEndsSum,
   createBotMatch,
   createFixedBotMatch,
@@ -44,7 +44,7 @@ import {
   isDouble,
   passTurn,
   previewPlayMove,
-  recomputeBoardEnds,
+  hydrateBoardForOpenEnds,
   startNextBotHand,
   startNextFixedBotHand,
   type BotActionResult,
@@ -97,7 +97,16 @@ import {
 } from '../dailyFritz/api';
 import { formatOrdinalPlace } from '../dailyFritz/format';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
+import {
+  canApplyNextHand,
+  emitHandLifecycleDebugLog,
+  logHandLifecycle,
+  resolveDailyFritzNextHandCache,
+  warnHandLifecycleStuck,
+  type HandLifecyclePhase,
+} from './handLifecycle';
 import './botMatch.css';
+import '../dailyFritz/dailyFritzMatchBoard.css';
 import './PlayVsFritz.css';
 import '../styles/shared-ui.css';
 import '../learn/learn.css';
@@ -105,7 +114,8 @@ import { useLearningCoach } from '../learning/useLearningCoach';
 import CoachPanel from '../learning/CoachPanel';
 import LearningHandRecap from '../learning/LearningHandRecap';
 import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
-import LessonCoachPanel from '../learn/LessonCoachPanel';
+import LearnGuidedMatchChrome from '../learn/LearnGuidedMatchChrome';
+import LessonCoachPanel, { type CoachingTip } from '../learn/LessonCoachPanel';
 import LeaveGameModal from '../components/LeaveGameModal';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import HandOverModal from '../components/handOver/HandOverModal';
@@ -526,11 +536,11 @@ function parseGuidedBoardState(boardState: string): BoardState | null {
       rightEndIsDouble: false,
       hubDoubles,
     };
-    const recomputed = recomputeBoardEnds(base);
+    const reconciled = hydrateBoardForOpenEnds(base);
     return {
-      ...recomputed,
-      leftEnd: typeof raw.leftEnd === 'number' ? raw.leftEnd : recomputed.leftEnd,
-      rightEnd: typeof raw.rightEnd === 'number' ? raw.rightEnd : recomputed.rightEnd,
+      ...reconciled,
+      leftEnd: typeof raw.leftEnd === 'number' ? raw.leftEnd : reconciled.leftEnd,
+      rightEnd: typeof raw.rightEnd === 'number' ? raw.rightEnd : reconciled.rightEnd,
     };
   } catch {
     return null;
@@ -703,6 +713,9 @@ export default function BotMatchScreen({
   const DRAW_STEP_MS = 700;
   const DAILY_FRITZ_REVEAL_DELAY_MS = 1400;
   const DAILY_FRITZ_AUTO_ADVANCE_MS = 3500;
+  const HAND_LIFECYCLE_DEBUG_ENDPOINT =
+    'http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979';
+  const HAND_LIFECYCLE_DEBUG_SESSION = '03aac5';
 
   console.log('[mode-debug]', { mode, isGuidedModeProp, isGuidedMode, isLearnAcademyMode });
 
@@ -844,6 +857,8 @@ export default function BotMatchScreen({
   const [lastBotChoice, setLastBotChoice] = useState<BotChoice | null>(null);
   const [handReveal, setHandReveal] = useState<BotHandReveal | null>(null);
   const [handRevealProgress, setHandRevealProgress] = useState(1);
+  const [handAdvanceError, setHandAdvanceError] = useState<string | null>(null);
+  const [showManualHandAdvance, setShowManualHandAdvance] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -909,6 +924,10 @@ export default function BotMatchScreen({
   const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const handAutoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const handAdvanceRetryTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const advanceHandRef = useRef<() => void>(() => {});
+  const handLifecyclePhaseRef = useRef<HandLifecyclePhase>('playing');
+  const handRevealShownAtRef = useRef<number | null>(null);
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
   const gameOverSoundKeyRef = useRef('');
@@ -1887,6 +1906,8 @@ export default function BotMatchScreen({
       if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
       if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
       if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+      if (handAutoAdvanceTimerRef.current) clearTimeout(handAutoAdvanceTimerRef.current);
+      if (handAdvanceRetryTimerRef.current) clearTimeout(handAdvanceRetryTimerRef.current);
       if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
     };
   }, []);
@@ -3107,6 +3128,18 @@ export default function BotMatchScreen({
 
   const notifyBotActionResult = useCallback((result: BotActionResult) => {
     if (result.handEnded) {
+      logHandLifecycle({
+        phase: 'resolving-hand',
+        previousPhase: handLifecyclePhaseRef.current,
+        mode,
+        handNumber: result.state.handNumber,
+        detail: {
+          winner: result.handEnded.winner,
+          reason: result.handEnded.reason,
+          gameOver: result.state.gameOver,
+        },
+      });
+      handLifecyclePhaseRef.current = 'resolving-hand';
       if (isDailyFritzMode) {
         lastDailyFlowLabelRef.current = 'hand-complete';
         console.log('[daily-flow] hand complete detected', {
@@ -4875,14 +4908,113 @@ export default function BotMatchScreen({
     return () => clearTimeout(timer);
   }, [isGuidedV1OnlineMode, frozenLesson, guidedReplyIndex, lessonStepIndex, isMuted, triggerDrawStepAnimation]);
 
+  const traceHandLifecycle = useCallback(
+    (phase: HandLifecyclePhase, detail?: Record<string, unknown>, hypothesisId?: string) => {
+      logHandLifecycle({
+        phase,
+        previousPhase: handLifecyclePhaseRef.current,
+        mode,
+        handNumber: matchRef.current.handNumber,
+        detail,
+        hypothesisId,
+      });
+      handLifecyclePhaseRef.current = phase;
+      // #region agent log
+      emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
+        location: 'BotMatchScreen.tsx:traceHandLifecycle',
+        message: phase,
+        hypothesisId,
+        data: { mode, handNumber: matchRef.current.handNumber, ...detail },
+      });
+      // #endregion
+    },
+    [mode],
+  );
+
+  const scheduleHandAdvanceRetry = useCallback((delayMs: number, reason: string) => {
+    if (handAdvanceRetryTimerRef.current) {
+      window.clearTimeout(handAdvanceRetryTimerRef.current);
+    }
+    handAdvanceRetryTimerRef.current = window.setTimeout(() => {
+      handAdvanceRetryTimerRef.current = null;
+      console.log('[hand-over] retry-scheduled', { reason, delayMs });
+      advanceHandRef.current();
+    }, delayMs);
+  }, []);
+
+  const applyDailyFritzNextHandResponse = useCallback(
+    (response: DailyFritzNextHandResponse, source: string) => {
+      lastDailyFlowLabelRef.current = 'next-hand-start';
+      console.log('[daily-fritz-hand] applying next hand', {
+        source,
+        gameNumber: response.game_number ?? dailyFritzPackage?.current_game_number ?? 1,
+        currentHandIndex: response.current_hand_index,
+        nextHandNumber: matchRef.current.handNumber + 1,
+        replayed: Boolean(response.replayed),
+        ignored: Boolean(response.ignored),
+      });
+      setDailyFritzHandIndex(response.current_hand_index);
+      setHandAdvanceError(null);
+      setShowManualHandAdvance(false);
+      setHandReveal(null);
+      traceHandLifecycle('dealing-next-hand', { source }, 'D');
+      let applied = false;
+      setMatch((prev) => {
+        if (!canApplyNextHand(prev)) {
+          warnHandLifecycleStuck('setMatch skipped — hand not over', {
+            handOver: prev.handOver,
+            gameOver: prev.gameOver,
+            source,
+          });
+          // #region agent log
+          emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
+            location: 'BotMatchScreen.tsx:applyDailyFritzNextHandResponse',
+            message: 'setMatch-noop',
+            hypothesisId: 'D',
+            data: { handOver: prev.handOver, gameOver: prev.gameOver, source },
+          });
+          // #endregion
+          return prev;
+        }
+        applied = true;
+        return {
+          ...startNextFixedBotHand(prev, response.hand),
+          opponentPassedOnEnds: [],
+          opponentDrawCount: 0,
+          opponentKnownMissing: [],
+        };
+      });
+      dailyFritzNextHandRef.current = null;
+      handTransitionInFlightRef.current = false;
+      if (applied) {
+        traceHandLifecycle('playing', { source, handIndex: response.current_hand_index });
+      } else {
+        traceHandLifecycle('error', { source, reason: 'setMatch-noop' }, 'D');
+        setHandAdvanceError('Could not start the next hand. Tap Continue to retry.');
+        setShowManualHandAdvance(true);
+      }
+    },
+    [dailyFritzPackage?.current_game_number, traceHandLifecycle],
+  );
+
   const advanceHand = useCallback(() => {
-    // ── One-way guard ────────────────────────────────────────────────────────
-    // Prevents duplicate overlapping transitions (e.g. 5s timer + watchdog firing
-    // together, or rapid double-call from effect re-runs).
     if (handTransitionInFlightRef.current) {
       console.log('[daily-flow] advanceHand skipped — transition already in flight');
+      // #region agent log
+      emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
+        location: 'BotMatchScreen.tsx:advanceHand',
+        message: 'advanceHand-skipped-in-flight',
+        hypothesisId: 'B',
+        data: { handNumber: matchRef.current.handNumber },
+      });
+      // #endregion
       return;
     }
+
+    traceHandLifecycle('advancing-hand', {
+      prefetchReady: dailyFritzNextHandRef.current?.result != null,
+      hasPrefetchPromise: dailyFritzNextHandRef.current?.promise != null,
+    });
 
     if (isDailyFritzMode) {
       lastDailyFlowLabelRef.current = 'reveal-end';
@@ -4905,167 +5037,121 @@ export default function BotMatchScreen({
         handAutoAdvanceTimerRef.current = null;
         console.log('[hand-over] timer-cleared', { reason: 'advance-start' });
       }
-      const cache = dailyFritzNextHandRef.current;
-      dailyFritzNextHandRef.current = null;
 
-      // ── End-of-run helper ────────────────────────────────────────────────
-      // Called whenever nextDailyFritzHand rejects with DailyFritzEndOfRunError.
-      // Transitions the match to gameOver so the completion effect fires.
       const handleEndOfRun = (reason: string) => {
         console.log('[daily-flow] end-of-run detected from server', { reason, handNumber: matchRef.current.handNumber });
-        console.log('[daily-flow] next hand terminal 409 -> match complete', { handNumber: matchRef.current.handNumber });
         lastDailyFlowLabelRef.current = 'match-complete';
         handTransitionInFlightRef.current = false;
-        setGhostResultError(null);
+        dailyFritzNextHandRef.current = null;
+        setHandAdvanceError(null);
+        setShowManualHandAdvance(false);
         setHandReveal(null);
-        // Force gameOver so the completion effect picks it up and submits.
-        // Winner is whoever has more points; ties go to the player.
+        traceHandLifecycle('match-complete', { reason });
         setMatch((prev) => {
           const yourScore = prev.players.you.score;
-          const botScore  = prev.players.bot.score;
-          const winnerId  = yourScore >= botScore ? 'you' : 'bot';
+          const botScore = prev.players.bot.score;
+          const winnerId = yourScore >= botScore ? 'you' : 'bot';
           return { ...prev, handOver: false, gameOver: true, winnerId };
         });
       };
 
-      // ── Early exit: prefetch already resolved with end-of-run error ──────
-      if (cache?.error instanceof DailyFritzEndOfRunError) {
-        console.log('[hand-over] skipped-game-complete', { reason: cache.error.message });
-        handleEndOfRun(cache.error.message);
+      const cacheSnapshot = dailyFritzNextHandRef.current;
+
+      if (cacheSnapshot?.error instanceof DailyFritzEndOfRunError) {
+        handleEndOfRun(cacheSnapshot.error.message);
         return;
       }
 
-      if (cache?.result) {
+      if (cacheSnapshot?.result) {
         console.log('[hand-over] advancing-next-hand', { source: 'prefetch-hit' });
-        // Prefetch already settled — instant hand transition, no network wait needed.
-        lastDailyFlowLabelRef.current = 'next-hand-start';
-        console.log('[daily-fritz-hand] applying next hand', {
-          source: 'prefetch-hit',
-          gameNumber: cache.result.game_number ?? dailyFritzPackage.current_game_number ?? 1,
-          currentHandIndex: cache.result.current_hand_index,
-          nextHandNumber: matchRef.current.handNumber + 1,
-        });
-        setDailyFritzHandIndex(cache.result.current_hand_index);
-        setHandReveal(null);
-        setMatch((prev) =>
-          prev.handOver && !prev.gameOver
-            ? {
-                ...startNextFixedBotHand(prev, cache.result!.hand),
-                opponentPassedOnEnds: [],
-                opponentDrawCount: 0,
-                opponentKnownMissing: [],
-              }
-            : prev,
-        );
-        // Reset guard synchronously — the setMatch updater is the actual one-way
-        // guard against double-advancing (prev.handOver check inside it).
-        handTransitionInFlightRef.current = false;
-      } else {
-        // Prefetch still in-flight or not started — issue a fresh guarded request
-        // so a stale unresolved promise cannot stall the hand transition.
-        // IMPORTANT: do NOT call setGhostResultLoading(true) here. The Daily Fritz
-        // completion effect calls setGhostResultLoading(false) on every render where
-        // !match.gameOver, immediately overriding the true we set here and producing
-        // a spurious "Submitting..." flash in the completion overlay.
-        const gameNumber = dailyFritzPackage.current_game_number ?? 1;
-        const source = cache?.promise ? 'advance-refresh' : 'advance';
-        console.log('[daily-fritz-hand] requesting next hand', {
-          source,
+        applyDailyFritzNextHandResponse(cacheSnapshot.result, 'prefetch-hit');
+        return;
+      }
+
+      const gameNumber = dailyFritzPackage.current_game_number ?? 1;
+      const source = cacheSnapshot?.promise ? 'advance-await-prefetch' : 'advance-fetch';
+      const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      const createRequest = () =>
+        nextDailyFritzHand({
+          attemptId: dailyFritzPackage.attempt_id,
+          verifiedMatchId: dailyFritzPackage.verified_match_id,
+          runDate: dailyFritzPackage.run_date,
           gameNumber,
           completedHandIndex: dailyFritzHandIndex,
-          yourScore: match.players.you.score,
-          fritzScore: match.players.bot.score,
+          completedHandScores: {
+            you: matchRef.current.players.you.score,
+            fritz: matchRef.current.players.bot.score,
+          },
+          timeoutMs: 4500,
         });
-        const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+      if (!cacheSnapshot?.promise) {
         dailyFritzNextHandRef.current = {
-          promise: Promise.resolve().then(() => nextDailyFritzHand({
-            attemptId: dailyFritzPackage.attempt_id,
-            verifiedMatchId: dailyFritzPackage.verified_match_id,
-            runDate: dailyFritzPackage.run_date,
-            gameNumber,
-            completedHandIndex: dailyFritzHandIndex,
-            completedHandScores: {
-              you: match.players.you.score,
-              fritz: match.players.bot.score,
-            },
-            timeoutMs: 4500,
-          })),
+          promise: createRequest(),
           result: null,
           error: null,
           startedAt: requestStartedAt,
         };
-        const handPromise = dailyFritzNextHandRef.current.promise;
-        console.log('[hand-over] advancing-next-hand', { source });
-        console.log('[daily-flow] next hand start (awaiting fetch)', {
-          hadCachedPromise: cache?.promise != null,
-        });
-        void handPromise
-          .then((response) => {
-            lastDailyFlowLabelRef.current = 'next-hand-start';
-            const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-            if (dailyFritzNextHandRef.current) {
-              dailyFritzNextHandRef.current.result = response;
-            }
-            console.log('[daily-fritz-hand] next hand response', {
-              source,
-              gameNumber: response.game_number ?? dailyFritzPackage.current_game_number ?? 1,
-              currentHandIndex: response.current_hand_index,
-              replayed: Boolean(response.replayed),
-              ignored: Boolean(response.ignored),
-              durationMs: Number((requestEndedAt - (dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
-            });
-            console.log('[daily-fritz-hand] applying next hand', {
-              source,
-              gameNumber: response.game_number ?? dailyFritzPackage.current_game_number ?? 1,
-              currentHandIndex: response.current_hand_index,
-              nextHandNumber: matchRef.current.handNumber + 1,
-            });
-            setDailyFritzHandIndex(response.current_hand_index);
-            setHandReveal(null);
-            setMatch((prev) =>
-              prev.handOver && !prev.gameOver
-                ? {
-                    ...startNextFixedBotHand(prev, response.hand),
-                    opponentPassedOnEnds: [],
-                    opponentDrawCount: 0,
-                    opponentKnownMissing: [],
-                  }
-                : prev,
-            );
-            handTransitionInFlightRef.current = false;
-          })
-          .catch((err) => {
-            // Terminal end-of-run: server says no hands remain — not a retryable error.
-            if (err instanceof DailyFritzEndOfRunError) {
-              console.log('[hand-over] skipped-game-complete', { reason: err.message });
-              handleEndOfRun(err.message);
-              return;
-            }
-            // Retryable network/server error — reset guard and let the watchdog retry.
-            // Daily Fritz should not show a red banner for transient hand-transition fetches.
-            // The watchdog will retry after 10 s if still stuck.
-            const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
-            const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-            if (dailyFritzNextHandRef.current) {
-              dailyFritzNextHandRef.current.error = err;
-            }
-            handTransitionInFlightRef.current = false;
-            console.warn('[daily-fritz-hand] next hand error', {
-              source,
-              gameNumber: dailyFritzPackage.current_game_number ?? 1,
-              error: errMsg,
-              handNumber: matchRef.current.handNumber,
-              durationMs: Number((requestEndedAt - (dailyFritzNextHandRef.current?.startedAt ?? requestEndedAt)).toFixed(1)),
-            });
-            // handReveal intentionally NOT cleared here — keep the reveal visible
-            // so the player sees the score while the watchdog queues a retry.
-          });
       }
+
+      const activeCache = dailyFritzNextHandRef.current!;
+      console.log('[daily-fritz-hand] requesting next hand', {
+        source,
+        gameNumber,
+        completedHandIndex: dailyFritzHandIndex,
+        yourScore: matchRef.current.players.you.score,
+        fritzScore: matchRef.current.players.bot.score,
+      });
+
+      void resolveDailyFritzNextHandCache(activeCache, createRequest)
+        .then((response) => {
+          activeCache.result = response;
+          const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+          console.log('[daily-fritz-hand] next hand response', {
+            source,
+            gameNumber: response.game_number ?? gameNumber,
+            currentHandIndex: response.current_hand_index,
+            replayed: Boolean(response.replayed),
+            ignored: Boolean(response.ignored),
+            durationMs: Number((requestEndedAt - activeCache.startedAt).toFixed(1)),
+          });
+          applyDailyFritzNextHandResponse(response, source);
+        })
+        .catch((err) => {
+          if (err instanceof DailyFritzEndOfRunError) {
+            handleEndOfRun(err.message);
+            return;
+          }
+          const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
+          activeCache.error = err;
+          handTransitionInFlightRef.current = false;
+          setHandAdvanceError(errMsg);
+          setShowManualHandAdvance(true);
+          traceHandLifecycle('error', { source, error: errMsg }, 'C');
+          // #region agent log
+          emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
+            location: 'BotMatchScreen.tsx:advanceHand',
+            message: 'advanceHand-network-error',
+            hypothesisId: 'C',
+            data: { source, error: errMsg, handNumber: matchRef.current.handNumber },
+          });
+          // #endregion
+          console.warn('[daily-fritz-hand] next hand error', {
+            source,
+            gameNumber,
+            error: errMsg,
+            handNumber: matchRef.current.handNumber,
+          });
+          scheduleHandAdvanceRetry(4000, 'next-hand-fetch-failed');
+        });
       return;
     }
 
-    // ── Non-Daily-Fritz modes (authoring, guided) ─────────────────────────────
+    // ── Non-Daily-Fritz modes (authoring, guided, bot match) ─────────────────
+    setHandAdvanceError(null);
+    setShowManualHandAdvance(false);
     setHandReveal(null);
+    traceHandLifecycle('dealing-next-hand');
 
     if (isGuidedV1MinimalMode && frozenLesson) {
       const nextStep = getGuidedV1AuthoredStepByIndex(frozenLesson, lessonStepIndex);
@@ -5098,10 +5184,7 @@ export default function BotMatchScreen({
     }
 
     setMatch((prev) => {
-      if (!prev.handOver || prev.gameOver) return prev;
-      // Authoring and guided lesson modes: each hand is seeded deterministically.
-      // prev.handNumber is the hand just completed (1-indexed), so the next
-      // hand's 0-indexed slot is prev.handNumber (e.g. hand 1 done → deal for slot 1).
+      if (!canApplyNextHand(prev)) return prev;
       const useSeededDeal = isAuthoringMode || (isGuidedMode && frozenLesson !== null);
       const nextState = useSeededDeal
         ? startNextFixedBotHand(prev, generateAuthoringHandDeal(prev.handNumber))
@@ -5113,11 +5196,31 @@ export default function BotMatchScreen({
         opponentKnownMissing: [],
       };
     });
-  }, [dailyFritzHandIndex, dailyFritzPackage, isDailyFritzMode, isAuthoringMode, isGuidedV1MinimalMode, frozenLesson, lessonStepIndex, isGuidedV2Mode, frozenV2Lesson, match.players.bot.score, match.players.you.score, invalidateLocalRuns]); // eslint-disable-line react-hooks/exhaustive-deps
+    traceHandLifecycle('playing');
+  }, [
+    applyDailyFritzNextHandResponse,
+    dailyFritzHandIndex,
+    dailyFritzPackage,
+    isDailyFritzMode,
+    isAuthoringMode,
+    isGuidedV1MinimalMode,
+    frozenLesson,
+    lessonStepIndex,
+    isGuidedV2Mode,
+    frozenV2Lesson,
+    isGuidedMode,
+    invalidateLocalRuns,
+    scheduleHandAdvanceRetry,
+    traceHandLifecycle,
+  ]);
+
+  advanceHandRef.current = advanceHand;
 
   useEffect(() => {
     if (!handReveal || match.gameOver) {
       setHandRevealProgress(1);
+      setShowManualHandAdvance(false);
+      handRevealShownAtRef.current = null;
       if (handAutoAdvanceTimerRef.current) {
         window.clearTimeout(handAutoAdvanceTimerRef.current);
         handAutoAdvanceTimerRef.current = null;
@@ -5125,6 +5228,11 @@ export default function BotMatchScreen({
       }
       return;
     }
+    handRevealShownAtRef.current = Date.now();
+    traceHandLifecycle('showing-hand-result', {
+      winner: handReveal.winner,
+      pointsAwarded: handReveal.pointsAwarded,
+    });
     console.log('[hand-over] shown', {
       mode,
       handWinner: handReveal.winner,
@@ -5133,7 +5241,7 @@ export default function BotMatchScreen({
       setComplete: false,
     });
     setHandRevealProgress(1);
-    // In guided / V2 guided modes the player taps "Next Hand →" manually
+    setHandAdvanceError(null);
     if (isGuidedMode || isGuidedV2Mode) return;
     if (isDailyFritzMode) {
       console.log('[daily-flow] reveal countdown started', {
@@ -5144,10 +5252,26 @@ export default function BotMatchScreen({
       });
     }
     console.log('[hand-over] timer-start', { delayMs: DAILY_FRITZ_AUTO_ADVANCE_MS });
+    // #region agent log
+    emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
+      location: 'BotMatchScreen.tsx:handRevealAutoAdvance',
+      message: 'timer-start',
+      hypothesisId: 'A',
+      data: { delayMs: DAILY_FRITZ_AUTO_ADVANCE_MS, handNumber: match.handNumber },
+    });
+    // #endregion
     const rafId = requestAnimationFrame(() => setHandRevealProgress(0));
     handAutoAdvanceTimerRef.current = window.setTimeout(() => {
       handAutoAdvanceTimerRef.current = null;
-      advanceHand();
+      // #region agent log
+      emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
+        location: 'BotMatchScreen.tsx:handRevealAutoAdvance',
+        message: 'timer-fired',
+        hypothesisId: 'A',
+        data: { handNumber: matchRef.current.handNumber },
+      });
+      // #endregion
+      advanceHandRef.current();
     }, DAILY_FRITZ_AUTO_ADVANCE_MS);
     return () => {
       cancelAnimationFrame(rafId);
@@ -5155,9 +5279,38 @@ export default function BotMatchScreen({
         window.clearTimeout(handAutoAdvanceTimerRef.current);
         handAutoAdvanceTimerRef.current = null;
         console.log('[hand-over] timer-cleared', { reason: 'effect-cleanup' });
+        // #region agent log
+        emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
+          location: 'BotMatchScreen.tsx:handRevealAutoAdvance',
+          message: 'timer-cleared-effect-cleanup',
+          hypothesisId: 'A',
+          data: { handNumber: matchRef.current.handNumber },
+        });
+        // #endregion
       }
     };
-  }, [handReveal, match.gameOver, advanceHand, isGuidedMode, isGuidedV2Mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [handReveal, match.gameOver, match.handNumber, isGuidedMode, isGuidedV2Mode, isDailyFritzMode, traceHandLifecycle]);
+
+  useEffect(() => {
+    if (!handReveal || match.gameOver || isGuidedMode || isGuidedV2Mode) {
+      return;
+    }
+    const stallMs = DAILY_FRITZ_AUTO_ADVANCE_MS + 2000;
+    const warnId = window.setTimeout(() => {
+      if (!handRevealShownAtRef.current) return;
+      const visibleMs = Date.now() - handRevealShownAtRef.current;
+      if (visibleMs < stallMs - 500) return;
+      warnHandLifecycleStuck('hand result modal visible past auto-advance window', {
+        visibleMs,
+        handOver: matchRef.current.handOver,
+        gameOver: matchRef.current.gameOver,
+        inFlight: handTransitionInFlightRef.current,
+        handAdvanceError,
+      });
+      setShowManualHandAdvance(true);
+    }, stallMs);
+    return () => window.clearTimeout(warnId);
+  }, [handReveal, match.gameOver, isGuidedMode, isGuidedV2Mode, handAdvanceError]);
 
   // Build learning summary when hand reveal appears (guided mode only)
   useEffect(() => {
@@ -5227,11 +5380,11 @@ export default function BotMatchScreen({
         revealVisible: handReveal !== null,
       });
       handTransitionInFlightRef.current = false;
-      advanceHand();
+      advanceHandRef.current();
     }, watchdogMs);
 
     return () => window.clearTimeout(id);
-  }, [isDailyFritzMode, match.handOver, match.gameOver, handReveal, advanceHand]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isDailyFritzMode, match.handOver, match.gameOver, handReveal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
@@ -5554,7 +5707,7 @@ export default function BotMatchScreen({
       const isLandscape = window.innerWidth > window.innerHeight;
       const isMobileWidth = window.innerWidth <= 900;
       const forceTwoRows = tileCount > 9;
-      const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 50 : 68);
+      const maxTileSize = (isLandscape && isMobileWidth) ? 42 : (tileCount > 9 ? 46 : 60);
       const containerWidth = window.innerWidth - 40;
       const effectiveLen = forceTwoRows ? Math.ceil(tileCount / 2) : tileCount;
       const tileWidth = Math.min(maxTileSize, Math.floor((containerWidth - 20) / effectiveLen));
@@ -5567,6 +5720,7 @@ export default function BotMatchScreen({
   }, [lessonLayoutMode, match.players.you.hand.length]);
 
   const handActive = !match.handOver && !match.gameOver;
+  const dailyFritzBoardHasPlay = (match.board?.mainLine?.length ?? 0) > 0;
   const botTurn = match.currentPlayer === 'bot' && handActive;
   const showTurnStatusCluster =
     handActive &&
@@ -5590,6 +5744,9 @@ export default function BotMatchScreen({
 
   const openEnds = getDisplayOpenEnds(match);
   const openEndsSum = match.board ? computeOpenEndsSum(match.board) : 0;
+  if (match.board) {
+    assertDisplayedOpenCountMatchesCanonical(match.board, openEndsSum, 'bot-match');
+  }
 
   if (isGuidedMode && !isAuthoringMode) {
     // ── BUG B INSTRUMENTATION ────────────────────────────────────────────
@@ -5731,6 +5888,53 @@ export default function BotMatchScreen({
         ? currentLessonStep.chosenMove.split(':')[0]?.replace('|', '-') ?? null
       : null;
 
+  const lessonOptimalTile = useMemo((): Tile | null => {
+    if (!showRecommendation) return null;
+    if (lessonRecommendedTileKey) {
+      return parseTileKey(lessonRecommendedTileKey);
+    }
+    const suggested = coach.preMoveRec?.suggestedMove.move;
+    if (suggested?.type === 'play' && suggested.tile) {
+      return suggested.tile;
+    }
+    return null;
+  }, [showRecommendation, lessonRecommendedTileKey, coach.preMoveRec]);
+
+  const lessonCoachEngineTips = useMemo((): CoachingTip[] => {
+    if (!showRecommendation || !coach.preMoveEval) return [];
+    const tips: CoachingTip[] = [];
+    const bestPts = coach.preMoveEval.bestMove.immediatePoints;
+    if (bestPts > 0) {
+      tips.push({
+        title: 'Score projection',
+        body: `The recommended play can add ${bestPts} on this turn when the open ends match.`,
+      });
+    }
+    const spread = match.players.you.score - match.players.bot.score;
+    tips.push({
+      title: 'Strategic concept',
+      body:
+        spread >= 0
+          ? `Maximize point spread — you lead by ${spread}. Extending that gap keeps Fritz behind on the race to ${winningScore}.`
+          : `Maximize point spread — you're down ${Math.abs(spread)}. Scoring turns here shrink the deficit faster than safe passes.`,
+    });
+    return tips;
+  }, [
+    showRecommendation,
+    coach.preMoveEval,
+    match.players.you.score,
+    match.players.bot.score,
+    winningScore,
+  ]);
+
+  const lessonOptimalRationale = coach.preMoveRec?.promptText?.trim() || undefined;
+
+  const lessonCoachSharedProps = {
+    optimalTile: lessonOptimalTile,
+    optimalRationale: lessonOptimalRationale,
+    coachingTips: lessonCoachEngineTips,
+  };
+
   const showLessonCoachPanel =
     isLessonLayoutMode &&
     !match.gameOver;
@@ -5771,6 +5975,7 @@ export default function BotMatchScreen({
           isOffAuthoredLine={isOffAuthoredLine}
           showRecommendation={showRecommendation}
           onToggleRecommendation={() => setShowRecommendation((prev) => !prev)}
+          {...lessonCoachSharedProps}
         />
       )}
       {isGuidedFrozenLessonMode && frozenLesson && (
@@ -5789,6 +5994,7 @@ export default function BotMatchScreen({
           isOffAuthoredLine={isOffAuthoredLine}
           showRecommendation={showRecommendation}
           onToggleRecommendation={() => setShowRecommendation((prev) => !prev)}
+          {...lessonCoachSharedProps}
         />
       )}
       {wantsOriginalGuidedRecordMode && guidedTranscript && (
@@ -5801,6 +6007,7 @@ export default function BotMatchScreen({
           isOffAuthoredLine={false}
           showRecommendation={showRecommendation}
           onToggleRecommendation={() => setShowRecommendation((prev) => !prev)}
+          {...lessonCoachSharedProps}
         />
       )}
       {isGuidedV2Mode && !isGuidedV2OffLine && frozenV2Lesson && (
@@ -5824,6 +6031,7 @@ export default function BotMatchScreen({
           isOffAuthoredLine={false}
           showRecommendation={showRecommendation}
           onToggleRecommendation={() => setShowRecommendation((prev) => !prev)}
+          {...lessonCoachSharedProps}
         />
       )}
     </div>
@@ -5840,7 +6048,7 @@ export default function BotMatchScreen({
             <div
               className={`hand-container ${
                 (handCompactStacked || isLessonLayoutMode) ? 'is-stacked' : ''
-              }`}
+              } ${normalHandRows.length > 1 ? 'has-multiple-rows' : 'has-single-row'}`}
             >
               {normalHandRows.map((row, rowIdx) => (
                 <div key={`bot-hand-row-${rowIdx}`} className="hand-row">
@@ -5946,19 +6154,15 @@ export default function BotMatchScreen({
             {renderScoreToastMessage(scoreToast.message)}
           </div>
         )}
-        {!match.gameOver && !isLessonLayoutMode && (
-          <div className="rh-board-meta-bar" data-ui="board-meta">
-            <BoardOpenEndsPill openEndsSum={openEndsSum} />
-            <div
-              ref={boneyardRef}
-              className="boneyard-pill board-corner-pill board-corner-pill--tr"
-            >
-              <BoneyardStackIcon className="boneyard-icon" style={{ width: 18, height: 18, opacity: 0.85 }} />
-              <span className="boneyard-count">{match.boneyard.length}</span>
-              {match.boneyard.length > 0 && match.boneyard.length <= 2 ? (
-                <span className="boneyard-meta" style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', opacity: 0.9 }}>locked</span>
-              ) : null}
-            </div>
+        {!match.gameOver && (
+          <div
+            className={`rh-board-meta-bar${isLessonLayoutMode ? ' rh-board-meta-bar--count-only' : ''}`}
+            data-ui="board-meta"
+          >
+            {!isLessonLayoutMode ? (
+              <BoardOpenEndsPill board={match.board} openEndsSum={openEndsSum} />
+            ) : null}
+            <BoneyardCountPill ref={boneyardRef} count={match.boneyard.length} />
           </div>
         )}
         {isGhostMode && ghostAgreementType && (
@@ -5979,7 +6183,7 @@ export default function BotMatchScreen({
             onSaveNote={saveAuthoringNoteOnly}
           />
         )}
-        {isGuidedMode && !isAuthoringMode && !frozenLesson && (
+        {isGuidedMode && !isAuthoringMode && !isLessonLayoutMode && !frozenLesson && (
           <CoachPanel
             preMoveRec={coach.preMoveRec}
             preMoveEval={coach.preMoveEval}
@@ -6205,7 +6409,7 @@ export default function BotMatchScreen({
       <RotateOverlay />
       <div
         ref={rootRef}
-        className={`screen game-screen walnut-live theme-green bot-match-screen bot-match-mode-${mode} ${isLessonLayoutMode ? 'learn-lesson-screen claude-mode-screen-shell' : ''}`}
+        className={`screen game-screen walnut-live theme-green bot-match-screen bot-match-mode-${mode} ${isDailyFritzMode && dailyFritzBoardHasPlay ? 'df-board-has-play' : ''} ${isLessonLayoutMode ? 'learn-lesson-screen claude-mode-screen-shell' : ''}`}
       >
       {isLessonLayoutMode && (
         <div className="home-bg" aria-hidden="true">
@@ -6273,6 +6477,31 @@ export default function BotMatchScreen({
                       }}
                     >
                       Retry
+                    </button>
+                  </div>
+                </footer>
+              ) : showManualHandAdvance || handAdvanceError ? (
+                <footer className="hand-over-modal__footer">
+                  <div className="hand-over-error-zone">
+                    {handAdvanceError ? (
+                      <span className="hand-over-error-text" title={handAdvanceError}>
+                        {handAdvanceError}
+                      </span>
+                    ) : (
+                      <span className="hand-over-modal__next-hint">
+                        Next hand is taking longer than expected.
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="mode-inline-btn"
+                      onClick={() => {
+                        setHandAdvanceError(null);
+                        handTransitionInFlightRef.current = false;
+                        advanceHand();
+                      }}
+                    >
+                      {handAdvanceError ? 'Retry' : 'Continue'}
                     </button>
                   </div>
                 </footer>
@@ -6644,9 +6873,7 @@ export default function BotMatchScreen({
       )}
 
       <div className="walnut-match-layout game-layout-layer">
-      {isLessonLayoutMode ? (
-        <GlobalNav currentMode="learn" activeColor="#19D8A2" onNavigate={onNavigate} />
-      ) : (
+      {!isLessonLayoutMode ? (
         <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
           <div className="bot-hud-left-cluster" style={{ gridColumn: 1 }}>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -6657,15 +6884,17 @@ export default function BotMatchScreen({
                 onClick={() => setScoreTrackOpen(true)}
                 aria-label="Open score track"
               >
-                <div className="wl-pill-top" style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-                  {ghostSubLabel && (
-                    <span className="wl-player-label" style={{ fontSize: '0.74rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
-                      {formatGhostName(ghostSubLabel)}
-                    </span>
-                  )}
-                  <span className="wl-player-label" style={{ fontSize: '0.62rem', opacity: 0.7, letterSpacing: '0.05em' }}>{opponentLabel}</span>
+                <div className="wl-player-card-content">
+                  <div className="wl-player-card-text">
+                    {ghostSubLabel && (
+                      <span className="wl-player-subtitle">
+                        {formatGhostName(ghostSubLabel)}
+                      </span>
+                    )}
+                    <span className="wl-player-label">{opponentLabel}</span>
+                  </div>
+                  <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
                 </div>
-                <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
               </button>
               {wantsOriginalGuidedRecordMode ? (
                 <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'min(420px, 40vw)' }}>
@@ -6734,47 +6963,64 @@ export default function BotMatchScreen({
               onClick={() => setScoreTrackOpen(true)}
               aria-label="Open score track"
             >
-              <span className="wl-player-label">You</span>
-              <AnimatedScore value={match.players.you.score} className="wl-player-score" />
+              <div className="wl-player-card-content">
+                <div className="wl-player-card-text">
+                  <span className="wl-player-label">You</span>
+                </div>
+                <AnimatedScore value={match.players.you.score} className="wl-player-score" />
+              </div>
             </button>
           </div>
         </div>
-      )}
+      ) : null}
 
 
       {isLessonLayoutMode ? (
-        <div className="pvf-layout">
-          <div className="pvf-left-col">
-            <button type="button" className="pvf-back-btn rh-back-button" onClick={() => setShowLeaveConfirm(true)}>
-              <span>←</span> Back to Learn
+        <div className="learn-guided-match">
+          <aside className="learn-guided-match__coach">{lessonCoachPanel}</aside>
+
+          <section className="learn-guided-match__arena">
+            <button
+              type="button"
+              className="learn-guided-match__exit"
+              onClick={() => setShowLeaveConfirm(true)}
+            >
+              Exit learn
             </button>
 
-            <div className="pvf-header">
-              <div className="pvf-label">LEARN</div>
-              <h1 className="pvf-title">Guided Match</h1>
-              <p className="pvf-subtitle">
-                Study a fixed lesson with move-by-move coaching from Oliver while you play through the authored line.
-              </p>
-            </div>
+            <LearnGuidedMatchChrome
+              username={username?.trim() || 'You'}
+              opponentLabel={opponentLabel}
+              yourScore={match.players.you.score}
+              opponentScore={match.players.bot.score}
+              yourTileCount={match.players.you.hand.length}
+              opponentTileCount={match.players.bot.hand.length}
+              winningScore={winningScore}
+              turnLabel={turnLabel || (botTurn ? `${opponentLabel} thinking` : 'Your move')}
+              isYourTurn={!botTurn && handActive}
+              board={match.board}
+              openEndsSum={openEndsSum}
+              onOpenScoreTrack={() => setScoreTrackOpen(true)}
+            />
 
-            {lessonCoachPanel}
-          </div>
-
-          <div className="pvf-control-panel">
-            <div className="learn-match-board-frame">
+            <div className="learn-guided-match__board learn-match-board-frame">
               {boardStage}
             </div>
 
-            <div className="learn-match-rack rh-rack">
+            <div className="learn-guided-match__hand learn-match-rack rh-rack">
               {handTray}
             </div>
-          </div>
+          </section>
         </div>
       ) : (
-        <>
-          {boardStage}
-          {handTray}
-        </>
+        <div className="rh-live-studio-shell" data-ui="live-studio-shell">
+          <div className="rh-live-board-zone" data-ui="live-board-zone">
+            {boardStage}
+          </div>
+          <div className="rh-live-hand-deck" data-ui="live-hand-deck">
+            {handTray}
+          </div>
+        </div>
       )}
 
       </div>

@@ -63,23 +63,23 @@ export default function UsernameModal({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="rh-modal-overlay"
+      className="auth-modal-overlay"
       onClick={() => {
         if (!saving) onClose?.();
       }}
     >
       <div
-        className="rh-modal-panel"
+        className="auth-modal-card"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Head row */}
-        <div className="rh-modal-head">
-          <p className="rh-modal-eyebrow">Profile</p>
+        <div className="auth-modal-head">
+          <p className="auth-modal-label">Profile</p>
           {/* Only show "Not now" during onboarding, not in profile-edit mode */}
           {onClose && !isProfileEdit && (
             <button
               type="button"
-              className="rh-modal-ghost-btn"
+              className="auth-modal-ghost-btn"
               onClick={onClose}
               disabled={saving || signingOut}
             >
@@ -90,7 +90,7 @@ export default function UsernameModal({
           {onClose && isProfileEdit && (
             <button
               type="button"
-              className="rh-modal-close"
+              className="auth-modal-close"
               onClick={onClose}
               disabled={saving || signingOut}
               aria-label="Close"
@@ -100,12 +100,12 @@ export default function UsernameModal({
           )}
         </div>
 
-        <h3 className="rh-modal-title">{title}</h3>
-        <p className="rh-modal-subtitle">{subtitle}</p>
+        <h3 className="auth-modal-title">{title}</h3>
+        <p className="auth-modal-subtitle">{subtitle}</p>
 
         {/* Username field */}
-        <label className="rh-modal-field">
-          <span className="rh-modal-field-label">Username</span>
+        <label className="auth-modal-field">
+          <span className="auth-modal-field-label">Username</span>
           <input
             type="text"
             value={username}
@@ -114,7 +114,7 @@ export default function UsernameModal({
             placeholder="racehorse_ace"
             disabled={saving || signingOut}
             autoComplete="username"
-            className="rh-modal-input"
+            className="auth-modal-input"
           />
         </label>
 
@@ -123,7 +123,7 @@ export default function UsernameModal({
         {/* Save button */}
         <button
           type="button"
-          className="rh-modal-submit"
+          className="auth-modal-submit"
           onClick={() => void submit()}
           disabled={!canSave}
         >
@@ -132,10 +132,10 @@ export default function UsernameModal({
 
         {/* Sign out row */}
         {onSignOut && (
-          <div className="rh-modal-signout-row">
+          <div className="auth-modal-signout-row">
             <button
               type="button"
-              className="rh-modal-signout-btn"
+              className="auth-modal-signout-btn"
               onClick={() => { void onSignOut(); }}
               disabled={saving || signingOut}
             >

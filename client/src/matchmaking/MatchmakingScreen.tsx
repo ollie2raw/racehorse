@@ -238,7 +238,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                 </p>
               </div>
 
-              <div className="pml-room-stage">
+              <div className="pml-room-stage pml-room-stage--quick">
                 <div className="pml-room-stage__scroll">
                   <div className="pml-matchup">
                   <ArenaRings />

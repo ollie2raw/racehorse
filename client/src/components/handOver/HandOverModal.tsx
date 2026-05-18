@@ -77,11 +77,17 @@ export function HandOverModal({
     (reveal) => reveal !== scoredReveal && reveal.tiles.length > 0,
   ) ?? null;
   const clearedReveal = tileReveals.find((reveal) => reveal.tiles.length === 0) ?? null;
-  const summaryBits = [
-    `Winner: ${winnerLabel}`,
-    `${loserLabel} · ${loserPipsLabel}`,
-    clearedReveal ? `${clearedReveal.ownerLabel} cleared hand` : null,
-  ].filter(Boolean) as string[];
+  const scoredFromLabel =
+    typeof loserPips === 'number' ? `${loserLabel} · ${loserPipsLabel}` : loserLabel;
+  const tilesStageNote = secondaryReveal && !clearedReveal
+    ? `${secondaryReveal.ownerLabel} also reveals ${secondaryReveal.tiles.length} tile${
+        secondaryReveal.tiles.length === 1 ? '' : 's'
+      } after the scoring hand.`
+    : winnerSide === 'tie'
+      ? 'Both hands are shown because the block was resolved on combined pips.'
+      : `${winnerLabel} takes ${pointsAwarded} point${
+          pointsAwarded === 1 ? '' : 's'
+        } from ${loserLabel}'s leftover pips.`;
 
   return (
     <div
@@ -106,42 +112,39 @@ export function HandOverModal({
           </header>
 
           <section className="hand-over-modal__award" aria-label="Points awarded this hand">
-            <div className="hand-over-modal__award-value">+{pointsAwarded}</div>
-            <div className="hand-over-modal__award-label">{pointsLabel}</div>
+            <div className="hand-over-modal__award-shell">
+              <div className="hand-over-modal__award-value">+{pointsAwarded}</div>
+              <div className="hand-over-modal__award-label">{pointsLabel}</div>
+            </div>
           </section>
         </div>
 
-        <section className="hand-over-modal__middle" aria-label="Hand outcome and remaining tiles">
-          <div className="hand-over-modal__summary">
-            <div className="hand-over-modal__summary-row">
-              <span className="hand-over-modal__summary-label">Winner</span>
-              <span className="hand-over-modal__summary-value">{winnerLabel}</span>
-            </div>
-            <div className="hand-over-modal__summary-row">
-              <span className="hand-over-modal__summary-label">Remaining pips</span>
-              <span className="hand-over-modal__summary-value">
-                {loserLabel} <span className="hand-over-modal__summary-sep">·</span> {loserPipsLabel}
-              </span>
-            </div>
-            {clearedReveal ? (
-              <div className="hand-over-modal__summary-row hand-over-modal__summary-row--muted">
-                <span className="hand-over-modal__summary-label">Cleared hand</span>
-                <span className="hand-over-modal__summary-value">{clearedReveal.ownerLabel}</span>
-              </div>
-            ) : null}
-            {secondaryReveal && !clearedReveal ? (
-              <div className="hand-over-modal__summary-note">
-                {secondaryReveal.ownerLabel} also shows {secondaryReveal.tiles.length} tile
-                {secondaryReveal.tiles.length === 1 ? '' : 's'}.
-              </div>
-            ) : null}
+        <section className="hand-over-modal__result-strip" aria-label="Hand outcome summary">
+          <div className="hand-over-modal__result-primary">
+            <span className="hand-over-modal__result-label">Winner</span>
+            <span className="hand-over-modal__result-value">{winnerLabel}</span>
           </div>
+          <div className="hand-over-modal__result-divider" aria-hidden="true" />
+          <div className="hand-over-modal__result-facts">
+            <span className="hand-over-modal__fact-pill">
+              <span className="hand-over-modal__fact-kicker">Scored From</span>
+              <span className="hand-over-modal__fact-value">{scoredFromLabel}</span>
+            </span>
+          </div>
+        </section>
 
-          <section className="hand-over-modal__tiles-section" aria-label="Remaining tiles">
-            <div className="hand-over-modal__tiles-header">
-              <span className="hand-over-modal__section-kicker">Remaining tiles</span>
-              <span className="hand-over-modal__section-note">{summaryBits.join('  •  ')}</span>
+        <section className="hand-over-modal__tiles-stage" aria-label="Remaining tiles">
+          <div className="hand-over-modal__tiles-stage-head">
+            <div className="hand-over-modal__tiles-stage-copy">
+              <span className="hand-over-modal__section-kicker">Remaining Tiles</span>
+              <p className="hand-over-modal__tiles-stage-note">{tilesStageNote}</p>
             </div>
+          </div>
+          <div
+            className={`hand-over-modal__tiles-layout${
+              secondaryReveal ? ' hand-over-modal__tiles-layout--dual' : ''
+            }`}
+          >
             {scoredReveal ? (
               <article className="hand-over-modal__tiles-panel is-scored">
                 <div className="hand-over-modal__tiles-head">
@@ -167,7 +170,7 @@ export function HandOverModal({
                 <RemainingTileGrid tiles={secondaryReveal.tiles} />
               </article>
             ) : null}
-          </section>
+          </div>
         </section>
 
         {learningRecap}
