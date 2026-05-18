@@ -889,9 +889,7 @@
 .dflb-you-strip__stats dd.is-loss { color: var(--hub-red); }
 
 .dflb-you-empty {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: block;
 }
 
 .dflb-you-empty p {
@@ -899,24 +897,6 @@
   font-size: 12px;
   line-height: 1.45;
   color: var(--hub-muted);
-}
-
-.dflb-your-cta {
-  align-self: flex-start;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: var(--hub-radius-pill, 999px);
-  border: 1px solid rgba(245, 185, 55, 0.38);
-  background: rgba(245, 185, 55, 0.12);
-  color: var(--hub-gold);
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.dflb-your-cta:hover {
-  background: rgba(245, 185, 55, 0.18);
 }
 
 /* —— Responsive —— */

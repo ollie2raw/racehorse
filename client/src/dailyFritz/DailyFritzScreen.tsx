@@ -27,16 +27,10 @@ import {
 import { formatOrdinalPlace } from './format';
 import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy } from './skunk';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
-import dailyFritzHeroPng from '../assets/dailyFritz/dailyfritzimage2.png';
+import dailyFritzHeroPng from '../assets/dailyFritz/dailyfritzimage.png';
 import './dailyFritz.css';
 
 /* Same marks as Play vs Fritz left-panel badges (compact header icons). */
-const DfPvfIconLightning = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
-  <svg width={20} height={20} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <path d="M13 3L5 14H12L11 21L19 10H12L13 3Z" fill={color} />
-  </svg>
-);
-
 const DfPvfIconRobotNav = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
   <svg width={20} height={20} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
     <rect x="4" y="7.5" width="16" height="11.5" rx="2.5" stroke={color} strokeWidth="1.7" />
@@ -54,6 +48,70 @@ const DfPvfIconCrown = ({ color = 'var(--tier-elite)' }: { color?: string }) => 
       d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
       fill={color}
     />
+  </svg>
+);
+
+const DfIconCalendar = () => (
+  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <rect x="4" y="5" width="16" height="16" rx="2" />
+    <path d="M8 3v4M16 3v4M4 11h16" strokeLinecap="round" />
+  </svg>
+);
+
+const DfIconSwords = () => (
+  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <path d="M4 20L9 15M15 9L20 4" strokeLinecap="round" />
+    <path d="M14 4l6 6M4 14l6 6" strokeLinecap="round" />
+  </svg>
+);
+
+const DfIconFlame = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
+  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <path
+      d="M12 22c4-2.5 6-6 6-10 0-3-1.5-5-3-6.5C13 4.5 12 2 12 2s-1 2.5-3 3.5C7.5 7 6 9 6 12c0 4 2 7.5 6 10z"
+      stroke={color}
+      strokeWidth="1.6"
+      fill={color}
+      fillOpacity="0.2"
+    />
+  </svg>
+);
+
+const DfIconGlobe = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
+  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+    <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.6" />
+    <path d="M3 12h18M12 3c2.5 2.8 4 6.2 4 9s-1.5 6.2-4 9M12 3c-2.5 2.8-4 6.2-4 9s1.5 6.2 4 9" stroke={color} strokeWidth="1.4" />
+  </svg>
+);
+
+const DfIconTrophy = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <path d="M8 21h8M12 17v4M8 4h8v4a4 4 0 0 1-8 0V4z" strokeLinejoin="round" />
+    <path d="M16 6h2a2 2 0 0 1 0 4h-2M8 6H6a2 2 0 0 0 0 4h2" strokeLinecap="round" />
+  </svg>
+);
+
+const DfIconStar = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M12 2.8l2.8 5.66 6.25.91-4.53 4.42 1.07 6.21L12 17.1l-5.59 2.9 1.07-6.21L2.95 9.37l6.25-.91L12 2.8z" />
+  </svg>
+);
+
+const DfIconLock = () => (
+  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <path d="M7 11V8a5 5 0 0 1 10 0v3" strokeLinecap="round" />
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <circle cx="12" cy="16" r="1.2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const DfIconDomino = () => (
+  <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+    <rect x="7" y="3.5" width="10" height="17" rx="2.5" />
+    <path d="M12 9v6" strokeLinecap="round" />
+    <circle cx="10" cy="7" r="1" fill="currentColor" stroke="none" />
+    <circle cx="14" cy="17" r="1" fill="currentColor" stroke="none" />
+    <circle cx="14" cy="13" r="1" fill="currentColor" stroke="none" />
   </svg>
 );
 
@@ -188,12 +246,13 @@ interface DailyFritzGameCompletionPayload {
 }
 
 type BetweenGameTrackerTone = 'win' | 'loss' | 'next' | 'idle';
+type DailyFritzGameCardState = 'active' | 'won' | 'lost' | 'locked' | 'not-needed' | 'pending';
 
 function formatDateLabel(dateText: string): string {
   const parsed = new Date(`${dateText}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return dateText;
   return parsed.toLocaleDateString(undefined, {
-    month: 'short',
+    month: 'long',
     day: 'numeric',
     year: 'numeric',
   });
@@ -442,20 +501,6 @@ function getSetTrackerStatus(
   };
 }
 
-const DfLockIcon = () => (
-  <svg className="df-game-lock" width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <path
-      d="M7 11V8a5 5 0 0 1 10 0v3"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    />
-    <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
-    <circle cx="12" cy="16" r="1.2" fill="currentColor" />
-  </svg>
-);
-
-
 function getLosAngelesHms(now: Date): { h: number; m: number; s: number } {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Los_Angeles',
@@ -621,7 +666,6 @@ export default function DailyFritzScreen({
   const [, setSetSubmitError] = useState<string | null>(null);
   const [startActionPending, setStartActionPending] = useState(false);
   const [countdownTick, setCountdownTick] = useState(0);
-  const [peakDailyFritzStreak, setPeakDailyFritzStreak] = useState(0);
 
   const cacheKey = useMemo(
     () => (user?.id ? `${DAILY_FRITZ_TODAY_CACHE_PREFIX}${user.id}` : null),
@@ -649,26 +693,6 @@ export default function DailyFritzScreen({
     const id = window.setInterval(() => setCountdownTick((t) => t + 1), 1000);
     return () => window.clearInterval(id);
   }, [activeRun]);
-
-  useEffect(() => {
-    if (!user?.id || !today) return;
-    const key = `racehorse:daily-fritz:peak-streak:${user.id}`;
-    let stored = 0;
-    try {
-      stored = Math.max(0, Number(window.localStorage.getItem(key) ?? '0'));
-    } catch {
-      /* noop */
-    }
-    const next = Math.max(stored, today.streak);
-    if (next !== stored) {
-      try {
-        window.localStorage.setItem(key, String(next));
-      } catch {
-        /* noop */
-      }
-    }
-    setPeakDailyFritzStreak(next);
-  }, [today, user?.id]);
 
   const persistTodayCache = useCallback(
     (response: DailyFritzTodayResponse) => {
@@ -1370,8 +1394,8 @@ export default function DailyFritzScreen({
   const primaryCtaLabel = isComplete
     ? 'Set complete'
     : isStarted
-      ? 'Resume Set'
-      : 'Play Daily Fritz';
+      ? "Resume Today's Set"
+      : "Play Today's Set";
 
   const matchClinched =
     todaySetResult != null &&
@@ -1383,26 +1407,36 @@ export default function DailyFritzScreen({
     const res = todaySetResult?.games.find((g) => g.gameNumber === n);
     const isNext = todaySetResult ? todaySetResult.games.length + 1 === n && !todaySetResult.setWinner : n === 1;
     const game3NotRequired = n === 3 && !res && matchClinched;
-
-    const rowVariant = res ? 'done' : isNext ? 'active' : 'muted';
-    const youWonRow = res ? Number(res.playerScore) > Number(res.fritzScore) : false;
-    const outcome = res ? (youWonRow ? ('won' as const) : ('lost' as const)) : null;
-    const isLocked = rowVariant === 'muted' && !game3NotRequired;
+    const gameState: DailyFritzGameCardState = res
+      ? res.playerWon
+        ? 'won'
+        : 'lost'
+      : isNext
+        ? 'active'
+      : game3NotRequired
+          ? 'not-needed'
+          : 'locked';
+    const isDone = gameState === 'won' || gameState === 'lost';
+    const isLocked = gameState === 'locked';
+    const isNotNeeded = gameState === 'not-needed';
+    const isActive = gameState === 'active';
 
     let statusSub: string;
     let unlockHint: string | null = null;
     let showPlay = false;
     if (res) {
-      statusSub = youWonRow ? 'Won' : 'Lost';
-    } else if (isNext) {
-      statusSub = 'Ready to play';
+      statusSub = res.playerWon ? 'Won' : 'Lost';
+    } else if (isActive) {
+      statusSub = n === 3 ? 'Decider' : 'Your move';
       showPlay = !isComplete && !startActionPending;
-    } else if (game3NotRequired) {
-      statusSub = 'Not required';
+      unlockHint = isStarted ? 'Resume now' : `First to ${winTarget}`;
+    } else if (isNotNeeded) {
+      statusSub = 'Not needed';
       unlockHint = 'Game 3 not required';
     } else {
-      statusSub = 'Locked';
-      unlockHint = n === 2 ? 'Play game 1 to unlock' : 'Win game 1 or 2 to unlock';
+      statusSub = n === 3 ? 'Decider' : 'Locked';
+      unlockHint =
+        n === 2 ? 'Defeat Fritz in Game 1 to unlock' : n === 3 ? 'Decider if needed' : null;
     }
 
     const scoreLine = res ? `${res.playerScore}–${res.fritzScore}` : null;
@@ -1413,11 +1447,33 @@ export default function DailyFritzScreen({
       unlockHint,
       showPlay,
       scoreLine,
-      rowVariant,
-      outcome,
+      gameState,
       isLocked,
+      isDone,
+      isActive,
+      isNotNeeded,
     };
   });
+
+  const handleSetAction = () => {
+    if (isStarted) {
+      void continueSet();
+      return;
+    }
+    void beginRun();
+  };
+
+  const fritzTierShort = today ? titleCaseTier(today.fritz_tier) : 'Elite';
+  const leaderboardRankLabel =
+    isComplete && today?.rank != null ? formatOrdinalPlace(today.rank) : null;
+  const leaderboardSupportLine = leaderboardRankLabel
+    ? `${leaderboardRankLabel} today`
+    : isComplete
+      ? 'Leaderboard updates after your set'
+      : 'Play today to appear on the leaderboard';
+  const setStatusLabel = isComplete ? 'Complete' : isStarted ? 'In Progress' : 'Ready';
+  const setStakesLabel = isComplete ? 'Return tomorrow for a new set' : 'Leaderboard eligible';
+  const opponentBadgeLabel = isComplete ? 'Set Complete' : isStarted ? 'Resume Available' : 'Bot Opponent';
 
   return (
     <div className="df-page">
@@ -1436,272 +1492,234 @@ export default function DailyFritzScreen({
         onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
         onOpenAccount={onOpenAccount}
-        activeColor="#E7B64A"
+        activeColor="var(--tier-elite)"
       />
 
       <div className="df-shell df-shell--daily-fritz">
-        <button type="button" className="df-back-btn df-back--ghost df-back--floating rh-back-button" onClick={onBack}>
-          <span aria-hidden>←</span> Back to Single Player
-        </button>
+        <div className="df-layout df-pvf-layout">
+          <div className="df-pvf-left-col">
+            <button type="button" className="df-back-btn df-pvf-back-btn rh-back-button" onClick={onBack}>
+              <span aria-hidden>←</span> Back to Single Player
+            </button>
 
-        <div className="df-layout">
-          <div className="df-left-col">
-            <div className="df-hero-fullbleed">
-              <img src={dailyFritzHeroPng} className="df-hero-fullbleed__img" alt="Fritz at the domino table" />
-              <div className="df-hero-fullbleed__overlay" aria-hidden />
-              <div className="df-hero-fullbleed__text-scrim" aria-hidden />
-              <div className="df-hero-fullbleed__rim" aria-hidden />
-              <div className="df-hero-fullbleed__copy">
-                <div className="df-hero-kicker">• DAILY FRITZ</div>
-                <h1 className="df-title df-title--page df-hero-title">Daily Fritz</h1>
-                <p className="df-hero-subtitle">
-                  Best of 3 games. Same deal for everyone.
-                  <br />
-                  Beat Fritz today and climb the leaderboard.
-                </p>
-              </div>
-              <div className="df-feature-bar" aria-label="Daily Fritz features">
-                <div className="df-feature-bar__col">
-                  <span className="df-feature-bar__icon" aria-hidden>
-                    <DfPvfIconCrown color="var(--tier-elite)" />
-                  </span>
-                  <div className="df-feature-bar__text">
-                    <span className="df-feature-bar__label">Rated Practice</span>
-                    <span className="df-feature-bar__desc">Matches affect practice rating.</span>
-                  </div>
-                </div>
-                <div className="df-feature-bar__col">
-                  <span className="df-feature-bar__icon" aria-hidden>
-                    <DfPvfIconLightning color="var(--tier-elite)" />
-                  </span>
-                  <div className="df-feature-bar__text">
-                    <span className="df-feature-bar__label">Instant Match</span>
-                    <span className="df-feature-bar__desc">Jump in and play right away.</span>
-                  </div>
-                </div>
-                <div className="df-feature-bar__col">
-                  <span className="df-feature-bar__icon" aria-hidden>
-                    <DfPvfIconRobotNav color="var(--tier-elite)" />
-                  </span>
-                  <div className="df-feature-bar__text">
-                    <span className="df-feature-bar__label">Bot Opponent</span>
-                    <span className="df-feature-bar__desc">Consistent. Fair. Improving.</span>
-                  </div>
-                </div>
-              </div>
+            <div className="df-pvf-header">
+              <div className="df-pvf-label">DAILY FRITZ</div>
+              <h1 className="df-pvf-title">Daily Fritz</h1>
+              <p className="df-pvf-subtitle">Best of 3. Same deal for everyone.</p>
             </div>
 
-            <div className="df-streak-card">
-              <div className="df-streak-card__block df-streak-card__block--current">
-                <span className="df-streak-card__crown" aria-hidden>
-                  <DfPvfIconCrown color="var(--tier-elite)" />
-                </span>
-                <div className="df-streak-card__meta">
-                  <span className="df-streak-card__key">Your Streak</span>
-                  <span className="df-streak-card__value">{today ? `${today.streak} Days` : '—'}</span>
+            <article className="df-pvf-opponent-card" aria-label="Daily Fritz overview">
+              <img src={dailyFritzHeroPng} className="df-pvf-card-bg-img" alt="Fritz waiting at the domino table" />
+              <div className="df-pvf-card-overlay" aria-hidden />
+
+              <div className="df-pvf-card-content">
+                <div className="df-pvf-card-header">
+                  <div className="df-pvf-card-eyebrow">TODAY&apos;S OPPONENT</div>
+                  <h2 className="df-pvf-card-name">Fritz</h2>
+                  <p className="df-pvf-card-description">
+                    Same set. No resets.
+                    <br />
+                    Beat Fritz today.
+                  </p>
+                </div>
+
+                <div className="df-pvf-card-badges">
+                  <div className="df-pvf-card-badge">
+                    <div className="df-pvf-card-badge-header">
+                      <DfIconFlame color="var(--tier-elite)" />
+                      <span className="df-pvf-card-badge-title">Daily Streak</span>
+                    </div>
+                    <div className="df-pvf-card-badge-desc">{streakLabel}</div>
+                  </div>
+
+                  <div className="df-pvf-card-badge">
+                    <div className="df-pvf-card-badge-header">
+                      <DfIconGlobe color="var(--tier-elite)" />
+                      <span className="df-pvf-card-badge-title">Same Deal</span>
+                    </div>
+                    <div className="df-pvf-card-badge-desc">Every player gets the same hand.</div>
+                  </div>
+
+                  <div className="df-pvf-card-badge">
+                    <div className="df-pvf-card-badge-header">
+                      <DfPvfIconRobotNav color="var(--tier-elite)" />
+                      <span className="df-pvf-card-badge-title">{opponentBadgeLabel}</span>
+                    </div>
+                    <div className="df-pvf-card-badge-desc">{isComplete ? leaderboardSupportLine : 'Fair, consistent, leaderboard eligible.'}</div>
+                  </div>
                 </div>
               </div>
-              <div className="df-streak-card__block df-streak-card__block--best">
-                <span className="df-streak-card__key">Best Streak</span>
-                <span className="df-streak-card__value">{today ? `${peakDailyFritzStreak} Days` : '—'}</span>
-              </div>
-              <div className="df-streak-card__block df-streak-card__block--copy">
-                <p className="df-streak-card__gold-lead">Beat Today. Build Tomorrow.</p>
-                <p className="df-streak-card__gold-line">New challenge every day at midnight.</p>
-                <p className="df-streak-card__gold-line">Your streak, your legacy.</p>
-              </div>
-            </div>
+            </article>
           </div>
 
-          <div className="df-control-panel">
-            <div className="df-panel-surface">
-              <div className="df-panel-body">
-                <div className="df-section df-section--overview">
-                  <div className="fritz-section-label">1. SET OVERVIEW</div>
-                  <div className="df-overview-stats">
-                    <div className="df-overview-stat">
-                      <div className="df-overview-stat__icon fritz-summary-icon fritz-summary-icon--df-gold">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                          <rect x="3" y="4" width="18" height="18" rx="2" />
-                          <line x1="16" y1="2" x2="16" y2="6" />
-                          <line x1="8" y1="2" x2="8" y2="6" />
-                          <line x1="3" y1="10" x2="21" y2="10" />
-                        </svg>
-                      </div>
-                      <div className="df-overview-stat__value">{dateLabel}</div>
-                      <div className="df-overview-stat__key">Date</div>
-                    </div>
-                    <div className="df-overview-stat">
-                      <div className="df-overview-stat__icon fritz-summary-icon fritz-summary-icon--df-gold">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                          <path
-                            d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
-                            fill="currentColor"
-                          />
-                        </svg>
-                      </div>
-                      <div className="df-overview-stat__value">{tierLabel}</div>
-                      <div className="df-overview-stat__key">Tier</div>
-                    </div>
-                    <div className="df-overview-stat">
-                      <div className="df-overview-stat__icon fritz-summary-icon fritz-summary-icon--df-gold">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-                          <path d="M8 6h12M6 12h12M4 18h12" />
-                        </svg>
-                      </div>
-                      <div className="df-overview-stat__value">{formatLabel}</div>
-                      <div className="df-overview-stat__key">Format</div>
-                    </div>
-                    <div className="df-overview-stat">
-                      <div className="df-overview-stat__icon fritz-summary-icon fritz-summary-icon--df-gold">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.5 3.5 6.5 1 1.5 2 3 2 5a7 7 0 1 1-14 0c0-3 2.5-5 2.5-5s0 1 1 2.5z" />
-                        </svg>
-                      </div>
-                      <div className="df-overview-stat__value">{streakLabel}</div>
-                      <div className="df-overview-stat__key">Streak</div>
-                    </div>
+          <section className="df-pvf-control-panel" aria-label="Today's Set">
+            <div className="df-pvf-section">
+              <div className="fritz-section-label">1. TODAY&apos;S SET</div>
+              <div className="df-pvf-overview-grid" role="list" aria-label="Set details">
+                <div className="df-pvf-overview-card" role="listitem">
+                  <div className="df-pvf-overview-icon" aria-hidden>
+                    <DfIconCalendar />
+                  </div>
+                  <div className="df-pvf-overview-body">
+                    <div className="df-pvf-overview-value">{dateLabel}</div>
+                    <div className="df-pvf-overview-key">Date</div>
                   </div>
                 </div>
-
-                <div className="df-section df-section--games-spotlight">
-                  <div className="fritz-section-label">2. BEST OF 3 GAMES</div>
-                  <div className="df-bof3-arena">
-                    <div className="df-bof3-arena__chrome" aria-hidden />
-                    <div className="df-bof3-arena__head">
-                      <span className="df-bof3-arena__pulse" aria-hidden />
-                      <span className="df-bof3-arena__tag">Live set</span>
-                      <span className="df-bof3-arena__rule">
-                        First to {winTarget} wins each game · win two for the match
-                      </span>
-                    </div>
-                  <div className="df-bof3">
-                    {games.map((game) => (
-                      <Fragment key={game.n}>
-                        <div className="df-bof3__rail">
-                          <span
-                            className={[
-                              'df-bof3__step',
-                              game.rowVariant === 'active' && 'df-bof3__step--active',
-                              game.outcome === 'won' && 'df-bof3__step--won',
-                              game.outcome === 'lost' && 'df-bof3__step--lost',
-                              game.isLocked && 'df-bof3__step--locked',
-                            ]
-                              .filter(Boolean)
-                              .join(' ')}
-                          >
-                            {game.n}
-                          </span>
-                          {game.n < 3 ? <span className="df-bof3__connector" /> : null}
-                        </div>
-                        <div
-                          className={[
-                            'fritz-selectable-row',
-                            'df-game-row',
-                            'df-game-row--bof3',
-                            'df-bof3-slot',
-                            game.rowVariant === 'muted' && 'fritz-selectable-row--muted',
-                            game.rowVariant === 'active' && 'fritz-selectable-row--active',
-                            game.rowVariant === 'done' && 'fritz-selectable-row--done',
-                            game.rowVariant === 'active' && 'df-game-row--bof3-active',
-                            game.isLocked && 'df-game-row--locked',
-                            game.outcome === 'won' ? 'df-game-row--player-won' : '',
-                            game.outcome === 'lost' ? 'df-game-row--player-lost' : '',
-                          ]
-                            .filter(Boolean)
-                            .join(' ')}
-                          data-game={game.n}
-                        >
-                          <div className="df-game-info">
-                            <h4>
-                              <span className="df-bof3-slot__game-label">Game {game.n}</span>
-                            </h4>
-                            <div
-                              className={[
-                                'df-game-status',
-                                game.rowVariant === 'active' && !game.outcome ? 'df-game-status--gold' : '',
-                                game.isLocked ? 'df-game-status--locked' : '',
-                              ]
-                                .filter(Boolean)
-                                .join(' ')}
-                            >
-                              {game.statusSub}
-                            </div>
-                          </div>
-                          {game.showPlay ? (
-                            <Button
-                              type="button"
-                              variant="tier-elite"
-                              size="sm"
-                              className="df-game-play-btn df-bof3-play-btn"
-                              disabled={startActionPending || isComplete}
-                              onClick={() => void beginRun()}
-                            >
-                              Play
-                            </Button>
-                          ) : null}
-                          {game.rowVariant === 'done' && game.scoreLine ? (
-                            <div className="df-game-done-score df-bof3-done-pill">{game.scoreLine}</div>
-                          ) : null}
-                          {game.unlockHint && game.rowVariant !== 'done' && !game.showPlay ? (
-                            <>
-                              <div className="df-game-unlock-hint df-bof3-unlock-hint">{game.unlockHint}</div>
-                              {game.isLocked ? (
-                                <div className="df-game-lock-wrap df-bof3-lock" aria-hidden>
-                                  <DfLockIcon />
-                                </div>
-                              ) : null}
-                            </>
-                          ) : null}
-                        </div>
-                      </Fragment>
-                    ))}
+                <div className="df-pvf-overview-card df-pvf-overview-card--active" role="listitem">
+                  <div className="df-pvf-overview-icon" aria-hidden>
+                    <DfPvfIconCrown color="var(--tier-elite)" />
                   </div>
+                  <div className="df-pvf-overview-body">
+                    <div className="df-pvf-overview-value">{tierLabel}</div>
+                    <div className="df-pvf-overview-key">Tier</div>
                   </div>
                 </div>
-              </div>
-
-              <div className="df-panel-footer">
-                {hubError ? (
-                  <p className="df-hub-error" role="alert">
-                    {hubError}
-                  </p>
-                ) : null}
-                <Button
-                  variant="tier-elite"
-                  size="lg"
-                  type="button"
-                  className={['df-start-match-btn', !isComplete && !startActionPending && !isStarted ? 'df-start-match-btn--ready-pulse' : '']
-                    .filter(Boolean)
-                    .join(' ')}
-                  onClick={() => void beginRun()}
-                  disabled={startActionPending || isComplete}
-                >
-                  {primaryCtaLabel}
-                  {!isComplete ? (
-                    <span className="df-start-match-chevron" aria-hidden>
-                      {' '}
-                      ›
-                    </span>
-                  ) : null}
-                </Button>
-                <div className="df-reset-countdown">
-                  <span className="df-reset-countdown__icon" aria-hidden>
+                <div className="df-pvf-overview-card" role="listitem">
+                  <div className="df-pvf-overview-icon" aria-hidden>
+                    <DfIconSwords />
+                  </div>
+                  <div className="df-pvf-overview-body">
+                    <div className="df-pvf-overview-value">{formatLabel}</div>
+                    <div className="df-pvf-overview-key">Format</div>
+                  </div>
+                </div>
+                <div className="df-pvf-overview-card" role="listitem">
+                  <div className="df-pvf-overview-icon" aria-hidden>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                       <circle cx="12" cy="12" r="9" />
                       <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                  </span>
-                  <span>
-                    Resets in {resetCountdownLabel}
-                  </span>
+                  </div>
+                  <div className="df-pvf-overview-body">
+                    <div className="df-pvf-overview-value">{resetCountdownLabel}</div>
+                    <div className="df-pvf-overview-key">Resets In</div>
+                  </div>
                 </div>
-                <Button type="button" variant="ghost" className="df-leaderboard-link" onClick={() => void openLeaderboard()}>
+              </div>
+            </div>
+
+            <div className="df-pvf-section">
+              <div className="fritz-section-label">2. BEST OF 3</div>
+              <div className="df-pvf-progress-grid" role="list" aria-label="Set progress">
+                {games.map((game) => {
+                  return (
+                    <article
+                      key={game.n}
+                      role="listitem"
+                      className={[
+                        'df-pvf-progress-card',
+                        'df-game-card',
+                        `df-game-card--${game.gameState}`,
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      <div className="df-pvf-progress-index" aria-hidden>{game.n}</div>
+                      <div className="df-pvf-progress-body">
+                        <span className="df-pvf-progress-eyebrow">{`GAME ${game.n}`}</span>
+                        <h3 className="df-pvf-progress-title">{`Game ${game.n}`}</h3>
+                        <p className="df-pvf-progress-status">{game.statusSub}</p>
+                        <p className="df-pvf-progress-hint">
+                          {game.isDone ? (game.scoreLine ?? 'Complete') : (game.unlockHint ?? `First to ${winTarget}`)}
+                        </p>
+                        <div className="df-pvf-progress-footer">
+                          <span className="df-pvf-progress-meta">
+                            {game.isLocked
+                              ? 'Locked'
+                              : game.isNotNeeded
+                                ? 'Not needed'
+                                : game.isDone
+                                  ? 'Complete'
+                                  : `First to ${winTarget}`}
+                          </span>
+                          {game.isLocked ? (
+                            <span className="df-pvf-progress-lock" aria-hidden>
+                              <DfIconLock />
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="df-pvf-section">
+              <div className="fritz-section-label">3. SET SUMMARY</div>
+              <div className="df-pvf-summary-strip">
+                <div className="df-pvf-summary-item">
+                  <div className="df-pvf-summary-icon" aria-hidden>
+                    <DfPvfIconRobotNav color="var(--tier-elite)" />
+                  </div>
+                  <div>
+                    <div className="df-pvf-summary-value">Fritz {fritzTierShort}</div>
+                    <div className="df-pvf-summary-key">Opponent</div>
+                  </div>
+                </div>
+                <div className="df-pvf-summary-divider" aria-hidden />
+                <div className="df-pvf-summary-item">
+                  <div className="df-pvf-summary-icon" aria-hidden>
+                    <DfIconDomino />
+                  </div>
+                  <div>
+                    <div className="df-pvf-summary-value">First to {winTarget}</div>
+                    <div className="df-pvf-summary-key">Scoring</div>
+                  </div>
+                </div>
+                <div className="df-pvf-summary-divider" aria-hidden />
+                <div className="df-pvf-summary-item">
+                  <div className="df-pvf-summary-icon" aria-hidden>
+                    <DfIconTrophy />
+                  </div>
+                  <div>
+                    <div className="df-pvf-summary-value">{setStatusLabel}</div>
+                    <div className="df-pvf-summary-key">Status</div>
+                  </div>
+                </div>
+                <div className="df-pvf-summary-divider" aria-hidden />
+                <div className="df-pvf-summary-item">
+                  <div className="df-pvf-summary-icon" aria-hidden>
+                    <DfIconStar />
+                  </div>
+                  <div>
+                    <div className="df-pvf-summary-value">{setStakesLabel}</div>
+                    <div className="df-pvf-summary-key">Stakes</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="df-pvf-actions">
+              {hubError ? (
+                <p className="df-hub-error" role="alert">
+                  {hubError}
+                </p>
+              ) : null}
+              <Button
+                variant="tier-elite"
+                size="lg"
+                type="button"
+                className={[
+                  'df-start-match-btn',
+                  'df-pvf-start-btn',
+                  !isComplete && !startActionPending && !isStarted ? 'df-start-match-btn--ready-pulse' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                onClick={() => void handleSetAction()}
+                disabled={startActionPending || isComplete}
+              >
+                {primaryCtaLabel}
+                {!isComplete ? <span className="df-start-match-chevron" aria-hidden> ›</span> : null}
+              </Button>
+              <div className="df-pvf-footer">
+                <Button type="button" variant="ghost" className="df-pvf-leaderboard-link" onClick={() => void openLeaderboard()}>
                   View Leaderboard →
                 </Button>
               </div>
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>

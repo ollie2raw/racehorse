@@ -1,0 +1,220 @@
+/*
+ * Racehorse image treatment tiers (presentation only).
+ * --home: medium-dark cinematic (RacehorseHomeArt.css + tokens)
+ * --mode-card: /solo light–medium, seated in card
+ * --hero: mode hero panels, light–medium
+ * No frosted panels, no hard seams. Inset shadows + veil only on compact/hero.
+ */
+
+/* ─── treatment--mode-card (/solo + learn hub mode cards) ─── */
+
+.rh-img-treatment--mode-card,
+.sp-solo-main .sp-solo-mode-card {
+  --rh-img-tune-brightness: var(--rh-img-mode-tune-brightness);
+  --rh-img-tune-contrast: var(--rh-img-mode-tune-contrast);
+  --rh-img-tune-saturate: var(--rh-img-mode-tune-saturate);
+}
+
+.rh-img-treatment--mode-card .rh-img-scrim--mode,
+.sp-solo-main .home-card-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(var(--rh-img-ink-rgb), var(--rh-img-mode-veil-alpha));
+  box-shadow:
+    inset var(--rh-img-mode-left-spread) 0 var(--rh-img-mode-left-blur) var(--rh-img-mode-left-contract)
+      rgba(var(--rh-img-ink-rgb), var(--rh-img-mode-left-alpha)),
+    inset var(--rh-img-mode-left-fade-spread) 0 88px -52px
+      rgba(var(--rh-img-ink-rgb), var(--rh-img-mode-left-fade-alpha)),
+    inset 0 var(--rh-img-mode-bottom-spread) var(--rh-img-mode-bottom-blur) var(--rh-img-mode-bottom-contract)
+      rgba(var(--rh-img-ink-rgb), var(--rh-img-mode-bottom-alpha));
+}
+
+/* ─── treatment--hero (Play vs Fritz, Daily Fritz, Ladder, Ghost setup) ─── */
+
+.rh-img-treatment--hero,
+.pvf-opponent-card,
+.df-pvf-opponent-card {
+  --rh-img-tune-brightness: var(--rh-img-hero-tune-brightness);
+  --rh-img-tune-contrast: var(--rh-img-hero-tune-contrast);
+  --rh-img-tune-saturate: 1.02;
+}
+
+.rh-img-treatment--hero .rh-img-scrim--hero,
+.pvf-card-overlay,
+.df-pvf-card-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-veil-alpha));
+  box-shadow:
+    inset var(--rh-img-hero-left-spread) 0 var(--rh-img-hero-left-blur) var(--rh-img-hero-left-contract)
+      rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-left-alpha)),
+    inset var(--rh-img-hero-left-fade-spread) 0 92px -54px
+      rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-left-fade-alpha)),
+    inset 0 var(--rh-img-hero-bottom-spread) var(--rh-img-hero-bottom-blur) var(--rh-img-hero-bottom-contract)
+      rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-bottom-alpha));
+}
+
+.df-pvf-card-overlay {
+  z-index: 1;
+}
+
+.df-pvf-opponent-card .df-pvf-card-bg-img {
+  --rh-img-tune-brightness: var(--rh-img-hero-df-tune-brightness);
+  --rh-img-tune-contrast: 1.04;
+  --rh-img-tune-saturate: 1.03;
+  --rh-img-media-opacity: 1;
+}
+
+/* ─── Overlay text readability (shadow only — no panels) ─── */
+
+.rh-overlay-text--heading,
+.home-main:not(.sp-solo-main) .home-card-content h2,
+.sp-solo-main .sp-solo-mode-card__text h2,
+.sp-solo-main .home-card-content h2,
+.learn-hub-main .sp-solo-mode-card__text h2,
+.learn-hub-main .home-card-content h2,
+.pvf-opponent-card .pvf-card-name,
+.df-pvf-opponent-card .df-pvf-card-name {
+  text-shadow: var(--rh-overlay-text-shadow-heading);
+}
+
+.rh-overlay-text--body,
+.home-main:not(.sp-solo-main) .home-card-content p,
+.sp-solo-main .sp-solo-mode-card__text p,
+.sp-solo-main .home-card-content p,
+.learn-hub-main .sp-solo-mode-card__text p,
+.learn-hub-main .home-card-content p,
+.pvf-opponent-card .pvf-card-eyebrow,
+.pvf-opponent-card .pvf-card-description,
+.df-pvf-opponent-card .df-pvf-card-eyebrow,
+.df-pvf-opponent-card .df-pvf-card-description,
+.ghost-pvf-opponent-card .pvf-card-name,
+.ghost-pvf-opponent-card .pvf-card-description {
+  text-shadow: var(--rh-overlay-text-shadow-body);
+}
+
+.rh-overlay-text--stat,
+.sp-solo-main .sp-solo-stat-label,
+.sp-solo-main .sp-solo-stat-value {
+  text-shadow: var(--rh-overlay-text-shadow-stat);
+}
+
+/* ─── Media tuning ─── */
+
+.rh-img-media,
+.pvf-card-bg-img,
+.df-pvf-card-bg-img,
+.sp-solo-mode-card__art {
+  filter: brightness(var(--rh-img-tune-brightness)) contrast(var(--rh-img-tune-contrast))
+    saturate(var(--rh-img-tune-saturate));
+}
+
+.pvf-card-bg-img,
+.df-pvf-card-bg-img {
+  opacity: var(--rh-img-media-opacity);
+}
+
+.sp-solo-main .daily-puzzle-card-container .sp-solo-mode-card__art {
+  --rh-img-tune-brightness: var(--rh-img-mode-ghost-tune-brightness);
+  --rh-img-tune-contrast: 1.06;
+  --rh-img-tune-saturate: 1.08;
+}
+
+/* ─── Default hero crop ─── */
+
+.rh-img-media--hero,
+.pvf-card-bg-img,
+.df-pvf-card-bg-img {
+  object-fit: cover;
+  object-position: 68% center;
+}
+
+/* ─── Card shell ─── */
+
+.rh-img-shell,
+.sp-solo-mode-card,
+.sp-lab-mode-card-container,
+.pvf-opponent-card,
+.df-pvf-opponent-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: var(--rh-img-radius);
+}
+
+.rh-img-shell__content,
+.pvf-card-content,
+.df-pvf-card-content,
+.sp-solo-main .home-card-content {
+  position: relative;
+  z-index: 3;
+}
+
+/* Bottom stat/badge pills */
+.rh-img-badge,
+.pvf-card-badge,
+.df-pvf-card-badge {
+  background: var(--rh-img-badge-bg);
+  border: 1px solid var(--rh-img-badge-border);
+  border-radius: var(--rh-img-badge-radius);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.pvf-card-badges,
+.df-pvf-card-badges {
+  position: relative;
+  z-index: 4;
+}
+
+/* Solo hub art slot */
+.rh-img-art-slot,
+.sp-solo-mode-card__art-slot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 38%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.rh-img-art-slot__media,
+.sp-solo-mode-card__art {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: center top;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Fullbleed editorial */
+.rh-img-text-panel,
+.df-hero-fullbleed__text-scrim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(54%, 22rem);
+  z-index: 3;
+  pointer-events: none;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.df-hero-fullbleed__overlay {
+  background: rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-veil-alpha));
+  box-shadow: inset 0 var(--rh-img-hero-bottom-spread) var(--rh-img-hero-bottom-blur)
+    var(--rh-img-hero-bottom-contract) rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-bottom-alpha));
+}

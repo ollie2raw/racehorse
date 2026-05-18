@@ -489,9 +489,6 @@ export default function DailyFritzLeaderboardScreen({
                     ) : (
                       <div className="dflb-you-empty">
                         <p>Play today&apos;s set to appear on the board.</p>
-                        <button type="button" className="dflb-your-cta" onClick={onBack}>
-                          Play Daily Fritz
-                        </button>
                       </div>
                     )}
                   </section>

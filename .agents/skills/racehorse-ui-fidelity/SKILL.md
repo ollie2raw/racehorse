@@ -27,8 +27,10 @@ The Racehorse homepage is the source of truth for platform identity:
 - modern editorial hierarchy
 - subtle geometric background linework
 - controlled glow and depth
+- matte solid surfaces with crisp borders and subtle shadows (not gradient fills)
 
 Avoid:
+- gradients across the app (they feel less premium and less aligned with Play vs Fritz—prefer matte solids, crisp borders, subtle shadows, restrained accents)
 - casino styling
 - fantasy styling
 - western/racetrack cliché styling

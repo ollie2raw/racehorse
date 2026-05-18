@@ -24,6 +24,7 @@ Racehorse should feel like:
 - dense but readable competition UI
 
 Avoid:
+- gradients across the app (use matte solid surfaces, crisp borders, subtle shadows, and restrained accent colors instead—gradients feel less premium and less aligned with Play vs Fritz)
 - flat black empty boxes
 - huge dead space
 - weak gray-only panels
@@ -123,7 +124,7 @@ Required process:
 - chunky white headings
 - pill buttons with compact uppercase labels
 - rounded 2xl cards
-- subtle background gradients
+- matte solid panel fills with crisp borders and subtle shadows
 
 ## Tests/build
 

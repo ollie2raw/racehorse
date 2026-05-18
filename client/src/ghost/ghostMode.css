@@ -815,13 +815,9 @@
   object-position: 78% 38%;
   transform: scale(1.14);
   transform-origin: 78% 38%;
-  opacity: 0.88;
-}
-
-.ghost-pvf-root .ghost-pvf-card-overlay.pvf-card-overlay {
-  background:
-    linear-gradient(to top, rgba(4, 7, 12, 0.98) 0%, rgba(4, 7, 12, 0.9) 26%, rgba(4, 7, 12, 0.35) 52%, transparent 68%),
-    linear-gradient(to right, rgba(4, 7, 12, 0.97) 0%, rgba(4, 7, 12, 0.88) 46%, rgba(4, 7, 12, 0.25) 62%, transparent 78%);
+  opacity: 0.96;
+  --rh-img-tune-brightness: 1.06;
+  --rh-img-tune-contrast: 1.03;
 }
 
 .ghost-pvf-root .ghost-pvf-opponent-card .pvf-card-header {
@@ -830,6 +826,7 @@
 
 .ghost-pvf-root .ghost-pvf-opponent-card .pvf-card-description {
   max-width: 58%;
+  margin-top: 12px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -837,8 +834,31 @@
 }
 
 .ghost-pvf-root .ghost-pvf-opponent-card .pvf-card-name {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  display: inline-block;
   font-size: clamp(32px, 4.2vw, 52px);
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
+  color: #a855e8;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+}
+
+/* Soft title matte — tight to the word only */
+.ghost-pvf-root .ghost-pvf-opponent-card .pvf-card-name::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  top: -6px;
+  right: -20px;
+  bottom: -4px;
+  left: -12px;
+  border-radius: 10px;
+  background: rgba(5, 9, 16, 0.72);
+  box-shadow:
+    -8px 0 20px 4px rgba(5, 9, 16, 0.5),
+    12px 0 20px 4px rgba(5, 9, 16, 0.5),
+    0 -6px 16px 2px rgba(5, 9, 16, 0.45);
 }
 
 /* 3. START MATCH — compact footer (no dead space above CTA) */

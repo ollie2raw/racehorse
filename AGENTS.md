@@ -17,6 +17,7 @@
 - Warm ivory/soft white typography.
 - Large bold editorial headings, compact uppercase HUD labels, and clean modern hierarchy.
 - Rounded cards with controlled glow, soft shadows, and subtle depth.
+- Matte solid surfaces—not gradients. Use crisp borders, subtle shadows, and restrained accent colors. Avoid gradients across the app; they feel less premium and less aligned with the Play vs Fritz identity.
 - Realistic ivory domino tiles with restrained shadows.
 - Mode color identities:
   - Daily Fritz / Single Player = brass/gold

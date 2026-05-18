@@ -7,11 +7,14 @@
 .df-page {
   position: relative;
   isolation: isolate;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 0;
   overflow: hidden;
+  box-sizing: border-box;
+  padding-bottom: 24px;
   color: var(--text-primary);
   font-family: var(--font-body);
 }
@@ -24,10 +27,10 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 1440px;
+  max-width: 1512px;
   margin: 0 auto;
   /* Match .pvf-layout horizontal rhythm (GlobalNav uses the same max-width) */
-  padding: 12px 36px 20px;
+  padding: 18px 36px 26px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -44,7 +47,9 @@
   position: relative;
   flex: 1 1 0;
   min-height: 0;
-  padding-top: 46px;
+  max-width: none;
+  width: 100%;
+  padding: 0 36px;
 }
 
 /* ── Daily Fritz loading (mirrors Daily Puzzle ladder preparing layout; brass accent) ── */
@@ -516,35 +521,11 @@
   z-index: 2;
   pointer-events: none;
   border-radius: var(--df-hero-inner-r);
-  /* Bottom vignette only — left text zone uses .df-hero-fullbleed__text-scrim */
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.58) 0%,
-    rgba(0, 0, 0, 0.14) 40%,
-    rgba(0, 0, 0, 0) 62%
-  );
 }
 
-/* Matte left panel — strong readability for headline/body; robot stays open on the right */
+/* Matte left panel: rh-image-surface.css (.df-hero-fullbleed__text-scrim) */
 .df-hero-fullbleed__text-scrim {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: min(54%, 22rem);
-  z-index: 3;
-  pointer-events: none;
   border-radius: var(--df-hero-inner-r) 0 0 var(--df-hero-inner-r);
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
-  background: linear-gradient(
-    90deg,
-    rgba(3, 7, 14, 0.9) 0%,
-    rgba(4, 10, 20, 0.86) 38%,
-    rgba(4, 10, 20, 0.62) 68%,
-    rgba(4, 10, 20, 0) 100%
-  );
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
 }
 
 /* Dedicated rim: empty layer so inset paint order is reliable (covers clip/filter fringe at corners). */
@@ -578,6 +559,20 @@
   text-transform: uppercase;
   color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-dim));
   margin: 0 0 8px;
+}
+
+.df-hero-kicker--ritual {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  margin-bottom: 10px;
+}
+
+.df-feature-bar--ritual {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .df-hero-title.df-title--page {
@@ -1107,19 +1102,29 @@
 
 /* Unified panel — match Play vs Fritz .pvf-control-panel (flat, high contrast) */
 .df-panel-surface {
+  --df-panel-pad-block: 16px;
+  --df-panel-pad-inline: 20px;
+  --df-panel-section-gap: 8px;
+  --df-panel-snapshot-min-h: 36px;
+  --df-panel-snapshot-pad: 6px 9px;
+  --df-panel-snapshot-icon: 26px;
+  --df-panel-snapshot-gap: 6px;
+  --df-panel-progress-row-min: 50px;
+  --df-panel-actions-gap: 6px;
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   width: 100%;
   box-sizing: border-box;
-  padding: 16px 22px 14px;
+  padding: var(--df-panel-pad-block) var(--df-panel-pad-inline) 16px;
   border-radius: var(--pvf-radius-lg);
   background: rgba(7, 9, 16, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 8px 32px rgba(0, 0, 0, 0.28);
+    0 8px 32px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(255, 255, 255, 0.02);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   overflow: hidden;
@@ -1250,13 +1255,40 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  /* Play vs Fritz control panel rhythm */
-  gap: 10px;
+  gap: var(--df-panel-section-gap);
   flex: 1 1 0;
   min-height: 0;
+  overflow: hidden;
+}
+
+/* Scrollable upper panel — snapshot + progress only */
+.df-panel-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--df-panel-section-gap);
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+/* Summary strip + CTA — always visible, never overlapped by footer */
+.df-panel-actions,
+.df-panel-footer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--df-panel-actions-gap);
+  padding-top: 2px;
+  position: relative;
+  z-index: 0;
+}
+
+.df-panel-divider.pvf-section-divider {
+  flex-shrink: 0;
+  margin: 4px 0;
 }
 
 .df-section {
@@ -1449,11 +1481,340 @@
 
 .df-section--games-spotlight {
   margin-top: 0;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+/* Progress deck — Play vs Fritz tier-card composition (1 emphasized + 2 support) */
+.df-section--progress {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.df-progress-deck {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.df-progress-deck--gold {
+  --df-progress-accent: var(--tier-elite);
+}
+
+.df-progress-deck--blue {
+  --df-progress-accent: var(--tier-standard);
+}
+
+.df-progress-deck__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  flex-shrink: 0;
+}
+
+.df-progress-deck__pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--df-progress-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--df-progress-accent) 22%, transparent);
+  flex-shrink: 0;
+}
+
+.df-progress-deck__tag {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  color: color-mix(in srgb, var(--df-progress-accent) 92%, var(--text-primary));
+  background: color-mix(in srgb, var(--df-progress-accent) 10%, rgba(0, 0, 0, 0.35));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.df-progress-deck__rule {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fritz-muted-label);
+  flex: 1 1 200px;
+  min-width: 0;
+  line-height: 1.28;
+}
+
+.df-progress-deck__grid {
+  flex: 1 1 auto;
+  min-height: clamp(156px, 24vh, 212px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.df-progress-deck__grid[data-active-slot='1'] {
+  grid-template-columns: minmax(0, 1.22fr) minmax(0, 0.89fr) minmax(0, 0.89fr);
+}
+
+.df-progress-deck__grid[data-active-slot='2'] {
+  grid-template-columns: minmax(0, 0.89fr) minmax(0, 1.22fr) minmax(0, 0.89fr);
+}
+
+.df-progress-deck__grid[data-active-slot='3'] {
+  grid-template-columns: minmax(0, 0.89fr) minmax(0, 0.89fr) minmax(0, 1.22fr);
+}
+
+.df-progress-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 132px;
+  padding: 12px 12px 11px;
+  box-sizing: border-box;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 13, 20, 0.94);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease,
+    filter 0.2s ease;
+}
+
+.df-progress-card--active {
+  min-height: 148px;
+  border: 2px solid var(--df-progress-accent);
+  background: color-mix(in srgb, var(--df-progress-accent) 7%, rgba(16, 21, 31, 0.96));
+  box-shadow:
+    inset 0 0 20px color-mix(in srgb, var(--df-progress-accent) 8%, transparent),
+    0 0 16px color-mix(in srgb, var(--df-progress-accent) 6%, transparent);
+}
+
+.df-progress-deck__grid:has(.df-progress-card--active) .df-progress-card:not(.df-progress-card--active):not(.df-progress-card--done) {
+  opacity: 0.86;
+  filter: saturate(0.78);
+}
+
+.df-progress-card--locked {
+  opacity: 0.9;
+  filter: saturate(0.76);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.df-progress-card--done.df-progress-card--won {
+  border-color: color-mix(in srgb, var(--tier-rookie) 34%, transparent);
+  background: color-mix(in srgb, var(--tier-rookie) 6%, rgba(10, 13, 20, 0.94));
+}
+
+.df-progress-card--done.df-progress-card--lost {
+  border-color: color-mix(in srgb, var(--accent-red) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-red) 5%, rgba(10, 13, 20, 0.94));
+}
+
+.df-progress-card__badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.df-progress-card__badge--active {
+  color: #1a1200;
+  background: var(--df-progress-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.df-progress-card__badge--won {
+  color: color-mix(in srgb, var(--tier-rookie) 92%, white);
+  border: 1px solid color-mix(in srgb, var(--tier-rookie) 38%, transparent);
+  background: color-mix(in srgb, var(--tier-rookie) 12%, transparent);
+}
+
+.df-progress-card__badge--lost {
+  color: color-mix(in srgb, var(--accent-red) 88%, white);
+  border: 1px solid color-mix(in srgb, var(--accent-red) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-red) 10%, transparent);
+}
+
+.df-progress-card__index {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 12, 22, 0.88);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.df-progress-card--active .df-progress-card__index {
+  border-color: var(--df-progress-accent);
+  color: color-mix(in srgb, var(--df-progress-accent) 95%, var(--text-primary));
+  background: color-mix(in srgb, var(--df-progress-accent) 14%, rgba(0, 0, 0, 0.22));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--df-progress-accent) 28%, transparent);
+}
+
+.df-progress-card--done.df-progress-card--won .df-progress-card__index {
+  border-color: color-mix(in srgb, var(--tier-rookie) 42%, transparent);
+  color: color-mix(in srgb, var(--tier-rookie) 90%, white);
+}
+
+.df-progress-card--done.df-progress-card--lost .df-progress-card__index {
+  border-color: color-mix(in srgb, var(--accent-red) 38%, transparent);
+  color: color-mix(in srgb, var(--accent-red) 82%, white);
+}
+
+.df-progress-card__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 44px;
+}
+
+.df-progress-card__eyebrow {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.df-progress-card--active .df-progress-card__eyebrow {
+  color: color-mix(in srgb, var(--df-progress-accent) 72%, var(--text-dim));
+}
+
+.df-progress-card__title {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.df-progress-card__status {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-secondary);
+}
+
+.df-progress-card--active .df-progress-card__status {
+  color: color-mix(in srgb, var(--df-progress-accent) 78%, var(--text-primary));
+}
+
+.df-progress-card__hint {
+  margin: 2px 0 0;
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+.df-progress-card__footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  min-height: 34px;
+  position: relative;
+  z-index: 1;
+}
+
+.df-progress-card__score {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.df-progress-card--won .df-progress-card__score {
+  color: color-mix(in srgb, var(--tier-rookie) 90%, white);
+}
+
+.df-progress-card--lost .df-progress-card__score {
+  color: color-mix(in srgb, var(--accent-red) 84%, white);
+}
+
+.df-progress-card__play.rh-btn {
+  flex-shrink: 0;
+  height: 34px;
+  min-height: 34px;
+  min-width: 72px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.df-progress-deck--gold .df-progress-card__play.rh-btn {
+  color: #1a1200;
+  background: var(--tier-elite);
+  border: none;
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--tier-elite) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.df-progress-deck--blue .df-progress-card__play.rh-btn {
+  color: #fff;
+  background: var(--tier-standard);
+  border: none;
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--tier-standard) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.df-progress-card__lock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .df-section--games-spotlight .fritz-section-label {
@@ -1463,67 +1824,122 @@
   border-bottom: none;
 }
 
+.df-section--overview .fritz-section-label {
+  margin-bottom: 6px;
+}
+
+/* Compact hero snapshot strip — icon + value on one row */
 .df-overview-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px 4px;
-  padding: 0 0 4px;
+  gap: var(--df-panel-snapshot-gap);
+  padding: 0;
   box-sizing: border-box;
 }
 
 .df-overview-stat {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  text-align: center;
-  gap: 4px;
+  gap: 8px;
   min-width: 0;
+  min-height: var(--df-panel-snapshot-min-h);
+  padding: var(--df-panel-snapshot-pad);
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .df-overview-stat__icon.fritz-summary-icon {
-  width: 26px;
-  height: 26px;
+  flex-shrink: 0;
+  width: var(--df-panel-snapshot-icon);
+  height: var(--df-panel-snapshot-icon);
   border-width: 1.5px;
   color: var(--tier-elite);
   border-color: var(--tier-elite);
   background: color-mix(in srgb, var(--tier-elite) 10%, transparent);
-  box-shadow: none;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tier-elite) 10%, transparent);
+}
+
+.df-overview-stat__icon.fritz-summary-icon svg {
+  width: 15px;
+  height: 15px;
+  display: block;
 }
 
 .df-overview-stat__value {
+  flex: 1 1 auto;
+  min-width: 0;
   font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
-  line-height: 1.15;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.94);
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%;
+}
+
+.df-overview-stat__main {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .df-overview-stat__key {
-  font-family: var(--font-display);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.38);
+  display: none;
 }
 
-/* Best-of-3 arena — compact; flexes inside viewport-locked panel */
+.df-progress-card {
+  overflow: visible;
+}
+
+.df-progress-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fritz-muted-label);
+  line-height: 1.25;
+}
+
+.df-progress-card__meta-left,
+.df-progress-card__meta-right {
+  white-space: nowrap;
+}
+
+.df-progress-card__meta-right {
+  color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-secondary));
+}
+
+.df-progress-card__meta-divider {
+  width: 1px;
+  height: 12px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Best-of-3 arena — compact; natural height (no flex clip) */
 .df-bof3-arena {
   position: relative;
   display: flex;
   flex-direction: column;
-  flex: 1 1 0;
-  min-height: 0;
-  padding: 8px 10px 10px;
+  flex: 0 0 auto;
+  padding: 10px;
   border-radius: var(--pvf-radius-md);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(8, 12, 24, 0.92);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .df-bof3-arena__chrome {
@@ -1537,8 +1953,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  margin-bottom: 6px;
+  gap: 6px 10px;
+  margin-bottom: 8px;
   padding-bottom: 0;
   border-bottom: none;
 }
@@ -1554,7 +1970,7 @@
 
 .df-bof3-arena__tag {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -1567,7 +1983,7 @@
 
 .df-bof3-arena__rule {
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--fritz-muted-label);
   flex: 1 1 200px;
@@ -1578,14 +1994,13 @@
 .df-bof3 {
   position: relative;
   z-index: 1;
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
   overflow: visible;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
-  grid-template-rows: repeat(3, minmax(50px, auto));
-  column-gap: 10px;
-  row-gap: 6px;
+  grid-template-rows: repeat(3, minmax(var(--df-panel-progress-row-min), auto));
+  column-gap: 8px;
+  row-gap: 8px;
   align-items: stretch;
 }
 
@@ -1601,14 +2016,14 @@
 }
 
 .df-bof3__step {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-pill);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -1658,11 +2073,12 @@
 
 /* Best-of-3 rows — same card padding + radius rhythm as .pvf-tier-card */
 .fritz-selectable-row.df-game-row.df-game-row--bof3.df-bof3-slot {
-  min-height: 50px;
+  min-height: var(--df-panel-progress-row-min);
   height: auto;
   max-height: none;
+  overflow: visible;
   gap: 10px;
-  padding: 7px 12px;
+  padding: 9px 12px;
   border-radius: var(--pvf-radius-md);
   align-items: center;
   background: rgba(10, 13, 20, 0.94);
@@ -1680,11 +2096,11 @@
 .fritz-selectable-row.df-bof3-slot.df-game-row--bof3 .df-bof3-slot__game-label {
   display: inline-flex;
   align-items: center;
-  min-height: 16px;
-  padding: 1px 6px;
+  min-height: 18px;
+  padding: 2px 7px;
   border-radius: 6px;
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1720,7 +2136,7 @@
 }
 
 .fritz-selectable-row.df-bof3-slot.df-game-row--bof3 .df-game-status {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -1735,12 +2151,12 @@
 
 .df-game-play-btn.rh-btn {
   flex-shrink: 0;
-  height: 30px;
-  min-height: 30px;
+  height: 34px;
+  min-height: 34px;
   padding: 0 14px;
   border-radius: var(--radius-pill);
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1757,11 +2173,11 @@
 }
 
 .df-bof3-play-btn.rh-btn {
-  height: 30px;
-  min-height: 30px;
+  height: 34px;
+  min-height: 34px;
   min-width: 68px;
   padding: 0 14px;
-  font-size: 11px;
+  font-size: 11.5px;
   letter-spacing: 0.08em;
   justify-content: center;
   box-shadow:
@@ -1771,9 +2187,9 @@
 
 .df-bof3-done-pill {
   margin-left: auto;
-  padding: 4px 11px;
+  padding: 5px 11px;
   border-radius: var(--radius-pill);
-  font-size: 13px;
+  font-size: 12px;
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -1789,7 +2205,7 @@
 }
 
 .df-bof3-unlock-hint {
-  padding: 4px 10px;
+  padding: 5px 10px;
   border-radius: var(--radius-pill);
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1803,7 +2219,7 @@
 .df-game-unlock-hint {
   margin-left: auto;
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--text-dim);
   text-align: right;
@@ -1822,7 +2238,7 @@
 .df-reset-countdown {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
   font-family: var(--font-body);
   font-size: 11px;
@@ -1831,38 +2247,45 @@
   color: var(--text-dim);
 }
 
+.df-support-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.df-support-row .df-leaderboard-link.rh-btn {
+  width: auto;
+  min-width: 0;
+  justify-content: flex-end;
+  padding: 0;
+}
+
 .df-reset-countdown__icon {
   display: flex;
   color: var(--text-dim);
   opacity: 0.85;
 }
 
-.df-panel-footer {
-  flex-shrink: 0;
-  margin-top: 0;
-  padding: 8px 0 0;
-  border-top: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: transparent;
-  position: relative;
-  z-index: 2;
+.df-panel-actions .df-section--summary,
+.df-panel-footer .df-section--summary {
+  margin-bottom: 0;
 }
 
-/* .pvf-start-btn uses margin-top:auto for PvF’s single-column panel; here the footer is a sibling — reset */
-.df-panel-footer .pvf-start-btn {
+.df-panel-actions .pvf-start-btn,
+.df-panel-footer .pvf-start-btn,
+.df-panel-actions .df-start-match-btn {
   margin-top: 0;
 }
 
 .df-start-match-btn.rh-btn {
   width: 100%;
-  height: 42px;
-  min-height: 42px;
-  padding: 0 20px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 18px;
   justify-content: center;
   font-family: var(--font-body);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.01em;
   text-transform: none;
@@ -1877,6 +2300,57 @@
   transition:
     transform 120ms cubic-bezier(0.2, 0, 0, 1),
     filter 120ms ease;
+}
+
+/* Run summary — Play vs Fritz horizontal strip (compact, no tall cards) */
+.df-run-summary-strip.fritz-summary-strip {
+  margin-bottom: 0;
+  border-radius: var(--fritz-summary-radius);
+}
+
+.df-run-summary-strip .fritz-summary-item {
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  padding: 8px 10px;
+}
+
+.df-run-summary-strip .fritz-summary-value {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.df-run-summary-strip .fritz-summary-key {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  margin-bottom: 0;
+}
+
+.df-run-summary-strip .fritz-summary-note {
+  font-size: 10px;
+  line-height: 1.2;
+  margin-top: 1px;
+  color: var(--fritz-muted-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.df-run-summary-strip .fritz-summary-item--accent {
+  background: color-mix(in srgb, var(--tier-elite) 8%, rgba(255, 255, 255, 0.03));
+}
+
+.df-run-summary-strip .fritz-summary-item--accent .fritz-summary-value {
+  color: color-mix(in srgb, var(--tier-elite) 90%, white);
 }
 
 .df-start-match-btn.rh-btn.df-start-match-btn--ready-pulse:not(:disabled) {
@@ -2028,14 +2502,48 @@
     max-height: min(420px, 50vh);
   }
 
-  .df-section--games-spotlight {
-    flex: 0 0 auto;
+  .df-section--games-spotlight,
+  .df-bof3-arena,
+  .df-section--progress {
+    flex: 1 1 0;
     min-height: 0;
   }
 
-  .df-bof3-arena {
-    flex: 0 0 auto;
+  .df-progress-deck__grid,
+  .df-progress-deck__grid[data-active-slot='1'],
+  .df-progress-deck__grid[data-active-slot='2'],
+  .df-progress-deck__grid[data-active-slot='3'] {
+    grid-template-columns: minmax(0, 1fr);
     min-height: 0;
+  }
+
+  .df-progress-card,
+  .df-progress-card--active {
+    min-height: 118px;
+  }
+
+  .df-overview-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .df-run-summary-strip.fritz-summary-strip {
+    flex-direction: column;
+  }
+
+  .df-run-summary-strip .fritz-summary-divider {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.08), transparent);
+  }
+
+  .df-support-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .df-support-row .df-leaderboard-link.rh-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 
@@ -2095,6 +2603,18 @@
 
   .df-hero-fullbleed__text-scrim {
     width: min(72%, 100%);
+  }
+
+  .df-overview-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .df-overview-stat {
+    min-height: 0;
+  }
+
+  .df-bof3 {
+    grid-template-rows: repeat(3, minmax(72px, auto));
   }
 }
 
@@ -2417,4 +2937,2646 @@
 
 .daily-fritz-set-overlay-hero .daily-fritz-skunk-badge {
   margin-top: 4px;
+}
+
+/* ── Daily Fritz Arena (hub identity — scoped; ladder/leaderboard unchanged) ── */
+
+.df-shell--daily-fritz {
+  --df-hero-img-pos: 48% 51%;
+  --df-event-pad-inline: 22px;
+  --df-event-pad-block: 18px;
+  --df-event-gap: 12px;
+  --df-track-section-min-h: 292px;
+  --df-progress-card-min: 184px;
+  --df-progress-card-active-min: 224px;
+  --df-progress-connector-w: 36px;
+  --df-meta-font: 11px;
+}
+
+.df-layout--arena {
+  gap: 20px;
+  padding-top: 6px;
+}
+
+.df-left-col--poster {
+  width: 38%;
+  flex: 0 0 38%;
+  gap: 0;
+}
+
+.df-hero-fullbleed--event {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* Event poster — intentional Fritz crop, no top overscan fringe */
+.df-hero-fullbleed--event .df-hero-fullbleed__img {
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--df-hero-img-pos);
+  transform: scale(1.03) translateZ(0);
+}
+
+.df-hero-fullbleed--event .df-hero-fullbleed__overlay {
+  background:
+    linear-gradient(
+      180deg,
+      #04070c 0%,
+      rgba(4, 7, 12, 0.92) 6%,
+      rgba(4, 7, 12, 0.55) 16%,
+      rgba(4, 7, 12, 0.12) 32%,
+      transparent 48%
+    ),
+    linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.62) 0%,
+      rgba(0, 0, 0, 0.18) 42%,
+      rgba(0, 0, 0, 0) 64%
+    );
+}
+
+.df-hero-fullbleed--event .df-hero-fullbleed__text-scrim {
+  width: min(58%, 24rem);
+}
+
+.df-hero-fullbleed--event .df-hero-fullbleed__copy {
+  padding: 26px 26px 0 24px;
+}
+
+.df-hero-fullbleed--event .df-hero-kicker--ritual {
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+
+.df-hero-fullbleed--event .df-hero-subtitle {
+  font-size: 16px;
+  line-height: 1.5;
+  max-width: 24rem;
+}
+
+.df-hero-fullbleed--event .df-feature-bar--ritual {
+  padding: 14px 18px 15px;
+  gap: 0;
+}
+
+.df-hero-fullbleed--event .df-feature-bar__label {
+  font-size: 12px;
+}
+
+.df-hero-fullbleed--event .df-feature-bar__desc {
+  font-size: 11px;
+}
+
+.df-hero-fullbleed--event .df-feature-bar__col {
+  padding: 0 12px;
+}
+
+.df-hero-fullbleed--event .df-feature-bar__col:first-child {
+  padding-left: 0;
+}
+
+.df-hero-fullbleed--event .df-feature-bar__col + .df-feature-bar__col {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.df-hero-event-badge {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #1a1200;
+  background: var(--tier-elite);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--tier-elite) 28%, transparent);
+}
+
+.df-arena-col {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.df-shell--daily-fritz .df-arena-col {
+  padding: var(--df-event-pad-block) var(--df-event-pad-inline) 16px;
+  gap: var(--df-event-gap);
+  border-radius: var(--pvf-radius-lg);
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 14%, rgba(255, 255, 255, 0.1));
+  background:
+    linear-gradient(
+      165deg,
+      rgba(10, 14, 24, 0.97) 0%,
+      rgba(7, 9, 16, 0.95) 55%,
+      rgba(5, 8, 15, 0.97) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 40px rgba(0, 0, 0, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--tier-elite) 8%, transparent);
+}
+
+/* Right command panel — explicit non-overlapping rows */
+.df-shell--daily-fritz .df-arena-col.df-event-command {
+  display: grid;
+  grid-template-rows: auto minmax(var(--df-track-section-min-h), 1fr) auto auto;
+  grid-template-areas:
+    'header'
+    'track'
+    'support'
+    'actions';
+  align-content: start;
+  gap: var(--df-event-gap);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.df-event-command__header {
+  grid-area: header;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+.df-event-command__track {
+  grid-area: track;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+}
+
+.df-event-command__support {
+  grid-area: support;
+  flex-shrink: 0;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.df-event-command__actions {
+  grid-area: actions;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+.df-arena-ritual {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 14px 18px;
+  border-radius: var(--pvf-radius-lg);
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 28%, rgba(255, 255, 255, 0.1));
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--tier-elite) 10%, rgba(8, 12, 22, 0.96)) 0%,
+      rgba(7, 9, 16, 0.94) 48%,
+      rgba(5, 8, 15, 0.96) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 32px rgba(0, 0, 0, 0.28);
+}
+
+.df-arena-ritual__eyebrow {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-dim));
+  margin-bottom: 4px;
+}
+
+.df-arena-ritual__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+}
+
+.df-arena-ritual__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(24px, 2.6vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--text-primary);
+}
+
+.df-arena-ritual__date {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.df-arena-ritual__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.df-arena-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.df-arena-chip svg {
+  flex-shrink: 0;
+  display: block;
+}
+
+.df-arena-chip--streak {
+  color: color-mix(in srgb, var(--tier-elite) 78%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--tier-elite) 24%, transparent);
+}
+
+.df-arena-chip--timer {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.df-arena-board {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(168px, 0.34fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.df-arena-board--track-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.df-shell--daily-fritz .df-event-command__track.df-arena-board--track-only {
+  flex: none;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
+.df-event-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 4px;
+}
+
+.df-event-panel__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  color: var(--text-primary);
+}
+
+.df-event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  min-height: 46px;
+  padding: 12px 16px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.22)),
+    rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.df-event-meta__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-primary) 72%, var(--text-secondary));
+  white-space: nowrap;
+}
+
+.df-event-meta__item svg {
+  flex-shrink: 0;
+  display: block;
+  width: 15px;
+  height: 15px;
+  opacity: 0.9;
+}
+
+.df-event-meta__item--timer {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+.df-event-meta__divider {
+  width: 1px;
+  height: 22px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 255, 255, 0.16) 20%,
+    rgba(255, 255, 255, 0.16) 80%,
+    transparent
+  );
+  flex-shrink: 0;
+}
+
+.df-event-support {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 16px 18px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(11, 15, 24, 0.84) 0%,
+      rgba(6, 9, 16, 0.88) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 4px 16px rgba(0, 0, 0, 0.16);
+}
+
+.df-event-support__zone {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.df-event-support__zone:first-child {
+  padding-left: 0;
+}
+
+.df-event-support__zone:last-child {
+  padding-right: 0;
+}
+
+.df-event-support__zone + .df-event-support__zone {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.df-event-support__label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tier-elite) 42%, var(--text-dim));
+}
+
+.df-event-support__opponent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.df-event-support__avatar {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 38%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--tier-elite) 14%, rgba(0, 0, 0, 0.4)),
+      rgba(0, 0, 0, 0.35)
+    );
+  box-shadow:
+    0 0 22px color-mix(in srgb, var(--tier-elite) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.df-event-support__avatar svg {
+  width: 30px;
+  height: 30px;
+}
+
+.df-event-support__name {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.df-event-support__tier {
+  margin: 0 0 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.df-event-support__tier-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 32%, transparent);
+  background: color-mix(in srgb, var(--tier-elite) 10%, rgba(0, 0, 0, 0.25));
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.df-event-support__copy,
+.df-event-support__leaderboard-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.df-event-support__leaderboard-line {
+  min-height: 2.7em;
+}
+
+.df-event-support__stakes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.df-event-support__stakes li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--text-primary) 78%, var(--text-secondary));
+}
+
+.df-event-support__stake-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  background: color-mix(in srgb, var(--tier-elite) 10%, rgba(0, 0, 0, 0.18));
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 22%, transparent);
+}
+
+.df-event-support__stakes li span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.df-event-support__stakes strong {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.df-event-support__stakes small {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.df-event-support__lb-link.rh-btn {
+  align-self: flex-start;
+  min-height: 0;
+  margin-top: 2px;
+  padding: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tier-elite) 86%, var(--text-primary));
+}
+
+.df-shell--daily-fritz .df-event-command__actions.df-arena-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 0;
+}
+
+.df-trust-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-dim));
+  text-align: center;
+}
+
+.df-trust-line svg {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.df-arena-node__play.rh-btn {
+  margin-top: auto;
+  width: 100%;
+  max-width: 172px;
+  align-self: center;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: #1a1200;
+  background: var(--tier-elite);
+  border: none;
+  box-shadow:
+    0 0 22px color-mix(in srgb, var(--tier-elite) 28%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.df-arena-node__card:has(.df-arena-node__play) {
+  padding-bottom: 16px;
+  gap: 10px;
+}
+
+.df-arena-track {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 20px 20px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(8, 12, 22, 0.94), rgba(5, 8, 15, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 48px rgba(0, 0, 0, 0.22);
+}
+
+.df-shell--daily-fritz .df-event-command__track .df-arena-track {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.df-arena-track__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  flex-shrink: 0;
+}
+
+.df-arena-track__pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tier-elite);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tier-elite) 22%, transparent);
+  animation: df-arena-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes df-arena-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+.df-arena-track__tag {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  color: color-mix(in srgb, var(--tier-elite) 92%, var(--text-primary));
+  background: color-mix(in srgb, var(--tier-elite) 12%, rgba(0, 0, 0, 0.35));
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 28%, rgba(255, 255, 255, 0.1));
+}
+
+.df-arena-track__rule {
+  margin: 0;
+  flex: 1 1 180px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.df-arena-track__path {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.df-arena-track__rail {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 8px;
+}
+
+.df-arena-track__rail-segment {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.df-arena-track__cards {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.df-arena-track__connector {
+  flex: 1 1 auto;
+  height: 3px;
+  min-width: 12px;
+  margin: 0 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  flex-shrink: 1;
+}
+
+.df-arena-track__connector--lit {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--tier-elite) 25%, transparent),
+    var(--tier-elite),
+    color-mix(in srgb, var(--tier-elite) 25%, transparent)
+  );
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tier-elite) 32%, transparent);
+}
+
+.df-arena-node {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 6px;
+}
+
+.df-arena-track__path:has(.df-arena-node--active) .df-arena-node--locked {
+  opacity: 0.92;
+}
+
+.df-arena-node__medallion {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 12, 22, 0.92);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+}
+
+.df-arena-node__medallion--active {
+  border-color: var(--tier-elite);
+  background: color-mix(in srgb, var(--tier-elite) 14%, rgba(0, 0, 0, 0.22));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--tier-elite) 28%, transparent);
+}
+
+.df-arena-node__medallion--active .df-arena-node__medallion-num {
+  color: color-mix(in srgb, var(--tier-elite) 95%, var(--text-primary));
+}
+
+.df-arena-node__medallion--won {
+  border-color: color-mix(in srgb, var(--tier-rookie) 42%, transparent);
+}
+
+.df-arena-node__medallion--won .df-arena-node__medallion-num {
+  color: color-mix(in srgb, var(--tier-rookie) 90%, white);
+}
+
+.df-arena-node__medallion--lost {
+  border-color: color-mix(in srgb, var(--accent-red) 38%, transparent);
+}
+
+.df-arena-node__medallion-num {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.df-arena-node__card {
+  position: relative;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: var(--df-progress-card-min);
+  height: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  box-sizing: border-box;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 13, 20, 0.96);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease,
+    filter 0.2s ease;
+}
+
+.df-arena-node--active .df-arena-node__card {
+  min-height: var(--df-progress-card-active-min);
+  border: 2px solid var(--tier-elite);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--tier-elite) 16%, transparent) 0%,
+      color-mix(in srgb, var(--tier-elite) 5%, transparent) 40%,
+      transparent 58%
+    ),
+    rgba(16, 21, 32, 0.98);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tier-elite) 20%, transparent),
+    0 0 26px color-mix(in srgb, var(--tier-elite) 18%, transparent),
+    inset 0 0 28px color-mix(in srgb, var(--tier-elite) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.df-arena-node--locked {
+  opacity: 0.96;
+  filter: saturate(0.88) brightness(0.98);
+}
+
+.df-arena-node--locked .df-arena-node__card {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(9, 12, 20, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 6px 16px rgba(0, 0, 0, 0.14);
+}
+
+.df-arena-node--locked .df-arena-node__title {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.df-arena-node--locked .df-arena-node__hint,
+.df-arena-node--locked .df-arena-node__meta {
+  color: var(--text-secondary);
+}
+
+.df-arena-node--won .df-arena-node__medallion {
+  border-color: color-mix(in srgb, var(--tier-rookie) 42%, transparent);
+}
+
+.df-arena-node--won .df-arena-node__medallion-num {
+  color: color-mix(in srgb, var(--tier-rookie) 90%, white);
+}
+
+.df-arena-node--won .df-arena-node__card {
+  border-color: color-mix(in srgb, var(--tier-rookie) 32%, transparent);
+}
+
+.df-arena-node--lost .df-arena-node__medallion {
+  border-color: color-mix(in srgb, var(--accent-red) 38%, transparent);
+}
+
+.df-arena-node--lost .df-arena-node__card {
+  border-color: color-mix(in srgb, var(--accent-red) 28%, transparent);
+}
+
+.df-arena-node__live,
+.df-arena-node__result {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.df-arena-node__live {
+  color: #1a1200;
+  background: var(--tier-elite);
+}
+
+.df-arena-node__result--won {
+  color: color-mix(in srgb, var(--tier-rookie) 92%, white);
+  border: 1px solid color-mix(in srgb, var(--tier-rookie) 38%, transparent);
+  background: color-mix(in srgb, var(--tier-rookie) 12%, transparent);
+}
+
+.df-arena-node__result--lost {
+  color: color-mix(in srgb, var(--accent-red) 88%, white);
+  border: 1px solid color-mix(in srgb, var(--accent-red) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-red) 10%, transparent);
+}
+
+.df-arena-node__lock {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin: 6px auto 0;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.58);
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.df-arena-node__eyebrow {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.df-arena-node--active .df-arena-node__eyebrow {
+  color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-dim));
+}
+
+.df-arena-node__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.12;
+  color: rgba(255, 255, 255, 0.96);
+  text-align: center;
+}
+
+.df-arena-node--active .df-arena-node__title {
+  font-size: 22px;
+}
+
+.df-arena-node__status {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.28;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.df-arena-node--active .df-arena-node__status {
+  font-size: 17px;
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.df-arena-node__hint,
+.df-arena-node__meta {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.42;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.df-arena-node__score {
+  margin: auto 0 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.df-arena-node--decider .df-arena-node__title::after {
+  content: '';
+}
+
+.df-arena-duel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 22%, rgba(255, 255, 255, 0.08));
+  background:
+    linear-gradient(180deg, rgba(12, 16, 26, 0.96), rgba(6, 9, 16, 0.94));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.df-arena-duel__avatar {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 32%, transparent);
+  background: color-mix(in srgb, var(--tier-elite) 8%, rgba(0, 0, 0, 0.35));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--tier-elite) 14%, transparent);
+}
+
+.df-arena-duel__avatar svg {
+  width: 28px;
+  height: 28px;
+}
+
+.df-arena-duel__label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.df-arena-duel__name {
+  margin: 0 0 2px;
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--text-primary);
+}
+
+.df-arena-duel__tier {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tier-elite) 82%, var(--text-primary));
+}
+
+.df-arena-duel__note,
+.df-arena-duel__state {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.df-arena-duel__state {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tier-elite) 70%, var(--text-secondary));
+}
+
+.df-arena-stakes {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 10px;
+  padding: 9px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.df-arena-stakes__item {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tier-elite) 58%, var(--text-secondary));
+  white-space: nowrap;
+}
+
+.df-arena-stakes__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.df-arena-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.df-arena-actions__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.df-arena-actions__compete {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.df-arena-actions .df-leaderboard-link.rh-btn {
+  width: auto;
+  min-height: 0;
+  padding: 4px 0;
+}
+
+.df-shell--daily-fritz .df-arena-cta.rh-btn {
+  height: 54px;
+  min-height: 54px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  border-radius: var(--pvf-radius-md);
+  background: linear-gradient(180deg, #e7b64a 0%, #d5a439 100%);
+  box-shadow:
+    0 0 48px color-mix(in srgb, var(--tier-elite) 30%, transparent),
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.df-shell--daily-fritz .df-layout {
+  gap: 22px;
+  padding-top: 8px;
+}
+
+.df-shell--daily-fritz .df-left-col--poster {
+  width: 36%;
+  flex: 0 0 36%;
+}
+
+.df-shell--daily-fritz .df-hero-fullbleed--event {
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+/* ── Daily Fritz flagship rebuild ─────────────────────────────────────────── */
+
+.df-shell--daily-fritz {
+  padding-top: 0;
+}
+
+.df-layout--flagship {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(340px, 0.88fr) minmax(0, 1.12fr);
+  gap: 22px;
+  align-items: stretch;
+}
+
+.df-fritz-poster,
+.df-fritz-command {
+  min-height: 0;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 12, 22, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+.df-fritz-poster {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.df-fritz-poster__art-wrap {
+  position: relative;
+  min-height: 0;
+}
+
+.df-fritz-poster__art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 44% 52%;
+  transform: scale(1.02);
+}
+
+.df-fritz-poster__veil {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 14, 0.56);
+}
+
+.df-fritz-poster__copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 20rem;
+  padding: 28px 28px 22px;
+}
+
+.df-fritz-poster__eyebrow {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tier-elite) 80%, var(--text-primary));
+}
+
+.df-fritz-poster__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(52px, 5.2vw, 70px);
+  font-weight: 900;
+  line-height: 0.94;
+  letter-spacing: -0.045em;
+  color: var(--text-primary);
+}
+
+.df-fritz-poster__lede,
+.df-fritz-poster__body {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.45;
+  color: rgba(248, 244, 236, 0.95);
+}
+
+.df-fritz-poster__body {
+  color: var(--text-secondary);
+}
+
+.df-fritz-poster__ritual-rail {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 16px 20px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 10, 18, 0.92);
+}
+
+.df-fritz-poster__ritual-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 12px;
+}
+
+.df-fritz-poster__ritual-item:first-child {
+  padding-left: 0;
+}
+
+.df-fritz-poster__ritual-item + .df-fritz-poster__ritual-item {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.df-fritz-poster__ritual-icon {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 30%, transparent);
+  background: color-mix(in srgb, var(--tier-elite) 10%, rgba(7, 10, 18, 0.94));
+}
+
+.df-fritz-poster__ritual-label {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tier-elite) 58%, var(--text-dim));
+}
+
+.df-fritz-poster__ritual-value {
+  display: block;
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.df-fritz-command {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 14px;
+  padding: 22px 22px 18px;
+  min-width: 0;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--tier-elite) 16%, rgba(255, 255, 255, 0.1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 44px rgba(0, 0, 0, 0.34),
+    0 0 0 1px color-mix(in srgb, var(--tier-elite) 8%, transparent);
+}
+
+.df-fritz-command__header {
+  display: grid;
+  gap: 12px;
+}
+
+.df-fritz-command__section-label,
+.df-fritz-stage__section-label,
+.df-fritz-summary__section-label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.df-fritz-command__title {
+  margin: 0;
+  font-size: clamp(34px, 3.5vw, 44px);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+  color: var(--text-primary);
+}
+
+.df-fritz-command__subtitle {
+  margin: 6px 0 0;
+  max-width: 34rem;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.df-fritz-command__meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.df-fritz-command__meta-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-primary) 74%, var(--text-secondary));
+}
+
+.df-fritz-command__meta-item svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.df-fritz-command__meta-item--timer {
+  color: color-mix(in srgb, var(--tier-elite) 84%, var(--text-primary));
+}
+
+.df-fritz-command__stage {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px 16px 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(9, 13, 21, 0.98);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.df-fritz-stage__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.df-fritz-stage__rule {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.df-fritz-stage__path {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) 24px minmax(0, 0.96fr) 24px minmax(0, 0.96fr);
+  align-items: stretch;
+  gap: 0;
+}
+
+.df-fritz-stage__connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.df-fritz-stage__connector-line {
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.df-fritz-stage__connector-line.is-lit {
+  background: color-mix(in srgb, var(--tier-elite) 78%, rgba(255, 255, 255, 0.18));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tier-elite) 18%, transparent);
+}
+
+.df-fritz-stage__connector-node {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--tier-elite) 70%, transparent);
+  background: rgba(8, 12, 22, 0.96);
+}
+
+.df-fritz-stage-card {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 16px 14px 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(9, 13, 21, 0.96);
+  text-align: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.df-fritz-stage-card--hero {
+  justify-content: center;
+  min-height: 252px;
+  padding: 20px 18px 18px;
+  border: 2px solid color-mix(in srgb, var(--tier-elite) 68%, transparent);
+  background: rgba(14, 19, 29, 0.99);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 0 1px color-mix(in srgb, var(--tier-elite) 16%, transparent),
+    0 0 18px color-mix(in srgb, var(--tier-elite) 10%, transparent),
+    0 18px 32px rgba(0, 0, 0, 0.22);
+}
+
+.df-fritz-stage-card--locked,
+.df-fritz-stage-card--idle {
+  min-height: 220px;
+  justify-content: center;
+  background: rgba(10, 14, 22, 0.97);
+}
+
+.df-fritz-stage-card--won {
+  border-color: color-mix(in srgb, var(--tier-rookie) 30%, transparent);
+}
+
+.df-fritz-stage-card--lost {
+  border-color: color-mix(in srgb, var(--accent-red) 26%, transparent);
+}
+
+.df-fritz-stage-card__eyebrow {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.df-fritz-stage-card__crest {
+  width: 76px;
+  height: 76px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.df-fritz-stage-card__crest--active {
+  width: 88px;
+  height: 88px;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--tier-elite) 78%, transparent);
+  color: color-mix(in srgb, var(--tier-elite) 94%, var(--text-primary));
+  background: color-mix(in srgb, var(--tier-elite) 12%, rgba(255, 255, 255, 0.02));
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--tier-elite) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.df-fritz-stage-card__crest--locked {
+  width: 68px;
+  height: 68px;
+}
+
+.df-fritz-stage-card__title {
+  margin: 0;
+  font-size: 23px;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.df-fritz-stage-card--hero .df-fritz-stage-card__title {
+  font-size: 27px;
+}
+
+.df-fritz-stage-card__state {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--text-primary) 84%, var(--text-secondary));
+}
+
+.df-fritz-stage-card--hero .df-fritz-stage-card__state {
+  font-size: 16px;
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.df-fritz-stage-card__detail,
+.df-fritz-stage-card__rule {
+  margin: 0;
+  max-width: 16rem;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.df-fritz-stage-card__rule {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-primary) 62%, var(--text-dim));
+}
+
+.df-fritz-stage-card__result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.df-fritz-stage-card__result--won {
+  color: color-mix(in srgb, var(--tier-rookie) 92%, white);
+  border: 1px solid color-mix(in srgb, var(--tier-rookie) 30%, transparent);
+  background: color-mix(in srgb, var(--tier-rookie) 10%, rgba(0, 0, 0, 0.16));
+}
+
+.df-fritz-stage-card__result--lost {
+  color: color-mix(in srgb, var(--accent-red) 88%, white);
+  border: 1px solid color-mix(in srgb, var(--accent-red) 28%, transparent);
+  background: color-mix(in srgb, var(--accent-red) 10%, rgba(0, 0, 0, 0.16));
+}
+
+.df-fritz-stage-card__play.rh-btn {
+  margin-top: 10px;
+  min-width: 172px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #1a1200;
+  background: #d7a741;
+  border: none;
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.df-fritz-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.df-fritz-summary__strip {
+  display: flex;
+  align-items: stretch;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.df-fritz-summary__item {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.df-fritz-summary__divider {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.df-fritz-summary__icon {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 18%, transparent);
+  background: rgba(255, 255, 255, 0.03);
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.df-fritz-summary__value {
+  display: block;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.df-fritz-summary__key {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.df-fritz-command__cta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.df-fritz-command__cta-button.rh-btn {
+  height: 54px;
+  min-height: 54px;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: #d7a741;
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.df-fritz-command__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.df-fritz-command__leaderboard-link.rh-btn {
+  min-height: 0;
+  padding: 2px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.df-fritz-command__trust {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text-secondary) 86%, var(--text-dim));
+  text-align: right;
+}
+
+.df-fritz-command__trust svg {
+  flex-shrink: 0;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .df-arena-track__pulse {
+    animation: none;
+  }
+}
+
+@media (max-width: 1280px) {
+  .df-shell {
+    padding: 14px 28px 22px;
+  }
+
+  .df-shell--daily-fritz {
+    padding-top: 0;
+  }
+
+  .df-layout--flagship {
+    grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr);
+    gap: 18px;
+  }
+
+  .df-fritz-poster__title {
+    font-size: clamp(48px, 5vw, 64px);
+  }
+
+  .df-fritz-command {
+    padding: 20px 18px 18px;
+    gap: 14px;
+  }
+
+  .df-fritz-command__meta {
+    gap: 8px;
+  }
+
+  .df-fritz-command__meta-item {
+    min-height: 46px;
+    padding: 0 12px;
+    font-size: 10px;
+  }
+
+  .df-fritz-stage__path {
+    grid-template-columns: minmax(0, 1.02fr) 18px minmax(0, 0.94fr) 18px minmax(0, 0.94fr);
+  }
+
+  .df-fritz-stage-card--hero {
+    min-height: 232px;
+  }
+
+  .df-fritz-stage-card--locked,
+  .df-fritz-stage-card--idle {
+    min-height: 206px;
+  }
+
+  .df-fritz-command__cta-button.rh-btn {
+    height: 54px;
+    min-height: 54px;
+    font-size: 18px;
+  }
+
+  .df-shell--daily-fritz {
+    --df-event-pad-inline: 18px;
+    --df-event-pad-block: 14px;
+    --df-event-gap: 10px;
+    --df-track-section-min-h: 260px;
+    --df-progress-card-min: 156px;
+    --df-progress-card-active-min: 188px;
+    --df-progress-connector-w: 28px;
+    --df-hero-img-pos: 54% 52%;
+  }
+
+  .df-layout--arena {
+    gap: 16px;
+  }
+
+  .df-arena-node__card {
+    padding: 15px 13px 14px;
+  }
+
+  .df-arena-node--active .df-arena-node__title {
+    font-size: 20px;
+  }
+
+  .df-event-panel__title {
+    font-size: clamp(26px, 2.6vw, 32px);
+  }
+
+  .df-event-support {
+    padding: 14px 14px;
+  }
+
+  .df-shell--daily-fritz .df-arena-cta.rh-btn {
+    height: 50px;
+    min-height: 50px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .df-layout--flagship {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .df-fritz-poster {
+    min-height: 360px;
+  }
+
+  .df-fritz-poster__art {
+    object-position: center 52%;
+  }
+
+  .df-fritz-command__meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .df-fritz-stage__path {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .df-fritz-stage__connector {
+    min-height: 16px;
+    flex-direction: row;
+  }
+
+  .df-fritz-stage__connector-line {
+    height: 2px;
+  }
+
+  .df-fritz-stage-card--hero,
+  .df-fritz-stage-card--locked,
+  .df-fritz-stage-card--idle {
+    min-height: auto;
+  }
+
+  .df-fritz-summary__strip {
+    flex-direction: column;
+  }
+
+  .df-fritz-summary__divider {
+    width: auto;
+    height: 1px;
+  }
+
+  .df-fritz-command__footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .df-fritz-command__trust {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .df-event-support {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .df-event-support__zone + .df-event-support__zone {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    padding-top: 12px;
+  }
+
+  .df-layout--arena {
+    flex-direction: column;
+  }
+
+  .df-left-col--poster,
+  .df-shell--daily-fritz .df-left-col--poster {
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .df-hero-fullbleed--event,
+  .df-shell--daily-fritz .df-hero-fullbleed--event {
+    min-height: min(300px, 36vh);
+    max-height: 380px;
+  }
+
+  .df-arena-board--track-only {
+    grid-template-columns: 1fr;
+  }
+
+  .df-arena-track__path {
+    gap: 8px;
+  }
+
+  .df-arena-track__rail {
+    display: none;
+  }
+
+  .df-arena-track__cards {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .df-arena-node {
+    width: 100%;
+    padding: 0;
+  }
+
+  .df-arena-node__card {
+    min-height: 108px;
+  }
+
+  .df-arena-actions__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .df-arena-actions .df-leaderboard-link.rh-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 720px) {
+  .df-arena-ritual {
+    padding: 12px 14px;
+  }
+
+  .df-arena-ritual__chips {
+    width: 100%;
+  }
+
+  .df-arena-stakes {
+    border-radius: var(--pvf-radius-md);
+  }
+}
+
+/* ── Daily Fritz PVF-aligned landing layout (live render path) ───────────── */
+
+.df-shell--daily-fritz .df-layout.df-pvf-layout {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 28px 0 24px;
+  gap: 32px;
+  align-items: stretch;
+  box-sizing: border-box;
+}
+
+.df-pvf-layout {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.1fr);
+  gap: 32px;
+  align-items: stretch;
+}
+
+.df-pvf-left-col {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  align-items: flex-start;
+}
+
+.df-pvf-back-btn {
+  align-self: flex-start;
+  margin-bottom: 24px;
+}
+
+.df-pvf-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 32px;
+  padding-right: 10px;
+}
+
+.df-pvf-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--tier-elite);
+  margin-bottom: 4px;
+}
+
+.df-pvf-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--tier-elite);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.df-pvf-title {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 52px;
+  line-height: 0.96;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+  text-shadow: 0 0 48px rgba(160, 200, 255, 0.13), 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.df-pvf-subtitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.42;
+  color: var(--text-secondary);
+}
+
+.df-pvf-opponent-card {
+  position: relative;
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(9, 13, 21, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 40px rgba(0, 0, 0, 0.3);
+}
+
+.df-pvf-card-bg-img {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 40px);
+  object-position: 50% 48%;
+  z-index: 0;
+}
+
+/* Scrim + media tuning: rh-image-surface.css */
+
+.df-pvf-card-content {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 24px;
+}
+
+.df-pvf-card-header {
+  max-width: 18rem;
+  padding: 4px 2px 6px;
+}
+
+.df-pvf-card-eyebrow {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--fritz-muted-label);
+  margin-bottom: 8px;
+}
+
+.df-pvf-card-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--tier-elite);
+  text-shadow: var(--rh-overlay-text-shadow-heading);
+}
+
+.df-pvf-card-description {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: var(--rh-overlay-text-shadow-body);
+}
+
+.df-pvf-card-badges {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.df-pvf-card-badge {
+  min-width: 0;
+  padding: 10px 10px 11px;
+}
+
+.df-pvf-card-badge-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.df-pvf-card-badge-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tier-elite);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.df-pvf-card-badge-desc {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.df-pvf-control-panel {
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 32px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 12, 22, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 40px rgba(0, 0, 0, 0.3);
+}
+
+.df-pvf-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.df-pvf-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.df-pvf-overview-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.df-pvf-overview-card--active {
+  border: 2px solid var(--tier-elite);
+  background: color-mix(in srgb, var(--tier-elite) 7%, rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--tier-elite) 7%, transparent);
+}
+
+.df-pvf-overview-icon {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--tier-elite) 44%, transparent);
+  background: color-mix(in srgb, var(--tier-elite) 8%, transparent);
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.df-pvf-overview-body {
+  min-width: 0;
+}
+
+.df-pvf-overview-value {
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.df-pvf-overview-key {
+  margin-top: 2px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.df-pvf-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.df-pvf-progress-card {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  gap: 10px;
+  padding: 14px 13px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.df-game-card--active {
+  border: 2px solid var(--tier-elite);
+  background: color-mix(in srgb, var(--tier-elite) 7%, rgba(255, 255, 255, 0.03));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tier-elite) 18%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--tier-elite) 7%, transparent);
+}
+
+.df-game-card--locked {
+  opacity: 0.88;
+}
+
+.df-game-card--won {
+  border-color: color-mix(in srgb, #4fa878 58%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(79, 168, 120, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.df-game-card--lost {
+  border-color: color-mix(in srgb, #b55f66 58%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(181, 95, 102, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.df-game-card--not-needed {
+  opacity: 0.9;
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.df-pvf-progress-index {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.df-game-card--active .df-pvf-progress-index {
+  border-color: var(--tier-elite);
+  color: color-mix(in srgb, var(--tier-elite) 92%, var(--text-primary));
+}
+
+.df-game-card--won .df-pvf-progress-index {
+  border-color: rgba(79, 168, 120, 0.72);
+  color: #8fd3af;
+}
+
+.df-game-card--lost .df-pvf-progress-index {
+  border-color: rgba(181, 95, 102, 0.72);
+  color: #d69aa0;
+}
+
+.df-game-card--not-needed .df-pvf-progress-index,
+.df-game-card--locked .df-pvf-progress-index {
+  border-color: rgba(148, 163, 184, 0.22);
+  color: rgba(226, 232, 240, 0.62);
+}
+
+.df-pvf-progress-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.df-pvf-progress-eyebrow {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.df-pvf-progress-title {
+  margin: 5px 0 4px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.df-pvf-progress-status {
+  margin: 0 0 6px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.df-game-card--active .df-pvf-progress-status {
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.df-game-card--won .df-pvf-progress-status {
+  color: #dff4e8;
+}
+
+.df-game-card--lost .df-pvf-progress-status {
+  color: #f4dadd;
+}
+
+.df-game-card--not-needed .df-pvf-progress-status,
+.df-game-card--locked .df-pvf-progress-status {
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.df-pvf-progress-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.df-pvf-progress-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.df-pvf-progress-meta {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-primary) 70%, var(--text-dim));
+}
+
+.df-game-card--active .df-pvf-progress-meta {
+  color: color-mix(in srgb, var(--tier-elite) 72%, var(--text-primary));
+}
+
+.df-game-card--won .df-pvf-progress-meta {
+  color: #84c9a4;
+}
+
+.df-game-card--lost .df-pvf-progress-meta {
+  color: #ce878d;
+}
+
+.df-game-card--not-needed .df-pvf-progress-meta {
+  color: rgba(203, 213, 225, 0.74);
+}
+
+.df-pvf-progress-lock {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.df-game-card--locked .df-pvf-progress-lock {
+  color: rgba(203, 213, 225, 0.72);
+}
+
+.df-pvf-summary-strip {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--fritz-summary-radius);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.df-pvf-summary-item {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+}
+
+.df-pvf-summary-divider {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.df-pvf-summary-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tier-elite) 18%, transparent);
+  background: rgba(255, 255, 255, 0.03);
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.df-pvf-summary-value {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.df-pvf-summary-key {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.df-pvf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.df-pvf-start-btn.rh-btn {
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  border-radius: var(--pvf-radius-sm);
+  color: #1a1200;
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: var(--tier-elite);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.df-pvf-footer {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-top: 0;
+}
+
+.df-pvf-footer .df-pvf-leaderboard-link.rh-btn {
+  width: auto;
+  height: auto;
+  min-height: 0;
+  align-self: center;
+  justify-content: center;
+  padding: 4px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+  transition: color 120ms ease, opacity 120ms ease;
+}
+
+.df-pvf-footer .df-pvf-leaderboard-link.rh-btn:hover {
+  color: var(--tier-elite);
+  background: transparent;
+  transform: none;
+  opacity: 1;
+}
+
+.df-pvf-footer .df-pvf-leaderboard-link.rh-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--tier-elite) 55%, transparent);
+  outline-offset: 3px;
+}
+
+.df-pvf-trust-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text-secondary) 86%, var(--text-dim));
+  text-align: right;
+}
+
+@media (max-width: 1280px) {
+  .df-pvf-layout {
+    grid-template-columns: minmax(300px, 0.84fr) minmax(0, 1.06fr);
+    gap: 18px;
+  }
+
+  .df-pvf-overview-grid,
+  .df-pvf-progress-grid {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .df-pvf-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .df-pvf-opponent-card {
+    min-height: 400px;
+  }
+
+  .df-pvf-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .df-pvf-progress-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .df-pvf-summary-strip {
+    flex-direction: column;
+  }
+
+  .df-pvf-summary-divider {
+    width: auto;
+    height: 1px;
+  }
+
+  .df-pvf-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .df-pvf-trust-line {
+    text-align: left;
+  }
+}
+
+@media (max-width: 720px) {
+  .df-pvf-title {
+    font-size: 40px;
+  }
+
+  .df-pvf-subtitle {
+    font-size: 16px;
+  }
+
+  .df-pvf-card-badges {
+    grid-template-columns: 1fr;
+  }
+
+  .df-shell--daily-fritz {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .df-shell--daily-fritz .df-layout.df-pvf-layout {
+    padding-top: 24px;
+    padding-bottom: 20px;
+    gap: 24px;
+  }
+
+  .df-pvf-control-panel {
+    padding: 20px 20px 18px;
+  }
 }

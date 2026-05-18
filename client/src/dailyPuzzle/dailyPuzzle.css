@@ -2128,6 +2128,134 @@
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
+  padding-bottom: 24px;
+}
+
+/* Daily Ladder — PVF layout (blue sibling of Daily Fritz; reuses .df-pvf-* from dailyFritz.css) */
+
+.dpl-ladder-hub .df-pvf-label {
+  color: color-mix(in srgb, var(--tier-standard) 58%, var(--text-dim));
+}
+
+.dpl-ladder-hub .df-pvf-label::before {
+  background: var(--tier-standard);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--tier-standard) 50%, transparent);
+}
+
+.dpl-ladder-hub .df-pvf-card-name {
+  color: var(--tier-standard);
+  text-shadow: var(--rh-overlay-text-shadow-heading);
+}
+
+.dpl-ladder-hub .df-pvf-card-badge-title {
+  color: var(--tier-standard);
+}
+
+.dpl-ladder-hub .df-pvf-card-bg-img.dpl-ladder-hero-img {
+  object-position: 48% 52%;
+}
+
+.dpl-ladder-hub .dpl-ladder-badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tier-standard);
+}
+
+.dpl-ladder-hub .df-pvf-overview-icon {
+  border: 2px solid color-mix(in srgb, var(--tier-standard) 44%, transparent);
+  background: color-mix(in srgb, var(--tier-standard) 8%, transparent);
+  color: color-mix(in srgb, var(--tier-standard) 88%, var(--text-primary));
+}
+
+.dpl-ladder-hub .df-pvf-summary-icon {
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 18%, transparent);
+  color: color-mix(in srgb, var(--tier-standard) 88%, var(--text-primary));
+}
+
+.dpl-ladder-hub .df-pvf-overview-card--active {
+  border-color: color-mix(in srgb, var(--tier-standard) 48%, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, var(--tier-standard) 6%, rgba(255, 255, 255, 0.03));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tier-standard) 14%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.dpl-ladder-hub .df-game-card--active {
+  border: 2px solid var(--tier-standard);
+  background: color-mix(in srgb, var(--tier-standard) 7%, rgba(255, 255, 255, 0.03));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tier-standard) 18%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--tier-standard) 7%, transparent);
+}
+
+.dpl-ladder-hub .df-game-card--active .df-pvf-progress-index {
+  border-color: var(--tier-standard);
+  color: color-mix(in srgb, var(--tier-standard) 92%, var(--text-primary));
+}
+
+.dpl-ladder-hub .df-game-card--active .df-pvf-progress-meta,
+.dpl-ladder-hub .df-game-card--active .df-pvf-progress-status {
+  color: color-mix(in srgb, var(--tier-standard) 88%, var(--text-primary));
+}
+
+.dpl-ladder-hub .dpl-puzzle-card--done {
+  border-color: color-mix(in srgb, var(--tier-standard) 40%, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, var(--tier-standard) 5%, rgba(255, 255, 255, 0.03));
+}
+
+.dpl-ladder-hub .dpl-puzzle-card--done .df-pvf-progress-index {
+  border-color: color-mix(in srgb, var(--tier-standard) 55%, transparent);
+  color: color-mix(in srgb, var(--tier-standard) 85%, white);
+}
+
+.dpl-ladder-hub .dpl-puzzle-card--done .df-pvf-progress-status {
+  color: color-mix(in srgb, var(--tier-standard) 72%, var(--text-secondary));
+}
+
+.dpl-ladder-hub .dpl-puzzle-card--idle {
+  opacity: 0.9;
+}
+
+.dpl-ladder-hub .dpl-pvf-start-btn.rh-btn {
+  width: 100%;
+  background: var(--tier-standard);
+  color: var(--text-on-elite);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.dpl-ladder-hub .df-pvf-footer .df-pvf-leaderboard-link.rh-btn {
+  color: color-mix(in srgb, var(--tier-elite) 88%, var(--text-primary));
+}
+
+.dpl-ladder-hub .df-pvf-footer .df-pvf-leaderboard-link.rh-btn:hover {
+  color: var(--tier-elite);
+}
+
+.dpl-ladder-hub .df-pvf-footer .df-pvf-leaderboard-link.rh-btn:focus-visible {
+  outline-color: color-mix(in srgb, var(--tier-elite) 55%, transparent);
+}
+
+.dpl-ladder-footer {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.dpl-ladder-trust-line {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--fritz-muted-label);
+  text-align: center;
+}
+
+.dpl-ladder-hub .df-pvf-actions .dpl-ladder-practice {
+  margin-top: 0;
+  width: 100%;
 }
 
 .dpl-ladder-df-hero-img.df-hero-fullbleed__img {
@@ -2148,17 +2276,19 @@
 
 .dpl-ladder-overview-stats.df-overview-stats {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 2px 0 6px;
+  padding: 0;
+  gap: var(--df-panel-snapshot-gap, 6px);
 }
 
 .dpl-ladder-df-page .df-overview-stat__icon.fritz-summary-icon.dpl-ladder-df-overview-icon {
   color: var(--tier-standard);
   border-color: var(--tier-standard);
   background: color-mix(in srgb, var(--tier-standard) 10%, transparent);
-  box-shadow: 0 0 20px color-mix(in srgb, var(--tier-standard) 28%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tier-standard) 12%, transparent);
 }
 
-.dpl-ladder-df-page .df-bof3-arena__pulse {
+.dpl-ladder-df-page .df-bof3-arena__pulse,
+.dpl-ladder-df-page .df-progress-deck--blue .df-progress-deck__pulse {
   background: var(--tier-standard);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--tier-standard) 22%, transparent);
 }
@@ -2185,22 +2315,21 @@
 }
 
 .dpl-ladder-df-page .df-section.dpl-ladder-df-run-section {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .dpl-ladder-df-page .df-section.dpl-ladder-df-run-section .df-bof3-arena {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   padding: 0;
   border: none;
   background: transparent;
   box-shadow: none;
+  overflow: visible;
 }
 
 .dpl-ladder-df-page .df-bof3-arena__head {
@@ -2219,16 +2348,14 @@
 .dpl-ladder-run-track {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  flex: 1 1 0;
-  min-height: 0;
+  gap: 6px;
+  flex: 0 0 auto;
   padding: 0 0 2px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .dpl-ladder-run-step {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
 }
@@ -2238,14 +2365,16 @@
   grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  flex: 1 1 0;
-  min-height: 48px;
-  padding: 10px 10px 10px 8px;
+  flex: 0 0 auto;
+  min-height: var(--df-panel-progress-row-min, 52px);
+  padding: 9px 12px;
   box-sizing: border-box;
   border-radius: var(--pvf-radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 13, 20, 0.94);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
   transition:
     border-color 0.2s ease,
     background 0.2s ease,
@@ -2263,17 +2392,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  align-self: stretch;
 }
 
 .dpl-ladder-run-badge {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   border: 2px solid var(--border-light);
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
@@ -2328,7 +2458,7 @@
 
 .dpl-ladder-run-status {
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1.12;
   color: var(--text-secondary);
@@ -2342,7 +2472,7 @@
 .dpl-ladder-run-meta {
   margin: 0;
   font-size: 11px;
-  line-height: 1.22;
+  line-height: 1.2;
   color: var(--fritz-muted-label);
 }
 
@@ -2362,7 +2492,7 @@
 
 .dpl-ladder-run-pts {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.05em;
   padding: 4px 10px;
@@ -2382,7 +2512,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-dim);
   text-align: right;
@@ -2401,19 +2531,15 @@
 
 .dpl-ladder-start-btn.pvf-start-btn {
   width: 100%;
-  height: 48px;
-  min-height: 48px;
-  padding: 0 24px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 20px;
   font-family: var(--font-body);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.01em;
   border-radius: var(--pvf-radius-sm);
-  background: linear-gradient(
-    180deg,
-    var(--tier-standard) 0%,
-    color-mix(in srgb, var(--tier-standard) 80%, var(--bg-obsidian)) 100%
-  );
+  background: var(--tier-standard);
   color: var(--text-on-elite);
   box-shadow:
     0 0 32px color-mix(in srgb, var(--tier-standard) 18%, transparent),
@@ -2441,6 +2567,31 @@
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.dpl-ladder-df-page .df-run-summary-strip .fritz-summary-item--accent {
+  background: color-mix(in srgb, var(--tier-standard) 8%, rgba(255, 255, 255, 0.03));
+}
+
+.dpl-ladder-df-page .df-run-summary-strip .fritz-summary-item--accent .fritz-summary-value {
+  color: color-mix(in srgb, var(--tier-standard) 92%, white);
+}
+
+.dpl-ladder-df-page .df-panel-actions .dpl-ladder-practice {
+  margin-top: 0;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.dpl-ladder-support-row {
+  align-items: center;
+}
+
+.dpl-ladder-support-copy {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--fritz-muted-label);
 }
 
 .dpl-ladder-practice-label {
@@ -2481,17 +2632,17 @@
 }
 
 @media (max-width: 1100px) {
-  .dpl-ladder-hub.df-page .df-layout {
+  .dpl-ladder-hub.df-page .df-pvf-layout {
     flex-direction: column;
     overflow-y: auto;
   }
 
-  .dpl-ladder-hub.df-page .df-left-col {
+  .dpl-ladder-hub.df-page .df-pvf-left-col {
     width: 100%;
     flex: 0 0 auto;
   }
 
-  .dpl-ladder-hub.df-page .df-hero-fullbleed {
+  .dpl-ladder-hub.df-page .df-pvf-opponent-card {
     min-height: min(320px, 42vh);
     max-height: 440px;
   }

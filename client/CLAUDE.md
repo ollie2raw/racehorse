@@ -71,7 +71,7 @@ The Racehorse color system is dark, atmospheric, and restrained:
 
 Accent colors come from the tier system only. Blue for gameplay/interaction, Gold for prestige/achievement, Purple for elite/premium, Green for streaks/success.
 
-**Never use random gradients, bright saturated fills, or pure white sections.**
+**Avoid gradients across the app.** Use matte solid surfaces, crisp borders, subtle shadows, and restrained accent colors—not `linear-gradient` / `radial-gradient` fills on panels, cards, buttons, or page backgrounds. Gradients make the product feel less premium and less aligned with the Play vs Fritz identity. Also avoid bright saturated fills and pure white sections.
 
 ### 4. The Glass Surface Pattern
 

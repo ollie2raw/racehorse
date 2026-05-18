@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import { Board, DominoTile, GlobalNav, RotateOverlay } from '../components';
+import { Button } from '../components/primitives';
 import {
   applyPlayMove,
   getLegalMoves,
@@ -29,6 +30,7 @@ import dailyLadderHeroImg from '../assets/dailyPuzzle/donedoneLADDER.png';
 import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
 import { getDailyPuzzleDisplayTitle, getDailyPuzzleStepPresentation } from './presentation';
 import '../dailyFritz/dailyFritz.css';
+import './dailyPuzzle.css';
 
 interface DailyPuzzleLadderScreenProps {
   user: User | null;
@@ -51,7 +53,6 @@ function formatDateLabel(dateText: string): string {
   const parsed = new Date(`${dateText}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return dateText;
   return parsed.toLocaleDateString(undefined, {
-    weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric',
@@ -80,27 +81,58 @@ const LadderIconLeaderboard = () => (
   </svg>
 );
 
-const DplDfIconCrown = ({ color = 'var(--tier-standard)' }: { color?: string }) => (
-  <svg width={20} height={20} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+const DplIconCalendar = () => (
+  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <rect x="4" y="5" width="16" height="16" rx="2" />
+    <path d="M8 3v4M16 3v4M4 11h16" strokeLinecap="round" />
+  </svg>
+);
+
+const DplIconFlame = ({ color = 'var(--tier-standard)' }: { color?: string }) => (
+  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
     <path
-      d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
+      d="M12 22c4-2.5 6-6 6-10 0-3-1.5-5-3-6.5C13 4.5 12 2 12 2s-1 2.5-3 3.5C7.5 7 6 9 6 12c0 4 2 7.5 6 10z"
+      stroke={color}
+      strokeWidth="1.6"
       fill={color}
+      fillOpacity="0.2"
     />
   </svg>
 );
 
-const DplLockIcon = () => (
-  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden style={{ display: 'block', flexShrink: 0 }}>
-    <path
-      d="M7 11V8a5 5 0 0 1 10 0v3"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    />
-    <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
-    <circle cx="12" cy="16" r="1.2" fill="currentColor" />
+const DplIconLock = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" strokeLinecap="round" />
   </svg>
 );
+
+const DplIconTrophy = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <path d="M8 21h8M12 17v4M8 4h8v4a4 4 0 0 1-8 0V4z" strokeLinejoin="round" />
+    <path d="M16 6h2a2 2 0 0 1 0 4h-2M8 6H6a2 2 0 0 0 0 4h2" strokeLinecap="round" />
+  </svg>
+);
+
+const DplIconLayers = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <path d="M12 2l8 4.5v7L12 18l-8-4.5v-7L12 2z" />
+    <path d="M12 11l8-4.5M12 11v7M12 11L4 6.5" />
+  </svg>
+);
+
+type LadderPuzzleCardState = 'active' | 'locked' | 'done' | 'idle';
+
+function getLadderPuzzleCardState(row: {
+  slotResult?: { awardedPoints: number } | null;
+  isLocked: boolean;
+  isAvailable: boolean;
+}): LadderPuzzleCardState {
+  if (row.slotResult) return 'done';
+  if (row.isLocked) return 'locked';
+  if (row.isAvailable) return 'active';
+  return 'idle';
+}
 
 function toCuratedPuzzle(slot: DailyPuzzleSlot): CuratedDailyPuzzle | null {
   if (!slot.startingBoard || !slot.startingHand) return null;
@@ -484,6 +516,10 @@ export default function DailyPuzzleLadderScreen({
       };
     });
   }, [attempt?.status, completedSlots, nextSlotIndex, today.slots]);
+  const ladderTotalPoints = useMemo(
+    () => today.slots.reduce((sum, slot) => sum + (slot.slotMaxPoints ?? 0), 0),
+    [today.slots],
+  );
 
   if (leaderboardOpen) {
     return (
@@ -561,16 +597,24 @@ export default function DailyPuzzleLadderScreen({
   if (!runtimeState || !activeSlot) {
     const showNav = Boolean(onNavigate && onOpenAuth);
     const isLadderComplete = attempt?.status === 'completed';
-    const primaryLabel = isLadderComplete
-      ? 'Practice mode'
+    const ladderStateLabel = isLadderComplete
+      ? 'Completed'
       : attempt
-        ? `Resume puzzle ${attempt.currentSlotIndex}`
-        : 'Start daily ladder';
+        ? `Live · Puzzle ${attempt.currentSlotIndex}`
+        : 'Ready to start';
+    const primaryLabel = isLadderComplete
+      ? 'Practice Mode'
+      : attempt
+        ? 'Resume Daily Ladder'
+        : 'Start Daily Ladder';
+    const trustLine = isLadderComplete
+      ? 'Practice any puzzle after your scored run.'
+      : 'Leaderboard updates after a scored run.';
 
     return (
       <>
         <div
-          className="df-page dpl-ladder-df-page dpl-ladder-hub"
+          className="df-page dpl-ladder-hub"
           style={{ '--pvf-dynamic-color': 'var(--tier-standard)' } as React.CSSProperties}
         >
           <div className="home-bg" aria-hidden="true">
@@ -595,236 +639,286 @@ export default function DailyPuzzleLadderScreen({
           ) : null}
 
           <div className="df-shell df-shell--daily-fritz">
-            <button type="button" className="df-back-btn df-back--ghost df-back--floating rh-back-button" onClick={onBack}>
-              <span aria-hidden>←</span> Back to home
-            </button>
+            <div className="df-layout df-pvf-layout">
+              <div className="df-pvf-left-col">
+                <button type="button" className="df-back-btn df-pvf-back-btn rh-back-button" onClick={onBack}>
+                  <span aria-hidden>←</span> Back to home
+                </button>
 
-            <div className="df-layout">
-              <div className="df-left-col">
-                <div className="df-hero-fullbleed">
-                  <div className="df-hero-fullbleed__copy">
-                    <div className="df-hero-kicker">• DAILY PUZZLE</div>
-                    <h1 className="df-title df-title--page df-hero-title">Daily Ladder</h1>
-                    <p className="df-hero-subtitle">
-                      Three curated boards in a fixed sequence.
-                      <br />
-                      One scored run posts to the global ladder — practice stays open after you lock it in.
-                    </p>
-                  </div>
+                <div className="df-pvf-header">
+                  <div className="df-pvf-label">DAILY PUZZLE</div>
+                  <h1 className="df-pvf-title">Daily Ladder</h1>
+                  <p className="df-pvf-subtitle">
+                    Three curated boards in a fixed sequence.
+                    <br />
+                    One scored run posts to the global ladder — practice stays open after you lock it in.
+                  </p>
+                </div>
+
+                <article className="df-pvf-opponent-card" aria-label="Daily Ladder overview">
                   <img
                     src={dailyLadderHeroImg}
-                    className="df-hero-fullbleed__img dpl-ladder-df-hero-img"
-                    alt=""
+                    className="df-pvf-card-bg-img dpl-ladder-hero-img"
+                    alt="Daily Ladder puzzle boards"
                     decoding="async"
                     loading="eager"
                   />
-                  <div className="df-hero-fullbleed__overlay" aria-hidden />
-                  <div className="df-hero-fullbleed__rim" aria-hidden />
-                  <div className="df-feature-bar" aria-label="Daily ladder features">
-                    <div className="df-feature-bar__col">
-                      <span className="df-feature-bar__icon" style={{ color: 'var(--tier-standard)' }} aria-hidden>
-                        <LadderIconSameBoard />
-                      </span>
-                      <div className="df-feature-bar__text">
-                        <span className="df-feature-bar__label">Same boards</span>
-                        <span className="df-feature-bar__desc">One daily deal for everyone.</span>
-                      </div>
-                    </div>
-                    <div className="df-feature-bar__col">
-                      <span className="df-feature-bar__icon" style={{ color: 'var(--tier-standard)' }} aria-hidden>
-                        <LadderIconOrdered />
-                      </span>
-                      <div className="df-feature-bar__text">
-                        <span className="df-feature-bar__label">Sequenced run</span>
-                        <span className="df-feature-bar__desc">Solve in order — no skipping slots.</span>
-                      </div>
-                    </div>
-                    <div className="df-feature-bar__col">
-                      <span className="df-feature-bar__icon" style={{ color: 'var(--tier-standard)' }} aria-hidden>
-                        <LadderIconLeaderboard />
-                      </span>
-                      <div className="df-feature-bar__text">
-                        <span className="df-feature-bar__label">Live ladder</span>
-                        <span className="df-feature-bar__desc">Points lock on a single scored attempt.</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  <div className="df-pvf-card-overlay" aria-hidden />
 
-                <div className="df-streak-card">
-                  <div className="df-streak-card__block df-streak-card__block--current">
-                    <span className="df-streak-card__crown" aria-hidden>
-                      <DplDfIconCrown />
-                    </span>
-                    <div className="df-streak-card__meta">
-                      <span className="df-streak-card__key">Your streak</span>
-                      <span className="df-streak-card__value">{streakDisplay} Days</span>
+                  <div className="df-pvf-card-content">
+                    <div className="df-pvf-card-header">
+                      <div className="df-pvf-card-eyebrow">TODAY&apos;S LADDER</div>
+                      <h2 className="df-pvf-card-name">Daily Ladder</h2>
+                    </div>
+
+                    <div className="df-pvf-card-badges">
+                      <div className="df-pvf-card-badge">
+                        <div className="df-pvf-card-badge-header">
+                          <span className="dpl-ladder-badge-icon" aria-hidden>
+                            <LadderIconSameBoard />
+                          </span>
+                          <span className="df-pvf-card-badge-title">Same boards</span>
+                        </div>
+                        <div className="df-pvf-card-badge-desc">One daily deal for everyone.</div>
+                      </div>
+
+                      <div className="df-pvf-card-badge">
+                        <div className="df-pvf-card-badge-header">
+                          <span className="dpl-ladder-badge-icon" aria-hidden>
+                            <LadderIconOrdered />
+                          </span>
+                          <span className="df-pvf-card-badge-title">Sequenced run</span>
+                        </div>
+                        <div className="df-pvf-card-badge-desc">Solve in order — no skipping slots.</div>
+                      </div>
+
+                      <div className="df-pvf-card-badge">
+                        <div className="df-pvf-card-badge-header">
+                          <span className="dpl-ladder-badge-icon" aria-hidden>
+                            <LadderIconLeaderboard />
+                          </span>
+                          <span className="df-pvf-card-badge-title">Live ladder</span>
+                        </div>
+                        <div className="df-pvf-card-badge-desc">Points lock on a single scored attempt.</div>
+                      </div>
                     </div>
                   </div>
-                  <div className="df-streak-card__block df-streak-card__block--best">
-                    <span className="df-streak-card__key">Scored total</span>
-                    <span className="df-streak-card__value">{attempt?.totalScore ?? 0}</span>
-                  </div>
-                  <div className="df-streak-card__block df-streak-card__block--copy">
-                    <p className="df-streak-card__gold-lead">Climb with the field.</p>
-                    <p className="df-streak-card__gold-line">One scored run locks ladder points.</p>
-                    <p className="df-streak-card__gold-line">Practice stays open after you post.</p>
-                  </div>
-                </div>
+                </article>
               </div>
 
-              <div className="df-control-panel">
-                <div className="df-panel-surface">
-                  <div className="df-panel-body">
-                    <div className="df-section df-section--overview">
-                      <div className="fritz-section-label">1. TODAY&apos;S SNAPSHOT</div>
-                      <div className="df-overview-stats dpl-ladder-overview-stats">
-                        <div className="df-overview-stat">
-                          <div className="df-overview-stat__icon fritz-summary-icon fritz-summary-icon--tile dpl-ladder-df-overview-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                              <rect x="3" y="4" width="18" height="18" rx="2" />
-                              <line x1="16" y1="2" x2="16" y2="6" />
-                              <line x1="8" y1="2" x2="8" y2="6" />
-                              <line x1="3" y1="10" x2="21" y2="10" />
-                            </svg>
-                          </div>
-                          <div className="df-overview-stat__value">{formatDateLabel(today.runDate)}</div>
-                          <div className="df-overview-stat__key">Date</div>
-                        </div>
-                        <div className="df-overview-stat">
-                          <div className="df-overview-stat__icon fritz-summary-icon fritz-summary-icon--tile dpl-ladder-df-overview-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                              <path
-                                d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
-                                fill="currentColor"
-                              />
-                            </svg>
-                          </div>
-                          <div className="df-overview-stat__value">{attempt?.totalScore ?? 0}</div>
-                          <div className="df-overview-stat__key">Ladder pts</div>
-                        </div>
-                        <div className="df-overview-stat">
-                          <div className="df-overview-stat__icon fritz-summary-icon fritz-summary-icon--tile dpl-ladder-df-overview-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-                              <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.5 3.5 6.5 1 1.5 2 3 2 5a7 7 0 1 1-14 0c0-3 2.5-5 2.5-5s0 1 1 2.5z" />
-                            </svg>
-                          </div>
-                          <div className="df-overview-stat__value">{streakDisplay} days</div>
-                          <div className="df-overview-stat__key">Streak</div>
-                        </div>
+              <section className="df-pvf-control-panel" aria-label="Daily Ladder">
+                <div className="df-pvf-section">
+                  <div className="fritz-section-label">1. TODAY&apos;S LADDER</div>
+                  <div className="df-pvf-overview-grid" role="list" aria-label="Ladder details">
+                    <div className="df-pvf-overview-card" role="listitem">
+                      <div className="df-pvf-overview-icon" aria-hidden>
+                        <DplIconCalendar />
+                      </div>
+                      <div className="df-pvf-overview-body">
+                        <div className="df-pvf-overview-value">{formatDateLabel(today.runDate)}</div>
+                        <div className="df-pvf-overview-key">Date</div>
                       </div>
                     </div>
-
-                    <div className="df-section df-section--games-spotlight dpl-ladder-df-run-section">
-                      <div className="fritz-section-label">2. THE RUN</div>
-                      <div className="df-bof3-arena">
-                        <div className="df-bof3-arena__chrome" aria-hidden />
-                        <div className="df-bof3-arena__head">
-                          <span className="df-bof3-arena__pulse" aria-hidden />
-                          <span className="df-bof3-arena__tag">Live ladder</span>
-                          <span className="df-bof3-arena__rule">
-                            Three stops in order. One scored run locks points — then practice any slot.
-                          </span>
-                        </div>
-                        <div className="dpl-ladder-run-track">
-                          {ladderSlotRows.map((row) => {
-                            const slot = row.slot;
-                            if (!slot) return null;
-                            const stepClass = [
-                              'dpl-ladder-run-step',
-                              row.rowVariant === 'active' && !row.slotResult && 'dpl-ladder-run-step--active',
-                              row.slotResult?.solved && 'dpl-ladder-run-step--done',
-                              row.slotResult && !row.slotResult.solved && 'dpl-ladder-run-step--failed',
-                              row.isLocked && 'dpl-ladder-run-step--locked',
-                            ]
-                              .filter(Boolean)
-                              .join(' ');
-                            return (
-                              <div key={slot.id} className={stepClass}>
-                                <div className="dpl-ladder-run-platform">
-                                  <div className="dpl-ladder-run-rail">
-                                    <span className="dpl-ladder-run-badge">{row.slotIndex}</span>
-                                  </div>
-                                  <div className="dpl-ladder-run-main">
-                                    <p className="dpl-ladder-run-eyebrow">Stop {row.slotIndex}</p>
-                                    <p className="dpl-ladder-run-status">{row.statusSub}</p>
-                                    <p className="dpl-ladder-run-meta">
-                                      <strong>{row.step.title}</strong>
-                                      <span>{` · ${row.step.subtitle} · ${slot.slotMaxPoints} pts max`}</span>
-                                    </p>
-                                  </div>
-                                  <div className="dpl-ladder-run-aside">
-                                    {row.rowVariant === 'done' && row.slotResult ? (
-                                      <span className="dpl-ladder-run-pts">{row.slotResult.awardedPoints} pts</span>
-                                    ) : null}
-                                    {row.isLocked && row.unlockHint ? (
-                                      <div className="dpl-ladder-run-lock">
-                                        <span>{row.unlockHint}</span>
-                                        <DplLockIcon />
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                    <div className="df-pvf-overview-card df-pvf-overview-card--active" role="listitem">
+                      <div className="df-pvf-overview-icon" aria-hidden>
+                        <LadderIconLeaderboard />
+                      </div>
+                      <div className="df-pvf-overview-body">
+                        <div className="df-pvf-overview-value">{attempt?.totalScore ?? 0}</div>
+                        <div className="df-pvf-overview-key">Ladder pts</div>
+                      </div>
+                    </div>
+                    <div className="df-pvf-overview-card" role="listitem">
+                      <div className="df-pvf-overview-icon" aria-hidden>
+                        <DplIconFlame />
+                      </div>
+                      <div className="df-pvf-overview-body">
+                        <div className="df-pvf-overview-value">{streakDisplay} days</div>
+                        <div className="df-pvf-overview-key">Streak</div>
+                      </div>
+                    </div>
+                    <div className="df-pvf-overview-card" role="listitem">
+                      <div className="df-pvf-overview-icon" aria-hidden>
+                        <DplIconLayers />
+                      </div>
+                      <div className="df-pvf-overview-body">
+                        <div className="df-pvf-overview-value">{ladderTotalPoints} pts</div>
+                        <div className="df-pvf-overview-key">Available</div>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="df-panel-footer">
-                    {hubError ? <p className="dpl-ladder-hub-error">{hubError}</p> : null}
+                <div className="df-pvf-section">
+                  <div className="fritz-section-label">2. LADDER PROGRESS</div>
+                  <div className="df-pvf-progress-grid" role="list" aria-label="Ladder progress">
+                    {ladderSlotRows.map((row) => {
+                      const cardState = getLadderPuzzleCardState(row);
+                      const cardClass =
+                        cardState === 'done'
+                          ? 'dpl-puzzle-card--done'
+                          : cardState === 'idle'
+                            ? 'dpl-puzzle-card--idle'
+                            : `df-game-card--${cardState}`;
+                      const hintLine = row.slotResult
+                        ? `${row.slotResult.awardedPoints} pts awarded`
+                        : row.unlockHint ??
+                          (row.slot?.slotMaxPoints != null ? `Up to ${row.slot.slotMaxPoints} pts` : null);
 
-                    {isLadderComplete ? (
-                      <button type="button" className="pvf-start-btn dpl-ladder-start-btn" onClick={() => handleStartPractice(1)}>
-                        <span>{primaryLabel}</span>
-                        <span className="pvf-start-arrow" aria-hidden>
+                      return (
+                        <article
+                          key={row.slotIndex}
+                          role="listitem"
+                          className={['df-pvf-progress-card', 'df-game-card', cardClass].filter(Boolean).join(' ')}
+                        >
+                          <div className="df-pvf-progress-index" aria-hidden>
+                            {row.slotIndex}
+                          </div>
+                          <div className="df-pvf-progress-body">
+                            <span className="df-pvf-progress-eyebrow">{row.step.subtitle}</span>
+                            <h3 className="df-pvf-progress-title">{row.step.title}</h3>
+                            <p className="df-pvf-progress-status">{row.statusSub}</p>
+                            {hintLine ? <p className="df-pvf-progress-hint">{hintLine}</p> : null}
+                            <div className="df-pvf-progress-footer">
+                              <span className="df-pvf-progress-meta">
+                                {cardState === 'locked'
+                                  ? 'Locked'
+                                  : cardState === 'done'
+                                    ? 'Completed'
+                                    : cardState === 'active'
+                                      ? 'Available now'
+                                      : 'Up next'}
+                              </span>
+                              {cardState === 'locked' ? (
+                                <span className="df-pvf-progress-lock" aria-hidden>
+                                  <DplIconLock />
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="df-pvf-section">
+                  <div className="fritz-section-label">3. RUN SUMMARY</div>
+                  <div className="df-pvf-summary-strip" aria-label="Run summary">
+                    <div className="df-pvf-summary-item">
+                      <div className="df-pvf-summary-icon" aria-hidden>
+                        <DplIconLayers />
+                      </div>
+                      <div>
+                        <div className="df-pvf-summary-value">Daily Ladder</div>
+                        <div className="df-pvf-summary-key">Mode</div>
+                      </div>
+                    </div>
+                    <div className="df-pvf-summary-divider" aria-hidden />
+                    <div className="df-pvf-summary-item">
+                      <div className="df-pvf-summary-icon" aria-hidden>
+                        <DplIconTrophy />
+                      </div>
+                      <div>
+                        <div className="df-pvf-summary-value">{ladderStateLabel}</div>
+                        <div className="df-pvf-summary-key">State</div>
+                      </div>
+                    </div>
+                    <div className="df-pvf-summary-divider" aria-hidden />
+                    <div className="df-pvf-summary-item">
+                      <div className="df-pvf-summary-icon" aria-hidden>
+                        <LadderIconLeaderboard />
+                      </div>
+                      <div>
+                        <div className="df-pvf-summary-value">{ladderTotalPoints} pts</div>
+                        <div className="df-pvf-summary-key">Available</div>
+                      </div>
+                    </div>
+                    <div className="df-pvf-summary-divider" aria-hidden />
+                    <div className="df-pvf-summary-item">
+                      <div className="df-pvf-summary-icon" aria-hidden>
+                        <DplIconFlame color="var(--tier-standard)" />
+                      </div>
+                      <div>
+                        <div className="df-pvf-summary-value">
+                          {isLadderComplete ? 'Practice unlocked' : 'One scored attempt'}
+                        </div>
+                        <div className="df-pvf-summary-key">Run</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="df-pvf-actions">
+                  {hubError ? (
+                    <p className="df-hub-error dpl-ladder-hub-error" role="alert">
+                      {hubError}
+                    </p>
+                  ) : null}
+                  {isLadderComplete ? (
+                    <Button
+                      variant="tier-standard"
+                      size="lg"
+                      type="button"
+                      className="df-start-match-btn df-pvf-start-btn dpl-pvf-start-btn"
+                      onClick={() => handleStartPractice(1)}
+                    >
+                      {primaryLabel}
+                      <span className="df-start-match-chevron" aria-hidden>
+                        {' '}
+                        ›
+                      </span>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="tier-standard"
+                      size="lg"
+                      type="button"
+                      className="df-start-match-btn df-pvf-start-btn dpl-pvf-start-btn"
+                      disabled={startPending}
+                      onClick={() => {
+                        void handleStartScored();
+                      }}
+                    >
+                      {primaryLabel}
+                      {!startPending ? (
+                        <span className="df-start-match-chevron" aria-hidden>
+                          {' '}
                           ›
                         </span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="pvf-start-btn dpl-ladder-start-btn"
-                        disabled={startPending}
-                        onClick={() => {
-                          void handleStartScored();
-                        }}
-                      >
-                        <span>{primaryLabel}</span>
-                        {!startPending ? (
-                          <span className="pvf-start-arrow" aria-hidden>
-                            ›
-                          </span>
-                        ) : null}
-                      </button>
-                    )}
-
-                    <button type="button" className="rh-btn df-leaderboard-link" onClick={() => setLeaderboardOpen(true)}>
-                      View leaderboard →
-                    </button>
-
-                    {isLadderComplete ? (
-                      <div className="dpl-ladder-practice">
-                        <span className="dpl-ladder-practice-label">Jump to practice</span>
-                        <div className="dpl-ladder-practice-row">
-                          {([1, 2, 3] as const).map((slotIdx) => (
-                            <button
-                              key={`practice-${slotIdx}`}
-                              type="button"
-                              className="dpl-ladder-practice-chip"
-                              onClick={() => handleStartPractice(slotIdx)}
-                            >
-                              P{slotIdx}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
+                      ) : null}
+                    </Button>
+                  )}
+                  <div className="df-pvf-footer dpl-ladder-footer">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="df-pvf-leaderboard-link"
+                      onClick={() => setLeaderboardOpen(true)}
+                    >
+                      View Leaderboard →
+                    </Button>
+                    <p className="dpl-ladder-trust-line">{trustLine}</p>
                   </div>
+                  {isLadderComplete ? (
+                    <div className="dpl-ladder-practice">
+                      <span className="dpl-ladder-practice-label">Jump to practice</span>
+                      <div className="dpl-ladder-practice-row">
+                        {([1, 2, 3] as const).map((slotIdx) => (
+                          <button
+                            key={`practice-${slotIdx}`}
+                            type="button"
+                            className="dpl-ladder-practice-chip"
+                            onClick={() => handleStartPractice(slotIdx)}
+                          >
+                            P{slotIdx}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </div>

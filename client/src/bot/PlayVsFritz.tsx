@@ -160,7 +160,7 @@ export default function PlayVsFritz({
   const dynamicColor = TIER_COLORS[difficulty];
 
   return (
-    <div className={`pvf-root tier-${difficulty}`} style={{ "--pvf-dynamic-color": dynamicColor } as React.CSSProperties}>
+    <div className={`pvf-root pvf-root--setup tier-${difficulty}`} style={{ "--pvf-dynamic-color": dynamicColor } as React.CSSProperties}>
       <div className="home-bg" aria-hidden="true">
         <div className="home-bg__halo" />
         <div className="home-bg__domino home-bg__domino--tl" />

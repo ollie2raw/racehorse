@@ -61,4 +61,58 @@
   /* ── Typography ──────────────────────────────────── */
   --font-display: 'Barlow Condensed', sans-serif;
   --font-body:    'Outfit', sans-serif;
+
+  /* ── Image-backed surfaces (hero / mode cards) ─── */
+  --rh-img-ink-rgb: 4, 7, 12;
+  --rh-img-radius: 20px;
+  --rh-img-shell-pad: 24px;
+  --rh-img-media-opacity: 1;
+
+  /* treatment--home: medium-dark cinematic */
+  --rh-img-home-art-fritz-opacity: 0.8;
+  --rh-img-home-art-puzzle-opacity: 0.82;
+  --rh-img-home-art-fritz-brightness: 1.04;
+  --rh-img-home-art-puzzle-brightness: 1.02;
+
+  /* treatment--mode-card: /solo light–medium (seated, not raw) */
+  --rh-img-mode-veil-alpha: 0.12;
+  --rh-img-mode-left-spread: 64px;
+  --rh-img-mode-left-blur: 76px;
+  --rh-img-mode-left-contract: -42px;
+  --rh-img-mode-left-alpha: 0.24;
+  --rh-img-mode-left-fade-spread: 112px;
+  --rh-img-mode-left-fade-alpha: 0.1;
+  --rh-img-mode-bottom-spread: -32px;
+  --rh-img-mode-bottom-blur: 48px;
+  --rh-img-mode-bottom-contract: -30px;
+  --rh-img-mode-bottom-alpha: 0.16;
+  --rh-img-mode-tune-brightness: 0.98;
+  --rh-img-mode-tune-contrast: 1.04;
+  --rh-img-mode-tune-saturate: 1.02;
+  --rh-img-mode-ghost-tune-brightness: 1.32;
+
+  /* treatment--hero: light–medium */
+  --rh-img-hero-veil-alpha: 0.09;
+  --rh-img-hero-left-spread: 70px;
+  --rh-img-hero-left-blur: 74px;
+  --rh-img-hero-left-contract: -40px;
+  --rh-img-hero-left-alpha: 0.26;
+  --rh-img-hero-left-fade-spread: 120px;
+  --rh-img-hero-left-fade-alpha: 0.11;
+  --rh-img-hero-bottom-spread: -34px;
+  --rh-img-hero-bottom-blur: 52px;
+  --rh-img-hero-bottom-contract: -30px;
+  --rh-img-hero-bottom-alpha: 0.17;
+  --rh-img-hero-tune-brightness: 1.05;
+  --rh-img-hero-tune-contrast: 1.03;
+  --rh-img-hero-df-tune-brightness: 1.08;
+  /* Overlay text on artwork — tight separation + soft depth */
+  --rh-overlay-text-shadow-body: 0 1px 1px rgba(0, 0, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.28);
+  --rh-overlay-text-shadow-heading: 0 1px 2px rgba(0, 0, 0, 0.48), 0 2px 14px rgba(0, 0, 0, 0.3);
+  --rh-overlay-text-shadow-stat: 0 1px 1px rgba(0, 0, 0, 0.4), 0 1px 7px rgba(0, 0, 0, 0.22);
+  --rh-img-text-shadow: var(--rh-overlay-text-shadow-body);
+  --rh-img-text-shadow-strong: var(--rh-overlay-text-shadow-heading);
+  --rh-img-badge-bg: rgba(7, 10, 18, 0.72);
+  --rh-img-badge-border: rgba(255, 255, 255, 0.08);
+  --rh-img-badge-radius: 12px;
 }

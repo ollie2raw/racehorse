@@ -13,6 +13,7 @@ import './styles/match-hud-polish.css';
 import './styles/match-board-architecture.css';
 import './match/gameLayoutLayers.css';
 import './styles/racehorse-background.css';
+import './styles/rh-image-surface.css';
 
 {installGlobalErrorHandlers();}
 

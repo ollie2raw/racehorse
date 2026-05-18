@@ -133,6 +133,79 @@
   contain: paint;
 }
 
+/* ─── /solo hub only: two-layer editorial zone (not Learn, not Home) ─── */
+
+.home-main.sp-solo-main:not(.learn-hub-main) .home-card-scrim {
+  background: transparent;
+  box-shadow: inset 0 -30px 44px -34px rgba(4, 7, 12, 0.14);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .home-card-content > div {
+  position: relative;
+  z-index: 3;
+}
+
+/* Local image dim under editorial column (no inner copy panel) */
+.home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-mode-card__art-slot::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 52%;
+  background: rgba(4, 7, 12, 0.24);
+  box-shadow: 44px 0 72px -12px rgba(4, 7, 12, 0.34);
+}
+
+/* /solo text — wide atmospheric shadow only (no tight letter outline) */
+.home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-mode-card__text h2 {
+  text-shadow: 0 3px 24px rgba(0, 0, 0, 0.68), 0 8px 36px rgba(0, 0, 0, 0.48);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-mode-card__text p,
+.home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-stat-label,
+.home-main.sp-solo-main:not(.learn-hub-main) .sp-solo-stat-value {
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.62), 0 6px 28px rgba(0, 0, 0, 0.4);
+}
+
+/* Play vs Fritz — strongest protection (hand/body behind stats) */
+.home-main.sp-solo-main:not(.learn-hub-main) .daily-fritz-card-container .sp-solo-mode-card__art-slot::after {
+  width: 58%;
+  background: rgba(4, 7, 12, 0.32);
+  box-shadow: 52px 0 80px -10px rgba(4, 7, 12, 0.4);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .daily-fritz-card-container .sp-solo-mode-card__text h2 {
+  text-shadow: 0 3px 26px rgba(0, 0, 0, 0.72), 0 10px 40px rgba(0, 0, 0, 0.52);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .daily-fritz-card-container .sp-solo-mode-card__art {
+  object-position: 72% top;
+  transform: scale(1.14) translate(8%, 3%);
+}
+
+/* Ghost Mode — medium dim; tame bloom, keep subject vivid */
+.home-main.sp-solo-main:not(.learn-hub-main) .daily-puzzle-card-container .sp-solo-mode-card__art-slot::after {
+  width: 52%;
+  background: rgba(4, 7, 12, 0.23);
+  box-shadow: 48px 0 76px -14px rgba(4, 7, 12, 0.32);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .daily-puzzle-card-container .sp-solo-mode-card__art {
+  filter: brightness(1.44) contrast(1.08) saturate(1.18);
+  object-position: center top;
+  transform: scale(1.28) translate(6%, 2%);
+}
+
+/* The Lab — light touch */
+.home-main.sp-solo-main:not(.learn-hub-main) .sp-lab-mode-card-container .sp-solo-mode-card__art-slot::after {
+  width: 50%;
+  background: rgba(4, 7, 12, 0.19);
+  box-shadow: 40px 0 68px -16px rgba(4, 7, 12, 0.28);
+}
+
 @media (max-width: 1100px) {
   .sp-solo-main .grid.grid-cols-3 {
     grid-template-columns: 1fr;

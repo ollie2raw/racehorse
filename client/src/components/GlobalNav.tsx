@@ -232,7 +232,7 @@ export function GlobalNav({
         <div className="flex items-center min-w-[280px] justify-end">
           {/* Rating */}
           <div className="flex items-center gap-3 px-5 py-2.5">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="#F2C35E" xmlns="http://www.w3.org/2000/svg">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill={activeColor ?? '#F2C35E'} xmlns="http://www.w3.org/2000/svg">
               <path d="M12 3.7L14.4 8.6L19.8 9.4L15.9 13.2L16.8 18.6L12 16.1L7.2 18.6L8.1 13.2L4.2 9.4L9.6 8.6L12 3.7Z" />
             </svg>
             <div className="leading-tight">

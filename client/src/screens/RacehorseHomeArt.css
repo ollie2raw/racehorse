@@ -171,56 +171,57 @@
 
 .home-card-art--fritz {
   background-image: url("../assets/home/daily-fritz-art.webp");
-  opacity: 0.68;
-  filter: brightness(0.88) contrast(0.94) saturate(0.90);
+  opacity: var(--rh-img-home-art-fritz-opacity);
+  filter: brightness(var(--rh-img-home-art-fritz-brightness)) contrast(1.02) saturate(1.02);
   background-position: 78% center;
   mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0,0,0,0.02) 18%,
-    rgba(0,0,0,0.18) 30%,
-    rgba(0,0,0,0.58) 46%,
-    rgba(0,0,0,0.90) 62%,
+    rgba(0,0,0,0.02) 20%,
+    rgba(0,0,0,0.12) 34%,
+    rgba(0,0,0,0.42) 50%,
+    rgba(0,0,0,0.72) 66%,
     black 100%
   );
   -webkit-mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0,0,0,0.02) 18%,
-    rgba(0,0,0,0.18) 30%,
-    rgba(0,0,0,0.58) 46%,
-    rgba(0,0,0,0.90) 62%,
+    rgba(0,0,0,0.02) 20%,
+    rgba(0,0,0,0.12) 34%,
+    rgba(0,0,0,0.42) 50%,
+    rgba(0,0,0,0.72) 66%,
     black 100%
   );
 }
 
 .home-card-art--puzzle {
   background-image: url("../assets/home/daily-puzzle-art.webp");
-  opacity: 0.76;
-  filter: brightness(0.96) contrast(0.95) saturate(0.94);
+  opacity: var(--rh-img-home-art-puzzle-opacity);
+  filter: brightness(var(--rh-img-home-art-puzzle-brightness)) contrast(1.02) saturate(0.99);
   background-position: 82% center;
   mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0,0,0,0.03) 20%,
-    rgba(0,0,0,0.20) 34%,
-    rgba(0,0,0,0.60) 50%,
-    rgba(0,0,0,0.92) 66%,
+    rgba(0,0,0,0.03) 22%,
+    rgba(0,0,0,0.16) 36%,
+    rgba(0,0,0,0.48) 52%,
+    rgba(0,0,0,0.78) 68%,
     black 100%
   );
   -webkit-mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0,0,0,0.03) 20%,
-    rgba(0,0,0,0.20) 34%,
-    rgba(0,0,0,0.60) 50%,
-    rgba(0,0,0,0.92) 66%,
+    rgba(0,0,0,0.03) 22%,
+    rgba(0,0,0,0.16) 36%,
+    rgba(0,0,0,0.48) 52%,
+    rgba(0,0,0,0.78) 68%,
     black 100%
   );
 }
 
-/* Glaze / Scrim / Text Protection layer */
-.home-card-scrim {
+/* treatment--home: medium-dark cinematic (wider cards — stronger than /solo) */
+.home-main:not(.sp-solo-main) .home-card-scrim,
+.rh-img-treatment--home .home-card-scrim {
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -228,19 +229,21 @@
   background:
     linear-gradient(
       90deg,
-      rgba(4, 7, 12, 0.96) 0%,
-      rgba(4, 7, 12, 0.92) 18%,
-      rgba(4, 7, 12, 0.82) 34%,
-      rgba(4, 7, 12, 0.56) 52%,
-      rgba(4, 7, 12, 0.34) 72%,
-      rgba(4, 7, 12, 0.22) 100%
+      rgba(4, 7, 12, 0.88) 0%,
+      rgba(4, 7, 12, 0.84) 18%,
+      rgba(4, 7, 12, 0.74) 34%,
+      rgba(4, 7, 12, 0.52) 52%,
+      rgba(4, 7, 12, 0.32) 72%,
+      rgba(4, 7, 12, 0.2) 100%
     ),
     linear-gradient(
       180deg,
-      rgba(0,0,0,0.22) 0%,
-      rgba(0,0,0,0.28) 100%
+      rgba(0, 0, 0, 0.18) 0%,
+      rgba(0, 0, 0, 0.24) 100%
     );
 }
+
+/* Overlay text shadows: rh-image-surface.css */
 
 /* ─── Ambient Atmospheric corner glows ────────────────────────────── */
 
