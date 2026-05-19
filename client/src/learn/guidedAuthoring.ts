@@ -379,6 +379,21 @@ function multisetDiff(next: string[], prev: string[]): { added: string[]; remove
   return { added, removed };
 }
 
+function frozenLessonHasPlayableMoves(lesson: FrozenLesson | null): boolean {
+  return Boolean(lesson?.steps?.some((step) => step.chosenMove !== null));
+}
+
+/** True when any V1 guided source has at least one authored player move or transcript turn. */
+export function hasPlayableV1GuidedContent(): boolean {
+  if (frozenLessonHasPlayableMoves(loadFrozenLesson())) return true;
+  if (frozenLessonHasPlayableMoves(loadAuthoringSession())) return true;
+  const published = loadOriginalGuidedTranscript();
+  if (published?.turns?.length) return true;
+  const draft = loadOriginalGuidedTranscriptDraft();
+  if (draft?.transcript?.turns?.length) return true;
+  return false;
+}
+
 export function loadFrozenLesson(): FrozenLesson | null {
   if (typeof window === 'undefined') return null;
   try {

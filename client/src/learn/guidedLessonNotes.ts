@@ -451,7 +451,7 @@ export function applyGuidedLessonCoachingText<
         const note = GUIDED_LESSON_COACHING_BY_VISIBLE_STEP[visibleCoachStep];
         visibleCoachStep++;
         
-        if (note) {
+        if (note && !(event.coachingText ?? '').trim()) {
           appliedCount++;
           return { ...event, coachingText: note };
         }

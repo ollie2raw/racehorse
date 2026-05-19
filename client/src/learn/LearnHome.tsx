@@ -6,10 +6,10 @@ import '../screens/RacehorseHomeArt.css';
 import '../screens/SinglePlayerModes.css';
 import './learn.css';
 import {
-  ensureGuidedV2FrozenLesson,
   freezeV2Lesson,
   loadV2AuthoringSession,
   loadV2FrozenLesson,
+  resolveGuidedMatchStart,
   type LessonV2AuthoringSession,
 } from './lessonV2';
 import artCoachPng from '../assets/singlePlayerHub/fritzwave.png';
@@ -130,7 +130,7 @@ interface LearnHomeProps {
 export default function LearnHome({
   onBack,
   onNavigate,
-  onStartGuidedGame: _onStartGuidedGame,
+  onStartGuidedGame,
   onStartGuidedAuthoring: _onStartGuidedAuthoring,
   onFreezeLesson: _onFreezeLesson,
   isAdmin,
@@ -143,6 +143,7 @@ export default function LearnHome({
   const [v2AuthoringSession, setV2AuthoringSession] = useState<LessonV2AuthoringSession | null>(null);
   const [_v2FrozenLesson, setV2FrozenLesson] = useState<ReturnType<typeof loadV2FrozenLesson>>(null);
   const [v2FreezeFlash, setV2FreezeFlash] = useState(false);
+  const [guidedV2StartError, setGuidedV2StartError] = useState<string | null>(null);
 
   useEffect(() => {
     setV2FrozenLesson(loadV2FrozenLesson());
@@ -169,8 +170,17 @@ export default function LearnHome({
       return;
     }
     if (mode.action === 'guided') {
-      ensureGuidedV2FrozenLesson();
-      onStartGuidedV2Game?.();
+      const start = resolveGuidedMatchStart();
+      if (!start.route) {
+        setGuidedV2StartError(start.error);
+        return;
+      }
+      setGuidedV2StartError(null);
+      if (start.route === 'v2') {
+        onStartGuidedV2Game?.();
+        return;
+      }
+      onStartGuidedGame?.();
     }
   };
 
@@ -223,14 +233,21 @@ export default function LearnHome({
               <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">
                 Coach-led practice modes to sharpen your Racehorse strategy.
               </p>
+              {guidedV2StartError ? (
+                <p className="mt-4 text-[15px] text-[#f0a8a8]" role="alert">
+                  {guidedV2StartError}
+                </p>
+              ) : null}
             </div>
 
             <div className="relative z-10 mt-[42px] learn-hub-grid--modes min-h-0 w-full flex-1 px-14 pb-2">
               {LEARN_MODE_CARDS.map((mode) => {
                 const isLocked =
-                  !mode.unlocked ||
-                  (mode.id === 'guided' && !isAdmin) ||
-                  (mode.id === 'howToPlay' && !canPreviewHowToPlay);
+                  mode.id === 'howToPlay'
+                    ? !canPreviewHowToPlay
+                    : mode.id === 'guided'
+                      ? !isAdmin
+                      : !mode.unlocked;
                 const cardDesc =
                   mode.id === 'howToPlay' && canPreviewHowToPlay
                     ? `${mode.desc} (Dev preview — admin only)`
@@ -316,9 +333,9 @@ export default function LearnHome({
                             className="pvf-start-btn learn-mode-card__play"
                             onClick={(e: MouseEvent) => {
                               e.stopPropagation();
-                              onStartGuidedV2Game?.();
+                              handleLearnCardActivate({ ...mode, action: 'guided' });
                             }}
-                            disabled={!onStartGuidedV2Game}
+                            disabled={!onStartGuidedV2Game && !onStartGuidedGame}
                           >
                             <span>{mode.ctaLabel ?? 'Play'}</span>
                             <span className="pvf-start-arrow" aria-hidden="true">

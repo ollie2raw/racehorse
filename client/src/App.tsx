@@ -75,6 +75,7 @@ import {
   saveFrozenLesson,
   loadFrozenLesson,
 } from './learn/guidedAuthoring';
+import { resolveGuidedMatchStart } from './learn/lessonV2';
 import RacehorseHomeScreen from './screens/HomeScreen';
 import SinglePlayerHubScreen from './screens/SinglePlayerHubScreen';
 import { TournamentScreen } from './screens/TournamentScreen';
@@ -1280,12 +1281,8 @@ export default function App() {
   const isAdmin = Boolean(
     authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
   );
-  const canOpenHowToPlayPreview = Boolean(
-    import.meta.env.DEV &&
-      authUser?.email &&
-      adminEmail &&
-      authUser.email.toLowerCase() === adminEmail.toLowerCase(),
-  );
+  /** Dev/admin account only (VITE_ADMIN_EMAIL) — works outside Vite dev server */
+  const canOpenHowToPlayPreview = isAdmin;
   const needsUsernameOnboarding = Boolean(
     authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
   );
@@ -4404,7 +4401,10 @@ export default function App() {
                 isAdmin
                   ? () => {
                       setLearnHowToPlayOpen(false);
-                      setIsGuidedV2Mode(true);
+                      const start = resolveGuidedMatchStart();
+                      if (!start.route) return;
+                      setIsGuidedMode(start.route === 'v1');
+                      setIsGuidedV2Mode(start.route === 'v2');
                       setBotFritzTier('elite');
                       setBotDealSize(7);
                       setAppMode('bot');
@@ -4453,7 +4453,10 @@ export default function App() {
               }
             }}
             onStartGuidedV2Game={() => {
-              setIsGuidedV2Mode(true);
+              const start = resolveGuidedMatchStart();
+              if (!start.route) return;
+              setIsGuidedMode(start.route === 'v1');
+              setIsGuidedV2Mode(start.route === 'v2');
               setBotFritzTier('elite');
               setBotDealSize(7);
               setAppMode('bot');

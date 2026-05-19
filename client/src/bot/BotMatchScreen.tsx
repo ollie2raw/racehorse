@@ -155,12 +155,16 @@ import {
 } from '../learn/guidedAuthoring';
 import {
   createV2Event,
-  ensureGuidedV2FrozenLesson,
+  loadGuidedV2PlaybackLesson,
   loadV2AuthoringSession,
   nextPlayerEvent,
   parseLessonV2BoardState,
+  initGuidedV2Playback,
   restoreGuidedV2HandStart,
   saveV2AuthoringSession,
+  canStartGuidedV2Lesson,
+  validateGuidedV2Lesson,
+  validateGuidedV2LessonPlayback,
   type LessonV2,
   type LessonV2AuthoringSession,
   type LessonV2Event,
@@ -686,6 +690,19 @@ export default function BotMatchScreen({
   const isGuidedV2Mode = isGuidedV2ModeProp && mode === 'bot';
   const isLearnAcademyMode = isGuidedMode || isAuthoringMode || isAuthoringV2Mode || isGuidedV2Mode;
   const wantsOriginalGuidedRecordMode = false;
+  const frozenV2Lesson = useMemo(
+    () => (isGuidedV2Mode ? loadGuidedV2PlaybackLesson() : null),
+    [isGuidedV2Mode],
+  );
+  const guidedV2BootError = useMemo(() => {
+    if (!isGuidedV2Mode) return null;
+    if (!canStartGuidedV2Lesson(frozenV2Lesson)) {
+      return validateGuidedV2Lesson(frozenV2Lesson);
+    }
+    return null;
+  }, [isGuidedV2Mode, frozenV2Lesson]);
+  const guidedV2PlaybackReady =
+    isGuidedV2Mode && guidedV2BootError === null && frozenV2Lesson !== null;
 
   const resolveServerBaseUrl = () => {
     return resolveGameServerUrl();
@@ -815,15 +832,30 @@ export default function BotMatchScreen({
       return createFixedBotMatch(generateAuthoringHandDeal(0), 60, 7);
     }
 
-    // ── V2 Guided: restore from authored hand-start snapshot ────────────────
+    // ── V2 Guided: hydrate ONLY from frozen lesson (never random deal) ─────
     if (isGuidedV2Mode) {
-      const v2Lesson = ensureGuidedV2FrozenLesson();
-      if (v2Lesson) {
-        const restored = restoreGuidedV2HandStart(v2Lesson, 1).state;
-        if (restored) {
-          return restored;
+      const v2Lesson = loadGuidedV2PlaybackLesson();
+      if (canStartGuidedV2Lesson(v2Lesson) && v2Lesson) {
+        const playback = initGuidedV2Playback(v2Lesson, 1);
+        if (playback.state) {
+          return playback.state;
+        }
+        const handStartOnly = restoreGuidedV2HandStart(v2Lesson, 1);
+        if (handStartOnly.state) {
+          return handStartOnly.state;
+        }
+        if (import.meta.env.DEV) {
+          console.warn(
+            '[guided-v2-init] playback restore failed; using empty fixed deal',
+            validateGuidedV2LessonPlayback(v2Lesson),
+          );
         }
       }
+      return createFixedBotMatch(
+        { player_tiles: [], fritz_tiles: [], boneyard: [], locked: [] },
+        winningScore,
+        dealSize,
+      );
     }
 
     if (isGuidedMode && guidedTranscript) {
@@ -1052,10 +1084,12 @@ export default function BotMatchScreen({
   const authoringV2EventsRef = useRef<LessonV2Event[]>([]);
 
   // ── V2 Guided Lesson state (player-facing, reads frozenV2Lesson) ─────────
-  const [frozenV2Lesson] = useState<LessonV2 | null>(() =>
-    isGuidedV2Mode ? ensureGuidedV2FrozenLesson() : null,
-  );
-  const [guidedV2EventIndex, setGuidedV2EventIndex] = useState(0);
+  const [guidedV2EventIndex, setGuidedV2EventIndex] = useState(() => {
+    if (!isGuidedV2Mode) return 0;
+    const lesson = loadGuidedV2PlaybackLesson();
+    if (!lesson || !canStartGuidedV2Lesson(lesson)) return 0;
+    return initGuidedV2Playback(lesson, 1).firstEventIndex;
+  });
   const [isGuidedV2OffLine, setIsGuidedV2OffLine] = useState(false);
   /**
    * Guards the Fritz V2 timer against double-apply.
@@ -1107,27 +1141,27 @@ export default function BotMatchScreen({
   const isGuidedV1MinimalMode = false;
   const isGuidedV1OnlineMode = false;
   const lessonLayoutMode =
-    isGuidedTranscriptMode || isGuidedFrozenLessonMode || wantsOriginalGuidedRecordMode || isGuidedV2Mode;
+    isGuidedTranscriptMode || isGuidedFrozenLessonMode || wantsOriginalGuidedRecordMode || guidedV2PlaybackReady;
 
   useEffect(() => {
-    if (!isGuidedV2Mode || !frozenV2Lesson) return;
-    const restoredHand = restoreGuidedV2HandStart(frozenV2Lesson, 1);
-    if (!restoredHand.state) return;
+    if (!guidedV2PlaybackReady || !frozenV2Lesson) return;
+    const playback = initGuidedV2Playback(frozenV2Lesson, 1);
+    if (!playback.state) return;
 
     fritzV2LastAppliedIndexRef.current = -1;
-    setGuidedV2EventIndex(restoredHand.firstEventIndex);
+    setGuidedV2EventIndex(playback.firstEventIndex);
     setIsGuidedV2OffLine(false);
     setSelectedTile(null);
     setSelectedController(null);
     setHandReveal(null);
     setMatch({
-      ...restoredHand.state,
+      ...playback.state,
       opponentPassedOnEnds: [],
       opponentDrawCount: 0,
       opponentKnownMissing: [],
       opponentMissingEvidence: [],
     });
-  }, [isGuidedV2Mode, frozenV2Lesson]);
+  }, [guidedV2PlaybackReady, frozenV2Lesson]);
 
   // ── Learning coach (guided mode only) ────────────────────────────────────
   const coach = useLearningCoach({
@@ -2172,6 +2206,9 @@ export default function BotMatchScreen({
   }, [invalidateLocalRuns, onBack]);
 
   const startFreshMatch = () => {
+    if (isGuidedV2Mode) {
+      return;
+    }
     if (isDailyFritzMode) {
       onDailyFritzComplete?.();
       exitMatch();
@@ -5190,20 +5227,24 @@ export default function BotMatchScreen({
     // begins cleanly on the authored line.  Resets the cursor and off-line flag.
     if (isGuidedV2Mode && frozenV2Lesson) {
       const nextHandNumber = matchRef.current.handNumber + 1;
-      const restoredHand = restoreGuidedV2HandStart(frozenV2Lesson, nextHandNumber);
-      if (restoredHand.state) {
-        setGuidedV2EventIndex(restoredHand.firstEventIndex);
+      const playback = initGuidedV2Playback(frozenV2Lesson, nextHandNumber);
+      if (playback.state) {
+        setGuidedV2EventIndex(playback.firstEventIndex);
         setIsGuidedV2OffLine(false);
         fritzV2LastAppliedIndexRef.current = -1; // reset double-apply guard for new hand
         setMatch(() => ({
-          ...restoredHand.state!,
+          ...playback.state!,
           opponentPassedOnEnds: [],
           opponentDrawCount: 0,
           opponentKnownMissing: [],
         }));
         return;
       }
-      // No authored hand start for next hand — lesson is over; let random play continue
+      return;
+    }
+
+    if (isGuidedV2Mode) {
+      return;
     }
 
     setMatch((prev) => {
@@ -5986,13 +6027,15 @@ export default function BotMatchScreen({
             isOffAuthoredLine: false,
           };
         }
-        if (isGuidedV2Mode && frozenV2Lesson) {
+        if (guidedV2PlaybackReady && frozenV2Lesson) {
+          const totalPlayerPlays = frozenV2Lesson.events.filter(
+            (event) => event.actor === 'player' && event.action === 'play',
+          ).length;
           return {
             stepIndex: frozenV2Lesson.events
               .slice(0, guidedV2EventIndex)
               .filter((event) => event.actor === 'player' && event.action === 'play').length,
-            totalSteps: frozenV2Lesson.events
-              .filter((event) => event.actor === 'player' && event.action === 'play').length,
+            totalSteps: Math.max(totalPlayerPlays, 1),
             coachingText: currentV2CoachingText,
             canBestMove: Boolean(
               !isGuidedV2OffLine &&
@@ -6007,14 +6050,7 @@ export default function BotMatchScreen({
             isOffAuthoredLine: isGuidedV2OffLine,
           };
         }
-        return {
-          stepIndex: 0,
-          totalSteps: 1,
-          coachingText:
-            'Guided lesson data is not loaded for this position yet.',
-          canBestMove: false,
-          isOffAuthoredLine: false,
-        };
+        return null;
       })()
     : null;
 
@@ -6370,6 +6406,38 @@ export default function BotMatchScreen({
         )}
     </>
   );
+
+  if (isGuidedV2Mode && guidedV2BootError) {
+    return (
+      <>
+        <RotateOverlay />
+        <div
+          className="screen game-screen walnut-live theme-green bot-match-screen learn-lesson-screen learn-pvf-root pvf-root tier-rookie"
+          style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: '1 1 0', overflow: 'hidden' }}
+        >
+          <div className="home-bg" aria-hidden="true">
+            <div className="home-bg__halo" />
+          </div>
+          <div
+            className="learn-guided-pvf"
+            data-ui="guided-boot-error"
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}
+          >
+            <div className="learn-guided-hero-card" style={{ maxWidth: 520, width: '100%' }}>
+              <div className="learn-guided-hero-card__content">
+                <p className="learn-guided-hero-card__eyebrow">Guided Match</p>
+                <h2 className="learn-guided-hero-card__title">Lesson not available</h2>
+                <p className="learn-guided-hero-card__description">{guidedV2BootError}</p>
+                <button type="button" className="pvf-back-btn rh-back-button" onClick={onBack} style={{ marginTop: 24 }}>
+                  ← Back to Learn
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const boardStage = (
     <div ref={boardStageRef} className="wl-stage-shell">
@@ -6975,7 +7043,13 @@ export default function BotMatchScreen({
                     <p className="learn-guided-hero-card__eyebrow">Fritz Coach</p>
                     <h2 className="learn-guided-hero-card__title">Fritz Coach</h2>
                     <p className="learn-guided-hero-card__description">
-                      Fritz walks you through one decision at a time. Think first, reveal the best move when you need it, then learn why it works.
+                      {lessonCoachVm?.coachingText?.trim()
+                        ? lessonCoachVm.coachingText.trim()
+                        : lessonCoachVm?.isOffAuthoredLine
+                          ? 'You went off the authored line. This hand continues live from here — coaching follows the live position.'
+                          : guidedV2PlaybackReady
+                            ? 'No coaching note was recorded for this step.'
+                            : 'Guided lesson data is not loaded for this position yet.'}
                     </p>
                   </div>
 

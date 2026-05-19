@@ -19,12 +19,31 @@ import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
 import type { BoardState, PlacedTile, TileOrientation } from '../types.ts';
 import type { BotActionResult, BotMatchState, BotPlayerId } from '../bot/botEngine';
 import { serializeGhostBoardState } from '../ghost/logic';
+import {
+  AUTHORING_GAME_ID,
+  AUTHORING_LESSON_ID,
+  AUTHORING_STORAGE_KEY,
+  FROZEN_LESSON_KEY,
+  ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY,
+  ORIGINAL_COACHED_TRANSCRIPT_KEY,
+  hasPlayableV1GuidedContent,
+} from './guidedAuthoring';
 import { applyGuidedLessonCoachingText } from './guidedLessonNotes';
 
 // ─── Storage keys ────────────────────────────────────────────────────────────
 
 export const LESSON_V2_AUTHORING_KEY = 'racehorse:lesson-v2:authoring:v1';
 export const LESSON_V2_FROZEN_KEY = 'racehorse:lesson-v2:frozen:v1';
+
+/** All localStorage keys used for guided lesson data (DevTools → Application → Local Storage). */
+export const GUIDED_LESSON_STORAGE_KEYS = {
+  v2Authoring: LESSON_V2_AUTHORING_KEY,
+  v2Frozen: LESSON_V2_FROZEN_KEY,
+  v1Authoring: AUTHORING_STORAGE_KEY,
+  v1Frozen: FROZEN_LESSON_KEY,
+  v1Transcript: ORIGINAL_COACHED_TRANSCRIPT_KEY,
+  v1TranscriptDraft: ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY,
+} as const;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -340,13 +359,111 @@ function lsRemove(key: string): void {
 
 // ─── Authoring session ───────────────────────────────────────────────────────
 
+function handStartHasSnapshot(handStart: LessonV2HandStart | null | undefined): boolean {
+  return Boolean(handStart?.matchStateJson?.trim());
+}
+
+function v2LessonHasStartableContent(lesson: LessonV2 | null): boolean {
+  if (!lesson) return false;
+  if (Array.isArray(lesson.events) && lesson.events.length > 0) return true;
+  return lesson.handStarts?.some(handStartHasSnapshot) ?? false;
+}
+
+function v2AuthoringSessionHasStartableContent(session: LessonV2AuthoringSession | null): boolean {
+  if (!session) return false;
+  if (session.events?.length) return true;
+  if (session.handStarts?.some(handStartHasSnapshot)) return true;
+  return Boolean(session.matchSnapshot?.trim());
+}
+
+function normalizeV2AuthoringSession(raw: unknown): LessonV2AuthoringSession | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const parsed = raw as Record<string, unknown>;
+
+  if (parsed.version === 2 && Array.isArray(parsed.events)) {
+    const frozenLike = parsed as unknown as LessonV2;
+    return {
+      lessonId:
+        typeof frozenLike.lessonId === 'string' && frozenLike.lessonId.trim()
+          ? frozenLike.lessonId
+          : AUTHORING_LESSON_ID,
+      gameId:
+        typeof frozenLike.gameId === 'string' && frozenLike.gameId.trim()
+          ? frozenLike.gameId
+          : AUTHORING_GAME_ID,
+      createdAt: typeof frozenLike.createdAt === 'string' ? frozenLike.createdAt : new Date().toISOString(),
+      updatedAt: typeof frozenLike.updatedAt === 'string' ? frozenLike.updatedAt : new Date().toISOString(),
+      handStarts: Array.isArray(frozenLike.handStarts) ? frozenLike.handStarts : [],
+      events: frozenLike.events,
+      matchSnapshot: null,
+      lastEventIndex: frozenLike.events.length > 0 ? frozenLike.events.length - 1 : -1,
+    };
+  }
+
+  const events = Array.isArray(parsed.events) ? (parsed.events as LessonV2Event[]) : [];
+  const handStarts = Array.isArray(parsed.handStarts) ? (parsed.handStarts as LessonV2HandStart[]) : [];
+  const matchSnapshot = typeof parsed.matchSnapshot === 'string' ? parsed.matchSnapshot : null;
+
+  if (!events.length && !handStarts.some(handStartHasSnapshot) && !matchSnapshot?.trim()) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  return {
+    lessonId:
+      typeof parsed.lessonId === 'string' && parsed.lessonId.trim() ? parsed.lessonId : AUTHORING_LESSON_ID,
+    gameId: typeof parsed.gameId === 'string' && parsed.gameId.trim() ? parsed.gameId : AUTHORING_GAME_ID,
+    createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : now,
+    updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : now,
+    handStarts,
+    events,
+    matchSnapshot,
+    lastEventIndex:
+      typeof parsed.lastEventIndex === 'number' && Number.isFinite(parsed.lastEventIndex)
+        ? parsed.lastEventIndex
+        : events.length > 0
+          ? events.length - 1
+          : -1,
+  };
+}
+
+function debugGuidedStart(message: string, detail?: unknown): void {
+  if (import.meta.env.DEV) {
+    console.warn('[guided-match-start]', message, detail ?? '');
+  }
+}
+
+export type GuidedV2StartFailure =
+  | 'no-storage'
+  | 'unreadable-v2-authoring'
+  | 'unreadable-v2-frozen'
+  | 'no-startable-content'
+  | 'playback-restore-failed';
+
+export function probeGuidedLessonStorage(): Record<keyof typeof GUIDED_LESSON_STORAGE_KEYS, 'missing' | 'empty' | 'present'> {
+  const read = (key: string): 'missing' | 'empty' | 'present' => {
+    const raw = lsGet(key);
+    if (raw === null) return 'missing';
+    if (!raw.trim()) return 'empty';
+    return 'present';
+  };
+  return {
+    v2Authoring: read(LESSON_V2_AUTHORING_KEY),
+    v2Frozen: read(LESSON_V2_FROZEN_KEY),
+    v1Authoring: read(AUTHORING_STORAGE_KEY),
+    v1Frozen: read(FROZEN_LESSON_KEY),
+    v1Transcript: read(ORIGINAL_COACHED_TRANSCRIPT_KEY),
+    v1TranscriptDraft: read(ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY),
+  };
+}
+
 export function loadV2AuthoringSession(): LessonV2AuthoringSession | null {
   const raw = lsGet(LESSON_V2_AUTHORING_KEY);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as LessonV2AuthoringSession;
-    if (!parsed.lessonId || !Array.isArray(parsed.events)) return null;
-    return applyGuidedLessonCoachingText(parsed);
+    const session = normalizeV2AuthoringSession(JSON.parse(raw));
+    if (!session) return null;
+    return applyGuidedLessonCoachingText(session);
   } catch {
     return null;
   }
@@ -479,31 +596,188 @@ export function loadV2FrozenLesson(): LessonV2 | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as LessonV2;
-    if (parsed.version !== 2 || !Array.isArray(parsed.events)) return null;
-    const normalizedEvents = normalizeLessonEvents(parsed.events);
-    return applyGuidedLessonCoachingText({
-      ...parsed,
+    if (parsed.version !== 2) return null;
+    const events = Array.isArray(parsed.events) ? parsed.events : [];
+    const handStarts = Array.isArray(parsed.handStarts) ? parsed.handStarts : [];
+    if (!events.length && !handStarts.some(handStartHasSnapshot)) return null;
+    const normalizedEvents = normalizeLessonEvents(events);
+    const lesson: LessonV2 = {
+      version: 2,
+      lessonId:
+        typeof parsed.lessonId === 'string' && parsed.lessonId.trim() ? parsed.lessonId : AUTHORING_LESSON_ID,
+      gameId: typeof parsed.gameId === 'string' && parsed.gameId.trim() ? parsed.gameId : AUTHORING_GAME_ID,
+      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+      handStarts: normalizeFrozenHandStarts(handStarts, normalizedEvents),
       events: normalizedEvents,
-      handStarts: normalizeFrozenHandStarts(parsed.handStarts ?? [], normalizedEvents),
-    });
+    };
+    return applyGuidedLessonCoachingText(lesson);
   } catch {
     return null;
   }
 }
 
+/** Auto-promote authoring → frozen before Guided Match (Learn hub play click). */
+export function autoFreezeGuidedV2ForPlay(): LessonV2 | null {
+  const session = loadV2AuthoringSession();
+  if (v2AuthoringSessionHasStartableContent(session)) {
+    return freezeV2Lesson(session!);
+  }
+  return loadV2FrozenLesson();
+}
+
 /**
- * Guided Match requires a frozen lesson. Use localStorage if present; otherwise
- * promote an in-progress authoring session (dev/publish workflow).
+ * Guided Match playback: frozen lesson, auto-promoted from authoring when needed.
+ */
+export function loadGuidedV2PlaybackLesson(): LessonV2 | null {
+  return ensureGuidedV2FrozenLesson();
+}
+
+/**
+ * Prefer frozen when startable; otherwise promote authoring (events, handStarts, or snapshot).
  */
 export function ensureGuidedV2FrozenLesson(): LessonV2 | null {
-  const frozen = loadV2FrozenLesson();
-  if (frozen) return frozen;
-
   const session = loadV2AuthoringSession();
-  if (session?.events?.length) {
-    return freezeV2Lesson(session);
+  if (v2AuthoringSessionHasStartableContent(session)) {
+    return freezeV2Lesson(session!);
   }
 
+  const frozen = loadV2FrozenLesson();
+  if (frozen && v2LessonHasStartableContent(frozen)) {
+    return frozen;
+  }
+
+  return null;
+}
+
+/** True when the hub can launch Guided Match V2 (does not require playback restore). */
+export function canStartGuidedV2Lesson(lesson: LessonV2 | null): boolean {
+  return v2LessonHasStartableContent(lesson);
+}
+
+export type GuidedMatchStartRoute = 'v2' | 'v1';
+
+export interface GuidedMatchStartResolution {
+  route: GuidedMatchStartRoute | null;
+  /** Set when route is null — user-facing message for Learn hub / guards */
+  error: string | null;
+  /** Dev-only hint for which gate failed */
+  failure?: GuidedV2StartFailure;
+}
+
+function messageForGuidedStartFailure(
+  failure: GuidedV2StartFailure,
+  playbackError: string | null,
+): string {
+  switch (failure) {
+    case 'no-storage':
+      return 'No guided lesson found in this browser. Author in Learn admin (V2 authoring) or restore localStorage.';
+    case 'unreadable-v2-authoring':
+      return 'V2 authoring data is saved but could not be read. Check racehorse:lesson-v2:authoring:v1 in DevTools → Application → Local Storage.';
+    case 'unreadable-v2-frozen':
+      return 'A frozen V2 lesson exists but could not be read. Re-freeze from Learn admin or fix racehorse:lesson-v2:frozen:v1.';
+    case 'no-startable-content':
+      return 'Guided lesson storage is present but has no events, hand snapshots, or V1 moves yet. Record at least one hand in V2 authoring.';
+    case 'playback-restore-failed':
+      return (
+        playbackError ??
+        'Could not restore the lesson opening from frozen data. Re-open V2 authoring and record hand 1 again.'
+      );
+    default:
+      return 'Guided Match could not start.';
+  }
+}
+
+/**
+ * Resolve how Guided Match should boot: V2 frozen/authoring first, else V1 sources.
+ * Auto-freezes authoring before validation.
+ */
+export function resolveGuidedMatchStart(): GuidedMatchStartResolution {
+  autoFreezeGuidedV2ForPlay();
+  const v2Lesson = ensureGuidedV2FrozenLesson();
+
+  if (canStartGuidedV2Lesson(v2Lesson)) {
+    return { route: 'v2', error: null };
+  }
+
+  if (hasPlayableV1GuidedContent()) {
+    return { route: 'v1', error: null };
+  }
+
+  const probe = probeGuidedLessonStorage();
+  const hasAnyRaw =
+    Object.values(probe).some((status) => status === 'present') || hasPlayableV1GuidedContent();
+
+  if (!hasAnyRaw) {
+    debugGuidedStart('no guided storage', { probe, keys: GUIDED_LESSON_STORAGE_KEYS });
+    return {
+      route: null,
+      error: messageForGuidedStartFailure('no-storage', null),
+      failure: 'no-storage',
+    };
+  }
+
+  const rawAuthoring = lsGet(LESSON_V2_AUTHORING_KEY);
+  if (rawAuthoring?.trim() && !loadV2AuthoringSession()) {
+    debugGuidedStart('unreadable v2 authoring', { probe });
+    return {
+      route: null,
+      error: messageForGuidedStartFailure('unreadable-v2-authoring', null),
+      failure: 'unreadable-v2-authoring',
+    };
+  }
+
+  const rawFrozen = lsGet(LESSON_V2_FROZEN_KEY);
+  if (rawFrozen?.trim() && !loadV2FrozenLesson()) {
+    debugGuidedStart('unreadable v2 frozen', { probe });
+    return {
+      route: null,
+      error: messageForGuidedStartFailure('unreadable-v2-frozen', null),
+      failure: 'unreadable-v2-frozen',
+    };
+  }
+
+  debugGuidedStart('no startable content', { probe, v2Lesson });
+  return {
+    route: null,
+    error: messageForGuidedStartFailure('no-startable-content', null),
+    failure: 'no-startable-content',
+  };
+}
+
+/** Strict playback validation (in-match cursor / board restore). */
+export function validateGuidedV2LessonPlayback(lesson: LessonV2 | null): string | null {
+  if (!lesson) {
+    return 'No guided lesson is loaded.';
+  }
+  if (!Array.isArray(lesson.events) || lesson.events.length === 0) {
+    if (lesson.handStarts?.some(handStartHasSnapshot)) {
+      const playback = initGuidedV2Playback(lesson, 1);
+      if (!playback.state) {
+        return 'Could not restore the lesson opening position from hand snapshots.';
+      }
+      return null;
+    }
+    return 'The frozen lesson has no recorded moves or hand snapshots.';
+  }
+  const playback = initGuidedV2Playback(lesson, 1);
+  if (!playback.state) {
+    return 'Could not restore the lesson opening position from frozen data.';
+  }
+  return null;
+}
+
+/**
+ * Hub / boot gate: startable content only (no initGuidedV2Playback check).
+ * @deprecated Prefer canStartGuidedV2Lesson + validateGuidedV2LessonPlayback at runtime.
+ */
+export function validateGuidedV2Lesson(lesson: LessonV2 | null): string | null {
+  if (!canStartGuidedV2Lesson(lesson)) {
+    if (!lesson) {
+      return messageForGuidedStartFailure('no-storage', null);
+    }
+    return messageForGuidedStartFailure('no-startable-content', null);
+  }
   return null;
 }
 
@@ -525,59 +799,139 @@ function parseTileKeySafe(key: string | undefined): { low: number; high: number 
   return { low, high };
 }
 
+function tilesFromKeys(keys: string[]): { low: number; high: number }[] {
+  return keys
+    .map((key) => parseTileKeySafe(key))
+    .filter((tile): tile is { low: number; high: number } => tile !== null);
+}
+
+function placeholderBoneyard(count: number): { low: number; high: number }[] {
+  return Array.from({ length: Math.max(0, count) }, () => ({ low: 0, high: 0 }));
+}
+
+function handsBeforeFirstEvent(firstEvent: LessonV2Event): {
+  playerHand: { low: number; high: number }[];
+  fritzHand: { low: number; high: number }[];
+  playerScore: number;
+  fritzScore: number;
+  currentPlayer: BotPlayerId;
+} {
+  const playedTile = parseTileKeySafe(firstEvent.tile);
+  const playerHandAfter = tilesFromKeys(firstEvent.playerHandAfter);
+  const fritzHandAfter = tilesFromKeys(firstEvent.fritzHandAfter);
+
+  const playerHandBefore =
+    firstEvent.actor === 'player' && firstEvent.action === 'play' && playedTile
+      ? [...playerHandAfter, playedTile]
+      : playerHandAfter;
+  const fritzHandBefore =
+    firstEvent.actor === 'fritz' && firstEvent.action === 'play' && playedTile
+      ? [...fritzHandAfter, playedTile]
+      : fritzHandAfter;
+
+  const playerScoreBefore =
+    firstEvent.actor === 'player'
+      ? firstEvent.playerScoreAfter - firstEvent.pointsScored
+      : firstEvent.playerScoreAfter;
+  const fritzScoreBefore =
+    firstEvent.actor === 'fritz'
+      ? firstEvent.fritzScoreAfter - firstEvent.pointsScored
+      : firstEvent.fritzScoreAfter;
+
+  return {
+    playerHand: playerHandBefore,
+    fritzHand: fritzHandBefore,
+    playerScore: playerScoreBefore,
+    fritzScore: fritzScoreBefore,
+    currentPlayer: firstEvent.actor === 'player' ? 'you' : 'bot',
+  };
+}
+
+/** Hand-start shell derived only from frozen event fields — no random deal. */
+function createGuidedEventDerivedShell(
+  handNumber: number,
+  firstEvent: LessonV2Event,
+): BotMatchState {
+  const { playerHand, fritzHand, playerScore, fritzScore, currentPlayer } =
+    handsBeforeFirstEvent(firstEvent);
+
+  return {
+    players: {
+      you: { hand: playerHand, score: playerScore },
+      bot: { hand: fritzHand, score: fritzScore },
+    },
+    board: null,
+    boneyard: placeholderBoneyard(firstEvent.boneyardCountAfter),
+    deadTiles: [],
+    handOpen: false,
+    currentPlayer,
+    consecutivePasses: 0,
+    handNumber,
+    turnIndex: 0,
+    handOver: false,
+    gameOver: false,
+    winnerId: null,
+    winningScore: 60,
+    lastHandWinner: null,
+    lastHandReason: null,
+    dealSize: 7,
+    opponentPassedOnEnds: [],
+    opponentDrawCount: 0,
+    opponentKnownMissing: [],
+    opponentMissingEvidence: [],
+  };
+}
+
 function restoreHandStartStateFromEvent(
-  handStart: LessonV2HandStart,
+  handStart: LessonV2HandStart | null | undefined,
   firstEvent: LessonV2Event | null | undefined,
+  handNumber: number,
 ): BotMatchState | null {
-  try {
-    const base = JSON.parse(handStart.matchStateJson) as BotMatchState;
-    if (!firstEvent) return base;
-
-    const playedTile = parseTileKeySafe(firstEvent.tile);
-    const playerHandAfter = firstEvent.playerHandAfter
-      .map((key) => parseTileKeySafe(key))
-      .filter((tile): tile is { low: number; high: number } => tile !== null);
-    const fritzHandAfter = firstEvent.fritzHandAfter
-      .map((key) => parseTileKeySafe(key))
-      .filter((tile): tile is { low: number; high: number } => tile !== null);
-
-    const playerHandBefore =
-      firstEvent.actor === 'player' && firstEvent.action === 'play' && playedTile
-        ? [...playerHandAfter, playedTile]
-        : playerHandAfter;
-    const fritzHandBefore =
-      firstEvent.actor === 'fritz' && firstEvent.action === 'play' && playedTile
-        ? [...fritzHandAfter, playedTile]
-        : fritzHandAfter;
-
-    const playerScoreBefore =
-      firstEvent.actor === 'player'
-        ? firstEvent.playerScoreAfter - firstEvent.pointsScored
-        : firstEvent.playerScoreAfter;
-    const fritzScoreBefore =
-      firstEvent.actor === 'fritz'
-        ? firstEvent.fritzScoreAfter - firstEvent.pointsScored
-        : firstEvent.fritzScoreAfter;
-
+  let base: BotMatchState | null = null;
+  if (handStart?.matchStateJson?.trim()) {
+    try {
+      base = JSON.parse(handStart.matchStateJson) as BotMatchState;
+    } catch {
+      base = null;
+    }
+  }
+  if (!base && firstEvent) {
+    base = createGuidedEventDerivedShell(handNumber, firstEvent);
+  }
+  if (!base) return null;
+  if (!firstEvent) {
     return {
       ...base,
-      handNumber: handStart.handNumber,
+      handNumber,
       board: null,
       handOpen: false,
-      currentPlayer: firstEvent.actor === 'player' ? 'you' : 'bot',
       handOver: false,
       gameOver: false,
       winnerId: null,
       consecutivePasses: 0,
-      turnIndex: 0,
-      players: {
-        you: { hand: playerHandBefore, score: playerScoreBefore },
-        bot: { hand: fritzHandBefore, score: fritzScoreBefore },
-      },
     };
-  } catch {
-    return null;
   }
+
+  const { playerHand, fritzHand, playerScore, fritzScore, currentPlayer } =
+    handsBeforeFirstEvent(firstEvent);
+
+  return {
+    ...base,
+    handNumber,
+    board: null,
+    handOpen: false,
+    currentPlayer,
+    handOver: false,
+    gameOver: false,
+    winnerId: null,
+    consecutivePasses: 0,
+    turnIndex: 0,
+    boneyard: placeholderBoneyard(firstEvent.boneyardCountAfter),
+    players: {
+      you: { hand: playerHand, score: playerScore },
+      bot: { hand: fritzHand, score: fritzScore },
+    },
+  };
 }
 
 function normalizeHandStartsFromEvents(session: LessonV2AuthoringSession): LessonV2HandStart[] {
@@ -588,12 +942,26 @@ function normalizeHandStartsFromEvents(session: LessonV2AuthoringSession): Lesso
     }
   }
 
-  const handNumbers = Array.from(new Set(session.events.map((event) => event.handNumber))).sort((a, b) => a - b);
+  const handNumbers = Array.from(
+    new Set([
+      ...session.handStarts.map((handStart) => handStart.handNumber),
+      ...session.events.map((event) => event.handNumber),
+      ...(session.matchSnapshot?.trim() ? [1] : []),
+    ]),
+  ).sort((a, b) => a - b);
 
   return handNumbers.map((handNumber) => {
     const firstEventIndex = session.events.findIndex((event) => event.handNumber === handNumber);
     const firstEvent = firstEventIndex >= 0 ? session.events[firstEventIndex]! : null;
-    const existing = byHand.get(handNumber);
+    const existing =
+      byHand.get(handNumber) ??
+      (handNumber === 1 && session.matchSnapshot?.trim()
+        ? {
+            handNumber: 1,
+            matchStateJson: session.matchSnapshot,
+            firstEventIndex: firstEventIndex >= 0 ? firstEventIndex : 0,
+          }
+        : undefined);
     if (!firstEvent || !existing?.matchStateJson) {
       return existing ?? {
         handNumber,
@@ -720,20 +1088,80 @@ export function restoreGuidedV2HandStart(
   lesson: LessonV2,
   handNumber: number,
 ): { state: BotMatchState | null; firstEventIndex: number } {
-  const handStart = lesson.handStarts.find((h) => h.handNumber === handNumber);
+  const handStart = lesson.handStarts.find((h) => h.handNumber === handNumber) ?? null;
   const firstEventIndex =
     handStart?.firstEventIndex ??
     lesson.events.findIndex((event) => event.handNumber === handNumber);
   const firstEvent =
     firstEventIndex >= 0 ? lesson.events[firstEventIndex] : null;
 
-  if (!handStart) {
-    return { state: null, firstEventIndex };
-  }
-
-  const restored = restoreHandStartStateFromEvent(handStart, firstEvent);
+  const restored = restoreHandStartStateFromEvent(
+    handStart ?? { handNumber, matchStateJson: '', firstEventIndex: Math.max(0, firstEventIndex) },
+    firstEvent,
+    handNumber,
+  );
   return {
     state: restored,
-    firstEventIndex,
+    firstEventIndex: Math.max(0, firstEventIndex),
   };
+}
+
+/**
+ * Reconstruct match state immediately before events[eventIndex] is applied.
+ * Uses the previous event's authoritative board/hand fields when available.
+ */
+export function restoreMatchStateBeforeEvent(
+  lesson: LessonV2,
+  eventIndex: number,
+): BotMatchState | null {
+  if (eventIndex <= 0) {
+    const handNumber = lesson.events[0]?.handNumber ?? 1;
+    return restoreGuidedV2HandStart(lesson, handNumber).state;
+  }
+
+  const atEvent = lesson.events[eventIndex];
+  const prev = lesson.events[eventIndex - 1];
+  if (!atEvent || !prev) {
+    const handNumber = atEvent?.handNumber ?? lesson.events[0]?.handNumber ?? 1;
+    return restoreGuidedV2HandStart(lesson, handNumber).state;
+  }
+
+  const shell =
+    restoreGuidedV2HandStart(lesson, atEvent.handNumber).state ??
+    createGuidedEventDerivedShell(atEvent.handNumber, atEvent);
+
+  const board = parseLessonV2BoardState(prev.boardAfter);
+  const playerHand = tilesFromKeys(prev.playerHandAfter);
+  const fritzHand = tilesFromKeys(prev.fritzHandAfter);
+
+  return {
+    ...shell,
+    handNumber: atEvent.handNumber,
+    board,
+    handOpen: Boolean(board?.mainLine?.length),
+    boneyard: placeholderBoneyard(prev.boneyardCountAfter),
+    players: {
+      you: { hand: playerHand, score: prev.playerScoreAfter },
+      bot: { hand: fritzHand, score: prev.fritzScoreAfter },
+    },
+    currentPlayer: atEvent.actor === 'player' ? 'you' : 'bot',
+    handOver: false,
+    gameOver: false,
+    winnerId: null,
+    consecutivePasses: 0,
+    turnIndex: shell.turnIndex ?? 0,
+  };
+}
+
+/** Guided Match entry: hand-start snapshot plus board/hands before the first event. */
+export function initGuidedV2Playback(
+  lesson: LessonV2,
+  handNumber = 1,
+): { state: BotMatchState | null; firstEventIndex: number } {
+  const { firstEventIndex } = restoreGuidedV2HandStart(lesson, handNumber);
+  const idx = Math.max(0, firstEventIndex);
+  const state =
+    restoreMatchStateBeforeEvent(lesson, idx) ??
+    restoreGuidedV2HandStart(lesson, handNumber).state;
+  return { state, firstEventIndex: idx };
 }
