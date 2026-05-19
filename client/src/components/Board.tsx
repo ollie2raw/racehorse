@@ -1,5 +1,15 @@
 // client/src/components/Board.tsx
-import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ForwardedRef,
+} from 'react';
 import { DominoTile } from './DominoTile';
 import type { Tile, BoardState, PlacementPosition, Move, PlacedTile } from '../types';
 import { isDouble } from '../bot/botEngine';
@@ -512,6 +522,11 @@ function layoutBranches(
 
 // ─── Board Component ─────────────────────────────────────────
 
+export interface BoardHandle {
+  zoomIn: () => void;
+  zoomOut: () => void;
+}
+
 interface BoardProps {
   board: BoardState | null;
   legalMoves: Move[];
@@ -527,6 +542,7 @@ interface BoardProps {
   showOpenEndGlow?: boolean;
   profileDailyFritz?: boolean;
   fitMode?: 'default' | 'guided';
+  showZoomTray?: boolean;
 }
 
 function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean {
@@ -539,22 +555,26 @@ function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean
   return true;
 }
 
-function BoardComponent({
-  board,
-  legalMoves,
-  selectedTile,
-  handNumber = 0,
-  handOver = false,
-  gameOver = false,
-  lastPlayedTile = null,
-  highlightedPosition = null,
-  highlightedEnds = null,
-  onPositionClick,
-  tileSize = 72,
-  showOpenEndGlow = false,
-  profileDailyFritz = false,
-  fitMode = 'default',
-}: BoardProps) {
+function BoardComponent(
+  {
+    board,
+    legalMoves,
+    selectedTile,
+    handNumber = 0,
+    handOver = false,
+    gameOver = false,
+    lastPlayedTile = null,
+    highlightedPosition = null,
+    highlightedEnds = null,
+    onPositionClick,
+    tileSize = 72,
+    showOpenEndGlow = false,
+    profileDailyFritz = false,
+    fitMode = 'default',
+    showZoomTray = true,
+  }: BoardProps,
+  ref: ForwardedRef<BoardHandle>,
+) {
   useRenderProfiler('Board');
   if (profileDailyFritz) {
     recordDailyFritzBoardMetric('boardRenderCount', 1);
@@ -941,6 +961,15 @@ function BoardComponent({
     }));
   }, [markManualCamera]);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomIn: () => applyZoomStep(0.12),
+      zoomOut: () => applyZoomStep(-0.12),
+    }),
+    [applyZoomStep],
+  );
+
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
   return (
@@ -1098,6 +1127,7 @@ function BoardComponent({
           })}
 
       </div>
+      {showZoomTray ? (
       <div
         className="board-zoom-tray control-pill"
         onMouseDown={(e) => e.stopPropagation()}
@@ -1155,6 +1185,7 @@ function BoardComponent({
           +
         </button>
       </div>
+      ) : null}
     </div>
   );
 }
@@ -1171,10 +1202,11 @@ function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
     prev.tileSize === next.tileSize &&
     prev.showOpenEndGlow === next.showOpenEndGlow &&
     prev.profileDailyFritz === next.profileDailyFritz &&
-    prev.fitMode === next.fitMode
+    prev.fitMode === next.fitMode &&
+    prev.showZoomTray === next.showZoomTray
   );
 }
 
-export const Board = memo(BoardComponent, areBoardPropsEqual);
+export const Board = memo(forwardRef(BoardComponent), areBoardPropsEqual);
 
 export default Board;

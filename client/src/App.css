@@ -1485,9 +1485,9 @@ button:hover:not(:disabled) {
 }
 
 .mode-accent-ghost {
-  --mode-accent: rgba(168, 85, 247, 0.64);
-  --mode-section-tone: rgba(229, 204, 255, 0.8);
-  --mode-hover-border: rgba(196, 124, 255, 0.38);
+  --mode-accent: rgba(79, 195, 247, 0.64);
+  --mode-section-tone: rgba(191, 233, 255, 0.8);
+  --mode-hover-border: rgba(79, 195, 247, 0.38);
 }
 
 .mode-accent-daily {

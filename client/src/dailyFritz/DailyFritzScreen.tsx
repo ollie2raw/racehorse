@@ -27,7 +27,7 @@ import {
 import { formatOrdinalPlace } from './format';
 import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy } from './skunk';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
-import dailyFritzHeroPng from '../assets/dailyFritz/dailyfritzMATCH1.png';
+import dailyFritzHeroPng from '../assets/dailyFritz/playvsfritzdone.png';
 import './dailyFritz.css';
 
 /* Same marks as Play vs Fritz left-panel badges (compact header icons). */

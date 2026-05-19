@@ -19,7 +19,10 @@ npx --yes playwright screenshot \
   ../board-arena-v2-mock.png
 ```
 
-Canonical reference image: `docs/design-references/board-arena-v2-mock.png`
+Canonical reference images:
+
+- **Polished review mock:** `docs/design-references/board-arena-v2-mock-reference.png`
+- **HTML render capture:** `docs/design-references/board-arena-v2-mock.png` (re-capture at 1440×900 for best results)
 
 ## Design intent
 

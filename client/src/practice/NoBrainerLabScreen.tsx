@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Board, DominoTile, MatchNblBoardFrame } from '../components';
+import type { BoardHandle } from '../components';
 import { Button } from '../components/primitives';
 import '../components/primitives/Button.css';
 import type { PlacementPosition, Tile } from '../types';
@@ -51,11 +52,21 @@ function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {
   );
 }
 
+function HomeIcon() {
+  return (
+    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
+      <polyline points="9 21 9 12 15 12 15 21" />
+    </svg>
+  );
+}
+
 export default function NoBrainerLabScreen({
   userId = null,
   onBack,
 }: NoBrainerLabScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<BoardHandle>(null);
   const [dataset, setDataset] = useState<NoBrainerHandRecord[] | null>(null);
   const [record, setRecord] = useState<NoBrainerHandRecord | null>(null);
   const [practiceState, setPracticeState] = useState<NoBrainerPracticeState | null>(null);
@@ -317,15 +328,58 @@ export default function NoBrainerLabScreen({
             <div className="wl-stage-shell">
               <MatchNblBoardFrame
                 toolbar={
-                  <button
-                    type="button"
-                    className="nbl-icon-btn"
-                    onClick={toggleFullscreen}
-                    title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  <div
+                    className="nbl-board-controls-pill control-pill"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
                   >
-                    <FullscreenIcon isFullscreen={isFullscreen} />
-                  </button>
+                    <button
+                      type="button"
+                      className="board-zoom-btn"
+                      title="Zoom out"
+                      aria-label="Zoom out"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        boardRef.current?.zoomOut();
+                      }}
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      className="board-zoom-btn"
+                      title="Zoom in"
+                      aria-label="Zoom in"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        boardRef.current?.zoomIn();
+                      }}
+                    >
+                      +
+                    </button>
+                    <span className="nbl-board-controls-divider" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="nbl-board-control-btn"
+                      onClick={toggleFullscreen}
+                      title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                      aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                    >
+                      <FullscreenIcon isFullscreen={isFullscreen} />
+                    </button>
+                    <button
+                      type="button"
+                      className="nbl-board-control-btn"
+                      onClick={onBack}
+                      title="Back to Single Player"
+                      aria-label="Back to Single Player"
+                    >
+                      <HomeIcon />
+                    </button>
+                  </div>
                 }
               >
                 {practiceState.status === 'won' ? (
@@ -334,6 +388,8 @@ export default function NoBrainerLabScreen({
                   </div>
                 ) : null}
                 <Board
+                  ref={boardRef}
+                  showZoomTray={false}
                   board={practiceState.board}
                   legalMoves={practiceState.legalMoves}
                   selectedTile={selectedTile}

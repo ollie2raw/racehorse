@@ -67,8 +67,9 @@
 }
 
 .sp-lab-mode-card-container .sp-solo-mode-card__art {
-  object-position: center top;
-  transform: scale(1.2) translate(4%, 3%);
+  filter: brightness(1.52) contrast(1.08) saturate(1.2);
+  object-position: 54% 2%;
+  transform: scale(1.45) translate(4%, -4%);
 }
 
 .sp-lab-mode-card-container {
@@ -199,11 +200,17 @@
   transform: scale(1.28) translate(6%, 2%);
 }
 
-/* The Lab — light touch */
+/* The Lab — match Ghost / Fritz hero scale and placement */
 .home-main.sp-solo-main:not(.learn-hub-main) .sp-lab-mode-card-container .sp-solo-mode-card__art-slot::after {
-  width: 50%;
-  background: rgba(4, 7, 12, 0.19);
-  box-shadow: 40px 0 68px -16px rgba(4, 7, 12, 0.28);
+  width: 52%;
+  background: rgba(4, 7, 12, 0.23);
+  box-shadow: 48px 0 76px -14px rgba(4, 7, 12, 0.32);
+}
+
+.home-main.sp-solo-main:not(.learn-hub-main) .sp-lab-mode-card-container .sp-solo-mode-card__art {
+  filter: brightness(1.52) contrast(1.08) saturate(1.2);
+  object-position: 52% 0%;
+  transform: scale(1.56) translate(5%, -8%);
 }
 
 @media (max-width: 1100px) {

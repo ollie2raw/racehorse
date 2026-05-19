@@ -4,7 +4,7 @@ import { fetchGhostProfileSummary, fetchGhostProfileSummaryByUsername } from './
 import { fetchFriends, type FriendRecord } from '../friends/friendsApi';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
-import ghostHeroImg from '../assets/ghost/newGHOSTmode.png';
+import ghostHeroImg from '../assets/ghost/ghostblue.png';
 import '../bot/PlayVsFritz.css';
 import './ghostMode.css';
 
@@ -13,7 +13,8 @@ const TRAINED_THRESHOLD = 30;
 const FULL_LABEL_THRESHOLD = 15;
 const FEATURED_GHOST_USERNAME = 'oliver';
 
-const GHOST_DYNAMIC = '#c040ff';
+/** Matches Single Player hub Ghost Mode card (`SinglePlayerHubScreen`). */
+const GHOST_ACCENT = '#4FC3F7';
 const ELITE_GOLD = '#E7B64A';
 
 function ghostTier(gamesPlayed: number): 'early' | 'learning' | 'trained' {
@@ -244,8 +245,13 @@ export default function GhostSetupScreen({
 
   return (
     <div
-      className="pvf-root ghost-pvf-root tier-master mode-accent-ghost"
-      style={{ '--pvf-dynamic-color': GHOST_DYNAMIC } as React.CSSProperties}
+      className="pvf-root ghost-pvf-root tier-standard mode-accent-ghost"
+      style={
+        {
+          '--pvf-dynamic-color': GHOST_ACCENT,
+          '--pvf-active-color': GHOST_ACCENT,
+        } as React.CSSProperties
+      }
     >
       <div className="home-bg" aria-hidden="true">
         <div className="home-bg__halo" />
@@ -261,7 +267,7 @@ export default function GhostSetupScreen({
         onNavigate={onNavigate || ((mode) => (mode === 'home' ? onBack() : undefined))}
         onOpenAuth={onOpenAuth}
         onOpenAccount={onOpenAccount}
-        activeColor={GHOST_DYNAMIC}
+        activeColor={GHOST_ACCENT}
       />
 
       <div className="pvf-layout">
@@ -422,7 +428,7 @@ export default function GhostSetupScreen({
                 <div className="fritz-section-label">2. GHOST STATUS</div>
                 <div className="fritz-summary-strip fritz-summary-strip--mb-lg ghost-pvf-status-strip">
                   <div className="fritz-summary-item">
-                    <div className="fritz-summary-icon" style={{ color: GHOST_DYNAMIC }}>
+                    <div className="fritz-summary-icon" style={{ color: GHOST_ACCENT }}>
                       <IconShield />
                     </div>
                     <div>
@@ -434,8 +440,8 @@ export default function GhostSetupScreen({
                   </div>
                   <div className="fritz-summary-divider" aria-hidden />
                   <div className="fritz-summary-item">
-                    <div className="fritz-summary-icon" style={{ color: GHOST_DYNAMIC }}>
-                      <IconBars size={18} color={GHOST_DYNAMIC} />
+                    <div className="fritz-summary-icon" style={{ color: GHOST_ACCENT }}>
+                      <IconBars size={18} color={GHOST_ACCENT} />
                     </div>
                     <div>
                       <div className="fritz-summary-value">
@@ -446,8 +452,8 @@ export default function GhostSetupScreen({
                   </div>
                   <div className="fritz-summary-divider" aria-hidden />
                   <div className="fritz-summary-item">
-                    <div className="fritz-summary-icon" style={{ color: GHOST_DYNAMIC }}>
-                      <IconTrend color={GHOST_DYNAMIC} />
+                    <div className="fritz-summary-icon" style={{ color: GHOST_ACCENT }}>
+                      <IconTrend color={GHOST_ACCENT} />
                     </div>
                     <div>
                       <div className="fritz-summary-value ghost-pvf-last-five-value">{lastFiveLabel}</div>
@@ -507,9 +513,9 @@ export default function GhostSetupScreen({
                   disabled={!canPlay}
                   style={{
                     background: canPlay
-                      ? `linear-gradient(180deg, ${GHOST_DYNAMIC} 0%, ${GHOST_DYNAMIC}CC 100%)`
+                      ? `linear-gradient(180deg, ${GHOST_ACCENT} 0%, ${GHOST_ACCENT}CC 100%)`
                       : undefined,
-                    boxShadow: canPlay ? `0 0 32px ${GHOST_DYNAMIC}33, inset 0 1px 0 rgba(255,255,255,0.4)` : undefined,
+                    boxShadow: canPlay ? `0 0 32px ${GHOST_ACCENT}33, inset 0 1px 0 rgba(255,255,255,0.4)` : undefined,
                     opacity: canPlay ? 1 : 0.45,
                     cursor: canPlay ? 'pointer' : 'not-allowed',
                   }}

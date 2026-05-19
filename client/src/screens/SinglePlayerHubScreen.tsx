@@ -6,9 +6,9 @@ import type { AppMode } from "../types";
 import { GlobalNav } from "../components";
 import { Button } from "../components/primitives";
 import { useSinglePlayerHubStats, type HubStatRow } from "./useSinglePlayerHubStats";
-import artFritzPng from "../assets/singlePlayerHub/fritzwave.png";
+import artFritzPng from "../assets/singlePlayerHub/fritzwave1.png";
 import artGhostPng from "../assets/singlePlayerHub/fritzghost2.png";
-import artLabPng from "../assets/singlePlayerHub/fritznobrainer2.png";
+import artLabPng from "../assets/singlePlayerHub/leftfacingfritzNOBRAINER.png";
 
 interface SinglePlayerHubScreenProps {
   userId?: string | null;
@@ -201,8 +201,8 @@ export default function SinglePlayerHubScreen({
                   />
                 </div>
                 <div className="home-card-scrim" aria-hidden="true" />
-                <div className="home-card-content relative flex h-[268px] items-center">
-                  <div className="flex flex-1 flex-col justify-center">
+                <div className="home-card-content relative grid h-[268px] grid-rows-[1fr_auto] gap-7">
+                  <div className="flex min-h-0 flex-col justify-center">
                     <div className="sp-solo-mode-card__text">
                       <h2 className="text-[44px] font-bold tracking-[-0.055em]" style={{ color: mode.titleColor }}>
                         {mode.title}
@@ -222,25 +222,25 @@ export default function SinglePlayerHubScreen({
                         </div>
                       ))}
                     </div>
-                    <Button
-                      variant={mode.variant}
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        onNavigate(mode.key);
-                      }}
-                      className="mt-7"
-                      style={{ width: 188, height: 50, justifyContent: "space-between" }}
-                      type="button"
-                    >
-                      <span>Play</span>
-                      <span
-                        style={{ fontSize: 22, lineHeight: 1, color: mode.chevronColor, opacity: 0.9 }}
-                        aria-hidden="true"
-                      >
-                        ›
-                      </span>
-                    </Button>
                   </div>
+                  <Button
+                    variant={mode.variant}
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      onNavigate(mode.key);
+                    }}
+                    className="self-start"
+                    style={{ width: 188, height: 50, justifyContent: "space-between" }}
+                    type="button"
+                  >
+                    <span>Play</span>
+                    <span
+                      style={{ fontSize: 22, lineHeight: 1, color: mode.chevronColor, opacity: 0.9 }}
+                      aria-hidden="true"
+                    >
+                      ›
+                    </span>
+                  </Button>
                 </div>
               </section>
             ))}

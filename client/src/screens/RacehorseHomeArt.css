@@ -171,31 +171,31 @@
 
 /*
  * Today’s Race — Daily Fritz teaser (preview tile).
- * Uses the former in-mode lounge hero; in-mode screen uses dailyfritzMATCH1.png.
+ * In-mode Daily Fritz screen uses playvsfritzdone.png.
  */
 .home-card-art--fritz {
-  background-image: url("../assets/dailyFritz/fritz-robotNEW.png");
+  background-image: url("../assets/home/newhomedailyfritz.png");
   background-size: cover;
-  background-position: 68% 42%;
+  background-position: 64% 42%;
   opacity: 0.88;
-  filter: brightness(0.9) contrast(1.1) saturate(0.96);
+  filter: brightness(0.9) contrast(1.06) saturate(0.96);
   mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0, 0, 0, 0.08) 14%,
-    rgba(0, 0, 0, 0.22) 28%,
-    rgba(0, 0, 0, 0.52) 44%,
-    rgba(0, 0, 0, 0.82) 58%,
-    black 72%
+    rgba(0, 0, 0, 0.08) 12%,
+    rgba(0, 0, 0, 0.22) 24%,
+    rgba(0, 0, 0, 0.52) 32%,
+    rgba(0, 0, 0, 0.88) 40%,
+    black 48%
   );
   -webkit-mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0, 0, 0, 0.08) 14%,
-    rgba(0, 0, 0, 0.22) 28%,
-    rgba(0, 0, 0, 0.52) 44%,
-    rgba(0, 0, 0, 0.82) 58%,
-    black 72%
+    rgba(0, 0, 0, 0.08) 12%,
+    rgba(0, 0, 0, 0.22) 24%,
+    rgba(0, 0, 0, 0.52) 32%,
+    rgba(0, 0, 0, 0.88) 40%,
+    black 48%
   );
 }
 
@@ -206,35 +206,48 @@
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(4, 7, 12, 0.78) 0%, rgba(4, 7, 12, 0.34) 38%, transparent 54%),
-    linear-gradient(180deg, rgba(4, 7, 12, 0.5) 0%, transparent 42%),
-    radial-gradient(ellipse 48% 62% at 90% 48%, rgba(215, 166, 74, 0.07) 0%, transparent 62%);
+    linear-gradient(90deg, rgba(4, 7, 12, 0.62) 0%, rgba(4, 7, 12, 0.22) 28%, transparent 44%),
+    linear-gradient(180deg, rgba(4, 7, 12, 0.34) 0%, transparent 40%);
 }
 
 /* Daily Puzzle — cool cyan domino board (not a full scene render) */
 .home-card-art--puzzle {
-  background-image: url("../assets/home/subHOMEpuzzle.png");
+  background-image: url("../assets/home/homefinalpuzzle.png");
   opacity: var(--rh-img-home-art-puzzle-opacity);
-  filter: brightness(var(--rh-img-home-art-puzzle-brightness)) contrast(1.04) saturate(1.08);
-  background-position: 58% center;
+  filter: brightness(var(--rh-img-home-art-puzzle-brightness))
+    contrast(var(--rh-img-home-art-puzzle-contrast))
+    saturate(var(--rh-img-home-art-puzzle-saturate));
+  background-position: 56% center;
   mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0, 0, 0, 0.03) 20%,
-    rgba(0, 0, 0, 0.16) 34%,
-    rgba(0, 0, 0, 0.5) 50%,
-    rgba(0, 0, 0, 0.8) 66%,
-    black 100%
+    rgba(0, 0, 0, 0.04) 16%,
+    rgba(0, 0, 0, 0.14) 30%,
+    rgba(0, 0, 0, 0.42) 44%,
+    rgba(0, 0, 0, 0.76) 56%,
+    black 68%
   );
   -webkit-mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0, 0, 0, 0.03) 20%,
-    rgba(0, 0, 0, 0.16) 34%,
-    rgba(0, 0, 0, 0.5) 50%,
-    rgba(0, 0, 0, 0.8) 66%,
-    black 100%
+    rgba(0, 0, 0, 0.04) 16%,
+    rgba(0, 0, 0, 0.14) 30%,
+    rgba(0, 0, 0, 0.42) 44%,
+    rgba(0, 0, 0, 0.76) 56%,
+    black 68%
   );
+}
+
+/* Tactical blue lift on the right — lighter than Fritz so tiles/arrow read clearly */
+.home-card-art--puzzle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(4, 7, 12, 0.62) 0%, rgba(4, 7, 12, 0.22) 36%, transparent 52%),
+    linear-gradient(180deg, rgba(4, 7, 12, 0.34) 0%, transparent 40%),
+    radial-gradient(ellipse 44% 58% at 90% 50%, rgba(56, 148, 255, 0.14) 0%, transparent 58%);
 }
 
 /* Home hero only — heavy left read column; art on the right stays bright */
@@ -256,20 +269,34 @@
   box-shadow: inset 0 -28px 44px -32px rgba(4, 7, 12, 0.22);
 }
 
-/* Daily Fritz teaser — extra left protection (detail page uses lighter PVF scrim) */
+/* Daily Fritz — narrower left read column so visor/eyes sit outside the shadow */
 .home-main:not(.sp-solo-main):not(.learn-hub-main) .daily-fritz-card-container .home-card-scrim {
   background: linear-gradient(
     90deg,
-    rgba(4, 7, 12, 0.99) 0%,
-    rgba(4, 7, 12, 0.98) 18%,
-    rgba(4, 7, 12, 0.94) 32%,
-    rgba(4, 7, 12, 0.72) 44%,
-    rgba(4, 7, 12, 0.28) 50%,
-    transparent 56%
+    rgba(4, 7, 12, 0.97) 0%,
+    rgba(4, 7, 12, 0.95) 12%,
+    rgba(4, 7, 12, 0.88) 22%,
+    rgba(4, 7, 12, 0.42) 30%,
+    rgba(4, 7, 12, 0.14) 36%,
+    transparent 40%
+  );
+  box-shadow: inset 0 -28px 44px -32px rgba(4, 7, 12, 0.18);
+}
+
+/* Daily Puzzle teaser — strong left column */
+.home-main:not(.sp-solo-main):not(.learn-hub-main) .daily-puzzle-card-container .home-card-scrim {
+  background: linear-gradient(
+    90deg,
+    rgba(4, 7, 12, 0.97) 0%,
+    rgba(4, 7, 12, 0.95) 14%,
+    rgba(4, 7, 12, 0.88) 28%,
+    rgba(4, 7, 12, 0.48) 40%,
+    rgba(4, 7, 12, 0.12) 48%,
+    transparent 54%
   );
   box-shadow:
-    inset 0 -32px 48px -30px rgba(4, 7, 12, 0.35),
-    inset 48px 0 64px -20px rgba(4, 7, 12, 0.22);
+    inset 0 -28px 44px -32px rgba(4, 7, 12, 0.18),
+    inset 40px 0 56px -24px rgba(4, 7, 12, 0.14);
 }
 
 /* Overlay text shadows: rh-image-surface.css */

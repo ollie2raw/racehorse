@@ -70,9 +70,11 @@
 
   /* treatment--home: vivid art + light scrim (parity with /solo mode cards) */
   --rh-img-home-art-fritz-opacity: 0.96;
-  --rh-img-home-art-puzzle-opacity: 0.96;
+  --rh-img-home-art-puzzle-opacity: 1;
   --rh-img-home-art-fritz-brightness: 0.9;
-  --rh-img-home-art-puzzle-brightness: 1.05;
+  --rh-img-home-art-puzzle-brightness: 1.12;
+  --rh-img-home-art-puzzle-contrast: 1.05;
+  --rh-img-home-art-puzzle-saturate: 1.1;
 
   /* treatment--mode-card: /solo light–medium (seated, not raw) */
   --rh-img-mode-veil-alpha: 0.12;

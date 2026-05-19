@@ -404,17 +404,17 @@
   overflow: hidden;
 }
 
-.ghost-progress-fill {
+.ghost-pvf-root .ghost-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #8e6dff, #c7b4ff);
+  background: var(--pvf-dynamic-color);
   transition: width 0.4s ease;
 }
 
-.ghost-progress-label {
+.ghost-pvf-root .ghost-progress-label {
   font-size: 1.04rem;
   font-weight: 700;
-  color: rgba(199, 180, 255, 0.9);
+  color: color-mix(in srgb, var(--pvf-dynamic-color) 88%, #fff);
   white-space: nowrap;
 }
 
@@ -491,6 +491,10 @@
 }
 
 /* Ghost setup — PVF shell accents (Play vs Fritz shared layout) */
+.ghost-pvf-root .pvf-title {
+  color: var(--pvf-dynamic-color);
+}
+
 .ghost-pvf-root .ghost-pvf-opponent-row.fritz-selectable-row--active.ghost-pvf-opponent-row--purple {
   border: 1px solid color-mix(in srgb, var(--pvf-dynamic-color) 72%, transparent);
   border-left: 3px solid var(--pvf-dynamic-color);
@@ -653,7 +657,7 @@
   overflow-y: auto;
   padding-right: 2px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(192, 64, 255, 0.35) transparent;
+  scrollbar-color: color-mix(in srgb, var(--pvf-dynamic-color) 35%, transparent) transparent;
 }
 
 .ghost-pvf-friend-list::-webkit-scrollbar {
@@ -839,7 +843,7 @@
   isolation: isolate;
   display: inline-block;
   font-size: clamp(32px, 4.2vw, 52px);
-  color: #a855e8;
+  color: var(--pvf-dynamic-color);
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
 }
 
@@ -893,7 +897,7 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border: 1px solid rgba(192, 64, 255, 0.18);
+  border: 1px solid color-mix(in srgb, var(--pvf-dynamic-color) 18%, transparent);
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
