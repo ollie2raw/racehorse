@@ -1280,6 +1280,12 @@ export default function App() {
   const isAdmin = Boolean(
     authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
   );
+  const canOpenHowToPlayPreview = Boolean(
+    import.meta.env.DEV &&
+      authUser?.email &&
+      adminEmail &&
+      authUser.email.toLowerCase() === adminEmail.toLowerCase(),
+  );
   const needsUsernameOnboarding = Boolean(
     authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
   );
@@ -4387,7 +4393,7 @@ export default function App() {
         </div>
       );
     }
-    if (learnHowToPlayOpen) {
+    if (learnHowToPlayOpen && canOpenHowToPlayPreview) {
       return (
         <div className={appRootClassName}>
           <Suspense fallback={<ScreenLoader label="Loading Learn…" />}>
@@ -4422,7 +4428,10 @@ export default function App() {
             onNavigate={setAppMode}
             isAdmin={isAdmin}
             showAdminView={Boolean(isAdmin && showLearnAdminView)}
-            onOpenHowToPlay={() => setLearnHowToPlayOpen(true)}
+            canOpenHowToPlay={canOpenHowToPlayPreview}
+            onOpenHowToPlay={
+              canOpenHowToPlayPreview ? () => setLearnHowToPlayOpen(true) : undefined
+            }
             onStartGuidedGame={() => {
               setIsGuidedMode(true);
               // Use elite Fritz if a frozen lesson exists (authored vs Elite Fritz)

@@ -491,6 +491,22 @@ export function loadV2FrozenLesson(): LessonV2 | null {
   }
 }
 
+/**
+ * Guided Match requires a frozen lesson. Use localStorage if present; otherwise
+ * promote an in-progress authoring session (dev/publish workflow).
+ */
+export function ensureGuidedV2FrozenLesson(): LessonV2 | null {
+  const frozen = loadV2FrozenLesson();
+  if (frozen) return frozen;
+
+  const session = loadV2AuthoringSession();
+  if (session?.events?.length) {
+    return freezeV2Lesson(session);
+  }
+
+  return null;
+}
+
 export function saveV2FrozenLesson(lesson: LessonV2): void {
   lsSet(LESSON_V2_FROZEN_KEY, JSON.stringify(lesson));
 }

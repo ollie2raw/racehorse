@@ -1,0 +1,384 @@
+/* How to Play — full-screen immersive pager (Learn-only; not PVF split) */
+
+.learn-howto-page--immersive {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+.learn-howto-page--immersive .learn-howto-page__shell {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+  max-width: none;
+  width: 100%;
+}
+
+.learn-howto-immersive {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+  width: 100%;
+  padding: 0 clamp(1.25rem, 3.5vw, 2.75rem);
+  box-sizing: border-box;
+}
+
+.learn-howto-immersive__top {
+  flex-shrink: 0;
+  padding: 0.35rem 0 1rem;
+  max-width: min(72rem, 100%);
+  width: 100%;
+  margin: 0 auto;
+}
+
+.learn-howto-immersive__stage {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  max-width: min(72rem, 100%);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.learn-howto-immersive__content {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: clamp(0.5rem, 1.5vh, 1.25rem) 0;
+  animation: learn-howto-slide-in 220ms var(--ease-premium);
+}
+
+.learn-howto-immersive__content--hero {
+  align-items: center;
+  text-align: center;
+  justify-content: center;
+}
+
+/* Matte intro card on welcome */
+.learn-howto-hero__intro {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--pvf-radius-md);
+  background: rgba(7, 9, 16, 0.88);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.learn-howto-four-ideas {
+  display: grid;
+  gap: 0.65rem;
+  width: 100%;
+  max-width: min(40rem, 96%);
+  margin: 1.5rem auto 0;
+  text-align: left;
+}
+
+@media (min-width: 640px) {
+  .learn-howto-four-ideas {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+}
+
+.learn-howto-four-ideas__card {
+  padding: 0.85rem 1rem 0.95rem;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  background: rgba(7, 9, 16, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.learn-howto-four-ideas__card--gold {
+  border-color: rgba(215, 166, 74, 0.28);
+}
+
+.learn-howto-four-ideas__title {
+  margin: 0 0 0.25rem;
+  font-family: var(--font-display);
+  font-size: clamp(0.95rem, 1.2vw, 1.05rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--accent-green);
+}
+
+.learn-howto-four-ideas__card--gold .learn-howto-four-ideas__title {
+  color: var(--tier-elite);
+}
+
+.learn-howto-four-ideas__line {
+  margin: 0;
+  font-size: clamp(0.95rem, 1.15vw, 1.05rem);
+  line-height: 1.38;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.learn-howto-fake-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.learn-howto-fake-controls__btn {
+  padding: 0.55rem 1.15rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.learn-howto-fake-controls__btn--blocked {
+  opacity: 0.35;
+  text-decoration: line-through;
+  border-color: rgba(248, 113, 113, 0.35);
+  color: rgba(248, 113, 113, 0.85);
+}
+
+.learn-howto-turn-loop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+  max-width: min(36rem, 100%);
+}
+
+.learn-howto-turn-loop__step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 0.85rem 1rem;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  background: rgba(7, 9, 16, 0.82);
+}
+
+.learn-howto-turn-loop__num {
+  display: flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: rgba(52, 211, 153, 0.14);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--accent-green);
+}
+
+.learn-howto-turn-loop__q {
+  margin: 0 0 0.2rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 1.5vw, 1.2rem);
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.learn-howto-turn-loop__detail {
+  margin: 0;
+  font-size: clamp(0.95rem, 1.15vw, 1.05rem);
+  line-height: 1.4;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.learn-howto-boneyard-fact {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem 1rem;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  background: rgba(7, 9, 16, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.learn-howto-boneyard-fact__label {
+  margin: 0 0 0.65rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-green);
+}
+
+.learn-howto-boneyard-fact__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+}
+
+.learn-howto-boneyard-fact__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: clamp(0.85rem, 1.05vw, 0.95rem);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.learn-howto-boneyard-fact__chip strong {
+  font-family: var(--font-display);
+  font-size: 1.05em;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.learn-howto-boneyard-fact__chip--draw {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.learn-howto-boneyard-fact__chip--lock {
+  border-color: rgba(215, 166, 74, 0.35);
+  background: rgba(215, 166, 74, 0.08);
+}
+
+.learn-howto-boneyard-fact__chip--total {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.learn-howto-boneyard-fact__body {
+  margin: 0;
+  font-size: clamp(0.92rem, 1.1vw, 1.02rem);
+  line-height: 1.42;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.learn-howto-cta--primary {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 520px) {
+  .learn-howto-cta--primary {
+    grid-column: span 2;
+  }
+}
+
+.learn-howto-hero__hint {
+  margin: 1.25rem 0 0;
+  font-size: clamp(1rem, 1.5vh, 1.125rem);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Slide bodies fill stage width */
+.learn-howto-immersive .learn-howto-pvf-slide,
+.learn-howto-immersive .learn-howto-slide-panel,
+.learn-howto-immersive .rh-glass-card.learn-howto-slide-panel {
+  width: 100%;
+  max-width: 100%;
+  min-height: min(100%, 100%);
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.learn-howto-immersive .learn-howto-slide-panel--visual,
+.learn-howto-immersive .learn-howto-slide-panel--stack {
+  justify-content: center;
+}
+
+.learn-howto-immersive .learn-howto-pvf-slide--pillar {
+  align-items: center;
+}
+
+.learn-howto-immersive .learn-howto-diagram,
+.learn-howto-immersive .learn-howto-calc {
+  max-width: 100%;
+}
+
+/* Full-width bottom dock (screenshot-style) */
+.learn-howto-immersive__dock {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100vw;
+  max-width: none;
+  margin: 0 calc(-1 * clamp(1.25rem, 3.5vw, 2.75rem));
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(4, 8, 14, 0.92);
+}
+
+.learn-howto-dock-btn {
+  appearance: none;
+  min-height: clamp(52px, 7vh, 60px);
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--font-display);
+  font-size: clamp(0.95rem, 1.2vw, 1.05rem);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.learn-howto-dock-btn:last-child {
+  border-right: none;
+}
+
+.learn-howto-dock-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.learn-howto-dock-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.learn-howto-dock-btn--next {
+  color: #f2eee8;
+  background: color-mix(in srgb, var(--color-rookie) 14%, rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.learn-howto-dock-btn--next:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-rookie) 22%, rgba(255, 255, 255, 0.06));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 24px color-mix(in srgb, var(--color-rookie) 18%, transparent);
+  color: #fff;
+}
+
+.learn-howto-page--immersive .learn-howto-pager__footer {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .learn-howto-hero__title {
+    font-size: clamp(2.35rem, 10vw, 3.25rem);
+  }
+
+  .learn-howto-hero__intro {
+    padding: 1.15rem 1.25rem 1.25rem;
+  }
+}

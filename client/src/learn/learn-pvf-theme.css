@@ -1,0 +1,347 @@
+/* Learn mode — Play vs Fritz matte/neon (green coaching accent) */
+
+.learn-pvf-root,
+.learn-lesson-screen {
+  --pvf-dynamic-color: var(--color-rookie);
+}
+
+.learn-pvf-root.pvf-root.tier-rookie {
+  --pvf-gold: var(--color-rookie);
+}
+
+/* ── Matte panels (replace glass blur in Learn) ── */
+
+.learn-pvf-root .rh-glass-card,
+.learn-lesson-screen .learn-coach-panel {
+  background: rgba(7, 9, 16, 0.92);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--pvf-radius-lg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 32px rgba(0, 0, 0, 0.28);
+}
+
+.learn-pvf-root .rh-glass-card::before {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 0%, transparent 36%);
+}
+
+.learn-pvf-root .rh-glass-card--lifted {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 40px rgba(0, 0, 0, 0.34);
+}
+
+.learn-pvf-root .rh-glass-card--accent-green {
+  border-color: color-mix(in srgb, var(--color-rookie) 48%, rgba(255, 255, 255, 0.09));
+  box-shadow:
+    inset 0 0 20px color-mix(in srgb, var(--color-rookie) 7%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 16px color-mix(in srgb, var(--color-rookie) 8%, transparent),
+    0 8px 32px rgba(0, 0, 0, 0.28);
+}
+
+.learn-pvf-root .rh-glass-card--accent-gold {
+  border-color: color-mix(in srgb, var(--color-elite) 42%, rgba(255, 255, 255, 0.09));
+  box-shadow:
+    inset 0 0 18px color-mix(in srgb, var(--color-elite) 6%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 8px 32px rgba(0, 0, 0, 0.28);
+}
+
+/* Nested option cards — pvf-deal-card rhythm */
+.learn-pvf-root .learn-howto-slide__turn-card.rh-glass-card,
+.learn-pvf-root .learn-howto-slide__compare-card.rh-glass-card {
+  border-radius: var(--pvf-radius-md);
+  padding: 1rem 1.1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.learn-pvf-root .learn-howto-slide__turn-card.rh-glass-card:hover,
+.learn-pvf-root .learn-howto-slide__compare-card.rh-glass-card:hover {
+  border-color: color-mix(in srgb, var(--color-rookie) 35%, rgba(255, 255, 255, 0.12));
+}
+
+/* ── Hub mode cards ── */
+
+.learn-pvf-root .learn-mode-card:not(.sp-solo-mode-card--locked) {
+  background: rgba(7, 9, 16, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 14px 36px rgba(0, 0, 0, 0.32);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.learn-pvf-root .learn-mode-card:not(.sp-solo-mode-card--locked):hover {
+  border-color: color-mix(in srgb, var(--color-rookie) 42%, rgba(255, 255, 255, 0.12));
+  box-shadow:
+    inset 0 0 20px color-mix(in srgb, var(--color-rookie) 6%, transparent),
+    0 0 18px color-mix(in srgb, var(--color-rookie) 10%, transparent),
+    0 18px 40px rgba(0, 0, 0, 0.36);
+  transform: translateY(-2px);
+}
+
+.learn-pvf-root .learn-rules-card-container,
+.learn-pvf-root .learn-library-card-container,
+.learn-pvf-root .daily-fritz-card-container.learn-mode-card {
+  border-color: color-mix(in srgb, var(--color-rookie) 32%, rgba(255, 255, 255, 0.09));
+}
+
+.learn-pvf-root .learn-mode-card__badge--available {
+  border: 1px solid var(--color-rookie);
+  background: color-mix(in srgb, var(--color-rookie) 12%, transparent);
+  color: #dcffec;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--color-rookie) 28%, transparent);
+}
+
+.learn-pvf-root .learn-mode-card__badge:not(.learn-mode-card__badge--available) {
+  border-color: color-mix(in srgb, var(--color-elite) 38%, transparent);
+  background: color-mix(in srgb, var(--color-elite) 10%, transparent);
+}
+
+/* ── Primary / secondary CTAs ── */
+
+.learn-pvf-root .pvf-start-btn,
+.learn-lesson-screen .pvf-start-btn,
+.learn-pvf-root .learn-start-guided-btn,
+.learn-lesson-screen .learn-coach-panel__bestmove,
+.learn-lesson-screen .learn-coach-sidebar__bestmove {
+  background: linear-gradient(
+    180deg,
+    var(--pvf-dynamic-color) 0%,
+    color-mix(in srgb, var(--pvf-dynamic-color) 80%, #040b17) 100%
+  ) !important;
+  color: #1a1200 !important;
+  border: none !important;
+  box-shadow:
+    0 0 32px color-mix(in srgb, var(--pvf-dynamic-color) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42) !important;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.learn-pvf-root .pvf-start-btn:hover:not(:disabled),
+.learn-lesson-screen .pvf-start-btn:hover:not(:disabled),
+.learn-pvf-root .learn-start-guided-btn:hover:not(:disabled),
+.learn-lesson-screen .learn-coach-panel__bestmove:hover:not(:disabled),
+.learn-lesson-screen .learn-coach-sidebar__bestmove:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.learn-pvf-root .pvf-start-btn--elite,
+.learn-pvf-root .learn-howto-cta--elite {
+  --pvf-dynamic-color: var(--color-elite);
+}
+
+.learn-pvf-root .pvf-start-btn--standard,
+.learn-pvf-root .learn-howto-cta--standard {
+  --pvf-dynamic-color: var(--color-standard);
+}
+
+.learn-pvf-root .pvf-start-btn--outline,
+.learn-pvf-root .learn-howto-cta--outline {
+  appearance: none;
+  background: rgba(11, 18, 31, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+}
+
+.learn-pvf-root .pvf-start-btn--outline:hover:not(:disabled),
+.learn-pvf-root .learn-howto-cta--outline:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-rookie) 40%, rgba(255, 255, 255, 0.2)) !important;
+  color: #fff !important;
+  filter: none;
+}
+
+/* Hub + pager sizing */
+.learn-pvf-root .learn-mode-card__play.pvf-start-btn,
+.learn-pvf-root .learn-mode-card__rules-cta.pvf-start-btn {
+  width: 188px;
+  height: 50px;
+  margin-top: 0;
+}
+
+.learn-pvf-root .learn-hub-back.pvf-back-btn {
+  position: absolute;
+  left: 3.5rem;
+  top: 2.5rem;
+  z-index: 20;
+  margin-bottom: 0;
+}
+
+.learn-pvf-root .learn-howto-back.pvf-back-btn {
+  position: absolute;
+  left: 3.5rem;
+  top: 2.5rem;
+  z-index: 20;
+  margin-bottom: 0;
+}
+
+/* ── How to Play pager chrome ── */
+
+.learn-pvf-root .learn-howto-pager__progress-fill {
+  background: var(--color-rookie);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--color-rookie) 55%, transparent);
+}
+
+.learn-pvf-root .learn-howto-pager__step {
+  color: var(--color-rookie);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--color-rookie) 35%, transparent);
+}
+
+.learn-pvf-root .learn-howto-pager__dot--active {
+  background: var(--color-rookie);
+  box-shadow:
+    0 0 0 2px #040b17,
+    0 0 0 4px var(--color-rookie),
+    0 0 12px color-mix(in srgb, var(--color-rookie) 45%, transparent);
+}
+
+.learn-pvf-root .learn-howto-pager__dot--done {
+  background: color-mix(in srgb, var(--color-rookie) 55%, transparent);
+}
+
+.learn-pvf-root .learn-howto-pager__footer {
+  align-items: stretch;
+}
+
+.learn-pvf-root .learn-howto-pager__btn-back.pvf-back-btn {
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 0;
+  min-height: 52px;
+  border-radius: var(--pvf-radius-sm);
+}
+
+.learn-pvf-root .learn-howto-pager__btn-next.pvf-start-btn {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 0;
+  border-radius: var(--pvf-radius-sm);
+}
+
+.learn-pvf-root .learn-howto-slide__cta-grid .pvf-start-btn,
+.learn-pvf-root .learn-howto-slide__cta-grid .learn-howto-cta--outline {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 0;
+  border-radius: var(--pvf-radius-sm);
+}
+
+/* ── Lesson / guided match controls ── */
+
+.learn-lesson-screen.learn-pvf-root > .learn-guided-match__exit {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(11, 18, 31, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.learn-lesson-screen.learn-pvf-root > .learn-guided-match__exit:hover {
+  border-color: color-mix(in srgb, var(--color-rookie) 38%, rgba(255, 255, 255, 0.16));
+  color: #fff;
+}
+
+.learn-lesson-screen .learn-guided-match__coach-panel {
+  background: rgba(7, 9, 16, 0.92);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.learn-lesson-screen .learn-coach-sidebar__eyebrow {
+  color: var(--color-rookie);
+}
+
+.learn-lesson-screen .learn-coach-sidebar__title,
+.learn-lesson-screen .learn-coach-sidebar__tips-title {
+  color: rgba(247, 243, 238, 0.96);
+}
+
+.learn-lesson-screen .learn-coach-sidebar__optimal {
+  border-color: color-mix(in srgb, var(--color-rookie) 42%, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--color-rookie) 10%, rgba(7, 11, 18, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 20px color-mix(in srgb, var(--color-rookie) 12%, transparent);
+}
+
+.learn-lesson-screen .learn-coach-sidebar__optimal-label,
+.learn-lesson-screen .learn-coach-sidebar__tips-list li strong {
+  color: var(--color-rookie);
+}
+
+.learn-lesson-screen .learn-coach-sidebar__progress .rh-progress__fill {
+  background: var(--color-rookie);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-rookie) 40%, transparent);
+}
+
+.learn-lesson-screen .learn-coach-panel {
+  --pvf-dynamic-color: var(--color-rookie);
+  border-color: color-mix(in srgb, var(--color-rookie) 28%, rgba(255, 255, 255, 0.09));
+}
+
+.learn-lesson-screen .learn-coach-panel__progress .rh-progress__fill {
+  background: var(--color-rookie);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--color-rookie) 40%, transparent);
+}
+
+.learn-lesson-screen .learn-coach-panel__badge-dot {
+  background: var(--color-rookie);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-rookie) 42%, transparent);
+}
+
+.learn-lesson-screen .pvf-control-panel {
+  --pvf-dynamic-color: var(--color-rookie);
+}
+
+.learn-lesson-screen .learn-coach-panel__bestmove {
+  min-height: 48px;
+  border-radius: var(--pvf-radius-sm);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Admin learn columns */
+.learn-pvf-root .learn-col {
+  background: rgba(7, 9, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.learn-pvf-root .learn-start-guided-btn {
+  width: 100%;
+  min-height: 52px;
+  border-radius: var(--pvf-radius-sm);
+  font-size: 16px;
+}
+
+.learn-pvf-root .learn-mode-card__soon {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  text-shadow: none;
+}
+
+@media (max-width: 640px) {
+  .learn-pvf-root .learn-hub-back.pvf-back-btn,
+  .learn-pvf-root .learn-howto-back.pvf-back-btn {
+    left: 1.25rem;
+    top: 1rem;
+  }
+}

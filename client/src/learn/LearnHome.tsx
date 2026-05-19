@@ -1,12 +1,12 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
 import { GlobalNav } from '../components';
-import { Button } from '../components/primitives';
 import type { AppMode } from '../types';
 import '../screens/RacehorseHomeArt.css';
 import '../screens/SinglePlayerModes.css';
 import './learn.css';
 import {
+  ensureGuidedV2FrozenLesson,
   freezeV2Lesson,
   loadV2AuthoringSession,
   loadV2FrozenLesson,
@@ -56,13 +56,12 @@ type LearnModeCard = {
 const LEARN_MODE_CARDS: LearnModeCard[] = [
   {
     id: 'howToPlay',
-    unlocked: true,
+    unlocked: false,
     containerClass: 'learn-rules-card-container',
     sectionRounded: 'rounded-[20px] rounded-tr-[5px]',
     title: 'How to Play',
     titleColor: '#34D399',
     desc: 'The complete Racehorse rules, explained visually.',
-    badges: ['AVAILABLE'],
     artSrc: artCoachPng,
     action: 'howToPlay',
     ctaLabel: 'Learn Rules',
@@ -124,6 +123,7 @@ interface LearnHomeProps {
   showAdminView?: boolean;
   onStartGuidedV2Game?: () => void;
   onStartAuthoringV2?: () => void;
+  canOpenHowToPlay?: boolean;
   onOpenHowToPlay?: () => void;
 }
 
@@ -137,6 +137,7 @@ export default function LearnHome({
   showAdminView = false,
   onStartGuidedV2Game,
   onStartAuthoringV2,
+  canOpenHowToPlay = false,
   onOpenHowToPlay,
 }: LearnHomeProps) {
   const [v2AuthoringSession, setV2AuthoringSession] = useState<LessonV2AuthoringSession | null>(null);
@@ -159,15 +160,24 @@ export default function LearnHome({
     setTimeout(() => setV2FreezeFlash(false), 2000);
   };
 
+  const canPreviewHowToPlay = canOpenHowToPlay;
+
   const handleLearnCardActivate = (mode: LearnModeCard) => {
-    if (mode.action === 'howToPlay') onOpenHowToPlay?.();
-    else if (mode.action === 'guided') onStartGuidedV2Game?.();
+    if (mode.action === 'howToPlay') {
+      if (!canPreviewHowToPlay) return;
+      onOpenHowToPlay?.();
+      return;
+    }
+    if (mode.action === 'guided') {
+      ensureGuidedV2FrozenLesson();
+      onStartGuidedV2Game?.();
+    }
   };
 
   if (!isAdmin || !showAdminView) {
     return (
       <div
-        className="learn-hub-page relative flex max-h-full min-h-0 flex-1 overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root"
+        className="learn-hub-page learn-pvf-root pvf-root tier-rookie relative flex max-h-full min-h-0 flex-1 overflow-hidden bg-[#040b17] text-[var(--rh-text)] home-page-root"
         style={themeVars}
       >
         <div className="home-bg" aria-hidden="true">
@@ -199,9 +209,9 @@ export default function LearnHome({
               aria-hidden="true"
             />
 
-            <Button variant="ghost" className="absolute left-14 top-10 z-20 rh-back-button" onClick={onBack} type="button">
+            <button type="button" className="pvf-back-btn learn-hub-back" onClick={onBack}>
               ← Back to Home
-            </Button>
+            </button>
 
             <div className="relative z-10 text-center">
               <h1
@@ -217,7 +227,18 @@ export default function LearnHome({
 
             <div className="relative z-10 mt-[42px] learn-hub-grid--modes min-h-0 w-full flex-1 px-14 pb-2">
               {LEARN_MODE_CARDS.map((mode) => {
-                const isLocked = !mode.unlocked || (mode.id === 'guided' && !isAdmin);
+                const isLocked =
+                  !mode.unlocked ||
+                  (mode.id === 'guided' && !isAdmin) ||
+                  (mode.id === 'howToPlay' && !canPreviewHowToPlay);
+                const cardDesc =
+                  mode.id === 'howToPlay' && canPreviewHowToPlay
+                    ? `${mode.desc} (Dev preview — admin only)`
+                    : mode.desc;
+                const cardBadges =
+                  mode.id === 'howToPlay' && canPreviewHowToPlay
+                    ? ['DEV PREVIEW']
+                    : mode.badges;
 
                 return (
                   <section
@@ -254,12 +275,12 @@ export default function LearnHome({
                           >
                             {mode.title}
                           </h2>
-                          <p className={`learn-mode-card__desc ${isLocked ? 'is-muted' : ''}`}>{mode.desc}</p>
+                          <p className={`learn-mode-card__desc ${isLocked ? 'is-muted' : ''}`}>{cardDesc}</p>
                         </div>
 
-                        {mode.badges && mode.badges.length > 0 ? (
+                        {cardBadges && cardBadges.length > 0 ? (
                           <div className="learn-mode-card__badges">
-                            {mode.badges.map((badge) => (
+                            {cardBadges.map((badge) => (
                               <span
                                 key={badge}
                                 className={`learn-mode-card__badge${badge === 'AVAILABLE' ? ' learn-mode-card__badge--available' : ''}`}
@@ -275,18 +296,20 @@ export default function LearnHome({
                         {isLocked ? (
                           <div className="learn-mode-card__soon">COMING SOON</div>
                         ) : mode.action === 'howToPlay' ? (
-                          <Button
+                          <button
                             type="button"
-                            variant="tier-rookie"
-                            className="learn-mode-card__rules-cta"
+                            className="pvf-start-btn learn-mode-card__rules-cta"
                             onClick={(e: MouseEvent) => {
                               e.stopPropagation();
                               onOpenHowToPlay?.();
                             }}
                             disabled={!onOpenHowToPlay}
                           >
-                            {mode.ctaLabel ?? 'Learn Rules'}
-                          </Button>
+                            <span>{mode.ctaLabel ?? 'Learn Rules'}</span>
+                            <span className="pvf-start-arrow" aria-hidden="true">
+                              ›
+                            </span>
+                          </button>
                         ) : (
                           <button
                             type="button"
@@ -320,7 +343,7 @@ export default function LearnHome({
       className="ghost-setup-screen mode-subpage-screen mode-accent-ghost"
       title="Learn Racehorse"
       subtitle="Build one fixed coached match cleanly."
-      contentClassName="multiplayer-menu-card screen-shell"
+      contentClassName="multiplayer-menu-card screen-shell learn-pvf-root pvf-root tier-rookie"
     >
       <div className="learn-columns">
         <div className="learn-col">

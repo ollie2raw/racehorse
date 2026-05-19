@@ -1,6 +1,7 @@
 /* Learn hub — extends Single Player mode cards (RacehorseHomeArt + SinglePlayerModes) */
 @import '../styles/_pvf-layout.css';
 @import './learnGuidedMatch.css';
+@import './learn-pvf-theme.css';
 
 .learn-hub-page {
   flex: 1 1 0;
@@ -8,7 +9,7 @@
   max-height: 100%;
 }
 
-.learn-lesson-screen .learn-guided-match {
+.learn-lesson-screen .learn-guided-cockpit {
   flex: 1 1 0;
   min-height: 0;
   max-height: 100%;
@@ -417,10 +418,6 @@
   width: 188px;
   height: 50px;
   margin-top: 0;
-  background: linear-gradient(180deg, #e7b64a 0%, #e7b64acc 100%);
-  box-shadow:
-    0 0 32px rgba(231, 182, 74, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .learn-mode-card__play.pvf-start-btn:disabled {
@@ -582,21 +579,12 @@
 
 .learn-start-guided-btn {
   width: 100%;
-  height: 56px;
-  background: #16a34a;
-  border: none;
-  border-radius: 10px;
-  color: #ffffff;
-  font-size: 18px;
-  font-weight: 800;
+  min-height: 52px;
+  border-radius: var(--pvf-radius-sm);
+  font-size: 16px;
   cursor: pointer;
-  transition: background 150ms ease;
   text-align: center;
   flex-shrink: 0;
-}
-
-.learn-start-guided-btn:hover {
-  background: #15803d;
 }
 
 .learn-cta-sub {

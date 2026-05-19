@@ -14,6 +14,7 @@ interface LessonCoachPanelProps {
   stepIndex: number;
   totalSteps: number;
   coachingText: string;
+  momentTitle?: string;
   onBestMove: () => void;
   canBestMove: boolean;
   isOffAuthoredLine?: boolean;
@@ -54,10 +55,23 @@ function buildTipsFromCoachingText(text: string): CoachingTip[] {
     .filter((tip): tip is CoachingTip => tip !== null);
 }
 
+function deriveMomentTitle(coachingText: string, explicit?: string): string {
+  if (explicit?.trim()) return explicit.trim();
+  const trimmed = coachingText.trim();
+  if (!trimmed) return 'Read the position';
+  const firstBlock = trimmed.split(/\n\s*\n/)[0]?.trim() ?? '';
+  const firstLine = firstBlock.split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  if (!firstLine) return 'Your decision';
+  if (/^play:/i.test(firstLine)) return 'Choose your line';
+  if (firstLine.length <= 52) return firstLine.replace(/\.$/, '');
+  return 'Your decision';
+}
+
 export default function LessonCoachPanel({
   stepIndex,
   totalSteps,
   coachingText,
+  momentTitle,
   onBestMove,
   canBestMove,
   isOffAuthoredLine = false,
@@ -74,98 +88,98 @@ export default function LessonCoachPanel({
     coachingTips && coachingTips.length > 0
       ? [...parsedTips, ...coachingTips]
       : parsedTips;
+  const title = deriveMomentTitle(coachingText, momentTitle);
   const rationale =
     optimalRationale?.trim() ||
     (showRecommendation && coachingText.trim()
       ? coachingText.split(/\n\s*\n/)[0]?.replace(/\n/g, ' ').trim()
       : '');
+  const watchNextTips = showRecommendation ? tips : [];
 
   return (
-    <section className="learn-coach-sidebar" aria-label="Learn mode coaching">
-      <header className="learn-coach-sidebar__header">
-        <p className="learn-coach-sidebar__eyebrow">Learn mode</p>
-        <h2 className="learn-coach-sidebar__title">Strategic breakdown</h2>
+    <section className="learn-coach-rail" aria-label="Guided match coaching">
+      <header className="learn-coach-rail__header">
+        <p className="learn-coach-rail__eyebrow">Guided match · Learn mode</p>
+        <h2 className="learn-coach-rail__title">{title}</h2>
       </header>
 
+      {!isOffAuthoredLine ? (
+        <div className="rh-progress learn-coach-rail__progress">
+          <div className="rh-progress__head">
+            <span>Lesson progress</span>
+            <strong>{progressLabel}</strong>
+          </div>
+          <div className="rh-progress__rail">
+            <div className="rh-progress__fill" style={{ width: `${progressPct}%` }} />
+          </div>
+        </div>
+      ) : null}
+
       {isOffAuthoredLine ? (
-        <div className="learn-coach-sidebar__offline">
+        <div className="learn-coach-rail__state learn-coach-rail__state--offline">
           <p>You went off the authored line. This hand continues live from here — coaching follows the live position.</p>
         </div>
       ) : (
         <>
-          {showRecommendation && optimalTile ? (
-            <div className="learn-coach-sidebar__optimal">
-              <div className="learn-coach-sidebar__optimal-tile" aria-hidden="true">
-                <DominoTile tile={optimalTile} size={36} />
+          <div className={`learn-coach-rail__state${showRecommendation ? ' is-revealed' : ''}`}>
+            <span className="learn-coach-rail__state-label">
+              {showRecommendation ? 'Fritz recommends' : 'Your turn to think'}
+            </span>
+            {showRecommendation && optimalTile ? (
+              <div className="learn-coach-rail__recommendation">
+                <div className="learn-coach-rail__rec-tile" aria-hidden="true">
+                  <DominoTile tile={optimalTile} size={40} />
+                </div>
+                <div className="learn-coach-rail__rec-copy">
+                  {rationale ? <p className="learn-coach-rail__rec-why">{rationale}</p> : null}
+                </div>
               </div>
-              <div className="learn-coach-sidebar__optimal-copy">
-                <span className="learn-coach-sidebar__optimal-label">Optimal move</span>
-                {rationale ? <p>{rationale}</p> : null}
-              </div>
-            </div>
-          ) : showRecommendation ? (
-            <div className="learn-coach-sidebar__optimal is-placeholder">
-              <p className="learn-coach-sidebar__optimal-label">Optimal move</p>
-              <p>Reveal coaching to see the recommended tile and why it works here.</p>
-            </div>
-          ) : null}
+            ) : showRecommendation ? (
+              <p className="learn-coach-rail__rec-placeholder">
+                Coaching is loaded for this turn. Use Show best move to play the authored line.
+              </p>
+            ) : (
+              <p className="learn-coach-rail__rec-placeholder">
+                Think first. Reveal Fritz&apos;s recommendation when you&apos;re ready.
+              </p>
+            )}
+          </div>
 
-          <div className="learn-coach-sidebar__tips">
-            <h3 className="learn-coach-sidebar__tips-title">Fritz&apos;s coaching tips</h3>
-            {tips.length > 0 ? (
-              <ul className="learn-coach-sidebar__tips-list">
-                {tips.map((tip, index) => (
+          {showRecommendation && watchNextTips.length > 0 ? (
+            <div className="learn-coach-rail__watch">
+              <h3 className="learn-coach-rail__watch-title">What to watch next</h3>
+              <ul className="learn-coach-rail__watch-list">
+                {watchNextTips.slice(0, 3).map((tip, index) => (
                   <li key={`${tip.title}-${index}`}>
                     <strong>{tip.title}</strong>
                     <p>{tip.body}</p>
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="learn-coach-sidebar__tips-empty">
-                {showRecommendation
-                  ? 'No extra notes for this turn — play the line and watch how the board responds.'
-                  : 'Show recommendation to load coaching notes for this turn.'}
-              </p>
-            )}
-          </div>
-        </>
-      )}
-
-      <footer className="learn-coach-sidebar__footer">
-        {!isOffAuthoredLine ? (
-          <>
-            <div className="rh-progress learn-coach-sidebar__progress">
-              <div className="rh-progress__head">
-                <span>Lesson progress</span>
-                <strong>{progressLabel}</strong>
-              </div>
-              <div className="rh-progress__rail">
-                <div className="rh-progress__fill" style={{ width: `${progressPct}%` }} />
-              </div>
             </div>
+          ) : null}
 
+          <div className="learn-coach-rail__actions">
             <button
               type="button"
-              className="learn-coach-sidebar__bestmove"
+              className="learn-coach-rail__primary"
               disabled={!canBestMove}
               onClick={onBestMove}
             >
               Show best move
             </button>
-
             {onToggleRecommendation ? (
               <button
                 type="button"
-                className="learn-coach-sidebar__toggle"
+                className="learn-coach-rail__secondary"
                 onClick={onToggleRecommendation}
               >
-                {showRecommendation ? 'Hide recommendation' : 'Show recommendation'}
+                {showRecommendation ? 'Hide recommendation' : 'Reveal recommendation'}
               </button>
             ) : null}
-          </>
-        ) : null}
-      </footer>
+          </div>
+        </>
+      )}
     </section>
   );
 }

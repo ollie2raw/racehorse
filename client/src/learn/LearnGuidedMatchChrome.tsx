@@ -1,88 +1,46 @@
-import { MatchBoardTurnBar } from '../components/MatchBoardTurnBar';
-import { MatchScoreHeader } from '../components/MatchScoreHeader';
-import type { BoardState } from '../types';
-
 export interface LearnGuidedMatchChromeProps {
-  username: string;
-  opponentLabel: string;
   yourScore: number;
   opponentScore: number;
-  yourTileCount: number;
-  opponentTileCount: number;
-  winningScore: number;
   turnLabel: string;
   isYourTurn: boolean;
-  board: BoardState | null;
   openEndsSum: number;
-  onOpenScoreTrack?: () => void;
+  boneyardCount: number;
 }
 
 export default function LearnGuidedMatchChrome({
-  username,
-  opponentLabel,
   yourScore,
   opponentScore,
-  yourTileCount,
-  opponentTileCount,
-  winningScore,
   turnLabel,
   isYourTurn,
-  board,
   openEndsSum,
-  onOpenScoreTrack,
+  boneyardCount,
 }: LearnGuidedMatchChromeProps) {
-  const displayName = username.trim() || 'You';
-
   return (
-    <header className="learn-guided-chrome" data-ui="learn-match-hud">
-      <div className="learn-guided-chrome__players">
-        <div className="learn-guided-chrome__player is-you">
-          <span className="learn-guided-chrome__avatar" aria-hidden="true">
-            {displayName.charAt(0).toUpperCase()}
-          </span>
-          <div className="learn-guided-chrome__player-meta">
-            <span className="learn-guided-chrome__player-name">{displayName}</span>
-            <strong className="learn-guided-chrome__player-score">{yourScore}</strong>
-          </div>
+    <header className="learn-guided-match-state" data-ui="learn-match-hud">
+      <div className="fritz-section-label">1. Current Decision</div>
+      <div className="learn-guided-match-state__grid">
+        <div className="learn-guided-match-state__stat">
+          <div className="fritz-summary-value">{opponentScore}</div>
+          <div className="fritz-summary-key">Fritz Score</div>
         </div>
-
-        <MatchBoardTurnBar
-          turnLabel={turnLabel}
-          isYourTurn={isYourTurn}
-          board={board}
-          openEndsSum={openEndsSum}
-          showOpenEnds
-        />
-
-        <div className="learn-guided-chrome__player is-opp">
-          <div className="learn-guided-chrome__player-meta is-opp">
-            <span className="learn-guided-chrome__player-name">{opponentLabel}</span>
-            <strong className="learn-guided-chrome__player-score">{opponentScore}</strong>
+        <div className="learn-guided-match-state__stat learn-guided-match-state__stat--turn">
+          <div className={`learn-guided-match-state__turn-pill${isYourTurn ? ' is-active' : ''}`}>
+            {isYourTurn ? 'Your Move' : turnLabel}
           </div>
-          <span className="learn-guided-chrome__avatar is-bot" aria-hidden="true">
-            F
-          </span>
+          <div className="fritz-summary-key">Turn State</div>
         </div>
-      </div>
-
-      <div className="learn-guided-chrome__track-wrap">
-        <MatchScoreHeader
-          target={winningScore}
-          you={{
-            label: displayName,
-            score: yourScore,
-            tileCount: yourTileCount,
-            isActive: isYourTurn,
-          }}
-          opponent={{
-            label: opponentLabel,
-            sublabel: 'Bot',
-            score: opponentScore,
-            tileCount: opponentTileCount,
-            isActive: !isYourTurn,
-          }}
-          onOpenDetail={onOpenScoreTrack}
-        />
+        <div className="learn-guided-match-state__stat">
+          <div className="fritz-summary-value">{yourScore}</div>
+          <div className="fritz-summary-key">Your Score</div>
+        </div>
+        <div className="learn-guided-match-state__stat">
+          <div className="fritz-summary-value">{openEndsSum}</div>
+          <div className="fritz-summary-key">Open Count</div>
+        </div>
+        <div className="learn-guided-match-state__stat">
+          <div className="fritz-summary-value">{boneyardCount}</div>
+          <div className="fritz-summary-key">Boneyard</div>
+        </div>
       </div>
     </header>
   );
