@@ -2754,8 +2754,34 @@ body {
   overflow-x: auto !important;
 }
 
+/* Single-row rack: center tile + underline glow as one unit (do not touch has-multiple-rows) */
 .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row {
-  transform: translateY(17px);
+  transform: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row .hand-row {
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* Wrap = tile + external underline glow (glow stays below tile, not inset) */
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row .guided-tile-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-bottom: 14px;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row .domino-tile {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
 }
 
 .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-hand-area .tray-rail {
