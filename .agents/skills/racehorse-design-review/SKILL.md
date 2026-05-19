@@ -5,6 +5,8 @@ description: Use when reviewing Racehorse screenshots, mockups, UI directions, o
 
 # Racehorse Design Review Skill
 
+Before reviewing or critiquing UI, read `docs/agent-skills/racehorse-design-source-of-truth.md`. The Play vs Fritz matte/neon panel system is canonical; walnut-era naming and old warm themes are not valid design direction.
+
 ## Purpose
 
 Use this skill before coding when reviewing Racehorse UI.
@@ -15,7 +17,7 @@ This skill is for analysis and planning, not implementation.
 
 ## Brand anchor
 
-The Racehorse homepage is the source of truth for platform identity:
+The Racehorse homepage remains the platform identity anchor; **evaluate execution** against the Play vs Fritz matte/neon panel system (`docs/agent-skills/racehorse-design-source-of-truth.md`). Homepage-level themes include:
 - premium daily strategy-game platform
 - deep midnight navy / blue-black background
 - electric blue/cyan UI energy

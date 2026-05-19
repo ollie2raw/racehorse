@@ -7,7 +7,7 @@ import { useMatchmaking } from './useMatchmaking';
 import type { MatchFoundPayload } from './types';
 import { MultiplayerTopBar } from './MultiplayerTopBar';
 import { ArenaRings } from '../multiplayer/ArenaRings';
-import { IconFlame, IconUserBust } from '../multiplayer/MultiplayerDuelIcons';
+import { IconFlame, IconPlus, IconUserBust } from '../multiplayer/MultiplayerDuelIcons';
 import { DuelOpponentFriendButton } from '../multiplayer/DuelOpponentFriendButton';
 import { MultiplayerHubFeatureStrip } from '../multiplayer/MultiplayerHubFeatureStrip';
 import { MultiplayerTwoColumnPvLayout } from '../multiplayer/MultiplayerTwoColumnPvLayout';
@@ -238,7 +238,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                 </p>
               </div>
 
-              <div className="pml-room-stage pml-room-stage--quick">
+              <div className="pml-room-stage">
                 <div className="pml-room-stage__scroll">
                   <div className="pml-matchup">
                   <ArenaRings />
@@ -327,6 +327,9 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                         <div className="pml-duel-avatar-frame">
                           <div className="pml-duel-avatar pml-duel-avatar--invite" aria-hidden>
                             <IconUserBust gradientId="mm-bust-opp" />
+                            <span className="pml-duel-avatar-plus" aria-hidden>
+                              <IconPlus />
+                            </span>
                           </div>
                         </div>
                         <div className="pml-duel-name pml-duel-name--awaiting">

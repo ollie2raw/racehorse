@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { Board, BoneyardCountPill, BrandLogo, DominoTile, RotateOverlay } from '../components';
+import { Board, BoneyardCountPill, BrandLogo, DominoTile, MatchNblBoardFrame, RotateOverlay } from '../components';
 import {
   applyPlayMove,
   getDisplayOpenEnds,
@@ -1499,7 +1499,7 @@ export default function DailyPuzzleScreen({
   return (
     <>
       <RotateOverlay />
-      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
+      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-standard-live-board">
       <canvas
         ref={confettiCanvasRef}
         style={{
@@ -1545,21 +1545,23 @@ export default function DailyPuzzleScreen({
         </div>
       </div>
 
-      <div className="wl-stage-shell">
-        <div className="board-area wl-board-area" data-ui="board">
-          {!runtimeState.gameOver && (
-            <div className="rh-board-meta-bar rh-board-meta-bar--count-only" data-ui="board-meta">
-              <BoneyardCountPill count={runtimeState.boneyard.length} />
-            </div>
-          )}
-          <Board
-            board={runtimeState.board}
-            legalMoves={legalMoves}
-            selectedTile={selectedTile}
-            lastPlayedTile={lastPlayedTile}
-            onPositionClick={onPositionClick}
-            tileSize={72}
-          />
+      <div className="rh-live-studio-shell">
+        <div className="rh-live-board-zone" data-ui="live-board-zone">
+          <div className="wl-stage-shell">
+            <MatchNblBoardFrame>
+              {!runtimeState.gameOver && (
+                <div className="rh-board-meta-bar rh-board-meta-bar--count-only" data-ui="board-meta">
+                  <BoneyardCountPill count={runtimeState.boneyard.length} />
+                </div>
+              )}
+              <Board
+                board={runtimeState.board}
+                legalMoves={legalMoves}
+                selectedTile={selectedTile}
+                lastPlayedTile={lastPlayedTile}
+                onPositionClick={onPositionClick}
+                tileSize={84}
+              />
           {solvableWarning && (
             <div className="daily-puzzle-warning-banner">
               Puzzle warning: {validation?.reason} (best score {validation?.bestScore}). You can
@@ -1573,10 +1575,11 @@ export default function DailyPuzzleScreen({
               explored={validation?.exploredStates}
             </div>
           )}
+            </MatchNblBoardFrame>
+          </div>
         </div>
-      </div>
 
-      <div className="hand-area wl-hand-area" data-ui="tray">
+        <div className="hand-area wl-hand-area" data-ui="tray">
         <div className="tray-rail">
           <div className="tray-center">
             <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
@@ -1621,7 +1624,7 @@ export default function DailyPuzzleScreen({
               ))}
             </div>
           </div>
-
+        </div>
         </div>
       </div>
 
@@ -1702,7 +1705,7 @@ export default function DailyPuzzleScreen({
         </div>
       )}
 
-    </div>
+      </div>
     </>
   );
 }

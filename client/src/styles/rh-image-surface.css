@@ -1,6 +1,6 @@
 /*
  * Racehorse image treatment tiers (presentation only).
- * --home: medium-dark cinematic (RacehorseHomeArt.css + tokens)
+ * --home: vivid art + heavy left text scrim (RacehorseHomeArt.css + tokens)
  * --mode-card: /solo light–medium, seated in card
  * --hero: mode hero panels, light–medium
  * No frosted panels, no hard seams. Inset shadows + veil only on compact/hero.
@@ -16,7 +16,8 @@
 }
 
 .rh-img-treatment--mode-card .rh-img-scrim--mode,
-.sp-solo-main .home-card-scrim {
+.learn-hub-main .home-card-scrim,
+.home-main.sp-solo-main:not(.learn-hub-main) .home-card-scrim {
   position: absolute;
   inset: 0;
   z-index: 2;

@@ -74,7 +74,17 @@ export async function resolveDailyFritzNextHandCache<T>(
   createRequest: () => Promise<T>,
 ): Promise<T> {
   if (cache?.result) return cache.result;
-  if (cache?.promise) return cache.promise;
+  if (cache?.promise) {
+    // A rejected prefetch (or any failed attempt) leaves `error` set and the
+    // same rejected promise on the cache. Retrying must issue a fresh fetch —
+    // the server path is idempotent (replayed/ignored responses).
+    if (cache.error) return createRequest();
+    try {
+      return await cache.promise;
+    } catch {
+      return createRequest();
+    }
+  }
   return createRequest();
 }
 
@@ -89,8 +99,10 @@ export function emitHandLifecycleDebugLog(
     runId?: string;
   },
 ): void {
-  const env = (import.meta as ImportMeta & { env?: { VITE_DEBUG_HAND_LIFECYCLE?: string } }).env;
-  if (!DEV && env?.VITE_DEBUG_HAND_LIFECYCLE !== 'true') return;
+  const env = (import.meta as ImportMeta & {
+    env?: { VITE_DEBUG_HAND_LIFECYCLE?: string; VITE_DEBUG_DAILY_FRITZ?: string };
+  }).env;
+  if (!DEV && env?.VITE_DEBUG_HAND_LIFECYCLE !== 'true' && env?.VITE_DEBUG_DAILY_FRITZ !== 'true') return;
   fetch(endpoint, {
     method: 'POST',
     headers: {

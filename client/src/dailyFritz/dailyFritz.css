@@ -5006,14 +5006,38 @@
     0 18px 40px rgba(0, 0, 0, 0.3);
 }
 
-.df-pvf-card-bg-img {
+/*
+ * Daily Fritz hero — portrait card crop for dailyfritzMATCH1 (3:2).
+ * Shift art up so domino tiles sit above bottom stat pills; Fritz stays center-right.
+ */
+.df-pvf-opponent-card .df-pvf-card-bg-img {
   position: absolute;
-  top: -40px;
+  top: -124px;
   left: 0;
   width: 100%;
-  height: calc(100% + 40px);
-  object-position: 50% 48%;
+  height: calc(100% + 124px);
+  object-fit: cover;
+  object-position: 58% 38%;
+  transform: none;
   z-index: 0;
+}
+
+/* Shelf gradient: stat pills read on table tone, not on tiles */
+.df-pvf-opponent-card .df-pvf-card-overlay {
+  background:
+    linear-gradient(
+      to top,
+      rgba(5, 9, 16, 0.78) 0%,
+      rgba(5, 9, 16, 0.32) 28%,
+      transparent 48%
+    ),
+    rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-veil-alpha));
+  box-shadow:
+    inset var(--rh-img-hero-left-spread) 0 var(--rh-img-hero-left-blur) var(--rh-img-hero-left-contract)
+      rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-left-alpha)),
+    inset var(--rh-img-hero-left-fade-spread) 0 92px -54px
+      rgba(var(--rh-img-ink-rgb), var(--rh-img-hero-left-fade-alpha)),
+    inset 0 -40px 58px -26px rgba(var(--rh-img-ink-rgb), 0.26);
 }
 
 /* Scrim + media tuning: rh-image-surface.css */
@@ -5067,39 +5091,15 @@
   left: 16px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.df-pvf-card-badge {
-  min-width: 0;
-  padding: 10px 10px 11px;
-}
-
-.df-pvf-card-badge-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 6px;
 }
 
 .df-pvf-card-badge-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 13px;
-  font-weight: 700;
   color: var(--tier-elite);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .df-pvf-card-badge-desc {
-  font-size: 11px;
-  line-height: 1.2;
   color: var(--text-secondary);
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
 }
 
 .df-pvf-control-panel {
@@ -5523,6 +5523,12 @@
 
   .df-pvf-opponent-card {
     min-height: 400px;
+  }
+
+  .df-pvf-opponent-card .df-pvf-card-bg-img {
+    top: -118px;
+    height: calc(100% + 118px);
+    object-position: 56% 40%;
   }
 
   .df-pvf-overview-grid {

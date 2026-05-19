@@ -1,21 +1,29 @@
 ---
 name: racehorse-ui-fidelity
-description: Use when refining Racehorse Dominoes UI screens to match the locked homepage identity or a supplied target screenshot/reference.
+description: Use when refining Racehorse Dominoes UI. Always read docs/agent-skills/racehorse-design-source-of-truth.md first; Play vs Fritz matte/neon panels are canonical. Then align to homepage/target references as needed.
 ---
 
 # Racehorse UI Fidelity Skill
+
+Before doing any UI work, read (in order):
+
+1. `docs/agent-skills/racehorse-design-source-of-truth.md` — **global identity law**; overrides legacy class names, old screenshots, and walnut-era references.
+2. This skill file.
+
+The Play vs Fritz matte/neon panel system is the canonical design source of truth. Walnut is deprecated as a visual direction; legacy filenames like `walnut-live.css` are implementation artifacts only.
 
 ## Purpose
 
 Use this skill for Racehorse visual/UI refinement tasks.
 
 The goal is not to invent a new design direction. The goal is to make the current screen more faithful to:
-1. the locked Racehorse homepage identity, and
-2. any supplied target/reference screenshot for that specific screen.
+1. the Play vs Fritz matte/neon panel system (primary),
+2. the locked Racehorse homepage identity where it aligns with that system, and
+3. any supplied target/reference screenshot for that specific screen.
 
 ## Brand anchor
 
-The Racehorse homepage is the source of truth for platform identity:
+The Racehorse homepage remains a platform identity anchor, but **visual execution** should match the Play vs Fritz matte/neon panel treatment (see `docs/agent-skills/racehorse-design-source-of-truth.md`). Homepage-level themes include:
 - deep midnight navy / blue-black background
 - premium dark glass cards
 - thin blue/brass borders
@@ -43,13 +51,14 @@ Avoid:
 ## Required workflow
 
 Before editing:
-1. Read AGENTS.md.
-2. Read the relevant screen/component/CSS files.
-3. Identify the smallest responsible set of files.
-4. Compare current UI vs the homepage identity and/or target screenshot by region.
-5. Write a visual gap analysis.
-6. Propose a scoped implementation plan.
-7. Wait for approval unless the user explicitly says to proceed.
+1. Read `docs/agent-skills/racehorse-design-source-of-truth.md`.
+2. Read AGENTS.md (especially the Racehorse Design Source of Truth section).
+3. Read the relevant screen/component/CSS files.
+4. Identify the smallest responsible set of files.
+5. Compare current UI vs Play vs Fritz / homepage identity and/or target screenshot by region.
+6. Write a visual gap analysis.
+7. Propose a scoped implementation plan.
+8. Wait for approval unless the user explicitly says to proceed.
 
 When implementing:
 1. Preserve gameplay logic and data flow.

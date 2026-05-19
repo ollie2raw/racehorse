@@ -3,6 +3,7 @@ import type { FritzTier } from "./fritzConfig";
 import type { BotDealSize } from "./botEngine";
 import type { AppMode } from "../types";
 import { DominoTile, GlobalNav } from "../components";
+import pvfHeroImg from "../assets/bot/playfritz2png.png";
 import "./PlayVsFritz.css";
 
 /* ---- High-Fidelity Home Icons ---- */
@@ -193,7 +194,7 @@ export default function PlayVsFritz({
 
           <div className="pvf-opponent-card">
             {/* 1. Background Image */}
-            <img src="/fritz2.png" className="pvf-card-bg-img" alt="Fritz Robot" />
+            <img src={pvfHeroImg} className="pvf-card-bg-img" alt="Fritz Robot" />
             
             {/* 2. Gradient Overlay */}
             <div className="pvf-card-overlay" />

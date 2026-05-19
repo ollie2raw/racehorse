@@ -1665,6 +1665,124 @@
   line-height: 1.52 !important;
 }
 
+/* ─── Modal overlay (ladder + daily puzzle completion) ─── */
+.rh-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg-obsidian) 42%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 16px;
+  animation: rh-fade 180ms ease;
+}
+
+@keyframes rh-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dpl-ladder-pending-modal {
+  width: min(420px, calc(100vw - 32px));
+  padding: clamp(28px, 4vw, 36px);
+  text-align: center;
+}
+
+.dpl-ladder-pending-modal .rh-result__feedback {
+  margin: 0 auto;
+}
+
+.dpl-ladder-pending-copy {
+  margin: 0;
+  padding: 0 22px 22px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* Daily Ladder completion — electric blue identity (not daily-puzzle gold/green) */
+.dpl-ladder-result {
+  border-color: color-mix(in srgb, var(--tier-standard) 22%, rgba(255, 255, 255, 0.08));
+}
+
+.dpl-ladder-result .rh-result__head {
+  background:
+    radial-gradient(ellipse 80% 70% at 0% 100%, color-mix(in srgb, var(--tier-standard) 20%, transparent), transparent 70%),
+    radial-gradient(ellipse 50% 50% at 100% 0%, color-mix(in srgb, var(--tier-standard) 8%, transparent), transparent 70%);
+}
+
+.dpl-ladder-result .claude-mode-hero__eyebrow {
+  color: var(--tier-standard);
+}
+
+.dpl-ladder-result .rh-result__score {
+  color: color-mix(in srgb, var(--tier-standard) 88%, var(--text-primary));
+  text-shadow: 0 0 48px color-mix(in srgb, var(--tier-standard) 32%, transparent);
+}
+
+.dpl-ladder-result__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 16px 20px 20px;
+}
+
+.dpl-ladder-result__actions--triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dpl-ladder-result-btn {
+  appearance: none;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    transform var(--duration-fast) var(--ease-premium),
+    border-color var(--duration-fast) var(--ease-premium),
+    box-shadow var(--duration-fast) var(--ease-premium);
+}
+
+.dpl-ladder-result-btn--ghost {
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 18%, var(--border-subtle));
+  background: color-mix(in srgb, var(--glass-bg) 88%, transparent);
+  color: var(--text-secondary);
+}
+
+.dpl-ladder-result-btn--ghost:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--tier-standard) 36%, var(--border-subtle));
+  color: var(--text-primary);
+}
+
+.dpl-ladder-result-btn--primary {
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 72%, white);
+  background: var(--tier-standard);
+  color: var(--text-primary);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--tier-standard) 28%, transparent);
+}
+
+.dpl-ladder-result-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--tier-standard) 38%, transparent);
+}
+
+@media (max-width: 640px) {
+  .dpl-ladder-result__actions,
+  .dpl-ladder-result__actions--triple {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ─── Daily Puzzle Result Modal Redesign ─── */
 .rh-result {
   width: min(720px, calc(100vw - 32px));
@@ -2142,6 +2260,10 @@
   box-shadow: 0 0 8px color-mix(in srgb, var(--tier-standard) 50%, transparent);
 }
 
+.dpl-ladder-hub .df-pvf-card-header {
+  max-width: none;
+}
+
 .dpl-ladder-hub .df-pvf-card-name {
   color: var(--tier-standard);
   text-shadow: var(--rh-overlay-text-shadow-heading);
@@ -2256,6 +2378,148 @@
 .dpl-ladder-hub .df-pvf-actions .dpl-ladder-practice {
   margin-top: 0;
   width: 100%;
+}
+
+/* Right control panel — even padding and full-width rows */
+.dpl-ladder-hub .df-pvf-control-panel {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 20px 24px 22px;
+  gap: 14px;
+}
+
+.dpl-ladder-hub .df-pvf-section {
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+}
+
+.dpl-ladder-hub .df-pvf-overview-grid,
+.dpl-ladder-hub .df-pvf-progress-grid,
+.dpl-ladder-hub .df-pvf-summary-strip {
+  width: 100%;
+  min-width: 0;
+}
+
+.dpl-ladder-hub .df-pvf-overview-grid {
+  gap: 8px;
+}
+
+.dpl-ladder-hub .df-pvf-overview-card {
+  padding: 10px;
+  gap: 8px;
+}
+
+.dpl-ladder-hub .df-pvf-overview-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.dpl-ladder-hub .df-pvf-overview-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dpl-ladder-hub .df-pvf-overview-value {
+  font-size: clamp(13px, 1.05vw, 16px);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dpl-ladder-hub .df-pvf-progress-grid {
+  gap: 8px;
+}
+
+.dpl-ladder-hub .df-pvf-progress-card {
+  padding: 12px 11px;
+}
+
+.dpl-ladder-hub .df-pvf-progress-body {
+  min-width: 0;
+}
+
+.dpl-ladder-hub .df-pvf-summary-strip {
+  align-items: stretch;
+}
+
+.dpl-ladder-hub .df-pvf-summary-item {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 10px;
+  gap: 8px;
+}
+
+.dpl-ladder-hub .df-pvf-summary-item > div:not(.df-pvf-summary-icon) {
+  flex: 1;
+  min-width: 0;
+}
+
+.dpl-ladder-hub .df-pvf-summary-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.dpl-ladder-hub .df-pvf-summary-value {
+  font-size: clamp(12px, 1vw, 15px);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dpl-ladder-hub .df-pvf-actions {
+  width: 100%;
+  min-width: 0;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.dpl-ladder-hub .dpl-ladder-practice-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.dpl-ladder-hub .dpl-ladder-practice-chip {
+  flex: unset;
+  width: 100%;
+  min-width: 0;
+}
+
+.dpl-ladder-hub .dpl-ladder-footer {
+  width: 100%;
+}
+
+@media (max-width: 1280px) {
+  .dpl-ladder-hub .df-pvf-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dpl-ladder-hub .df-pvf-summary-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dpl-ladder-hub .df-pvf-summary-divider {
+    display: none;
+  }
+
+  .dpl-ladder-hub .df-pvf-summary-item {
+    border-radius: var(--pvf-radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+  }
+}
+
+@media (max-width: 1100px) {
+  .dpl-ladder-hub .df-pvf-control-panel {
+    padding: 20px 20px 18px;
+  }
 }
 
 .dpl-ladder-df-hero-img.df-hero-fullbleed__img {
@@ -2591,17 +2855,6 @@
   font-size: 11px;
   font-weight: 600;
   line-height: 1.35;
-  color: var(--fritz-muted-label);
-}
-
-.dpl-ladder-practice-label {
-  display: block;
-  margin-bottom: 8px;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--fritz-muted-label);
 }
 

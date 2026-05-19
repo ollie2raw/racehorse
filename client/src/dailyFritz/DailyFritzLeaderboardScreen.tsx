@@ -79,15 +79,32 @@ function isCurrentUserRow(row: DailyFritzLeaderboardRow, currentUsername: string
   );
 }
 
-function RankCrown({ rank }: { rank: 1 | 2 | 3 }) {
-  const tone = rank === 1 ? 'gold' : rank === 2 ? 'silver' : 'bronze';
+function RankIcon({ rank }: { rank: 1 | 2 | 3 }) {
+  if (rank === 1) {
+    return (
+      <span className="dflb-crown dflb-rank-icon--gold" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18">
+          <path
+            d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
+            fill="#e7b64a"
+          />
+        </svg>
+      </span>
+    );
+  }
+
+  const trophyColor = rank === 2 ? '#94a3b8' : '#c97b3f';
+  const tone = rank === 2 ? 'silver' : 'bronze';
+
   return (
-    <span className={`dflb-crown dflb-crown--${tone}`} aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="16" height="16">
-        <path
-          d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
-          fill="currentColor"
-        />
+    <span className={`dflb-trophy dflb-rank-icon--${tone}`} aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke={trophyColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+        <path d="M4 22h16" />
+        <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+        <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+        <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
       </svg>
     </span>
   );
@@ -144,7 +161,7 @@ function LeaderboardRow({
         .join(' ')}
     >
       <div className="dflb-rank">
-        {topRank ? <RankCrown rank={topRank} /> : null}
+        {topRank ? <RankIcon rank={topRank} /> : null}
         <strong className={`dflb-rank-num${topRank ? ` is-${topRank}` : ''}`}>{row.rank}</strong>
       </div>
       <div className="dflb-player">
@@ -187,10 +204,21 @@ function PodiumSlot({
 }) {
   const ring = rank === 1 ? 'gold' : rank === 2 ? 'silver' : 'bronze';
 
+  const rankDisplay = rank === 1 ? null : (
+    <RankIcon rank={rank} />
+  );
+
+  const crownBadge = rank === 1 ? (
+    <span className="dflb-podium-crown-badge" aria-hidden="true">
+      <RankIcon rank={1} />
+    </span>
+  ) : null;
+
   if (!row) {
     return (
       <div className={`dflb-podium-slot place-${rank} is-empty`}>
-        <span className="dflb-podium-rank">#{rank}</span>
+        {crownBadge}
+        {rankDisplay}
         <span className="dflb-podium-avatar dflb-podium-avatar--empty" aria-hidden="true">
           <span className="dflb-podium-avatar__glyph">+</span>
         </span>
@@ -202,12 +230,8 @@ function PodiumSlot({
 
   return (
     <div className={`dflb-podium-slot place-${rank}${rank === 1 ? ' is-featured' : ''}`}>
-      {rank === 1 ? (
-        <span className="dflb-podium-crown-badge" aria-hidden="true">
-          <RankCrown rank={1} />
-        </span>
-      ) : null}
-      <span className="dflb-podium-rank">#{rank}</span>
+      {crownBadge}
+      {rankDisplay}
       <PlayerInitialsAvatar username={row.username} size={rank === 1 ? 'lg' : 'md'} ring={ring} />
       <span className="dflb-podium-name">{row.username}</span>
       <span className="dflb-podium-score">{row.finalScore}–{row.opponentScore}</span>

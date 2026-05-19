@@ -83,6 +83,13 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.dflb-eyebrow--ladder,
+.dflb-tier-chip--puzzle {
+  border-color: rgba(76, 201, 240, 0.38);
+  background: rgba(76, 201, 240, 0.1);
+  color: #9ee7ff;
+}
+
 .dflb-command__title {
   margin: 10px 0 0;
   font-family: var(--font-display);
@@ -331,9 +338,15 @@
   gap: 5px;
 }
 
-.dflb-crown--gold { color: var(--hub-gold); }
-.dflb-crown--silver { color: #94a3b8; }
-.dflb-crown--bronze { color: #c97b3f; }
+.dflb-rank-icon--gold { color: var(--hub-gold); }
+.dflb-rank-icon--silver { color: #94a3b8; }
+.dflb-rank-icon--bronze { color: #c97b3f; }
+
+.dflb-trophy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .dflb-rank-num {
   font-family: var(--font-display);
@@ -631,17 +644,19 @@
 
 .dflb-podium-crown-badge {
   position: absolute;
-  top: 6px;
+  top: 4px;
   left: 50%;
   transform: translateX(-50%);
 }
 
-.dflb-podium-crown-badge .dflb-crown {
+.dflb-podium-crown-badge .dflb-crown,
+.dflb-podium-crown-badge .dflb-trophy {
   width: 18px;
   height: 18px;
 }
 
-.dflb-podium-crown-badge .dflb-crown svg {
+.dflb-podium-crown-badge .dflb-crown svg,
+.dflb-podium-crown-badge .dflb-trophy svg {
   width: 18px;
   height: 18px;
 }

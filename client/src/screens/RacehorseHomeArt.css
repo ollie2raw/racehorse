@@ -169,78 +169,107 @@
   transition: opacity 180ms ease;
 }
 
+/*
+ * Today’s Race — Daily Fritz teaser (preview tile).
+ * Uses the former in-mode lounge hero; in-mode screen uses dailyfritzMATCH1.png.
+ */
 .home-card-art--fritz {
-  background-image: url("../assets/home/daily-fritz-art.webp");
-  opacity: var(--rh-img-home-art-fritz-opacity);
-  filter: brightness(var(--rh-img-home-art-fritz-brightness)) contrast(1.02) saturate(1.02);
-  background-position: 78% center;
+  background-image: url("../assets/dailyFritz/fritz-robotNEW.png");
+  background-size: cover;
+  background-position: 68% 42%;
+  opacity: 0.88;
+  filter: brightness(0.9) contrast(1.1) saturate(0.96);
   mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0,0,0,0.02) 20%,
-    rgba(0,0,0,0.12) 34%,
-    rgba(0,0,0,0.42) 50%,
-    rgba(0,0,0,0.72) 66%,
-    black 100%
+    rgba(0, 0, 0, 0.08) 14%,
+    rgba(0, 0, 0, 0.22) 28%,
+    rgba(0, 0, 0, 0.52) 44%,
+    rgba(0, 0, 0, 0.82) 58%,
+    black 72%
   );
   -webkit-mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0,0,0,0.02) 20%,
-    rgba(0,0,0,0.12) 34%,
-    rgba(0,0,0,0.42) 50%,
-    rgba(0,0,0,0.72) 66%,
-    black 100%
+    rgba(0, 0, 0, 0.08) 14%,
+    rgba(0, 0, 0, 0.22) 28%,
+    rgba(0, 0, 0, 0.52) 44%,
+    rgba(0, 0, 0, 0.82) 58%,
+    black 72%
   );
 }
 
+/* Moody atmospheric veil — teaser only, not detail hero */
+.home-card-art--fritz::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(4, 7, 12, 0.78) 0%, rgba(4, 7, 12, 0.34) 38%, transparent 54%),
+    linear-gradient(180deg, rgba(4, 7, 12, 0.5) 0%, transparent 42%),
+    radial-gradient(ellipse 48% 62% at 90% 48%, rgba(215, 166, 74, 0.07) 0%, transparent 62%);
+}
+
+/* Daily Puzzle — cool cyan domino board (not a full scene render) */
 .home-card-art--puzzle {
-  background-image: url("../assets/home/daily-puzzle-art.webp");
+  background-image: url("../assets/home/subHOMEpuzzle.png");
   opacity: var(--rh-img-home-art-puzzle-opacity);
-  filter: brightness(var(--rh-img-home-art-puzzle-brightness)) contrast(1.02) saturate(0.99);
-  background-position: 82% center;
+  filter: brightness(var(--rh-img-home-art-puzzle-brightness)) contrast(1.04) saturate(1.08);
+  background-position: 58% center;
   mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0,0,0,0.03) 22%,
-    rgba(0,0,0,0.16) 36%,
-    rgba(0,0,0,0.48) 52%,
-    rgba(0,0,0,0.78) 68%,
+    rgba(0, 0, 0, 0.03) 20%,
+    rgba(0, 0, 0, 0.16) 34%,
+    rgba(0, 0, 0, 0.5) 50%,
+    rgba(0, 0, 0, 0.8) 66%,
     black 100%
   );
   -webkit-mask-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0,0,0,0.03) 22%,
-    rgba(0,0,0,0.16) 36%,
-    rgba(0,0,0,0.48) 52%,
-    rgba(0,0,0,0.78) 68%,
+    rgba(0, 0, 0, 0.03) 20%,
+    rgba(0, 0, 0, 0.16) 34%,
+    rgba(0, 0, 0, 0.5) 50%,
+    rgba(0, 0, 0, 0.8) 66%,
     black 100%
   );
 }
 
-/* treatment--home: medium-dark cinematic (wider cards — stronger than /solo) */
-.home-main:not(.sp-solo-main) .home-card-scrim,
+/* Home hero only — heavy left read column; art on the right stays bright */
+.home-main:not(.sp-solo-main):not(.learn-hub-main) .home-card-scrim,
 .rh-img-treatment--home .home-card-scrim {
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  background:
-    linear-gradient(
-      90deg,
-      rgba(4, 7, 12, 0.88) 0%,
-      rgba(4, 7, 12, 0.84) 18%,
-      rgba(4, 7, 12, 0.74) 34%,
-      rgba(4, 7, 12, 0.52) 52%,
-      rgba(4, 7, 12, 0.32) 72%,
-      rgba(4, 7, 12, 0.2) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(0, 0, 0, 0.18) 0%,
-      rgba(0, 0, 0, 0.24) 100%
-    );
+  background: linear-gradient(
+    90deg,
+    rgba(4, 7, 12, 0.97) 0%,
+    rgba(4, 7, 12, 0.94) 14%,
+    rgba(4, 7, 12, 0.86) 28%,
+    rgba(4, 7, 12, 0.58) 40%,
+    rgba(4, 7, 12, 0.22) 48%,
+    transparent 54%
+  );
+  box-shadow: inset 0 -28px 44px -32px rgba(4, 7, 12, 0.22);
+}
+
+/* Daily Fritz teaser — extra left protection (detail page uses lighter PVF scrim) */
+.home-main:not(.sp-solo-main):not(.learn-hub-main) .daily-fritz-card-container .home-card-scrim {
+  background: linear-gradient(
+    90deg,
+    rgba(4, 7, 12, 0.99) 0%,
+    rgba(4, 7, 12, 0.98) 18%,
+    rgba(4, 7, 12, 0.94) 32%,
+    rgba(4, 7, 12, 0.72) 44%,
+    rgba(4, 7, 12, 0.28) 50%,
+    transparent 56%
+  );
+  box-shadow:
+    inset 0 -32px 48px -30px rgba(4, 7, 12, 0.35),
+    inset 48px 0 64px -20px rgba(4, 7, 12, 0.22);
 }
 
 /* Overlay text shadows: rh-image-surface.css */

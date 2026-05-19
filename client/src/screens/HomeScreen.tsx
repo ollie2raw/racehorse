@@ -47,8 +47,8 @@ const tabs: { label: string; color: string; icon: 'robot' | 'users' | 'cap' | 't
   { label: 'Multiplayer', color: '#3FA7FF', icon: 'users', mode: 'multiplayer' },
   { label: 'Single Player', color: '#9B6CFF', icon: 'robot', mode: 'singlePlayerHub' },
   { label: 'Tournament', color: '#F5A524', icon: 'trophy', mode: 'tournament' },
-  { label: 'Learn', color: '#19D8A2', icon: 'cap', mode: 'learn' },
   { label: 'Social', color: '#B8C7DA', icon: 'medal', mode: 'feed' },
+  { label: 'Learn', color: '#19D8A2', icon: 'cap', mode: 'learn' },
 ];
 
 function TabIcon({ icon, color, size = 22 }: { icon: (typeof tabs)[number]['icon']; color: string; size?: number }) {
@@ -279,7 +279,7 @@ export default function RacehorseHomeScreen({
         <main className="relative flex-1 px-0 pb-5 pt-10 home-main">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-[linear-gradient(180deg,rgba(7,12,22,0.26)_0%,transparent_100%)]" />
           <div className="text-center">
-            <h1 className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-white" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Challenge</h1>
+            <h1 className="text-[64px] font-black leading-[0.9] tracking-[-0.05em] text-white" style={{ textShadow: '0 0 48px rgba(160,200,255,0.13), 0 2px 0 rgba(0,0,0,0.3)' }}>Today&apos;s Race</h1>
             <p className="mt-3 text-[20px] font-normal text-[#727083] opacity-90">Two ways to test your strategy. One daily tradition.</p>
           </div>
 
@@ -290,14 +290,16 @@ export default function RacehorseHomeScreen({
               <div className="home-card-content relative flex h-[268px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#E7B64A]">Daily Fritz</h2>
-                  <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Best of 3 series. Same deal for everyone.</p>
-                  <StatusRow
-                    status={fritzStatus}
-                    text={fritzStatus === 'completed' ? (fritzOutcome === 'win' ? 'Win' : fritzOutcome === 'loss' ? 'Loss' : undefined) : undefined}
-                    color="#E7B64A"
-                    accentColor="#FFD76A"
-                    textColor={fritzOutcome === 'win' ? '#7EE24E' : fritzOutcome === 'loss' ? '#F87171' : undefined}
-                  />
+                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">Best of 3 series. Same deal for everyone.</p>
+                  <div className="mt-2">
+                    <StatusRow
+                      status={fritzStatus}
+                      text={fritzStatus === 'completed' ? (fritzOutcome === 'win' ? 'Win' : fritzOutcome === 'loss' ? 'Loss' : undefined) : undefined}
+                      color="#E7B64A"
+                      accentColor="#FFD76A"
+                      textColor={fritzOutcome === 'win' ? '#7EE24E' : fritzOutcome === 'loss' ? '#F87171' : undefined}
+                    />
+                  </div>
                   <Button
                     variant="tier-elite"
                     onClick={() => navigate('dailyFritz')}
@@ -317,13 +319,15 @@ export default function RacehorseHomeScreen({
               <div className="home-card-content relative flex h-[268px] items-center">
                 <div className="flex flex-1 flex-col justify-center">
                   <h2 className="text-[44px] font-bold tracking-[-0.055em] text-[#58A6FF]">Daily Puzzle</h2>
-                  <p className="mt-3 text-[17px] text-[#AAA6B4] leading-relaxed">Three daily puzzles. Rising difficulty.</p>
-                  <StatusRow
-                    status={puzzleStatus}
-                    text={puzzleStatus === 'completed' && puzzleScore != null ? `Score: ${puzzleScore}` : undefined}
-                    color="#58A6FF"
-                    accentColor="#68B3FF"
-                  />
+                  <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">Three daily puzzles. Rising difficulty.</p>
+                  <div className="mt-2">
+                    <StatusRow
+                      status={puzzleStatus}
+                      text={puzzleStatus === 'completed' && puzzleScore != null ? `Score: ${puzzleScore}` : undefined}
+                      color="#58A6FF"
+                      accentColor="#68B3FF"
+                    />
+                  </div>
                   <Button
                     variant="tier-standard"
                     onClick={() => navigate('daily')}

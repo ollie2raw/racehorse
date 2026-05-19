@@ -4,7 +4,7 @@
 
 This document guides future in-game board redesign work for Racehorse Dominoes.
 
-It is used together with `AGENTS.md` and the `racehorse-ui-fidelity` skill.
+It is used together with `AGENTS.md`, `docs/agent-skills/racehorse-design-source-of-truth.md`, and the `racehorse-ui-fidelity` skill.
 
 The intent is to define the target visual direction for the match board before implementation so future redesign passes stay aligned, scoped, and consistent with the Racehorse product identity.
 

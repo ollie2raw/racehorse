@@ -35,8 +35,8 @@ const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
   { label: 'Multiplayer', mode: 'multiplayer', activeModes: ['multiplayer'] },
   { label: 'Single Player', mode: 'singlePlayerHub', activeModes: ['singlePlayerHub', 'botSetup', 'ghostSetup', 'noBrainer', 'dailyFritz', 'daily'] },
   { label: 'Tournament', mode: 'tournament', activeModes: ['tournament'] },
-  { label: 'Learn', mode: 'learn', activeModes: ['learn'] },
   { label: 'Social', mode: 'feed', activeModes: ['feed', 'friends', 'leaderboard', 'profile', 'stats'] },
+  { label: 'Learn', mode: 'learn', activeModes: ['learn'] },
 ];
 
 const TAB_COLORS: Record<string, string> = {

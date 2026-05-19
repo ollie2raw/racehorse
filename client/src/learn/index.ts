@@ -1,4 +1,5 @@
 export { default as LearnHome } from './LearnHome';
+export { default as LearnHowToPlayRacehorse } from './LearnHowToPlayRacehorse';
 export { default as LearnPlayer } from './LearnPlayer';
 export { default as LearnBoard } from './components/LearnBoard';
 export * from './data';

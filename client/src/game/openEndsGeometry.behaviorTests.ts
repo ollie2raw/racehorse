@@ -114,6 +114,19 @@ function run(): void {
     expectEqual(computeOpenEndsSum(board), 19, 'partially crossed double tip total');
   }
 
+  {
+    const board = buildScreenshotLayout();
+    const laneHubs = board.hubDoubles.filter(
+      (h) => h.laneType === 'branch' && h.laneRef === 'branch-0-0',
+    );
+    assert(laneHubs.length >= 2, 'screenshot lane should have multiple branch-lane hub records');
+    assert(
+      explainOpenEndsSum(board).some((c) => c.tile === '[2|2]' && c.value === 4),
+      'open [2|2] at lane tip must count full tile value',
+    );
+    assert(computeOpenEndsSum(board) > 10, 'regression: mainline-only scorer returned 10');
+  }
+
   console.log('openEndsGeometry.behaviorTests.ts: all passed');
 }
 

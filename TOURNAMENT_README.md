@@ -51,7 +51,7 @@ select count(*) from public.scheduled_tournaments where scheduled_start > now();
 | Disconnect handling | **Existing 30s reconnect window, then forfeit** | Reuses the battle-tested room reconnect system |
 | Rating impact | **None — tournament results don't touch Glicko** | Recorded only in `scheduled_tournament_matches` |
 | Schedule timezone | **America/Los_Angeles** | DST handled by Postgres `at time zone` |
-| Tournament accent color | **Amber/orange** (`var(--accent-amber)`) | Per AGENTS.md §2 |
+| Tournament accent color | **Amber/orange** (`var(--accent-amber)`) | Per AGENTS.md §3 |
 
 ## How to run locally
 

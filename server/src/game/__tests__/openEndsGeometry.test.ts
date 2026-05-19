@@ -4,6 +4,7 @@ import {
   assertOpenEndsSumConsistent,
   auditOpenEndsBoard,
   computeOpenEndsSum,
+  explainOpenEndsSum,
   getScoringOpenEndPips,
   hydrateBoardForOpenEnds,
   reconcileBoardOpenEndsMetadata,
@@ -158,23 +159,48 @@ describe('openEndsGeometry — Racehorse open count rules', () => {
 
   it('screenshot layout: open [2|2], open [3|3], single 6, single 3 totals 19', () => {
     const board = buildScreenshotLayout();
-    const sum = computeOpenEndsSum(board);
-    const pips = getScoringOpenEndPips(board);
-    if (sum !== 19) {
-      console.log('sum', sum, 'pips', pips, 'hubs', board.hubDoubles);
-    }
+    const contributions = explainOpenEndsSum(board).map((entry) => ({
+      source: entry.source,
+      tile: entry.tile,
+      value: entry.value,
+    }));
+    expect(contributions).toEqual([
+      { source: 'mainline-left', tile: undefined, value: 6 },
+      { source: 'mainline-right', tile: undefined, value: 3 },
+      { source: 'open-double', tile: '[2|2]', value: 4 },
+      { source: 'open-double', tile: '[3|3]', value: 6 },
+    ]);
     expectOpenCount(board, 19);
+  });
+
+  it('multiple doubles on one branch lane: scores lane tip [2|2], not only first nested hub arms', () => {
+    const board = buildScreenshotLayout();
+    const laneHubs = board.hubDoubles.filter(
+      (h) => h.laneType === 'branch' && h.laneRef === 'branch-0-0',
+    );
+    expect(laneHubs.length).toBeGreaterThanOrEqual(2);
+    expect(
+      explainOpenEndsSum(board).some((c) => c.source === 'open-double' && c.tile === '[2|2]'),
+    ).toBe(true);
+    // Regression guard: old scorer returned 10 (mainline only) on this layout.
+    expect(computeOpenEndsSum(board)).toBeGreaterThan(10);
   });
 
   it('screenshot layout after [2|2] is crossed drops [2|2] and uses the new tip only', () => {
     let board = buildScreenshotLayout();
     board = simulatePlacement(board, t(1, 2), 'branch-0-0');
+    expect(
+      explainOpenEndsSum(board).some((c) => c.tile === '[2|2]'),
+    ).toBe(false);
     expectOpenCount(board, 16);
   });
 
   it('screenshot layout after [3|3] is crossed drops [3|3] and uses the new tip only', () => {
     let board = buildScreenshotLayout();
     board = simulatePlacement(board, t(1, 3), 'branch-0-1');
+    expect(
+      explainOpenEndsSum(board).some((c) => c.tile === '[3|3]'),
+    ).toBe(false);
     expectOpenCount(board, 14);
   });
 

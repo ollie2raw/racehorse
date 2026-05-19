@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { Board, DominoTile, GlobalNav, RotateOverlay } from '../components';
+import { Board, DominoTile, GlobalNav, MatchNblBoardFrame, RotateOverlay } from '../components';
 import { Button } from '../components/primitives';
 import {
   applyPlayMove,
@@ -11,7 +11,6 @@ import {
 import type { AppMode, Move, Tile } from '../types';
 import {
   completeDailyPuzzleLadder,
-  fetchDailyPuzzleLadderLeaderboard,
   startDailyPuzzleLadder,
   submitDailyPuzzleSlot,
 } from './api';
@@ -20,13 +19,12 @@ import type {
   CuratedDailyPuzzle,
   DailyPuzzleAttempt,
   DailyPuzzleCompleteResponse,
-  DailyPuzzleLeaderboardRow,
   DailyPuzzleSlot,
   DailyPuzzleSubmitSlotResponse,
   DailyPuzzleTodayResponse,
 } from './types';
-import LeaderboardPageShell from '../ui/LeaderboardPageShell';
-import dailyLadderHeroImg from '../assets/dailyPuzzle/donedoneLADDER.png';
+import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
+import dailyLadderHeroImg from '../assets/dailyPuzzle/newnewladderfinal.png';
 import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
 import { getDailyPuzzleDisplayTitle, getDailyPuzzleStepPresentation } from './presentation';
 import '../dailyFritz/dailyFritz.css';
@@ -159,7 +157,7 @@ function toCuratedPuzzle(slot: DailyPuzzleSlot): CuratedDailyPuzzle | null {
 
 export default function DailyPuzzleLadderScreen({
   user,
-  profile: _profile,
+  profile,
   initialToday,
   onBack,
   onNavigate,
@@ -183,10 +181,6 @@ export default function DailyPuzzleLadderScreen({
   const [submitPending, setSubmitPending] = useState(false);
   const [finalizePending, setFinalizePending] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  const [leaderboardRows, setLeaderboardRows] = useState<DailyPuzzleLeaderboardRow[]>(
-    initialToday.leaderboardPreview ?? [],
-  );
   const [slotOverlay, setSlotOverlay] = useState<{
     response: DailyPuzzleSubmitSlotResponse;
     rawScore: number;
@@ -210,23 +204,6 @@ export default function DailyPuzzleLadderScreen({
   const currentScore = runtimeState?.players.you.score ?? 0;
   const displayScore =
     activeSlot?.puzzleType === 'one_turn_high_score' ? (finalScore ?? runningScoreRef.current) : currentScore;
-
-  const refreshLeaderboard = useCallback(async () => {
-    setLeaderboardLoading(true);
-    try {
-      const rows = await fetchDailyPuzzleLadderLeaderboard(today.runDate);
-      setLeaderboardRows(rows);
-    } catch (error) {
-      setHubError(error instanceof Error ? error.message : 'Unable to load ladder leaderboard.');
-    } finally {
-      setLeaderboardLoading(false);
-    }
-  }, [today.runDate]);
-
-  useEffect(() => {
-    if (!leaderboardOpen) return;
-    void refreshLeaderboard();
-  }, [leaderboardOpen, refreshLeaderboard]);
 
   useEffect(() => {
     return () => {
@@ -365,13 +342,9 @@ export default function DailyPuzzleLadderScreen({
           attempt: completeResponse.attempt,
         }));
         setFinalOverlay({ response: completeResponse });
-        setLeaderboardRows(completeResponse.leaderboardPreview);
         recordSolvedStreak(completeResponse.attempt.puzzleDate);
-        setRuntimeState(null);
-        setActiveSlot(null);
       } else {
         setSlotOverlay({ response, rawScore: rawScoreValue });
-        setRuntimeState(null);
       }
     } catch (error) {
       setHubError(error instanceof Error ? error.message : 'Unable to submit slot result.');
@@ -523,78 +496,269 @@ export default function DailyPuzzleLadderScreen({
 
   if (leaderboardOpen) {
     return (
-      <LeaderboardPageShell
-        mode="puzzle"
-        className="mode-subpage-screen mode-accent-daily"
-        label="Daily Puzzle"
-        title="Ladder Leaderboard"
-        subtitle={`${formatDateLabel(today.runDate)} · Global ranking`}
-        backLabel="Back to Ladder"
-        summaryCards={[
-          {
-            label: 'Total Score',
-            value: `${attempt?.totalScore ?? 0}`,
-            sublabel: 'Your current ladder total',
-            tone: 'accent',
-          },
-          {
-            label: 'Completed',
-            value: `${attempt?.puzzlesCompleted ?? 0}/3`,
-            sublabel: 'Scored puzzle slots',
-            tone: 'neutral',
-          },
-          {
-            label: 'Puzzle 3',
-            value: `${attempt?.masterChainScore ?? 0}`,
-            sublabel: 'Final puzzle score',
-            tone: 'neutral',
-          },
-        ]}
-        resultsLabel={`Global Results · ${leaderboardRows.length} ${leaderboardRows.length === 1 ? 'player' : 'players'}`}
-        onClose={() => setLeaderboardOpen(false)}
-      >
-        <div className="daily-leaderboard-panel daily-leaderboard-page-panel">
-          {leaderboardLoading ? <p className="daily-leaderboard-loading">Loading leaderboard...</p> : null}
-          {!leaderboardLoading && leaderboardRows.length === 0 ? (
-            <p className="daily-leaderboard-empty">No ladder runs recorded yet.</p>
-          ) : null}
-          {!leaderboardLoading && leaderboardRows.length > 0 ? (
-            <div className="daily-ladder-board">
-              <div className="daily-ladder-board-head">
-                <span>#</span>
-                <span>Player</span>
-                <span>Total</span>
-                <span>Done</span>
-                <span>Master</span>
-                <span>Breakdown</span>
-              </div>
-              {leaderboardRows.map((row) => (
-                <div
-                  key={`${row.userId}-${row.rank}`}
-                  className={`daily-ladder-board-row ${user?.id === row.userId ? 'is-current-user' : ''}`}
-                >
-                  <span>{row.rank}</span>
-                  <span>@{row.username}</span>
-                  <span>{row.totalScore}</span>
-                  <span>{row.puzzlesCompleted}/3</span>
-                  <span>{row.masterChainScore}</span>
-                  <span className="daily-ladder-chip-row">
-                    {row.breakdown.map((chip) => (
-                      <span key={`${row.userId}-${chip.slotIndex}`} className="daily-ladder-chip">
-                        P{chip.slotIndex} {chip.awardedPoints ?? '—'}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </LeaderboardPageShell>
+      <DailyPuzzleLadderLeaderboardScreen
+        user={user}
+        runDate={today.runDate}
+        currentUsername={profile?.username ?? null}
+        currentUserId={user?.id ?? null}
+        onBack={() => setLeaderboardOpen(false)}
+        onNavigate={onNavigate}
+        onOpenAuth={onOpenAuth}
+        onOpenAccount={onOpenAccount}
+      />
     );
   }
 
-  if (!runtimeState || !activeSlot) {
+  const inActivePlay = Boolean(activeSlot && runtimeState);
+
+  const exitPlayToHub = useCallback(() => {
+    setSlotOverlay(null);
+    setFinalOverlay(null);
+    setPracticeOverlay(null);
+    setRuntimeState(null);
+    setActiveSlot(null);
+    setStatus('IN_PROGRESS');
+    setSelectedTile(null);
+  }, []);
+
+  const renderLadderOverlays = () => (
+    <>
+      {submitPending || finalizePending ? (
+        <div
+          className="rh-modal-overlay dpl-ladder-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-busy="true"
+          aria-label={finalizePending ? 'Finalizing ladder' : 'Submitting puzzle'}
+        >
+          <div className="rh-result dpl-ladder-pending-modal">
+            <header className="rh-result__head">
+              <div className="claude-mode-hero__eyebrow" style={{ color: 'var(--tier-standard)' }}>
+                DAILY LADDER
+              </div>
+              <div className="rh-result__feedback">
+                {finalizePending ? 'Finalizing ladder…' : 'Submitting puzzle…'}
+              </div>
+            </header>
+            <p className="dpl-ladder-pending-copy">Please wait.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {slotOverlay ? (
+        <div
+          className="rh-modal-overlay dpl-ladder-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Puzzle complete"
+        >
+          <div className="rh-result dpl-ladder-result">
+            <header className="rh-result__head">
+              <div className="claude-mode-hero__eyebrow">PUZZLE COMPLETE</div>
+              <div className="rh-result__score">
+                <span>{slotOverlay.response.slotResult.awardedPoints}</span>
+                <span className="rh-result__score-suffix">PTS</span>
+              </div>
+              <div className="rh-result__feedback">
+                {getDailyPuzzleDisplayTitle(
+                  slotOverlay.response.slotResult.slotIndex,
+                  slotOverlay.response.slotResult.slotTitle,
+                )}
+              </div>
+            </header>
+            <div className="rh-result__summary">
+              <div>
+                <span className="rh-result__summary-label">Raw Score</span>
+                <span className="rh-result__summary-value">{slotOverlay.rawScore}</span>
+              </div>
+              <div>
+                <span className="rh-result__summary-label">Best Possible</span>
+                <span className="rh-result__summary-value">{slotOverlay.response.slotResult.bestPossibleScore}</span>
+              </div>
+              <div>
+                <span className="rh-result__summary-label">Ladder Total</span>
+                <span className="rh-result__summary-value">{slotOverlay.response.attempt.totalScore}</span>
+              </div>
+            </div>
+            <footer className="rh-result__actions dpl-ladder-result__actions">
+              <button type="button" className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost" onClick={exitPlayToHub}>
+                Back to Ladder
+              </button>
+              {slotOverlay.response.nextSlot ? (
+                <button
+                  type="button"
+                  className="dpl-ladder-result-btn dpl-ladder-result-btn--primary"
+                  onClick={() => {
+                    const nextSlot = slotOverlay.response.nextSlot;
+                    setSlotOverlay(null);
+                    if (nextSlot) launchSlot(nextSlot, 'scored');
+                  }}
+                >
+                  {`Next · Puzzle ${slotOverlay.response.nextSlot.slotIndex}`}
+                </button>
+              ) : null}
+            </footer>
+          </div>
+        </div>
+      ) : null}
+
+      {practiceOverlay ? (
+        <div className="rh-modal-overlay dpl-ladder-modal-overlay" role="dialog" aria-modal="true" aria-label="Practice complete">
+          <div className="rh-result">
+            <header className="rh-result__head">
+              <div className="claude-mode-hero__eyebrow" style={{ color: 'var(--tier-standard)' }}>PRACTICE COMPLETE</div>
+              <div className="rh-result__score">
+                <span>{practiceOverlay.rawScore}</span>
+                <span className="rh-result__score-suffix">PTS</span>
+              </div>
+              <div className="rh-result__feedback">
+                {getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex, practiceOverlay.slotTitle)}
+              </div>
+            </header>
+            <div className="rh-result__summary">
+              <div>
+                <span className="rh-result__summary-label">Best Possible</span>
+                <span className="rh-result__summary-value">{practiceOverlay.bestPossible ?? '—'}</span>
+              </div>
+              <div>
+                <span className="rh-result__summary-label">Mode</span>
+                <span className="rh-result__summary-value">Practice</span>
+              </div>
+              <div>
+                <span className="rh-result__summary-label">Slot</span>
+                <span className="rh-result__summary-value">P{practiceOverlay.slotIndex}</span>
+              </div>
+            </div>
+            <footer
+              className="rh-result__actions"
+              style={{ gridTemplateColumns: practiceOverlay.slotIndex < 3 ? '1fr 1.2fr' : '1fr 1fr' }}
+            >
+              <button
+                type="button"
+                className="rh-btn-leave"
+                onClick={() => {
+                  const idx = practiceOverlay.slotIndex;
+                  setPracticeOverlay(null);
+                  handleStartPractice(idx as 1 | 2 | 3);
+                }}
+              >
+                Replay P{practiceOverlay.slotIndex}
+              </button>
+              {practiceOverlay.slotIndex < 3 ? (
+                <button
+                  type="button"
+                  className="rh-btn-cancel"
+                  onClick={() => {
+                    const nextIdx = practiceOverlay.slotIndex + 1;
+                    setPracticeOverlay(null);
+                    handleStartPractice(nextIdx as 1 | 2 | 3);
+                  }}
+                >
+                  Practice P{practiceOverlay.slotIndex + 1}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rh-btn-cancel"
+                  onClick={() => {
+                    setPracticeOverlay(null);
+                    setRuntimeState(null);
+                    setActiveSlot(null);
+                  }}
+                >
+                  ← Back to Ladder
+                </button>
+              )}
+            </footer>
+            {practiceOverlay.slotIndex < 3 && (
+              <div style={{ padding: '0 22px 22px', marginTop: '-10px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  className="btn text compact"
+                  style={{ opacity: 0.5, fontSize: '11px' }}
+                  onClick={() => {
+                    setPracticeOverlay(null);
+                    setRuntimeState(null);
+                    setActiveSlot(null);
+                  }}
+                >
+                  Return to Ladder Home
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {finalOverlay ? (
+        <div className="rh-modal-overlay dpl-ladder-modal-overlay" role="dialog" aria-modal="true" aria-label="Ladder complete">
+          <div className="rh-result dpl-ladder-result">
+            <header className="rh-result__head">
+              <div className="claude-mode-hero__eyebrow">LADDER COMPLETE</div>
+              <div className="rh-result__score">
+                <span>{finalOverlay.response.attempt.totalScore}</span>
+                <span className="rh-result__score-suffix">PTS</span>
+              </div>
+              <div className="rh-result__feedback">
+                {finalOverlay.response.leaderboardRank ? `Rank #${finalOverlay.response.leaderboardRank}` : 'Ladder finalized'}
+              </div>
+            </header>
+            <div className="rh-result__summary">
+              <div>
+                <span className="rh-result__summary-label">Completed</span>
+                <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/3</span>
+              </div>
+              <div>
+                <span className="rh-result__summary-label">Puzzle 3</span>
+                <span className="rh-result__summary-value">{finalOverlay.response.attempt.masterChainScore}</span>
+              </div>
+              <div>
+                <span className="rh-result__summary-label">Breakdown</span>
+                <span className="rh-result__summary-value">
+                  {currentSlotBreakdown.map((chip) => `${chip.label} ${chip.value}`).join(' · ')}
+                </span>
+              </div>
+            </div>
+            <footer className="rh-result__actions dpl-ladder-result__actions dpl-ladder-result__actions--triple">
+              <button
+                type="button"
+                className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
+                onClick={() => {
+                  exitPlayToHub();
+                  onBack();
+                }}
+              >
+                ← Home
+              </button>
+              <button
+                type="button"
+                className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
+                onClick={() => {
+                  setFinalOverlay(null);
+                  exitPlayToHub();
+                }}
+              >
+                Review Ladder
+              </button>
+              <button
+                type="button"
+                className="dpl-ladder-result-btn dpl-ladder-result-btn--primary"
+                onClick={() => {
+                  setFinalOverlay(null);
+                  exitPlayToHub();
+                  setLeaderboardOpen(true);
+                }}
+              >
+                Leaderboard
+              </button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+
+  if (!inActivePlay) {
     const showNav = Boolean(onNavigate && onOpenAuth);
     const isLadderComplete = attempt?.status === 'completed';
     const ladderStateLabel = isLadderComplete
@@ -613,6 +777,7 @@ export default function DailyPuzzleLadderScreen({
 
     return (
       <>
+        {renderLadderOverlays()}
         <div
           className="df-page dpl-ladder-hub"
           style={{ '--pvf-dynamic-color': 'var(--tier-standard)' } as React.CSSProperties}
@@ -667,8 +832,8 @@ export default function DailyPuzzleLadderScreen({
 
                   <div className="df-pvf-card-content">
                     <div className="df-pvf-card-header">
-                      <div className="df-pvf-card-eyebrow">TODAY&apos;S LADDER</div>
-                      <h2 className="df-pvf-card-name">Daily Ladder</h2>
+                      <div className="df-pvf-card-eyebrow">TODAY&apos;S DAILY</div>
+                      <h2 className="df-pvf-card-name">Ladder</h2>
                     </div>
 
                     <div className="df-pvf-card-badges">
@@ -841,7 +1006,7 @@ export default function DailyPuzzleLadderScreen({
                       </div>
                       <div>
                         <div className="df-pvf-summary-value">
-                          {isLadderComplete ? 'Practice unlocked' : 'One scored attempt'}
+                          {isLadderComplete ? 'Unlocked' : 'One attempt'}
                         </div>
                         <div className="df-pvf-summary-key">Run</div>
                       </div>
@@ -902,7 +1067,6 @@ export default function DailyPuzzleLadderScreen({
                   </div>
                   {isLadderComplete ? (
                     <div className="dpl-ladder-practice">
-                      <span className="dpl-ladder-practice-label">Jump to practice</span>
                       <div className="dpl-ladder-practice-row">
                         {([1, 2, 3] as const).map((slotIdx) => (
                           <button
@@ -922,67 +1086,27 @@ export default function DailyPuzzleLadderScreen({
             </div>
           </div>
         </div>
-
-        {finalOverlay ? (
-          <div className="rh-modal-overlay" role="dialog" aria-modal="true">
-            <div className="rh-result">
-              <header className="rh-result__head">
-                <div className="claude-mode-hero__eyebrow" style={{ color: '#f0c040' }}>LADDER COMPLETE</div>
-                <div className="rh-result__score">
-                  <span>{finalOverlay.response.attempt.totalScore}</span>
-                  <span className="rh-result__score-suffix">PTS</span>
-                </div>
-                <div className="rh-result__feedback">
-                  {finalOverlay.response.leaderboardRank ? `Rank #${finalOverlay.response.leaderboardRank}` : 'Ladder finalized'}
-                </div>
-              </header>
-              <div className="rh-result__summary">
-                <div>
-                  <span className="rh-result__summary-label">Completed</span>
-                  <span className="rh-result__summary-value">{finalOverlay.response.attempt.puzzlesCompleted}/3</span>
-                </div>
-                <div>
-                  <span className="rh-result__summary-label">Puzzle 3</span>
-                  <span className="rh-result__summary-value">{finalOverlay.response.attempt.masterChainScore}</span>
-                </div>
-                <div>
-                  <span className="rh-result__summary-label">Breakdown</span>
-                  <span className="rh-result__summary-value">
-                    {currentSlotBreakdown.map((chip) => `${chip.label} ${chip.value}`).join(' · ')}
-                  </span>
-                </div>
-              </div>
-              <footer className="rh-result__actions">
-                <button type="button" className="rh-btn-home rh-back-button" onClick={onBack}>
-                  ← Back to Home
-                </button>
-                <button type="button" className="rh-btn-leave" onClick={() => setFinalOverlay(null)}>
-                  Review / Practice
-                </button>
-                <button type="button" className="rh-btn-cancel" onClick={() => setLeaderboardOpen(true)}>
-                  Leaderboard
-                </button>
-              </footer>
-            </div>
-          </div>
-        ) : null}
       </>
     );
   }
 
+  const playingSlot = activeSlot!;
+  const playingState = runtimeState!;
+
   return (
     <>
+      {renderLadderOverlays()}
       <RotateOverlay />
-      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen">
+      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-standard-live-board">
         <div className="wl-top-rail daily-top-rail" data-ui="hud">
           <div className="wl-player-pill is-active daily-hud-pill">
-            <span className="wl-player-label">{getDailyPuzzleDisplayTitle(activeSlot.slotIndex, activeSlot.slotTitle)}</span>
+            <span className="wl-player-label">{getDailyPuzzleDisplayTitle(playingSlot.slotIndex, playingSlot.slotTitle)}</span>
             <span className="wl-player-score">{displayScore}</span>
           </div>
           <div className="daily-center-zone">
             <div className="wl-center-status">
               <span className="wl-turn-label your-turn">DAILY PUZZLE LADDER</span>
-              <span className="wl-room-code">Puzzle {activeSlot.slotIndex} / 3</span>
+              <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / 3</span>
             </div>
           </div>
           <div className="daily-top-actions-pill">
@@ -991,29 +1115,32 @@ export default function DailyPuzzleLadderScreen({
           </div>
         </div>
 
-        <div className="wl-stage-shell">
-          <div className="board-area wl-board-area" data-ui="board">
-            <Board
-              board={runtimeState.board}
-              legalMoves={legalMoves}
-              selectedTile={selectedTile}
-              lastPlayedTile={lastPlayedTile}
-              onPositionClick={onPositionClick}
-              tileSize={72}
-            />
+        <div className="rh-live-studio-shell">
+          <div className="rh-live-board-zone" data-ui="live-board-zone">
+            <div className="wl-stage-shell">
+              <MatchNblBoardFrame>
+                <Board
+                  board={playingState.board}
+                  legalMoves={legalMoves}
+                  selectedTile={selectedTile}
+                  lastPlayedTile={lastPlayedTile}
+                  onPositionClick={onPositionClick}
+                  tileSize={84}
+                />
+              </MatchNblBoardFrame>
+            </div>
           </div>
-        </div>
 
-        <div className="hand-area wl-hand-area" data-ui="tray">
-          <div className="tray-rail">
-            <div className="tray-center">
+          <div className="hand-area wl-hand-area" data-ui="tray">
+            <div className="tray-rail">
+              <div className="tray-center">
               <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
                 {(handCompactStacked
                   ? [
-                      runtimeState.players.you.hand.slice(0, Math.ceil(runtimeState.players.you.hand.length / 2)),
-                      runtimeState.players.you.hand.slice(Math.ceil(runtimeState.players.you.hand.length / 2)),
+                      playingState.players.you.hand.slice(0, Math.ceil(playingState.players.you.hand.length / 2)),
+                      playingState.players.you.hand.slice(Math.ceil(playingState.players.you.hand.length / 2)),
                     ]
-                  : [runtimeState.players.you.hand]
+                  : [playingState.players.you.hand]
                 ).map((row, rowIdx) => (
                   <div key={`ladder-hand-row-${rowIdx}`} className="hand-row">
                     {row.map((tile, idx) => {
@@ -1042,131 +1169,9 @@ export default function DailyPuzzleLadderScreen({
               </div>
             </div>
           </div>
+          </div>
         </div>
 
-        {submitPending || finalizePending ? (
-          <div className="daily-puzzle-overlay" role="dialog" aria-modal="true">
-            <div className="daily-puzzle-modal">
-              <h3>{finalizePending ? 'Finalizing ladder…' : 'Submitting slot…'}</h3>
-              <p>Please wait.</p>
-            </div>
-          </div>
-        ) : null}
-
-        {slotOverlay ? (
-          <div className="rh-modal-overlay" role="dialog" aria-modal="true">
-            <div className="rh-result">
-              <header className="rh-result__head">
-                <div className="claude-mode-hero__eyebrow" style={{ color: '#f0c040' }}>PUZZLE COMPLETE</div>
-                <div className="rh-result__score">
-                  <span>{slotOverlay.response.slotResult.awardedPoints}</span>
-                  <span className="rh-result__score-suffix">PTS</span>
-                </div>
-                <div className="rh-result__feedback">
-                  {getDailyPuzzleDisplayTitle(
-                    slotOverlay.response.slotResult.slotIndex,
-                    slotOverlay.response.slotResult.slotTitle,
-                  )}
-                </div>
-              </header>
-              <div className="rh-result__summary">
-                <div>
-                  <span className="rh-result__summary-label">Raw Score</span>
-                  <span className="rh-result__summary-value">{slotOverlay.rawScore}</span>
-                </div>
-                <div>
-                  <span className="rh-result__summary-label">Best Possible</span>
-                  <span className="rh-result__summary-value">{slotOverlay.response.slotResult.bestPossibleScore}</span>
-                </div>
-                <div>
-                  <span className="rh-result__summary-label">Ladder Total</span>
-                  <span className="rh-result__summary-value">{slotOverlay.response.attempt.totalScore}</span>
-                </div>
-              </div>
-              <footer className="rh-result__actions">
-                <button
-                  type="button"
-                  className="rh-btn-cancel"
-                  onClick={() => {
-                    const nextSlot = slotOverlay.response.nextSlot;
-                    setSlotOverlay(null);
-                    if (nextSlot) launchSlot(nextSlot, 'scored');
-                  }}
-                >
-                  Continue
-                </button>
-              </footer>
-            </div>
-          </div>
-        ) : null}
-
-        {practiceOverlay ? (
-          <div className="rh-modal-overlay" role="dialog" aria-modal="true">
-            <div className="rh-result">
-              <header className="rh-result__head">
-                <div className="claude-mode-hero__eyebrow" style={{ color: '#f0c040' }}>PRACTICE COMPLETE</div>
-                <div className="rh-result__score">
-                  <span>{practiceOverlay.rawScore}</span>
-                  <span className="rh-result__score-suffix">PTS</span>
-                </div>
-                <div className="rh-result__feedback">
-                  {getDailyPuzzleDisplayTitle(practiceOverlay.slotIndex, practiceOverlay.slotTitle)}
-                </div>
-              </header>
-              <div className="rh-result__summary">
-                <div>
-                  <span className="rh-result__summary-label">Best Possible</span>
-                  <span className="rh-result__summary-value">{practiceOverlay.bestPossible ?? '—'}</span>
-                </div>
-                <div>
-                  <span className="rh-result__summary-label">Mode</span>
-                  <span className="rh-result__summary-value">Practice</span>
-                </div>
-                <div>
-                  <span className="rh-result__summary-label">Slot</span>
-                  <span className="rh-result__summary-value">P{practiceOverlay.slotIndex}</span>
-                </div>
-              </div>
-              <footer className="rh-result__actions" style={{ gridTemplateColumns: practiceOverlay.slotIndex < 3 ? '1fr 1.2fr' : '1fr 1fr' }}>
-                <button type="button" className="rh-btn-leave" onClick={() => {
-                  const idx = practiceOverlay.slotIndex;
-                  setPracticeOverlay(null);
-                  handleStartPractice(idx as 1|2|3);
-                }}>
-                  Replay P{practiceOverlay.slotIndex}
-                </button>
-                {practiceOverlay.slotIndex < 3 ? (
-                  <button type="button" className="rh-btn-cancel" onClick={() => {
-                    const nextIdx = practiceOverlay.slotIndex + 1;
-                    setPracticeOverlay(null);
-                    handleStartPractice(nextIdx as 1|2|3);
-                  }}>
-                    Practice P{practiceOverlay.slotIndex + 1}
-                  </button>
-                ) : (
-                  <button type="button" className="rh-btn-cancel" onClick={() => {
-                    setPracticeOverlay(null);
-                    setRuntimeState(null);
-                    setActiveSlot(null);
-                  }}>
-                    ← Back to Ladder
-                  </button>
-                )}
-              </footer>
-              {practiceOverlay.slotIndex < 3 && (
-                <div style={{ padding: '0 22px 22px', marginTop: '-10px', textAlign: 'center' }}>
-                  <button type="button" className="btn text compact" style={{ opacity: 0.5, fontSize: '11px' }} onClick={() => {
-                    setPracticeOverlay(null);
-                    setRuntimeState(null);
-                    setActiveSlot(null);
-                  }}>
-                    Return to Ladder Home
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : null}
       </div>
     </>
   );

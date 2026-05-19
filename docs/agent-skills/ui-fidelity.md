@@ -1,5 +1,13 @@
 # Racehorse UI Fidelity Skill
 
+Before doing any UI work, read:
+
+- [racehorse-design-source-of-truth.md](./racehorse-design-source-of-truth.md)
+
+This document overrides older visual language, legacy class names, old screenshots, and any “walnut” styling references.
+
+The current canonical Racehorse UI direction is the Play vs Fritz matte/neon panel system.
+
 Use this whenever changing page layout, visual design, CSS, UI polish, mockup implementation, responsive layout, HUDs, modals, cards, tabs, leaderboards, social pages, tournament screens, or game-screen presentation.
 
 ## Goal
@@ -52,7 +60,7 @@ Before editing, answer:
 Common:
 - client/src/App.tsx
 - client/src/App.css
-- client/src/styles/walnut-live.css
+- client/src/styles/walnut-live.css (legacy filename only—follow [racehorse-design-source-of-truth.md](./racehorse-design-source-of-truth.md), not brown/walnut aesthetics)
 - client/src/styles/match-hud-polish.css
 - client/src/styles/racehorse-background.css
 - client/src/styles/game-interactions.css

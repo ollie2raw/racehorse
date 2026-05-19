@@ -50,6 +50,45 @@ async function testResolveDailyFritzNextHandCache(): Promise<void> {
   const fresh = await resolveDailyFritzNextHandCache(null, create);
   assertEqual(fresh, { index: 2 }, 'creates when empty cache');
   assertEqual(created, 1, 'create called once');
+
+  // Failed prefetch: stale rejected promise must not block a retrying fetch.
+  let retryCreated = 0;
+  const createRetry = async () => {
+    retryCreated += 1;
+    return { index: 99 };
+  };
+  const rejectedNet = Promise.reject(new Error('network'));
+  void rejectedNet.catch(() => {});
+  const failedPrefetch = await resolveDailyFritzNextHandCache(
+    {
+      promise: rejectedNet,
+      result: null,
+      error: new Error('network'),
+      startedAt: 0,
+    },
+    createRetry,
+  );
+  assertEqual(failedPrefetch, { index: 99 }, 'after prefetch failure, createRequest runs');
+  assertEqual(retryCreated, 1, 'createRequest after failed prefetch');
+
+  let afterThrowCreated = 0;
+  const createAfterThrow = async () => {
+    afterThrowCreated += 1;
+    return { index: 7 };
+  };
+  const rejectedBoom = Promise.reject(new Error('boom'));
+  void rejectedBoom.catch(() => {});
+  const afterThrow = await resolveDailyFritzNextHandCache(
+    {
+      promise: rejectedBoom,
+      result: null,
+      error: null,
+      startedAt: 0,
+    },
+    createAfterThrow,
+  );
+  assertEqual(afterThrow, { index: 7 }, 'rejected promise without error flag still falls back');
+  assertEqual(afterThrowCreated, 1, 'createRequest after await rejection');
 }
 
 async function run(): Promise<void> {

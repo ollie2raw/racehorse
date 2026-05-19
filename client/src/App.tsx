@@ -211,6 +211,9 @@ const ActivityFeedScreen = React.lazy(() => import('./social/ActivityFeedScreen'
 const LearnHome = React.lazy(() =>
   import('./learn').then((module) => ({ default: module.LearnHome })),
 );
+const LearnHowToPlayRacehorse = React.lazy(() =>
+  import('./learn').then((module) => ({ default: module.LearnHowToPlayRacehorse })),
+);
 const LearnPlayer = React.lazy(() =>
   import('./learn').then((module) => ({ default: module.LearnPlayer })),
 );
@@ -947,6 +950,7 @@ export default function App() {
     return mode && !SOCKET_MODES.has(mode) ? mode : 'home';
   });
   const [selectedLearnLessonId, setSelectedLearnLessonId] = useState<string | null>(null);
+  const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(false);
   const [mpSubView, setMpSubView] = useState<'quick' | 'private'>('quick');
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
   const [tournamentSubView, setTournamentSubView] = useState<'hub' | 'bracket' | 'result'>('hub');
@@ -998,7 +1002,14 @@ export default function App() {
   useEffect(() => {
     if (!LEARN_MODE_VISIBLE && appMode === 'learn') {
       setSelectedLearnLessonId(null);
+      setLearnHowToPlayOpen(false);
       setAppMode('singlePlayerHub');
+    }
+  }, [appMode]);
+
+  useEffect(() => {
+    if (appMode !== 'learn') {
+      setLearnHowToPlayOpen(false);
     }
   }, [appMode]);
 
@@ -4376,6 +4387,33 @@ export default function App() {
         </div>
       );
     }
+    if (learnHowToPlayOpen) {
+      return (
+        <div className={appRootClassName}>
+          <Suspense fallback={<ScreenLoader label="Loading Learn…" />}>
+            <LearnHowToPlayRacehorse
+              onBack={() => setLearnHowToPlayOpen(false)}
+              onNavigate={setAppMode}
+              onStartGuidedMatch={
+                isAdmin
+                  ? () => {
+                      setLearnHowToPlayOpen(false);
+                      setIsGuidedV2Mode(true);
+                      setBotFritzTier('elite');
+                      setBotDealSize(7);
+                      setAppMode('bot');
+                    }
+                  : undefined
+              }
+              onPlayVsFritz={() => {
+                setLearnHowToPlayOpen(false);
+                setAppMode('botSetup');
+              }}
+            />
+          </Suspense>
+        </div>
+      );
+    }
     return (
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Learn Mode…" />}>
@@ -4384,6 +4422,7 @@ export default function App() {
             onNavigate={setAppMode}
             isAdmin={isAdmin}
             showAdminView={Boolean(isAdmin && showLearnAdminView)}
+            onOpenHowToPlay={() => setLearnHowToPlayOpen(true)}
             onStartGuidedGame={() => {
               setIsGuidedMode(true);
               // Use elite Fritz if a frozen lesson exists (authored vs Elite Fritz)

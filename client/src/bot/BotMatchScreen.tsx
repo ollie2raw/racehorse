@@ -89,6 +89,7 @@ import { supabase } from '../lib/supabase';
 import {
   buildDailyFritzCompletionHash,
   completeDailyFritz,
+  formatDailyFritzNextHandUserMessage,
   nextDailyFritzHand,
   DailyFritzEndOfRunError,
   type DailyFritzLeaderboardRow,
@@ -715,7 +716,7 @@ export default function BotMatchScreen({
   const DAILY_FRITZ_AUTO_ADVANCE_MS = 3500;
   const HAND_LIFECYCLE_DEBUG_ENDPOINT =
     'http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979';
-  const HAND_LIFECYCLE_DEBUG_SESSION = '03aac5';
+  const HAND_LIFECYCLE_DEBUG_SESSION = '7ec4f9';
 
   console.log('[mode-debug]', { mode, isGuidedModeProp, isGuidedMode, isLearnAcademyMode });
 
@@ -5125,17 +5126,31 @@ export default function BotMatchScreen({
           const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
           activeCache.error = err;
           handTransitionInFlightRef.current = false;
-          setHandAdvanceError(errMsg);
+          setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
           setShowManualHandAdvance(true);
           traceHandLifecycle('error', { source, error: errMsg }, 'C');
           // #region agent log
           emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
             location: 'BotMatchScreen.tsx:advanceHand',
             message: 'advanceHand-network-error',
-            hypothesisId: 'C',
-            data: { source, error: errMsg, handNumber: matchRef.current.handNumber },
+            hypothesisId: 'A',
+            data: {
+              source,
+              error: errMsg,
+              handNumber: matchRef.current.handNumber,
+              nextHandUrl: `${resolveGameServerUrl()}/api/daily-fritz/next-hand`,
+            },
           });
           // #endregion
+          if (import.meta.env.DEV) {
+            console.warn('[daily-fritz-hand] next hand error (raw)', {
+              source,
+              gameNumber,
+              url: `${resolveGameServerUrl()}/api/daily-fritz/next-hand`,
+              error: errMsg,
+              handNumber: matchRef.current.handNumber,
+            });
+          }
           console.warn('[daily-fritz-hand] next hand error', {
             source,
             gameNumber,
@@ -6498,6 +6513,7 @@ export default function BotMatchScreen({
                       onClick={() => {
                         setHandAdvanceError(null);
                         handTransitionInFlightRef.current = false;
+                        dailyFritzNextHandRef.current = null;
                         advanceHand();
                       }}
                     >

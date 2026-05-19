@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1440, initial-scale=1" />
+  <title>Racehorse Board Arena v2 — Design Reference</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="board-arena-v2-mock.css" />
+</head>
+<body>
+  <div class="mock-shell" id="mock-capture">
+    <header class="mock-top">
+      <div class="mock-brand">
+        <span class="mock-brand__mark" aria-hidden="true">R</span>
+        <span class="mock-brand__text">Racehorse</span>
+      </div>
+      <div class="mock-match-meta">
+        <span class="mock-tag mock-tag--gold">Play vs Fritz</span>
+        <span class="mock-meta-dot">Hand 4</span>
+        <span class="mock-meta-dot">Race to 100</span>
+      </div>
+    </header>
+
+    <section class="mock-opponent-rail" aria-label="Opponent">
+      <div class="opp-card">
+        <span class="opp-card__avatar">F</span>
+        <div class="opp-card__body">
+          <span class="opp-card__name">Fritz</span>
+          <span class="opp-card__sub">7 tiles · 23 pips</span>
+        </div>
+        <span class="opp-card__score">41</span>
+      </div>
+      <div class="opp-hand" aria-hidden="true">
+        <span class="tile-back"></span><span class="tile-back"></span><span class="tile-back"></span>
+        <span class="tile-back"></span><span class="tile-back"></span><span class="tile-back"></span>
+        <span class="tile-back"></span>
+      </div>
+      <div class="turn-pill turn-pill--you">
+        <span class="turn-pill__dot"></span>
+        Your move · 0:42
+      </div>
+    </section>
+
+    <div class="mock-stage">
+      <section class="arena" aria-label="Play arena">
+        <div class="arena__frame">
+          <div class="arena__surface">
+            <div class="arena__grid" aria-hidden="true"></div>
+            <div class="arena__watermark" aria-hidden="true">R</div>
+
+            <div class="chain-layer" aria-label="Board chain with branches">
+              <div class="domino domino--h placed" style="--left: 18%; --top: 48%;">
+                <span class="pip pip--6"></span><span class="pip pip--5"></span>
+              </div>
+              <div class="endpoint endpoint--playable" style="--left: 14%; --top: 48%;">
+                <span class="endpoint__ring"></span><span class="endpoint__val">6</span>
+              </div>
+
+              <div class="domino domino--h placed" style="--left: 28%; --top: 48%;">
+                <span class="pip pip--5"></span><span class="pip pip--4"></span>
+              </div>
+
+              <div class="domino domino--v placed domino--double hub-node" style="--left: 38%; --top: 48%;">
+                <span class="pip pip--4"></span><span class="pip pip--4"></span>
+                <span class="hub-node__badge">×2</span>
+              </div>
+
+              <div class="branch-guide branch-guide--up" style="--left: 38%; --top: 38%;" aria-hidden="true"></div>
+              <div class="domino domino--v placed" style="--left: 38%; --top: 28%;">
+                <span class="pip pip--4"></span><span class="pip pip--6"></span>
+              </div>
+              <div class="endpoint endpoint--playable" style="--left: 38%; --top: 22%;">
+                <span class="endpoint__ring"></span><span class="endpoint__val">6</span>
+              </div>
+
+              <div class="branch-guide branch-guide--down" style="--left: 38%; --top: 58%;" aria-hidden="true"></div>
+              <div class="domino domino--v placed" style="--left: 38%; --top: 66%;">
+                <span class="pip pip--4"></span><span class="pip pip--2"></span>
+              </div>
+              <div class="endpoint endpoint--playable" style="--left: 38%; --top: 74%;">
+                <span class="endpoint__ring"></span><span class="endpoint__val">2</span>
+              </div>
+
+              <div class="domino domino--h placed" style="--left: 48%; --top: 48%;">
+                <span class="pip pip--4"></span><span class="pip pip--3"></span>
+              </div>
+              <div class="domino domino--h placed" style="--left: 58%; --top: 48%;">
+                <span class="pip pip--3"></span><span class="pip pip--1"></span>
+              </div>
+              <div class="endpoint endpoint--playable endpoint--dim" style="--left: 64%; --top: 48%;">
+                <span class="endpoint__ring"></span><span class="endpoint__val">1</span>
+              </div>
+
+              <div class="branch-guide branch-guide--down branch-guide--thin" style="--left: 28%; --top: 54%;" aria-hidden="true"></div>
+              <div class="domino domino--v placed domino--small" style="--left: 28%; --top: 62%;">
+                <span class="pip pip--5"></span><span class="pip pip--0"></span>
+              </div>
+              <div class="endpoint endpoint--playable" style="--left: 28%; --top: 70%;">
+                <span class="endpoint__ring"></span><span class="endpoint__val">0</span>
+              </div>
+            </div>
+
+            <div class="arena-dock arena-dock--bl">
+              <button type="button" class="dock-btn" aria-label="Zoom out">−</button>
+              <button type="button" class="dock-btn" aria-label="Zoom in">+</button>
+            </div>
+            <div class="arena-dock arena-dock--br">
+              <button type="button" class="dock-btn" aria-label="Sound">♪</button>
+              <button type="button" class="dock-btn" aria-label="Fullscreen">⛶</button>
+              <button type="button" class="dock-btn" aria-label="Home">⌂</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="utility" aria-label="Match utilities">
+        <div class="util-panel util-panel--race">
+          <header class="util-panel__head">
+            <span class="util-label">Race</span>
+            <span class="util-sublabel">to 100</span>
+          </header>
+          <div class="race-track">
+            <div class="race-lane race-lane--you">
+              <span class="race-lane__name">You</span>
+              <div class="race-bar"><span class="race-fill race-fill--blue" style="width: 58%"></span></div>
+              <span class="race-lane__pts">58</span>
+            </div>
+            <div class="race-lane race-lane--opp">
+              <span class="race-lane__name">Fritz</span>
+              <div class="race-bar"><span class="race-fill race-fill--gold" style="width: 41%"></span></div>
+              <span class="race-lane__pts">41</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="util-panel util-panel--open-ends util-panel--accent">
+          <header class="util-panel__head">
+            <span class="util-label">Open ends</span>
+            <span class="util-badge">4 active</span>
+          </header>
+          <p class="util-hint">Play on any highlighted endpoint</p>
+          <div class="open-chips" role="list">
+            <span class="open-chip open-chip--hot" role="listitem"><span class="open-chip__n">6</span><span class="open-chip__tag">L</span></span>
+            <span class="open-chip open-chip--hot" role="listitem"><span class="open-chip__n">6</span><span class="open-chip__tag">N</span></span>
+            <span class="open-chip" role="listitem"><span class="open-chip__n">2</span><span class="open-chip__tag">S</span></span>
+            <span class="open-chip" role="listitem"><span class="open-chip__n">0</span><span class="open-chip__tag">B</span></span>
+          </div>
+          <div class="open-sum">
+            <span class="open-sum__label">Open sum</span>
+            <span class="open-sum__val">14</span>
+          </div>
+        </div>
+
+        <div class="util-panel">
+          <header class="util-panel__head">
+            <span class="util-label">Boneyard</span>
+          </header>
+          <div class="boneyard-stat">
+            <span class="boneyard-icon" aria-hidden="true"></span>
+            <span class="boneyard-count">11</span>
+            <span class="boneyard-sub">tiles left</span>
+          </div>
+        </div>
+
+        <div class="util-panel util-panel--actions">
+          <button type="button" class="action-btn action-btn--ghost">Pass</button>
+          <button type="button" class="action-btn action-btn--ghost">Draw</button>
+          <button type="button" class="action-btn action-btn--primary" disabled>Play tile</button>
+        </div>
+      </aside>
+    </div>
+
+    <section class="mock-player-zone" aria-label="Your hand">
+      <div class="player-card">
+        <span class="player-card__name">You</span>
+        <span class="player-card__score">58</span>
+      </div>
+      <div class="tray-dock">
+        <div class="tray-dock__rail">
+          <div class="domino domino--h domino--hand playable">
+            <span class="pip pip--2"></span><span class="pip pip--6"></span>
+            <span class="match-hint">↔ 6</span>
+          </div>
+          <div class="domino domino--h domino--hand playable">
+            <span class="pip pip--1"></span><span class="pip pip--2"></span>
+            <span class="match-hint">↔ 2</span>
+          </div>
+          <div class="domino domino--h domino--hand domino--selected playable">
+            <span class="pip pip--3"></span><span class="pip pip--6"></span>
+            <span class="match-hint match-hint--on">↔ 6</span>
+          </div>
+          <div class="domino domino--h domino--hand">
+            <span class="pip pip--4"></span><span class="pip pip--5"></span>
+          </div>
+          <div class="domino domino--h domino--hand">
+            <span class="pip pip--0"></span><span class="pip pip--5"></span>
+          </div>
+          <div class="domino domino--h domino--hand">
+            <span class="pip pip--1"></span><span class="pip pip--1"></span>
+          </div>
+          <div class="domino domino--h domino--hand">
+            <span class="pip pip--2"></span><span class="pip pip--3"></span>
+          </div>
+        </div>
+        <p class="tray-hint"><strong>3–6</strong> selected · tap an open end on the arena to play</p>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

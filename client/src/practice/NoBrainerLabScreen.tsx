@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Board, DominoTile } from '../components';
+import { Board, DominoTile, MatchNblBoardFrame } from '../components';
 import { Button } from '../components/primitives';
 import '../components/primitives/Button.css';
 import type { PlacementPosition, Tile } from '../types';
@@ -260,7 +260,7 @@ export default function NoBrainerLabScreen({
   }
 
   return (
-    <div ref={rootRef} className="practice-lab home-page-root">
+    <div ref={rootRef} className="practice-lab practice-lab-screen home-page-root screen game-screen walnut-live rh-standard-live-board">
       <div className="home-bg" aria-hidden="true">
         <div className="home-bg__halo" />
         <div className="home-bg__line home-bg__line--1" />
@@ -312,36 +312,36 @@ export default function NoBrainerLabScreen({
           </div>
         </header>
 
-        <main className="nbl-stage">
-          <div className="nbl-board-frame">
-            <div className="nbl-board-canvas">
-              <div className="nbl-board-watermark" aria-hidden="true">
-                <img src="/brand_logo.png" alt="" />
-              </div>
-              {practiceState.status === 'won' ? (
-                <div className="nbl-win-banner" role="status">
-                  Cleared — no brainer
-                </div>
-              ) : null}
-              <Board
-                board={practiceState.board}
-                legalMoves={practiceState.legalMoves}
-                selectedTile={selectedTile}
-                lastPlayedTile={lastPlayedTile}
-                onPositionClick={onPositionClick}
-                tileSize={72}
-              />
-              <div className="nbl-board-toolbar">
-                <button
-                  type="button"
-                  className="nbl-icon-btn"
-                  onClick={toggleFullscreen}
-                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                >
-                  <FullscreenIcon isFullscreen={isFullscreen} />
-                </button>
-              </div>
+        <main className="nbl-stage rh-live-studio-shell">
+          <div className="rh-live-board-zone" data-ui="live-board-zone">
+            <div className="wl-stage-shell">
+              <MatchNblBoardFrame
+                toolbar={
+                  <button
+                    type="button"
+                    className="nbl-icon-btn"
+                    onClick={toggleFullscreen}
+                    title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  >
+                    <FullscreenIcon isFullscreen={isFullscreen} />
+                  </button>
+                }
+              >
+                {practiceState.status === 'won' ? (
+                  <div className="nbl-win-banner" role="status">
+                    Cleared — no brainer
+                  </div>
+                ) : null}
+                <Board
+                  board={practiceState.board}
+                  legalMoves={practiceState.legalMoves}
+                  selectedTile={selectedTile}
+                  lastPlayedTile={lastPlayedTile}
+                  onPositionClick={onPositionClick}
+                  tileSize={84}
+                />
+              </MatchNblBoardFrame>
             </div>
           </div>
 

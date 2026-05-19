@@ -6,7 +6,7 @@
 
 **Architecture:** New persistence layer in three Supabase tables (`scheduled_tournaments`, `scheduled_tournament_registrations`, `scheduled_tournament_matches`) seeded for 30 days. A server-side cron tick polls every minute, flipping tournaments between `upcoming → registration_open → in_progress → completed` and emitting socket events. Bracket generation reserves rooms via the **existing** `createReservedRoom()` API; the actual gameplay reuses the **existing** multiplayer pipeline (room:join, broadcastStateUpdate, reconnect, forfeit). On game-over the existing flow detects a `tournament_match_id` on the room and advances the bracket. The legacy lobby-based round-robin tournament in `server/src/tournament/` is left untouched — the new system lives under `server/src/scheduledTournament/` and `client/src/tournament/` (new directory).
 
-**Tech Stack:** Server — Express 5, Socket.io 4, TypeScript, Supabase REST via `supabaseFetch`, `node-cron` for the scheduler, vitest for unit tests. Client — React 19, socket.io-client, scoped CSS following the `_fritz-screen-shell.css` design system. Tournament accent = `var(--accent-amber)` per AGENTS.md §2.
+**Tech Stack:** Server — Express 5, Socket.io 4, TypeScript, Supabase REST via `supabaseFetch`, `node-cron` for the scheduler, vitest for unit tests. Client — React 19, socket.io-client, scoped CSS following the `_fritz-screen-shell.css` design system. Tournament accent = `var(--accent-amber)` per AGENTS.md §3.
 
 ## Locked decisions (approved 2026-05-14)
 1. **Min players to start:** 4. Byes fill the bracket when 5–7 register; top seeds get the byes.
@@ -19,7 +19,7 @@
 - No global game-engine changes. Win target of 30 is applied per-room when the room is created via `createReservedRoom(code, { winningScore: 30 })`.
 - No changes to the rated ranking system.
 - Legacy `server/src/tournament/` and `client/src/screens/TournamentScreen.tsx` are NOT modified. The `tournament` AppMode is re-routed to the new hub; the old screen file remains in the repo as dead code (can be deleted in a follow-up PR).
-- All new screen roots use the viewport-locked shell contract per AGENTS.md §4b: `flex: 1 1 0; min-height: 0; max-height: 100%; overflow: hidden`.
+- All new screen roots use the viewport-locked shell contract per AGENTS.md §6: `flex: 1 1 0; min-height: 0; max-height: 100%; overflow: hidden`.
 - Tournament accent comes from the existing token system (`var(--accent-amber)`). No new colors introduced.
 
 ---
@@ -1490,7 +1490,7 @@ git commit -m "feat(tournament): useTournament hook"
 
 ## Phase 4 — Frontend screens
 
-Tournament accent is `var(--accent-amber)` (= `#f59e0b`) per AGENTS.md §2. All screen roots use the viewport-locked shell contract per AGENTS.md §4b.
+Tournament accent is `var(--accent-amber)` (= `#f59e0b`) per AGENTS.md §3. All screen roots use the viewport-locked shell contract per AGENTS.md §6.
 
 ### Task 4.1: TournamentHubScreen
 
@@ -1501,7 +1501,7 @@ Tournament accent is `var(--accent-amber)` (= `#f59e0b`) per AGENTS.md §2. All 
 - [ ] **Step 1: Write the CSS** (full content; uses the viewport-locked shell contract)
 
 ```css
-/* Tournament Hub — amber/orange accent per AGENTS.md §2 */
+/* Tournament Hub — amber/orange accent per AGENTS.md §3 */
 @import '../styles/_fritz-screen-shell.css';
 
 .th-page {
@@ -2447,7 +2447,7 @@ Expected: both clean.
 - No ranked ranking for tournament matches → Task 2.11 early-return in game-over branch ✓
 - Hub / Bracket / Match-banner / Result screens → Tasks 4.1–4.4 ✓
 - useTournament hook → Task 3.3 ✓
-- Tournament accent = amber → Tasks 4.1+ use `var(--accent-amber)` ✓ (NOT purple — corrected from initial draft per AGENTS.md §2)
+- Tournament accent = amber → Tasks 4.1+ use `var(--accent-amber)` ✓ (NOT purple — corrected from initial draft per AGENTS.md §3)
 - Navigation wiring → Task 5.1 ✓
 - README + flagged decisions → Task 6.1 ✓
 
@@ -2456,8 +2456,8 @@ Expected: both clean.
 **3. Type consistency:** Server `MatchRow`/`RegistrationRow`/`ScheduledTournamentRow` are mirrored as `TournamentMatch`/`Registration`/`ScheduledTournament` on the client (renamed for client readability; field names identical). `BracketView` is shared as the wire shape between `/api/tournaments/:id/bracket` response and `useTournament.activeBracket`. `applyMatchResult` server signature matches the game-over hook params in Task 2.11.
 
 **4. AGENTS.md compliance:**
-- §2 amber tournament accent: ✓ (`var(--accent-amber)`)
-- §3 no game-logic changes: ✓ (win target set per-room only)
-- §4b viewport-locked shell: ✓ (all new screen roots use `flex: 1 1 0; min-height: 0; max-height: 100%; overflow: hidden`)
-- §5 plan-before-implement: ✓ (this document)
-- §7 final response format: documented in TOURNAMENT_README.md
+- §3 amber tournament accent: ✓ (`var(--accent-amber)`)
+- §4 no game-logic changes: ✓ (win target set per-room only)
+- §6 viewport-locked shell: ✓ (all new screen roots use `flex: 1 1 0; min-height: 0; max-height: 100%; overflow: hidden`)
+- §7 plan-before-implement: ✓ (this document)
+- §9 final response format: documented in TOURNAMENT_README.md

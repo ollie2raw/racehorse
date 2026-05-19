@@ -4,6 +4,7 @@ import { fetchGhostProfileSummary, fetchGhostProfileSummaryByUsername } from './
 import { fetchFriends, type FriendRecord } from '../friends/friendsApi';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
+import ghostHeroImg from '../assets/ghost/newGHOSTmode.png';
 import '../bot/PlayVsFritz.css';
 import './ghostMode.css';
 
@@ -280,7 +281,7 @@ export default function GhostSetupScreen({
           </div>
 
           <div className="pvf-opponent-card ghost-pvf-opponent-card">
-            <img src="/ghostmodeimage.png" className="pvf-card-bg-img ghost-pvf-card-bg-img" alt="" />
+            <img src={ghostHeroImg} className="pvf-card-bg-img ghost-pvf-card-bg-img" alt="" />
             <div className="pvf-card-overlay ghost-pvf-card-overlay" />
             <div className="pvf-card-content">
               <div className="pvf-card-header">

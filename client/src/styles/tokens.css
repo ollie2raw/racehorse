@@ -68,11 +68,11 @@
   --rh-img-shell-pad: 24px;
   --rh-img-media-opacity: 1;
 
-  /* treatment--home: medium-dark cinematic */
-  --rh-img-home-art-fritz-opacity: 0.8;
-  --rh-img-home-art-puzzle-opacity: 0.82;
-  --rh-img-home-art-fritz-brightness: 1.04;
-  --rh-img-home-art-puzzle-brightness: 1.02;
+  /* treatment--home: vivid art + light scrim (parity with /solo mode cards) */
+  --rh-img-home-art-fritz-opacity: 0.96;
+  --rh-img-home-art-puzzle-opacity: 0.96;
+  --rh-img-home-art-fritz-brightness: 0.9;
+  --rh-img-home-art-puzzle-brightness: 1.05;
 
   /* treatment--mode-card: /solo light–medium (seated, not raw) */
   --rh-img-mode-veil-alpha: 0.12;
@@ -115,4 +115,27 @@
   --rh-img-badge-bg: rgba(7, 10, 18, 0.72);
   --rh-img-badge-border: rgba(255, 255, 255, 0.08);
   --rh-img-badge-radius: 12px;
+
+  /* Match shell — obsidian frame (darker than the playfield for depth separation) */
+  --rh-match-shell-bg-top: #03060c;
+  --rh-match-shell-bg-mid: #040912;
+  --rh-match-shell-bg-bottom: #020509;
+
+  /* Match playfield — premium navy digital table (PvF matte/neon family; not brown/walnut) */
+  --rh-match-board-bg-top: #101722;
+  --rh-match-board-bg-mid: #0d1520;
+  --rh-match-board-bg-bottom: #081019;
+  --rh-match-board-warm-glow: rgba(210, 160, 70, 0.1);
+  --rh-match-board-border-blue: rgba(91, 132, 180, 0.28);
+  --rh-match-board-border-gold: rgba(226, 176, 72, 0.22);
+  --rh-match-board-chain-glow: radial-gradient(
+    circle at 50% 48%,
+    rgba(216, 164, 69, 0.08),
+    rgba(20, 32, 48, 0.035) 28%,
+    transparent 58%
+  );
+  --rh-match-board-grid-line: rgba(91, 132, 180, 0.045);
+  --rh-match-board-sheen-wash: rgba(255, 247, 236, 0.022);
+  /* Inset guide ring on the board — faint structure without dulling the lift */
+  --rh-match-board-inner-frame-fill: rgba(18, 28, 44, 0.1);
 }

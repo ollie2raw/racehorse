@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import './authModal.css';
 
 interface UsernameModalProps {
@@ -24,6 +24,7 @@ export default function UsernameModal({
   const [username, setUsername] = useState(currentUsername ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const overlayPointerDownOnBackdrop = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -52,6 +53,17 @@ export default function UsernameModal({
 
   const canSave = username.trim().length > 0 && !saving && !signingOut;
 
+  const handleOverlayPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    overlayPointerDownOnBackdrop.current = e.target === e.currentTarget;
+  };
+
+  const handleOverlayClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && overlayPointerDownOnBackdrop.current && !saving) {
+      onClose?.();
+    }
+    overlayPointerDownOnBackdrop.current = false;
+  };
+
   // Copy branches: profile edit vs first-time handle onboarding
   const title = isProfileEdit ? 'Your profile' : 'Choose your handle';
   const subtitle = isProfileEdit
@@ -64,14 +76,10 @@ export default function UsernameModal({
       aria-modal="true"
       aria-label={title}
       className="auth-modal-overlay"
-      onClick={() => {
-        if (!saving) onClose?.();
-      }}
+      onPointerDown={handleOverlayPointerDown}
+      onClick={handleOverlayClick}
     >
-      <div
-        className="auth-modal-card"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="auth-modal-card">
         {/* Head row */}
         <div className="auth-modal-head">
           <p className="auth-modal-label">Profile</p>

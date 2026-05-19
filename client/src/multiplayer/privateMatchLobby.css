@@ -371,9 +371,19 @@
 
 .pml-duel-name--awaiting {
   flex-direction: column;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  min-height: min-content;
+}
+
+.pml-duel-name--awaiting .pml-duel-name-text,
+.pml-duel-name--awaiting .pml-duel-awaiting-hint {
+  width: 100%;
+  max-width: 100%;
+  text-align: center;
 }
 
 .pml-duel-awaiting-hint {
@@ -385,6 +395,7 @@
   color: var(--text-dim);
   text-align: center;
   max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .pml-duel-avatar {
@@ -2332,12 +2343,12 @@
 }
 
 
-/* Quick Match: equal compact duel cards, matching Private Match proportions */
-.pml-room-stage--quick .pml-matchup {
+/* Multiplayer hubs (Quick + Private): shared compact duel card layout */
+.multiplayer-hub .pml-room-stage .pml-matchup {
   align-items: center !important;
 }
 
-.pml-room-stage--quick .pml-matchup > .pml-duel-card {
+.multiplayer-hub .pml-room-stage .pml-matchup > .pml-duel-card {
   align-self: center !important;
   height: 260px !important;
   min-height: 260px !important;
@@ -2346,19 +2357,18 @@
   overflow: visible !important;
 }
 
-.pml-room-stage--quick .pml-vs-column {
+.multiplayer-hub .pml-room-stage .pml-vs-column {
   align-self: center !important;
 }
 
-
-/* Quick Match: align awaiting opponent text baseline with Private Match */
-.pml-room-stage--quick .pml-duel-card--awaiting .pml-duel-name--awaiting {
-  transform: translateY(-6px);
+/* Awaiting guest / invite slot: top-aligned stack inside the fixed card */
+.multiplayer-hub .pml-room-stage .pml-duel-card--awaiting {
+  justify-content: flex-start !important;
+  padding-top: 20px !important;
 }
 
-
-/* Private Match: bring host profile text down to match Quick Match */
-.pml-room-stage:not(.pml-room-stage--quick) .pml-duel-card--host .pml-duel-name,
-.pml-room-stage:not(.pml-room-stage--quick) .pml-duel-card--host .pml-duel-rating {
-  transform: translateY(6px);
+.multiplayer-hub .pml-room-stage .pml-duel-card--awaiting > .pml-duel-rating.pml-duel-spacer,
+.multiplayer-hub .pml-room-stage .pml-duel-card--awaiting > .pml-duel-streak-wrap.pml-duel-spacer {
+  min-height: 0;
+  flex: 0 0 0;
 }

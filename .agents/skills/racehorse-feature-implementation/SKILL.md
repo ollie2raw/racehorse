@@ -25,15 +25,16 @@ The goal is to implement the requested product behavior cleanly without accident
 ## Required workflow
 
 Before editing:
-1. Read AGENTS.md.
-2. Restate the intended product behavior.
-3. Identify the affected user flow.
-4. Identify the likely files involved.
-5. Read the relevant files before changing anything.
-6. Identify existing state, props, data flow, storage, and API usage.
-7. Identify high-risk areas.
-8. Propose a scoped implementation plan.
-9. Wait for approval unless the user explicitly says to proceed.
+1. Read AGENTS.md (includes **§2 Racehorse Design Source of Truth** for UI work).
+2. If the task touches UI, layout, CSS, or visual design, read `docs/agent-skills/racehorse-design-source-of-truth.md` before other files.
+3. Restate the intended product behavior.
+4. Identify the affected user flow.
+5. Identify the likely files involved.
+6. Read the relevant files before changing anything.
+7. Identify existing state, props, data flow, storage, and API usage.
+8. Identify high-risk areas.
+9. Propose a scoped implementation plan.
+10. Wait for approval unless the user explicitly says to proceed.
 
 When implementing:
 1. Preserve existing working behavior outside the requested feature.

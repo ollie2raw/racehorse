@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import './authModal.css';
 
 const AUTH_MODAL_SUBMIT_TIMEOUT_MS = 16000;
@@ -34,6 +42,7 @@ export default function AuthModal({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
+  const overlayPointerDownOnBackdrop = useRef(false);
 
   const resetFormState = () => {
     setSubmitting(false);
@@ -60,6 +69,17 @@ export default function AuthModal({
     setMode('signin');
     onClose();
   }, [onClose]);
+
+  const handleOverlayPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    overlayPointerDownOnBackdrop.current = e.target === e.currentTarget;
+  };
+
+  const handleOverlayClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && overlayPointerDownOnBackdrop.current) {
+      handleClose();
+    }
+    overlayPointerDownOnBackdrop.current = false;
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -122,11 +142,11 @@ export default function AuthModal({
       role="dialog"
       aria-modal="true"
       aria-label={mode === 'verify' ? 'Verify email' : mode === 'signup' ? 'Create account' : 'Sign in'}
-      onClick={handleClose}
+      onPointerDown={handleOverlayPointerDown}
+      onClick={handleOverlayClick}
       className="auth-modal-overlay"
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         className={`auth-modal-card${mode === 'signup' ? ' auth-modal-card--wide' : ''}`}
       >
         <div className="auth-modal-head">
@@ -199,98 +219,99 @@ export default function AuthModal({
             </button>
           </div>
         ) : (
-          <div className="auth-modal-fields">
-            {mode === 'signup' && (
+          <form
+            className="auth-modal-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+          >
+            <div className="auth-modal-fields">
+              {mode === 'signup' && (
+                <label className="auth-modal-field">
+                  <span className="auth-modal-field-label">Username</span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="your_username"
+                    autoComplete="username"
+                    className="auth-modal-input"
+                  />
+                </label>
+              )}
+
               <label className="auth-modal-field">
-                <span className="auth-modal-field-label">Username</span>
+                <span className="auth-modal-field-label">Email</span>
                 <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="your_username"
-                  autoComplete="username"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
                   className="auth-modal-input"
                 />
               </label>
-            )}
 
-            <label className="auth-modal-field">
-              <span className="auth-modal-field-label">Email</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                autoComplete="email"
-                className="auth-modal-input"
-              />
-            </label>
-
-            <label className="auth-modal-field">
-              <span className="auth-modal-field-label">Password</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
-                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                className="auth-modal-input"
-              />
-            </label>
-            {mode === 'signin' && (
-              <button
-                type="button"
-                className="auth-modal-forgot"
-                disabled={submitting || resetSent}
-                onClick={async () => {
-                  if (!email.trim()) {
-                    setError('Enter your email above first.');
-                    return;
-                  }
-                  setSubmitting(true);
-                  setError(null);
-                  const result = await onResetPassword(email.trim());
-                  setSubmitting(false);
-                  if (result.error) {
-                    setError(result.error);
-                  } else {
-                    setResetSent(true);
+              <label className="auth-modal-field">
+                <span className="auth-modal-field-label">Password</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                  className="auth-modal-input"
+                />
+              </label>
+              {mode === 'signin' && (
+                <button
+                  type="button"
+                  className="auth-modal-forgot"
+                  disabled={submitting || resetSent}
+                  onClick={async () => {
+                    if (!email.trim()) {
+                      setError('Enter your email above first.');
+                      return;
+                    }
+                    setSubmitting(true);
                     setError(null);
-                  }
-                }}
-              >
-                {resetSent ? '✓ Reset email sent' : 'Forgot password?'}
-              </button>
-            )}
-          </div>
-        )}
+                    const result = await onResetPassword(email.trim());
+                    setSubmitting(false);
+                    if (result.error) {
+                      setError(result.error);
+                    } else {
+                      setResetSent(true);
+                      setError(null);
+                    }
+                  }}
+                >
+                  {resetSent ? '✓ Reset email sent' : 'Forgot password?'}
+                </button>
+              )}
+            </div>
 
-        {error && <p className="auth-inline-error">{error}</p>}
-        {notice && !error && mode !== 'verify' && <p className="auth-inline-success">{notice}</p>}
+            {error && <p className="auth-inline-error">{error}</p>}
+            {notice && !error && <p className="auth-inline-success">{notice}</p>}
 
-        {mode !== 'verify' && (
-          <>
-            <button
-              type="button"
-              className="auth-modal-submit"
-              onClick={() => void submit()}
-              disabled={!canSubmit}
-            >
+            <button type="submit" className="auth-modal-submit" disabled={!canSubmit}>
               {submitting ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
             </button>
+          </form>
+        )}
 
-            <button type="button" className="auth-modal-toggle" onClick={() => setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))}>
-              {mode === 'signin' ? (
-                <>
-                  Need an account? <span>Create one</span>
-                </>
-              ) : (
-                <>
-                  Already have an account? <span>Sign in</span>
-                </>
-              )}
-            </button>
-          </>
+        {mode !== 'verify' && (
+          <button type="button" className="auth-modal-toggle" onClick={() => setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))}>
+            {mode === 'signin' ? (
+              <>
+                Need an account? <span>Create one</span>
+              </>
+            ) : (
+              <>
+                Already have an account? <span>Sign in</span>
+              </>
+            )}
+          </button>
         )}
       </div>
     </div>

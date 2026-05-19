@@ -11,6 +11,7 @@ import './styles/rh-glow-underline.css';
 import './styles/game-interactions.css';
 import './styles/match-hud-polish.css';
 import './styles/match-board-architecture.css';
+import './styles/match-standard-live-board.css';
 import './match/gameLayoutLayers.css';
 import './styles/racehorse-background.css';
 import './styles/rh-image-surface.css';

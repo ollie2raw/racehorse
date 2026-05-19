@@ -327,6 +327,46 @@ export class DailyFritzEndOfRunError extends Error {
   }
 }
 
+const DAILY_FRITZ_NEXT_HAND_DEBUG_INGEST =
+  import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
+
+function dfNextHandIngest(payload: {
+  location: string;
+  message: string;
+  hypothesisId?: string;
+  data?: Record<string, unknown>;
+  runId?: string;
+}): void {
+  if (!DAILY_FRITZ_NEXT_HAND_DEBUG_INGEST) return;
+  // #region agent log
+  fetch('http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': '7ec4f9',
+    },
+    body: JSON.stringify({
+      sessionId: '7ec4f9',
+      timestamp: Date.now(),
+      ...payload,
+    }),
+  }).catch(() => {});
+  // #endregion
+}
+
+/** Production copy for modal; dev keeps the raw message for debugging. */
+export function formatDailyFritzNextHandUserMessage(raw: string): string {
+  if (import.meta.env.DEV) return raw;
+  const lower = raw.toLowerCase();
+  if (raw === 'Failed to fetch' || lower.includes('networkerror') || lower.includes('load failed')) {
+    return "Couldn't load the next hand. Check connection and retry.";
+  }
+  if (lower.includes('timed out loading the next daily fritz hand')) {
+    return "Couldn't load the next hand. Check connection and retry.";
+  }
+  return raw.length > 220 ? "Couldn't load the next hand. Check connection and retry." : raw;
+}
+
 export async function nextDailyFritzHand(input: {
   attemptId: string;
   verifiedMatchId: string;
@@ -343,29 +383,56 @@ export async function nextDailyFritzHand(input: {
   const timeoutMs = Math.max(1000, input.timeoutMs ?? 6500);
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
-  const response = await fetch(
-    `${resolveServerBaseUrl()}/api/daily-fritz/next-hand`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify({
-        attempt_id: input.attemptId,
-        verified_match_id: input.verifiedMatchId,
-        run_date: input.runDate,
-        game_number: input.gameNumber ?? 1,
-        completed_hand_index: input.completedHandIndex,
-        completed_hand_scores: input.completedHandScores,
-      }),
+  const url = `${resolveServerBaseUrl()}/api/daily-fritz/next-hand`;
+  dfNextHandIngest({
+    location: 'dailyFritz/api.ts:nextDailyFritzHand',
+    message: 'request-start',
+    hypothesisId: 'B',
+    data: {
+      url,
+      timeoutMs,
+      completedHandIndex: input.completedHandIndex,
+      gameNumber: input.gameNumber ?? 1,
     },
-  ).catch((error) => {
+  });
+  const response = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    signal: controller.signal,
+    body: JSON.stringify({
+      attempt_id: input.attemptId,
+      verified_match_id: input.verifiedMatchId,
+      run_date: input.runDate,
+      game_number: input.gameNumber ?? 1,
+      completed_hand_index: input.completedHandIndex,
+      completed_hand_scores: input.completedHandScores,
+    }),
+  }).catch((error) => {
+    const name = error instanceof Error ? error.name : 'unknown';
+    const message = error instanceof Error ? error.message : String(error);
+    dfNextHandIngest({
+      location: 'dailyFritz/api.ts:nextDailyFritzHand',
+      message: 'fetch-rejected',
+      hypothesisId: 'B',
+      data: { url, errorName: name, errorMessage: message, isAbort: name === 'AbortError' },
+    });
+    if (import.meta.env.DEV) {
+      console.warn('[daily-fritz:next-hand] fetch failed', { url, name, message });
+    }
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error(`Timed out loading the next Daily Fritz hand after ${timeoutMs}ms.`);
     }
     throw error;
   }).finally(() => {
     window.clearTimeout(timeoutId);
+  });
+
+  dfNextHandIngest({
+    location: 'dailyFritz/api.ts:nextDailyFritzHand',
+    message: 'response',
+    hypothesisId: 'B',
+    data: { url, status: response.status, ok: response.ok },
   });
 
   const text = await response.text().catch(() => '');
@@ -387,6 +454,24 @@ export async function nextDailyFritzHand(input: {
   }
 
   if (!response.ok) {
+    dfNextHandIngest({
+      location: 'dailyFritz/api.ts:nextDailyFritzHand',
+      message: 'http-non-ok',
+      hypothesisId: 'B',
+      data: {
+        url,
+        status: response.status,
+        error: parsed?.error ?? null,
+        bodySnippet: text.slice(0, 240),
+      },
+    });
+    if (import.meta.env.DEV) {
+      console.warn('[daily-fritz:next-hand] non-OK response', {
+        url,
+        status: response.status,
+        error: parsed?.error,
+      });
+    }
     throw new Error(
       parsed?.error ?? `/api/daily-fritz/next-hand failed with ${response.status}`,
     );
