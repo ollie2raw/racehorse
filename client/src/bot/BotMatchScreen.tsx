@@ -508,6 +508,29 @@ function toastFromResult(result: BotActionResult, opponentLabel: string): string
   return '';
 }
 
+function notifyGuidedV2EventToasts(
+  event: LessonV2Event,
+  opponentLabel: string,
+  callbacks: {
+    showScoreToast: (player: 'you' | 'bot', points: number) => void;
+    showBoardToast: (message: string, tone: 'you' | 'bot') => void;
+  },
+): void {
+  if (event.pointsScored > 0) {
+    callbacks.showScoreToast(event.actor === 'player' ? 'you' : 'bot', event.pointsScored);
+  }
+  if (event.action === 'draw') {
+    const label = event.actor === 'player' ? 'You' : opponentLabel;
+    callbacks.showBoardToast(`${label} drew a tile`, 'bot');
+  } else if (event.action === 'pass') {
+    const label = event.actor === 'player' ? 'You' : opponentLabel;
+    callbacks.showBoardToast(
+      `${label} passed`,
+      event.actor === 'player' ? 'you' : 'bot',
+    );
+  }
+}
+
 function moveEntriesToGhostMoveLog(entries: MoveEntry[]): GhostMoveLogEntry[] {
   return entries
     .filter((entry) => entry.player === 'you')
@@ -808,6 +831,8 @@ export default function BotMatchScreen({
   const handAreaRef = useRef<HTMLDivElement>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
+  const guidedBoneyardAnchorRef = useRef<HTMLDivElement>(null);
+  const guidedFritzAnchorRef = useRef<HTMLButtonElement>(null);
   const [frozenLesson] = useState<FrozenLesson | null>(() => {
     if (!isGuidedMode) return null;
     // Primary: explicitly frozen lesson
@@ -1798,14 +1823,14 @@ export default function BotMatchScreen({
         expectedFritzHandAfter: event.fritzHandAfter,
       });
 
-      setMatch((prev) => ({
-        ...prev,
+      const nextState: BotMatchState = {
+        ...matchRef.current,
         board,
         handOpen: Boolean(board && board.mainLine && board.mainLine.length > 0),
-        boneyard: syncGuidedBoneyardCount(prev.boneyard, event.boneyardCountAfter),
+        boneyard: syncGuidedBoneyardCount(matchRef.current.boneyard, event.boneyardCountAfter),
         players: {
-          you: { ...prev.players.you, hand: playerHand, score: event.playerScoreAfter },
-          bot: { ...prev.players.bot, hand: fritzHand, score: event.fritzScoreAfter },
+          you: { ...matchRef.current.players.you, hand: playerHand, score: event.playerScoreAfter },
+          bot: { ...matchRef.current.players.bot, hand: fritzHand, score: event.fritzScoreAfter },
         },
         currentPlayer: nextPlayer,
         handOver: event.handOver,
@@ -1813,8 +1838,12 @@ export default function BotMatchScreen({
         handNumber: event.handNumber,
         winnerId: event.gameOver
           ? guidedWinnerIdFromScores(event.playerScoreAfter, event.fritzScoreAfter)
-          : prev.winnerId,
-      }));
+          : matchRef.current.winnerId,
+      };
+      setMatch(nextState);
+      if (event.action === 'draw') {
+        scheduleDrawStepAnimation('bot', nextState);
+      }
 
       window.setTimeout(() => {
         const live = matchRef.current;
@@ -1827,6 +1856,8 @@ export default function BotMatchScreen({
           liveFritzHand: live.players.bot.hand.map(toTileKey),
         });
       }, 0);
+
+      notifyGuidedV2EventToasts(event, opponentLabel, { showScoreToast, showBoardToast });
 
       // Play sounds for Fritz action
       if (event.pointsScored > 0) queueSound(() => playScoreSound(event.pointsScored, isMuted), 80);
@@ -1938,14 +1969,14 @@ export default function BotMatchScreen({
           ? 'you'
           : 'bot';
 
-      setMatch((prev) => ({
-        ...prev,
+      const nextState: BotMatchState = {
+        ...matchRef.current,
         board,
         handOpen: Boolean(board && board.mainLine && board.mainLine.length > 0),
-        boneyard: syncGuidedBoneyardCount(prev.boneyard, event.boneyardCountAfter),
+        boneyard: syncGuidedBoneyardCount(matchRef.current.boneyard, event.boneyardCountAfter),
         players: {
-          you: { ...prev.players.you, hand: playerHand, score: event.playerScoreAfter },
-          bot: { ...prev.players.bot, hand: fritzHand, score: event.fritzScoreAfter },
+          you: { ...matchRef.current.players.you, hand: playerHand, score: event.playerScoreAfter },
+          bot: { ...matchRef.current.players.bot, hand: fritzHand, score: event.fritzScoreAfter },
         },
         currentPlayer: nextPlayer,
         handOver: event.handOver,
@@ -1953,12 +1984,14 @@ export default function BotMatchScreen({
         handNumber: event.handNumber,
         winnerId: event.gameOver
           ? guidedWinnerIdFromScores(event.playerScoreAfter, event.fritzScoreAfter)
-          : prev.winnerId,
-      }));
+          : matchRef.current.winnerId,
+      };
+      setMatch(nextState);
 
+      notifyGuidedV2EventToasts(event, opponentLabel, { showScoreToast, showBoardToast });
       if (event.action === 'draw') {
+        scheduleDrawStepAnimation('you', nextState);
         queueSound(() => playDrawSound(isMuted), 0);
-        showBoardToast('You drew a tile', 'bot');
       }
 
       setGuidedV2EventIndex((i) => i + 1);
@@ -2913,7 +2946,24 @@ export default function BotMatchScreen({
       return [];
     }
   }, [match, wantsOriginalGuidedRecordMode]);
+  /** Event at the playback cursor — may be player or fritz. */
+  const currentV2CursorEvent = useMemo(() => {
+    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return null;
+    return frozenV2Lesson.events[guidedV2EventIndex] ?? null;
+  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
+
+  /**
+   * The player event the UI is waiting on right now (cursor must be on a player event).
+   * Do not use nextPlayerEvent() here — that looks ahead and surfaces the next
+   * coached tile while Fritz is still resolving.
+   */
   const currentExpectedV2PlayerEvent = useMemo(() => {
+    if (!currentV2CursorEvent || currentV2CursorEvent.actor !== 'player') return null;
+    return currentV2CursorEvent;
+  }, [currentV2CursorEvent]);
+
+  /** Next player event after the cursor — coaching copy only (may look ahead). */
+  const upcomingV2PlayerEvent = useMemo(() => {
     if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return null;
     return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex);
   }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
@@ -3150,8 +3200,8 @@ export default function BotMatchScreen({
    */
   const currentV2CoachingText = useMemo(() => {
     if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return '';
-    return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex)?.coachingText ?? '';
-  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
+    return upcomingV2PlayerEvent?.coachingText ?? '';
+  }, [isGuidedV2Mode, frozenV2Lesson, isGuidedV2OffLine, upcomingV2PlayerEvent]);
 
   const authoringV2PlayerMoveIndex = useMemo(
     () => authoringV2Events.filter((event) => event.actor === 'player' && event.action === 'play').length,
@@ -3422,9 +3472,13 @@ export default function BotMatchScreen({
       }
     }
 
-    if (!boneyardRef.current) return;
-    const from = boneyardRef.current.getBoundingClientRect();
-    const targetEl = drawer === 'you' ? handAreaRef.current : opponentPillRef.current;
+    const boneyardEl = boneyardRef.current ?? guidedBoneyardAnchorRef.current;
+    if (!boneyardEl) return;
+    const from = boneyardEl.getBoundingClientRect();
+    const targetEl =
+      drawer === 'you'
+        ? handAreaRef.current
+        : opponentPillRef.current ?? guidedFritzAnchorRef.current;
     if (!targetEl) return;
     const to = targetEl.getBoundingClientRect();
     const id = ++flyingTileIdRef.current;
@@ -3448,6 +3502,15 @@ export default function BotMatchScreen({
         : null,
     });
   }, []);
+
+  const scheduleDrawStepAnimation = useCallback(
+    (drawer: BotPlayerId, nextState: BotMatchState) => {
+      window.requestAnimationFrame(() => {
+        triggerDrawStepAnimation(drawer, nextState);
+      });
+    },
+    [triggerDrawStepAnimation],
+  );
 
   const runDrawSequenceLocal = useCallback(
     async (
@@ -4051,6 +4114,7 @@ export default function BotMatchScreen({
             ? guidedWinnerIdFromScores(expected.playerScoreAfter, expected.fritzScoreAfter)
             : prev.winnerId,
         }));
+        notifyGuidedV2EventToasts(expected, opponentLabel, { showScoreToast, showBoardToast });
         if (expected.pointsScored > 0) queueSound(() => playScoreSound(expected.pointsScored, isMuted), 80);
         queueSound(() => playTileSound('standard', isMuted), 0);
         setGuidedV2EventIndex((i) => i + 1);
@@ -4266,6 +4330,7 @@ export default function BotMatchScreen({
           ? guidedWinnerIdFromScores(expected.playerScoreAfter, expected.fritzScoreAfter)
           : prev.winnerId,
       }));
+      notifyGuidedV2EventToasts(expected, opponentLabel, { showScoreToast, showBoardToast });
       if (expected.pointsScored > 0) queueSound(() => playScoreSound(expected.pointsScored, isMuted), 80);
       queueSound(() => playTileSound('standard', isMuted), 0);
       setGuidedV2EventIndex((i) => i + 1);
@@ -6175,15 +6240,34 @@ export default function BotMatchScreen({
   const isFullscreenReady = true;
   const isLessonLayoutMode = lessonLayoutMode;
 
-  const lessonRecommendedTileKey = isGuidedV2Mode && !isGuidedV2OffLine
-    ? currentExpectedV2PlayerEvent?.tile ?? null
-    : isGuidedTranscriptMode
-      ? currentTranscriptTurn?.expectedPlayerMove.type === 'play' && currentTranscriptTurn.expectedPlayerMove.tile
-        ? currentTranscriptTurn.expectedPlayerMove.tile
+  const isGuidedV2FritzResolving =
+    isGuidedV2Mode &&
+    !isGuidedV2OffLine &&
+    currentV2CursorEvent?.actor === 'fritz';
+
+  const isAwaitingPlayerTurnAction =
+    handActive &&
+    match.currentPlayer === 'you' &&
+    !botTurn &&
+    !drawSequenceActive &&
+    !handReveal &&
+    !isTransitioningRef.current &&
+    !isGuidedV2FritzResolving &&
+    (!isGuidedV2Mode || isGuidedV2OffLine || currentV2CursorEvent?.actor === 'player');
+
+  const lessonRecommendedTileKey = !isAwaitingPlayerTurnAction
+    ? null
+    : isGuidedV2Mode && !isGuidedV2OffLine
+      ? currentExpectedV2PlayerEvent?.action === 'play'
+        ? currentExpectedV2PlayerEvent.tile ?? null
         : null
-      : isGuidedFrozenLessonMode && currentLessonStep?.chosenMove
-        ? currentLessonStep.chosenMove.split(':')[0]?.replace('|', '-') ?? null
-      : null;
+      : isGuidedTranscriptMode
+        ? currentTranscriptTurn?.expectedPlayerMove.type === 'play' && currentTranscriptTurn.expectedPlayerMove.tile
+          ? currentTranscriptTurn.expectedPlayerMove.tile
+          : null
+        : isGuidedFrozenLessonMode && currentLessonStep?.chosenMove
+          ? currentLessonStep.chosenMove.split(':')[0]?.replace('|', '-') ?? null
+          : null;
 
   const showLessonCoachPanel =
     isLessonLayoutMode &&
@@ -6295,6 +6379,13 @@ export default function BotMatchScreen({
     [lessonCoachBodyText.length, lessonCoachContent.bodyParagraphs.length],
   );
   const lessonRecommendedTileLabel = formatLessonTileLabel(lessonRecommendedTileKey);
+  const showCoachedRecommendation =
+    isLessonLayoutMode &&
+    showRecommendation &&
+    isAwaitingPlayerTurnAction &&
+    !match.handOver &&
+    !match.gameOver &&
+    Boolean(lessonCoachVm?.canBestMove);
 
   useEffect(() => {
     setShowFullCoachTip(false);
@@ -6348,8 +6439,7 @@ export default function BotMatchScreen({
                       ? guidedPts > 0 ? 'guided-scoring' : 'guided-legal'
                       : '';
                     const isRecommendedLessonTile =
-                      isLessonLayoutMode &&
-                      showRecommendation &&
+                      showCoachedRecommendation &&
                       lessonRecommendedTileKey != null &&
                       lessonRecommendedTileKey === toTileKey(tile);
                     const baseClass = drawPulseIndex === absoluteIdx ? 'new-draw' : '';
@@ -6365,7 +6455,13 @@ export default function BotMatchScreen({
                           tile={tile}
                           size={handTileSize}
                           rotation={0}
-                          className={[baseClass, guidedClass].filter(Boolean).join(' ')}
+                          className={[
+                            baseClass,
+                            guidedClass,
+                            isRecommendedLessonTile ? 'is-coached-recommended' : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
                           selected={selected}
                           highlight={legalityHighlight}
                           unplayable={isUnplayable}
@@ -7428,10 +7524,31 @@ export default function BotMatchScreen({
                     </div>
                   ) : null}
                   {!lessonCoachVm?.isOffAuthoredLine && currentExpectedV2PlayerEvent ? (
-                    <div className="learn-guided-hero-card__context-strip" aria-label="Decision context">
-                      <span>Hand {currentExpectedV2PlayerEvent.handNumber}</span>
-                      <span>Move {lessonCoachProgressCount}</span>
-                      {lessonRecommendedTileLabel ? <span>Play {lessonRecommendedTileLabel}</span> : null}
+                    <div className="learn-guided-hero-card__footer" aria-label="Lesson utilities">
+                      <div className="learn-guided-hero-card__context-strip" aria-label="Decision context">
+                        <span>Hand {currentExpectedV2PlayerEvent.handNumber}</span>
+                        <span>Move {lessonCoachProgressCount}</span>
+                        {lessonRecommendedTileLabel ? <span>Play {lessonRecommendedTileLabel}</span> : null}
+                      </div>
+                      <div className="learn-guided-hero-card__action-row">
+                        {showLessonCoachPanel ? (
+                          <button
+                            type="button"
+                            className="learn-guided-hero-card__action-secondary"
+                            onClick={() => setShowRecommendation((prev) => !prev)}
+                          >
+                            {showRecommendation ? 'Hide Preview' : 'Show Preview'}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="learn-guided-hero-card__action-primary"
+                          disabled={!lessonCoachVm?.canBestMove}
+                          onClick={playLessonBestMove}
+                        >
+                          Play Move
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -7439,67 +7556,67 @@ export default function BotMatchScreen({
             </aside>
 
             <section className="pvf-control-panel learn-guided-pvf__panel" data-ui="guided-stage">
-
-              <div className="wl-top-rail bot-top-rail learn-guided-top-rail" data-ui="hud" style={{ position: 'relative' }}>
-                <div className="bot-hud-left-cluster" style={{ gridColumn: 1 }}>
+              <div className="learn-guided-panel-section learn-guided-panel-section--state">
+                <div className="fritz-summary-strip learn-guided-summary-strip" data-ui="guided-match-state">
                   <button
                     type="button"
-                    className="wl-player-pill wl-player-pill-btn score-card"
+                    ref={guidedFritzAnchorRef}
+                    className="fritz-summary-item learn-guided-summary-item learn-guided-summary-item--score"
+                    onClick={() => setScoreTrackOpen(true)}
+                    aria-label="Open score track"
+                    data-ui="guided-fritz-draw-anchor"
+                  >
+                    <div>
+                      <div className="fritz-summary-value">
+                        <AnimatedScore value={match.players.bot.score} className="learn-guided-summary-score" />
+                      </div>
+                      <div className="fritz-summary-key">{opponentLabel}</div>
+                    </div>
+                  </button>
+                  <div className="fritz-summary-divider" aria-hidden />
+                  <button
+                    type="button"
+                    className="fritz-summary-item learn-guided-summary-item learn-guided-summary-item--score"
                     onClick={() => setScoreTrackOpen(true)}
                     aria-label="Open score track"
                   >
-                    <div className="wl-player-card-content">
-                      <div className="wl-player-card-text">
-                        <span className="wl-player-label">{opponentLabel}</span>
+                    <div>
+                      <div className="fritz-summary-value">
+                        <AnimatedScore value={match.players.you.score} className="learn-guided-summary-score" />
                       </div>
-                      <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
+                      <div className="fritz-summary-key">You</div>
                     </div>
                   </button>
-                </div>
-
-                <div
-                  className="wl-center-status"
-                  data-ui="turn-status"
-                  style={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
-                    {turnLabel || (botTurn ? `${opponentLabel} thinking` : 'Your move')}
-                  </span>
-                </div>
-
-                <div className="bot-hud-right-cluster" style={{ gridColumn: 3, justifySelf: 'end' }}>
-                  <button
-                    type="button"
-                    className="wl-player-pill wl-player-pill-btn score-card is-you"
-                    onClick={() => setScoreTrackOpen(true)}
-                    aria-label="Open score track"
+                  <div className="fritz-summary-divider learn-guided-summary-divider--turn" aria-hidden />
+                  <div className="fritz-summary-item learn-guided-summary-item learn-guided-summary-item--turn">
+                    <span className={`learn-guided-summary-turn ${botTurn ? 'is-opponent' : 'is-you'}`}>
+                      {turnLabel || (botTurn ? `${opponentLabel} thinking` : 'Your move')}
+                    </span>
+                  </div>
+                  <div className="fritz-summary-divider learn-guided-summary-divider--turn" aria-hidden />
+                  <div className="fritz-summary-item learn-guided-summary-item learn-guided-summary-item--meta">
+                    <div>
+                      <div className="fritz-summary-value">{openEndsSum}</div>
+                      <div className="fritz-summary-key">Open Count</div>
+                    </div>
+                  </div>
+                  <div className="fritz-summary-divider" aria-hidden />
+                  <div
+                    ref={guidedBoneyardAnchorRef}
+                    className="fritz-summary-item learn-guided-summary-item learn-guided-summary-item--meta"
+                    data-ui="guided-boneyard-draw-anchor"
                   >
-                    <div className="wl-player-card-content">
-                      <div className="wl-player-card-text">
-                        <span className="wl-player-label">You</span>
-                      </div>
-                      <AnimatedScore value={match.players.you.score} className="wl-player-score" />
+                    <div>
+                      <div className="fritz-summary-value">{match.boneyard.length}</div>
+                      <div className="fritz-summary-key">Boneyard</div>
                     </div>
-                  </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="rh-live-studio-shell learn-guided-live-shell" data-ui="guided-live-shell">
+              <div className="learn-guided-panel-section learn-guided-panel-section--game">
+                <div className="learn-guided-game-stage">
                 <div className="rh-live-board-zone learn-guided-live-board-zone" data-ui="live-board-zone">
-                  {!match.gameOver ? (
-                    <div className="rh-board-meta-bar learn-guided-board-meta" data-ui="board-meta">
-                      <BoardOpenEndsPill board={match.board} openEndsSum={openEndsSum} />
-                      <BoneyardCountPill ref={boneyardRef} count={match.boneyard.length} />
-                    </div>
-                  ) : null}
                   {isLessonLayoutMode && !match.board?.mainLine?.length ? (
                     <div className="learn-guided-board-card__hint" aria-hidden="true">
                       <span className="learn-guided-board-card__hint-kicker">Opening move</span>
@@ -7508,31 +7625,11 @@ export default function BotMatchScreen({
                   ) : null}
                   {boardStage}
                 </div>
-
-                <div className="rh-live-hand-deck learn-guided-live-hand-deck" data-ui="live-hand-deck">
-                  {handTray}
-                </div>
-              </div>
-
-              <div className="learn-guided-panel-section learn-guided-panel-section--cta">
-                <div className="learn-guided-cta-row">
-                  <button
-                    type="button"
-                    className="pvf-start-btn learn-guided-cta-primary"
-                    disabled={!lessonCoachVm?.canBestMove}
-                    onClick={playLessonBestMove}
-                  >
-                    Play Coached Move
-                  </button>
-                  {showLessonCoachPanel ? (
-                    <button
-                      type="button"
-                      className="learn-guided-cta-secondary"
-                      onClick={() => setShowRecommendation((prev) => !prev)}
-                    >
-                      {showRecommendation ? 'Hide Preview' : 'Reveal Preview'}
-                    </button>
-                  ) : null}
+                  <div className="learn-guided-game-stage__hand">
+                    <div className="rh-live-hand-deck learn-guided-live-hand-deck" data-ui="live-hand-deck">
+                      {handTray}
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>

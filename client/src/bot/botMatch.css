@@ -569,18 +569,40 @@
 }
 
 .guided-tile-wrap.is-recommended::before {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border: 1.5px dashed rgba(34, 211, 238, 0.78);
-  border-radius: 6px;
-  pointer-events: none;
-  animation: guidedRecommendedPulse 1.6s ease-in-out infinite;
+  display: none;
+  content: none;
 }
 
-@keyframes guidedRecommendedPulse {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 1; }
+.guided-tile-wrap.is-recommended {
+  filter: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.guided-tile-wrap.is-recommended .domino-tile.highlight:not(.unplayable) {
+  filter: none;
+}
+
+/* Gold coached underline — same geometry as guided-hand playable blue (see learnGuidedMatch.css) */
+.learn-lesson-screen .guided-tile-wrap.is-recommended .domino-tile.highlight:not(.unplayable)::after,
+.learn-lesson-screen .domino-tile.is-coached-recommended.highlight:not(.unplayable)::after {
+  width: 48px;
+  height: 3px;
+  bottom: -7px;
+  background-color: rgba(231, 182, 74, 0.92);
+  box-shadow:
+    0 0 3px 1px rgba(231, 182, 74, 0.68),
+    0 0 10px 3px rgba(231, 182, 74, 0.34);
+}
+
+.learn-lesson-screen.walnut-live .learn-guided-live-hand-deck .guided-tile-wrap.is-recommended .domino-tile.highlight:not(.unplayable) .domino-body,
+.learn-lesson-screen.walnut-live .learn-guided-live-hand-deck .domino-tile.is-coached-recommended.highlight:not(.unplayable) .domino-body {
+  border-width: 2.5px !important;
+  border-color: rgba(231, 182, 74, 0.72) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 7px 16px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(255, 255, 255, 0.08) !important;
 }
 
 .guided-score-badge {
@@ -601,11 +623,10 @@
   box-shadow: 0 1px 4px rgba(0,0,0,0.4);
 }
 
-/* Green glow for any legal tile */
+/* Legality uses the shared blue highlight underline — no extra box */
 .guided-legal .domino-tile,
 .guided-legal {
-  box-shadow: 0 0 0 2px #34d399, 0 0 8px rgba(52, 211, 153, 0.5) !important;
-  border-radius: 6px;
+  box-shadow: none !important;
 }
 
 /* Gold glow for scoring tile */
