@@ -67,9 +67,10 @@ interface OpenCountCalcProps {
   total: number;
   scores?: boolean;
   footnote?: string;
+  racePoints?: number;
 }
 
-export function OpenCountCalc({ parts, total, scores = false, footnote }: OpenCountCalcProps) {
+export function OpenCountCalc({ parts, total, scores = false, footnote, racePoints }: OpenCountCalcProps) {
   return (
     <div className={`learn-howto-calc${scores ? ' learn-howto-calc--score' : ''}`}>
       <div className="learn-howto-calc__parts">
@@ -86,6 +87,13 @@ export function OpenCountCalc({ parts, total, scores = false, footnote }: OpenCo
       <span className="learn-howto-calc__eq">=</span>
       <span className="learn-howto-calc__total">{total}</span>
       {scores ? <span className="learn-howto-calc__badge">Scores</span> : null}
+      {racePoints != null && scores ? (
+        <p className="learn-howto-calc__race">
+          <span className="learn-howto-calc__race-label">Race points</span>
+          <strong>{racePoints}</strong>
+          <span className="learn-howto-calc__race-formula">({total} ÷ 5)</span>
+        </p>
+      ) : null}
       {footnote ? <p className="learn-howto-calc__footnote">{footnote}</p> : null}
     </div>
   );
@@ -130,7 +138,7 @@ export function BranchBoardDiagram({
             >
               <DominoTile tile={hubTile} size={68} rotation={90} />
               <span className="learn-howto-diagram__hub-tag">
-                {crossed ? 'crossed · drops out' : 'open double'}
+                {crossed ? 'crossed · branches' : 'open double'}
               </span>
             </div>
             <div className="learn-howto-diagram__main-spine">
@@ -164,6 +172,89 @@ function BranchArm({ tiles, end }: { tiles: ChainTileSpec[]; end: EndMarkerSpec 
         </div>
       ))}
       <EndMarker {...end} />
+    </div>
+  );
+}
+
+export interface ChainRoadmapStep {
+  label: string;
+  detail: string;
+  tile: Tile;
+  rotation?: 0 | 90;
+}
+
+interface ChainRoadmapDiagramProps {
+  steps: ChainRoadmapStep[];
+  caption?: string;
+}
+
+/** Guided Match chain: setup → double → finish. */
+export function ChainRoadmapDiagram({ steps, caption }: ChainRoadmapDiagramProps) {
+  return (
+    <figure className="learn-howto-diagram learn-howto-diagram--roadmap">
+      <ol className="learn-howto-roadmap">
+        {steps.map((step, i) => (
+          <li key={step.label} className="learn-howto-roadmap__step">
+            <div className="learn-howto-roadmap__tile">
+              <DominoTile tile={step.tile} size={58} rotation={step.rotation ?? 0} />
+            </div>
+            <div className="learn-howto-roadmap__copy">
+              <span className="learn-howto-roadmap__label">{step.label}</span>
+              <p className="learn-howto-roadmap__detail">{step.detail}</p>
+            </div>
+            {i < steps.length - 1 ? (
+              <span className="learn-howto-roadmap__arrow" aria-hidden="true">
+                →
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+      {caption ? <figcaption className="learn-howto-diagram__caption">{caption}</figcaption> : null}
+    </figure>
+  );
+}
+
+interface DoublesCompareDiagramProps {
+  openEnds: EndMarkerSpec[];
+}
+
+export function DoublesCompareDiagram({ openEnds }: DoublesCompareDiagramProps) {
+  return (
+    <div className="learn-howto-doubles-compare">
+      <div className="learn-howto-doubles-compare__panel">
+        <p className="learn-howto-doubles-compare__title">Open double</p>
+        <MiniChainDiagram
+          tiles={[
+            { tile: { low: 3, high: 5 } },
+            { tile: { low: 6, high: 6 }, rotation: 90, highlight: 'gold' },
+            { tile: { low: 5, high: 2 } },
+          ]}
+          ends={openEnds}
+        />
+        <p className="learn-howto-doubles-compare__hint">Counts fully · extends tempo</p>
+      </div>
+      <div className="learn-howto-doubles-compare__panel">
+        <p className="learn-howto-doubles-compare__title">Crossed double</p>
+        <BranchBoardDiagram
+          mainTiles={[{ tile: { low: 4, high: 1 } }, { tile: { low: 1, high: 3 } }]}
+          hubTile={{ low: 3, high: 3 }}
+          crossed
+          branches={[
+            {
+              side: 'left',
+              tiles: [{ tile: { low: 3, high: 5 } }],
+              end: { label: 'branch tip', value: 5, tone: 'active' },
+            },
+            {
+              side: 'right',
+              tiles: [],
+              end: { label: 'empty', value: 0, tone: 'muted', note: 'no phantom points' },
+            },
+          ]}
+        />
+        <p className="learn-howto-doubles-compare__hint">Branches only · real tips count</p>
+      </div>
     </div>
   );
 }

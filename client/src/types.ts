@@ -89,6 +89,8 @@ export type AppMode =
   | 'daily'
   | 'dailyFritz'
   | 'learn'
+  | 'guidedMatchRecorder'
+  | 'guidedMatchAnnotator'
   | 'friends'
   | 'stats'
   | 'ratingHistory'

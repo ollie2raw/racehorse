@@ -54,6 +54,7 @@ export const RacehorseMatchArena: React.FC<RacehorseMatchArenaProps> = ({
   isPlayerTurn,
   openEndsSum,
   boneyardCount,
+  winningScore,
   boardContent,
   handContent,
   opponentHandPreview,
@@ -69,8 +70,11 @@ export const RacehorseMatchArena: React.FC<RacehorseMatchArenaProps> = ({
   showHints,
   hintCount = 3,
 }) => {
-  const trackTarget = 150;
+  const trackTarget = Math.max(1, winningScore);
   const playerProgress = Math.min(1, playerScore / trackTarget) * 100;
+  const trackMilestones = [0, 0.25, 0.5, 0.75, 1].map((fraction) =>
+    Math.round(trackTarget * fraction),
+  );
   const displayUsername = username ?? 'oliver';
   const displayRating = rating?.toLocaleString() ?? '1,976';
   
@@ -153,7 +157,7 @@ export const RacehorseMatchArena: React.FC<RacehorseMatchArenaProps> = ({
           </div>
           
           <div className="track-milestones">
-            {[0, 25, 50, 75, 100, 125].map(m => (
+            {trackMilestones.map((m) => (
               <div key={m} className="milestone">
                 <div style={{ width: 1.5, height: 8, background: 'var(--rh-gold)', opacity: 0.3, marginBottom: 4 }} />
                 <span>{m}</span>
@@ -164,7 +168,7 @@ export const RacehorseMatchArena: React.FC<RacehorseMatchArenaProps> = ({
           <div className="track-medallion" style={{ borderColor: '#fff', color: '#fff' }}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"/></svg>
           </div>
-          <div className="track-goal-chip">150</div>
+          <div className="track-goal-chip">{trackTarget}</div>
         </div>
       </section>
 

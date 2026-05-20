@@ -115,7 +115,6 @@ import { useLearningCoach } from '../learning/useLearningCoach';
 import CoachPanel from '../learning/CoachPanel';
 import LearningHandRecap from '../learning/LearningHandRecap';
 import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
-import LearnGuidedMatchChrome from '../learn/LearnGuidedMatchChrome';
 import LeaveGameModal from '../components/LeaveGameModal';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import HandOverModal from '../components/handOver/HandOverModal';
@@ -170,6 +169,16 @@ import {
   type LessonV2Event,
   type LessonV2HandStart,
 } from '../learn/lessonV2';
+import {
+  copyGuidedMatchCandidateJson,
+  createGuidedMatchCapture,
+  getGuidedMatchCaptureStatus,
+  recordGuidedMatchCandidateAction,
+  recordGuidedMatchCandidateNextHand,
+  type GuidedMatchCaptureState,
+} from '../learn/guidedMatch/guidedMatchCapture';
+import { upsertGuidedMatchCandidate } from '../learn/guidedMatch/guidedMatchCandidateStorage';
+import { validateGuidedMatchCandidate } from '../learn/guidedMatch/guidedMatchCandidateValidation';
 
 interface BotMatchScreenProps {
   onBack: () => void;
@@ -207,6 +216,8 @@ interface BotMatchScreenProps {
   isAuthoringV2Mode?: boolean;
   /** Player-facing V2: playback a frozen LessonV2 lesson */
   isGuidedV2Mode?: boolean;
+  /** Admin-only passive capture for future Guided Match candidate authoring. */
+  enableGuidedMatchCandidateCapture?: boolean;
 }
 
 interface BotHandReveal {
@@ -232,6 +243,52 @@ type GuidedCoachViewModel = {
   canBestMove: boolean;
   isOffAuthoredLine: boolean;
 };
+
+type GuidedLessonCoachContent = {
+  title: string;
+  bodyParagraphs: string[];
+};
+
+const GUIDED_PUBLIC_COACHING_LONG_CHAR_THRESHOLD = 520;
+const GUIDED_PUBLIC_COACHING_LONG_PARAGRAPH_THRESHOLD = 3;
+
+function formatLessonTileLabel(tileKey: string | null | undefined): string | null {
+  if (!tileKey) return null;
+  return tileKey.replace(/\|/g, '-');
+}
+
+function parseGuidedLessonCoachContent(coachingText: string): GuidedLessonCoachContent {
+  const normalized = coachingText.replace(/\r\n/g, '\n').trim();
+  if (!normalized) {
+    return {
+      title: 'Your decision',
+      bodyParagraphs: ['Study the board, compare your options, and follow the coached line.'],
+    };
+  }
+
+  const lines = normalized.split('\n');
+  const firstMeaningfulIndex = lines.findIndex((line) => line.trim().length > 0);
+  const firstMeaningful = firstMeaningfulIndex >= 0 ? lines[firstMeaningfulIndex]!.trim() : '';
+  const useFirstLineAsTitle =
+    Boolean(firstMeaningful) &&
+    firstMeaningful.length <= 72 &&
+    !/^play:/i.test(firstMeaningful);
+
+  const title = useFirstLineAsTitle ? firstMeaningful : 'Your decision';
+  const bodySource = useFirstLineAsTitle
+    ? lines.slice(firstMeaningfulIndex + 1).join('\n').trim()
+    : normalized;
+  const bodyParagraphs = bodySource
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\n/g, ' ').trim())
+    .filter(Boolean);
+  const safeBodyParagraphs = bodyParagraphs.length > 0 ? bodyParagraphs : [bodySource || normalized];
+
+  return {
+    title,
+    bodyParagraphs: safeBodyParagraphs,
+  };
+}
 
 function traceDailyFritzEvent(
   tag: string,
@@ -678,6 +735,7 @@ export default function BotMatchScreen({
   isAuthoringMode: isAuthoringModeProp = false,
   isAuthoringV2Mode: isAuthoringV2ModeProp = false,
   isGuidedV2Mode: isGuidedV2ModeProp = false,
+  enableGuidedMatchCandidateCapture = false,
 }: BotMatchScreenProps) {
   const dailyFritzStorageKey =
     mode === 'daily-fritz' && dailyFritzPackage
@@ -906,6 +964,7 @@ export default function BotMatchScreen({
   });
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showFullCoachTip, setShowFullCoachTip] = useState(false);
 
   useEffect(() => {
     logLayoutDebug(showLeaveConfirm ? 'leave-open' : 'leave-close', {
@@ -953,6 +1012,11 @@ export default function BotMatchScreen({
         ? `daily-fritz:${dailyFritzPackage.run_date}:${dailyFritzPackage.attempt_id}`
         : createLocalMatchId()),
   );
+  const guidedMatchCaptureRef = useRef<GuidedMatchCaptureState | null>(null);
+  const [guidedMatchCaptureStatus, setGuidedMatchCaptureStatus] = useState(() =>
+    getGuidedMatchCaptureStatus(null),
+  );
+  const [guidedMatchCandidateSaveStatus, setGuidedMatchCandidateSaveStatus] = useState<string | null>(null);
   const [verifiedMatchId, setVerifiedMatchId] = useState<string | null>(
     dailyFritzPackage?.verified_match_id ?? null,
   );
@@ -2227,6 +2291,7 @@ export default function BotMatchScreen({
     setGhostResult(null);
     setGhostResultLoading(false);
     setGhostResultError(null);
+    setGuidedMatchCandidateSaveStatus(null);
     setMovesUsed(0);
     setDailyLeaderboard([]);
     setDailyLeaderboardError(null);
@@ -3389,14 +3454,21 @@ export default function BotMatchScreen({
       initialState: BotMatchState,
       player: BotPlayerId,
       token?: LocalRunToken,
+      onStep?: (step: {
+        actionKind: 'draw' | 'pass';
+        beforeState: BotMatchState;
+        result: BotActionResult;
+      }) => void,
     ): Promise<BotActionResult> => {
       let current = initialState;
       let drewAny = false;
 
       while (asPlayMoves(getLegalMoves(current, player)).length === 0) {
         if (token && !isLocalRunCurrent(token)) break;
-        const step = drawOne(current, player);
+        const beforeDraw = current;
+        const step = drawOne(beforeDraw, player);
         if (!step.drew) break;
+        onStep?.({ actionKind: 'draw', beforeState: beforeDraw, result: step });
         drewAny = true;
         current = step.state;
         if (token && !isLocalRunCurrent(token)) break;
@@ -3408,7 +3480,9 @@ export default function BotMatchScreen({
       }
 
       if (asPlayMoves(getLegalMoves(current, player)).length === 0) {
-        const passResult = passTurn(current, player);
+        const beforePass = current;
+        const passResult = passTurn(beforePass, player);
+        onStep?.({ actionKind: 'pass', beforeState: beforePass, result: passResult });
         return {
           ...passResult,
           drew: drewAny ? { player, tile: current.players[player].hand[current.players[player].hand.length - 1] } : undefined,
@@ -3525,6 +3599,119 @@ export default function BotMatchScreen({
       return [...prev, draftStep];
     });
   }, [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!enableGuidedMatchCandidateCapture) {
+      guidedMatchCaptureRef.current = null;
+      setGuidedMatchCaptureStatus(getGuidedMatchCaptureStatus(null));
+      setGuidedMatchCandidateSaveStatus(null);
+      return;
+    }
+    const capture = createGuidedMatchCapture(match);
+    guidedMatchCaptureRef.current = capture;
+    setGuidedMatchCaptureStatus(getGuidedMatchCaptureStatus(capture));
+    setGuidedMatchCandidateSaveStatus(null);
+  }, [activeLocalMatchId, enableGuidedMatchCandidateCapture]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const captureGuidedMatchCandidateAction = useCallback((
+    actor: 'player' | 'fritz',
+    actionKind: 'tile-play' | 'draw' | 'pass',
+    beforeState: BotMatchState,
+    result: BotActionResult,
+    move?: Move | null,
+  ) => {
+    if (!enableGuidedMatchCandidateCapture || !guidedMatchCaptureRef.current) return;
+    const nextCapture = recordGuidedMatchCandidateAction(
+      guidedMatchCaptureRef.current,
+      actor,
+      actionKind,
+      beforeState,
+      result,
+      move,
+    );
+    guidedMatchCaptureRef.current = nextCapture;
+    setGuidedMatchCaptureStatus(getGuidedMatchCaptureStatus(nextCapture));
+    if (result.state.gameOver) {
+      const validation = validateGuidedMatchCandidate(nextCapture.candidate, 'draft');
+      if (!validation.ok && import.meta.env.DEV) {
+        console.warn('[guided-match-capture] draft validation issues', validation.issues);
+      }
+    }
+  }, [enableGuidedMatchCandidateCapture]);
+
+  const captureGuidedMatchCandidateNextHand = useCallback((
+    previousState: BotMatchState,
+    nextState: BotMatchState,
+  ) => {
+    if (!enableGuidedMatchCandidateCapture || !guidedMatchCaptureRef.current) return;
+    const nextCapture = recordGuidedMatchCandidateNextHand(
+      guidedMatchCaptureRef.current,
+      previousState,
+      nextState,
+    );
+    guidedMatchCaptureRef.current = nextCapture;
+    setGuidedMatchCaptureStatus(getGuidedMatchCaptureStatus(nextCapture));
+  }, [enableGuidedMatchCandidateCapture]);
+
+  const isEmergencySaveableGuidedMatchCandidate = useCallback((
+    candidate: GuidedMatchCaptureState['candidate'],
+  ) => Boolean(
+    candidate.candidateId &&
+      candidate.initialMatchSnapshot &&
+      candidate.finalMatchSnapshot &&
+      candidate.events.length > 0 &&
+      candidate.targetScore === 60 &&
+      candidate.opponent === 'standard-fritz' &&
+      candidate.dealSize === 7 &&
+      (candidate.result === 'won' || candidate.result === 'lost'),
+  ), []);
+
+  const saveGuidedMatchCandidate = useCallback(() => {
+    const candidate = guidedMatchCaptureRef.current?.candidate ?? null;
+    if (!candidate) {
+      setGuidedMatchCandidateSaveStatus('No candidate captured.');
+      return;
+    }
+    const validation = validateGuidedMatchCandidate(candidate, 'draft');
+    if (!validation.ok && !isEmergencySaveableGuidedMatchCandidate(candidate)) {
+      setGuidedMatchCandidateSaveStatus(`Candidate has ${validation.issues.length} draft issue(s).`);
+      if (import.meta.env.DEV) {
+        console.warn('[guided-match-capture] save blocked by draft validation', validation.issues);
+      }
+      return;
+    }
+    const candidateToSave = {
+      ...candidate,
+      updatedAt: new Date().toISOString(),
+      validationStatus: validation.ok ? 'draft-valid' as const : 'draft-with-issues' as const,
+      validationIssues: validation.issues,
+    };
+    const saved = upsertGuidedMatchCandidate(candidateToSave);
+    setGuidedMatchCandidateSaveStatus(
+      saved
+        ? validation.ok
+          ? 'Guided Match candidate saved.'
+          : `Saved with ${validation.issues.length} draft issues`
+        : 'Candidate save failed.',
+    );
+    if (!validation.ok && import.meta.env.DEV) {
+      console.warn('[guided-match-capture] saved raw candidate with draft validation issues', validation.issues);
+    }
+  }, [isEmergencySaveableGuidedMatchCandidate]);
+
+  const copyGuidedMatchCandidate = useCallback(async () => {
+    const candidate = guidedMatchCaptureRef.current?.candidate ?? null;
+    if (!candidate) {
+      setGuidedMatchCandidateSaveStatus('No candidate captured.');
+      return;
+    }
+    const validation = validateGuidedMatchCandidate(candidate, 'draft');
+    if (!validation.ok && import.meta.env.DEV) {
+      console.warn('[guided-match-capture] draft copy validation issues', validation.issues);
+    }
+    const copied = await copyGuidedMatchCandidateJson(candidate);
+    setGuidedMatchCandidateSaveStatus(copied ? 'Draft candidate JSON copied.' : 'Candidate copy failed.');
+  }, []);
 
   const onPositionClick = useCallback((position: PlacementPosition) => {
     const actingPlayer: BotPlayerId =
@@ -3769,6 +3956,7 @@ export default function BotMatchScreen({
           },
         }
       : result;
+    captureGuidedMatchCandidateAction('player', 'tile-play', match, adjustedResult, move);
     if (isDailyFritzMode) {
       traceDailyFritzEvent('[state] move applied', {
         tile: move.tile ? toTileKey(move.tile) : null,
@@ -3986,6 +4174,7 @@ export default function BotMatchScreen({
     isDailyFritzMode,
     wantsOriginalGuidedRecordMode,
     selectedController,
+    captureGuidedMatchCandidateAction,
   ]);
 
   const playBestMove = () => {
@@ -4530,7 +4719,9 @@ export default function BotMatchScreen({
           const botPlayable = asPlayMoves(getLegalMoves(working, 'bot'));
           if (botPlayable.length === 0) {
             setDrawSequenceActiveBoth(true);
-            const drawPass = await runDrawSequenceLocal(working, 'bot', runToken);
+            const drawPass = await runDrawSequenceLocal(working, 'bot', runToken, (step) => {
+              captureGuidedMatchCandidateAction('fritz', step.actionKind, step.beforeState, step.result);
+            });
             if (cancelled || !isLocalRunCurrent(runToken)) return;
             working = drawPass.state;
 
@@ -4614,6 +4805,15 @@ export default function BotMatchScreen({
                   ? { type: 'play', tile: ghostChosen.tile, position: ghostChosen.position }
                   : chosen?.move ?? afterDraw[0],
               );
+              captureGuidedMatchCandidateAction(
+                'fritz',
+                'tile-play',
+                working,
+                result,
+                ghostChosen
+                  ? { type: 'play', tile: ghostChosen.tile, position: ghostChosen.position }
+                  : chosen?.move ?? afterDraw[0],
+              );
             }
           } else {
             if (isGhostMode) {
@@ -4631,6 +4831,15 @@ export default function BotMatchScreen({
             result = applyPlayMove(
               working,
               'bot',
+              ghostChosen
+                ? { type: 'play', tile: ghostChosen.tile, position: ghostChosen.position }
+                : chosen?.move ?? botPlayable[0],
+            );
+            captureGuidedMatchCandidateAction(
+              'fritz',
+              'tile-play',
+              working,
+              result,
               ghostChosen
                 ? { type: 'play', tile: ghostChosen.tile, position: ghostChosen.position }
                 : chosen?.move ?? botPlayable[0],
@@ -4786,6 +4995,7 @@ export default function BotMatchScreen({
       const beforeEndsRaw = getDisplayOpenEnds(live);
       const boardEnds: [number, number] = [beforeEndsRaw[0] ?? -1, beforeEndsRaw[1] ?? -1];
       const forcedResult = applyPlayMove(live, 'bot', fallbackPlay);
+      captureGuidedMatchCandidateAction('fritz', 'tile-play', live, forcedResult, fallbackPlay);
       botChainPauseRef.current =
         forcedResult.state.currentPlayer === 'bot' && !forcedResult.state.handOver && !forcedResult.state.gameOver;
       if (fallbackPlay.tile) {
@@ -4841,6 +5051,7 @@ export default function BotMatchScreen({
     finishLocalRun,
     isMuted,
     toEngineBestFromChoice,
+    captureGuidedMatchCandidateAction,
   ]);
 
   // ── Sequential Bot Reply Replay ───────────────────────────────────────────
@@ -5247,18 +5458,18 @@ export default function BotMatchScreen({
       return;
     }
 
-    setMatch((prev) => {
-      if (!canApplyNextHand(prev)) return prev;
-      const useSeededDeal = isAuthoringMode || (isGuidedMode && frozenLesson !== null);
-      const nextState = useSeededDeal
-        ? startNextFixedBotHand(prev, generateAuthoringHandDeal(prev.handNumber))
-        : startNextBotHand(prev);
-      return {
-        ...nextState,
-        opponentPassedOnEnds: [],
-        opponentDrawCount: 0,
-        opponentKnownMissing: [],
-      };
+    const previousState = matchRef.current;
+    if (!canApplyNextHand(previousState)) return;
+    const useSeededDeal = isAuthoringMode || (isGuidedMode && frozenLesson !== null);
+    const nextState = useSeededDeal
+      ? startNextFixedBotHand(previousState, generateAuthoringHandDeal(previousState.handNumber))
+      : startNextBotHand(previousState);
+    captureGuidedMatchCandidateNextHand(previousState, nextState);
+    setMatch({
+      ...nextState,
+      opponentPassedOnEnds: [],
+      opponentDrawCount: 0,
+      opponentKnownMissing: [],
     });
     traceHandLifecycle('playing');
   }, [
@@ -5276,6 +5487,7 @@ export default function BotMatchScreen({
     invalidateLocalRuns,
     scheduleHandAdvanceRetry,
     traceHandLifecycle,
+    captureGuidedMatchCandidateNextHand,
   ]);
 
   advanceHandRef.current = advanceHand;
@@ -5572,7 +5784,9 @@ export default function BotMatchScreen({
           return;
         }
         // ── Normal draw-or-pass flow ───────────────────────────────────────────
-        const result = await runDrawSequenceLocal(match, 'you', runToken);
+        const result = await runDrawSequenceLocal(match, 'you', runToken, (step) => {
+          captureGuidedMatchCandidateAction('player', step.actionKind, step.beforeState, step.result);
+        });
         if (!isLocalRunCurrent(runToken)) return;
         setSelectedTile(null);
         if (result.drew) {
@@ -5704,6 +5918,7 @@ export default function BotMatchScreen({
     isDailyFritzMode,
     isGuidedV2Mode,
     isGuidedV2OffLine,
+    captureGuidedMatchCandidateAction,
   ]);
 
   useEffect(() => {
@@ -5830,6 +6045,11 @@ export default function BotMatchScreen({
     : botTurn
       ? `${opponentLabel} thinking`
       : 'Your move';
+  const canSaveGuidedMatchCandidate =
+    enableGuidedMatchCandidateCapture &&
+    match.gameOver &&
+    guidedMatchCaptureStatus.enabled &&
+    guidedMatchCaptureStatus.candidateStatus === 'complete';
 
   if (isGuidedMode && !isAuthoringMode) {
     console.log('[guided-move] rendered match player hand =', match.players.you.hand.map(toTileKey));
@@ -6060,6 +6280,43 @@ export default function BotMatchScreen({
     ? Math.max(0, Math.min(100, (lessonCoachProgressCount / lessonCoachProgressTotal) * 100))
     : 0;
   const lessonCoachProgressLabel = `${lessonCoachProgressCount} / ${lessonCoachProgressTotal}`;
+  const lessonCoachContent = useMemo(
+    () => parseGuidedLessonCoachContent(lessonCoachVm?.coachingText ?? ''),
+    [lessonCoachVm?.coachingText],
+  );
+  const lessonCoachBodyText = useMemo(
+    () => lessonCoachContent.bodyParagraphs.join('\n\n'),
+    [lessonCoachContent.bodyParagraphs],
+  );
+  const shouldClampLessonCoach = useMemo(
+    () =>
+      lessonCoachBodyText.length > GUIDED_PUBLIC_COACHING_LONG_CHAR_THRESHOLD ||
+      lessonCoachContent.bodyParagraphs.length >= GUIDED_PUBLIC_COACHING_LONG_PARAGRAPH_THRESHOLD,
+    [lessonCoachBodyText.length, lessonCoachContent.bodyParagraphs.length],
+  );
+  const lessonRecommendedTileLabel = formatLessonTileLabel(lessonRecommendedTileKey);
+
+  useEffect(() => {
+    setShowFullCoachTip(false);
+  }, [lessonCoachVm?.stepIndex]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (!isLessonLayoutMode || !shouldClampLessonCoach) return;
+    console.warn('[guided-match-ui] coaching body is long; consider shortening', {
+      stepIndex: lessonCoachVm?.stepIndex,
+      title: lessonCoachContent.title,
+      chars: lessonCoachBodyText.length,
+      paragraphs: lessonCoachContent.bodyParagraphs.length,
+    });
+  }, [
+    isLessonLayoutMode,
+    shouldClampLessonCoach,
+    lessonCoachVm?.stepIndex,
+    lessonCoachContent.title,
+    lessonCoachBodyText.length,
+    lessonCoachContent.bodyParagraphs.length,
+  ]);
 
   const handTray = (
     <div
@@ -6174,6 +6431,53 @@ export default function BotMatchScreen({
             }}
           >
             {renderScoreToastMessage(scoreToast.message)}
+          </div>
+        )}
+        {enableGuidedMatchCandidateCapture && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 14,
+              right: 14,
+              zIndex: 16,
+              display: 'grid',
+              gap: 2,
+              padding: '8px 10px',
+              borderRadius: 8,
+              border: '1px solid rgba(103,217,87,0.28)',
+              background: 'rgba(6,12,20,0.82)',
+              color: 'rgba(228,242,232,0.9)',
+              fontSize: 11,
+              lineHeight: 1.25,
+              pointerEvents: 'auto',
+            }}
+          >
+            <strong style={{ color: 'rgba(141,231,165,0.95)' }}>
+              Capture: {guidedMatchCaptureStatus.enabled ? 'on' : 'off'}
+            </strong>
+            <span>Events: {guidedMatchCaptureStatus.eventCount}</span>
+            <span>Candidate: {guidedMatchCaptureStatus.candidateStatus}</span>
+            <span>Last: {guidedMatchCaptureStatus.lastEventId ?? '-'}</span>
+            <span>Save unlocks at match over</span>
+            <button
+              type="button"
+              onClick={copyGuidedMatchCandidate}
+              style={{
+                marginTop: 4,
+                padding: '4px 7px',
+                borderRadius: 6,
+                border: '1px solid rgba(141,231,165,0.28)',
+                background: 'rgba(141,231,165,0.1)',
+                color: 'rgba(228,242,232,0.94)',
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+              }}
+            >
+              Copy Draft JSON
+            </button>
           </div>
         )}
         {!match.gameOver && !isLessonLayoutMode && (
@@ -6746,10 +7050,43 @@ export default function BotMatchScreen({
           onPrimary={startFreshMatch}
           secondaryLabel={isDailyFritzMode ? 'Back Home' : isGhostMode ? 'Home' : 'Change Setup'}
           onSecondary={isDailyFritzMode ? exitMatch : isGhostMode ? goHome : exitMatch}
-          extraActionLabel={!isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate ? 'Home' : undefined}
-          onExtraAction={!isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate ? goHome : undefined}
+          extraActionLabel={
+            canSaveGuidedMatchCandidate
+              ? 'Save as Guided Match Candidate'
+              : !isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate
+                ? 'Home'
+                : undefined
+          }
+          onExtraAction={
+            canSaveGuidedMatchCandidate
+              ? saveGuidedMatchCandidate
+              : !isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate
+                ? goHome
+                : undefined
+          }
           onClose={exitMatch}
         >
+          {enableGuidedMatchCandidateCapture && (
+            <div className="rh-go-rating">
+              <span>Guided Capture</span>
+              <strong>
+                {guidedMatchCaptureStatus.eventCount} events · {guidedMatchCaptureStatus.candidateStatus}
+              </strong>
+              <button
+                type="button"
+                className="btn"
+                onClick={copyGuidedMatchCandidate}
+                style={{ marginTop: 8 }}
+              >
+                Copy Candidate JSON
+              </button>
+              {guidedMatchCandidateSaveStatus ? (
+                <p style={{ margin: '8px 0 0', color: 'rgba(226,232,241,0.78)' }}>
+                  {guidedMatchCandidateSaveStatus}
+                </p>
+              ) : null}
+            </div>
+          )}
           {!isGuidedMode &&
             !isGhostMode &&
             !isDailyFritzMode &&
@@ -7040,28 +7377,16 @@ export default function BotMatchScreen({
               <div className="learn-guided-hero-card">
                 <div className="learn-guided-hero-card__content">
                   <div className="learn-guided-hero-card__header">
-                    <p className="learn-guided-hero-card__eyebrow">Fritz Coach</p>
-                    <h2 className="learn-guided-hero-card__title">Fritz Coach</h2>
-                    <p className="learn-guided-hero-card__description">
-                      {lessonCoachVm?.coachingText?.trim()
-                        ? lessonCoachVm.coachingText.trim()
-                        : lessonCoachVm?.isOffAuthoredLine
-                          ? 'You went off the authored line. This hand continues live from here — coaching follows the live position.'
-                          : guidedV2PlaybackReady
-                            ? 'No coaching note was recorded for this step.'
-                            : 'Guided lesson data is not loaded for this position yet.'}
-                    </p>
-                  </div>
-
-                  <div className="learn-guided-hero-card__moment">
-                    <span className="learn-guided-hero-card__moment-label">Current moment</span>
-                    <strong className="learn-guided-hero-card__moment-title">
-                      {lessonCoachVm?.isOffAuthoredLine ? 'Live position' : 'Your decision'}
-                    </strong>
-                    <div className="learn-guided-hero-card__progress-head">
-                      <span>Lesson progress</span>
-                      <strong>{lessonCoachProgressLabel}</strong>
+                    <div className="learn-guided-hero-card__header-meta">
+                      <p className="learn-guided-hero-card__eyebrow">Fritz Coach</p>
+                      <div className="learn-guided-hero-card__progress-chip">
+                        <span>Move</span>
+                        <strong>{lessonCoachProgressLabel}</strong>
+                      </div>
                     </div>
+                    <h2 className="learn-guided-hero-card__title">
+                      {lessonCoachVm?.isOffAuthoredLine ? 'Live position' : lessonCoachContent.title}
+                    </h2>
                     <div className="learn-guided-hero-card__progress-rail" aria-hidden="true">
                       <div
                         className="learn-guided-hero-card__progress-fill"
@@ -7070,56 +7395,126 @@ export default function BotMatchScreen({
                     </div>
                   </div>
 
-                  <div className="pvf-card-badges learn-guided-hero-card__badges">
-                    <div className="pvf-card-badge learn-guided-hero-card__badge">
-                      <div className="pvf-card-badge-header">
-                        <span className="learn-guided-hero-card__badge-dot" aria-hidden="true" />
-                        <span className="pvf-card-badge-title">Best Move</span>
-                      </div>
-                    </div>
-                    <div className="pvf-card-badge learn-guided-hero-card__badge">
-                      <div className="pvf-card-badge-header">
-                        <span className="learn-guided-hero-card__badge-dot" aria-hidden="true" />
-                        <span className="pvf-card-badge-title">Why It Works</span>
-                      </div>
-                    </div>
-                    <div className="pvf-card-badge learn-guided-hero-card__badge">
-                      <div className="pvf-card-badge-header">
-                        <span className="learn-guided-hero-card__badge-dot" aria-hidden="true" />
-                        <span className="pvf-card-badge-title">What To Watch</span>
-                      </div>
+                  <div className="learn-guided-hero-card__divider" aria-hidden="true" />
+
+                  <div className="learn-guided-hero-card__body-wrap">
+                    <div className={`learn-guided-hero-card__body${shouldClampLessonCoach ? ' is-clamped' : ''}`}>
+                      {lessonCoachVm?.isOffAuthoredLine ? (
+                        <p className="learn-guided-hero-card__paragraph">
+                          You went off the authored line. This hand continues live from here, so the coaching now follows the live position.
+                        </p>
+                      ) : shouldClampLessonCoach ? (
+                        <p className="learn-guided-hero-card__paragraph learn-guided-hero-card__paragraph--preview">
+                          {lessonCoachBodyText.replace(/\n+/g, ' ').trim()}
+                        </p>
+                      ) : (
+                        lessonCoachContent.bodyParagraphs.map((paragraph, index) => (
+                          <p key={`${index}-${paragraph.slice(0, 24)}`} className="learn-guided-hero-card__paragraph">
+                            {paragraph}
+                          </p>
+                        ))
+                      )}
                     </div>
                   </div>
+                  {!lessonCoachVm?.isOffAuthoredLine && shouldClampLessonCoach ? (
+                    <div className="learn-guided-hero-card__more-row">
+                      <button
+                        type="button"
+                        className="learn-guided-hero-card__more-btn"
+                        onClick={() => setShowFullCoachTip((prev) => !prev)}
+                      >
+                        {showFullCoachTip ? 'Less' : 'More'}
+                      </button>
+                    </div>
+                  ) : null}
+                  {!lessonCoachVm?.isOffAuthoredLine && currentExpectedV2PlayerEvent ? (
+                    <div className="learn-guided-hero-card__context-strip" aria-label="Decision context">
+                      <span>Hand {currentExpectedV2PlayerEvent.handNumber}</span>
+                      <span>Move {lessonCoachProgressCount}</span>
+                      {lessonRecommendedTileLabel ? <span>Play {lessonRecommendedTileLabel}</span> : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </aside>
 
             <section className="pvf-control-panel learn-guided-pvf__panel" data-ui="guided-stage">
-              <LearnGuidedMatchChrome
-                yourScore={match.players.you.score}
-                opponentScore={match.players.bot.score}
-                turnLabel={turnLabel || (botTurn ? `${opponentLabel} thinking` : 'Your move')}
-                isYourTurn={!botTurn && handActive}
-                openEndsSum={openEndsSum}
-                boneyardCount={match.boneyard.length}
-              />
 
-              <div className="learn-guided-panel-section learn-guided-panel-section--board">
-                <div className="fritz-section-label">2. Board</div>
-                <div className="learn-guided-board-card" data-ui="live-board-zone">
-                  {boardStage}
+              <div className="wl-top-rail bot-top-rail learn-guided-top-rail" data-ui="hud" style={{ position: 'relative' }}>
+                <div className="bot-hud-left-cluster" style={{ gridColumn: 1 }}>
+                  <button
+                    type="button"
+                    className="wl-player-pill wl-player-pill-btn score-card"
+                    onClick={() => setScoreTrackOpen(true)}
+                    aria-label="Open score track"
+                  >
+                    <div className="wl-player-card-content">
+                      <div className="wl-player-card-text">
+                        <span className="wl-player-label">{opponentLabel}</span>
+                      </div>
+                      <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
+                    </div>
+                  </button>
+                </div>
+
+                <div
+                  className="wl-center-status"
+                  data-ui="turn-status"
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
+                    {turnLabel || (botTurn ? `${opponentLabel} thinking` : 'Your move')}
+                  </span>
+                </div>
+
+                <div className="bot-hud-right-cluster" style={{ gridColumn: 3, justifySelf: 'end' }}>
+                  <button
+                    type="button"
+                    className="wl-player-pill wl-player-pill-btn score-card is-you"
+                    onClick={() => setScoreTrackOpen(true)}
+                    aria-label="Open score track"
+                  >
+                    <div className="wl-player-card-content">
+                      <div className="wl-player-card-text">
+                        <span className="wl-player-label">You</span>
+                      </div>
+                      <AnimatedScore value={match.players.you.score} className="wl-player-score" />
+                    </div>
+                  </button>
                 </div>
               </div>
 
-              <div className="learn-guided-panel-section learn-guided-panel-section--hand">
-                <div className="fritz-section-label">3. Your Hand</div>
-                <div className="learn-guided-hand-card" data-ui="live-hand-deck">
+              <div className="rh-live-studio-shell learn-guided-live-shell" data-ui="guided-live-shell">
+                <div className="rh-live-board-zone learn-guided-live-board-zone" data-ui="live-board-zone">
+                  {!match.gameOver ? (
+                    <div className="rh-board-meta-bar learn-guided-board-meta" data-ui="board-meta">
+                      <BoardOpenEndsPill board={match.board} openEndsSum={openEndsSum} />
+                      <BoneyardCountPill ref={boneyardRef} count={match.boneyard.length} />
+                    </div>
+                  ) : null}
+                  {isLessonLayoutMode && !match.board?.mainLine?.length ? (
+                    <div className="learn-guided-board-card__hint" aria-hidden="true">
+                      <span className="learn-guided-board-card__hint-kicker">Opening move</span>
+                      <strong className="learn-guided-board-card__hint-title">The board is waiting for the first coached tile.</strong>
+                    </div>
+                  ) : null}
+                  {boardStage}
+                </div>
+
+                <div className="rh-live-hand-deck learn-guided-live-hand-deck" data-ui="live-hand-deck">
                   {handTray}
                 </div>
               </div>
 
               <div className="learn-guided-panel-section learn-guided-panel-section--cta">
-                <div className="fritz-section-label">4. Next Step</div>
                 <div className="learn-guided-cta-row">
                   <button
                     type="button"
@@ -7127,7 +7522,7 @@ export default function BotMatchScreen({
                     disabled={!lessonCoachVm?.canBestMove}
                     onClick={playLessonBestMove}
                   >
-                    Show Best Move
+                    Play Coached Move
                   </button>
                   {showLessonCoachPanel ? (
                     <button
@@ -7135,7 +7530,7 @@ export default function BotMatchScreen({
                       className="learn-guided-cta-secondary"
                       onClick={() => setShowRecommendation((prev) => !prev)}
                     >
-                      {showRecommendation ? 'Hide Recommendation' : 'Reveal Recommendation'}
+                      {showRecommendation ? 'Hide Preview' : 'Reveal Preview'}
                     </button>
                   ) : null}
                 </div>
@@ -7172,6 +7567,42 @@ export default function BotMatchScreen({
           ))}
         </GameOverlayPortal>
       )}
+
+      {isLessonLayoutMode && showFullCoachTip && !lessonCoachVm?.isOffAuthoredLine ? (
+        <GameOverlayPortal>
+          <div
+            className="learn-guided-coach-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Full coach tip"
+            onClick={() => setShowFullCoachTip(false)}
+          >
+            <div
+              className="learn-guided-coach-modal__card"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="learn-guided-coach-modal__header">
+                <p className="learn-guided-coach-modal__eyebrow">Fritz Coach</p>
+                <button
+                  type="button"
+                  className="learn-guided-coach-modal__close"
+                  onClick={() => setShowFullCoachTip(false)}
+                >
+                  Less
+                </button>
+              </div>
+              <h2 className="learn-guided-coach-modal__title">{lessonCoachContent.title}</h2>
+              <div className="learn-guided-coach-modal__body">
+                {lessonCoachContent.bodyParagraphs.map((paragraph, index) => (
+                  <p key={`modal-${index}-${paragraph.slice(0, 24)}`} className="learn-guided-coach-modal__paragraph">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </GameOverlayPortal>
+      ) : null}
 
       <GameReviewer
         open={analyzerOpen}

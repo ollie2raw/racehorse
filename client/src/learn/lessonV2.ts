@@ -29,6 +29,7 @@ import {
   hasPlayableV1GuidedContent,
 } from './guidedAuthoring';
 import { applyGuidedLessonCoachingText } from './guidedLessonNotes';
+import { getPublicGuidedMatchLessonSanityIssues, getPublicGuidedMatchPlaybackLesson } from './guidedMatch/guidedMatchLessonLoader';
 
 // ─── Storage keys ────────────────────────────────────────────────────────────
 
@@ -630,7 +631,14 @@ export function autoFreezeGuidedV2ForPlay(): LessonV2 | null {
  * Guided Match playback: frozen lesson, auto-promoted from authoring when needed.
  */
 export function loadGuidedV2PlaybackLesson(): LessonV2 | null {
-  return ensureGuidedV2FrozenLesson();
+  try {
+    return getPublicGuidedMatchPlaybackLesson();
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[guided-match-public-lesson] failed to load bundled lesson', error);
+    }
+    return null;
+  }
 }
 
 /**
@@ -693,55 +701,23 @@ function messageForGuidedStartFailure(
  * Auto-freezes authoring before validation.
  */
 export function resolveGuidedMatchStart(): GuidedMatchStartResolution {
-  autoFreezeGuidedV2ForPlay();
-  const v2Lesson = ensureGuidedV2FrozenLesson();
+  const v2Lesson = loadGuidedV2PlaybackLesson();
+  const sanityIssues = getPublicGuidedMatchLessonSanityIssues();
+  const playbackError = validateGuidedV2LessonPlayback(v2Lesson);
 
-  if (canStartGuidedV2Lesson(v2Lesson)) {
+  if (canStartGuidedV2Lesson(v2Lesson) && playbackError === null) {
     return { route: 'v2', error: null };
   }
 
-  if (hasPlayableV1GuidedContent()) {
-    return { route: 'v1', error: null };
-  }
-
-  const probe = probeGuidedLessonStorage();
-  const hasAnyRaw =
-    Object.values(probe).some((status) => status === 'present') || hasPlayableV1GuidedContent();
-
-  if (!hasAnyRaw) {
-    debugGuidedStart('no guided storage', { probe, keys: GUIDED_LESSON_STORAGE_KEYS });
-    return {
-      route: null,
-      error: messageForGuidedStartFailure('no-storage', null),
-      failure: 'no-storage',
-    };
-  }
-
-  const rawAuthoring = lsGet(LESSON_V2_AUTHORING_KEY);
-  if (rawAuthoring?.trim() && !loadV2AuthoringSession()) {
-    debugGuidedStart('unreadable v2 authoring', { probe });
-    return {
-      route: null,
-      error: messageForGuidedStartFailure('unreadable-v2-authoring', null),
-      failure: 'unreadable-v2-authoring',
-    };
-  }
-
-  const rawFrozen = lsGet(LESSON_V2_FROZEN_KEY);
-  if (rawFrozen?.trim() && !loadV2FrozenLesson()) {
-    debugGuidedStart('unreadable v2 frozen', { probe });
-    return {
-      route: null,
-      error: messageForGuidedStartFailure('unreadable-v2-frozen', null),
-      failure: 'unreadable-v2-frozen',
-    };
-  }
-
-  debugGuidedStart('no startable content', { probe, v2Lesson });
+  debugGuidedStart('bundled public lesson unavailable', { playbackError, sanityIssues });
   return {
     route: null,
-    error: messageForGuidedStartFailure('no-startable-content', null),
-    failure: 'no-startable-content',
+    error:
+      playbackError ??
+      (sanityIssues.length > 0
+        ? `Bundled Guided Match lesson failed sanity checks: ${sanityIssues.join('; ')}`
+        : 'Bundled Guided Match lesson is unavailable.'),
+    failure: 'playback-restore-failed',
   };
 }
 
@@ -1124,6 +1100,14 @@ export function restoreMatchStateBeforeEvent(
   if (!atEvent || !prev) {
     const handNumber = atEvent?.handNumber ?? lesson.events[0]?.handNumber ?? 1;
     return restoreGuidedV2HandStart(lesson, handNumber).state;
+  }
+
+  const firstEventIndexForCurrentHand = firstEventIndexForHand(lesson.handStarts, atEvent.handNumber);
+  if (atEvent.handNumber !== prev.handNumber || firstEventIndexForCurrentHand === eventIndex) {
+    return (
+      restoreGuidedV2HandStart(lesson, atEvent.handNumber).state ??
+      createGuidedEventDerivedShell(atEvent.handNumber, atEvent)
+    );
   }
 
   const shell =

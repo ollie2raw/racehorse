@@ -73,6 +73,8 @@ type UseMultiplayerRoomActionsParams = {
       | 'daily'
       | 'dailyFritz'
       | 'learn'
+      | 'guidedMatchRecorder'
+      | 'guidedMatchAnnotator'
       | 'friends'
       | 'stats'
       | 'ratingHistory'

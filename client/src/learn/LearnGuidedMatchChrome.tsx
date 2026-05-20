@@ -17,7 +17,6 @@ export default function LearnGuidedMatchChrome({
 }: LearnGuidedMatchChromeProps) {
   return (
     <header className="learn-guided-match-state" data-ui="learn-match-hud">
-      <div className="fritz-section-label">1. Current Decision</div>
       <div className="learn-guided-match-state__grid">
         <div className="learn-guided-match-state__stat">
           <div className="fritz-summary-value">{opponentScore}</div>
@@ -27,7 +26,7 @@ export default function LearnGuidedMatchChrome({
           <div className={`learn-guided-match-state__turn-pill${isYourTurn ? ' is-active' : ''}`}>
             {isYourTurn ? 'Your Move' : turnLabel}
           </div>
-          <div className="fritz-summary-key">Turn State</div>
+          <div className="fritz-summary-key">Move</div>
         </div>
         <div className="learn-guided-match-state__stat">
           <div className="fritz-summary-value">{yourScore}</div>

@@ -182,6 +182,8 @@ type AppMode =
   | 'daily'
   | 'dailyFritz'
   | 'learn'
+  | 'guidedMatchRecorder'
+  | 'guidedMatchAnnotator'
   | 'friends'
   | 'stats'
   | 'ratingHistory'
@@ -211,6 +213,12 @@ const PublicProfileScreen = React.lazy(() => import('./social/PublicProfileScree
 const ActivityFeedScreen = React.lazy(() => import('./social/ActivityFeedScreen'));
 const LearnHome = React.lazy(() =>
   import('./learn').then((module) => ({ default: module.LearnHome })),
+);
+const GuidedMatchRecorderScreen = React.lazy(() =>
+  import('./learn').then((module) => ({ default: module.GuidedMatchRecorderScreen })),
+);
+const GuidedMatchAnnotatorScreen = React.lazy(() =>
+  import('./learn').then((module) => ({ default: module.GuidedMatchAnnotatorScreen })),
 );
 const LearnHowToPlayRacehorse = React.lazy(() =>
   import('./learn').then((module) => ({ default: module.LearnHowToPlayRacehorse })),
@@ -923,6 +931,8 @@ const MODE_TO_PATH: Partial<Record<AppMode, string>> = {
   tournament: '/tournament',
   noBrainer: '/practice',
   learn: '/learn',
+  guidedMatchRecorder: '/learn/recorder',
+  guidedMatchAnnotator: '/learn/guided-annotator',
 };
 
 const PATH_TO_MODE: Record<string, AppMode> = Object.fromEntries(
@@ -1281,8 +1291,7 @@ export default function App() {
   const isAdmin = Boolean(
     authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
   );
-  /** Dev/admin account only (VITE_ADMIN_EMAIL) — works outside Vite dev server */
-  const canOpenHowToPlayPreview = isAdmin;
+  const canOpenHowToPlayPreview = true;
   const needsUsernameOnboarding = Boolean(
     authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
   );
@@ -4397,23 +4406,15 @@ export default function App() {
             <LearnHowToPlayRacehorse
               onBack={() => setLearnHowToPlayOpen(false)}
               onNavigate={setAppMode}
-              onStartGuidedMatch={
-                isAdmin
-                  ? () => {
-                      setLearnHowToPlayOpen(false);
-                      const start = resolveGuidedMatchStart();
-                      if (!start.route) return;
-                      setIsGuidedMode(start.route === 'v1');
-                      setIsGuidedV2Mode(start.route === 'v2');
-                      setBotFritzTier('elite');
-                      setBotDealSize(7);
-                      setAppMode('bot');
-                    }
-                  : undefined
-              }
-              onPlayVsFritz={() => {
+              onStartGuidedMatch={() => {
                 setLearnHowToPlayOpen(false);
-                setAppMode('botSetup');
+                const start = resolveGuidedMatchStart();
+                if (!start.route) return;
+                setIsGuidedMode(start.route === 'v1');
+                setIsGuidedV2Mode(start.route === 'v2');
+                setBotFritzTier('standard');
+                setBotDealSize(7);
+                setAppMode('bot');
               }}
             />
           </Suspense>
@@ -4434,9 +4435,7 @@ export default function App() {
             }
             onStartGuidedGame={() => {
               setIsGuidedMode(true);
-              // Use elite Fritz if a frozen lesson exists (authored vs Elite Fritz)
-              const frozen = loadFrozenLesson();
-              setBotFritzTier(frozen ? 'elite' : 'rookie');
+              setBotFritzTier('standard');
               setBotDealSize(7);
               setAppMode('bot');
             }}
@@ -4457,7 +4456,7 @@ export default function App() {
               if (!start.route) return;
               setIsGuidedMode(start.route === 'v1');
               setIsGuidedV2Mode(start.route === 'v2');
-              setBotFritzTier('elite');
+              setBotFritzTier('standard');
               setBotDealSize(7);
               setAppMode('bot');
             }}
@@ -4467,6 +4466,37 @@ export default function App() {
               setBotDealSize(7);
               setAppMode('bot');
             }}
+            onStartGuidedMatchRecorder={() => {
+              setAppMode('guidedMatchRecorder');
+            }}
+            onOpenGuidedMatchAnnotator={() => {
+              setAppMode('guidedMatchAnnotator');
+            }}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'guidedMatchAnnotator') {
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Guided Match Annotator…" />}>
+          <GuidedMatchAnnotatorScreen
+            onBack={() => setAppMode('learn')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (appMode === 'guidedMatchRecorder') {
+    return (
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Guided Match Recorder…" />}>
+          <GuidedMatchRecorderScreen
+            onBack={() => setAppMode('learn')}
+            onNavigate={setAppMode}
           />
         </Suspense>
       </div>
@@ -4512,6 +4542,15 @@ export default function App() {
             isAuthoringMode={isAuthoringMode}
             isAuthoringV2Mode={isAuthoringV2Mode}
             isGuidedV2Mode={isGuidedV2Mode}
+            enableGuidedMatchCandidateCapture={
+              Boolean(isAdmin) &&
+              !isGuidedMode &&
+              !isAuthoringMode &&
+              !isAuthoringV2Mode &&
+              !isGuidedV2Mode &&
+              botFritzTier === 'standard' &&
+              botDealSize === 7
+            }
             userId={authUser?.id ?? null}
             username={authProfile?.username ?? null}
             currentGlickoRating={authProfile?.glicko_rating ?? null}

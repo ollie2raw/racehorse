@@ -12,6 +12,20 @@ import {
   resolveGuidedMatchStart,
   type LessonV2AuthoringSession,
 } from './lessonV2';
+import {
+  upsertGuidedMatchCandidate,
+} from './guidedMatch/guidedMatchCandidateStorage';
+import {
+  loadGuidedMatchSource,
+  saveGuidedMatchSource,
+} from './guidedMatch/guidedMatchSourceStorage';
+import {
+  type GuidedMatchCandidate,
+} from './guidedMatch/guidedMatchCandidateTypes';
+import {
+  validateGuidedMatchCandidate,
+  type GuidedMatchCandidateValidationIssue,
+} from './guidedMatch/guidedMatchCandidateValidation';
 import artCoachPng from '../assets/singlePlayerHub/fritzwave.png';
 
 const themeVars = {
@@ -56,15 +70,15 @@ type LearnModeCard = {
 const LEARN_MODE_CARDS: LearnModeCard[] = [
   {
     id: 'howToPlay',
-    unlocked: false,
+    unlocked: true,
     containerClass: 'learn-rules-card-container',
     sectionRounded: 'rounded-[20px] rounded-tr-[5px]',
     title: 'How to Play',
     titleColor: '#34D399',
-    desc: 'The complete Racehorse rules, explained visually.',
+    desc: 'Fritz walks you through rules and instincts before your first coached hand.',
     artSrc: artCoachPng,
     action: 'howToPlay',
-    ctaLabel: 'Learn Rules',
+    ctaLabel: 'Start',
   },
   {
     id: 'guided',
@@ -123,6 +137,8 @@ interface LearnHomeProps {
   showAdminView?: boolean;
   onStartGuidedV2Game?: () => void;
   onStartAuthoringV2?: () => void;
+  onStartGuidedMatchRecorder?: () => void;
+  onOpenGuidedMatchAnnotator?: () => void;
   canOpenHowToPlay?: boolean;
   onOpenHowToPlay?: () => void;
 }
@@ -137,6 +153,8 @@ export default function LearnHome({
   showAdminView = false,
   onStartGuidedV2Game,
   onStartAuthoringV2,
+  onStartGuidedMatchRecorder,
+  onOpenGuidedMatchAnnotator,
   canOpenHowToPlay = false,
   onOpenHowToPlay,
 }: LearnHomeProps) {
@@ -144,6 +162,14 @@ export default function LearnHome({
   const [_v2FrozenLesson, setV2FrozenLesson] = useState<ReturnType<typeof loadV2FrozenLesson>>(null);
   const [v2FreezeFlash, setV2FreezeFlash] = useState(false);
   const [guidedV2StartError, setGuidedV2StartError] = useState<string | null>(null);
+  const [candidateImportText, setCandidateImportText] = useState('');
+  const [candidateImportStatus, setCandidateImportStatus] = useState<string | null>(null);
+  const [candidateImportSummary, setCandidateImportSummary] = useState<string | null>(null);
+  const [candidateImportIssues, setCandidateImportIssues] = useState<GuidedMatchCandidateValidationIssue[]>([]);
+  const [currentGuidedMatchSource, setCurrentGuidedMatchSource] = useState<GuidedMatchCandidate | null>(() =>
+    loadGuidedMatchSource(),
+  );
+  const [lastImportedCandidate, setLastImportedCandidate] = useState<GuidedMatchCandidate | null>(null);
 
   useEffect(() => {
     setV2FrozenLesson(loadV2FrozenLesson());
@@ -159,6 +185,130 @@ export default function LearnHome({
     setV2FrozenLesson(frozen);
     setV2FreezeFlash(true);
     setTimeout(() => setV2FreezeFlash(false), 2000);
+  };
+
+  const parseCandidateImport = (): GuidedMatchCandidate | null => {
+    try {
+      const parsed = JSON.parse(candidateImportText) as Partial<GuidedMatchCandidate>;
+      const imported = parsed as GuidedMatchCandidate;
+      const errors: string[] = [];
+      if (imported.version !== 1) errors.push('version must be 1');
+      if (!imported.candidateId) errors.push('candidateId is required');
+      if (imported.targetScore !== 60) errors.push('targetScore must be 60');
+      if (imported.opponent !== 'standard-fritz') errors.push('opponent must be standard-fritz');
+      if (imported.dealSize !== 7) errors.push('dealSize must be 7');
+      if (imported.result !== 'won' && imported.result !== 'lost') errors.push('result must be won or lost');
+      if (!imported.initialMatchSnapshot) errors.push('initialMatchSnapshot is required');
+      if (!imported.finalMatchSnapshot) errors.push('finalMatchSnapshot is required');
+      if (!Array.isArray(imported.events) || imported.events.length === 0) {
+        errors.push('events must be a non-empty array');
+      }
+      if (errors.length > 0) {
+        setCandidateImportStatus(`Import rejected: ${errors.join('; ')}`);
+        setCandidateImportSummary(null);
+        setCandidateImportIssues([]);
+        return null;
+      }
+
+      const events = imported.events;
+      const playerTileEventCount = events.filter(
+        (event) => event.kind === 'tile-play' && event.actor === 'player',
+      ).length;
+      const handCount = new Set(events.map((event) => event.handNumber)).size;
+      const now = new Date().toISOString();
+      return {
+        ...imported,
+        createdAt: imported.createdAt || now,
+        updatedAt: now,
+        title: imported.title || 'Imported Guided Match Candidate',
+        notes: imported.notes || '',
+        fritzTier: imported.fritzTier || 'standard',
+        rootSeed: imported.rootSeed ?? null,
+        finalScore: imported.finalScore ?? { player: 0, fritz: 0 },
+        eventCount: events.length,
+        playerTileEventCount,
+        handCount,
+      };
+    } catch (error) {
+      setCandidateImportStatus(error instanceof Error ? `Import JSON parse failed: ${error.message}` : 'Import JSON parse failed.');
+      setCandidateImportSummary(null);
+      setCandidateImportIssues([]);
+      return null;
+    }
+  };
+
+  const summarizeCandidateImport = (
+    candidate: GuidedMatchCandidate,
+    issueCount: number,
+    validationStatus: string,
+  ) => {
+    setCandidateImportSummary(
+      `Score ${candidate.finalScore.player}-${candidate.finalScore.fritz} · ${candidate.eventCount} events · ${candidate.playerTileEventCount} player tile events · ${candidate.handCount} hands · ${validationStatus}${issueCount > 0 ? ` (${issueCount} issues)` : ''}`,
+    );
+  };
+
+  const handleValidateCandidateImport = () => {
+    const candidate = parseCandidateImport();
+    if (!candidate) return;
+    const validation = validateGuidedMatchCandidate(candidate, 'draft');
+    setCandidateImportIssues(validation.issues);
+    const validationStatus = validation.ok ? 'draft-valid' : 'draft-with-issues';
+    setCandidateImportStatus(validation.ok ? 'Import is draft-valid.' : `Import has ${validation.issues.length} draft issues; import is still allowed.`);
+    summarizeCandidateImport(candidate, validation.issues.length, validationStatus);
+  };
+
+  const handleImportCandidate = () => {
+    const candidate = parseCandidateImport();
+    if (!candidate) return;
+    const validation = validateGuidedMatchCandidate(candidate, 'draft');
+    const validationStatus = validation.ok ? 'draft-valid' as const : 'draft-with-issues' as const;
+    const candidateToSave: GuidedMatchCandidate = {
+      ...candidate,
+      validationStatus,
+      validationIssues: validation.issues,
+    };
+    const saved = upsertGuidedMatchCandidate(candidateToSave);
+    if (saved) {
+      setLastImportedCandidate(candidateToSave);
+    }
+    setCandidateImportIssues(validation.issues);
+    setCandidateImportStatus(
+      saved
+        ? validation.ok
+          ? 'Candidate imported.'
+          : `Candidate imported with ${validation.issues.length} draft issues.`
+        : 'Candidate import failed.',
+    );
+    summarizeCandidateImport(candidateToSave, validation.issues.length, validationStatus);
+  };
+
+  const setCandidateAsCurrentSource = (candidate: GuidedMatchCandidate | null) => {
+    if (!candidate) {
+      setCandidateImportStatus('No imported candidate is available to set as source.');
+      return;
+    }
+    const source = {
+      ...candidate,
+      updatedAt: new Date().toISOString(),
+    };
+    const saved = saveGuidedMatchSource(source);
+    if (saved) {
+      setCurrentGuidedMatchSource(source);
+      setCandidateImportStatus('Set as current Guided Match source.');
+      setCandidateImportSummary(
+        `Current source: ${source.finalScore.player}-${source.finalScore.fritz} · ${source.eventCount} events · ${source.playerTileEventCount} player moves · ${source.handCount} hands`,
+      );
+    } else {
+      setCandidateImportStatus('Failed to set current Guided Match source.');
+    }
+  };
+
+  const handleCandidateImportFile = async (file: File | null) => {
+    if (!file) return;
+    setCandidateImportText(await file.text());
+    setCandidateImportStatus(`Loaded ${file.name}. Click Validate Import.`);
+    setCandidateImportSummary(null);
+    setCandidateImportIssues([]);
   };
 
   const canPreviewHowToPlay = canOpenHowToPlay;
@@ -244,18 +394,12 @@ export default function LearnHome({
               {LEARN_MODE_CARDS.map((mode) => {
                 const isLocked =
                   mode.id === 'howToPlay'
-                    ? !canPreviewHowToPlay
+                    ? !canPreviewHowToPlay || !onOpenHowToPlay
                     : mode.id === 'guided'
                       ? !isAdmin
                       : !mode.unlocked;
-                const cardDesc =
-                  mode.id === 'howToPlay' && canPreviewHowToPlay
-                    ? `${mode.desc} (Dev preview — admin only)`
-                    : mode.desc;
-                const cardBadges =
-                  mode.id === 'howToPlay' && canPreviewHowToPlay
-                    ? ['DEV PREVIEW']
-                    : mode.badges;
+                const cardDesc = mode.desc;
+                const cardBadges = mode.badges;
 
                 return (
                   <section
@@ -369,6 +513,10 @@ export default function LearnHome({
             Start V2 Authoring Session
           </button>
           <p className="learn-cta-sub">Build the event timeline for the new guided match system.</p>
+          <button className="learn-start-guided-btn" onClick={onStartGuidedMatchRecorder} style={{ marginTop: 12 }}>
+            Open Canonical Recorder
+          </button>
+          <p className="learn-cta-sub">Record the fixed Standard Fritz match into exportable canonical guided lesson JSON.</p>
         </div>
         <div className="learn-col">
           {isAdmin ? (
@@ -398,6 +546,83 @@ export default function LearnHome({
           ) : null}
         </div>
       </div>
+      {isAdmin ? (
+        <div className="learn-columns" style={{ marginTop: 18 }}>
+          <div className="learn-col" style={{ flex: 1 }}>
+            <h3 className="learn-col-heading">GUIDED MATCH CANDIDATE IMPORT</h3>
+            <p className="learn-cta-sub">
+              Import a completed raw candidate JSON. Draft validation issues are stored on the candidate and final export still blocks.
+            </p>
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => {
+                void handleCandidateImportFile(event.target.files?.[0] ?? null);
+              }}
+              style={{ margin: '8px 0 10px', color: 'rgba(242,238,232,0.78)' }}
+            />
+            <textarea
+              value={candidateImportText}
+              onChange={(event) => {
+                setCandidateImportText(event.target.value);
+                setCandidateImportStatus(null);
+                setCandidateImportSummary(null);
+                setCandidateImportIssues([]);
+              }}
+              placeholder="Paste Guided Match Candidate JSON here"
+              rows={8}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                borderRadius: 14,
+                border: '1px solid rgba(103,217,87,0.24)',
+                background: 'rgba(6,12,20,0.72)',
+                color: 'rgba(242,238,232,0.92)',
+                padding: 12,
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                fontSize: 12,
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+              <button className="learn-start-guided-btn" type="button" onClick={handleValidateCandidateImport}>
+                Validate Import
+              </button>
+              <button className="learn-start-guided-btn" type="button" onClick={handleImportCandidate}>
+                Import Candidate
+              </button>
+              <button
+                className="learn-start-guided-btn"
+                type="button"
+                onClick={() => setCandidateAsCurrentSource(lastImportedCandidate)}
+                disabled={!lastImportedCandidate}
+              >
+                Set as Current Guided Match Source
+              </button>
+              <button
+                className="learn-start-guided-btn"
+                type="button"
+                onClick={onOpenGuidedMatchAnnotator}
+                disabled={!currentGuidedMatchSource}
+              >
+                Open Annotator
+              </button>
+            </div>
+            {candidateImportStatus ? <p className="learn-cta-sub">{candidateImportStatus}</p> : null}
+            {candidateImportSummary ? <p className="learn-cta-sub">{candidateImportSummary}</p> : null}
+            {candidateImportIssues.length > 0 ? (
+              <div className="learn-cta-sub">
+                {candidateImportIssues.slice(0, 6).map((issue) => (
+                  <div key={`${issue.path}-${issue.message}`}>
+                    {issue.path}: {issue.message}
+                  </div>
+                ))}
+                {candidateImportIssues.length > 6 ? <div>+{candidateImportIssues.length - 6} more issues stored on import.</div> : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </LayoutScreen>
   );
 }

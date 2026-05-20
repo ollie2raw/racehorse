@@ -48,6 +48,8 @@ type UseMultiplayerConnectionParams = {
     | 'daily'
     | 'dailyFritz'
     | 'learn'
+    | 'guidedMatchRecorder'
+    | 'guidedMatchAnnotator'
     | 'friends'
     | 'stats'
     | 'ratingHistory'
