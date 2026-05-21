@@ -1,16 +1,11 @@
 import type { Tile } from '../../types';
 import {
-  ChainRoadmapDiagram,
   DoublesCompareDiagram,
   MiniChainDiagram,
   OpenCountCalc,
 } from '../LearnHowToPlayDiagrams';
 import type { HowToPlayVisualType } from './howToPlayModules';
-import {
-  HOW_TO_PLAY_BONEYARD_DRAWABLE,
-  HOW_TO_PLAY_BONEYARD_LOCKED,
-  HOW_TO_PLAY_MATCH_TARGET,
-} from './howToPlayModules';
+import { HOW_TO_PLAY_MATCH_TARGET } from './howToPlayModules';
 
 function t(low: number, high: number): Tile {
   return { low, high };
@@ -104,40 +99,6 @@ export function HowToPlayVisuals({ visual }: HowToPlayVisualsProps) {
               { label: 'active end', value: 2, tone: 'active' },
             ]}
           />
-        </div>
-      );
-
-    case 'chains-runs':
-      return (
-        <div className="learn-howto-pvf__demo-stack learn-howto-pvf__demo-stack--chains">
-          <ChainRoadmapDiagram
-            steps={[
-              {
-                label: 'Setup',
-                detail: '5-6 on the 5 — same points, better future',
-                tile: t(5, 6),
-              },
-              {
-                label: 'Tempo',
-                detail: '6-6 keeps your turn alive',
-                tile: t(6, 6),
-                rotation: 90,
-              },
-              {
-                label: 'Payoff',
-                detail: 'Finish the chain for race points',
-                tile: t(0, 4),
-              },
-            ]}
-            caption="Chains beat isolated hits."
-          />
-          <div className="learn-howto-pvf__runs-strip">
-            <span className="learn-howto-pvf__runs-label">Momentum</span>
-            <p>
-              <strong>{HOW_TO_PLAY_BONEYARD_DRAWABLE} drawable</strong> +{' '}
-              <strong>{HOW_TO_PLAY_BONEYARD_LOCKED} locked</strong> each hand. Pressure the draw — runs follow.
-            </p>
-          </div>
         </div>
       );
 

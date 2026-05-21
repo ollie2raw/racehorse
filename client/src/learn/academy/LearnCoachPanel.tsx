@@ -8,6 +8,8 @@ type LearnCoachPanelProps = {
   momentumNote?: string;
   takeaway: string;
   footer?: ReactNode;
+  /** Final step: hide bullets — detail lives in the stage visual */
+  compact?: boolean;
 };
 
 export function LearnCoachPanel({
@@ -18,6 +20,7 @@ export function LearnCoachPanel({
   momentumNote,
   takeaway,
   footer,
+  compact = false,
 }: LearnCoachPanelProps) {
   return (
     <div className="learn-academy__coach">
@@ -28,21 +31,23 @@ export function LearnCoachPanel({
         <h1 className="learn-academy__title">{title}</h1>
       </header>
 
-      <p className="learn-academy__lede">{lede}</p>
+      <div className="learn-academy__coach-main">
+        <p className="learn-academy__lede">{lede}</p>
 
-      {beats.length > 0 ? (
-        <ul className="learn-academy__beats">
-          {beats.map((beat) => (
-            <li key={beat}>{beat}</li>
-          ))}
-        </ul>
-      ) : null}
+        {!compact && beats.length > 0 ? (
+          <ul className="learn-academy__beats">
+            {beats.map((beat) => (
+              <li key={beat}>{beat}</li>
+            ))}
+          </ul>
+        ) : null}
 
-      {momentumNote ? (
-        <blockquote className="learn-academy__momentum">
-          <p>{momentumNote}</p>
-        </blockquote>
-      ) : null}
+        {momentumNote ? (
+          <blockquote className="learn-academy__momentum">
+            <p>{momentumNote}</p>
+          </blockquote>
+        ) : null}
+      </div>
 
       <div className="learn-academy__takeaway">
         <span className="learn-academy__takeaway-label">Takeaway</span>

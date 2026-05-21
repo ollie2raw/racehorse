@@ -20,6 +20,18 @@
   gap: 0.35rem;
 }
 
+.learn-howto-diagram__chain--scoring {
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.learn-howto-diagram__chain--scoring::-webkit-scrollbar {
+  display: none;
+}
+
 .learn-howto-diagram__tile-wrap {
   display: flex;
   flex-shrink: 0;
@@ -100,6 +112,52 @@
   color: rgba(201, 212, 226, 0.72);
   text-align: center;
   font-weight: 500;
+}
+
+.learn-howto-diagram--scoring-chain .learn-howto-diagram__board {
+  padding: 0.5rem 0.35rem 0.65rem;
+}
+
+.learn-howto-diagram__ends-scoring {
+  display: grid;
+  grid-template-columns: minmax(5rem, 1fr) minmax(0, 2.2fr) minmax(5rem, 1fr);
+  align-items: end;
+  gap: 0.5rem 0.75rem;
+  width: 100%;
+  margin-top: 0.65rem;
+}
+
+.learn-howto-diagram__ends-scoring .learn-howto-diagram__end:first-child {
+  justify-self: start;
+}
+
+.learn-howto-diagram__ends-scoring .learn-howto-diagram__end:last-child {
+  justify-self: end;
+}
+
+.learn-howto-diagram__ends-caption {
+  margin: 0;
+  align-self: center;
+  font-size: clamp(0.78rem, 1.2vh, 0.88rem);
+  line-height: 1.38;
+  font-weight: 500;
+  text-align: center;
+  color: rgba(201, 212, 226, 0.72);
+}
+
+.learn-howto-diagram--scoring-chain .learn-howto-diagram__end {
+  min-width: 4.75rem;
+  min-height: 4rem;
+  padding: 0.35rem 0.5rem 0.4rem;
+  justify-content: flex-start;
+}
+
+.learn-howto-diagram--scoring-chain .learn-howto-diagram__end-value {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.45rem;
 }
 
 .learn-howto-diagram--branch .learn-howto-diagram__board {
@@ -284,6 +342,41 @@
   color: rgba(201, 212, 226, 0.72);
   text-align: center;
   font-weight: 500;
+}
+
+.learn-howto-calc--stacked {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.learn-howto-calc--stacked.learn-howto-calc--score {
+  border: none;
+  background: transparent;
+}
+
+.learn-howto-calc--stacked .learn-howto-calc__equation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem 0.55rem;
+}
+
+.learn-howto-calc--stacked .learn-howto-calc__race,
+.learn-howto-calc--stacked .learn-howto-calc__footnote {
+  flex: none;
+  width: 100%;
+  margin: 0;
+}
+
+.learn-howto-calc--stacked .learn-howto-calc__total {
+  font-size: 1.65rem;
 }
 
 .learn-howto-doubles-compare {

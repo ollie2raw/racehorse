@@ -24,6 +24,47 @@ interface MiniChainDiagramProps {
   className?: string;
 }
 
+interface ScoringChainDiagramProps {
+  tiles: ChainTileSpec[];
+  leftEnd: EndMarkerSpec;
+  rightEnd: EndMarkerSpec;
+  caption?: string;
+  className?: string;
+}
+
+/** Horizontal chain with end markers under the outer tiles (scoring step mock). */
+export function ScoringChainDiagram({
+  tiles,
+  leftEnd,
+  rightEnd,
+  caption,
+  className = '',
+}: ScoringChainDiagramProps) {
+  return (
+    <figure className={`learn-howto-diagram learn-howto-diagram--scoring-chain ${className}`.trim()}>
+      <div className="learn-howto-diagram__board">
+        <div className="learn-howto-diagram__chain learn-howto-diagram__chain--scoring">
+          {tiles.map((spec, i) => (
+            <div
+              key={`${spec.tile.low}-${spec.tile.high}-${i}`}
+              className={`learn-howto-diagram__tile-wrap${
+                spec.highlight ? ` learn-howto-diagram__tile-wrap--${spec.highlight}` : ''
+              }`}
+            >
+              <DominoTile tile={spec.tile} size={58} rotation={spec.rotation ?? 0} />
+            </div>
+          ))}
+        </div>
+        <div className="learn-howto-diagram__ends-scoring">
+          <EndMarker {...leftEnd} />
+          {caption ? <p className="learn-howto-diagram__ends-caption">{caption}</p> : null}
+          <EndMarker {...rightEnd} />
+        </div>
+      </div>
+    </figure>
+  );
+}
+
 export function MiniChainDiagram({ tiles, ends = [], caption, className = '' }: MiniChainDiagramProps) {
   return (
     <figure className={`learn-howto-diagram ${className}`.trim()}>
@@ -69,11 +110,19 @@ interface OpenCountCalcProps {
   scores?: boolean;
   footnote?: string;
   racePoints?: number;
+  stacked?: boolean;
 }
 
-export function OpenCountCalc({ parts, total, scores = false, footnote, racePoints }: OpenCountCalcProps) {
-  return (
-    <div className={`learn-howto-calc${scores ? ' learn-howto-calc--score' : ''}`}>
+export function OpenCountCalc({
+  parts,
+  total,
+  scores = false,
+  footnote,
+  racePoints,
+  stacked = false,
+}: OpenCountCalcProps) {
+  const equation = (
+    <>
       <div className="learn-howto-calc__parts">
         {parts.map((part, i) => (
           <span key={part.label} className="learn-howto-calc__part">
@@ -88,9 +137,19 @@ export function OpenCountCalc({ parts, total, scores = false, footnote, racePoin
       <span className="learn-howto-calc__eq">=</span>
       <span className="learn-howto-calc__total">{total}</span>
       {scores ? <span className="learn-howto-calc__badge">Scores</span> : null}
+    </>
+  );
+
+  return (
+    <div
+      className={`learn-howto-calc${scores ? ' learn-howto-calc--score' : ''}${
+        stacked ? ' learn-howto-calc--stacked' : ''
+      }`}
+    >
+      {stacked ? <div className="learn-howto-calc__equation">{equation}</div> : equation}
       {racePoints != null && scores ? (
         <p className="learn-howto-calc__race">
-          <span className="learn-howto-calc__race-label">Race points</span>
+          <span className="learn-howto-calc__race-label">Race points:</span>
           <strong>{racePoints}</strong>
           <span className="learn-howto-calc__race-formula">({total} ÷ 5)</span>
         </p>
@@ -174,45 +233,6 @@ function BranchArm({ tiles, end }: { tiles: ChainTileSpec[]; end: EndMarkerSpec 
       ))}
       <EndMarker {...end} />
     </div>
-  );
-}
-
-export interface ChainRoadmapStep {
-  label: string;
-  detail: string;
-  tile: Tile;
-  rotation?: 0 | 90;
-}
-
-interface ChainRoadmapDiagramProps {
-  steps: ChainRoadmapStep[];
-  caption?: string;
-}
-
-/** Guided Match chain: setup → double → finish. */
-export function ChainRoadmapDiagram({ steps, caption }: ChainRoadmapDiagramProps) {
-  return (
-    <figure className="learn-howto-diagram learn-howto-diagram--roadmap">
-      <ol className="learn-howto-roadmap">
-        {steps.map((step, i) => (
-          <li key={step.label} className="learn-howto-roadmap__step">
-            <div className="learn-howto-roadmap__tile">
-              <DominoTile tile={step.tile} size={58} rotation={step.rotation ?? 0} />
-            </div>
-            <div className="learn-howto-roadmap__copy">
-              <span className="learn-howto-roadmap__label">{step.label}</span>
-              <p className="learn-howto-roadmap__detail">{step.detail}</p>
-            </div>
-            {i < steps.length - 1 ? (
-              <span className="learn-howto-roadmap__arrow" aria-hidden="true">
-                →
-              </span>
-            ) : null}
-          </li>
-        ))}
-      </ol>
-      {caption ? <figcaption className="learn-howto-diagram__caption">{caption}</figcaption> : null}
-    </figure>
   );
 }
 

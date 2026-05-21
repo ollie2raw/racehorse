@@ -520,10 +520,6 @@
   grid-template-rows: 1fr;
 }
 
-.learn-howto-pvf__demo-stack--chains {
-  grid-template-rows: minmax(0, 1fr) auto;
-}
-
 .learn-howto-pvf__demo .learn-howto-diagram__board {
   padding: clamp(16px, 1.8vh, 20px) clamp(18px, 2vw, 22px);
   border-color: rgba(255, 255, 255, 0.1);
@@ -573,80 +569,6 @@
 .learn-howto-pvf__demo .learn-howto-doubles-compare__title {
   font-size: 11px;
   color: var(--learn-gold);
-}
-
-.learn-howto-pvf__runs-strip {
-  flex-shrink: 0;
-  padding: 14px 16px;
-  border-radius: var(--pvf-radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.learn-howto-pvf__runs-label {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--learn-green);
-  margin-bottom: 6px;
-}
-
-.learn-howto-pvf__runs-strip p {
-  margin: 0;
-  font-size: clamp(1.05rem, 2vh, 1.35rem);
-  line-height: 1.38;
-  color: var(--pvf-para);
-}
-
-.learn-howto-pvf__runs-strip strong {
-  color: #fff;
-}
-
-.learn-howto-pvf__demo .learn-howto-diagram--roadmap {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-  margin: 0;
-}
-
-.learn-howto-pvf__demo .learn-howto-roadmap {
-  flex: 1 1 0;
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.learn-howto-pvf__demo .learn-howto-roadmap__step {
-  container-type: size;
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px 12px;
-  border-radius: var(--pvf-radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.learn-howto-pvf__demo .learn-howto-roadmap__label {
-  font-size: clamp(11px, 9cqh, 17px);
-}
-
-.learn-howto-pvf__demo .learn-howto-roadmap__detail {
-  font-size: clamp(0.95rem, 7cqh, 1.25rem);
-  line-height: 1.3;
-  text-align: center;
 }
 
 /* ── Win module demo ── */

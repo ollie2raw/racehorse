@@ -3,7 +3,6 @@ export type HowToPlayVisualType =
   | 'turn-flow'
   | 'scoring-open-count'
   | 'doubles-compare'
-  | 'chains-runs'
   | 'win-guided';
 
 export type HowToPlayModule = {
@@ -19,8 +18,6 @@ export type HowToPlayModule = {
 };
 
 export const HOW_TO_PLAY_MATCH_TARGET = 60;
-export const HOW_TO_PLAY_BONEYARD_DRAWABLE = 12;
-export const HOW_TO_PLAY_BONEYARD_LOCKED = 2;
 
 export const HOW_TO_PLAY_MODULES: HowToPlayModule[] = [
   {
@@ -50,6 +47,8 @@ export const HOW_TO_PLAY_MODULES: HowToPlayModule[] = [
       'Blocked? Racehorse draws until you can play or the pile locks.',
       'Still blocked when the pile locks? Auto-pass.',
     ],
+    runNote:
+      'To end the hand by going out, your final tile has to be a “dead” play. It cannot be a double, and it cannot score.',
     takeaway: 'The game handles draw and pass. You handle tempo.',
     visual: 'turn-flow',
   },
@@ -64,6 +63,8 @@ export const HOW_TO_PLAY_MODULES: HowToPlayModule[] = [
       'Non-zero multiples of five score race points (÷ 5).',
       'A scoring play often sparks a short burst — mini-runs that swing momentum.',
     ],
+    runNote:
+      'When a player goes out and ends that hand, they score the total pips left in their opponent’s hand.',
     takeaway: 'Read the board total before you commit a tile.',
     visual: 'scoring-open-count',
   },
@@ -71,44 +72,26 @@ export const HOW_TO_PLAY_MODULES: HowToPlayModule[] = [
     id: 'doubles-tempo',
     stepLabel: 'Doubles',
     title: 'Doubles and tempo',
-    lede: 'Doubles extend your turn and let you control the table — not just survive it.',
+    lede: 'Doubles extend your turn and reshape open count — follow the same three-board story every time.',
     beats: [
-      'Any double keeps your turn going.',
-      'Open doubles count fully in open count.',
-      'Crossed doubles branch the board; only real tips count.',
-      'Tempo beats raw legality — doubles are how you keep the table.',
+      'Open doubles count fully: double-1 (1+1) and double-4 (4+4) → open count 10.',
+      'Cross the double on both sides and it drops out; 4-3 on the right leaves count at 5.',
+      'Branches open on a crossed double; 5-4 on the top branch adds 5 back → count 10 again.',
+      'Any double keeps your turn going — tempo is controlling which tips stay live.',
     ],
     takeaway: 'Doubles create control. Use them to keep the table yours.',
     visual: 'doubles-compare',
   },
   {
-    id: 'chains-runs',
-    stepLabel: 'Pressure',
-    title: 'Draw pressure, chains, and runs',
-    lede: 'Racehorse is a momentum game. One hand can erase a deficit.',
-    beats: [
-      'Forced draws are not always bad — more tiles can mean more power.',
-      'Think in chains: what does this tile open next?',
-      'Narrow the board and pressure your opponent into narrow draws.',
-      'A hot run can score in bunches; the next hand can swing the race back.',
-    ],
-    runNote:
-      'Like basketball: score in bursts, hold the turn, build a run — then one swing hand flips the match.',
-    takeaway: 'Think one move ahead. Pressure creates runs.',
-    visual: 'chains-runs',
-  },
-  {
     id: 'win-guided',
     stepLabel: 'Ready',
-    title: 'Win the hand',
-    lede: 'You can go out or win on leftover pips. Every pip still moves the race.',
+    title: "You're ready",
+    lede: "You've seen the core rules. Guided Match puts them on a real board.",
     beats: [
-      'Go out: play your last tile; opponent pips convert (÷ 5, rounded).',
-      'Locked boneyard: small pip swings matter near the target.',
-      'Blocked endings still push the score — nothing is wasted.',
-      'Guided Match walks you through a full coached hand, move by move.',
+      'Nothing new here — just a quick checklist of what you already learned.',
+      `First to ${HOW_TO_PLAY_MATCH_TARGET} race points wins the match.`,
     ],
-    takeaway: 'You know the rules. Now learn the rhythm in a real hand.',
+    takeaway: 'Play Guided Match — coach prompts on every move.',
     visual: 'win-guided',
     isFinal: true,
   },

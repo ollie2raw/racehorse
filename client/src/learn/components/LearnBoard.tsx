@@ -5,9 +5,17 @@ import type { LearnBoardState } from '../engine/types';
 export interface LearnBoardProps {
   board: LearnBoardState;
   highlightOpenEnds?: boolean;
+  /** Fixed auto-fit diagram — no pan/zoom tray. */
+  staticView?: boolean;
+  tileSize?: number;
 }
 
-export default function LearnBoard({ board, highlightOpenEnds = false }: LearnBoardProps) {
+export default function LearnBoard({
+  board,
+  highlightOpenEnds = false,
+  staticView = false,
+  tileSize,
+}: LearnBoardProps) {
   const convertedBoard = toBoardState(board);
 
   if (import.meta.env.DEV && convertedBoard === null) {
@@ -34,6 +42,8 @@ export default function LearnBoard({ board, highlightOpenEnds = false }: LearnBo
       selectedTile={null}
       onPositionClick={() => {}}
       showOpenEndGlow={highlightOpenEnds}
+      staticView={staticView}
+      tileSize={tileSize}
     />
   );
 }

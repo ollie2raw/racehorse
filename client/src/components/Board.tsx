@@ -543,6 +543,8 @@ interface BoardProps {
   profileDailyFritz?: boolean;
   fitMode?: 'default' | 'guided';
   showZoomTray?: boolean;
+  /** Learn/diagram preview: auto-fit only, no pan/zoom UI or drag. */
+  staticView?: boolean;
 }
 
 function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean {
@@ -572,9 +574,12 @@ function BoardComponent(
     profileDailyFritz = false,
     fitMode = 'default',
     showZoomTray = true,
+    staticView = false,
   }: BoardProps,
   ref: ForwardedRef<BoardHandle>,
 ) {
+  const resolvedFitMode = staticView ? 'guided' : fitMode;
+  const resolvedShowZoomTray = staticView ? false : showZoomTray;
   useRenderProfiler('Board');
   if (profileDailyFritz) {
     recordDailyFritzBoardMetric('boardRenderCount', 1);
@@ -626,11 +631,12 @@ function BoardComponent(
   }, [selectedTile, legalMoves]);
 
   const cameraFitPositions = useMemo(() => {
+    if (staticView) return [] as PlacementPosition[];
     if (isResettingBoard) {
       return validPositions.length > 0 ? validPositions : (['left'] as PlacementPosition[]);
     }
     return selectedTile != null || showOpenEndGlow ? openEndPositions : [];
-  }, [isResettingBoard, validPositions, openEndPositions, selectedTile, showOpenEndGlow]);
+  }, [staticView, isResettingBoard, validPositions, openEndPositions, selectedTile, showOpenEndGlow]);
 
   const logLayoutDebug = useCallback(
     (validPositionsCount: number, selectedTileKey: string | null, layout: BoardLayout) => {
@@ -781,7 +787,7 @@ function BoardComponent(
     // Calculate scale to fit
     const layoutSpanUnits = Math.max(layout.maxX - layout.minX, layout.maxY - layout.minY);
     const targetFill =
-      fitMode === 'guided'
+      resolvedFitMode === 'guided'
         ? layoutSpanUnits <= 3
           ? 1.08
           : layoutSpanUnits <= 5
@@ -800,10 +806,10 @@ function BoardComponent(
               : layoutSpanUnits >= 10
                 ? 0.93
                 : 0.9;
-    const scaleX = (containerWidth * targetFill) / layoutWidth;
-    const scaleY = (containerHeight * targetFill) / layoutHeight;
-    const maxFitScale =
-      fitMode === 'guided'
+    let scaleX = (containerWidth * targetFill) / layoutWidth;
+    let scaleY = (containerHeight * targetFill) / layoutHeight;
+    let maxFitScale =
+      resolvedFitMode === 'guided'
         ? boardTileCount <= 1
           ? 4.4
           : boardTileCount <= 4
@@ -818,7 +824,17 @@ function BoardComponent(
             : boardTileCount <= 8
               ? 1.8
               : 1.45;
-    const fitScale = Math.min(maxFitScale, Math.max(0.22, Math.min(scaleX, scaleY)));
+
+    if (staticView) {
+      const diagramFill = 1.04;
+      scaleX = (containerWidth * diagramFill) / layoutWidth;
+      scaleY = (containerHeight * diagramFill) / layoutHeight;
+      maxFitScale =
+        boardTileCount <= 3 ? 11.6 : boardTileCount <= 5 ? 10.4 : boardTileCount <= 8 ? 9.2 : 8;
+    }
+
+    const rawFit = Math.max(0.22, Math.min(scaleX, scaleY));
+    const fitScale = Math.min(maxFitScale, staticView ? rawFit * 2 : rawFit);
 
     traceCameraDebug('[camera-debug] setCamera', {
       reason,
@@ -975,14 +991,18 @@ function BoardComponent(
   return (
     <div
       ref={containerRef}
-      className="board-container"
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onDoubleClick={handleDoubleClick}
-      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+      className={`board-container${staticView ? ' board-container--static' : ''}`}
+      onWheel={staticView ? undefined : handleWheel}
+      onMouseDown={staticView ? undefined : handleMouseDown}
+      onMouseMove={staticView ? undefined : handleMouseMove}
+      onMouseUp={staticView ? undefined : handleMouseUp}
+      onMouseLeave={staticView ? undefined : handleMouseUp}
+      onDoubleClick={staticView ? undefined : handleDoubleClick}
+      style={{
+        cursor: staticView ? 'default' : isDragging ? 'grabbing' : 'grab',
+        pointerEvents: staticView ? 'none' : undefined,
+        touchAction: staticView ? 'none' : undefined,
+      }}
     >
       <div
         className="board-canvas"
@@ -1027,7 +1047,8 @@ function BoardComponent(
         })}
 
         {/* Render placement zones */}
-        {placementZones.map((zone) => {
+        {!staticView &&
+          placementZones.map((zone) => {
           const outwardPx = tileSize * 0.16;
           const x = (zone.x - centerX) * unitToPixels + zone.dirX * outwardPx;
           const y = (zone.y - centerY) * unitToPixels + zone.dirY * outwardPx;
@@ -1100,9 +1121,10 @@ function BoardComponent(
               )}
             </div>
           );
-        })}
+          })}
 
-        {showOpenEndGlow &&
+        {!staticView &&
+          showOpenEndGlow &&
           selectedTile === null &&
           glowLayout?.zones.map((zone) => {
             const outwardPx = tileSize * 0.16;
@@ -1127,7 +1149,7 @@ function BoardComponent(
           })}
 
       </div>
-      {showZoomTray ? (
+      {resolvedShowZoomTray ? (
       <div
         className="board-zoom-tray control-pill"
         onMouseDown={(e) => e.stopPropagation()}
@@ -1203,7 +1225,8 @@ function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
     prev.showOpenEndGlow === next.showOpenEndGlow &&
     prev.profileDailyFritz === next.profileDailyFritz &&
     prev.fitMode === next.fitMode &&
-    prev.showZoomTray === next.showZoomTray
+    prev.showZoomTray === next.showZoomTray &&
+    prev.staticView === next.staticView
   );
 }
 

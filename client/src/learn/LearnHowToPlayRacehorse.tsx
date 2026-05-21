@@ -51,23 +51,13 @@ export default function LearnHowToPlayRacehorse({
 
   const finalFooter = module.isFinal ? (
     <>
-      <button
-        type="button"
-        className="pvf-start-btn learn-academy__cta-primary"
-        onClick={() => onStartGuidedMatch?.()}
+      <LearnActionButton
+        label="Play Guided Match"
+        variant="primary"
         disabled={!onStartGuidedMatch}
-      >
-        <span>Play Guided Match</span>
-        <span className="pvf-start-arrow" aria-hidden="true">
-          ›
-        </span>
-      </button>
-      <button type="button" className="pvf-start-btn pvf-start-btn--standard" onClick={onBack}>
-        <span>Back to Learn</span>
-        <span className="pvf-start-arrow" aria-hidden="true">
-          ›
-        </span>
-      </button>
+        onClick={() => onStartGuidedMatch?.()}
+      />
+      <LearnActionButton label="Back to Learn" variant="secondary" onClick={onBack} />
     </>
   ) : undefined;
 

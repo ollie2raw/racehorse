@@ -63,7 +63,12 @@ export function LearnShell({
           <LearnProgressTrack page={page} modules={modules} onGoTo={onGoTo} />
 
           <div className="learn-academy__module-card">
-            <div key={module.id} className="learn-academy__module-inner learn-academy__module-inner--in">
+            <div
+              key={module.id}
+              className={`learn-academy__module-inner learn-academy__module-inner--in${
+                module.isFinal ? ' learn-academy__module-inner--final' : ''
+              }`}
+            >
               <div className="learn-academy__coach-col">{coach}</div>
               <div className="learn-academy__stage-col">{stage}</div>
             </div>

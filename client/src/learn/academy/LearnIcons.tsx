@@ -54,6 +54,58 @@ export function LearnIconDraw({ className = '' }: IconProps) {
   );
 }
 
+/** Stacked layers — boneyard / draw pile */
+export function LearnIconStack({ className = '' }: IconProps) {
+  return (
+    <svg className={className} width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+      <rect
+        x="7"
+        y="17"
+        width="18"
+        height="9"
+        rx="2"
+        fill="currentColor"
+        opacity="0.22"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <rect
+        x="8"
+        y="12"
+        width="18"
+        height="9"
+        rx="2"
+        fill="currentColor"
+        opacity="0.4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <rect
+        x="9"
+        y="7"
+        width="18"
+        height="9"
+        rx="2"
+        fill="currentColor"
+        opacity="0.58"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
+export function LearnIconHorse({ className = '' }: IconProps) {
+  return (
+    <svg className={className} width="24" height="18" viewBox="0 0 22 16" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M2 12c2-1 3-4 5-5 2-2 4-1 5 1 1 2 3 2 5 0 2-2 3-4 2-1-2-3-2-4 1-1 2-4 1-5-1-2-1-3 1-4 2H2z"
+      />
+    </svg>
+  );
+}
+
 export function LearnIconTrophy({ className = '' }: IconProps) {
   return (
     <svg className={className} width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
