@@ -7,6 +7,10 @@ export interface LearnBoardProps {
   highlightOpenEnds?: boolean;
   /** Fixed auto-fit diagram — no pan/zoom tray. */
   staticView?: boolean;
+  /** Keep the horizontal spine aligned when a branch extends above/below. */
+  staticFitMainline?: boolean;
+  /** Fraction from top (0–1) where the main-line spine should sit in the frame. */
+  staticSpineAnchor?: number;
   tileSize?: number;
 }
 
@@ -14,6 +18,8 @@ export default function LearnBoard({
   board,
   highlightOpenEnds = false,
   staticView = false,
+  staticFitMainline = false,
+  staticSpineAnchor,
   tileSize,
 }: LearnBoardProps) {
   const convertedBoard = toBoardState(board);
@@ -43,6 +49,8 @@ export default function LearnBoard({
       onPositionClick={() => {}}
       showOpenEndGlow={highlightOpenEnds}
       staticView={staticView}
+      staticFitMainline={staticFitMainline}
+      staticSpineAnchor={staticSpineAnchor}
       tileSize={tileSize}
     />
   );

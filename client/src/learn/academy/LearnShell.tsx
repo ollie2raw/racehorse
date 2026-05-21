@@ -67,7 +67,7 @@ export function LearnShell({
               key={module.id}
               className={`learn-academy__module-inner learn-academy__module-inner--in${
                 module.isFinal ? ' learn-academy__module-inner--final' : ''
-              }`}
+              }${module.visual === 'doubles-compare' ? ' learn-academy__module-inner--doubles' : ''}`}
             >
               <div className="learn-academy__coach-col">{coach}</div>
               <div className="learn-academy__stage-col">{stage}</div>

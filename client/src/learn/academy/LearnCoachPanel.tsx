@@ -6,7 +6,7 @@ type LearnCoachPanelProps = {
   lede: string;
   beats?: string[];
   momentumNote?: string;
-  takeaway: string;
+  takeaway?: string;
   footer?: ReactNode;
   /** Final step: hide bullets — detail lives in the stage visual */
   compact?: boolean;
@@ -49,10 +49,12 @@ export function LearnCoachPanel({
         ) : null}
       </div>
 
-      <div className="learn-academy__takeaway">
-        <span className="learn-academy__takeaway-label">Takeaway</span>
-        <p className="learn-academy__takeaway-text">{takeaway}</p>
-      </div>
+      {takeaway ? (
+        <div className="learn-academy__takeaway">
+          <span className="learn-academy__takeaway-label">Takeaway</span>
+          <p className="learn-academy__takeaway-text">{takeaway}</p>
+        </div>
+      ) : null}
 
       {footer ? <div className="learn-academy__coach-ctas">{footer}</div> : null}
     </div>

@@ -11,7 +11,7 @@ export type HowToPlayModule = {
   title: string;
   lede: string;
   beats: string[];
-  takeaway: string;
+  takeaway?: string;
   visual: HowToPlayVisualType;
   runNote?: string;
   isFinal?: boolean;
@@ -58,10 +58,10 @@ export const HOW_TO_PLAY_MODULES: HowToPlayModule[] = [
     title: 'Scoring and open count',
     lede: 'Points come from the board total — not from guessing.',
     beats: [
-      'Open ends are the exposed pips on the chain.',
-      'Open count = sum of every active scoring end.',
-      'Non-zero multiples of five score race points (÷ 5).',
-      'A scoring play often sparks a short burst — mini-runs that swing momentum.',
+      'Open ends are the exposed pips still active on the chain.',
+      'Add those active ends together to get the open count.',
+      'If the count lands on a non-zero multiple of five, you score race points.',
+      'Scoring keeps your turn alive — one good count can start a run.',
     ],
     runNote:
       'When a player goes out and ends that hand, they score the total pips left in their opponent’s hand.',
@@ -72,12 +72,12 @@ export const HOW_TO_PLAY_MODULES: HowToPlayModule[] = [
     id: 'doubles-tempo',
     stepLabel: 'Doubles',
     title: 'Doubles and tempo',
-    lede: 'Doubles extend your turn and reshape open count — follow the same three-board story every time.',
+    lede: 'Doubles keep your turn alive — and change which ends count.',
     beats: [
-      'Open doubles count fully: double-1 (1+1) and double-4 (4+4) → open count 10.',
-      'Cross the double on both sides and it drops out; 4-3 on the right leaves count at 5.',
-      'Branches open on a crossed double; 5-4 on the top branch adds 5 back → count 10 again.',
-      'Any double keeps your turn going — tempo is controlling which tips stay live.',
+      'An open double counts its full value in the open count.',
+      'Once a double is crossed on both sides, the double itself drops out.',
+      'Crossing the double opens new branches.',
+      'When you play on a branch, that new open end joins the count.',
     ],
     takeaway: 'Doubles create control. Use them to keep the table yours.',
     visual: 'doubles-compare',

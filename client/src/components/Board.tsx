@@ -545,6 +545,10 @@ interface BoardProps {
   showZoomTray?: boolean;
   /** Learn/diagram preview: auto-fit only, no pan/zoom UI or drag. */
   staticView?: boolean;
+  /** Pin vertical center to the main-line spine (y=0) so branches do not shift the row down. */
+  staticFitMainline?: boolean;
+  /** When set with staticFitMainline, place the spine at this fraction from the top (0–1). */
+  staticSpineAnchor?: number;
 }
 
 function highlightedEndsEqual(a?: number[] | null, b?: number[] | null): boolean {
@@ -575,6 +579,8 @@ function BoardComponent(
     fitMode = 'default',
     showZoomTray = true,
     staticView = false,
+    staticFitMainline = false,
+    staticSpineAnchor,
   }: BoardProps,
   ref: ForwardedRef<BoardHandle>,
 ) {
@@ -749,7 +755,8 @@ function BoardComponent(
   const unitToPixels = tileSize;
   // Calculate board center offset
   const centerX = (layout.minX + layout.maxX) / 2;
-  const centerY = (layout.minY + layout.maxY) / 2;
+  const centerY =
+    staticView && staticFitMainline ? 0 : (layout.minY + layout.maxY) / 2;
   const markManualCamera = useCallback(() => {
     const now = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
     manualCameraRef.current = true;
@@ -836,13 +843,19 @@ function BoardComponent(
     const rawFit = Math.max(0.22, Math.min(scaleX, scaleY));
     const fitScale = Math.min(maxFitScale, staticView ? rawFit * 2 : rawFit);
 
+    let cameraY = 0;
+    if (staticView && staticFitMainline && staticSpineAnchor != null) {
+      const anchor = Math.min(0.85, Math.max(0.15, staticSpineAnchor));
+      cameraY = containerHeight * (anchor - 0.5);
+    }
+
     traceCameraDebug('[camera-debug] setCamera', {
       reason,
       x: 0,
-      y: 0,
+      y: Number(cameraY.toFixed(1)),
       scale: Number(fitScale.toFixed(3)),
     });
-    setCamera({ x: 0, y: 0, scale: fitScale });
+    setCamera({ x: 0, y: cameraY, scale: fitScale });
   }
 
   // Single authoritative camera auto-fit: respond to layout and container size.
@@ -1226,7 +1239,9 @@ function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
     prev.profileDailyFritz === next.profileDailyFritz &&
     prev.fitMode === next.fitMode &&
     prev.showZoomTray === next.showZoomTray &&
-    prev.staticView === next.staticView
+    prev.staticView === next.staticView &&
+    prev.staticFitMainline === next.staticFitMainline &&
+    prev.staticSpineAnchor === next.staticSpineAnchor
   );
 }
 
