@@ -370,6 +370,20 @@
   color: rgba(203, 213, 225, 0.78);
 }
 
+.rh-af-rich-badge--red {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #f87171;
+}
+
+.rh-af-rich-badge--skunk {
+  background: #f2eee8;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  color: #0a1018;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
 .rh-af-rich-view-btn {
   height: 26px;
   padding: 0 10px;

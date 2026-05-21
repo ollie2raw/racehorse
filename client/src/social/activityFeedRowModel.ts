@@ -10,7 +10,7 @@ export type FeedIconKind =
   | 'swords'
   | 'robot';
 
-export type FeedBadgeTone = 'purple' | 'green' | 'teal' | 'gray' | 'gold';
+export type FeedBadgeTone = 'purple' | 'green' | 'teal' | 'gray' | 'gold' | 'red' | 'skunk';
 
 export interface FeedRowViewModel {
   icon: FeedIconKind;
@@ -105,6 +105,7 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
         secondary: `${mode}${tilesSuffix(meta)}`,
         modeBadge: { label: mode, tone: 'gray' },
         scoreLine: scorePair(meta, true),
+        badge: { label: 'Loss', tone: 'red' },
       };
     }
     case 'streak': {
@@ -166,10 +167,10 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
             ? `${playerScore} - ${fritzScore}`
             : undefined,
         badge: skunk
-          ? { label: 'SKUNK', tone: 'gold' }
+          ? { label: 'SKUNK', tone: 'skunk' }
           : won
             ? { label: 'Winner', tone: 'teal' }
-            : undefined,
+            : { label: 'Loss', tone: 'red' },
       };
     }
     default:

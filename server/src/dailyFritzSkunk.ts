@@ -37,6 +37,15 @@ export function getDailyFritzSkunkWinRank(setResult: DailyFritzSetResult): numbe
   if (setResult.instantSkunk && setResult.skunkBy === 'player' && setResult.skunkGameNumber === 1) {
     return 50;
   }
+  if (
+    setResult.hasSkunk &&
+    setResult.skunkGameNumber === 2 &&
+    setResult.setWinner === 'player' &&
+    setResult.playerGamesWon === 1 &&
+    setResult.fritzGamesWon === 1
+  ) {
+    return 35;
+  }
   if (setResult.hasSkunk && setResult.skunkGameNumber === 2 && setResult.playerGamesWon === 2) {
     return 40;
   }
@@ -56,6 +65,16 @@ export function getDailyFritzSkunkLossRank(setResult: DailyFritzSetResult): numb
   if (setResult.setWinner !== 'fritz') return 0;
   if (setResult.instantSkunk && setResult.skunkBy === 'fritz' && setResult.skunkGameNumber === 1) {
     return 0;
+  }
+  if (
+    setResult.hasSkunk &&
+    setResult.skunkGameNumber === 2 &&
+    setResult.skunkBy === 'fritz' &&
+    setResult.setWinner === 'fritz' &&
+    setResult.playerGamesWon === 1 &&
+    setResult.fritzGamesWon === 1
+  ) {
+    return 8;
   }
   if (setResult.playerGamesWon === 0 && setResult.fritzGamesWon === 2) {
     return 10;
@@ -118,8 +137,20 @@ export function appendDailyFritzGameToSet(
 
   const playedWins = games.filter((entry) => entry.playerWon).length;
   const playedLosses = games.length - playedWins;
-  const setWinner =
+  let setWinner =
     playedWins >= 2 ? 'player' : playedLosses >= 2 ? 'fritz' : undefined;
+
+  // Game 2 skunk finish: after a split start (1–1 in games played), a skunk in game 2 ends the set.
+  if (
+    game.gameNumber === 2 &&
+    skunk &&
+    games.length === 2 &&
+    playedWins === 1 &&
+    playedLosses === 1
+  ) {
+    setWinner = game.playerWon ? 'player' : 'fritz';
+  }
+
   const skunkGames = games.filter((entry) => entry.skunk);
   const skunkGameNumber = skunkGames.length
     ? skunkGames[skunkGames.length - 1]!.gameNumber

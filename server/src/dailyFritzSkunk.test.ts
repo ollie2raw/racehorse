@@ -77,13 +77,35 @@ describe('Game 2 and 3 skunk', () => {
     expect(set.games).toHaveLength(2);
   });
 
-  it('keeps the set alive at 1-1 when game 2 is a skunk after losing game 1', () => {
+  it('ends the set when the player skunks Fritz in game 2 after losing game 1', () => {
     let set = recordGame(emptySet(), 1, 40, 60);
     set = recordGame(set, 2, 60, 20);
-    expect(set.setWinner).toBeUndefined();
+    expect(set.setWinner).toBe('player');
     expect(set.playerGamesWon).toBe(1);
     expect(set.fritzGamesWon).toBe(1);
     expect(set.skunkGameNumber).toBe(2);
+    expect(set.skunkBy).toBe('player');
+    expect(set.games).toHaveLength(2);
+  });
+
+  it('ends the set when Fritz skunks the player in game 2 after the player won game 1', () => {
+    let set = recordGame(emptySet(), 1, 60, 45);
+    set = recordGame(set, 2, 20, 60);
+    expect(set.setWinner).toBe('fritz');
+    expect(set.playerGamesWon).toBe(1);
+    expect(set.fritzGamesWon).toBe(1);
+    expect(set.skunkGameNumber).toBe(2);
+    expect(set.skunkBy).toBe('fritz');
+    expect(set.games).toHaveLength(2);
+  });
+
+  it('still goes to game 3 when game 2 is not a skunk at 1-1', () => {
+    let set = recordGame(emptySet(), 1, 60, 45);
+    set = recordGame(set, 2, 40, 60);
+    expect(set.setWinner).toBeUndefined();
+    expect(set.playerGamesWon).toBe(1);
+    expect(set.fritzGamesWon).toBe(1);
+    expect(set.games).toHaveLength(2);
   });
 
   it('does not inflate set score on a game 3 decider skunk', () => {

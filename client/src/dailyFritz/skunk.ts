@@ -107,19 +107,21 @@ export function getSkunkOverlayCopy(
     };
   }
   if (completedGame.gameNumber === 2 && playerWonGame && setWon) {
+    const setLine = `${setResult.playerGamesWon}–${setResult.fritzGamesWon}`;
     return {
       eyebrow: 'Daily Fritz',
       headline: 'SKUNK FINISH',
-      subheadline: 'You closed the set before Fritz reached 30.',
+      subheadline: `You skunked Fritz in game 2. Set won ${setLine}.`,
       primaryTone: 'success',
     };
   }
-  if (completedGame.gameNumber === 2 && playerWonGame && !setResult.setWinner) {
+  if (completedGame.gameNumber === 2 && !playerWonGame && setLost) {
+    const setLine = `${setResult.playerGamesWon}–${setResult.fritzGamesWon}`;
     return {
       eyebrow: 'Daily Fritz',
-      headline: 'Game 2 SKUNK',
-      subheadline: `You skunked Fritz, but the set is ${setResult.playerGamesWon}–${setResult.fritzGamesWon}. Decider up next.`,
-      primaryTone: 'decider',
+      headline: 'Skunked in Game 2',
+      subheadline: `Fritz skunked you in game 2. Set lost ${setLine}.`,
+      primaryTone: 'default',
     };
   }
   if (completedGame.gameNumber === 3 && playerWonGame && setWon) {
