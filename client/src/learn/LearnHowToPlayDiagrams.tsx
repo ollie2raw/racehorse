@@ -1,5 +1,6 @@
 import { DominoTile } from '../components';
 import type { Tile } from '../types';
+import './learnHowToPlayDiagrams.css';
 
 export type EndMarkerTone = 'active' | 'gold' | 'muted' | 'drop';
 

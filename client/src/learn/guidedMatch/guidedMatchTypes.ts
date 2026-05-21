@@ -129,6 +129,11 @@ export type GuidedMatchEvent =
   | GuidedMatchScoreAwardEvent
   | GuidedMatchNextHandEvent;
 
+export interface GuidedMatchFinalDebriefContent {
+  title: string;
+  body: string;
+}
+
 export interface GuidedMatchLesson {
   version: typeof GUIDED_MATCH_CANONICAL_VERSION;
   lessonId: string;
@@ -142,6 +147,8 @@ export interface GuidedMatchLesson {
   initialMatchSnapshot: string;
   finalMatchSnapshot: string;
   events: GuidedMatchEvent[];
+  /** Optional post-victory teaching block (canonical lesson may also use guidedMatchFinalDebrief.ts). */
+  finalDebrief?: GuidedMatchFinalDebriefContent;
 }
 
 export interface GuidedMatchRecorderCursor {

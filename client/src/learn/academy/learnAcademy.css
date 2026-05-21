@@ -1,0 +1,926 @@
+/* Racehorse Academy — unified module card + step path (Play vs Fritz tokens) */
+@import '../../styles/_pvf-layout.css';
+@import '../learnHowToPlayDiagrams.css';
+
+.learn-academy-host {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.app > .learn-academy-host {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.learn-academy.pvf-root {
+  --pvf-dynamic-color: #34d399;
+  --pvf-active-color: #34d399;
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  position: relative;
+}
+
+.learn-academy.pvf-root--setup {
+  padding-bottom: 0 !important;
+}
+
+.learn-academy__bokeh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  background:
+    radial-gradient(ellipse 420px 280px at 12% 78%, rgba(52, 211, 153, 0.06), transparent 70%),
+    radial-gradient(ellipse 360px 240px at 88% 22%, rgba(91, 159, 255, 0.05), transparent 72%);
+}
+
+.learn-academy .global-nav,
+.learn-academy__layout {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Shell column: path → card → dock ── */
+
+.learn-academy__layout {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-width: min(1360px, 94vw);
+  margin: 0 auto;
+  width: 100%;
+  padding-top: 12px !important;
+  padding-bottom: 8px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+/* ── Step path (above unified card) ── */
+
+.learn-academy__path {
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.learn-academy__path-label {
+  display: block;
+  margin-bottom: 10px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #34d399;
+}
+
+.learn-academy__path-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+}
+
+.learn-academy__path-horse {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  color: #34d399;
+  opacity: 0.85;
+}
+
+.learn-academy__path-steps {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learn-academy__path-step {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.learn-academy__path-connector {
+  position: absolute;
+  top: 14px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  z-index: 0;
+}
+
+.learn-academy__path-node {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(8, 12, 20, 0.9);
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.learn-academy__path-num {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.learn-academy__path-node--done {
+  border-color: color-mix(in srgb, #34d399 40%, transparent);
+  color: rgba(52, 211, 153, 0.75);
+}
+
+.learn-academy__path-node--active {
+  border-color: #34d399;
+  color: #0a1018;
+  background: #34d399;
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.35);
+}
+
+.learn-academy__path-name {
+  margin-top: 6px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.42);
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+
+.learn-academy__path-name--done {
+  color: rgba(52, 211, 153, 0.5);
+}
+
+.learn-academy__path-name--active {
+  color: #34d399;
+  font-weight: 800;
+}
+
+.learn-academy__path-finish {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  color: var(--color-elite);
+  opacity: 0.75;
+}
+
+/* ── Unified module card ── */
+
+.learn-academy__module-card {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--pvf-radius-lg);
+  border: 1px solid rgba(120, 160, 220, 0.14);
+  background: rgba(7, 9, 16, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 14px 42px rgba(0, 0, 0, 0.38);
+  overflow: hidden;
+}
+
+.learn-academy__module-inner {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr);
+}
+
+.learn-academy__module-inner--in {
+  animation: learn-academy-in 240ms ease;
+}
+
+@keyframes learn-academy-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.learn-academy__coach-col {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 32px 40px 22px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: none;
+}
+
+.learn-academy__coach-col::-webkit-scrollbar {
+  display: none;
+}
+
+.learn-academy__stage-col {
+  min-height: 0;
+  overflow: hidden;
+  padding: 24px 30px;
+  background: rgba(4, 7, 12, 0.55);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Coach column ── */
+
+.learn-academy__coach {
+  flex: 0 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.8vh, 18px);
+}
+
+.learn-academy__header {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.learn-academy__kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(0.8rem, 1.2vh, 0.9rem);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #34d399;
+}
+
+.learn-academy__kicker::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  flex-shrink: 0;
+}
+
+.learn-academy__kicker span {
+  opacity: 0.55;
+  letter-spacing: 0.12em;
+}
+
+.learn-academy__title {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(2.35rem, 4.5vw, 3.25rem);
+  font-weight: 900;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: #fff;
+  text-shadow: 0 0 36px rgba(160, 200, 255, 0.1), 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.learn-academy__lede {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: clamp(1.2rem, 2.15vh, 1.5rem);
+  line-height: 1.38;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+}
+
+.learn-academy__beats {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: clamp(12px, 1.9vh, 18px);
+  flex-shrink: 0;
+}
+
+.learn-academy__beats li {
+  position: relative;
+  padding-left: 18px;
+  font-size: clamp(1.1rem, 2vh, 1.35rem);
+  line-height: 1.34;
+  color: rgba(255, 255, 255, 0.94);
+  font-weight: 600;
+}
+
+.learn-academy__beats li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+}
+
+.learn-academy__quote {
+  position: relative;
+  margin: 0;
+  flex-shrink: 0;
+  padding: clamp(18px, 2.4vh, 22px) clamp(20px, 2.5vh, 24px) clamp(18px, 2.4vh, 22px)
+    clamp(36px, 4vh, 42px);
+  border: 1px solid color-mix(in srgb, var(--color-elite) 42%, transparent);
+  border-radius: var(--pvf-radius-md);
+  background: color-mix(in srgb, var(--color-elite) 7%, rgba(0, 0, 0, 0.2));
+  font-size: clamp(1.08rem, 1.95vh, 1.28rem);
+  line-height: 1.46;
+  font-style: normal;
+  font-weight: 600;
+  color: rgba(244, 221, 162, 0.98);
+}
+
+.learn-academy__quote p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.learn-academy__quote-mark {
+  position: absolute;
+  left: 12px;
+  top: 8px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(1.5rem, 2.2vh, 1.75rem);
+  line-height: 1;
+  color: var(--color-elite);
+  opacity: 0.85;
+}
+
+.learn-academy__takeaway {
+  flex-shrink: 0;
+  margin-top: 4px;
+  padding: 0 0 4px;
+  border-top: none;
+}
+
+.learn-academy__takeaway-label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: calc(clamp(0.72rem, 1.15vh, 0.82rem) + 3px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-elite);
+  margin-bottom: 8px;
+}
+
+.learn-academy__takeaway-text {
+  margin: 0;
+  font-size: clamp(1.28rem, 2.35vh, 1.55rem);
+  font-weight: 800;
+  line-height: 1.3;
+  color: #fff;
+}
+
+.learn-academy__coach-ctas {
+  flex-shrink: 0;
+  display: grid;
+  gap: 10px;
+  margin-top: clamp(12px, 1.8vh, 18px);
+}
+
+.learn-academy__coach-ctas .pvf-start-btn {
+  font-size: clamp(0.95rem, 1.4vh, 1.05rem);
+  font-weight: 800;
+  min-height: 48px;
+}
+
+.learn-academy__cta-primary {
+  background: #34d399 !important;
+  color: #0a1018 !important;
+  margin-top: 0 !important;
+}
+
+.learn-academy__cta-primary .pvf-start-arrow {
+  color: #0a1018 !important;
+}
+
+/* ── Stage / visuals ── */
+
+.learn-academy__stage-col .learn-academy__visual-inner {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.learn-academy__section-label {
+  flex-shrink: 0;
+  margin: 0 0 6px !important;
+  font-family: 'Outfit', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+/* ── Intro: Core rhythm 2×2 ── */
+
+.learn-academy__rhythm-grid {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 14px;
+}
+
+.learn-academy__rhythm-card {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 10px 12px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.learn-academy__rhythm-card--mint {
+  border-color: color-mix(in srgb, #34d399 32%, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, #34d399 5%, rgba(255, 255, 255, 0.02));
+}
+
+.learn-academy__rhythm-card--gold {
+  border-color: color-mix(in srgb, var(--color-elite) 36%, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, var(--color-elite) 6%, rgba(255, 255, 255, 0.02));
+}
+
+.learn-academy__rhythm-icon {
+  width: clamp(76px, 11vh, 92px);
+  height: clamp(76px, 11vh, 92px);
+  margin-bottom: clamp(10px, 1.4vh, 14px);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--icon-border, rgba(255, 255, 255, 0.2));
+  background: var(--icon-bg, rgba(255, 255, 255, 0.04));
+  color: var(--accent-color, #34d399);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--accent-color, #34d399) 22%, transparent);
+}
+
+.learn-academy__rhythm-icon--mint {
+  --accent-color: #34d399;
+  --icon-border: color-mix(in srgb, #34d399 45%, transparent);
+  --icon-bg: color-mix(in srgb, #34d399 10%, transparent);
+}
+
+.learn-academy__rhythm-icon--gold {
+  --accent-color: var(--color-elite);
+  --icon-border: color-mix(in srgb, var(--color-elite) 45%, transparent);
+  --icon-bg: color-mix(in srgb, var(--color-elite) 10%, transparent);
+}
+
+.learn-academy__rhythm-icon svg {
+  width: clamp(40px, 5.8vh, 48px);
+  height: clamp(40px, 5.8vh, 48px);
+}
+
+.learn-academy__rhythm-title {
+  margin: 0 0 5px;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(1.05rem, 1.75vh, 1.22rem);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1.15;
+}
+
+.learn-academy__rhythm-desc {
+  margin: 0;
+  font-size: clamp(0.95rem, 1.55vh, 1.12rem);
+  line-height: 1.3;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* ── Turn pipeline ── */
+
+.learn-academy__pipeline {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.learn-academy__pipe {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  padding: 10px 8px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.learn-academy__pipe strong {
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(0.92rem, 1.4vh, 1.05rem);
+  font-weight: 800;
+  color: #fff;
+}
+
+.learn-academy__pipe span:last-child {
+  font-size: clamp(0.85rem, 1.25vh, 0.98rem);
+  font-weight: 600;
+}
+
+.learn-academy__pipe--mint {
+  border-color: color-mix(in srgb, #34d399 30%, transparent);
+}
+
+.learn-academy__pipe--gold {
+  border-color: color-mix(in srgb, var(--color-elite) 32%, transparent);
+}
+
+.learn-academy__pipe--muted {
+  opacity: 0.75;
+}
+
+.learn-academy__pipe-n {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  color: #0a1018;
+  background: #34d399;
+}
+
+.learn-academy__pipe--gold .learn-academy__pipe-n {
+  background: var(--color-elite);
+}
+
+.learn-academy__pipe-line {
+  flex: 0 0 10px;
+  align-self: center;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Scoring ── */
+
+.learn-academy__board-frame {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid color-mix(in srgb, #5b9fff 25%, rgba(255, 255, 255, 0.08));
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.learn-academy__visual--scoring .learn-howto-diagram__tile-wrap {
+  transform: scale(1.28);
+  transform-origin: center;
+}
+
+.learn-academy__visual--scoring .learn-howto-diagram__end--active {
+  animation: learn-end-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes learn-end-pulse {
+  50% {
+    box-shadow: 0 0 14px rgba(91, 159, 255, 0.35);
+  }
+}
+
+.learn-academy__visual--scoring .learn-howto-calc {
+  flex-shrink: 0;
+}
+
+/* ── Doubles ── */
+
+.learn-academy__visual--doubles {
+  position: relative;
+}
+
+.learn-academy__tempo-pill {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-elite) 45%, transparent);
+  background: rgba(7, 9, 16, 0.95);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-elite);
+}
+
+.learn-academy__double-row {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.learn-academy__double-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 10px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.learn-academy__pane-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-elite);
+}
+
+.learn-academy__double-pane .learn-howto-diagram__hub-tile--crossed {
+  opacity: 1;
+}
+
+/* ── Chains ── */
+
+.learn-academy__visual--chains .learn-howto-roadmap {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learn-academy__visual--chains .learn-howto-roadmap__step {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+
+.learn-academy__visual--chains .learn-howto-roadmap__tile .domino-tile {
+  transform: scale(1.1);
+}
+
+.learn-academy__visual--chains .learn-howto-roadmap__arrow {
+  display: none;
+}
+
+.learn-academy__meter {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--pvf-radius-md);
+  border: 1px solid color-mix(in srgb, var(--color-elite) 28%, transparent);
+  background: color-mix(in srgb, var(--color-elite) 6%, transparent);
+  font-size: clamp(0.95rem, 1.4vh, 1.05rem);
+  font-weight: 600;
+  line-height: 1.38;
+  color: rgba(255, 255, 255, 0.82);
+  text-align: center;
+}
+
+.learn-academy__meter strong {
+  color: #fff;
+  font-weight: 800;
+}
+
+/* ── Finish ── */
+
+.learn-academy__finish-lead {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(1.12rem, 1.85vh, 1.3rem);
+  font-weight: 800;
+  line-height: 1.35;
+  color: #fff;
+  text-align: center;
+}
+
+.learn-academy__finish-grid {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+  align-content: stretch;
+}
+
+.learn-academy__finish-card {
+  min-width: 0 !important;
+  height: 100%;
+  cursor: default;
+  align-items: flex-start !important;
+}
+
+.learn-academy__finish-card:hover {
+  transform: none;
+}
+
+.learn-academy__finish-card .pvf-deal-label {
+  font-size: clamp(1rem, 1.5vh, 1.15rem);
+  font-weight: 800;
+}
+
+.learn-academy__finish-card .pvf-deal-sub {
+  font-size: clamp(0.88rem, 1.3vh, 1rem);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.38;
+}
+
+.learn-academy__finish-card--mint {
+  border-color: color-mix(in srgb, #34d399 32%, transparent) !important;
+}
+
+.learn-academy__finish-card--gold {
+  border-color: color-mix(in srgb, var(--color-elite) 35%, transparent) !important;
+}
+
+.learn-academy__race-meter {
+  flex-shrink: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.learn-academy__race-meter-label,
+.learn-academy__race-meter-note {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-elite);
+}
+
+.learn-academy__race-meter-note {
+  color: rgba(255, 255, 255, 0.62);
+  text-transform: none;
+  font-weight: 600;
+  letter-spacing: 0;
+  font-size: clamp(0.88rem, 1.25vh, 0.98rem);
+}
+
+.learn-academy__race-track {
+  position: relative;
+  height: 8px !important;
+}
+
+.learn-academy__race-fill {
+  background: var(--color-elite) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-elite) 40%, transparent);
+}
+
+/* ── Dock ── */
+
+.learn-academy__dock {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+}
+
+.learn-academy__dock .pvf-back-btn {
+  margin-bottom: 0 !important;
+  font-weight: 700;
+}
+
+.learn-academy .learn-academy__start-btn {
+  width: auto !important;
+  min-width: 200px;
+  height: 52px !important;
+  margin-top: 0 !important;
+  padding: 0 44px 0 28px !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  background: #34d399 !important;
+  color: #0a1018 !important;
+  border: 1px solid color-mix(in srgb, #34d399 55%, transparent) !important;
+  box-shadow:
+    0 0 24px rgba(52, 211, 153, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+}
+
+.learn-academy .learn-academy__start-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.learn-academy .learn-academy__start-btn:active {
+  transform: scale(0.98);
+}
+
+.learn-academy .learn-academy__start-btn .pvf-start-arrow {
+  color: #0a1018 !important;
+  opacity: 1;
+}
+
+.learn-academy .learn-academy__start-btn span:first-child {
+  font-weight: 800;
+}
+
+.learn-academy__dock--final {
+  justify-content: flex-start;
+}
+
+@media (max-width: 960px) {
+  .learn-academy__module-inner {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .learn-academy__coach-col {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .learn-academy__path-name {
+    font-size: 8px;
+  }
+
+  .learn-academy__pipeline {
+    flex-wrap: wrap;
+  }
+
+  .learn-academy__pipe-line {
+    display: none;
+  }
+}

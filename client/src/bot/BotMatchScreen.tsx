@@ -179,6 +179,8 @@ import {
 } from '../learn/guidedMatch/guidedMatchCapture';
 import { upsertGuidedMatchCandidate } from '../learn/guidedMatch/guidedMatchCandidateStorage';
 import { validateGuidedMatchCandidate } from '../learn/guidedMatch/guidedMatchCandidateValidation';
+import { GuidedMatchFinalDebriefPanel } from '../learn/guidedMatch/GuidedMatchFinalDebriefPanel';
+import { getPublicGuidedMatchFinalDebrief } from '../learn/guidedMatch/guidedMatchLessonLoader';
 
 interface BotMatchScreenProps {
   onBack: () => void;
@@ -1210,6 +1212,11 @@ export default function BotMatchScreen({
     return initGuidedV2Playback(lesson, 1).firstEventIndex;
   });
   const [isGuidedV2OffLine, setIsGuidedV2OffLine] = useState(false);
+  const guidedMatchFinalDebrief = useMemo(() => {
+    if (!isGuidedV2Mode || match.winnerId !== 'you') return null;
+    return getPublicGuidedMatchFinalDebrief();
+  }, [isGuidedV2Mode, match.winnerId]);
+  const isGuidedMatchVictoryResult = Boolean(guidedMatchFinalDebrief);
   /**
    * Guards the Fritz V2 timer against double-apply.
    * Each event index may be applied at most once regardless of effect re-fires.
@@ -2389,6 +2396,11 @@ export default function BotMatchScreen({
   const goHome = useCallback(() => {
     invalidateLocalRuns();
     onNavigate?.('home');
+  }, [invalidateLocalRuns, onNavigate]);
+
+  const returnToLearn = useCallback(() => {
+    invalidateLocalRuns();
+    onNavigate?.('learn');
   }, [invalidateLocalRuns, onNavigate]);
 
   useEffect(() => {
@@ -7209,7 +7221,16 @@ export default function BotMatchScreen({
           open
           ariaLabel={`${opponentLabel} match over`}
           matchKind="single-player"
-          kicker={isDailyFritzMode ? 'Daily Fritz Complete' : isGhostMode ? 'Ghost Match Result' : 'Play vs Fritz Result'}
+          layout={isGuidedMatchVictoryResult ? 'guided-split' : 'default'}
+          kicker={
+            isGuidedMatchVictoryResult
+              ? 'Guided Match Complete'
+              : isDailyFritzMode
+                ? 'Daily Fritz Complete'
+                : isGhostMode
+                  ? 'Ghost Match Result'
+                  : 'Play vs Fritz Result'
+          }
           title={
             isGhostMode
               ? match.winnerId === 'you'
@@ -7272,28 +7293,57 @@ export default function BotMatchScreen({
             },
           ]}
           primaryLabel={
-            isDailyFritzMode ? 'Back Home' : isGhostMode ? 'Play Again' : 'Rematch'
+            isGuidedMatchVictoryResult
+              ? 'Finish Lesson'
+              : isDailyFritzMode
+                ? 'Back Home'
+                : isGhostMode
+                  ? 'Play Again'
+                  : 'Rematch'
           }
-          onPrimary={startFreshMatch}
-          secondaryLabel={isDailyFritzMode ? 'Back Home' : isGhostMode ? 'Home' : 'Change Setup'}
-          onSecondary={isDailyFritzMode ? exitMatch : isGhostMode ? goHome : exitMatch}
+          onPrimary={isGuidedMatchVictoryResult ? returnToLearn : startFreshMatch}
+          secondaryLabel={
+            isGuidedMatchVictoryResult
+              ? undefined
+              : isDailyFritzMode
+                ? 'Back Home'
+                : isGhostMode
+                  ? 'Home'
+                  : 'Change Setup'
+          }
+          onSecondary={
+            isGuidedMatchVictoryResult
+              ? undefined
+              : isDailyFritzMode
+                ? exitMatch
+                : isGhostMode
+                  ? goHome
+                  : exitMatch
+          }
           extraActionLabel={
-            canSaveGuidedMatchCandidate
-              ? 'Save as Guided Match Candidate'
-              : !isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate
-                ? 'Home'
-                : undefined
+            isGuidedMatchVictoryResult
+              ? undefined
+              : canSaveGuidedMatchCandidate
+                ? 'Save as Guided Match Candidate'
+                : !isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate
+                  ? 'Home'
+                  : undefined
           }
           onExtraAction={
-            canSaveGuidedMatchCandidate
-              ? saveGuidedMatchCandidate
-              : !isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate
-                ? goHome
-                : undefined
+            isGuidedMatchVictoryResult
+              ? undefined
+              : canSaveGuidedMatchCandidate
+                ? saveGuidedMatchCandidate
+                : !isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate
+                  ? goHome
+                  : undefined
           }
-          onClose={exitMatch}
+          onClose={isGuidedMatchVictoryResult ? returnToLearn : exitMatch}
         >
-          {enableGuidedMatchCandidateCapture && (
+          {guidedMatchFinalDebrief ? (
+            <GuidedMatchFinalDebriefPanel debrief={guidedMatchFinalDebrief} />
+          ) : null}
+          {!isGuidedMatchVictoryResult && enableGuidedMatchCandidateCapture && (
             <div className="rh-go-rating">
               <span>Guided Capture</span>
               <strong>
@@ -7315,6 +7365,7 @@ export default function BotMatchScreen({
             </div>
           )}
           {!isGuidedMode &&
+            !isGuidedV2Mode &&
             !isGhostMode &&
             !isDailyFritzMode &&
             (ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null) && (

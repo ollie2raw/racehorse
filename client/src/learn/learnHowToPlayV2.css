@@ -1,0 +1,864 @@
+/* How to Play v2 — scoped premium Learn onboarding */
+
+.learn-howto-v2-host {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.learn-howto-v2 {
+  --howto-v2-green: #34d399;
+  --howto-v2-gold: #e7b64a;
+  --howto-v2-text: #f2eee8;
+  --howto-v2-muted: rgba(201, 212, 226, 0.72);
+  --howto-v2-stage-max: min(1420px, calc(100vw - 56px));
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  color: var(--howto-v2-text);
+  background: var(--bg-obsidian, #050911);
+}
+
+.learn-howto-v2__shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.learn-howto-v2__body {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 28px 14px;
+  overflow: hidden;
+}
+
+.learn-howto-v2__track {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  width: var(--howto-v2-stage-max);
+  max-width: var(--howto-v2-stage-max);
+  gap: 8px;
+}
+
+.learn-howto-v2__progress {
+  flex-shrink: 0;
+  display: grid;
+  gap: 6px;
+  padding: 4px 0 0;
+  width: 100%;
+}
+
+.learn-howto-v2__progress-rail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.learn-howto-v2__progress-rail .learn-howto-v2__progress-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.learn-howto-v2__progress-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+
+.learn-howto-v2__progress-step {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--howto-v2-green);
+}
+
+.learn-howto-v2__progress-label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--howto-v2-muted);
+}
+
+.learn-howto-v2__progress-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.learn-howto-v2__progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--howto-v2-green);
+  transition: width 220ms var(--ease-premium, ease);
+}
+
+.learn-howto-v2__dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.learn-howto-v2__dot {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.learn-howto-v2__dot--done {
+  background: rgba(52, 211, 153, 0.45);
+}
+
+.learn-howto-v2__dot--active {
+  background: var(--howto-v2-green);
+  transform: scale(1.15);
+}
+
+.learn-howto-v2__stage {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.learn-howto-v2__module-block {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  gap: 0;
+}
+
+.learn-howto-v2__panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(22px, 2.8vw, 36px);
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  align-items: stretch;
+  padding: clamp(20px, 2.2vh, 26px) clamp(22px, 2.4vw, 32px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(7, 9, 16, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 36px rgba(0, 0, 0, 0.32);
+  animation: learn-howto-v2-in 220ms var(--ease-premium, ease);
+}
+
+@keyframes learn-howto-v2-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.learn-howto-v2__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.learn-howto-v2__eyebrow {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(52, 211, 153, 0.78);
+}
+
+.learn-howto-v2__title {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(2.1rem, 3.5vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--howto-v2-text);
+}
+
+.learn-howto-v2__lede {
+  margin: 0;
+  font-size: clamp(1.05rem, 1.45vw, 1.2rem);
+  font-weight: 500;
+  line-height: 1.45;
+  color: rgba(242, 238, 232, 0.82);
+}
+
+.learn-howto-v2__beats {
+  margin: 2px 0 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 10px;
+}
+
+.learn-howto-v2__beats li {
+  font-size: clamp(1rem, 1.25vw, 1.08rem);
+  font-weight: 500;
+  line-height: 1.42;
+  color: rgba(232, 238, 246, 0.78);
+}
+
+.learn-howto-v2__run {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(231, 182, 74, 0.22);
+  border-left: 2px solid rgba(231, 182, 74, 0.55);
+  background: rgba(231, 182, 74, 0.06);
+  font-size: clamp(0.95rem, 1.15vw, 1.02rem);
+  font-weight: 500;
+  line-height: 1.45;
+  color: rgba(244, 221, 162, 0.92);
+}
+
+.learn-howto-v2__takeaway {
+  margin-top: auto;
+  padding-top: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.learn-howto-v2__takeaway-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(231, 182, 74, 0.78);
+}
+
+.learn-howto-v2__takeaway-body {
+  margin: 0;
+  font-size: clamp(1rem, 1.2vw, 1.08rem);
+  font-weight: 600;
+  line-height: 1.38;
+  color: rgba(247, 242, 235, 0.94);
+}
+
+.learn-howto-v2__visual {
+  display: flex;
+  min-width: 0;
+  min-height: min(300px, 38vh);
+  max-height: 100%;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  padding: clamp(16px, 2vh, 22px) clamp(18px, 2.2vw, 24px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: auto;
+}
+
+.learn-howto-v2__visual:has(.learn-howto-v2__intro-beats) {
+  align-items: center;
+  justify-content: center;
+  padding: clamp(18px, 2.2vh, 24px);
+}
+
+.learn-howto-v2__final-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.learn-howto-v2__final-actions .pvf-start-btn {
+  width: 100%;
+  min-height: 54px;
+  justify-content: center;
+  font-size: 15px;
+}
+
+/* ── Visuals: intro beats ── */
+
+.learn-howto-v2__intro-beats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  align-content: center;
+}
+
+.learn-howto-v2__intro-beat {
+  display: grid;
+  gap: 6px;
+  padding: 18px 20px;
+  min-height: 92px;
+  align-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.learn-howto-v2__intro-beat--green {
+  border-color: rgba(52, 211, 153, 0.22);
+}
+
+.learn-howto-v2__intro-beat--gold {
+  border-color: rgba(231, 182, 74, 0.22);
+}
+
+.learn-howto-v2__intro-beat-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--howto-v2-green);
+}
+
+.learn-howto-v2__intro-beat--gold .learn-howto-v2__intro-beat-label {
+  color: var(--howto-v2-gold);
+}
+
+.learn-howto-v2__intro-beat-detail {
+  font-size: clamp(0.92rem, 1.1vw, 1rem);
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(232, 238, 246, 0.8);
+}
+
+/* ── Visuals: turn loop ── */
+
+.learn-howto-v2__turn-loop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learn-howto-v2__turn-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 150px;
+  max-width: 200px;
+  padding: 14px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.learn-howto-v2__turn-step--gold {
+  border-color: rgba(231, 182, 74, 0.2);
+}
+
+.learn-howto-v2__turn-step-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  color: #0a1018;
+  background: var(--howto-v2-green);
+}
+
+.learn-howto-v2__turn-step--gold .learn-howto-v2__turn-step-num {
+  background: var(--howto-v2-gold);
+}
+
+.learn-howto-v2__turn-step-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.learn-howto-v2__turn-step-title {
+  font-size: clamp(0.88rem, 1.05vw, 0.98rem);
+  font-weight: 700;
+  line-height: 1.2;
+  color: rgba(247, 242, 235, 0.95);
+}
+
+.learn-howto-v2__turn-step-detail {
+  font-size: clamp(0.8rem, 0.95vw, 0.88rem);
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--howto-v2-muted);
+}
+
+.learn-howto-v2__turn-step-arrow {
+  display: none;
+}
+
+/* ── Diagram overrides ── */
+
+.learn-howto-v2__diagram-stack {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  justify-items: center;
+}
+
+.learn-howto-v2__visual .learn-howto-diagram {
+  width: 100%;
+  max-width: 100%;
+}
+
+.learn-howto-v2__visual .learn-howto-diagram__board {
+  padding: 14px 16px;
+}
+
+.learn-howto-v2__visual .learn-howto-diagram__tile-wrap {
+  transform: scale(1.12);
+  transform-origin: center;
+}
+
+.learn-howto-v2__visual .learn-howto-diagram__end-value {
+  font-size: 1.5rem;
+}
+
+.learn-howto-v2__visual .learn-howto-diagram__caption {
+  font-size: 0.92rem;
+}
+
+.learn-howto-v2__visual .learn-howto-calc {
+  padding: 14px 16px;
+  width: 100%;
+}
+
+.learn-howto-v2__visual .learn-howto-calc__total {
+  font-size: 1.85rem;
+}
+
+.learn-howto-v2__visual .learn-howto-calc__chip-value {
+  font-size: 1.35rem;
+}
+
+.learn-howto-v2__visual .learn-howto-calc__footnote {
+  font-size: 0.9rem;
+}
+
+.learn-howto-v2__visual .learn-howto-doubles-compare {
+  gap: 14px;
+  width: 100%;
+}
+
+.learn-howto-v2__visual .learn-howto-doubles-compare__title {
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.learn-howto-v2__visual .learn-howto-doubles-compare__hint {
+  font-size: 0.82rem;
+}
+
+.learn-howto-v2__diagram-stack--compact .learn-howto-doubles-compare {
+  gap: 8px;
+}
+
+.learn-howto-v2__diagram.learn-howto-diagram {
+  margin: 0;
+}
+
+.learn-howto-v2__visual .learn-howto-diagram__tile-wrap .domino-tile,
+.learn-howto-v2__visual .domino-tile {
+  filter: none;
+}
+
+.learn-howto-v2__visual .learn-howto-diagram__board {
+  padding: 8px 10px;
+}
+
+.learn-howto-v2__visual .learn-howto-calc {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.learn-howto-v2__visual .learn-howto-doubles-compare__panel {
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.learn-howto-v2__visual .learn-howto-doubles-compare__title {
+  font-size: 10px;
+  margin: 0 0 6px;
+}
+
+.learn-howto-v2__hand-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.learn-howto-v2__hand-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--howto-v2-muted);
+}
+
+.learn-howto-v2__hand-note {
+  font-size: 0.9rem;
+  color: rgba(52, 211, 153, 0.85);
+}
+
+/* ── Boneyard visual ── */
+
+.learn-howto-v2__boneyard {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.learn-howto-v2__boneyard-pile {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+  text-align: center;
+}
+
+.learn-howto-v2__boneyard-pile-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--howto-v2-muted);
+}
+
+.learn-howto-v2__boneyard-counts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.learn-howto-v2__boneyard-count {
+  display: grid;
+  gap: 2px;
+}
+
+.learn-howto-v2__boneyard-count strong {
+  font-family: var(--font-display);
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--howto-v2-text);
+}
+
+.learn-howto-v2__boneyard-count span {
+  font-size: 0.72rem;
+  color: var(--howto-v2-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.learn-howto-v2__boneyard-count--draw strong {
+  color: var(--howto-v2-green);
+}
+
+.learn-howto-v2__boneyard-count--lock strong {
+  color: var(--howto-v2-gold);
+}
+
+.learn-howto-v2__boneyard-plus {
+  font-size: 1.1rem;
+  color: var(--howto-v2-muted);
+}
+
+.learn-howto-v2__boneyard-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.learn-howto-v2__boneyard-hand {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.learn-howto-v2__boneyard-hand p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--howto-v2-muted);
+}
+
+.learn-howto-v2__boneyard-hand-tag {
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.learn-howto-v2__boneyard-hand--early .learn-howto-v2__boneyard-hand-tag {
+  color: var(--howto-v2-green);
+}
+
+.learn-howto-v2__boneyard-hand--late .learn-howto-v2__boneyard-hand-tag {
+  color: var(--howto-v2-gold);
+}
+
+.learn-howto-v2__boneyard-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.learn-howto-v2__boneyard-more {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--howto-v2-muted);
+}
+
+/* ── Finish visual ── */
+
+.learn-howto-v2__finish-visual {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+}
+
+.learn-howto-v2__finish-track {
+  display: grid;
+  gap: 8px;
+}
+
+.learn-howto-v2__finish-track-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--howto-v2-muted);
+}
+
+.learn-howto-v2__finish-track-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.learn-howto-v2__finish-track-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(231, 182, 74, 0.72);
+}
+
+.learn-howto-v2__finish-track-mark {
+  position: absolute;
+  top: -18px;
+  left: 38%;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--howto-v2-gold);
+}
+
+.learn-howto-v2__finish-track-target {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--howto-v2-gold);
+  text-align: right;
+}
+
+.learn-howto-v2__finish-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learn-howto-v2__finish-skills li {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(231, 182, 74, 0.2);
+  color: rgba(231, 182, 74, 0.75);
+  background: rgba(231, 182, 74, 0.06);
+}
+
+/* ── Dock (attached under module panel) ── */
+
+.learn-howto-v2__dock {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  margin-top: 20px;
+  padding: 0 4px;
+}
+
+.learn-howto-v2__dock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  min-width: 120px;
+  padding: 0 28px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(16, 23, 37, 0.92);
+  color: rgba(237, 242, 246, 0.9);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.learn-howto-v2__dock-btn:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.learn-howto-v2__dock-btn--next {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.12);
+  color: #dcffec;
+}
+
+.learn-howto-v2__dock-btn--next:hover {
+  border-color: rgba(52, 211, 153, 0.5);
+  background: rgba(52, 211, 153, 0.18);
+}
+
+.learn-howto-v2__dock-btn--start {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.2);
+}
+
+.learn-howto-v2__dock-spacer {
+  flex: 1;
+}
+
+@media (max-width: 900px) {
+  .learn-howto-v2__track {
+    width: 100%;
+  }
+
+  .learn-howto-v2__panel {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .learn-howto-v2__copy {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .learn-howto-v2__visual {
+    align-self: stretch;
+    max-height: none;
+    min-height: 160px;
+  }
+
+  .learn-howto-v2__module-block {
+    overflow-y: auto;
+  }
+
+  .learn-howto-v2__turn-loop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .learn-howto-v2__turn-step {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .learn-howto-v2__intro-beats {
+    grid-template-columns: 1fr;
+  }
+
+  .learn-howto-v2__boneyard-compare {
+    grid-template-columns: 1fr;
+  }
+}

@@ -6526,8 +6526,8 @@
       "pointsScored": 0,
       "continuedTurnReason": "none",
       "coaching": {
-        "title": "Trap Fritz and Win on Pips",
-        "body": "Once the board is locked on 2s, Fritz is forced into the boneyard. Since the remaining playable 2s are either already gone, in your control, or locked in the final boneyard tiles, Fritz gets stuck after drawing.\n\nThat means the hand ends with Fritz holding a lot of pips, and you collect those points. This is a perfect example of winning without simply going out — you controlled the board, trapped the opponent, and used their remaining hand to push yourself over the target score.",
+        "title": "Force Fritz Into the 2s",
+        "body": "Play 5-2 to turn the whole board into 2s. This does not guarantee Fritz is trapped right away — the boneyard is still full, so he may draw into playable 2s and even gain more power.\n\nBut it puts the pressure on him. Fritz now has to keep finding 2s just to stay alive, while you still have a clean chance to go out soon after. This is the right idea: narrow the board, force the draw, and try to finish before the extra tiles can help him.",
         "tags": []
       }
     },

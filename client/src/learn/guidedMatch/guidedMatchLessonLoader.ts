@@ -9,6 +9,11 @@ import type {
   GuidedMatchTilePlayEvent,
 } from './guidedMatchTypes';
 import bundledCanonicalLesson from './lessons/FINAL-guided-match-standard-v1-canonical-75-48.json';
+import {
+  getGuidedMatchFinalDebrief,
+  STANDARD_GUIDED_MATCH_FINAL_DEBRIEF,
+  type GuidedMatchFinalDebrief,
+} from './guidedMatchFinalDebrief';
 
 export const PUBLIC_GUIDED_MATCH_EXPECTED_TARGET_SCORE = 60;
 export const PUBLIC_GUIDED_MATCH_EXPECTED_EVENT_COUNT = 232;
@@ -185,3 +190,9 @@ export function getPublicGuidedMatchPlaybackLesson(): LessonV2 {
 export function getPublicGuidedMatchLessonSanityIssues(): string[] {
   return [...publicGuidedMatchLessonSanityIssues];
 }
+
+export function getPublicGuidedMatchFinalDebrief(): GuidedMatchFinalDebrief | null {
+  return getGuidedMatchFinalDebrief(publicGuidedMatchLesson.lessonId);
+}
+
+export { STANDARD_GUIDED_MATCH_FINAL_DEBRIEF };

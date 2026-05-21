@@ -286,6 +286,62 @@
   gap: 10px;
 }
 
+/* Guided Match final victory — wide two-column result + lesson */
+
+.rh-go-card--guided-split {
+  width: min(1040px, calc(100vw - 32px));
+  gap: 0;
+  padding: 22px 24px;
+}
+
+.rh-go-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.58fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.rh-go-split__main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rh-go-split__main .rh-go-actions {
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.rh-go-split__aside {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  padding-left: 20px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rh-go-card--guided-split .victory-title {
+  font-size: clamp(2rem, 3.4vw, 2.85rem);
+}
+
+.rh-go-card--guided-split .game-over-meta {
+  margin-top: 0;
+}
+
+.rh-go-card--guided-split .rh-go-stat {
+  min-height: 78px;
+  padding: 12px 14px;
+}
+
+.rh-go-card--guided-split .rh-go-stat strong {
+  font-size: clamp(1.2rem, 1.8vw, 1.65rem);
+}
+
+.rh-go-card--guided-split .final-score {
+  min-height: 52px;
+}
+
 .rh-go--sp .final-score.winner,
 .rh-go--tone-gold .final-score.winner {
   background: color-mix(in srgb, var(--tier-elite) 12%, rgba(255, 255, 255, 0.02));
@@ -381,6 +437,25 @@
   border: none;
   padding: 0;
   background: transparent;
+}
+
+@media (max-width: 860px) {
+  .rh-go-card--guided-split {
+    width: calc(100vw - 20px);
+    padding: 20px 16px;
+  }
+
+  .rh-go-split {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .rh-go-split__aside {
+    padding-left: 0;
+    border-left: none;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
 }
 
 @media (max-width: 700px) {

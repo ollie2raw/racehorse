@@ -514,23 +514,13 @@
     0 18px 38px rgba(0, 0, 0, 0.3);
 }
 
-.learn-replay-card-container {
-  border: 1px solid rgba(167, 139, 250, 0.14);
-  box-shadow:
-    inset 0 1px 0 rgba(167, 139, 250, 0.1),
-    inset 0 -40px 70px rgba(0, 0, 0, 0.32),
-    0 18px 38px rgba(0, 0, 0, 0.3);
-}
-
 .learn-library-card-container .sp-solo-mode-card__art-slot,
-.learn-drills-card-container .sp-solo-mode-card__art-slot,
-.learn-replay-card-container .sp-solo-mode-card__art-slot {
+.learn-drills-card-container .sp-solo-mode-card__art-slot {
   left: 28%;
 }
 
 .learn-library-card-container .sp-solo-mode-card__art,
-.learn-drills-card-container .sp-solo-mode-card__art,
-.learn-replay-card-container .sp-solo-mode-card__art {
+.learn-drills-card-container .sp-solo-mode-card__art {
   object-position: center top;
   transform: scale(1.15) translate(4%, 4%);
   opacity: 0.28;

@@ -1,0 +1,143 @@
+/* Guided Match victory debrief — compact PVF matte panel */
+
+.guided-match-final-debrief {
+  display: grid;
+  gap: 6px;
+  max-width: 36rem;
+  padding: 11px 13px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(231, 182, 74, 0.26);
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.rh-go-split__aside .guided-match-final-debrief {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  padding: 14px 15px 15px;
+  gap: 8px;
+}
+
+.rh-go-split__aside .guided-match-final-debrief__body {
+  display: grid;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.rh-go-split__aside .guided-match-final-debrief__paragraph {
+  font-size: 13px;
+  line-height: 1.46;
+}
+
+.rh-go-split__aside .guided-match-final-debrief__takeaway {
+  margin-top: auto;
+}
+
+.guided-match-final-debrief__eyebrow {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(231, 182, 74, 0.7);
+}
+
+.guided-match-final-debrief__title {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: #f2eee8;
+}
+
+.guided-match-final-debrief__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guided-match-final-debrief__chip {
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(231, 182, 74, 0.62);
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(231, 182, 74, 0.18);
+  background: rgba(231, 182, 74, 0.06);
+}
+
+.guided-match-final-debrief__body {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.guided-match-final-debrief__paragraph {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.42;
+  color: rgba(242, 238, 232, 0.8);
+}
+
+.guided-match-final-debrief__takeaway {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(231, 182, 74, 0.22);
+  border-left: 2px solid rgba(231, 182, 74, 0.55);
+  background: rgba(231, 182, 74, 0.055);
+}
+
+.guided-match-final-debrief__takeaway-label {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(231, 182, 74, 0.78);
+}
+
+.guided-match-final-debrief__takeaway-body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.38;
+  color: rgba(247, 242, 235, 0.92);
+}
+
+@media (max-width: 640px) {
+  .guided-match-final-debrief {
+    padding: 10px 12px 11px;
+  }
+
+  .guided-match-final-debrief__title {
+    font-size: 16px;
+  }
+
+  .guided-match-final-debrief__paragraph {
+    font-size: 12.5px;
+  }
+
+  .guided-match-final-debrief__takeaway-body {
+    font-size: 12px;
+  }
+}

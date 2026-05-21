@@ -4535,7 +4535,15 @@ export default function App() {
               setIsGuidedV2Mode(false);
               setAppMode('home');
             }}
-            onNavigate={setAppMode}
+            onNavigate={(mode) => {
+              if (mode === 'learn') {
+                setIsGuidedMode(false);
+                setIsAuthoringMode(false);
+                setIsAuthoringV2Mode(false);
+                setIsGuidedV2Mode(false);
+              }
+              setAppMode(mode);
+            }}
             dealSize={botDealSize}
             fritzTier={botFritzTier}
             isGuidedMode={isGuidedMode}
