@@ -21,6 +21,11 @@ export function handOverTileSize(tileCount: number): number {
   return 28;
 }
 
+function handOverPointsLabel(points: number): string {
+  return `${points} point${points === 1 ? '' : 's'}`;
+}
+
+/** Concise hero result line (includes points once; reward plate repeats the award). */
 export function buildHandOverReasonCopy(opts: {
   youWentOut: boolean;
   opponentWentOut: boolean;
@@ -29,18 +34,34 @@ export function buildHandOverReasonCopy(opts: {
   pointsAwarded: number;
 }): string {
   const { youWentOut, opponentWentOut, isBlocked, opponentName, pointsAwarded } = opts;
-  const pointsLabel = `${pointsAwarded} point${pointsAwarded === 1 ? '' : 's'}`;
+  const pointsLabel = handOverPointsLabel(pointsAwarded);
 
   if (youWentOut) {
-    return `You emptied your hand. Tiles left with ${opponentName} count toward your ${pointsLabel}.`;
+    return `You emptied your hand and collected ${pointsLabel}.`;
   }
   if (opponentWentOut) {
-    return `${opponentName} went out. Your leftover tiles were rounded into ${pointsLabel} for them.`;
+    const wentOut =
+      opponentName === 'Fritz'
+        ? `${opponentName} emptied his hand`
+        : `${opponentName} went out`;
+    return `${wentOut}. ${opponentName} collected ${pointsLabel}.`;
   }
   if (isBlocked) {
-    return `The hand blocked with no play left. Lowest combined pips earn ${pointsLabel}.`;
+    return `Hand blocked — lowest combined pips earn ${pointsLabel}.`;
   }
   return `Hand complete — ${pointsLabel} awarded.`;
+}
+
+export function buildRemainingTilesMetric(reveal: HandOverTileReveal): string {
+  const pipLabel = `${reveal.pipTotal} pip${reveal.pipTotal === 1 ? '' : 's'}`;
+  const tileLabel = `${reveal.tiles.length} tile${reveal.tiles.length === 1 ? '' : 's'}`;
+  return `${pipLabel} · ${tileLabel}`;
+}
+
+/** Short game-like line under the tile showcase (no point totals). */
+export function buildRemainingTilesEvidenceNote(reveal: HandOverTileReveal): string {
+  if (reveal.ownerLabel === 'You') return 'You left these tiles.';
+  return `${reveal.ownerLabel} left these tiles.`;
 }
 
 export function buildBotHandOverReveals(

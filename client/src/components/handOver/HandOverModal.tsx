@@ -1,10 +1,15 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { DominoTile } from '../DominoTile';
-import type { Tile } from '../../types';
+import type { FritzTier } from '../../bot/fritzConfig';
 import {
-  handOverTileSize,
-  type HandOverTileReveal,
-  type HandOverWinnerSide,
+  FRITZ_TIER_PVF_COLORS,
+  HAND_OVER_DEFAULT_ACCENT,
+} from '../../bot/fritzConfig';
+import type { Tile } from '../../types';
+import type { HandOverTileReveal, HandOverWinnerSide } from './handOverCopy';
+import {
+  buildRemainingTilesEvidenceNote,
+  buildRemainingTilesMetric,
 } from './handOverCopy';
 import './handOverModal.css';
 
@@ -25,17 +30,75 @@ export type HandOverModalProps = {
   progressTransitionMs?: number;
   footer?: ReactNode;
   learningRecap?: ReactNode;
+  /** When set (Play vs Fritz), accents follow tier; otherwise elite gold. */
+  accentTier?: FritzTier | null;
 };
+
+function resolveHandOverAccent(tier?: FritzTier | null): {
+  color: string;
+  tierClass: FritzTier;
+  usesPvfTier: boolean;
+} {
+  if (!tier) {
+    return { color: HAND_OVER_DEFAULT_ACCENT, tierClass: 'elite', usesPvfTier: false };
+  }
+  return {
+    color: FRITZ_TIER_PVF_COLORS[tier],
+    tierClass: tier,
+    usesPvfTier: true,
+  };
+}
+
+function handOverRewardCardStyle(accentColor: string): CSSProperties {
+  return {
+    borderColor: accentColor,
+    boxShadow: `inset 0 0 20px color-mix(in srgb, ${accentColor} 8%, transparent), 0 0 16px color-mix(in srgb, ${accentColor} 6%, transparent)`,
+  };
+}
 
 function tileKey(tile: Tile, index: number): string {
   return `${tile.low}-${tile.high}-${index}`;
 }
 
-function RemainingTileGrid({ tiles }: { tiles: Tile[] }) {
-  const size = handOverTileSize(tiles.length);
+function handOverShowcaseTileSize(tileCount: number): number {
+  if (tileCount <= 3) return 56;
+  if (tileCount <= 6) return 48;
+  if (tileCount <= 10) return 42;
+  return 36;
+}
+
+const IconCrown = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" />
+  </svg>
+);
+
+const IconPips = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+    <line x1="6" y1="20" x2="6" y2="14" />
+    <line x1="12" y1="20" x2="12" y2="4" />
+    <line x1="18" y1="20" x2="18" y2="10" />
+  </svg>
+);
+
+const IconTiles = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <rect x="5" y="2" width="14" height="20" rx="2" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+    <circle cx="12" cy="7" r="1.2" fill="currentColor" />
+    <circle cx="12" cy="17" r="1.2" fill="currentColor" />
+  </svg>
+);
+
+function RemainingTileTableau({ tiles }: { tiles: Tile[] }) {
+  const size = handOverShowcaseTileSize(tiles.length);
+  const compact = tiles.length <= 3;
 
   return (
-    <div className="hand-over-modal__tile-grid" aria-label={`${tiles.length} remaining tiles`}>
+    <div
+      className={`hand-over-modal__tile-tableau${compact ? ' hand-over-modal__tile-tableau--compact' : ''}`}
+      aria-label={`${tiles.length} remaining tiles`}
+    >
       {tiles.map((tile, index) => (
         <DominoTile
           key={tileKey(tile, index)}
@@ -48,13 +111,31 @@ function RemainingTileGrid({ tiles }: { tiles: Tile[] }) {
   );
 }
 
+function RemainingTilesSection({ reveal }: { reveal: HandOverTileReveal }) {
+  if (reveal.tiles.length === 0) return null;
+
+  return (
+    <div className="hand-over-modal__tiles-section">
+      <div className="hand-over-modal__tiles-head">
+        <div className="fritz-section-label hand-over-modal__tiles-label">Remaining Tiles</div>
+        <span className="hand-over-modal__tiles-metric">{buildRemainingTilesMetric(reveal)}</span>
+      </div>
+      <p className="fritz-summary-note hand-over-modal__tiles-note">
+        {buildRemainingTilesEvidenceNote(reveal)}
+      </p>
+      <div className="hand-over-modal__tiles-well">
+        <RemainingTileTableau tiles={reveal.tiles} />
+      </div>
+    </div>
+  );
+}
 
 export function HandOverModal({
   variant,
   pointsAwarded,
   reasonCopy,
   winnerLabel,
-  loserLabel,
+  loserLabel: _loserLabel,
   winnerSide,
   tileReveals,
   loserPips,
@@ -64,30 +145,35 @@ export function HandOverModal({
   progressTransitionMs,
   footer,
   learningRecap,
+  accentTier = null,
 }: HandOverModalProps) {
+  const { color: accentColor, tierClass, usesPvfTier } = resolveHandOverAccent(accentTier);
+  const panelStyle = { '--pvf-dynamic-color': accentColor } as CSSProperties;
   const showAutoAdvance = typeof progress === 'number';
   const clampedProgress = showAutoAdvance ? Math.max(0, Math.min(1, progress)) : 0;
-  const pointsLabel = `Point${pointsAwarded === 1 ? '' : 's'} awarded`;
-  const loserPipsLabel =
-    typeof loserPips === 'number'
-      ? `${loserPips} pip${loserPips === 1 ? '' : 's'} left`
-      : 'Hand complete';
   const scoredReveal = tileReveals.find((reveal) => reveal.isScoredHand && reveal.tiles.length > 0) ?? null;
   const secondaryReveal = tileReveals.find(
     (reveal) => reveal !== scoredReveal && reveal.tiles.length > 0,
   ) ?? null;
-  const clearedReveal = tileReveals.find((reveal) => reveal.tiles.length === 0) ?? null;
+  const outcomeKicker =
+    winnerSide === 'you'
+      ? 'You Won This Hand'
+      : winnerSide === 'tie'
+        ? 'Hand Tied'
+        : winnerSide === 'opponent' || winnerSide === 'bot'
+          ? `${winnerLabel} Won This Hand`
+          : 'Hand Complete';
   const leftoverPipsValue =
-    typeof loserPips === 'number' ? `${loserPips}` : '—';
-  const tilesStageNote = secondaryReveal && !clearedReveal
-    ? `${secondaryReveal.ownerLabel} also reveals ${secondaryReveal.tiles.length} tile${
-        secondaryReveal.tiles.length === 1 ? '' : 's'
-      } after the scoring hand.`
-    : winnerSide === 'tie'
-      ? 'Both hands are shown because the block was resolved on combined pips.'
-      : `${winnerLabel} takes ${pointsAwarded} point${
-          pointsAwarded === 1 ? '' : 's'
-        } from ${loserLabel}'s leftover pips.`;
+    typeof loserPips === 'number'
+      ? `${loserPips}`
+      : scoredReveal != null
+        ? `${scoredReveal.pipTotal}`
+        : '—';
+  const tilesLeftValue = scoredReveal != null ? `${scoredReveal.tiles.length}` : '—';
+  const pointsOwnerLabel = winnerLabel.toUpperCase();
+  const showTilesSection = scoredReveal != null || secondaryReveal != null;
+  const summaryIconColor =
+    winnerSide === 'you' ? accentColor : 'rgba(255, 255, 255, 0.72)';
 
   return (
     <div
@@ -97,118 +183,132 @@ export function HandOverModal({
       aria-labelledby="hand-over-modal-title"
     >
       <div
-        className={`game-over-card hand-over-modal hand-over-modal--${variant} hand-over-modal--winner-${winnerSide}`}
+        className={`game-over-card hand-over-modal hand-over-modal--${variant} hand-over-modal--winner-${winnerSide} tier-${tierClass}${usesPvfTier ? ' hand-over-modal--pvf-tier' : ''}`}
+        style={panelStyle}
         onClick={(event) => event.stopPropagation()}
       >
-        <section className="hand-over-modal__hero-shell" aria-label="Hand result">
-          <div className="hand-over-modal__hero">
-            <header className="hand-over-modal__top">
-              <div className="hand-over-modal__title-block">
-                <p className="hand-over-modal__kicker">Hand Complete</p>
-                <h3 id="hand-over-modal-title" className="hand-over-modal__title">
-                  Hand Over
-                </h3>
-                <p className="hand-over-modal__reason">{reasonCopy}</p>
+        <div className="hand-over-modal__panel">
+          <header className="hand-over-modal__hero" aria-label="Hand result">
+            <div className="pvf-header hand-over-modal__intro">
+              <div className="pvf-label">{outcomeKicker}</div>
+              <h3 id="hand-over-modal-title" className="pvf-title hand-over-modal__title">
+                Hand Over
+              </h3>
+              <p className="pvf-subtitle hand-over-modal__subtitle">{reasonCopy}</p>
+            </div>
+
+            <div
+              className="hand-over-modal__reward-card"
+              aria-label="Points awarded this hand"
+              style={handOverRewardCardStyle(accentColor)}
+            >
+              <span className="hand-over-modal__reward-label">Points Awarded</span>
+              <div
+                className={`hand-over-modal__reward-value${pointsAwarded === 0 ? ' is-zero' : ''}`}
+              >
+                +{pointsAwarded}
               </div>
-            </header>
+              <span className="hand-over-modal__reward-owner">{pointsOwnerLabel}</span>
+            </div>
+          </header>
 
-            <section className="hand-over-modal__award" aria-label="Points awarded this hand">
-              <div className={`hand-over-modal__award-shell${pointsAwarded === 0 ? ' is-zero' : ''}`}>
-                <span className="hand-over-modal__award-kicker">Points Awarded</span>
-                <div className="hand-over-modal__award-value">+{pointsAwarded}</div>
-                <div className="hand-over-modal__award-label">{winnerLabel}</div>
+          <div className="fritz-summary-strip fritz-summary-strip--mb-lg" aria-label="Hand summary">
+            <div
+              className={`fritz-summary-item${
+                winnerSide === 'you' ? ' hand-over-modal__summary-item--winner' : ''
+              }`}
+            >
+              <div className="fritz-summary-icon" style={{ color: summaryIconColor }}>
+                <IconCrown />
               </div>
-            </section>
+              <div>
+                <div className="fritz-summary-value">{winnerLabel}</div>
+                <div className="fritz-summary-key">Winner</div>
+              </div>
+            </div>
+            <div className="fritz-summary-divider" aria-hidden />
+            <div className="fritz-summary-item">
+              <div className="fritz-summary-icon fritz-summary-icon--tile">
+                <IconPips />
+              </div>
+              <div>
+                <div className="fritz-summary-value">{leftoverPipsValue}</div>
+                <div className="fritz-summary-key">Leftover Pips</div>
+              </div>
+            </div>
+            <div className="fritz-summary-divider" aria-hidden />
+            <div className="fritz-summary-item">
+              <div className="fritz-summary-icon fritz-summary-icon--tile">
+                <IconTiles />
+              </div>
+              <div>
+                <div className="fritz-summary-value">{tilesLeftValue}</div>
+                <div className="fritz-summary-key">Tiles Left</div>
+              </div>
+            </div>
           </div>
-        </section>
 
-        <section className="hand-over-modal__cards" aria-label="Result summary">
-          <article className="hand-over-modal__result-card">
-            <span className="hand-over-modal__result-card-label">Winner</span>
-            <strong className="hand-over-modal__result-card-value">{winnerLabel}</strong>
-          </article>
-          <article className="hand-over-modal__result-card">
-            <span className="hand-over-modal__result-card-label">Scored From</span>
-            <strong className="hand-over-modal__result-card-value">{loserLabel}</strong>
-          </article>
-          <article className="hand-over-modal__result-card">
-            <span className="hand-over-modal__result-card-label">Leftover Pips</span>
-            <strong className="hand-over-modal__result-card-value">{leftoverPipsValue}</strong>
-          </article>
-        </section>
-
-        <section className="hand-over-modal__section hand-over-modal__section--tiles" aria-label="Remaining tiles">
-          <div className="hand-over-modal__section-head">
-            <div className="fritz-section-label">Remaining Tiles</div>
-            {scoredReveal ? (
-              <span className="hand-over-modal__tiles-chip">
-                {scoredReveal.pipTotal} pip{scoredReveal.pipTotal === 1 ? '' : 's'} across {scoredReveal.tiles.length} tile
-                {scoredReveal.tiles.length === 1 ? '' : 's'}
-              </span>
-            ) : null}
-          </div>
-          <div className="hand-over-modal__tiles-stage">
-            <p className="hand-over-modal__tiles-stage-note">{tilesStageNote}</p>
-            {scoredReveal ? (
-              <article className="hand-over-modal__tiles-panel is-scored">
-                <div className="hand-over-modal__tile-tray">
-                  <RemainingTileGrid tiles={scoredReveal.tiles} />
-                </div>
-              </article>
-            ) : null}
-            {secondaryReveal ? (
-              <article className="hand-over-modal__tiles-panel hand-over-modal__tiles-panel--secondary">
-                <div className="hand-over-modal__tiles-head">
-                  <div className="hand-over-modal__tiles-copy">
-                    <h4 className="hand-over-modal__tiles-owner">{secondaryReveal.ownerLabel}</h4>
-                    <span className="hand-over-modal__tiles-meta">
-                      {secondaryReveal.isScoredHand ? 'Scored hand' : 'Also revealed'} · {secondaryReveal.pipTotal} pip
-                      {secondaryReveal.pipTotal === 1 ? '' : 's'}
+          {showTilesSection ? (
+            <div className="hand-over-modal__tiles-block" aria-label="Remaining tiles">
+              {scoredReveal ? <RemainingTilesSection reveal={scoredReveal} /> : null}
+              {secondaryReveal ? (
+                <div className="hand-over-modal__tiles-section hand-over-modal__tiles-section--secondary">
+                  <div className="hand-over-modal__tiles-head">
+                    <div className="fritz-section-label hand-over-modal__tiles-label">Also Revealed</div>
+                    <span className="hand-over-modal__tiles-metric">
+                      {buildRemainingTilesMetric(secondaryReveal)}
                     </span>
                   </div>
-                </div>
-                <div className="hand-over-modal__tile-tray hand-over-modal__tile-tray--secondary">
-                  <RemainingTileGrid tiles={secondaryReveal.tiles} />
-                </div>
-              </article>
-            ) : null}
-          </div>
-        </section>
-
-        {learningRecap}
-
-        {footer ??
-          (showAutoAdvance ? (
-            <footer className="hand-over-modal__section hand-over-modal__section--footer hand-over-modal__footer">
-              <div className="hand-over-modal__footer-card">
-                <div className="hand-over-modal__next-row">
-                  <div className="hand-over-modal__next-copy">
-                    <span className="hand-over-modal__next-label">{nextHandLabel}</span>
-                    <span className="hand-over-modal__next-hint">{nextHandHint}</span>
+                  <p className="fritz-summary-note hand-over-modal__tiles-note">
+                    {buildRemainingTilesEvidenceNote(secondaryReveal)}
+                  </p>
+                  <div className="hand-over-modal__tiles-well">
+                    <RemainingTileTableau tiles={secondaryReveal.tiles} />
                   </div>
-                  <span className="hand-over-modal__status-pill">Auto-Advancing</span>
                 </div>
-                <div
-                  className="hand-over-modal__progress-track"
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(clampedProgress * 100)}
-                  aria-label="Time until next hand"
-                >
-                  <div
-                    className="hand-over-modal__progress-fill"
-                    style={{
-                      width: `${clampedProgress * 100}%`,
-                      transition: progressTransitionMs
-                        ? `width ${progressTransitionMs}ms linear`
-                        : undefined,
-                    }}
-                  />
-                </div>
-              </div>
-            </footer>
-          ) : null)}
+              ) : null}
+            </div>
+          ) : null}
+
+          {learningRecap}
+
+          <div className="hand-over-modal__actions">
+            {footer ??
+              (showAutoAdvance ? (
+                <footer className="hand-over-modal__footer">
+                  <div className="hand-over-modal__auto-advance">
+                    <div className="hand-over-modal__next-row">
+                      <div className="hand-over-modal__next-copy">
+                        <span className="fritz-section-label hand-over-modal__next-label">
+                          {nextHandLabel}
+                        </span>
+                        <span className="fritz-summary-note">{nextHandHint}</span>
+                      </div>
+                      <span className="hand-over-modal__status-pill">Auto-Advancing</span>
+                    </div>
+                    <div
+                      className="hand-over-modal__progress-track"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(clampedProgress * 100)}
+                      aria-label="Time until next hand"
+                    >
+                      <div
+                        className="hand-over-modal__progress-fill"
+                        style={{
+                          width: `${clampedProgress * 100}%`,
+                          transition: progressTransitionMs
+                            ? `width ${progressTransitionMs}ms linear`
+                            : undefined,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </footer>
+              ) : null)}
+          </div>
+        </div>
       </div>
     </div>
   );

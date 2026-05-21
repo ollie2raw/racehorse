@@ -5,6 +5,16 @@ export const FRITZ_MASTER_ID = '00000000-0000-0000-0000-000000000004';
 
 export type FritzTier = 'rookie' | 'standard' | 'elite' | 'master';
 
+/** Play vs Fritz UI accent hex (matches PlayVsFritz.tsx TIER_COLORS). */
+export const FRITZ_TIER_PVF_COLORS: Record<FritzTier, string> = {
+  rookie: '#4ADE80',
+  standard: '#3B82F6',
+  elite: '#E7B64A',
+  master: '#A855F7',
+};
+
+export const HAND_OVER_DEFAULT_ACCENT = FRITZ_TIER_PVF_COLORS.elite;
+
 export const FRITZ_TIERS = {
   rookie: {
     id: FRITZ_ROOKIE_ID,

@@ -111,6 +111,8 @@ export interface LessonV2Event {
    * Authors edit this in the authoring UI.
    */
   coachingText: string;
+  /** Optional short copy for the coach card preview; full tip uses coachingText body. */
+  coachingSummary?: string;
 }
 
 /**

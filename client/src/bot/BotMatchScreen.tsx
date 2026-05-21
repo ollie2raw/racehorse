@@ -240,6 +240,7 @@ type GuidedCoachViewModel = {
   stepIndex: number;
   totalSteps: number;
   coachingText: string;
+  coachingSummary?: string;
   canBestMove: boolean;
   isOffAuthoredLine: boolean;
 };
@@ -247,22 +248,50 @@ type GuidedCoachViewModel = {
 type GuidedLessonCoachContent = {
   title: string;
   bodyParagraphs: string[];
+  summary: string | null;
 };
 
-const GUIDED_PUBLIC_COACHING_LONG_CHAR_THRESHOLD = 520;
-const GUIDED_PUBLIC_COACHING_LONG_PARAGRAPH_THRESHOLD = 3;
+const GUIDED_COACH_PREVIEW_MAX_CHARS = 600;
+const GUIDED_COACH_MORE_MIN_EXTRA_CHARS = 16;
+
+const COACHING_SUMMARY_BLOCK_RE = /^@summary\s*\r?\n([\s\S]*?)\r?\n---\r?\n/i;
+
+function splitCoachingSummaryBlock(raw: string): { summary: string | null; body: string } {
+  const match = raw.match(COACHING_SUMMARY_BLOCK_RE);
+  if (!match) return { summary: null, body: raw };
+  return {
+    summary: match[1]?.trim() || null,
+    body: match[2] ?? '',
+  };
+}
+
+function buildCoachPreviewText(bodyText: string, summary: string | null): string {
+  if (summary?.trim()) return summary.trim();
+  const normalized = bodyText.replace(/\n+/g, ' ').trim();
+  if (normalized.length <= GUIDED_COACH_PREVIEW_MAX_CHARS) return normalized;
+  const slice = normalized.slice(0, GUIDED_COACH_PREVIEW_MAX_CHARS);
+  const lastSpace = slice.lastIndexOf(' ');
+  const cut = lastSpace > GUIDED_COACH_PREVIEW_MAX_CHARS * 0.65 ? slice.slice(0, lastSpace) : slice;
+  return `${cut.trim()}…`;
+}
 
 function formatLessonTileLabel(tileKey: string | null | undefined): string | null {
   if (!tileKey) return null;
   return tileKey.replace(/\|/g, '-');
 }
 
-function parseGuidedLessonCoachContent(coachingText: string): GuidedLessonCoachContent {
-  const normalized = coachingText.replace(/\r\n/g, '\n').trim();
+function parseGuidedLessonCoachContent(
+  coachingText: string,
+  explicitSummary?: string | null,
+): GuidedLessonCoachContent {
+  const { summary: inlineSummary, body: coachingBody } = splitCoachingSummaryBlock(coachingText);
+  const summary = explicitSummary?.trim() || inlineSummary;
+  const normalized = coachingBody.replace(/\r\n/g, '\n').trim();
   if (!normalized) {
     return {
       title: 'Your decision',
       bodyParagraphs: ['Study the board, compare your options, and follow the coached line.'],
+      summary,
     };
   }
 
@@ -287,6 +316,7 @@ function parseGuidedLessonCoachContent(coachingText: string): GuidedLessonCoachC
   return {
     title,
     bodyParagraphs: safeBodyParagraphs,
+    summary,
   };
 }
 
@@ -1193,6 +1223,13 @@ export default function BotMatchScreen({
     userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
+  const handOverUsesPlayVsFritzTierAccent =
+    mode === 'bot' &&
+    !isGuidedMode &&
+    !isAuthoringMode &&
+    !isAuthoringV2Mode &&
+    !isGuidedV2Mode &&
+    !isDailyPuzzleRun;
 
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
@@ -2962,11 +2999,6 @@ export default function BotMatchScreen({
     return currentV2CursorEvent;
   }, [currentV2CursorEvent]);
 
-  /** Next player event after the cursor — coaching copy only (may look ahead). */
-  const upcomingV2PlayerEvent = useMemo(() => {
-    if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return null;
-    return nextPlayerEvent(frozenV2Lesson.events, guidedV2EventIndex);
-  }, [isGuidedV2Mode, frozenV2Lesson, guidedV2EventIndex, isGuidedV2OffLine]);
   const activePlacementMoves = useMemo(
     () =>
       isGuidedV2Mode && !isGuidedV2OffLine && currentExpectedV2PlayerEvent?.action === 'play'
@@ -3192,16 +3224,11 @@ export default function BotMatchScreen({
     return getGuidedV1AuthoredStepByIndex(frozenLesson, lessonStepIndex);
   }, [isGuidedMode, frozenLesson, match.handOver, match.gameOver, lessonStepIndex]);
 
-  /**
-   * Coaching text for the V2 guided lesson.
-   * Looks ahead from the current cursor to the next player-actor event and
-   * returns its coachingText.  Recomputes whenever the cursor advances so the
-   * coach always shows guidance for the UPCOMING player move.
-   */
+  /** Coaching text for the V2 cursor player event only (never the next queued player event). */
   const currentV2CoachingText = useMemo(() => {
     if (!isGuidedV2Mode || !frozenV2Lesson || isGuidedV2OffLine) return '';
-    return upcomingV2PlayerEvent?.coachingText ?? '';
-  }, [isGuidedV2Mode, frozenV2Lesson, isGuidedV2OffLine, upcomingV2PlayerEvent]);
+    return currentExpectedV2PlayerEvent?.coachingText ?? '';
+  }, [isGuidedV2Mode, frozenV2Lesson, isGuidedV2OffLine, currentExpectedV2PlayerEvent]);
 
   const authoringV2PlayerMoveIndex = useMemo(
     () => authoringV2Events.filter((event) => event.actor === 'player' && event.action === 'play').length,
@@ -4283,7 +4310,7 @@ export default function BotMatchScreen({
    */
   const playLessonBestMove = () => {
     if (!isGuidedTranscriptMode && !isGuidedV1MinimalMode && !isGuidedV1OnlineMode && !isGuidedV2Mode) return;
-    if (match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
+    if (!canPlayCoachedMove || match.currentPlayer !== 'you' || match.handOver || match.gameOver) return;
 
     if (isGuidedV2Mode && frozenV2Lesson && !isGuidedV2OffLine) {
       const expected = currentExpectedV2PlayerEvent;
@@ -6245,6 +6272,8 @@ export default function BotMatchScreen({
     !isGuidedV2OffLine &&
     currentV2CursorEvent?.actor === 'fritz';
 
+  const isHandOverTransitionOpen = Boolean(handReveal) || isTransitioningRef.current;
+
   const isAwaitingPlayerTurnAction =
     handActive &&
     match.currentPlayer === 'you' &&
@@ -6255,7 +6284,24 @@ export default function BotMatchScreen({
     !isGuidedV2FritzResolving &&
     (!isGuidedV2Mode || isGuidedV2OffLine || currentV2CursorEvent?.actor === 'player');
 
-  const lessonRecommendedTileKey = !isAwaitingPlayerTurnAction
+  /** Player may see authored coaching, recommendations, and Play Move. */
+  const showPlayerCoaching =
+    isLessonLayoutMode &&
+    isAwaitingPlayerTurnAction &&
+    !match.handOver &&
+    !match.gameOver &&
+    !isHandOverTransitionOpen;
+
+  const showFritzCoachingPanel =
+    isLessonLayoutMode &&
+    !showPlayerCoaching &&
+    !isHandOverTransitionOpen &&
+    !match.gameOver &&
+    (isGuidedV2FritzResolving || (botTurn && !drawSequenceActive));
+
+  const canPlayCoachedMove = showPlayerCoaching;
+
+  const lessonRecommendedTileKey = !showPlayerCoaching
     ? null
     : isGuidedV2Mode && !isGuidedV2OffLine
       ? currentExpectedV2PlayerEvent?.action === 'play'
@@ -6299,8 +6345,9 @@ export default function BotMatchScreen({
           return {
             stepIndex: lessonStepIndex,
             totalSteps: guidedTranscript.turns.length,
-            coachingText: currentTranscriptTurn?.coachingText ?? '',
+            coachingText: showPlayerCoaching ? (currentTranscriptTurn?.coachingText ?? '') : '',
             canBestMove:
+              showPlayerCoaching &&
               !isOffAuthoredLine &&
               currentTranscriptTurn?.expectedPlayerMove.type === 'play' &&
               userPlayMoves.length > 0,
@@ -6311,8 +6358,9 @@ export default function BotMatchScreen({
           return {
             stepIndex: lessonStepIndex,
             totalSteps: getGuidedV1OrderedAuthoredSteps(frozenLesson).length,
-            coachingText: currentLessonStep?.coachingText ?? '',
+            coachingText: showPlayerCoaching ? (currentLessonStep?.coachingText ?? '') : '',
             canBestMove: Boolean(
+              showPlayerCoaching &&
               !isOffAuthoredLine &&
               currentLessonStep?.chosenMove &&
               currentLessonStep.chosenMove !== 'draw' &&
@@ -6340,8 +6388,12 @@ export default function BotMatchScreen({
               .slice(0, guidedV2EventIndex)
               .filter((event) => event.actor === 'player' && event.action === 'play').length,
             totalSteps: Math.max(totalPlayerPlays, 1),
-            coachingText: currentV2CoachingText,
+            coachingText: showPlayerCoaching ? currentV2CoachingText : '',
+            coachingSummary: showPlayerCoaching
+              ? currentExpectedV2PlayerEvent?.coachingSummary
+              : undefined,
             canBestMove: Boolean(
+              showPlayerCoaching &&
               !isGuidedV2OffLine &&
               currentExpectedV2PlayerEvent &&
               currentExpectedV2PlayerEvent.actor === 'player' &&
@@ -6365,49 +6417,129 @@ export default function BotMatchScreen({
     : 0;
   const lessonCoachProgressLabel = `${lessonCoachProgressCount} / ${lessonCoachProgressTotal}`;
   const lessonCoachContent = useMemo(
-    () => parseGuidedLessonCoachContent(lessonCoachVm?.coachingText ?? ''),
-    [lessonCoachVm?.coachingText],
+    () => parseGuidedLessonCoachContent(
+      lessonCoachVm?.coachingText ?? '',
+      lessonCoachVm?.coachingSummary,
+    ),
+    [lessonCoachVm?.coachingText, lessonCoachVm?.coachingSummary],
   );
   const lessonCoachBodyText = useMemo(
     () => lessonCoachContent.bodyParagraphs.join('\n\n'),
     [lessonCoachContent.bodyParagraphs],
   );
-  const shouldClampLessonCoach = useMemo(
-    () =>
-      lessonCoachBodyText.length > GUIDED_PUBLIC_COACHING_LONG_CHAR_THRESHOLD ||
-      lessonCoachContent.bodyParagraphs.length >= GUIDED_PUBLIC_COACHING_LONG_PARAGRAPH_THRESHOLD,
-    [lessonCoachBodyText.length, lessonCoachContent.bodyParagraphs.length],
+  const lessonCoachPreviewText = useMemo(
+    () => buildCoachPreviewText(lessonCoachBodyText, lessonCoachContent.summary),
+    [lessonCoachBodyText, lessonCoachContent.summary],
   );
+  const showCoachMoreButton = useMemo(() => {
+    if (!showPlayerCoaching || lessonCoachVm?.isOffAuthoredLine) return false;
+    const body = lessonCoachBodyText.trim();
+    if (!body) return false;
+    return body.length > lessonCoachPreviewText.length + GUIDED_COACH_MORE_MIN_EXTRA_CHARS;
+  }, [
+    lessonCoachBodyText,
+    lessonCoachPreviewText,
+    lessonCoachVm?.isOffAuthoredLine,
+    showPlayerCoaching,
+  ]);
   const lessonRecommendedTileLabel = formatLessonTileLabel(lessonRecommendedTileKey);
   const showCoachedRecommendation =
-    isLessonLayoutMode &&
+    showPlayerCoaching &&
     showRecommendation &&
-    isAwaitingPlayerTurnAction &&
-    !match.handOver &&
-    !match.gameOver &&
     Boolean(lessonCoachVm?.canBestMove);
+
+  const lessonBoardPlacementMoves = showPlayerCoaching ? activePlacementMoves : [];
+
+  const lessonCoachPanelContent = useMemo(() => {
+    if (!lessonCoachVm) return null;
+    if (lessonCoachVm.isOffAuthoredLine) {
+      return {
+        title: 'Live position',
+        bodyParagraphs: [
+          'You went off the authored line. This hand continues live from here, so the coaching now follows the live position.',
+        ],
+        previewText: '',
+        showMore: false,
+        showFooter: false,
+        progressChipLabel: lessonCoachProgressLabel,
+        contextChips: [] as string[],
+      };
+    }
+    if (showFritzCoachingPanel) {
+      return {
+        title: 'Fritz is playing',
+        bodyParagraphs: [
+          'Watch the board change. Your next coaching tip appears when it is your turn.',
+        ],
+        previewText: '',
+        showMore: false,
+        showFooter: false,
+        progressChipLabel: 'Fritz turn',
+        contextChips: ['Fritz turn'],
+      };
+    }
+    if (isHandOverTransitionOpen) {
+      return {
+        title: 'Hand complete',
+        bodyParagraphs: ['Review the hand result, then continue when you are ready.'],
+        previewText: '',
+        showMore: false,
+        showFooter: false,
+        progressChipLabel: lessonCoachProgressLabel,
+        contextChips: [] as string[],
+      };
+    }
+    if (showPlayerCoaching) {
+      return {
+        title: lessonCoachContent.title,
+        bodyParagraphs: lessonCoachContent.bodyParagraphs,
+        previewText: lessonCoachPreviewText,
+        showMore: showCoachMoreButton,
+        showFooter: true,
+        progressChipLabel: lessonCoachProgressLabel,
+        contextChips: [
+          currentExpectedV2PlayerEvent ? `Hand ${currentExpectedV2PlayerEvent.handNumber}` : '',
+          `Move ${lessonCoachProgressCount}`,
+          lessonRecommendedTileLabel ? `Play ${lessonRecommendedTileLabel}` : '',
+        ].filter(Boolean),
+      };
+    }
+    return {
+      title: 'Guided Match',
+      bodyParagraphs: ['Coaching will appear when it is your turn to play.'],
+      previewText: '',
+      showMore: false,
+      showFooter: false,
+      progressChipLabel: lessonCoachProgressLabel,
+      contextChips: [] as string[],
+    };
+  }, [
+    currentExpectedV2PlayerEvent,
+    isHandOverTransitionOpen,
+    lessonCoachContent.bodyParagraphs,
+    lessonCoachContent.title,
+    lessonCoachPreviewText,
+    lessonCoachProgressCount,
+    lessonCoachProgressLabel,
+    lessonCoachVm,
+    lessonRecommendedTileLabel,
+    showCoachMoreButton,
+    showFritzCoachingPanel,
+    showPlayerCoaching,
+  ]);
 
   useEffect(() => {
     setShowFullCoachTip(false);
   }, [lessonCoachVm?.stepIndex]);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    if (!isLessonLayoutMode || !shouldClampLessonCoach) return;
-    console.warn('[guided-match-ui] coaching body is long; consider shortening', {
-      stepIndex: lessonCoachVm?.stepIndex,
-      title: lessonCoachContent.title,
-      chars: lessonCoachBodyText.length,
-      paragraphs: lessonCoachContent.bodyParagraphs.length,
-    });
-  }, [
-    isLessonLayoutMode,
-    shouldClampLessonCoach,
-    lessonCoachVm?.stepIndex,
-    lessonCoachContent.title,
-    lessonCoachBodyText.length,
-    lessonCoachContent.bodyParagraphs.length,
-  ]);
+    if (!showFullCoachTip) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowFullCoachTip(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showFullCoachTip]);
 
   const handTray = (
     <div
@@ -6748,7 +6880,7 @@ export default function BotMatchScreen({
         )}
         <Board
           board={match.board}
-          legalMoves={activePlacementMoves}
+          legalMoves={isLessonLayoutMode ? lessonBoardPlacementMoves : activePlacementMoves}
           selectedTile={selectedTile}
           handNumber={match.handNumber}
           handOver={match.handOver}
@@ -6880,6 +7012,7 @@ export default function BotMatchScreen({
         <GameOverlayPortal>
           <HandOverModal
             variant="sp"
+            accentTier={handOverUsesPlayVsFritzTierAccent ? fritzTier : null}
             pointsAwarded={handReveal.pointsAwarded}
             winnerSide={resolveWinnerSide(handReveal.winner)}
             winnerLabel={winnerDisplayLabel(resolveWinnerSide(handReveal.winner), opponentLabel)}
@@ -6951,13 +7084,11 @@ export default function BotMatchScreen({
                 </footer>
               ) : isGuidedMode || isGuidedV2Mode ? (
                 <footer className="hand-over-modal__footer">
-                  <button
-                    type="button"
-                    className="mode-inline-btn guided-next-hand-btn"
-                    onClick={advanceHand}
-                    style={{ position: 'relative', zIndex: 2 }}
-                  >
-                    Next Hand →
+                  <button type="button" className="pvf-start-btn" onClick={advanceHand}>
+                    <span>Next Hand</span>
+                    <span className="pvf-start-arrow" aria-hidden>
+                      ›
+                    </span>
                   </button>
                 </footer>
               ) : undefined
@@ -7476,12 +7607,12 @@ export default function BotMatchScreen({
                     <div className="learn-guided-hero-card__header-meta">
                       <p className="learn-guided-hero-card__eyebrow">Fritz Coach</p>
                       <div className="learn-guided-hero-card__progress-chip">
-                        <span>Move</span>
-                        <strong>{lessonCoachProgressLabel}</strong>
+                        <span>{showFritzCoachingPanel ? 'Turn' : 'Move'}</span>
+                        <strong>{lessonCoachPanelContent?.progressChipLabel ?? lessonCoachProgressLabel}</strong>
                       </div>
                     </div>
                     <h2 className="learn-guided-hero-card__title">
-                      {lessonCoachVm?.isOffAuthoredLine ? 'Live position' : lessonCoachContent.title}
+                      {lessonCoachPanelContent?.title ?? 'Hand Over'}
                     </h2>
                     <div className="learn-guided-hero-card__progress-rail" aria-hidden="true">
                       <div
@@ -7494,41 +7625,39 @@ export default function BotMatchScreen({
                   <div className="learn-guided-hero-card__divider" aria-hidden="true" />
 
                   <div className="learn-guided-hero-card__body-wrap">
-                    <div className={`learn-guided-hero-card__body${shouldClampLessonCoach ? ' is-clamped' : ''}`}>
-                      {lessonCoachVm?.isOffAuthoredLine ? (
-                        <p className="learn-guided-hero-card__paragraph">
-                          You went off the authored line. This hand continues live from here, so the coaching now follows the live position.
-                        </p>
-                      ) : shouldClampLessonCoach ? (
+                    <div className="learn-guided-hero-card__body">
+                      {lessonCoachPanelContent?.showMore ? (
                         <p className="learn-guided-hero-card__paragraph learn-guided-hero-card__paragraph--preview">
-                          {lessonCoachBodyText.replace(/\n+/g, ' ').trim()}
+                          {lessonCoachPanelContent.previewText}
                         </p>
                       ) : (
-                        lessonCoachContent.bodyParagraphs.map((paragraph, index) => (
+                        (lessonCoachPanelContent?.bodyParagraphs ?? []).map((paragraph, index) => (
                           <p key={`${index}-${paragraph.slice(0, 24)}`} className="learn-guided-hero-card__paragraph">
                             {paragraph}
                           </p>
                         ))
                       )}
                     </div>
+                    {lessonCoachPanelContent?.showMore ? (
+                      <div className="learn-guided-hero-card__more-row">
+                        <button
+                          type="button"
+                          className="learn-guided-hero-card__more-btn"
+                          onClick={() => setShowFullCoachTip(true)}
+                          aria-expanded={showFullCoachTip}
+                          aria-haspopup="dialog"
+                        >
+                          More
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                  {!lessonCoachVm?.isOffAuthoredLine && shouldClampLessonCoach ? (
-                    <div className="learn-guided-hero-card__more-row">
-                      <button
-                        type="button"
-                        className="learn-guided-hero-card__more-btn"
-                        onClick={() => setShowFullCoachTip((prev) => !prev)}
-                      >
-                        {showFullCoachTip ? 'Less' : 'More'}
-                      </button>
-                    </div>
-                  ) : null}
-                  {!lessonCoachVm?.isOffAuthoredLine && currentExpectedV2PlayerEvent ? (
+                  {lessonCoachPanelContent?.showFooter ? (
                     <div className="learn-guided-hero-card__footer" aria-label="Lesson utilities">
                       <div className="learn-guided-hero-card__context-strip" aria-label="Decision context">
-                        <span>Hand {currentExpectedV2PlayerEvent.handNumber}</span>
-                        <span>Move {lessonCoachProgressCount}</span>
-                        {lessonRecommendedTileLabel ? <span>Play {lessonRecommendedTileLabel}</span> : null}
+                        {(lessonCoachPanelContent.contextChips ?? []).map((chip) => (
+                          <span key={chip}>{chip}</span>
+                        ))}
                       </div>
                       <div className="learn-guided-hero-card__action-row">
                         {showLessonCoachPanel ? (
@@ -7543,11 +7672,19 @@ export default function BotMatchScreen({
                         <button
                           type="button"
                           className="learn-guided-hero-card__action-primary"
-                          disabled={!lessonCoachVm?.canBestMove}
+                          disabled={!canPlayCoachedMove || !lessonCoachVm?.canBestMove}
                           onClick={playLessonBestMove}
                         >
                           Play Move
                         </button>
+                      </div>
+                    </div>
+                  ) : lessonCoachPanelContent?.contextChips?.length ? (
+                    <div className="learn-guided-hero-card__footer learn-guided-hero-card__footer--compact" aria-label="Turn status">
+                      <div className="learn-guided-hero-card__context-strip" aria-label="Turn context">
+                        {lessonCoachPanelContent.contextChips.map((chip) => (
+                          <span key={chip}>{chip}</span>
+                        ))}
                       </div>
                     </div>
                   ) : null}
@@ -7567,10 +7704,13 @@ export default function BotMatchScreen({
                     data-ui="guided-fritz-draw-anchor"
                   >
                     <div>
+                      <div className="fritz-summary-key">{opponentLabel}</div>
                       <div className="fritz-summary-value">
                         <AnimatedScore value={match.players.bot.score} className="learn-guided-summary-score" />
                       </div>
-                      <div className="fritz-summary-key">{opponentLabel}</div>
+                      <span className="learn-guided-summary-tiles" aria-label={`${opponentLabel} has ${match.players.bot.hand.length} tiles remaining`}>
+                        {match.players.bot.hand.length} {match.players.bot.hand.length === 1 ? 'tile' : 'tiles'}
+                      </span>
                     </div>
                   </button>
                   <div className="fritz-summary-divider" aria-hidden />
@@ -7581,10 +7721,13 @@ export default function BotMatchScreen({
                     aria-label="Open score track"
                   >
                     <div>
+                      <div className="fritz-summary-key">You</div>
                       <div className="fritz-summary-value">
                         <AnimatedScore value={match.players.you.score} className="learn-guided-summary-score" />
                       </div>
-                      <div className="fritz-summary-key">You</div>
+                      <span className="learn-guided-summary-tiles learn-guided-summary-tiles--you" aria-label={`You have ${match.players.you.hand.length} tiles remaining`}>
+                        {match.players.you.hand.length} {match.players.you.hand.length === 1 ? 'tile' : 'tiles'}
+                      </span>
                     </div>
                   </button>
                   <div className="fritz-summary-divider learn-guided-summary-divider--turn" aria-hidden />
@@ -7665,7 +7808,7 @@ export default function BotMatchScreen({
         </GameOverlayPortal>
       )}
 
-      {isLessonLayoutMode && showFullCoachTip && !lessonCoachVm?.isOffAuthoredLine ? (
+      {isLessonLayoutMode && showFullCoachTip && showPlayerCoaching && !lessonCoachVm?.isOffAuthoredLine ? (
         <GameOverlayPortal>
           <div
             className="learn-guided-coach-modal"
@@ -7685,7 +7828,7 @@ export default function BotMatchScreen({
                   className="learn-guided-coach-modal__close"
                   onClick={() => setShowFullCoachTip(false)}
                 >
-                  Less
+                  Close
                 </button>
               </div>
               <h2 className="learn-guided-coach-modal__title">{lessonCoachContent.title}</h2>

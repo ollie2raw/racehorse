@@ -1,56 +1,53 @@
-/* Hand Over modal aligned to the Play vs Fritz right-panel language. */
+/* Hand Over — Play vs Fritz panel grammar (shared Fritz primitives + PVF tokens) */
 
-.hand-over-modal-overlay {
-  z-index: 1500;
-  background: rgba(3, 7, 14, 0.84);
+@import '../../styles/_fritz-screen-shell.css';
+
+.hand-over-modal-overlay.game-over-overlay {
+  padding: 24px;
+  background: rgba(4, 11, 23, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-.hand-over-modal {
-  --ho-accent: var(--tier-standard);
-  --ho-accent-soft: color-mix(in srgb, var(--ho-accent) 10%, transparent);
-  --ho-accent-border: color-mix(in srgb, var(--ho-accent) 30%, transparent);
-  --ho-panel-bg: rgba(7, 9, 16, 0.94);
-  --ho-card-bg: rgba(255, 255, 255, 0.03);
-  --ho-card-bg-strong: rgba(255, 255, 255, 0.045);
-  --ho-border: rgba(255, 255, 255, 0.09);
-  --ho-border-soft: rgba(255, 255, 255, 0.08);
-  --ho-muted: #8891a0;
-  --ho-copy: rgba(242, 238, 232, 0.76);
-  --ho-ink: #f2eee8;
+/* Outer shell ≈ .pvf-control-panel */
+.hand-over-modal.game-over-card {
+  --pvf-dynamic-color: var(--color-elite, #e7b64a);
+  --pvf-active-color: var(--pvf-dynamic-color);
+  --pvf-text: #f2eee8;
+  --pvf-muted: #8891a0;
+  --pvf-radius-lg: 20px;
+  --pvf-radius-md: 14px;
+  --pvf-radius-sm: 12px;
 
-  width: min(1020px, calc(100vw - 56px));
-  max-height: calc(100vh - 88px);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  overflow: auto;
-  padding: 34px 38px;
-  border: 1px solid var(--ho-border);
-  border-radius: 20px;
-  background: var(--ho-panel-bg);
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  display: block;
+  overflow: hidden;
+  color: var(--pvf-text);
+  font-family: var(--font-body);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--pvf-radius-lg);
+  background: rgba(7, 9, 16, 0.92);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 8px 32px rgba(0, 0, 0, 0.28);
-  color: var(--ho-ink);
-  animation: hand-over-modal-enter 220ms var(--ease-premium);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: hand-over-modal-enter 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.hand-over-modal--winner-you {
-  --ho-accent: var(--tier-elite, #e7b64a);
-}
-
-.hand-over-modal--winner-opponent,
-.hand-over-modal--winner-bot,
 .hand-over-modal--winner-tie,
 .hand-over-modal--winner-none {
-  --ho-accent: var(--tier-standard);
+  --pvf-dynamic-color: rgba(242, 238, 232, 0.72);
 }
 
 @keyframes hand-over-modal-enter {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.985);
+    transform: translateY(12px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -58,300 +55,269 @@
   }
 }
 
-.hand-over-modal__section {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
+.hand-over-modal__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 32px 24px;
+  min-height: 0;
 }
 
-.hand-over-modal__hero-shell {
-  padding: 0 0 4px;
-}
+/* ── Hero row (pvf-header + selected-card reward) ── */
 
 .hand-over-modal__hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 292px);
-  align-items: stretch;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 20px 24px;
+  padding-bottom: 4px;
 }
 
-.hand-over-modal__top,
-.hand-over-modal__title-block {
-  min-width: 0;
+.hand-over-modal__intro.pvf-header {
+  margin-bottom: 0 !important;
+  padding: 0;
+  width: auto;
+}
+
+.hand-over-modal__intro .pvf-label {
+  margin-bottom: 6px !important;
+}
+
+.hand-over-modal__title.pvf-title {
+  font-size: clamp(36px, 4.2vw, 44px);
+  margin: 0 0 8px;
+  text-shadow: none;
+}
+
+.hand-over-modal__subtitle.pvf-subtitle {
+  font-size: 15px;
+  max-width: 28em;
+}
+
+/* Reward card ≈ compact .pvf-tier-card--selected */
+.hand-over-modal__reward-card {
+  flex-shrink: 0;
   display: grid;
-  gap: 10px;
+  justify-items: center;
+  gap: 4px;
+  min-width: 140px;
+  padding: 14px 18px 12px;
+  border-radius: var(--pvf-radius-md);
+  border: 2px solid var(--pvf-dynamic-color);
+  background: color-mix(in srgb, var(--pvf-dynamic-color) 7%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.hand-over-modal__top {
-  padding: 22px 24px;
-  border: 1px solid var(--ho-border-soft);
-  border-radius: 16px;
-  background: var(--ho-card-bg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.hand-over-modal__kicker,
-.hand-over-modal__next-label {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.hand-over-modal__kicker {
-  color: var(--ho-accent);
-}
-
-.hand-over-modal__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 52px;
-  font-weight: 800;
-  line-height: 0.94;
-  letter-spacing: -0.03em;
-  color: var(--ho-ink);
-}
-
-.hand-over-modal__reason {
-  max-width: 40rem;
-  margin: 0;
-  font-family: var(--font-body);
-  font-size: 15.5px;
-  font-weight: 400;
-  line-height: 1.5;
-  color: var(--ho-copy);
-}
-
-.hand-over-modal__award {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.hand-over-modal__award-shell {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-  padding: 22px 24px;
-  border: 1px solid var(--ho-accent-border);
-  border-radius: 14px;
-  background: var(--ho-accent-soft);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 0 0 1px rgba(255, 255, 255, 0.02);
-}
-
-.hand-over-modal__award-shell.is-zero {
-  background: rgba(255, 255, 255, 0.035);
+.hand-over-modal--winner-tie .hand-over-modal__reward-card,
+.hand-over-modal--winner-none .hand-over-modal__reward-card {
   border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.hand-over-modal__award-kicker {
+.hand-over-modal__reward-label {
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(242, 238, 232, 0.62);
+  color: rgba(255, 255, 255, 0.38);
 }
 
-.hand-over-modal__award-value {
-  font-family: var(--font-display);
-  font-size: 76px;
+.hand-over-modal__reward-value {
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(44px, 5vw, 52px);
   font-weight: 800;
-  line-height: 0.84;
+  line-height: 0.9;
   letter-spacing: -0.03em;
-  color: var(--ho-accent);
-  text-align: left;
+  color: var(--pvf-dynamic-color);
 }
 
-.hand-over-modal__award-label {
+.hand-over-modal__reward-value.is-zero {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.hand-over-modal__reward-owner {
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: 0.14em;
-  text-align: left;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(242, 238, 232, 0.84);
+  color: rgba(255, 255, 255, 0.62);
 }
 
-.hand-over-modal__cards {
+.hand-over-modal--winner-you .hand-over-modal__reward-owner,
+.hand-over-modal--winner-bot .hand-over-modal__reward-owner,
+.hand-over-modal--winner-opponent .hand-over-modal__reward-owner {
+  color: var(--pvf-dynamic-color);
+}
+
+.hand-over-modal.tier-rookie {
+  --pvf-active-color: var(--color-rookie, #4ade80);
+}
+
+.hand-over-modal.tier-standard {
+  --pvf-active-color: var(--color-standard, #3b82f6);
+}
+
+.hand-over-modal.tier-elite {
+  --pvf-active-color: var(--color-elite, #e7b64a);
+}
+
+.hand-over-modal.tier-master {
+  --pvf-active-color: var(--color-master, #a855f7);
+}
+
+/* ── Match summary strip (direct fritz-summary-strip reuse) ── */
+
+.hand-over-modal .fritz-summary-strip--mb-lg {
+  margin-bottom: 0;
+}
+
+.hand-over-modal .hand-over-modal__summary-item--winner .fritz-summary-value {
+  color: var(--pvf-dynamic-color);
+}
+
+/* ── Remaining tiles (pvf section + subtle card well) ── */
+
+.hand-over-modal__tiles-block {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 20px;
 }
 
-.hand-over-modal__result-card {
-  min-width: 0;
-  display: grid;
-  gap: 10px;
-  padding: 18px 18px 16px;
-  border: 1px solid var(--ho-border-soft);
-  border-radius: 14px;
-  background: var(--ho-card-bg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.hand-over-modal__result-card-label,
-.hand-over-modal__tiles-chip {
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-}
-
-.hand-over-modal__result-card-label {
-  color: rgba(255, 255, 255, 0.34);
-}
-
-.hand-over-modal__result-card-value {
-  min-width: 0;
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 31px;
-  font-weight: 800;
-  line-height: 0.96;
-  letter-spacing: -0.03em;
-  color: var(--ho-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hand-over-modal__section--tiles {
-  gap: 12px;
-}
-
-.hand-over-modal__section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.hand-over-modal__tiles-chip {
-  flex: 0 0 auto;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--ho-border-soft);
-  background: rgba(255, 255, 255, 0.04);
-  display: inline-flex;
-  align-items: center;
-  color: var(--ho-muted);
-}
-
-.hand-over-modal__tiles-stage {
-  display: grid;
-  gap: 10px;
-}
-
-.hand-over-modal__tiles-stage-note {
-  margin: 0;
-  font-family: var(--font-body);
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--ho-copy);
-  max-width: 46rem;
-}
-
-.hand-over-modal__tiles-panel {
+.hand-over-modal__tiles-section {
   display: grid;
   gap: 8px;
 }
 
-.hand-over-modal__tiles-panel--secondary {
-  margin-top: 2px;
+.hand-over-modal__tiles-section--secondary {
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.hand-over-modal__tiles-head,
-.hand-over-modal__tiles-copy {
-  display: grid;
-  gap: 4px;
+.hand-over-modal__tiles-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
 }
 
-.hand-over-modal__tiles-owner {
-  margin: 0;
+.hand-over-modal__tiles-label.fritz-section-label {
+  margin-bottom: 0;
+}
+
+.hand-over-modal__tiles-metric {
   font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  color: var(--ho-ink);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
 }
 
-.hand-over-modal__tiles-meta {
-  min-width: 0;
-  font-family: var(--font-body);
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--ho-muted);
+.hand-over-modal__tiles-note {
+  margin: 0;
 }
 
-.hand-over-modal__tile-tray {
+.hand-over-modal__tiles-well {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 126px;
-  padding: 14px 18px;
-  border: 1px solid var(--ho-border-soft);
-  border-radius: 16px;
-  background: rgba(9, 14, 24, 0.96);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 0 0 1px rgba(88, 166, 255, 0.06);
+  min-height: 120px;
+  padding: 20px 16px 16px;
+  border-radius: var(--fritz-card-radius-md);
+  border: 1px solid var(--fritz-card-border);
+  background: var(--fritz-card-bg);
+  box-shadow: var(--fritz-card-inset);
 }
 
-.hand-over-modal__tile-tray--secondary {
-  min-height: 104px;
-  background: rgba(8, 12, 20, 0.92);
-}
-
-.hand-over-modal__tile-grid {
-  width: 100%;
+.hand-over-modal__tile-tableau {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 14px 16px;
 }
 
-.hand-over-modal__tile-grid .hand-over-modal-tile .domino-body {
-  filter: none;
-  opacity: 1;
+.hand-over-modal__tile-tableau--compact {
+  gap: 16px 18px;
+}
+
+.hand-over-modal__tile-tableau .hand-over-modal-tile .domino-body {
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.4));
+}
+
+/* ── CTA ≈ .pvf-start-btn (Start Match) ── */
+
+.hand-over-modal__actions {
+  margin-top: 4px;
+}
+
+.hand-over-modal .pvf-start-btn,
+.hand-over-modal__cta-primary {
+  appearance: none;
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-radius: var(--pvf-radius-sm);
+  color: #1a1200;
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: linear-gradient(180deg, var(--pvf-dynamic-color) 0%, color-mix(in srgb, var(--pvf-dynamic-color) 80%, #3d2e08) 100%);
+  box-shadow:
+    0 0 32px color-mix(in srgb, var(--pvf-dynamic-color) 16%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: all 0.2s ease;
+}
+
+.hand-over-modal .pvf-start-btn:hover,
+.hand-over-modal__cta-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.hand-over-modal .pvf-start-btn:active,
+.hand-over-modal__cta-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.hand-over-modal__cta-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.hand-over-modal .pvf-start-arrow,
+.hand-over-modal__cta-arrow {
+  position: absolute;
+  right: 24px;
+  font-size: 21px;
+  line-height: 1;
+  color: #1a1200;
+  opacity: 0.9;
 }
 
 .hand-over-modal__footer {
-  gap: 10px;
+  margin: 0;
 }
 
-.hand-over-modal__footer-card {
+.hand-over-modal__auto-advance {
   display: grid;
-  gap: 12px;
-  padding: 16px 18px 18px;
-  border: 1px solid var(--ho-border-soft);
-  border-radius: 14px;
-  background: var(--ho-card-bg-strong);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.hand-over-modal .learning-hand-recap {
-  margin-top: 0;
+  gap: 10px;
 }
 
 .hand-over-modal__next-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
 .hand-over-modal__next-copy {
@@ -360,98 +326,125 @@
   gap: 4px;
 }
 
-.hand-over-modal__next-label {
-  color: var(--ho-ink);
-}
-
-.hand-over-modal__next-hint {
-  font-family: var(--font-body);
-  font-size: 13.5px;
-  line-height: 1.4;
-  color: var(--ho-muted);
+.hand-over-modal__next-label.fritz-section-label {
+  margin-bottom: 0;
+  color: var(--pvf-text);
+  letter-spacing: 0.1em;
 }
 
 .hand-over-modal__status-pill {
-  flex: 0 0 auto;
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fritz-muted-label);
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ho-muted);
 }
 
 .hand-over-modal__progress-track {
   width: 100%;
-  height: 6px;
-  overflow: hidden;
+  height: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
 }
 
 .hand-over-modal__progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: var(--ho-accent);
-  transition: width 100ms linear;
+  background: var(--pvf-dynamic-color);
 }
 
-@media (max-width: 900px) {
-  .hand-over-modal {
-    width: min(100vw - 24px, 760px);
-    padding: 24px;
+.hand-over-modal .learning-hand-recap {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.hand-over-modal__footer .hand-over-error-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* PVF header typography (subset from _pvf-layout — label dot + title stack) */
+.hand-over-modal .pvf-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--pvf-active-color);
+}
+
+.hand-over-modal .pvf-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--pvf-active-color);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.hand-over-modal .pvf-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #fff;
+}
+
+.hand-over-modal .pvf-subtitle {
+  font-size: 15px;
+  color: var(--pvf-muted);
+  margin: 0;
+  line-height: 1.45;
+  font-weight: 400;
+}
+
+@media (max-width: 800px) {
+  .hand-over-modal__panel {
+    padding: 22px 22px 20px;
+    gap: 14px;
   }
 
   .hand-over-modal__hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .hand-over-modal__award {
-    justify-content: flex-start;
-  }
-
-  .hand-over-modal__cards {
     grid-template-columns: 1fr;
+    align-items: start;
+    gap: 16px;
   }
 
-  .hand-over-modal__award-value,
-  .hand-over-modal__award-label {
-    text-align: left;
+  .hand-over-modal__reward-card {
+    justify-self: start;
+  }
+
+  .hand-over-modal__tiles-well {
+    min-height: 104px;
+    padding: 16px 12px 14px;
   }
 }
 
-@media (max-width: 640px), (max-height: 760px) {
-  .hand-over-modal {
-    width: min(100vw - 20px, 680px);
+@media (max-width: 640px), (max-height: 720px) {
+  .hand-over-modal.game-over-card {
     max-height: calc(100vh - 24px);
-    gap: 14px;
-    padding: 18px;
+    border-radius: 16px;
   }
 
-  .hand-over-modal__title {
+  .hand-over-modal__title.pvf-title {
+    font-size: 34px;
+  }
+
+  .hand-over-modal__reward-value {
     font-size: 40px;
-  }
-
-  .hand-over-modal__next-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .hand-over-modal__section-head {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .hand-over-modal__tile-tray {
-    min-height: 112px;
-    padding: 14px;
   }
 }
