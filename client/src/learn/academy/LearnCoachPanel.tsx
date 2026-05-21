@@ -39,10 +39,7 @@ export function LearnCoachPanel({
       ) : null}
 
       {momentumNote ? (
-        <blockquote className="learn-academy__quote">
-          <span className="learn-academy__quote-mark" aria-hidden="true">
-            “
-          </span>
+        <blockquote className="learn-academy__momentum">
           <p>{momentumNote}</p>
         </blockquote>
       ) : null}

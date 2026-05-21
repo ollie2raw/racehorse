@@ -35,7 +35,7 @@ export const HOW_TO_PLAY_MODULES: HowToPlayModule[] = [
       `First to ${HOW_TO_PLAY_MATCH_TARGET} wins the match.`,
     ],
     runNote:
-      'Racehorse has momentum swings. One player can go on a run, score in bursts, and take control. All it takes is one good hand to flip the race around. Think about how you can chain moves together.',
+      'Racehorse has momentum swings. One player can go on a run, score in bursts, and take control. All it takes is one good hand to flip the race around. Always think of how you can chain moves together.',
     takeaway: 'Every hand matters. One run can flip the match.',
     visual: 'intro-beats',
   },

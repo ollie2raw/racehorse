@@ -75,7 +75,7 @@ export function LearnShell({
                 {isFirst ? '← Exit' : '← Back'}
               </button>
               <button type="button" className="pvf-start-btn learn-academy__start-btn" onClick={onNext}>
-                <span>Next</span>
+                <span>{isFirst ? 'Start' : 'Next'}</span>
                 <span className="pvf-start-arrow" aria-hidden="true">
                   ›
                 </span>
