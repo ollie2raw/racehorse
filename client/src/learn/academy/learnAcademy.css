@@ -49,17 +49,22 @@
 
 /* ── Shell column: path → card → dock ── */
 
+.learn-academy.pvf-root--setup > .pvf-layout.learn-academy__layout {
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
 .learn-academy__layout {
   flex: 1 1 0 !important;
   min-height: 0 !important;
   max-width: min(1360px, 94vw);
   margin: 0 auto;
   width: 100%;
-  padding-top: 12px !important;
-  padding-bottom: 8px !important;
+  padding-left: 36px !important;
+  padding-right: 36px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 12px !important;
+  gap: 8px !important;
 }
 
 /* ── Step path (above unified card) ── */
@@ -69,33 +74,26 @@
   width: 100%;
 }
 
+.learn-academy__path-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(10px, 1.4vw, 18px);
+  width: 100%;
+}
+
 .learn-academy__path-label {
-  display: block;
-  margin-bottom: 10px;
+  flex-shrink: 0;
+  margin: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #34d399;
-}
-
-.learn-academy__path-rail {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  width: 100%;
-}
-
-.learn-academy__path-horse {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  margin-top: 2px;
-  color: #34d399;
-  opacity: 0.85;
+  white-space: nowrap;
 }
 
 .learn-academy__path-steps {
@@ -197,13 +195,19 @@
 
 .learn-academy__path-finish {
   flex-shrink: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
-  margin-top: 2px;
   color: var(--color-elite);
-  opacity: 0.75;
+}
+
+.learn-academy__path-finish svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.25;
 }
 
 /* ── Unified module card ── */
@@ -636,8 +640,10 @@
 }
 
 .learn-academy__rhythm-icon svg {
-  width: clamp(44px, 6.4vh, 52px);
-  height: clamp(44px, 6.4vh, 52px);
+  display: block;
+  width: clamp(42px, 6vh, 48px);
+  height: clamp(42px, 6vh, 48px);
+  stroke-width: 2.25;
 }
 
 .learn-academy__rhythm-title {
@@ -840,8 +846,10 @@
 }
 
 .learn-academy__visual--pipeline .learn-academy__pipe-card-icon svg {
-  width: clamp(32px, 4.8vh, 40px);
-  height: clamp(32px, 4.8vh, 40px);
+  display: block;
+  width: clamp(34px, 5vh, 40px);
+  height: clamp(34px, 5vh, 40px);
+  stroke-width: 2.25;
 }
 
 .learn-academy__visual--pipeline .learn-academy__pipe-card-copy {

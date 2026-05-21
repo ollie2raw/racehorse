@@ -4,20 +4,20 @@ import { DoublesTempoVisual } from './DoublesTempoVisual';
 import { ReadyFinishVisual } from './ReadyFinishVisual';
 import { ScoringOpenCountVisual } from './ScoringOpenCountVisual';
 import type { HowToPlayVisualType } from '../howToPlay/howToPlayModules';
-import {
-  LearnIconDraw,
-  LearnIconLock,
-  LearnIconRefresh,
-  LearnIconStack,
-  LearnIconTile,
-} from './LearnIcons';
+import { LearnIcon, type LearnIconType } from './LearnIcons';
 
 const PIPELINE_STEPS = [
-  { n: 1, accent: 'mint', Icon: LearnIconTile, title: 'Can you play?', desc: 'You must play.' },
-  { n: 2, accent: 'gold', Icon: LearnIconRefresh, title: 'Score or double?', desc: 'Keep your turn.' },
-  { n: 3, accent: 'cyan', Icon: LearnIconStack, title: 'Blocked?', desc: 'Racehorse draws.' },
-  { n: 4, accent: 'slate', Icon: LearnIconLock, title: 'Pile locked?', desc: 'Auto-pass.' },
-] as const;
+  { n: 1, accent: 'mint', icon: 'must-play', title: 'Can you play?', desc: 'You must play.' },
+  { n: 2, accent: 'gold', icon: 'keep-turn', title: 'Score or double?', desc: 'Keep your turn.' },
+  { n: 3, accent: 'cyan', icon: 'blocked', title: 'Blocked?', desc: 'Racehorse draws.' },
+  { n: 4, accent: 'slate', icon: 'pile-locked', title: 'Pile locked?', desc: 'Auto-pass.' },
+] as const satisfies ReadonlyArray<{
+  n: number;
+  accent: 'mint' | 'gold' | 'cyan' | 'slate';
+  icon: LearnIconType;
+  title: string;
+  desc: string;
+}>;
 
 type AcademyVisualsProps = {
   visual: HowToPlayVisualType;
@@ -48,7 +48,7 @@ export function AcademyVisuals({ visual }: AcademyVisualsProps) {
                     <div
                       className={`learn-academy__pipe-card-icon learn-academy__pipe-card-icon--${step.accent}`}
                     >
-                      <step.Icon />
+                      <LearnIcon type={step.icon} />
                     </div>
                     <div className="learn-academy__pipe-card-copy">
                       <strong className="learn-academy__pipe-card-title">{step.title}</strong>

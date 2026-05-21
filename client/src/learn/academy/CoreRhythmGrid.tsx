@@ -1,18 +1,42 @@
 import { HOW_TO_PLAY_MATCH_TARGET } from '../howToPlay/howToPlayModules';
-import { LearnIconDraw, LearnIconRefresh, LearnIconTile, LearnIconTrophy } from './LearnIcons';
+import { LearnIcon, type LearnIconType } from './LearnIcons';
 
 export const CORE_RHYTHM_TILES = [
-  { key: 'must', name: 'Must play', desc: 'Legal tile? You play it.', accent: 'mint', Icon: LearnIconTile },
-  { key: 'keep', name: 'Keep turn', desc: 'Score or double → again.', accent: 'gold', Icon: LearnIconRefresh },
-  { key: 'draw', name: 'Auto draw', desc: 'Blocked? Game draws.', accent: 'mint', Icon: LearnIconDraw },
+  {
+    key: 'must',
+    name: 'Must play',
+    desc: 'Legal tile? You play it.',
+    accent: 'mint',
+    icon: 'must-play',
+  },
+  {
+    key: 'keep',
+    name: 'Keep turn',
+    desc: 'Score or double → again.',
+    accent: 'gold',
+    icon: 'keep-turn',
+  },
+  {
+    key: 'draw',
+    name: 'Auto draw',
+    desc: 'Blocked? Game draws.',
+    accent: 'mint',
+    icon: 'auto-draw',
+  },
   {
     key: 'race',
     name: `Race to ${HOW_TO_PLAY_MATCH_TARGET}`,
     desc: 'First to target wins.',
     accent: 'gold',
-    Icon: LearnIconTrophy,
+    icon: 'race-to-60',
   },
-] as const;
+] as const satisfies ReadonlyArray<{
+  key: string;
+  name: string;
+  desc: string;
+  accent: 'mint' | 'gold';
+  icon: LearnIconType;
+}>;
 
 type CoreRhythmGridProps = {
   sectionLabel: string;
@@ -24,10 +48,10 @@ export function CoreRhythmGrid({ sectionLabel }: CoreRhythmGridProps) {
     <div className="learn-academy__rhythm-wrap">
       <p className="learn-academy__section-label">{sectionLabel}</p>
       <div className="learn-academy__rhythm-grid">
-        {CORE_RHYTHM_TILES.map(({ key, name, desc, accent, Icon }) => (
+        {CORE_RHYTHM_TILES.map(({ key, name, desc, accent, icon }) => (
           <article key={key} className={`learn-academy__rhythm-card learn-academy__rhythm-card--${accent}`}>
             <div className={`learn-academy__rhythm-icon learn-academy__rhythm-icon--${accent}`}>
-              <Icon />
+              <LearnIcon type={icon} />
             </div>
             <h3 className="learn-academy__rhythm-title">{name}</h3>
             <p className="learn-academy__rhythm-desc">{desc}</p>
