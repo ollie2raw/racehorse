@@ -80,6 +80,7 @@ export default function LearnHowToPlayRacehorse({
           momentumNote={module.runNote}
           takeaway={module.takeaway}
           footer={finalFooter}
+          final={module.isFinal}
         />
       }
       stage={<AcademyVisuals visual={module.visual} />}

@@ -10,6 +10,8 @@ type LearnCoachPanelProps = {
   footer?: ReactNode;
   /** Final step: hide bullets — detail lives in the stage visual */
   compact?: boolean;
+  /** Ready step — taller checklist + larger CTAs */
+  final?: boolean;
 };
 
 export function LearnCoachPanel({
@@ -21,9 +23,10 @@ export function LearnCoachPanel({
   takeaway,
   footer,
   compact = false,
+  final = false,
 }: LearnCoachPanelProps) {
   return (
-    <div className="learn-academy__coach">
+    <div className={`learn-academy__coach${final ? ' learn-academy__coach--final' : ''}`}>
       <header className="learn-academy__header">
         <p className="learn-academy__kicker">
           How to Play <span aria-hidden="true">·</span> {stepLabel}
