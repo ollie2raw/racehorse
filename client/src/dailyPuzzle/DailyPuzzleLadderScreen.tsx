@@ -494,6 +494,18 @@ export default function DailyPuzzleLadderScreen({
     [today.slots],
   );
 
+  const inActivePlay = Boolean(activeSlot && runtimeState);
+
+  const exitPlayToHub = useCallback(() => {
+    setSlotOverlay(null);
+    setFinalOverlay(null);
+    setPracticeOverlay(null);
+    setRuntimeState(null);
+    setActiveSlot(null);
+    setStatus('IN_PROGRESS');
+    setSelectedTile(null);
+  }, []);
+
   if (leaderboardOpen) {
     return (
       <DailyPuzzleLadderLeaderboardScreen
@@ -508,18 +520,6 @@ export default function DailyPuzzleLadderScreen({
       />
     );
   }
-
-  const inActivePlay = Boolean(activeSlot && runtimeState);
-
-  const exitPlayToHub = useCallback(() => {
-    setSlotOverlay(null);
-    setFinalOverlay(null);
-    setPracticeOverlay(null);
-    setRuntimeState(null);
-    setActiveSlot(null);
-    setStatus('IN_PROGRESS');
-    setSelectedTile(null);
-  }, []);
 
   const renderLadderOverlays = () => (
     <>

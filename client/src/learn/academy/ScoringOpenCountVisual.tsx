@@ -42,8 +42,7 @@ export function ScoringOpenCountVisual() {
           total={SCORING_OPEN_COUNT_TOTAL}
           scores
           stacked
-          racePoints={2}
-          footnote="10 ÷ 5 = 2 race points"
+          scoreLine="2 race points"
         />
       </div>
     </div>

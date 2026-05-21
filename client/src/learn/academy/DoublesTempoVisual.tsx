@@ -1,5 +1,4 @@
 import LearnBoard from '../components/LearnBoard';
-import { OpenCountCalc } from '../LearnHowToPlayDiagrams';
 import {
   DOUBLES_TEMPO_BOARD_STAGE_1,
   DOUBLES_TEMPO_BOARD_STAGE_2,
@@ -7,51 +6,88 @@ import {
   DOUBLES_TEMPO_OPEN_COUNTS,
 } from '../howToPlay/doublesTempoBoards';
 
+type FormulaPart = {
+  label?: string;
+  value: number;
+  /** Show only the number (e.g. middle term in crossed-double). */
+  bare?: boolean;
+};
+
 const STAGES = [
   {
     key: 'open',
     step: 1,
-    title: 'Open double',
+    title: 'OPEN DOUBLE',
     board: DOUBLES_TEMPO_BOARD_STAGE_1,
     parts: [
-      { label: 'double 1', value: 2, tone: 'gold' as const },
-      { label: 'double 4', value: 8, tone: 'gold' as const },
-    ],
+      { label: 'DOUBLE 1', value: 2 },
+      { label: 'DOUBLE 4', value: 8 },
+    ] satisfies FormulaPart[],
     total: DOUBLES_TEMPO_OPEN_COUNTS.stage1,
-    racePoints: 2,
-    scoresLabel: 'Scores 2',
+    scoreLine: '2 race points',
     hint: null,
   },
   {
     key: 'crossed',
     step: 2,
-    title: 'Cross the double',
+    title: 'CROSS THE DOUBLE',
     board: DOUBLES_TEMPO_BOARD_STAGE_2,
     parts: [
-      { label: 'double 1', value: 2, tone: 'gold' as const },
-      { label: 'open 3', value: 3, tone: 'active' as const },
-    ],
+      { label: 'DOUBLE 1', value: 2 },
+      { value: 3, bare: true },
+    ] satisfies FormulaPart[],
     total: DOUBLES_TEMPO_OPEN_COUNTS.stage2,
-    racePoints: undefined,
-    scoresLabel: null,
+    scoreLine: undefined,
     hint: 'Crossed double stops counting. Branches open.',
   },
   {
     key: 'branch',
     step: 3,
-    title: 'Play the branch',
+    title: 'PLAY THE BRANCH',
     board: DOUBLES_TEMPO_BOARD_STAGE_3,
     parts: [
-      { label: 'double 1', value: 2, tone: 'gold' as const },
-      { label: 'open 3', value: 3, tone: 'active' as const },
-      { label: 'branch 5', value: 5, tone: 'active' as const },
-    ],
+      { label: 'DOUBLE 1', value: 2 },
+      { value: 3, bare: true },
+      { label: 'OPEN 5', value: 5 },
+    ] satisfies FormulaPart[],
     total: DOUBLES_TEMPO_OPEN_COUNTS.stage3,
-    racePoints: 2,
-    scoresLabel: 'Scores 2 more',
+    scoreLine: '2 new race points',
     hint: 'Played branch end joins the count.',
   },
 ] as const;
+
+function formatOpenCountLine(parts: FormulaPart[], total: number): string {
+  const terms = parts.map((part) =>
+    part.bare ? String(part.value) : `${part.label} ${part.value}`,
+  );
+  return `${terms.join(' + ')} = ${total}`;
+}
+
+function DoublesStageCaption({
+  scoreLine,
+  hint,
+}: {
+  scoreLine?: string;
+  hint?: string | null;
+}) {
+  if (scoreLine && hint) {
+    return (
+      <p className="learn-academy__doubles-caption">
+        <span className="learn-academy__doubles-caption-score">{scoreLine}.</span> {hint}
+      </p>
+    );
+  }
+
+  if (scoreLine) {
+    return <p className="learn-academy__doubles-caption learn-academy__doubles-caption--score">{scoreLine}</p>;
+  }
+
+  if (hint) {
+    return <p className="learn-academy__doubles-caption">{hint}</p>;
+  }
+
+  return null;
+}
 
 export function DoublesTempoVisual() {
   return (
@@ -65,27 +101,22 @@ export function DoublesTempoVisual() {
         {STAGES.map((stage) => (
           <article key={stage.key} className="learn-academy__doubles-stage" role="listitem">
             <header className="learn-academy__doubles-stage-head">
-              <span className="learn-academy__doubles-step-n">{stage.step}</span>
-              <p className="learn-academy__doubles-stage-title">{stage.title}</p>
+              <h3 className="learn-academy__doubles-stage-title">
+                <span className="learn-academy__doubles-stage-n">{stage.step}</span>
+                {stage.title}
+              </h3>
             </header>
 
             <div className="learn-academy__doubles-stage-board">
-              <LearnBoard board={stage.board} highlightOpenEnds staticView tileSize={48} />
+              <LearnBoard board={stage.board} highlightOpenEnds staticView tileSize={72} />
             </div>
 
-            <div className="learn-academy__doubles-stage-foot">
-              <OpenCountCalc
-                parts={[...stage.parts]}
-                total={stage.total}
-                scores={Boolean(stage.scoresLabel)}
-                racePoints={'racePoints' in stage ? stage.racePoints : undefined}
-                stacked
-              />
-              {stage.scoresLabel ? (
-                <span className="learn-academy__doubles-scores-pill">{stage.scoresLabel}</span>
-              ) : null}
-              {stage.hint ? <p className="learn-academy__doubles-stage-hint">{stage.hint}</p> : null}
-            </div>
+            <footer className="learn-academy__doubles-stage-foot">
+              <p className="learn-academy__doubles-formula" aria-label={`Open count ${stage.total}`}>
+                {formatOpenCountLine([...stage.parts], stage.total)}
+              </p>
+              <DoublesStageCaption scoreLine={stage.scoreLine} hint={stage.hint} />
+            </footer>
           </article>
         ))}
       </div>

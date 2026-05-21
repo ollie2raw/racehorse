@@ -108,19 +108,41 @@ interface OpenCountCalcProps {
   parts: { label: string; value: number; tone?: EndMarkerTone }[];
   total: number;
   scores?: boolean;
-  footnote?: string;
-  racePoints?: number;
   stacked?: boolean;
+  /** One line under the equation when the total scores (e.g. "2 race points"). */
+  scoreLine?: string;
+  /** Muted caption when the total does not score. */
+  hint?: string;
+  /** @deprecated Prefer scoreLine */
+  footnote?: string;
+  /** @deprecated Prefer scoreLine */
+  racePoints?: number;
+}
+
+function resolveScoreLine(
+  scoreLine: string | undefined,
+  racePoints: number | undefined,
+  total: number,
+): string | undefined {
+  if (scoreLine) return scoreLine;
+  if (racePoints == null || total % 5 !== 0) return undefined;
+  const n = racePoints;
+  return `${n} race point${n === 1 ? '' : 's'}`;
 }
 
 export function OpenCountCalc({
   parts,
   total,
   scores = false,
+  stacked = false,
+  scoreLine,
+  hint,
   footnote,
   racePoints,
-  stacked = false,
 }: OpenCountCalcProps) {
+  const resolvedScoreLine = scores ? resolveScoreLine(scoreLine, racePoints, total) : undefined;
+  const resolvedHint = hint ?? (footnote && !resolvedScoreLine ? footnote : undefined);
+
   const equation = (
     <>
       <div className="learn-howto-calc__parts">
@@ -136,7 +158,6 @@ export function OpenCountCalc({
       </div>
       <span className="learn-howto-calc__eq">=</span>
       <span className="learn-howto-calc__total">{total}</span>
-      {scores ? <span className="learn-howto-calc__badge">Scores</span> : null}
     </>
   );
 
@@ -147,14 +168,8 @@ export function OpenCountCalc({
       }`}
     >
       {stacked ? <div className="learn-howto-calc__equation">{equation}</div> : equation}
-      {racePoints != null && scores ? (
-        <p className="learn-howto-calc__race">
-          <span className="learn-howto-calc__race-label">Race points:</span>
-          <strong>{racePoints}</strong>
-          <span className="learn-howto-calc__race-formula">({total} ÷ 5)</span>
-        </p>
-      ) : null}
-      {footnote ? <p className="learn-howto-calc__footnote">{footnote}</p> : null}
+      {resolvedScoreLine ? <p className="learn-howto-calc__score-line">{resolvedScoreLine}</p> : null}
+      {resolvedHint ? <p className="learn-howto-calc__hint">{resolvedHint}</p> : null}
     </div>
   );
 }

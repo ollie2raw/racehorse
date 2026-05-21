@@ -1041,13 +1041,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: clamp(14px, 2vh, 18px) clamp(12px, 1.6vw, 16px);
+  padding: clamp(10px, 1.4vh, 14px) clamp(12px, 1.4vw, 16px);
   border-radius: var(--pvf-radius-md);
-  border: 1px solid color-mix(in srgb, var(--color-elite) 42%, rgba(255, 255, 255, 0.1));
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 40%),
-    rgba(0, 0, 0, 0.42);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.28);
 }
 
 @keyframes learn-end-pulse {
@@ -1062,6 +1059,7 @@
   flex: 1 1 0;
   min-height: 0;
   height: 100%;
+  gap: clamp(6px, 0.9vh, 10px);
   overflow: hidden;
 }
 
@@ -1071,7 +1069,7 @@
   flex: 1 1 0;
   min-height: 0;
   height: 100%;
-  gap: clamp(8px, 1.2vh, 12px);
+  gap: clamp(6px, 0.9vh, 10px);
   overflow: hidden;
 }
 
@@ -1080,7 +1078,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  min-height: 0;
 }
 
 .learn-academy__doubles-logic-label {
@@ -1107,7 +1106,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: minmax(0, 1fr);
-  gap: clamp(8px, 1.2vw, 14px);
+  gap: clamp(10px, 1.4vw, 16px);
   align-items: stretch;
   overflow: hidden;
 }
@@ -1115,10 +1114,10 @@
 .learn-academy__doubles-stage {
   min-width: 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(6px, 1vh, 10px);
-  padding: clamp(10px, 1.4vh, 14px) clamp(8px, 1vw, 12px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(4px, 0.65vh, 8px);
+  padding: clamp(8px, 1vh, 12px) clamp(8px, 0.9vw, 10px) clamp(10px, 1.1vh, 12px);
   border-radius: var(--pvf-radius-md);
   border: 1px solid color-mix(in srgb, #5b9fff 18%, rgba(255, 255, 255, 0.1));
   background: rgba(0, 0, 0, 0.38);
@@ -1126,40 +1125,30 @@
 }
 
 .learn-academy__doubles-stage-head {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.learn-academy__doubles-step-n {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: #34d399;
-  color: #0a1018;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
+  min-height: 0;
 }
 
 .learn-academy__doubles-stage-title {
   margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
   font-family: 'Outfit', sans-serif;
-  font-size: clamp(0.68rem, 1.05vh, 0.78rem);
+  font-size: clamp(0.62rem, 0.95vh, 0.72rem);
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.2;
+}
+
+.learn-academy__doubles-stage-n {
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 700;
 }
 
 .learn-academy__doubles-stage-board {
-  flex: 1 1 0;
-  min-height: clamp(150px, 26vh, 240px);
+  min-height: clamp(128px, 22vh, 260px);
   width: 100%;
   position: relative;
   overflow: hidden;
@@ -1171,6 +1160,7 @@
   inset: 0;
   width: 100%;
   height: 100%;
+  min-height: inherit;
   transform: none;
 }
 
@@ -1191,71 +1181,48 @@
 }
 
 .learn-academy__doubles-stage-foot {
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 3px;
+  padding-top: 4px;
+  text-align: center;
 }
 
-.learn-academy__doubles-stage .learn-howto-calc {
-  width: 100%;
-  padding: 0;
+.learn-academy__doubles-formula {
+  margin: 0;
+  max-width: 100%;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(0.6rem, 0.88vh, 0.7rem);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.58);
 }
 
-.learn-academy__doubles-stage .learn-howto-calc--stacked {
-  gap: 0.3rem;
+@media (min-width: 901px) {
+  .learn-academy__doubles-formula {
+    white-space: nowrap;
+  }
 }
 
-.learn-academy__doubles-stage .learn-howto-calc__equation {
-  gap: 0.28rem 0.4rem;
+.learn-academy__doubles-caption {
+  margin: 0;
+  max-width: 100%;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(0.58rem, 0.84vh, 0.66rem);
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.48);
 }
 
-.learn-academy__doubles-stage .learn-howto-calc__chip {
-  min-width: 2.35rem;
-  padding: 0.2rem 0.35rem;
-}
-
-.learn-academy__doubles-stage .learn-howto-calc__chip-label {
-  font-size: 0.5rem;
-  letter-spacing: 0.06em;
-}
-
-.learn-academy__doubles-stage .learn-howto-calc__chip-value {
-  font-size: 0.88rem;
-}
-
-.learn-academy__doubles-stage .learn-howto-calc__total {
-  font-size: 1.05rem;
-}
-
-.learn-academy__doubles-stage .learn-howto-calc__race {
-  display: none;
-}
-
-.learn-academy__doubles-scores-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--color-elite) 42%, transparent);
-  background: color-mix(in srgb, var(--color-elite) 14%, rgba(0, 0, 0, 0.35));
-  font-family: var(--font-display);
-  font-size: clamp(0.62rem, 0.95vh, 0.72rem);
+.learn-academy__doubles-caption--score,
+.learn-academy__doubles-caption-score {
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--color-elite);
-}
-
-.learn-academy__doubles-stage-hint {
-  margin: 0;
-  font-size: clamp(0.68rem, 1vh, 0.76rem);
-  line-height: 1.3;
-  font-weight: 500;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.55);
 }
 
 @media (max-width: 900px) {

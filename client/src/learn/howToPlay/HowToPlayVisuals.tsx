@@ -83,8 +83,7 @@ export function HowToPlayVisuals({ visual }: HowToPlayVisualsProps) {
             ]}
             total={10}
             scores
-            racePoints={2}
-            footnote="10 ÷ 5 = 2 race points on this play."
+            scoreLine="2 race points"
           />
         </div>
       );

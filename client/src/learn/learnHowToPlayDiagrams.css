@@ -304,51 +304,33 @@
   color: #e7b64a;
 }
 
-.learn-howto-calc__badge {
-  padding: 0.25rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid rgba(231, 182, 74, 0.35);
-  background: rgba(231, 182, 74, 0.1);
+.learn-howto-calc__score-line {
+  flex: 1 1 100%;
+  margin: 0;
   font-family: var(--font-display);
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #e7b64a;
-}
-
-.learn-howto-calc__race {
-  flex: 1 1 100%;
-  margin: 0.25rem 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0.35rem 0.5rem;
-  font-size: 0.82rem;
-  color: rgba(201, 212, 226, 0.78);
-}
-
-.learn-howto-calc__race strong {
-  color: #e7b64a;
-  font-size: 1rem;
-}
-
-.learn-howto-calc__footnote {
-  flex: 1 1 100%;
-  margin: 0.25rem 0 0;
-  font-size: 0.8rem;
-  line-height: 1.42;
-  color: rgba(201, 212, 226, 0.72);
+  color: var(--color-elite);
   text-align: center;
-  font-weight: 500;
+}
+
+.learn-howto-calc__hint {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: clamp(0.72rem, 1.05vh, 0.82rem);
+  line-height: 1.38;
+  font-weight: 600;
+  color: rgba(201, 212, 226, 0.68);
+  text-align: center;
 }
 
 .learn-howto-calc--stacked {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
+  gap: 0.4rem;
   width: 100%;
   border: none;
   background: transparent;
@@ -365,18 +347,17 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem 0.55rem;
+  gap: 0.35rem 0.45rem;
 }
 
-.learn-howto-calc--stacked .learn-howto-calc__race,
-.learn-howto-calc--stacked .learn-howto-calc__footnote {
+.learn-howto-calc--stacked .learn-howto-calc__score-line,
+.learn-howto-calc--stacked .learn-howto-calc__hint {
   flex: none;
   width: 100%;
-  margin: 0;
 }
 
 .learn-howto-calc--stacked .learn-howto-calc__total {
-  font-size: 1.65rem;
+  font-size: 1.35rem;
 }
 
 .learn-howto-doubles-compare {
