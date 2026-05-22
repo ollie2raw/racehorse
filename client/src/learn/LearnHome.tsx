@@ -26,8 +26,6 @@ import {
   validateGuidedMatchCandidate,
   type GuidedMatchCandidateValidationIssue,
 } from './guidedMatch/guidedMatchCandidateValidation';
-import artCoachPng from '../assets/singlePlayerHub/fritzwave.png';
-
 const themeVars = {
   '--rh-bg': '#050911',
   '--rh-panel': '#09101A',
@@ -62,7 +60,6 @@ type LearnModeCard = {
   badges?: string[];
   variant?: 'tier-elite' | 'tier-standard' | 'tier-master';
   chevronColor?: string;
-  artSrc?: string;
   action?: LearnCardAction;
   ctaLabel?: string;
 };
@@ -76,7 +73,6 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     title: 'How to Play',
     titleColor: '#34D399',
     desc: 'Fritz walks you through rules and instincts before your first coached hand.',
-    artSrc: artCoachPng,
     action: 'howToPlay',
     ctaLabel: 'Start',
   },
@@ -91,7 +87,6 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     badges: ['60 TURNS', 'COACHING EVERY MOVE', 'FIXED LESSON'],
     variant: 'tier-elite',
     chevronColor: '#FFD76A',
-    artSrc: artCoachPng,
     action: 'guided',
     ctaLabel: 'Play',
   },
@@ -103,7 +98,6 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     title: 'Lesson Library',
     titleColor: '#34D399',
     desc: 'Short focused lessons on strategy and scoring.',
-    artSrc: artCoachPng,
   },
   {
     id: 'drills',
@@ -113,7 +107,6 @@ const LEARN_MODE_CARDS: LearnModeCard[] = [
     title: 'Position Drills',
     titleColor: '#22D3EE',
     desc: 'Find the best move from real board positions.',
-    artSrc: artCoachPng,
   },
 ];
 
@@ -404,25 +397,21 @@ export default function LearnHome({
                       </div>
                     ) : null}
 
-                    {mode.artSrc ? (
-                      <div className="sp-solo-mode-card__art-slot" aria-hidden>
-                        <img
-                          src={mode.artSrc}
-                          alt=""
-                          className="sp-solo-mode-card__art"
-                          draggable={false}
-                          aria-hidden
-                        />
-                      </div>
-                    ) : null}
+                    <div
+                      className={`sp-solo-mode-card__art-slot learn-art-slice learn-art-slice--${mode.id}`}
+                      aria-hidden
+                    />
+                    <div className="learn-mode-card__art-tint" aria-hidden="true" />
+                    <div className="home-card-scrim learn-mode-card__read-scrim" aria-hidden="true" />
+                    <div className="learn-mode-card__bottom-vignette" aria-hidden="true" />
+                    {isLocked ? <div className="learn-mode-card__locked-overlay" aria-hidden="true" /> : null}
 
-                    <div className="home-card-scrim" aria-hidden="true" />
                     <div className="home-card-content learn-mode-card__content">
                       <div className="learn-mode-card__body">
                         <div className="sp-solo-mode-card__text">
                           <h2
                             className="learn-mode-card__title"
-                            style={{ color: isLocked ? 'rgba(255,255,255,0.42)' : mode.titleColor }}
+                            style={isLocked ? undefined : { color: mode.titleColor }}
                           >
                             {mode.title}
                           </h2>
