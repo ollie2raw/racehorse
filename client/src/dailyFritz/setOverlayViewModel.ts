@@ -28,6 +28,10 @@ export interface DailyFritzSetOverlayViewModel {
   resultValue: string | null;
   rankValue: string | null;
   skunkBadge: string | null;
+  shareDate?: string;
+  shareTier?: string;
+  shareRating?: number;
+  shareStreak?: number;
   tracker: Array<{
     gameNumber: DailyFritzSetGameNumber;
     label: string;
@@ -37,6 +41,9 @@ export interface DailyFritzSetOverlayViewModel {
     gameNumber: DailyFritzSetGameNumber;
     value: string;
     tone: 'win' | 'loss';
+    playerScore: number;
+    fritzScore: number;
+    skunk?: boolean;
     skunkLabel?: string | null;
   }>;
   onPrimary: () => void;

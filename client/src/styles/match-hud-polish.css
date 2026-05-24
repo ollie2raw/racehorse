@@ -248,3 +248,12 @@
   pointer-events: none;
   z-index: 1;
 }
+
+.df-share-card { margin: 16px 0; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+.df-share-preview { background: rgba(0,0,0,0.35); padding: 14px 16px; }
+.df-share-text { font-family: monospace; font-size: 13px; line-height: 1.7; color: rgba(255,255,255,0.8); margin: 0; white-space: pre; user-select: all; }
+.df-share-actions { display: flex; border-top: 1px solid rgba(255,255,255,0.08); }
+.df-share-btn { flex: 1; padding: 11px 0; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; transition: opacity 120ms ease; display: flex; align-items: center; justify-content: center; }
+.df-share-btn:hover { opacity: 0.85; }
+.df-share-copy { background: #f0c040; color: #0d1421; }
+.df-share-x { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.85); border-left: 1px solid rgba(255,255,255,0.08); }

@@ -97,6 +97,7 @@ import {
   type DailyFritzStartResponse,
 } from '../dailyFritz/api';
 import { formatOrdinalPlace } from '../dailyFritz/format';
+import { buildShareText } from '../dailyFritz/shareCard';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 import {
   canApplyNextHand,
@@ -796,6 +797,22 @@ export default function BotMatchScreen({
     mode === 'daily-fritz' && dailyFritzPackage
       ? `racehorse:daily-fritz:v2:${dailyFritzPackage.attempt_id}:game:${dailyFritzPackage.current_game_number ?? 1}`
       : null;
+  const [shareCopied, setShareCopied] = useState(false);
+  const dailyFritzShareText = useMemo(
+    () => (dailyFritzSetOverlay ? buildShareText(dailyFritzSetOverlay) : ''),
+    [dailyFritzSetOverlay],
+  );
+  const handleCopyShare = useCallback(() => {
+    if (!dailyFritzShareText) return;
+    void navigator.clipboard.writeText(dailyFritzShareText).then(() => {
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 2500);
+    });
+  }, [dailyFritzShareText]);
+
+  useEffect(() => {
+    setShareCopied(false);
+  }, [dailyFritzShareText]);
 
   const isGuidedMode = isGuidedModeProp && mode === 'bot';
   const isAuthoringMode = isAuthoringModeProp && mode === 'bot';
@@ -7190,6 +7207,27 @@ export default function BotMatchScreen({
                 <span className="hand-over-error-text" title={dailyFritzSetOverlay.errorMessage}>
                   {dailyFritzSetOverlay.errorMessage}
                 </span>
+              </div>
+            ) : null}
+
+            {dailyFritzSetOverlay.kind === 'final' ? (
+              <div className="df-share-card">
+                <div className="df-share-preview">
+                  <pre className="df-share-text">{dailyFritzShareText}</pre>
+                </div>
+                <div className="df-share-actions">
+                  <button type="button" className="df-share-btn df-share-copy" onClick={handleCopyShare}>
+                    {shareCopied ? '✓ Copied!' : 'Copy result'}
+                  </button>
+                  <a
+                    className="df-share-btn df-share-x"
+                    href={`https://x.com/intent/tweet?text=${encodeURIComponent(dailyFritzShareText)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Post to X
+                  </a>
+                </div>
               </div>
             ) : null}
 

@@ -25,7 +25,7 @@ import {
   type DailyFritzTodayResponse,
 } from './api';
 import { formatOrdinalPlace } from './format';
-import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy } from './skunk';
+import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy, isDailyFritzSkunk } from './skunk';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 import dailyFritzHeroPng from '../assets/dailyFritz/playvsfritzdone.png';
 import './dailyFritz.css';
@@ -125,6 +125,9 @@ interface OverlayGameItem {
   gameNumber: DailyFritzSetGameNumber;
   value: string;
   tone: 'win' | 'loss';
+  playerScore: number;
+  fritzScore: number;
+  skunk?: boolean;
   skunkLabel?: string | null;
 }
 
@@ -329,9 +332,17 @@ function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
       const movesUsed = g.movesUsed == null && g.moves_used == null ? undefined : Number(g.movesUsed ?? g.moves_used);
       const handsPlayed =
         g.handsPlayed == null && g.hands_played == null ? undefined : Number(g.handsPlayed ?? g.hands_played);
-      const skunk = g.skunk === true;
+      const losingScore = playerWon ? fritzScore : playerScore;
+      const skunk = g.skunk === true || isDailyFritzSkunk(losingScore);
       const skunkByRaw = g.skunkBy ?? g.skunk_by;
-      const skunkBy = skunkByRaw === 'player' || skunkByRaw === 'fritz' ? skunkByRaw : undefined;
+      const skunkBy =
+        skunkByRaw === 'player' || skunkByRaw === 'fritz'
+          ? skunkByRaw
+          : skunk
+            ? playerWon
+              ? 'player'
+              : 'fritz'
+            : undefined;
       return {
         gameNumber,
         seed,
@@ -371,6 +382,10 @@ function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
     setWinner = rec.setWinner;
   } else if (rec.set_winner === 'player' || rec.set_winner === 'fritz') {
     setWinner = rec.set_winner;
+  }
+  if (!setWinner && skunkGameNumber === 2 && games.length === 2 && playedWins === 1 && playedLosses === 1) {
+    const skunkGame = games.find((game) => game.gameNumber === 2 && game.skunk);
+    if (skunkGame) setWinner = skunkGame.playerWon ? 'player' : 'fritz';
   }
   const storedPlayerGamesWon = Number(rec.playerGamesWon ?? rec.player_games_won);
   const storedFritzGamesWon = Number(rec.fritzGamesWon ?? rec.fritz_games_won);
@@ -1292,11 +1307,16 @@ export default function DailyFritzScreen({
         sr.totalPointDiff > 0 ? 'win' : sr.totalPointDiff < 0 ? 'loss' : 'idle';
       const skunkCopy = getSkunkOverlayCopy(sr, g);
       const games: OverlayGameItem[] = sr.games.map((game) => {
-        const youWon = Number(game.playerScore) > Number(game.fritzScore);
+        const playerScore = Number.isFinite(game.playerScore) ? game.playerScore : 0;
+        const fritzScore = Number.isFinite(game.fritzScore) ? game.fritzScore : 0;
+        const youWon = playerScore > fritzScore;
         return {
           gameNumber: game.gameNumber,
-          value: `${game.playerScore}–${game.fritzScore}`,
+          value: `${playerScore}–${fritzScore}`,
           tone: youWon ? ('win' as const) : ('loss' as const),
+          playerScore,
+          fritzScore,
+          skunk: Boolean(game.skunk),
           skunkLabel: getGameSkunkChipLabel(game),
         };
       });
@@ -1313,6 +1333,7 @@ export default function DailyFritzScreen({
         if (rd) openLeaderboardForRunDate();
       };
       const setWonPlayer = sr.setWinner === 'player';
+      const profileRating = profile?.glicko_rating;
       return {
         ...base,
         kind: 'final' as const,
@@ -1331,6 +1352,10 @@ export default function DailyFritzScreen({
         marginTone,
         resultValue: setWonPlayer ? 'Victory' : 'Defeat',
         rankValue: formatOrdinalPlace(setOverlay.rank),
+        shareDate: formatDateLabel(activeRun?.run_date ?? today?.run_date ?? setOverlay.setResult.run_date ?? ''),
+        shareTier: titleCaseTier(activeRun?.fritz_tier ?? today?.fritz_tier ?? ''),
+        shareRating: typeof profileRating === 'number' && Number.isFinite(profileRating) ? Math.round(profileRating) : undefined,
+        shareStreak: today?.streak ?? 0,
         games,
         primaryLabel: setOverlay.canViewLeaderboard ? 'View Leaderboard' : 'Back Home',
         onPrimary: setOverlay.canViewLeaderboard ? openLeaderboard : returnToHub,
@@ -1340,7 +1365,7 @@ export default function DailyFritzScreen({
     }
 
     return base;
-  }, [setOverlay, continueSet, loadToday, today, activeRun, openLeaderboardForRunDate, submitCompletedGame]);
+  }, [setOverlay, continueSet, loadToday, today, activeRun, profile?.glicko_rating, openLeaderboardForRunDate, submitCompletedGame]);
 
   if (activeRun) {
     return (
@@ -1402,20 +1427,23 @@ export default function DailyFritzScreen({
     (todaySetResult.setWinner != null ||
       todaySetResult.playerGamesWon >= 2 ||
       todaySetResult.fritzGamesWon >= 2);
+  const skunkGameNumber =
+    todaySetResult?.skunkGameNumber ?? todaySetResult?.games.find((game) => game.skunk)?.gameNumber ?? null;
 
   const games = [1, 2, 3].map((n) => {
     const res = todaySetResult?.games.find((g) => g.gameNumber === n);
     const isNext = todaySetResult ? todaySetResult.games.length + 1 === n && !todaySetResult.setWinner : n === 1;
-    const game3NotRequired = n === 3 && !res && matchClinched;
+    const skippedAfterSkunk = !res && skunkGameNumber != null && n > skunkGameNumber;
+    const gameNotRequired = !res && (skippedAfterSkunk || (n === 3 && matchClinched));
     const gameState: DailyFritzGameCardState = res
       ? res.playerWon
         ? 'won'
         : 'lost'
-      : isNext
+      : gameNotRequired
+        ? 'not-needed'
+        : isNext
         ? 'active'
-      : game3NotRequired
-          ? 'not-needed'
-          : 'locked';
+        : 'locked';
     const isDone = gameState === 'won' || gameState === 'lost';
     const isLocked = gameState === 'locked';
     const isNotNeeded = gameState === 'not-needed';
@@ -1432,7 +1460,7 @@ export default function DailyFritzScreen({
       unlockHint = isStarted ? 'Resume now' : `First to ${winTarget}`;
     } else if (isNotNeeded) {
       statusSub = 'Not needed';
-      unlockHint = 'Game 3 not required';
+      unlockHint = skippedAfterSkunk && skunkGameNumber != null ? `Skunk ended set in G${skunkGameNumber}` : 'Game 3 not required';
     } else {
       statusSub = n === 3 ? 'Decider' : 'Locked';
       unlockHint =
