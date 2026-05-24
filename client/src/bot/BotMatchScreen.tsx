@@ -7211,24 +7211,45 @@ export default function BotMatchScreen({
             ) : null}
 
             {dailyFritzSetOverlay.kind === 'final' ? (
-              <div className="df-share-card">
-                <div className="df-share-preview">
-                  <pre className="df-share-text">{dailyFritzShareText}</pre>
+              <>
+                <div className="df-share-card">
+                  <div className="df-share-preview">
+                    <pre className="df-share-text">{dailyFritzShareText}</pre>
+                  </div>
+                  <div className="df-share-actions">
+                    {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                      <button
+                        type="button"
+                        className="df-share-btn df-share-native"
+                        onClick={() => {
+                          void navigator
+                            .share({
+                              title: 'Daily Fritz',
+                              text: dailyFritzShareText,
+                            })
+                            .catch(() => {});
+                        }}
+                      >
+                        Share
+                      </button>
+                    )}
+                    <button type="button" className="df-share-btn df-share-copy" onClick={handleCopyShare}>
+                      {shareCopied ? '✓ Copied!' : 'Copy result'}
+                    </button>
+                    <a
+                      className="df-share-btn df-share-x"
+                      href={`https://x.com/intent/tweet?text=${encodeURIComponent(dailyFritzShareText)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Post to X
+                    </a>
+                  </div>
                 </div>
-                <div className="df-share-actions">
-                  <button type="button" className="df-share-btn df-share-copy" onClick={handleCopyShare}>
-                    {shareCopied ? '✓ Copied!' : 'Copy result'}
-                  </button>
-                  <a
-                    className="df-share-btn df-share-x"
-                    href={`https://x.com/intent/tweet?text=${encodeURIComponent(dailyFritzShareText)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Post to X
-                  </a>
-                </div>
-              </div>
+                {shareCopied && (
+                  <p className="df-share-hint">Paste into iMessage, WhatsApp, or anywhere</p>
+                )}
+              </>
             ) : null}
 
             <div className="daily-fritz-set-overlay-actions">
