@@ -89,6 +89,7 @@ import { supabase } from '../lib/supabase';
 import {
   buildDailyFritzCompletionHash,
   completeDailyFritz,
+  DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
   formatDailyFritzNextHandUserMessage,
   nextDailyFritzHand,
   DailyFritzEndOfRunError,
@@ -888,7 +889,7 @@ export default function BotMatchScreen({
   const DAILY_FRITZ_AUTO_ADVANCE_MS = 3500;
   const HAND_LIFECYCLE_DEBUG_ENDPOINT =
     'http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979';
-  const HAND_LIFECYCLE_DEBUG_SESSION = '7ec4f9';
+  const HAND_LIFECYCLE_DEBUG_SESSION = '65d5db';
 
   console.log('[mode-debug]', { mode, isGuidedModeProp, isGuidedMode, isLearnAcademyMode });
 
@@ -1137,6 +1138,8 @@ export default function BotMatchScreen({
   // One-way guard: set to true when advanceHand starts, reset on success or fatal error.
   // Prevents overlapping hand-transition calls (e.g. from watchdog + 5s timer firing together).
   const handTransitionInFlightRef = useRef(false);
+  /** Retryable next-hand fetch failures before showing the red error copy. */
+  const dailyFritzNextHandFailureCountRef = useRef(0);
   // Last-label ref for the Daily Fritz debug overlay — updated on every major transition.
   const lastDailyFlowLabelRef = useRef('init');
   const dailyFritzStorageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3422,7 +3425,7 @@ export default function BotMatchScreen({
               you: result.state.players.you.score,
               fritz: result.state.players.bot.score,
             },
-            timeoutMs: 4500,
+            timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
           }),
           result: null,
           error: null,
@@ -5350,6 +5353,7 @@ export default function BotMatchScreen({
         ignored: Boolean(response.ignored),
       });
       setDailyFritzHandIndex(response.current_hand_index);
+      dailyFritzNextHandFailureCountRef.current = 0;
       setHandAdvanceError(null);
       setShowManualHandAdvance(false);
       setHandReveal(null);
@@ -5478,7 +5482,7 @@ export default function BotMatchScreen({
             you: matchRef.current.players.you.score,
             fritz: matchRef.current.players.bot.score,
           },
-          timeoutMs: 4500,
+          timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
         });
 
       if (!cacheSnapshot?.promise) {
@@ -5521,22 +5525,33 @@ export default function BotMatchScreen({
           const errMsg = err instanceof Error ? err.message : 'Failed to load next Daily Fritz hand.';
           activeCache.error = err;
           handTransitionInFlightRef.current = false;
-          setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
-          setShowManualHandAdvance(true);
-          traceHandLifecycle('error', { source, error: errMsg }, 'C');
+          dailyFritzNextHandFailureCountRef.current += 1;
+          const failureAttempt = dailyFritzNextHandFailureCountRef.current;
+          const isAbort = err instanceof Error && err.message.toLowerCase().includes('timed out');
           // #region agent log
           emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
             location: 'BotMatchScreen.tsx:advanceHand',
             message: 'advanceHand-network-error',
-            hypothesisId: 'A',
+            hypothesisId: isAbort ? 'A' : 'B',
             data: {
               source,
               error: errMsg,
+              failureAttempt,
               handNumber: matchRef.current.handNumber,
+              timeoutMs: DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS,
               nextHandUrl: `${resolveGameServerUrl()}/api/daily-fritz/next-hand`,
             },
           });
           // #endregion
+          if (failureAttempt < 2) {
+            setShowManualHandAdvance(true);
+            traceHandLifecycle('error', { source, error: errMsg, failureAttempt, willRetry: true }, 'C');
+            scheduleHandAdvanceRetry(2500, 'next-hand-fetch-failed');
+            return;
+          }
+          setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
+          setShowManualHandAdvance(true);
+          traceHandLifecycle('error', { source, error: errMsg, failureAttempt }, 'C');
           if (import.meta.env.DEV) {
             console.warn('[daily-fritz-hand] next hand error (raw)', {
               source,
@@ -5657,6 +5672,7 @@ export default function BotMatchScreen({
     });
     setHandRevealProgress(1);
     setHandAdvanceError(null);
+    dailyFritzNextHandFailureCountRef.current = 0;
     if (isGuidedMode || isGuidedV2Mode) return;
     if (isDailyFritzMode) {
       console.log('[daily-flow] reveal countdown started', {
@@ -5710,18 +5726,30 @@ export default function BotMatchScreen({
     if (!handReveal || match.gameOver || isGuidedMode || isGuidedV2Mode) {
       return;
     }
-    const stallMs = DAILY_FRITZ_AUTO_ADVANCE_MS + 2000;
+    // After auto-advance fires, allow a full next-hand timeout (+ retry) before the soft stall hint.
+    const stallMs =
+      DAILY_FRITZ_AUTO_ADVANCE_MS + DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS * 2 + 2500;
     const warnId = window.setTimeout(() => {
       if (!handRevealShownAtRef.current) return;
       const visibleMs = Date.now() - handRevealShownAtRef.current;
       if (visibleMs < stallMs - 500) return;
+      if (handAdvanceError) return;
       warnHandLifecycleStuck('hand result modal visible past auto-advance window', {
         visibleMs,
+        stallMs,
         handOver: matchRef.current.handOver,
         gameOver: matchRef.current.gameOver,
         inFlight: handTransitionInFlightRef.current,
         handAdvanceError,
       });
+      // #region agent log
+      emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
+        location: 'BotMatchScreen.tsx:handRevealStallWarn',
+        message: 'stall-hint-shown',
+        hypothesisId: 'C',
+        data: { visibleMs, stallMs, inFlight: handTransitionInFlightRef.current },
+      });
+      // #endregion
       setShowManualHandAdvance(true);
     }, stallMs);
     return () => window.clearTimeout(warnId);

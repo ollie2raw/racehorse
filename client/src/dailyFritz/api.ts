@@ -9,6 +9,9 @@ const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
 /** Init/today/start requests — 8–12s window before the UI leaves infinite loading. */
 export const DAILY_FRITZ_INIT_TIMEOUT_MS = 10_000;
 
+/** Next-hand advance (prefetch + reveal auto-advance). Match init — Render cold starts can exceed 4.5s. */
+export const DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS = 10_000;
+
 export const DAILY_FRITZ_TODAY_CACHE_PREFIX = 'racehorse:daily-fritz:today:';
 
 function dfClientDebug(...args: unknown[]): void {
@@ -343,10 +346,10 @@ function dfNextHandIngest(payload: {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Debug-Session-Id': '7ec4f9',
+      'X-Debug-Session-Id': '65d5db',
     },
     body: JSON.stringify({
-      sessionId: '7ec4f9',
+      sessionId: '65d5db',
       timestamp: Date.now(),
       ...payload,
     }),
@@ -380,7 +383,7 @@ export async function nextDailyFritzHand(input: {
   // requestJson treats all non-2xx responses identically; we need to
   // distinguish the terminal 409 "no hands remain" from retryable errors.
   const headers = await authHeaders();
-  const timeoutMs = Math.max(1000, input.timeoutMs ?? 6500);
+  const timeoutMs = Math.max(1000, input.timeoutMs ?? DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS);
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   const url = `${resolveServerBaseUrl()}/api/daily-fritz/next-hand`;
