@@ -2,14 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
+import { GameOverlayPortal } from '../components/GameOverlayPortal';
 import { fetchFriends } from '../friends/friendsApi';
 import FilterPills from '../social/hub/FilterPills';
 import { PlayerInitialsAvatar } from '../components/hub';
 import {
   fetchDailyFritzLeaderboard,
+  getTodayDailyFritz,
   type DailyFritzLeaderboardRow,
   type DailyFritzSetGameNumber,
+  type DailyFritzSetResult,
+  type DailyFritzTodayResponse,
 } from './api';
+import { buildDailyFritzFinalOverlayViewModel } from './buildFinalOverlayViewModel';
+import { DailyFritzFinalResultOverlay } from './DailyFritzFinalResultOverlay';
+import { buildShareText } from './shareCard';
 import { getGameSkunkChipLabel } from './skunk';
 import { formatCountdownHms, secondsUntilNextPacificMidnight } from './format';
 import '../components/hub/hubDesignTokens.css';
@@ -31,6 +38,7 @@ interface DailyFritzLeaderboardScreenProps {
   user: User | null;
   runDate: string;
   currentUsername?: string | null;
+  glickoRating?: number | null;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
@@ -299,6 +307,7 @@ export default function DailyFritzLeaderboardScreen({
   user,
   runDate,
   currentUsername = null,
+  glickoRating = null,
   onBack,
   onNavigate,
 }: DailyFritzLeaderboardScreenProps) {
@@ -308,6 +317,9 @@ export default function DailyFritzLeaderboardScreen({
   const [filter, setFilter] = useState<LeaderboardFilter>('global');
   const [friendUsernames, setFriendUsernames] = useState<Set<string>>(new Set());
   const [countdownTick, setCountdownTick] = useState(0);
+  const [today, setToday] = useState<DailyFritzTodayResponse | null>(null);
+  const [resultOverlayOpen, setResultOverlayOpen] = useState(false);
+  const [shareDone, setShareDone] = useState(false);
 
   useEffect(() => {
     const id = window.setInterval(() => setCountdownTick((t) => t + 1), 1000);
@@ -363,6 +375,85 @@ export default function DailyFritzLeaderboardScreen({
     [rows, currentUsername],
   );
 
+  const hasCompletedSetToday = Boolean(
+    selfRow && today?.attempt_status === 'completed' && today.set_result?.setWinner,
+  );
+
+  useEffect(() => {
+    if (!selfRow) {
+      setToday(null);
+      return;
+    }
+    let cancelled = false;
+    void getTodayDailyFritz()
+      .then((response) => {
+        if (!cancelled) setToday(response);
+      })
+      .catch(() => {
+        if (!cancelled) setToday(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selfRow, runDate]);
+
+  const resultOverlayConfig = useMemo(() => {
+    if (!hasCompletedSetToday || !today) return null;
+    const setResult = today.set_result as DailyFritzSetResult | null | undefined;
+    if (!setResult?.setWinner) return null;
+    const profileRating =
+      typeof glickoRating === 'number' && Number.isFinite(glickoRating) ? Math.round(glickoRating) : undefined;
+    return buildDailyFritzFinalOverlayViewModel({
+      setResult,
+      rank: selfRow?.rank ?? today.rank ?? null,
+      runDate: today.run_date || runDate,
+      fritzTier: today.fritz_tier,
+      shareRating: profileRating,
+      shareStreak: today.streak ?? 0,
+      canViewLeaderboard: true,
+      onPrimary: () => setResultOverlayOpen(false),
+      onSecondary: () => {
+        setResultOverlayOpen(false);
+        if (onNavigate) {
+          onNavigate('dailyFritz');
+          return;
+        }
+        onBack();
+      },
+    });
+  }, [hasCompletedSetToday, today, selfRow?.rank, runDate, glickoRating, onNavigate, onBack]);
+
+  const resultShareText = useMemo(
+    () => (resultOverlayConfig ? buildShareText(resultOverlayConfig) : ''),
+    [resultOverlayConfig],
+  );
+
+  const handleShareResult = useCallback(() => {
+    if (!resultShareText) return;
+    const markShared = (): void => {
+      setShareDone(true);
+      window.setTimeout(() => setShareDone(false), 2000);
+    };
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      void navigator
+        .share({ title: 'Daily Fritz', text: resultShareText })
+        .then(() => {
+          markShared();
+        })
+        .catch(() => {
+          /* user dismissed native share */
+        });
+      return;
+    }
+    void navigator.clipboard.writeText(resultShareText).then(() => {
+      markShared();
+    });
+  }, [resultShareText]);
+
+  useEffect(() => {
+    setShareDone(false);
+  }, [resultShareText, resultOverlayOpen]);
+
   const podiumSlots = useMemo(
     () => [rows[0] ?? null, rows[1] ?? null, rows[2] ?? null] as const,
     [rows],
@@ -412,20 +503,31 @@ export default function DailyFritzLeaderboardScreen({
                   </p>
                 </div>
                 <div className="dflb-command__aside">
-                  <button
-                    type="button"
-                    className="dflb-back-link rh-back-button"
-                    onClick={() => {
-                      if (onNavigate) {
-                        onNavigate('dailyFritz');
-                        return;
-                      }
-                      onBack();
-                    }}
-                  >
-                    <span aria-hidden>←</span>
-                    Back to Daily Fritz
-                  </button>
+                  <div className="dflb-command__actions">
+                    {hasCompletedSetToday && resultOverlayConfig ? (
+                      <button
+                        type="button"
+                        className="dflb-share-result-btn"
+                        onClick={() => setResultOverlayOpen(true)}
+                      >
+                        Share Result
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="dflb-back-link rh-back-button"
+                      onClick={() => {
+                        if (onNavigate) {
+                          onNavigate('dailyFritz');
+                          return;
+                        }
+                        onBack();
+                      }}
+                    >
+                      <span aria-hidden>←</span>
+                      Back to Daily Fritz
+                    </button>
+                  </div>
                   <div className="dflb-command__meta" aria-label="Daily board status">
                     <div className="dflb-meta-chip">
                       <span className="dflb-meta-chip__label">Date</span>
@@ -598,6 +700,16 @@ export default function DailyFritzLeaderboardScreen({
           </div>
         </div>
       </div>
+
+      {resultOverlayOpen && resultOverlayConfig ? (
+        <GameOverlayPortal>
+          <DailyFritzFinalResultOverlay
+            overlay={resultOverlayConfig}
+            shareDone={shareDone}
+            onShare={handleShareResult}
+          />
+        </GameOverlayPortal>
+      ) : null}
     </div>
   );
 }

@@ -67,6 +67,7 @@ export default function DailyFritzLeaderboardRoute({
       user={user}
       runDate={runDate}
       currentUsername={profile?.username ?? null}
+      glickoRating={profile?.glicko_rating ?? null}
       onBack={onClose}
       onNavigate={onNavigate}
       onOpenAuth={onOpenAuth}

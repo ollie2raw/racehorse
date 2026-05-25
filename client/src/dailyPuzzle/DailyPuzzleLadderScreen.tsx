@@ -25,6 +25,11 @@ import type {
 } from './types';
 import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
 import dailyLadderHeroImg from '../assets/dailyPuzzle/newnewladderfinal.png';
+import {
+  buildLadderShareData,
+  buildLadderShareText,
+  invokeLadderShareResult,
+} from './ladderShareCard';
 import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
 import { getDailyPuzzleDisplayTitle, getDailyPuzzleStepPresentation } from './presentation';
 import '../dailyFritz/dailyFritz.css';
@@ -194,6 +199,7 @@ export default function DailyPuzzleLadderScreen({
     rawScore: number;
     bestPossible: number | null;
   } | null>(null);
+  const [shareDone, setShareDone] = useState(false);
   const startTimeRef = useRef(0);
   const runningScoreRef = useRef(0);
   const moveTraceRef = useRef<Array<Record<string, unknown>>>([]);
@@ -453,6 +459,49 @@ export default function DailyPuzzleLadderScreen({
 
   const streakDisplay = useMemo(() => getDisplayStreak(today.runDate), [today.runDate]);
 
+  const profileRating = useMemo(() => {
+    const raw = profile?.glicko_rating;
+    return typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : undefined;
+  }, [profile?.glicko_rating]);
+
+  const hubLadderShareText = useMemo(() => {
+    if (attempt?.status !== 'completed') return '';
+    const previewRank =
+      user?.id != null
+        ? (today.leaderboardPreview.find((row) => row.userId === user.id)?.rank ?? null)
+        : null;
+    const data = buildLadderShareData({
+      runDate: today.runDate,
+      attempt,
+      rank: previewRank,
+      shareStreak: streakDisplay,
+      shareRating: profileRating,
+    });
+    return buildLadderShareText(data);
+  }, [attempt, today.runDate, today.leaderboardPreview, user?.id, streakDisplay, profileRating]);
+
+  const finalLadderShareText = useMemo(() => {
+    if (!finalOverlay) return '';
+    const data = buildLadderShareData({
+      runDate: finalOverlay.response.runDate,
+      attempt: finalOverlay.response.attempt,
+      rank: finalOverlay.response.leaderboardRank,
+      shareStreak: getDisplayStreak(finalOverlay.response.runDate),
+      shareRating: profileRating,
+    });
+    return buildLadderShareText(data);
+  }, [finalOverlay, profileRating]);
+
+  const handleShareLadderResult = useCallback(
+    (text: string) => {
+      invokeLadderShareResult(text, () => {
+        setShareDone(true);
+        window.setTimeout(() => setShareDone(false), 2000);
+      });
+    },
+    [],
+  );
+
   const ladderSlotRows = useMemo(() => {
     return [1, 2, 3].map((slotIndex) => {
       const slot = today.slots.find((s) => s.slotIndex === slotIndex);
@@ -513,6 +562,7 @@ export default function DailyPuzzleLadderScreen({
         runDate={today.runDate}
         currentUsername={profile?.username ?? null}
         currentUserId={user?.id ?? null}
+        glickoRating={profile?.glicko_rating ?? null}
         onBack={() => setLeaderboardOpen(false)}
         onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
@@ -719,7 +769,16 @@ export default function DailyPuzzleLadderScreen({
                 </span>
               </div>
             </div>
-            <footer className="rh-result__actions dpl-ladder-result__actions dpl-ladder-result__actions--triple">
+            <footer className="rh-result__actions dpl-ladder-result__actions dpl-ladder-result__actions--with-share">
+              {finalLadderShareText ? (
+                <button
+                  type="button"
+                  className="dpl-ladder-result-btn dpl-ladder-share-result-btn"
+                  onClick={() => handleShareLadderResult(finalLadderShareText)}
+                >
+                  {shareDone ? '✓ Shared!' : 'Share Result'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="dpl-ladder-result-btn dpl-ladder-result-btn--ghost"
@@ -1055,14 +1114,25 @@ export default function DailyPuzzleLadderScreen({
                     </Button>
                   )}
                   <div className="df-pvf-footer dpl-ladder-footer">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="df-pvf-leaderboard-link"
-                      onClick={() => setLeaderboardOpen(true)}
-                    >
-                      View Leaderboard →
-                    </Button>
+                    <div className="dpl-ladder-footer-actions">
+                      {isLadderComplete && hubLadderShareText ? (
+                        <button
+                          type="button"
+                          className="dpl-share-result-btn"
+                          onClick={() => handleShareLadderResult(hubLadderShareText)}
+                        >
+                          {shareDone ? '✓ Shared!' : 'Share Result'}
+                        </button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="df-pvf-leaderboard-link"
+                        onClick={() => setLeaderboardOpen(true)}
+                      >
+                        View Leaderboard →
+                      </Button>
+                    </div>
                     <p className="dpl-ladder-trust-line">{trustLine}</p>
                   </div>
                   {isLadderComplete ? (

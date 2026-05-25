@@ -98,6 +98,7 @@ import {
 } from '../dailyFritz/api';
 import { formatOrdinalPlace } from '../dailyFritz/format';
 import { buildShareText } from '../dailyFritz/shareCard';
+import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 import {
   canApplyNextHand,
@@ -802,11 +803,28 @@ export default function BotMatchScreen({
     () => (dailyFritzSetOverlay ? buildShareText(dailyFritzSetOverlay) : ''),
     [dailyFritzSetOverlay],
   );
-  const handleCopyShare = useCallback(() => {
+  const handleShareResult = useCallback(() => {
     if (!dailyFritzShareText) return;
-    void navigator.clipboard.writeText(dailyFritzShareText).then(() => {
+    const markShared = (): void => {
       setShareCopied(true);
-      window.setTimeout(() => setShareCopied(false), 2500);
+      window.setTimeout(() => setShareCopied(false), 2000);
+    };
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      void navigator
+        .share({
+          title: 'Daily Fritz',
+          text: dailyFritzShareText,
+        })
+        .then(() => {
+          markShared();
+        })
+        .catch(() => {
+          /* user dismissed native share */
+        });
+      return;
+    }
+    void navigator.clipboard.writeText(dailyFritzShareText).then(() => {
+      markShared();
     });
   }, [dailyFritzShareText]);
 
@@ -7125,7 +7143,16 @@ export default function BotMatchScreen({
           />
         </GameOverlayPortal>
       )}
-      {match.gameOver && isDailyFritzMode && dailyFritzSetOverlay && (
+      {match.gameOver && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind === 'final' ? (
+        <GameOverlayPortal>
+          <DailyFritzFinalResultOverlay
+            overlay={dailyFritzSetOverlay}
+            shareDone={shareCopied}
+            onShare={handleShareResult}
+          />
+        </GameOverlayPortal>
+      ) : null}
+      {match.gameOver && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind !== 'final' ? (
         <GameOverlayPortal>
         <div className="game-over-overlay daily-fritz-set-overlay" role="dialog" aria-label="Daily Fritz set interstitial">
           <div className="game-over-card daily-fritz-set-overlay-card" onClick={(event) => event.stopPropagation()}>
@@ -7142,35 +7169,17 @@ export default function BotMatchScreen({
 
             <div className="daily-fritz-set-overlay-stats" aria-label="Daily Fritz set summary">
               <div className="daily-fritz-set-overlay-stat">
-                <span>
-                  {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.resultValue
-                    ? 'Result'
-                    : dailyFritzSetOverlay.gameScoreLabel || 'This game'}
-                </span>
-                <strong
-                  className={
-                    dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.resultValue && dailyFritzSetOverlay.marginTone === 'loss'
-                      ? 'is-loss'
-                      : dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.resultValue && dailyFritzSetOverlay.marginTone === 'win'
-                        ? 'is-win'
-                        : ''
-                  }
-                >
-                  {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.resultValue
-                    ? dailyFritzSetOverlay.resultValue
-                    : dailyFritzSetOverlay.gameScoreValue || '—'}
-                </strong>
+                <span>{dailyFritzSetOverlay.gameScoreLabel || 'This game'}</span>
+                <strong>{dailyFritzSetOverlay.gameScoreValue || '—'}</strong>
               </div>
               <div className="daily-fritz-set-overlay-stat">
                 <span>Set Score</span>
                 <strong>{dailyFritzSetOverlay.setScoreValue || '—'}</strong>
               </div>
               <div className="daily-fritz-set-overlay-stat">
-                <span>{dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue ? 'Rank' : 'Set Margin'}</span>
-                <strong className={dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue ? '' : `is-${dailyFritzSetOverlay.marginTone}`}>
-                  {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.rankValue
-                    ? dailyFritzSetOverlay.rankValue
-                    : dailyFritzSetOverlay.marginValue || '—'}
+                <span>Set Margin</span>
+                <strong className={`is-${dailyFritzSetOverlay.marginTone}`}>
+                  {dailyFritzSetOverlay.marginValue || '—'}
                 </strong>
               </div>
             </div>
@@ -7191,65 +7200,12 @@ export default function BotMatchScreen({
               </div>
             ) : null}
 
-            {dailyFritzSetOverlay.kind === 'final' && dailyFritzSetOverlay.games.length > 0 ? (
-              <div className="daily-fritz-set-overlay-game-list" aria-label="Per-game scores">
-                {dailyFritzSetOverlay.games.map((game) => (
-                  <div key={game.gameNumber} className="daily-fritz-set-overlay-game-row">
-                    <span>Game {game.gameNumber}</span>
-                    <strong className={`is-${game.tone}`}>{game.skunkLabel ?? game.value}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
             {dailyFritzSetOverlay.errorMessage ? (
               <div className="hand-over-error-zone">
                 <span className="hand-over-error-text" title={dailyFritzSetOverlay.errorMessage}>
                   {dailyFritzSetOverlay.errorMessage}
                 </span>
               </div>
-            ) : null}
-
-            {dailyFritzSetOverlay.kind === 'final' ? (
-              <>
-                <div className="df-share-card">
-                  <div className="df-share-preview">
-                    <pre className="df-share-text">{dailyFritzShareText}</pre>
-                  </div>
-                  <div className="df-share-actions">
-                    {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
-                      <button
-                        type="button"
-                        className="df-share-btn df-share-native"
-                        onClick={() => {
-                          void navigator
-                            .share({
-                              title: 'Daily Fritz',
-                              text: dailyFritzShareText,
-                            })
-                            .catch(() => {});
-                        }}
-                      >
-                        Share
-                      </button>
-                    )}
-                    <button type="button" className="df-share-btn df-share-copy" onClick={handleCopyShare}>
-                      {shareCopied ? '✓ Copied!' : 'Copy result'}
-                    </button>
-                    <a
-                      className="df-share-btn df-share-x"
-                      href={`https://x.com/intent/tweet?text=${encodeURIComponent(dailyFritzShareText)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Post to X
-                    </a>
-                  </div>
-                </div>
-                {shareCopied && (
-                  <p className="df-share-hint">Paste into iMessage, WhatsApp, or anywhere</p>
-                )}
-              </>
             ) : null}
 
             <div className="daily-fritz-set-overlay-actions">
@@ -7274,7 +7230,7 @@ export default function BotMatchScreen({
           </div>
         </div>
         </GameOverlayPortal>
-      )}
+      ) : null}
       {match.gameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
         <GameOverModal
           open

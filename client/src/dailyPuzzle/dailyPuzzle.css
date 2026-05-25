@@ -1734,6 +1734,58 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.dpl-ladder-result__actions--with-share {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dpl-ladder-result__actions--with-share .dpl-ladder-share-result-btn {
+  grid-column: 1 / -1;
+}
+
+.dpl-ladder-share-result-btn,
+.dpl-share-result-btn {
+  border: 1px solid color-mix(in srgb, var(--tier-standard) 42%, transparent);
+  background: color-mix(in srgb, var(--tier-standard) 16%, transparent);
+  color: color-mix(in srgb, var(--tier-standard) 92%, white);
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.dpl-ladder-share-result-btn {
+  appearance: none;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.dpl-ladder-share-result-btn:hover,
+.dpl-share-result-btn:hover {
+  opacity: 0.9;
+}
+
+.dpl-ladder-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.dpl-share-result-btn {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.dflb-page--ladder .dpl-share-result-btn.dflb-share-result-btn {
+  border-color: color-mix(in srgb, var(--tier-standard) 38%, transparent);
+  background: color-mix(in srgb, var(--tier-standard) 14%, transparent);
+  color: color-mix(in srgb, var(--tier-standard) 90%, white);
+}
+
 .dpl-ladder-result-btn {
   appearance: none;
   min-height: 44px;
@@ -1778,7 +1830,8 @@
 
 @media (max-width: 640px) {
   .dpl-ladder-result__actions,
-  .dpl-ladder-result__actions--triple {
+  .dpl-ladder-result__actions--triple,
+  .dpl-ladder-result__actions--with-share {
     grid-template-columns: 1fr;
   }
 }

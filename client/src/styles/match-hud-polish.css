@@ -259,3 +259,223 @@
 .df-share-copy { background: #f0c040; color: #0d1421; }
 .df-share-x { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.85); border-left: 1px solid rgba(255,255,255,0.08); }
 .df-share-hint { margin: 6px 0 0; font-size: 12px; color: rgba(255,255,255,0.4); text-align: center; }
+
+/* Daily Fritz final result overlay (match + leaderboard share) */
+.df-result-overlay.game-over-overlay {
+  z-index: 120;
+}
+
+.df-result-card.game-over-card {
+  --df-result-accent: var(--tier-elite, #e7b64a);
+  width: min(100%, 420px);
+  max-height: min(92dvh, 720px);
+  overflow: auto;
+  animation: df-result-enter 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes df-result-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.df-result-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 2px;
+}
+
+.df-result-hero {
+  text-align: center;
+}
+
+.df-result-eyebrow {
+  margin: 0 0 8px;
+  font-family: var(--font-display, 'Barlow Condensed', sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--df-result-accent);
+}
+
+.df-result-title {
+  margin: 0;
+  font-family: var(--font-display, 'Barlow Condensed', sans-serif);
+  font-size: clamp(26px, 5vw, 32px);
+  font-weight: 800;
+  line-height: 1.05;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.df-result-subtitle {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.df-result-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.df-result-stat {
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+  text-align: center;
+}
+
+.df-result-stat-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.df-result-stat-value {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-display, 'Barlow Condensed', sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.df-result-stat-value.is-win {
+  color: #7ee0a8;
+}
+
+.df-result-stat-value.is-loss {
+  color: #f0a0a8;
+}
+
+.df-result-games-head {
+  margin-bottom: 6px;
+}
+
+.df-result-games-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.df-result-games-well {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.df-result-game-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+}
+
+.df-result-game-row:first-child {
+  border-top: none;
+}
+
+.df-result-game-row strong.is-win {
+  color: #7ee0a8;
+}
+
+.df-result-game-row strong.is-loss {
+  color: #f0a0a8;
+}
+
+.df-result-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.df-result-meta-pill {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.df-result-meta-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.df-result-meta-value {
+  display: block;
+  margin-top: 2px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.df-result-share-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid rgba(231, 182, 74, 0.35);
+  border-radius: 12px;
+  background: rgba(231, 182, 74, 0.14);
+  color: #f2dc9a;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.df-result-share-btn:hover {
+  opacity: 0.9;
+}
+
+.df-result-share-btn:active {
+  transform: scale(0.98);
+}
+
+.df-result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.df-result-primary,
+.df-result-secondary {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.df-result-primary {
+  background: var(--df-result-accent);
+  color: #0d1421;
+}
+
+.df-result-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+}

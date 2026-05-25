@@ -5,7 +5,13 @@ import { GlobalNav } from '../components';
 import { fetchFriends } from '../friends/friendsApi';
 import FilterPills from '../social/hub/FilterPills';
 import { PlayerInitialsAvatar } from '../components/hub';
-import { fetchDailyPuzzleLadderLeaderboard } from './api';
+import { fetchDailyPuzzleLadderLeaderboard, getTodayDailyPuzzleLadder } from './api';
+import {
+  buildLadderShareData,
+  buildLadderShareText,
+  invokeLadderShareResult,
+} from './ladderShareCard';
+import { getDisplayStreak } from './streakStorage';
 import type { DailyPuzzleLeaderboardRow } from './types';
 import { formatCountdownHms, secondsUntilNextPacificMidnight } from '../dailyFritz/format';
 import '../components/hub/hubDesignTokens.css';
@@ -28,6 +34,7 @@ interface DailyPuzzleLadderLeaderboardScreenProps {
   runDate: string;
   currentUsername?: string | null;
   currentUserId?: string | null;
+  glickoRating?: number | null;
   onBack: () => void;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
@@ -282,6 +289,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
   runDate,
   currentUsername = null,
   currentUserId = null,
+  glickoRating = null,
   onBack,
   onNavigate,
 }: DailyPuzzleLadderLeaderboardScreenProps) {
@@ -291,6 +299,7 @@ export default function DailyPuzzleLadderLeaderboardScreen({
   const [filter, setFilter] = useState<LeaderboardFilter>('global');
   const [friendUsernames, setFriendUsernames] = useState<Set<string>>(new Set());
   const [countdownTick, setCountdownTick] = useState(0);
+  const [shareDone, setShareDone] = useState(false);
 
   useEffect(() => {
     const id = window.setInterval(() => setCountdownTick((t) => t + 1), 1000);
@@ -346,6 +355,51 @@ export default function DailyPuzzleLadderLeaderboardScreen({
     [rows, currentUserId, currentUsername],
   );
 
+  const [ladderShareText, setLadderShareText] = useState('');
+
+  useEffect(() => {
+    if (!selfRow) {
+      setLadderShareText('');
+      return;
+    }
+    let cancelled = false;
+    void getTodayDailyPuzzleLadder()
+      .then((today) => {
+        if (cancelled) return;
+        const attempt = today.attempt;
+        if (attempt?.status !== 'completed') {
+          setLadderShareText('');
+          return;
+        }
+        const profileRating =
+          typeof glickoRating === 'number' && Number.isFinite(glickoRating)
+            ? Math.round(glickoRating)
+            : undefined;
+        const data = buildLadderShareData({
+          runDate: today.runDate,
+          attempt,
+          rank: selfRow.rank,
+          shareStreak: getDisplayStreak(today.runDate),
+          shareRating: profileRating,
+        });
+        setLadderShareText(buildLadderShareText(data));
+      })
+      .catch(() => {
+        if (!cancelled) setLadderShareText('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selfRow, runDate, glickoRating]);
+
+  const handleShareResult = useCallback(() => {
+    if (!ladderShareText) return;
+    invokeLadderShareResult(ladderShareText, () => {
+      setShareDone(true);
+      window.setTimeout(() => setShareDone(false), 2000);
+    });
+  }, [ladderShareText]);
+
   const podiumSlots = useMemo(
     () => [rows[0] ?? null, rows[1] ?? null, rows[2] ?? null] as const,
     [rows],
@@ -395,10 +449,21 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                   </p>
                 </div>
                 <div className="dflb-command__aside">
-                  <button type="button" className="dflb-back-link rh-back-button" onClick={onBack}>
-                    <span aria-hidden>←</span>
-                    Back to Ladder
-                  </button>
+                  <div className="dflb-command__actions">
+                    {ladderShareText ? (
+                      <button
+                        type="button"
+                        className="dpl-share-result-btn dflb-share-result-btn"
+                        onClick={handleShareResult}
+                      >
+                        {shareDone ? '✓ Shared!' : 'Share Result'}
+                      </button>
+                    ) : null}
+                    <button type="button" className="dflb-back-link rh-back-button" onClick={onBack}>
+                      <span aria-hidden>←</span>
+                      Back to Ladder
+                    </button>
+                  </div>
                   <div className="dflb-command__meta" aria-label="Daily board status">
                     <div className="dflb-meta-chip">
                       <span className="dflb-meta-chip__label">Date</span>
