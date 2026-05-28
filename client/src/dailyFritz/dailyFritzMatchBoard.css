@@ -177,8 +177,3 @@
 .bot-match-screen.bot-match-mode-daily-fritz.df-board-has-play .nbl-board-watermark {
   opacity: 0;
 }
-
-.bot-match-screen.bot-match-mode-daily-fritz .hand-area,
-.bot-match-screen.bot-match-mode-daily-fritz .wl-hand-area {
-  border-top-color: rgba(231, 182, 74, 0.14) !important;
-}

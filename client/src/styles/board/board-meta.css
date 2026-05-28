@@ -16,3 +16,34 @@
  * - structural and shared visual ownership belongs here
  * - mode accent differences belong in skins
  */
+
+/* Shared board meta bar structure.
+   Visual pill skins and mode-specific accents remain legacy-owned until the skin pass. */
+.screen.game-screen.walnut-live .rh-board-meta-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  pointer-events: none;
+}
+
+.screen.game-screen.walnut-live .rh-board-meta-bar > * {
+  pointer-events: auto;
+}
+
+.screen.game-screen.walnut-live .rh-board-meta-bar .board-corner-pill {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+}
+
+.screen.game-screen.walnut-live .rh-board-meta-bar--count-only {
+  justify-content: flex-end;
+}

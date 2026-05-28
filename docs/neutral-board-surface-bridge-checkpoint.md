@@ -1,9 +1,112 @@
 # Neutral Board Surface Bridge Checkpoint
 
-**Status:** Documentation / audit only (Patch 26)  
+**Status:** Documentation checkpoint (Patch 44)  
 **Date:** 2026-05-28  
 **Mode:** No-visual-change migration — not redesign  
-**Scope:** Patches 19–25 neutral runtime bridge + low-risk CSS aliases
+**Scope:** Patches 19–30 — surface bridge; Patches 32–43 — hand dock (see **`docs/board-hand-dock-ownership-checkpoint.md`**)
+
+**Related plans:** `docs/board-surface-first-ownership-move-plan.md` (Patch 27–28), `docs/board-container-stacking-ownership-plan.md` (Patch 29–30), `docs/board-hand-dock-ownership-checkpoint.md` (Patch 44)
+
+**Phase 1 complete:** See **`docs/board-phase-1-cleanup-checkpoint.md`** (Patch 49) for end-to-end ownership status and next fork (black matte skin planning).
+
+---
+
+## Current checkpoint (Patch 44)
+
+| Layer | State |
+|-------|--------|
+| **Runtime neutral classes** | `.rh-board-stage`, `.rh-board-frame`, `.rh-board-canvas`, `.rh-board-watermark` exist on live board DOM alongside legacy `nbl-*` classes |
+| **Shell structure** | Partially canonical in `client/src/styles/board/board-shell.css` (stage/frame sizing for standard-live + bot-match zones) |
+| **Canvas structure + stacking** | **Canonical in `client/src/styles/board/board-surface.css`** (base canvas flex box + three scoped `.board-container` stacking rules) |
+| **Hand dock structure** | **Canonical in `client/src/styles/board/board-hand-dock.css`** — inner tray + bot `.rh-live-hand-deck` shell (Patches 33, 39); details in **`docs/board-hand-dock-ownership-checkpoint.md`** |
+| **Visual surface skin** | Still **legacy-owned** (frame/canvas backgrounds, pseudo-elements, watermark, route skins, hand dock chrome) |
+| **Black matte redesign** | **Not started** — cleanup/ownership/bridge mode only |
+
+---
+
+## `board-surface.css` canonical ownership (Patches 28–30)
+
+**File:** `client/src/styles/board/board-surface.css`  
+**Loaded via:** `client/src/main.tsx` → `client/src/styles/board/index.css`
+
+### 1. Base canvas structure
+
+```css
+.nbl-board-canvas,
+.rh-board-canvas {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+```
+
+**Migrated from:** `client/src/practice/noBrainerLab.css` (Patch 28)
+
+### 2. Board-container stacking inside canvas
+
+```css
+.walnut-live .nbl-board-canvas .board-container,
+.walnut-live .rh-board-canvas .board-container {
+  position: relative;
+  z-index: 4;
+}
+
+.practice-lab .nbl-board-canvas .board-container,
+.practice-lab .rh-board-canvas .board-container {
+  z-index: 4;
+}
+
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-board-canvas .board-container,
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .rh-board-canvas .board-container {
+  position: relative;
+  z-index: 4;
+}
+```
+
+**Migrated from:** `walnut-live.css`, `match-standard-live-board.css`, `noBrainerLab.css` (Patch 30)
+
+**Nature:** structure/stacking only — engine tile plane above canvas (`z-index: 2`) and watermark (`z-index: 3`).
+
+---
+
+## Legacy files that no longer own safe canvas/stacking rules
+
+These files **previously** held the rules above; ownership moved to `board-surface.css`. They still own visual skins, frame polish, and other concerns listed below.
+
+| File | No longer owns |
+|------|----------------|
+| `client/src/styles/walnut-live.css` | NBL `.board-container` stacking under `.nbl-board-canvas` / `.rh-board-canvas` |
+| `client/src/styles/match-standard-live-board.css` | Standard-live zone `.board-container` stacking |
+| `client/src/practice/noBrainerLab.css` | Base canvas structure; practice-scoped `.board-container` stacking |
+
+**Still imported at runtime:** `noBrainerLab.css` remains required via `MatchNblBoardFrame` / `InGameBoardShell` for **frame visuals**, watermark, and toolbar — not for canvas/stacking structure.
+
+---
+
+## Explicitly untouched and legacy-owned
+
+Do **not** assume these are in `board-surface.css` or safe to move without a dedicated high-risk plan:
+
+| Item | Primary legacy owner(s) |
+|------|-------------------------|
+| `.wl-board-area .board-container` | **`walnut-live.css`** — different DOM path (legacy board-area, not NBL canvas) |
+| `.nbl-board-frame` / `.rh-board-frame` visual skin | `noBrainerLab.css`, `match-hud-polish.css`, `walnut-live.css`, `match-standard-live-board.css`, route files |
+| `.nbl-board-frame::before` / `::after` | `walnut-live.css`, `learnGuidedMatch.css`, `match-hud-polish.css`, `match-standard-live-board.css`, `dailyFritzMatchBoard.css`, `noBrainerLab.css` |
+| `.nbl-board-canvas::before` | `walnut-live.css`, `match-standard-live-board.css`, `learnGuidedMatch.css`, `dailyFritzMatchBoard.css` |
+| `.nbl-board-watermark` / `.rh-board-watermark` | `noBrainerLab.css`, `walnut-live.css`, `match-standard-live-board.css`, `learnGuidedMatch.css`, `dailyFritzMatchBoard.css` — **no `.rh-board-watermark` CSS yet** |
+| **Daily Fritz** surface skin | `dailyFritzMatchBoard.css` |
+| **Learn/Guided** surface skin | `learnGuidedMatch.css` |
+| **Practice frame visuals** | `noBrainerLab.css` (`.nbl-board-frame` base grid/matte) |
+| Generic frame polish | `match-hud-polish.css` (`.screen.game-screen .nbl-board-frame`) |
+| **Tile styling** | `game-interactions.css`, `walnut-live.css`, route hand/tile hooks |
+| **Hand dock structure** | **`board-hand-dock.css`** (inner tray + bot deck shell) — see hand dock checkpoint |
+| **Hand dock skin / deck child / tiles** | `walnut-live.css`, `learnGuidedMatch.css`, `game-interactions.css`, route files |
+| **Meta / controls** | `match-standard-live-board.css`, `noBrainerLab.css`, HUD/control pills |
 
 ---
 
@@ -21,156 +124,67 @@ Two frame emitters render the same neutral class pairing on the same nodes (lega
 **Consumers:**
 
 - `MatchNblBoardFrame`: `BotMatchScreen` `boardStage`, `App.tsx` multiplayer board shell
-- `InGameBoardFrame` (via `InGameBoardShell`): Daily Puzzle, Daily Puzzle Ladder, No Brainer Lab, and `BotMatchScreen` studio path (`InGameBoardShell` + `board/InGameBoardFrame` zone wrapper)
+- `InGameBoardFrame` (via `InGameBoardShell`): Daily Puzzle, Daily Puzzle Ladder, No Brainer Lab, and `BotMatchScreen` studio path
 
-`client/src/match/board/InGameBoardFrame.tsx` is a **zone/shell wrapper only** (`.rh-live-studio-shell` / `.rh-live-board-zone`); it does **not** emit `rh-board-*` surface classes.
+`client/src/match/board/InGameBoardFrame.tsx` is a **zone/shell wrapper only**; it does **not** emit `rh-board-*` surface classes.
 
-All four neutral classes exist in runtime today:
+### CSS recognition today
 
-- `.rh-board-stage`
-- `.rh-board-frame`
-- `.rh-board-canvas`
-- `.rh-board-watermark`
-
-**CSS recognition today:** neutral selectors are recognized only where explicitly aliased or listed in `board-shell.css`. There is **no** `.rh-board-watermark` CSS yet. There are **no** `.rh-board-frame` / `.rh-board-canvas` visual-surface aliases.
+| Neutral class | Structural CSS | Visual CSS |
+|---------------|----------------|------------|
+| `.rh-board-stage` | `board-shell.css` (sizing) | Legacy route/shell |
+| `.rh-board-frame` | `board-shell.css` (sizing) | Legacy frame skin (see untouched list) |
+| `.rh-board-canvas` | **`board-surface.css`** (structure + child stacking scopes) | Legacy route canvas skins (`nbl-board-canvas` selectors) |
+| `.rh-board-watermark` | None | Legacy `nbl-board-watermark` only |
 
 ### Canonical namespace load order
 
 From `client/src/main.tsx`:
 
 1. Legacy globals (`walnut-live.css`, `match-hud-polish.css`, `match-board-architecture.css`, `match-standard-live-board.css`, …)
-2. `client/src/styles/board/index.css` (last among board-related globals)
+2. `client/src/styles/board/index.css` → `board-shell.css` + **`board-surface.css`** (active structure/stacking rules)
 
-`styles/board/index.css` imports `board-shell.css` (active structural rules) and `board-surface.css` (**comment/header only — no runtime rules**).
-
-Frame emitters also import `client/src/practice/noBrainerLab.css` directly (`MatchNblBoardFrame`, `InGameBoardShell`), so practice base frame/canvas/watermark rules apply on every route using those components unless overridden.
+Frame emitters still import `noBrainerLab.css` for **frame/watermark/toolbar** visuals on routes using `MatchNblBoardFrame` / `InGameBoardShell`.
 
 ---
 
-## B. Completed safe aliases
+## B. Completed safe work (aliases + ownership)
 
-### 1. Shell structure (stage + frame sizing)
+### 1. Shell structure (stage + frame sizing) — `board-shell.css`
 
-**File:** `client/src/styles/board/board-shell.css`
+Neutral aliases for `.rh-board-stage` and `.rh-board-frame` in standard-live and bot-match zones (flex/sizing only).
 
-**Alias groups:**
+### 2. Canvas structure + board-container stacking — `board-surface.css`
 
-```css
-/* rh-standard-live-board */
-... .nbl-stage, ... .rh-board-stage,
-... .nbl-board-frame, ... .rh-board-frame { width/height/padding }
+| Milestone | Patch | What moved |
+|-----------|-------|------------|
+| Base canvas flex box | 28 | `.nbl-board-canvas, .rh-board-canvas` |
+| Container stacking (3 scopes) | 30 | walnut-live, practice-lab, rh-standard-live-board zone |
 
-/* bot-match (not learn-lesson) */
-... .nbl-stage, ... .rh-board-stage,
-... .nbl-board-frame, ... .rh-board-frame { width/height/padding }
-```
+Low-risk **alias** work on `.rh-board-canvas .board-container` preceded ownership moves (Patches 24–25); rules now live only in `board-surface.css`.
 
-Plus bot-only `.rh-board-stage { min-height: 0; }`.
+### Not bridged / not canonical yet
 
-**Nature:** flex/sizing only — no background, border, shadow, or pseudo-elements.
-
-### 2. Base canvas structure (centered flex box)
-
-**File:** `client/src/practice/noBrainerLab.css`
-
-```css
-.nbl-board-canvas,
-.rh-board-canvas {
-  position: relative;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-```
-
-**Nature:** layout/stacking only.
-
-### 3. Board-container stacking (complete low-risk set)
-
-| File | Selector pair |
-|------|----------------|
-| `client/src/styles/walnut-live.css` | `.walnut-live .nbl-board-canvas .board-container`, `.walnut-live .rh-board-canvas .board-container` → `position: relative; z-index: 4` |
-| `client/src/styles/match-standard-live-board.css` | `.rh-standard-live-board .rh-live-board-zone .nbl-board-canvas .board-container`, same zone `.rh-board-canvas .board-container` → `position: relative; z-index: 4` |
-| `client/src/practice/noBrainerLab.css` | `.practice-lab .nbl-board-canvas .board-container`, `.practice-lab .rh-board-canvas .board-container` → `z-index: 4` |
-
-**Patch 25** completed the standard-live and practice entries; walnut-live stacking alias predates it.
-
-### Not bridged (intentionally)
-
-- `.rh-board-watermark` — zero CSS selectors
-- `.rh-board-frame` — shell sizing only; no visual alias
-- `.rh-board-canvas` — base structure + stacking only; route visual skins still `nbl-board-canvas` only
-- Frame `::before` / `::after`, canvas `::before`, watermark opacity/filter/size
+- `.rh-board-watermark` — no neutral CSS
+- `.rh-board-frame` — visual skin remains `nbl-board-frame`-keyed
+- Route **canvas visual** skins — still `nbl-board-canvas` in legacy files
+- Frame/canvas pseudo-elements, watermark styling
 
 ---
 
-## C. What remains legacy-owned
+## C. What remains legacy-owned (visual + parallel paths)
 
-All visual playfield identity still keys off `nbl-*` (and route wrappers). `board-surface.css` documents future ownership only.
+All **visual** playfield identity still keys off `nbl-*` and route wrappers. See **Explicitly untouched** table above.
 
-### `.nbl-board-frame` (visual + structure)
+### Quick reference — high-traffic legacy owners
 
-| Owner file | Notes |
-|------------|--------|
-| `client/src/practice/noBrainerLab.css` | **Practice visual frame base** — grid matte background, inset shadow, `::after` bezel |
-| `client/src/styles/match-hud-polish.css` | **Generic frame polish** — global `.screen.game-screen .nbl-board-frame` border/padding/background; `::after` inset; mobile padding tweak |
-| `client/src/styles/match-board-architecture.css` | Playfield card frame reset + `::after` |
-| `client/src/styles/match-standard-live-board.css` | Standard-live frame transparent reset (kills NBL skin inside zone) |
-| `client/src/styles/walnut-live.css` | Bot-match frame skin, `::before`/`::after`, rh-live-board-zone overrides, duplicate blocks ~1895–2593 |
-| `client/src/dailyFritz/dailyFritzMatchBoard.css` | **Daily Fritz** frame overrides on `.walnut-nbl-stage .nbl-board-frame` + `::after` |
-| `client/src/learn/learnGuidedMatch.css` | **Learn/Guided** `.learn-guided-live-board-zone` + `.learn-guided-board-card` frame rules |
-| `client/src/styles/board/board-shell.css` | Structural width/height only (paired with `.rh-board-frame`) |
-
-### `.nbl-board-frame::before` / `::after`
-
-| Owner file |
-|------------|
-| `match-standard-live-board.css` (disabled via `content: none` in standard-live zone) |
-| `walnut-live.css` (bot-match decorative layers) |
-| `learnGuidedMatch.css` |
-| `noBrainerLab.css` (`::after` only; no `::before` in practice base) |
-| `match-hud-polish.css` (`::after`) |
-| `match-board-architecture.css` (`::after`) |
-| `dailyFritzMatchBoard.css` (`::after`) |
-
-### `.nbl-board-canvas` visual surface rules
-
-| Owner file | Notes |
-|------------|--------|
-| `match-standard-live-board.css` | Standard-live felt/matte (`background-color`, `background-image`, `box-shadow`) + `.board-area.wl-board-area` |
-| `walnut-live.css` | Bot-match canvas skin + `::before` texture layer (multiple selector blocks) |
-| `learnGuidedMatch.css` | Guided live zone + board-card canvas/area skin, tile scale hooks |
-| `dailyFritzMatchBoard.css` | `::before` layer only (mode skin accent) |
-
-### `.nbl-board-canvas::before`
-
-| Owner file |
-|------------|
-| `match-standard-live-board.css` (suppressed in zone) |
-| `walnut-live.css` |
-| `learnGuidedMatch.css` |
-| `dailyFritzMatchBoard.css` |
-
-### `.nbl-board-watermark`
-
-| Owner file |
-|------------|
-| `noBrainerLab.css` (base position, size, opacity, color, `img`) |
-| `match-standard-live-board.css` (standard-live opacity/size) |
-| `walnut-live.css` (bot-match) |
-| `learnGuidedMatch.css` |
-| `dailyFritzMatchBoard.css` (+ `.df-board-has-play` variant) |
-
-### Related legacy (not canvas aliases)
-
-- `walnut-live.css` — `.walnut-live .walnut-nbl-stage .nbl-board-frame` flex hook (structural, no neutral alias)
-- `walnut-live.css` — `.board-area.wl-board-area` parallel surface path
-- `botMatch.css` — mobile `.board-canvas` / `.board-container` fit (`!important` overflow) — **not** `nbl-board-canvas` scoped
-- Tile/highlight rules in `game-interactions.css`, `walnut-live.css` — out of surface bridge scope
+| Concern | Owner files |
+|---------|-------------|
+| Frame visual skin | `noBrainerLab.css`, `match-hud-polish.css`, `walnut-live.css`, `match-standard-live-board.css`, `dailyFritzMatchBoard.css`, `learnGuidedMatch.css` |
+| Canvas visual skin + `::before` | `walnut-live.css`, `match-standard-live-board.css`, `learnGuidedMatch.css`, `dailyFritzMatchBoard.css` |
+| Watermark | `noBrainerLab.css`, `walnut-live.css`, `match-standard-live-board.css`, `learnGuidedMatch.css`, `dailyFritzMatchBoard.css` |
+| Parallel board-area path | `walnut-live.css` — `.board-area.wl-board-area`, **`.wl-board-area .board-container`** |
+| Mobile board fit | `botMatch.css` — `.bot-match-screen .board-container` (sizing/overflow, not NBL stacking) |
 
 ---
 
@@ -178,86 +192,81 @@ All visual playfield identity still keys off `nbl-*` (and route wrappers). `boar
 
 ### Low risk
 
-- Additional **selector aliases** that mirror already-proven patterns:
-  - structure/stacking only (`position`, `z-index`, `display`, `flex`, `width`, `height`, `min-height`, `padding` without visual tokens)
-- Documenting import-order constraints before any move
-- **Not recommended next:** aliasing visual surface selectors to `.rh-board-canvas` / `.rh-board-frame` without a dedicated plan and route matrix sign-off
-
-**Low-risk alias queue is effectively empty** for `.board-container` stacking; the three-family bridge is complete.
+- **Done** for NBL canvas path: structure + `.board-container` stacking under canvas
+- Future structural moves in **`board-hand-dock.css`**, **`board-layout.css`**, **`board-hud.css`** (tray/HUD geometry without visual tokens)
+- Documentation and ownership audits
 
 ### Medium risk
 
-- **Watermark** changes that split positioning (`top`/`left`/`transform`/`width`) from opacity/color/filter — easy to desync route overrides
-- **Route-fit** rules: `overflow`, `transform`, `transform-origin`, mobile `!important` sizing (`botMatch.css`, guided tile scale in `learnGuidedMatch.css`)
-- **Generic frame resets** without background/shadow (e.g. `match-standard-live-board` transparent frame strip) if duplicated or reordered incorrectly
-- `walnut-live .walnut-nbl-stage .nbl-board-frame` flex hook — structural but route-global
+- Watermark position vs opacity split across files
+- Route-fit `overflow` / `transform` (`botMatch.css`, guided tile scale)
+- Generic frame resets without skin duplication
 
 ### High risk
 
-- **Frame visual skin** (background gradients/images, border, `box-shadow`, `border-radius`)
-- **Canvas backgrounds/textures** and `::before` overlay layers
-- **Pseudo-elements** on frame or canvas
-- **Daily Fritz** mode skin (`dailyFritzMatchBoard.css`)
-- **Learn/Guided** skin (`learnGuidedMatch.css`) including tile transform/scaling blocks adjacent to canvas selectors
-- **`match-hud-polish.css`** global frame polish (affects all `.screen.game-screen`)
-- Anything touching **tile rendering**, highlights, or domino plane geometry
-- Moving visual rules into `board-surface.css` without parity testing across all six routes
+- Frame visual skin, canvas backgrounds/textures, pseudo-elements
+- Daily Fritz / Learn/Guided mode skins
+- `match-hud-polish.css` global frame polish
+- Tile rendering and highlights
+- Moving **visual** rules into `board-surface.css` before route matrix sign-off
 
 ---
 
 ## E. Route matrix
 
-| Route / mode | Screen / root signals | Frame emitter | Main CSS owners (surface) | Highest-risk selectors |
-|--------------|----------------------|---------------|---------------------------|-------------------------|
-| **Daily Fritz** | `.bot-match-screen.bot-match-mode-daily-fritz` (+ `.df-board-has-play`) | `MatchNblBoardFrame` in `BotMatchScreen` `boardStage` | `noBrainerLab.css` (imported) → `walnut-live.css` bot blocks → **`dailyFritzMatchBoard.css`** | `.bot-match-mode-daily-fritz .nbl-board-canvas::before`, `.nbl-board-frame::after`, watermark play-state |
-| **Play vs Fritz** | `.bot-match-screen` (non-lesson, non-DF mode class) | `MatchNblBoardFrame` | `noBrainerLab.css` → **`walnut-live.css`** bot-match frame/canvas/`::before`/watermark (~1895–2593) → `match-hud-polish.css` global frame | `.bot-match-screen:not(.learn-lesson-screen) .nbl-board-canvas`, `::before`, frame `::before`/`::after` |
-| **Ghost / bot match** | Same as PvF (mode class varies) | `MatchNblBoardFrame` | Same stack as PvF + `botMatch.css` mobile board-container fit | `walnut-live` canvas `background-image` layers; mobile `.board-container` `overflow`/`transform-origin` |
-| **Daily Puzzle** | `.rh-standard-live-board.daily-puzzle-screen` | `InGameBoardFrame` via `InGameBoardShell` | `noBrainerLab.css` → **`match-standard-live-board.css`** (overrides NBL inside `.rh-live-board-zone`) → `board-shell.css` | `.rh-standard-live-board .nbl-board-canvas` visual block (background/box-shadow); pseudo suppression block |
-| **Practice / No Brainer Lab** | `.practice-lab.rh-standard-live-board` | `InGameBoardFrame` via `InGameBoardShell` | **`noBrainerLab.css`** (owns base frame skin) + `match-standard-live-board.css` zone overrides + `board-shell.css` | `.nbl-board-frame` base gradients/shadows; practice lacks route-specific canvas skin file — relies on NBL base |
-| **Learn / Guided** | `.learn-lesson-screen` + `.learn-guided-live-board-zone` | `MatchNblBoardFrame` inside guided layout (`boardStage` in zone) | `noBrainerLab.css` → **`learnGuidedMatch.css`** (zone + board-card) → lesson exclusions in `walnut-live` | `.learn-guided-live-board-zone .nbl-board-canvas`, tile scale selectors, watermark |
-
-**Shared across routes:** `match-hud-polish.css` `.screen.game-screen .nbl-board-frame` applies unless a more specific route block overrides it.
+| Route / mode | Frame emitter | Structure/stacking owner | Visual surface owners (unchanged) |
+|--------------|---------------|---------------------------|-----------------------------------|
+| **Daily Fritz** | `MatchNblBoardFrame` | **`board-surface.css`** | `noBrainerLab.css`, `walnut-live.css`, **`dailyFritzMatchBoard.css`** |
+| **Play vs Fritz** | `MatchNblBoardFrame` | **`board-surface.css`** | `noBrainerLab.css`, `walnut-live.css`, `match-hud-polish.css` |
+| **Ghost / bot** | `MatchNblBoardFrame` | **`board-surface.css`** | Same as PvF + `botMatch.css` mobile fit |
+| **Daily Puzzle** | `InGameBoardFrame` | **`board-surface.css`** (standard-live stacking scope) | `noBrainerLab.css`, **`match-standard-live-board.css`**, `board-shell.css` |
+| **Practice / NBL** | `InGameBoardFrame` | **`board-surface.css`** | `noBrainerLab.css` frame skin, `match-standard-live-board.css` zone skin |
+| **Learn / Guided** | `MatchNblBoardFrame` in guided zone | **`board-surface.css`** (walnut-live stacking scope) | `noBrainerLab.css`, **`learnGuidedMatch.css`** |
 
 ---
 
-## F. Recommended next fork (Patch 27)
+## F. Recommended next track (Patch 45+)
 
-### Options considered
+Hand dock structure cleanup (**Patches 32–43**) is documented in **`docs/board-hand-dock-ownership-checkpoint.md`**.
 
-| Option | Summary | Verdict |
-|--------|---------|---------|
-| **1 — Plan first `board-surface.css` ownership move (base canvas structure only)** | Move or copy-own the shared `.nbl-board-canvas, .rh-board-canvas` flex box (+ optionally the three `.board-container` stacking pairs) into `board-surface.css`; leave legacy files as re-export or thin forwarders in a later patch | **Recommended** |
-| **2 — Watermark split audit** | Decompose opacity/size vs position across 4+ files | Defer — medium risk, no neutral CSS yet |
-| **3 — Frame visual ownership audit** | Map `nbl-board-frame` vs `rh-board-frame` skin before any alias | Defer — high risk; do before visual aliases, not before structure move |
-| **4 — Hand dock / tray cleanup** | Shift focus to `board-hand-dock.css` | Valid parallel track, but does not advance surface ownership |
+### Options
 
-### Recommendation: **Option 1 (planning only for Patch 27)**
+| Option | Focus | Risk | Notes |
+|--------|--------|------|-------|
+| **A — Remaining deck-scoped hand layout** | `.rh-live-hand-deck .tray-center` / `.hand-container` / scroll / single-row → `board-hand-dock.css` | Low–medium | Left in `walnut-live.css` after Patches 37–39 |
+| **B — Board meta / controls audit** | `board-meta.css`, `board-controls.css` — pills, zoom tray, controls tray, meta bars | **Medium** | Likely still scattered; visible on every match |
+| **C — Frame visual ownership audit** | `.nbl-board-frame` skin, pseudo-elements, `match-hud-polish.css`, route skins | **High** | Defer until redesign plan |
 
-**Patch 27 should be a written implementation plan** (not CSS edits) for the first real `board-surface.css` ownership move, limited to:
+### Recommendation: **Option B — board meta / controls audit** (Patch 45 planning)
 
-1. **Candidate rule:** `.nbl-board-canvas, .rh-board-canvas` base structure from `noBrainerLab.css` (the only cross-route neutral structure block today).
-2. **Optional second candidate (same patch series, still low risk):** the three completed `.board-container` stacking alias groups — moved as-is into `board-surface.css`, with legacy files reduced to `@import` or duplicate selectors until deletion proof exists.
+**Reasoning:** Phase 1 structure for surface, shell, and hand dock is largely in `styles/board/`. Meta/controls are the next high-visibility scattered area. Frame visuals (Option C) remain high-risk. Remaining hand overrides (Option A) are lower priority unless a quick win is obvious.
 
-**Do not include in Patch 27 implementation:**
+**Defer:** Frame visual migration, black matte redesign, hand dock skin pass.
 
-- Frame visuals (`.nbl-board-frame` backgrounds, `match-hud-polish` polish)
-- Watermark rules
-- Pseudo-elements
-- Route skins (`match-standard-live-board`, `walnut-live` bot canvas, Daily Fritz, Learn/Guided)
+---
 
-**Reasoning:**
+## Patch history (surface bridge)
 
-- Low-risk **alias** work for canvas/container stacking is **done**; further alias-only patches have diminishing returns.
-- `board-surface.css` is the declared canonical owner but empty; the base canvas flex box is the smallest shared rule with neutral classes already in DOM and CSS.
-- Moving structure before visuals avoids splitting skin across two owners prematurely.
-- Import order must be planned explicitly: `board/index.css` loads **after** legacy globals, so moved rules may need to stay in legacy files as forwards until specificity/order is validated — the plan should document that.
-
-**Suggested Patch 27 deliverable:** `docs/board-surface-first-move-plan.md` with move list, before/after ownership table, import-order notes, route verification checklist (from `docs/board-canvas-fit-alias-plan.md` §F), and explicit “no forward delete” until Patch 28+ parity proof.
+| Patch | Deliverable |
+|-------|-------------|
+| 24–25 | Low-risk `.rh-board-canvas .board-container` aliases in legacy files |
+| 26 | This checkpoint (initial) |
+| 27 | `docs/board-surface-first-ownership-move-plan.md` |
+| 28 | Canvas structure → `board-surface.css` |
+| 29 | `docs/board-container-stacking-ownership-plan.md` |
+| 30 | Container stacking → `board-surface.css` |
+| **31** | Surface checkpoint update |
+| 32–43 | Hand dock structure + dead-rule cleanup — see **`docs/board-hand-dock-ownership-checkpoint.md`** |
+| **44** | Surface checkpoint cross-reference + hand dock pointer |
 
 ---
 
 ## References
 
-- `docs/board-canvas-fit-alias-plan.md` — Patch 24/25 alias scope
-- `docs/board-css-ownership-audit.md` — broader ownership map
-- `client/src/styles/board/README.md` — namespace file intents
+- `docs/board-hand-dock-ownership-checkpoint.md` — hand dock canonical ownership (Patches 32–43)
+- `docs/board-canvas-fit-alias-plan.md`
+- `docs/board-surface-first-ownership-move-plan.md`
+- `docs/board-container-stacking-ownership-plan.md`
+- `docs/board-css-ownership-audit.md`
+- `client/src/styles/board/README.md`
+- `client/src/styles/board/board-surface.css` — live canonical structure/stacking rules

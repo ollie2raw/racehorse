@@ -17,3 +17,83 @@
  * Migration note:
  * - this file owns dock layout and shell behavior, not tile interaction states
  */
+
+/* Shared inner hand tray layout (structure only).
+   Deck shell chrome, .wl-hand-area skin, tile visuals, and interaction states remain legacy-owned. */
+.wl-hand-area .tray-rail {
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+}
+
+.wl-hand-area .tray-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  padding: 2px 4px 0;
+  overflow: visible;
+}
+
+.wl-hand-area .hand-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0;
+  transform: none;
+  overflow: visible;
+}
+
+.wl-hand-area .hand-container.is-stacked {
+  display: flex;
+  flex-direction: column;
+  align-content: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.wl-hand-area .hand-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.wl-hand-area .hand-container.is-scrollable {
+  justify-content: flex-start;
+  width: 100%;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wl-hand-area .hand-container:not(.is-scrollable) {
+  justify-content: center !important;
+  width: 100%;
+}
+
+/* Center tiles when they fit */
+.wl-hand-area .hand-container.is-scrollable {
+  justify-content: safe center;
+}
+
+/* Bot-route live hand deck shell structure.
+   Visual chrome remains legacy-owned in walnut-live.css until the final skin pass. */
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck {
+  position: relative;
+  flex: 0 0 142px;
+  min-height: 0;
+  display: block;
+  overflow: hidden;
+}
+
+@media (max-height: 760px) {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck {
+    flex-basis: 116px;
+  }
+}

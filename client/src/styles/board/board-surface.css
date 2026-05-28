@@ -15,3 +15,36 @@
  * - this file should eventually absorb production board-surface responsibility
  *   from legacy No Brainer Lab and walnut-era layers
  */
+
+/* Shared board canvas structure.
+   Visual surface skin, textures, frame effects, route-specific skins, and watermark styling remain legacy-owned for now. */
+.nbl-board-canvas,
+.rh-board-canvas {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Board engine stacking inside shared board canvas surfaces.
+   These are structure/stacking rules only. Visual frame/canvas skins remain legacy-owned for now. */
+.walnut-live .nbl-board-canvas .board-container,
+.walnut-live .rh-board-canvas .board-container {
+  position: relative;
+  z-index: 4;
+}
+
+.practice-lab .nbl-board-canvas .board-container,
+.practice-lab .rh-board-canvas .board-container {
+  z-index: 4;
+}
+
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-board-canvas .board-container,
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .rh-board-canvas .board-container {
+  position: relative;
+  z-index: 4;
+}

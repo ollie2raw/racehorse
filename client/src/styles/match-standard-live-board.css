@@ -77,12 +77,6 @@
   height: min(300px, 26%);
 }
 
-.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-board-canvas .board-container,
-.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .rh-board-canvas .board-container {
-  position: relative;
-  z-index: 4;
-}
-
 .screen.game-screen.walnut-live.rh-standard-live-board .rh-board-meta-bar {
   top: 22px;
   left: 24px;

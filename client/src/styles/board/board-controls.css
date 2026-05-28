@@ -13,3 +13,34 @@
  * Migration note:
  * - this file should own shared board utility chrome, not route-specific logic
  */
+
+/* Shared board toolbar wrapper structure.
+   Active zoom/utility tray positioning and visual control skins remain legacy-owned for now. */
+.screen.game-screen.walnut-live .rh-board-toolbar {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 12;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.screen.game-screen.walnut-live .rh-board-toolbar > * {
+  pointer-events: auto;
+}
+
+.screen.game-screen.walnut-live .nbl-board-toolbar {
+  position: absolute;
+  inset: auto 10px 10px auto;
+  z-index: 12;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.screen.game-screen.walnut-live .nbl-board-toolbar > * {
+  pointer-events: auto;
+}

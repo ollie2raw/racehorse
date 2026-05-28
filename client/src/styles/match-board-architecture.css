@@ -158,39 +158,10 @@
   border-radius: 10px;
 }
 
-/* ─── Board meta bar (open / boneyard counters) ─── */
-.screen.game-screen.walnut-live .rh-board-meta-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 9;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
-  pointer-events: none;
-}
-
-.screen.game-screen.walnut-live .rh-board-meta-bar > * {
-  pointer-events: auto;
-}
-
-.screen.game-screen.walnut-live .rh-board-meta-bar .board-corner-pill {
-  position: static !important;
-  top: auto !important;
-  left: auto !important;
-  right: auto !important;
-}
-
+/* Board meta bar — counter typography (structure in board-meta.css) */
 .screen.game-screen.walnut-live .rh-board-meta-bar .open-ends-count,
 .screen.game-screen.walnut-live .rh-board-meta-bar .boneyard-count {
   font-size: var(--match-counter-value-size, max(1.1rem, calc(var(--match-score-size, 38px) * 0.52)));
-}
-
-.screen.game-screen.walnut-live .rh-board-meta-bar--count-only {
-  justify-content: flex-end;
 }
 
 .screen.game-screen.walnut-live.daily-puzzle-screen .board-area.wl-board-area,
@@ -216,40 +187,11 @@
   width: 100% !important;
 }
 
-/* ─── Board toolbar (controls + zoom alignment) ─── */
-.screen.game-screen.walnut-live .rh-board-toolbar {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  z-index: 12;
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  pointer-events: none;
-}
-
-.screen.game-screen.walnut-live .rh-board-toolbar > * {
-  pointer-events: auto;
-}
-
+/* Board toolbar — zoom reset when tray wrapper is used (wrapper structure in board-controls.css) */
 .screen.game-screen.walnut-live .rh-board-toolbar .board-zoom-tray.control-pill {
   position: static;
   bottom: auto;
   left: auto;
-}
-
-.screen.game-screen.walnut-live .nbl-board-toolbar {
-  position: absolute;
-  inset: auto 10px 10px auto;
-  z-index: 12;
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  pointer-events: none;
-}
-
-.screen.game-screen.walnut-live .nbl-board-toolbar > * {
-  pointer-events: auto;
 }
 
 /* Bot match: align with architecture grid */
