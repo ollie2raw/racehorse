@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>boardmock1.png — Annotated Regions</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #111;
+        font-family: 'Outfit', system-ui, sans-serif;
+        color: #eee;
+      }
+
+      header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #333;
+      }
+
+      header h1 {
+        margin: 0 0 6px;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      header p {
+        margin: 0;
+        font-size: 12px;
+        color: #999;
+        line-height: 1.5;
+      }
+
+      .stage {
+        position: relative;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+
+      .stage__frame {
+        position: relative;
+        width: 100%;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+      }
+
+      .stage__frame img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .regions {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .region {
+        position: absolute;
+        border: 2px solid;
+        background: rgba(255, 255, 255, 0.04);
+        display: flex;
+        align-items: flex-start;
+        padding: 6px 8px;
+      }
+
+      .region__label {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+        line-height: 1.35;
+        max-width: 12em;
+      }
+
+      .region--a {
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 7%;
+        border-color: #f472b6;
+        color: #fbcfe8;
+      }
+
+      .region--b {
+        top: 7%;
+        left: 0;
+        right: 0;
+        height: 13%;
+        border-color: #38bdf8;
+        color: #bae6fd;
+      }
+
+      .region--b-opp {
+        top: 8%;
+        left: 1%;
+        width: 28%;
+        height: 10%;
+        border-color: #60a5fa;
+      }
+
+      .region--b-turn {
+        top: 8%;
+        left: 32%;
+        width: 36%;
+        height: 10%;
+        border-color: #fbbf24;
+        color: #fde68a;
+      }
+
+      .region--b-you {
+        top: 8%;
+        right: 1%;
+        width: 22%;
+        height: 10%;
+        border-color: #e7b64a;
+        color: #fde68a;
+      }
+
+      .region--d {
+        top: 20%;
+        left: 1.5%;
+        right: 1.5%;
+        height: 58%;
+        border-color: #a78bfa;
+        color: #ddd6fe;
+      }
+
+      .region--d3 {
+        top: 24%;
+        right: 3%;
+        width: 16%;
+        height: 14%;
+        border-color: #fb923c;
+        color: #fed7aa;
+      }
+
+      .region--d4 {
+        bottom: 22%;
+        left: 3%;
+        width: 12%;
+        height: 8%;
+        border-color: #94a3b8;
+        color: #cbd5e1;
+      }
+
+      .region--d4b {
+        bottom: 22%;
+        right: 3%;
+        width: 14%;
+        height: 8%;
+        border-color: #94a3b8;
+      }
+
+      .region--e1 {
+        bottom: 0;
+        left: 5%;
+        right: 5%;
+        height: 20%;
+        border-color: #4ade80;
+        color: #bbf7d0;
+      }
+
+      .region--c-note {
+        top: 20%;
+        left: 1.5%;
+        right: 1.5%;
+        height: 5%;
+        border: 2px dashed #a78bfa;
+        color: #c4b5fd;
+        background: rgba(167, 139, 250, 0.08);
+        align-items: center;
+        justify-content: center;
+      }
+
+      .legend {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .legend dt {
+        font-weight: 700;
+        margin: 0;
+      }
+
+      .legend dd {
+        margin: 0 0 10px;
+        color: #aaa;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>boardmock1.png — canonical match board mock</h1>
+      <p>
+        Cyan/blue glow in file → implement as Fritz gold. Region <strong>A</strong> is mock-only
+        (not built — app nav). Dashed <strong>C</strong> is peg track (product, not in mock).
+      </p>
+    </header>
+
+    <div class="stage">
+      <div class="stage__frame">
+        <img src="boardmock1.png" alt="Racehorse match board mock" width="1200" height="675" />
+        <div class="regions" aria-hidden="true">
+          <div class="region region--a"><span class="region__label">A · App chrome</span></div>
+          <div class="region region--b"><span class="region__label">B · Match HUD band</span></div>
+          <div class="region region--b-opp"><span class="region__label">B · Fritz + rack</span></div>
+          <div class="region region--b-turn"><span class="region__label">B · Turn hero (hex)</span></div>
+          <div class="region region--b-you"><span class="region__label">B · You score</span></div>
+          <div class="region region--c-note">
+            <span class="region__label">C · Race strip (product — not in mock)</span>
+          </div>
+          <div class="region region--d"><span class="region__label">D · Arena mat + board slot</span></div>
+          <div class="region region--d3"><span class="region__label">D3 · Tiles left · Open ends</span></div>
+          <div class="region region--d4"><span class="region__label">D4 · Zoom</span></div>
+          <div class="region region--d4b"><span class="region__label">D4 · Sound · FS · Home</span></div>
+          <div class="region region--e1"><span class="region__label">E1 · Hand dock (below arena)</span></div>
+        </div>
+      </div>
+
+      <dl class="legend">
+        <dt style="color: #fbcfe8">A — App chrome (mock only)</dt>
+        <dd>Not included in MatchBoardShell — existing app navigation covers this.</dd>
+        <dt style="color: #bae6fd">B — MatchHudBar</dt>
+        <dd>Fritz left (avatar, score, hidden rack), hex turn center, You right. No bottom action bar in mock.</dd>
+        <dt style="color: #c4b5fd">C — MatchRaceStrip (product)</dt>
+        <dd>Signature peg track — keep per AGENTS.md; insert between B and D even though mock omits it.</dd>
+        <dt style="color: #ddd6fe">D — MatchArena</dt>
+        <dd>Glowing inset frame, dot grid, R watermark, transparent board slot.</dd>
+        <dt style="color: #fed7aa">D3 — Meta</dt>
+        <dd>“14 TILES LEFT” + “0 OPEN ENDS” stack on arena right.</dd>
+        <dt style="color: #cbd5e1">D4 — Utilities</dt>
+        <dd>Zoom (− +) bottom-left; mute, fullscreen, home bottom-right.</dd>
+        <dt style="color: #bbf7d0">E1 — Hand</dt>
+        <dd>Ivory tiles on shelf below arena — matches mock (not inside mat).</dd>
+      </dl>
+    </div>
+  </body>
+</html>

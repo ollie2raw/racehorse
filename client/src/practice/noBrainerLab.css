@@ -200,7 +200,8 @@
   z-index: 1;
 }
 
-.nbl-board-canvas {
+.nbl-board-canvas,
+.rh-board-canvas {
   position: relative;
   z-index: 2;
   width: 100%;
@@ -231,7 +232,8 @@
   object-fit: contain;
 }
 
-.practice-lab .nbl-board-canvas .board-container {
+.practice-lab .nbl-board-canvas .board-container,
+.practice-lab .rh-board-canvas .board-container {
   z-index: 4;
 }
 

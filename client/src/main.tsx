@@ -15,6 +15,7 @@ import './styles/match-standard-live-board.css';
 import './match/gameLayoutLayers.css';
 import './styles/racehorse-background.css';
 import './styles/rh-image-surface.css';
+import './styles/board/index.css';
 
 {installGlobalErrorHandlers();}
 

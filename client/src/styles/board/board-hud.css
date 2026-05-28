@@ -1,0 +1,82 @@
+/*
+ * Board CSS Namespace: board-hud.css
+ *
+ * Future canonical owner:
+ * - top HUD rail structure
+ * - left / center / right HUD slots
+ * - player score pills
+ * - turn / status chip structure
+ * - shared HUD base responsibility currently spread across:
+ *   - .wl-top-rail
+ *   - .bot-top-rail
+ *   - .wl-player-pill
+ *   - .wl-center-status
+ *   - .wl-turn-label
+ *
+ * Migration note:
+ * - mode-specific accents should stay out of this file and move into skins
+ */
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-top-rail .wl-center-status {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+  grid-column: 2 !important;
+  justify-self: center !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-left-cluster {
+  grid-column: 1 !important;
+  justify-self: start !important;
+  min-width: 0;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-right-cluster {
+  grid-column: 3 !important;
+  justify-self: end !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-left-cluster > div {
+  gap: 14px !important;
+  min-width: 0;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-center-status {
+  gap: 0;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-top-rail,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-top-rail {
+  display: grid !important;
+  grid-template-columns: minmax(420px, 1fr) auto minmax(220px, 1fr) !important;
+  align-items: center !important;
+  min-height: 82px !important;
+  padding: 0 !important;
+  gap: 22px !important;
+}
+
+@media (max-width: 600px) {
+  .bot-match-screen .bot-top-rail {
+    grid-template-columns: 1fr 1fr !important;
+    row-gap: 8px !important;
+  }
+
+  .bot-match-screen .bot-hud-left-cluster {
+    grid-column: 1;
+  }
+
+  .bot-match-screen .bot-hud-right-cluster {
+    grid-column: 2;
+    justify-self: end !important;
+  }
+
+  .bot-match-screen .bot-top-rail .wl-center-status {
+    grid-column: 1 / -1;
+    position: relative !important;
+    left: auto !important;
+    transform: none !important;
+    justify-self: center;
+    margin: 0 auto;
+  }
+}

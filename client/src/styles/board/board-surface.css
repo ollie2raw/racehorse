@@ -1,0 +1,17 @@
+/*
+ * Board CSS Namespace: board-surface.css
+ *
+ * Future canonical owner:
+ * - actual playfield / canvas visual surface
+ * - board frame
+ * - matte / felt / glass surface treatment
+ * - watermark, grid, and board background layers
+ * - visual responsibility currently associated with:
+ *   - .nbl-board-frame
+ *   - .nbl-board-canvas
+ *   - related board-stage surface descendants
+ *
+ * Migration note:
+ * - this file should eventually absorb production board-surface responsibility
+ *   from legacy No Brainer Lab and walnut-era layers
+ */

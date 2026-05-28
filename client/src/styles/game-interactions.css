@@ -23,11 +23,26 @@
 
 .screen.game-screen.walnut-live .hand-container .domino-tile.highlight:not(.unplayable) .domino-body {
   border-width: 2.5px !important;
-  border-color: rgba(84, 165, 255, 0.72) !important;
+  border-color: rgba(231, 182, 74, 0.82) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
     0 7px 16px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+    0 0 0 1px rgba(231, 182, 74, 0.14) !important;
+}
+
+/* Selected tile lifts slightly above the rack baseline */
+.hand-container .domino-tile.selected,
+.walnut-live .hand-container .domino-tile.selected,
+.hand-container .guided-tile-wrap:has(.domino-tile.selected),
+.walnut-live .hand-container .guided-tile-wrap:has(.domino-tile.selected) {
+  transform: translateY(-6px);
+  z-index: 3;
+  transition: transform 0.16s ease;
+}
+
+.hand-container .guided-tile-wrap:has(.domino-tile.selected) .domino-tile.selected,
+.walnut-live .hand-container .guided-tile-wrap:has(.domino-tile.selected) .domino-tile.selected {
+  transform: none;
 }
 
 /* Playable underline: rh-glow-underline.css (::after) */

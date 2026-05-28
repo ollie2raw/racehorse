@@ -1,0 +1,13 @@
+/*
+ * Board CSS Namespace: board-overlays.css
+ *
+ * Future canonical owner:
+ * - board overlay layer
+ * - flying tile overlay
+ * - score track overlay shell
+ * - portal overlay structure
+ *
+ * Migration note:
+ * - keep modal card systems out of this file
+ * - this file is for board-surface and overlay-layer behavior
+ */

@@ -130,6 +130,12 @@ import {
 } from '../components/handOver/handOverCopy';
 import { logLayoutDebug } from '../match/layoutDebug';
 import {
+  InGameBoardFrame,
+  InGameBoardHud,
+  InGameBoardShell,
+  InGameOverlayStack,
+} from '../match/board';
+import {
   AUTHORING_GAME_ID,
   AUTHORING_LESSON_ID,
   generateAuthoringHandDeal,
@@ -7574,110 +7580,8 @@ export default function BotMatchScreen({
         </GameOverModal>
       )}
 
-      <div className="walnut-match-layout game-layout-layer">
-      {!isLessonLayoutMode ? (
-        <div className="wl-top-rail bot-top-rail" data-ui="hud" style={{ position: 'relative' }}>
-          <div className="bot-hud-left-cluster" style={{ gridColumn: 1 }}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <button
-                type="button"
-                className="wl-player-pill wl-player-pill-btn score-card"
-                ref={opponentPillRef}
-                onClick={() => setScoreTrackOpen(true)}
-                aria-label="Open score track"
-              >
-                <div className="wl-player-card-content">
-                  <div className="wl-player-card-text">
-                    {ghostSubLabel && (
-                      <span className="wl-player-subtitle">
-                        {formatGhostName(ghostSubLabel)}
-                      </span>
-                    )}
-                    <span className="wl-player-label">{opponentLabel}</span>
-                  </div>
-                  <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
-                </div>
-              </button>
-              {wantsOriginalGuidedRecordMode ? (
-                <div style={{ display: 'flex', gap: 6, marginLeft: 6, alignItems: 'center', flexWrap: 'wrap', maxWidth: 'min(420px, 40vw)' }}>
-                  {guidedRecordFritzPalette.map((tile, idx) => {
-                    const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
-                    return (
-                    <DominoTile
-                      key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
-                      tile={tile}
-                      size={28}
-                      rotation={0}
-                      selected={selectedController === 'bot' && !!selectedTile && tileEquals(selectedTile, tile)}
-                      highlight={playable}
-                      disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
-                      onClick={() => {
-                        if (!handActive || match.currentPlayer !== 'bot') return;
-                        if (!playable) return;
-                        setSelectedTile(tile);
-                        setSelectedController('bot');
-                      }}
-                    />
-                  )})}
-                </div>
-              ) : (
-                <TileRack
-                  count={match.players.bot.hand.length}
-                  isActive={botTurn}
-                  variant="default"
-                />
-              )}
-            </div>
-          </div>
-
-          {showTurnStatusCluster && (
-            <div
-              className="wl-center-status"
-              data-ui="turn-status"
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-                {isDailyFritzMode && dailyFritzPackage && (
-                  <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
-                    <span className="hud-pill-label">GAME</span>
-                    <span className="hud-pill-value">{dailyFritzPackage.current_game_number ?? 1}</span>
-                  </div>
-                )}
-                {turnLabel && (
-                  <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
-                    {turnLabel}
-                  </span>
-                )}
-            </div>
-          )}
-
-          <div className="bot-hud-right-cluster" style={{ gridColumn: 3, justifySelf: 'end' }}>
-            <button
-              type="button"
-              className="wl-player-pill wl-player-pill-btn score-card is-you"
-              onClick={() => setScoreTrackOpen(true)}
-              aria-label="Open score track"
-            >
-              <div className="wl-player-card-content">
-                <div className="wl-player-card-text">
-                  <span className="wl-player-label">You</span>
-                </div>
-                <AnimatedScore value={match.players.you.score} className="wl-player-score" />
-              </div>
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-
       {isLessonLayoutMode ? (
+        <div className="walnut-match-layout game-layout-layer">
         <div className="learn-guided-pvf" data-ui="guided-cockpit">
           <div className="pvf-layout learn-guided-pvf__layout">
             <aside className="pvf-left-col learn-guided-pvf__left">
@@ -7872,35 +7776,149 @@ export default function BotMatchScreen({
             </section>
           </div>
         </div>
-      ) : (
-        <div className="rh-live-studio-shell" data-ui="live-studio-shell">
-          <div className="rh-live-board-zone" data-ui="live-board-zone">
-            {boardStage}
-          </div>
-          <div className="rh-live-hand-deck" data-ui="live-hand-deck">
-            {handTray}
-          </div>
         </div>
+      ) : (
+        <InGameBoardShell
+          topHud={
+            <InGameBoardHud
+              style={{ position: 'relative' }}
+              leftSlot={
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="wl-player-pill wl-player-pill-btn score-card"
+                    ref={opponentPillRef}
+                    onClick={() => setScoreTrackOpen(true)}
+                    aria-label="Open score track"
+                  >
+                    <div className="wl-player-card-content">
+                      <div className="wl-player-card-text">
+                        {ghostSubLabel && (
+                          <span className="wl-player-subtitle">
+                            {formatGhostName(ghostSubLabel)}
+                          </span>
+                        )}
+                        <span className="wl-player-label">{opponentLabel}</span>
+                      </div>
+                      <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
+                    </div>
+                  </button>
+                  {wantsOriginalGuidedRecordMode ? (
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 6,
+                        marginLeft: 6,
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        maxWidth: 'min(420px, 40vw)',
+                      }}
+                    >
+                      {guidedRecordFritzPalette.map((tile, idx) => {
+                        const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
+                        return (
+                          <DominoTile
+                            key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
+                            tile={tile}
+                            size={28}
+                            rotation={0}
+                            selected={
+                              selectedController === 'bot' &&
+                              !!selectedTile &&
+                              tileEquals(selectedTile, tile)
+                            }
+                            highlight={playable}
+                            disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
+                            onClick={() => {
+                              if (!handActive || match.currentPlayer !== 'bot') return;
+                              if (!playable) return;
+                              setSelectedTile(tile);
+                              setSelectedController('bot');
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <TileRack
+                      count={match.players.bot.hand.length}
+                      isActive={botTurn}
+                      variant="default"
+                    />
+                  )}
+                </div>
+              }
+              centerSlot={
+                showTurnStatusCluster ? (
+                  <div
+                    className="wl-center-status"
+                    data-ui="turn-status"
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {isDailyFritzMode && dailyFritzPackage && (
+                      <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
+                        <span className="hud-pill-label">GAME</span>
+                        <span className="hud-pill-value">
+                          {dailyFritzPackage.current_game_number ?? 1}
+                        </span>
+                      </div>
+                    )}
+                    {turnLabel && (
+                      <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
+                        {turnLabel}
+                      </span>
+                    )}
+                  </div>
+                ) : null
+              }
+              rightSlot={
+                <button
+                  type="button"
+                  className="wl-player-pill wl-player-pill-btn score-card is-you"
+                  onClick={() => setScoreTrackOpen(true)}
+                  aria-label="Open score track"
+                >
+                  <div className="wl-player-card-content">
+                    <div className="wl-player-card-text">
+                      <span className="wl-player-label">You</span>
+                    </div>
+                    <AnimatedScore value={match.players.you.score} className="wl-player-score" />
+                  </div>
+                </button>
+              }
+            />
+          }
+        >
+          <InGameBoardFrame boardStage={boardStage} handDock={handTray} />
+        </InGameBoardShell>
       )}
 
-      </div>
-
-      {flyingTiles.length > 0 && (
-        <GameOverlayPortal>
-          {flyingTiles.map((ft) => (
-        <div
-          key={ft.id}
-          className="flying-tile-overlay"
-          style={{
-            '--fly-from-x': `${ft.x}px`,
-            '--fly-from-y': `${ft.y}px`,
-            '--fly-to-x': `${ft.toX}px`,
-            '--fly-to-y': `${ft.toY}px`,
-          } as React.CSSProperties}
-        />
-          ))}
-        </GameOverlayPortal>
-      )}
+      <InGameOverlayStack>
+        {flyingTiles.length > 0 && (
+          <GameOverlayPortal>
+            {flyingTiles.map((ft) => (
+              <div
+                key={ft.id}
+                className="flying-tile-overlay"
+                style={{
+                  '--fly-from-x': `${ft.x}px`,
+                  '--fly-from-y': `${ft.y}px`,
+                  '--fly-to-x': `${ft.toX}px`,
+                  '--fly-to-y': `${ft.toY}px`,
+                } as React.CSSProperties}
+              />
+            ))}
+          </GameOverlayPortal>
+        )}
+      </InGameOverlayStack>
 
       {isLessonLayoutMode && showFullCoachTip && showPlayerCoaching && !lessonCoachVm?.isOffAuthoredLine ? (
         <GameOverlayPortal>

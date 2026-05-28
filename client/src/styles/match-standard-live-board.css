@@ -1,19 +1,9 @@
 /* Shared in-game board surface — daily puzzle play, No Brainer Lab, and other rh-standard-live-board screens */
 
 .screen.game-screen.walnut-live.rh-standard-live-board .rh-live-studio-shell {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  position: relative;
-  overflow: hidden;
 }
 
 .screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone {
-  flex: 1 1 0;
-  min-height: 0;
-  position: relative;
   border-radius: 34px;
   padding: 12px;
   border: 1px solid rgba(88, 166, 255, 0.16);
@@ -48,20 +38,13 @@
 }
 
 .screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .wl-stage-shell {
-  flex: 1 1 0;
-  min-height: 0;
-  padding: 0 !important;
   border-radius: 28px 28px 0 0;
-  overflow: visible;
 }
 
 .screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .wl-stage-shell,
 .screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .walnut-nbl-stage,
 .screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-stage,
 .screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-board-frame {
-  width: 100% !important;
-  height: 100%;
-  padding: 0 !important;
   border: 0 !important;
   border-radius: 24px !important;
   background: transparent !important;
@@ -94,7 +77,8 @@
   height: min(300px, 26%);
 }
 
-.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-board-canvas .board-container {
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-board-canvas .board-container,
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .rh-board-canvas .board-container {
   position: relative;
   z-index: 4;
 }

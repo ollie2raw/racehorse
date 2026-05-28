@@ -1,0 +1,16 @@
+/*
+ * Board CSS Namespace: board-tiles.css
+ *
+ * Future canonical owner:
+ * - shared domino tile presentation
+ * - board tile vs hand tile visual treatment
+ * - tile body / base sizing / polish where CSS ownership is possible
+ * - selectors currently associated with:
+ *   - .domino-tile
+ *   - .domino-body
+ *   - board / hand context tile styling
+ *
+ * Migration note:
+ * - DominoTile.tsx still owns important inline structure and pip rendering
+ * - this file should receive CSS-owned presentation rules only
+ */

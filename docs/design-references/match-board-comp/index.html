@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Match Board Comp — Phase 1 (boardmock1)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Outfit:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./match-board-comp.css" />
+  </head>
+  <body>
+    <div class="comp-page" id="comp-page">
+      <header class="comp-review-bar">
+        <strong>Phase 1 comp</strong>
+        <span>Match shell only — no region A (app nav). SSOT: boardmock1.png</span>
+        <label>
+          <input type="checkbox" id="toggle-mock" />
+          Overlay boardmock1
+        </label>
+        <label>
+          <input type="checkbox" id="toggle-regions" />
+          Region outlines
+        </label>
+        <a href="../boardmock1-annotated.html">Annotated mock</a>
+        <a href="../../match-board-reset-plan.md">Reset plan</a>
+      </header>
+
+      <div class="comp-stage-wrap">
+        <div class="comp-mock-overlay" id="mock-overlay" aria-hidden="true">
+          <img src="../boardmock1.png" alt="" />
+        </div>
+
+        <div class="match-board-shell" data-ui="match-board-shell" data-mode="daily-fritz" data-tier="elite">
+          <!-- B · HUD -->
+          <section class="match-board-region match-board-hud" data-ui="match-hud-bar" data-region="B · HUD">
+            <div class="match-board-hud__grid">
+              <div class="match-player-card match-player-card--opponent" data-ui="match-player-card" data-side="opponent">
+                <div class="match-player-card__avatar" aria-hidden="true">F</div>
+                <button type="button" class="match-player-card__score-btn">
+                  <span class="match-player-card__card">
+                    <span class="match-player-card__label">Fritz</span>
+                    <span class="match-player-card__score">5</span>
+                  </span>
+                </button>
+                <div class="match-player-card__rack is-active" aria-label="Opponent tiles">
+                  <span class="match-player-card__rack-tile"></span>
+                  <span class="match-player-card__rack-tile"></span>
+                  <span class="match-player-card__rack-tile"></span>
+                </div>
+              </div>
+
+              <div class="match-board-hud__turn-slot">
+                <div class="match-turn-badge is-your-turn" data-ui="match-turn-badge" role="status">
+                  <span class="match-turn-badge__game">Game 2</span>
+                  <span class="match-turn-badge__sep" aria-hidden="true">·</span>
+                  <span class="match-turn-badge__turn">Your move</span>
+                </div>
+              </div>
+
+              <div class="match-player-card match-player-card--you" data-ui="match-player-card" data-side="you">
+                <button type="button" class="match-player-card__score-btn is-turn-active">
+                  <span class="match-player-card__card">
+                    <span class="match-player-card__label">You</span>
+                    <span class="match-player-card__score">3</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- C · Race (product — not in boardmock1) -->
+          <section class="match-board-region match-board-race" data-ui="match-race-strip" data-region="C · Race">
+            <div class="match-board-race__body">
+              <div class="match-race-lanes">
+                <div class="match-race-lane">
+                  <span class="match-race-lane__label">Fritz → 60</span>
+                  <div class="match-race-lane__holes" id="race-fritz"></div>
+                </div>
+                <div class="match-race-lane">
+                  <span class="match-race-lane__label">You → 60</span>
+                  <div class="match-race-lane__holes" id="race-you"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- D · Arena -->
+          <section class="match-board-region match-board-arena" data-ui="match-arena" data-region="D · Arena">
+            <div class="match-board-arena-frame">
+              <div class="match-board-arena-surface" data-ui="arena-surface">
+                <div class="match-board-arena-grid" aria-hidden="true"></div>
+                <div class="match-board-arena-spotlight" aria-hidden="true"></div>
+
+                <div class="match-board-arena-watermark" aria-hidden="true">
+                  <div class="match-board-arena-watermark__rings">
+                    <span class="match-board-arena-watermark__ring match-board-arena-watermark__ring--outer"></span>
+                    <span class="match-board-arena-watermark__ring match-board-arena-watermark__ring--mid"></span>
+                    <span class="match-board-arena-watermark__ring match-board-arena-watermark__ring--inner"></span>
+                    <span class="match-board-arena-watermark__r">R</span>
+                  </div>
+                </div>
+
+                <div class="match-board-arena-board-slot" data-ui="match-arena-board-slot">
+                  <div class="comp-chain" aria-hidden="true">
+                    <div class="comp-board-tile is-h">
+                      <div class="comp-board-tile__half">
+                        <div class="comp-pips comp-pips--3">
+                          <span class="comp-pip comp-pip--g"></span>
+                          <span class="comp-pip comp-pip--g"></span>
+                          <span class="comp-pip comp-pip--g"></span>
+                        </div>
+                      </div>
+                      <div class="comp-board-tile__half">
+                        <div class="comp-pips">
+                          <span class="comp-pip comp-pip--r"></span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="comp-board-tile">
+                      <div class="comp-board-tile__half">
+                        <div class="comp-pips">
+                          <span class="comp-pip comp-pip--r"></span>
+                          <span class="comp-pip comp-pip--r"></span>
+                        </div>
+                      </div>
+                      <div class="comp-board-tile__half">
+                        <div class="comp-pips">
+                          <span class="comp-pip comp-pip--b"></span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="comp-board-tile is-h">
+                      <div class="comp-board-tile__half">
+                        <div class="comp-pips">
+                          <span class="comp-pip comp-pip--b"></span>
+                          <span class="comp-pip comp-pip--b"></span>
+                        </div>
+                      </div>
+                      <div class="comp-board-tile__half">
+                        <div class="comp-pips">
+                          <span class="comp-pip comp-pip--o"></span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="comp-board-tile">
+                      <div class="comp-board-tile__half">
+                        <div class="comp-pips comp-pips--3">
+                          <span class="comp-pip comp-pip--o"></span>
+                          <span class="comp-pip comp-pip--o"></span>
+                          <span class="comp-pip comp-pip--o"></span>
+                        </div>
+                      </div>
+                      <div class="comp-board-tile__half">
+                        <div class="comp-pips">
+                          <span class="comp-pip comp-pip--g"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="match-board-arena-meta" data-ui="match-arena-meta">
+                  <div class="match-board-meta-pill">
+                    <span class="match-board-meta-pill__label">Open</span>
+                    <span class="match-board-meta-pill__value">13</span>
+                  </div>
+                  <div class="match-board-meta-pill">
+                    <span class="match-board-meta-pill__label">Tiles left</span>
+                    <span class="match-board-meta-pill__value">11</span>
+                  </div>
+                </div>
+
+                <div class="match-board-arena-controls" data-ui="match-arena-controls">
+                  <div class="match-board-control-dock" data-ui="match-arena-controls-zoom">
+                    <button type="button" class="match-board-icon-btn" aria-label="Zoom out">−</button>
+                    <button type="button" class="match-board-icon-btn" aria-label="Zoom in">+</button>
+                  </div>
+                  <div class="match-board-control-dock" data-ui="match-arena-controls-util">
+                    <button type="button" class="match-board-icon-btn" aria-label="Mute" title="Mute">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                      </svg>
+                    </button>
+                    <button type="button" class="match-board-icon-btn" aria-label="Fullscreen" title="Fullscreen">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+                      </svg>
+                    </button>
+                    <button type="button" class="match-board-icon-btn" aria-label="Leave" title="Home">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                        <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- E1 · Hand -->
+          <section class="match-board-region match-board-hand" data-ui="match-hand-dock" data-region="E1 · Hand">
+            <div class="match-board-hand__body">
+              <div class="comp-hand-row" aria-label="Your hand">
+                <div class="comp-hand-tile is-playable">
+                  <span class="comp-hand-tile__divider"></span>
+                  <span class="comp-hand-tile__pips"><span class="comp-pip comp-pip--g"></span></span>
+                  <span class="comp-hand-tile__pips" style="top: 55%"><span class="comp-pip comp-pip--r"></span></span>
+                </div>
+                <div class="comp-hand-tile is-playable">
+                  <span class="comp-hand-tile__divider"></span>
+                  <span class="comp-hand-tile__pips"><span class="comp-pip comp-pip--b"></span><span class="comp-pip comp-pip--b"></span></span>
+                  <span class="comp-hand-tile__pips" style="top: 55%"><span class="comp-pip comp-pip--o"></span></span>
+                </div>
+                <div class="comp-hand-tile">
+                  <span class="comp-hand-tile__divider"></span>
+                  <span class="comp-hand-tile__pips"><span class="comp-pip comp-pip--o"></span></span>
+                  <span class="comp-hand-tile__pips" style="top: 55%"><span class="comp-pip comp-pip--g"></span></span>
+                </div>
+                <div class="comp-hand-tile is-playable">
+                  <span class="comp-hand-tile__divider"></span>
+                  <span class="comp-hand-tile__pips comp-pips--3">
+                    <span class="comp-pip comp-pip--g"></span><span class="comp-pip comp-pip--g"></span><span class="comp-pip comp-pip--g"></span>
+                  </span>
+                  <span class="comp-hand-tile__pips" style="top: 55%"><span class="comp-pip comp-pip--r"></span></span>
+                </div>
+                <div class="comp-hand-tile">
+                  <span class="comp-hand-tile__divider"></span>
+                  <span class="comp-hand-tile__pips"><span class="comp-pip comp-pip--r"></span><span class="comp-pip comp-pip--r"></span></span>
+                  <span class="comp-hand-tile__pips" style="top: 55%"><span class="comp-pip comp-pip--b"></span></span>
+                </div>
+                <div class="comp-hand-tile">
+                  <span class="comp-hand-tile__divider"></span>
+                  <span class="comp-hand-tile__pips"><span class="comp-pip comp-pip--b"></span></span>
+                  <span class="comp-hand-tile__pips" style="top: 55%"><span class="comp-pip comp-pip--o"></span></span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const page = document.getElementById('comp-page');
+        const mockToggle = document.getElementById('toggle-mock');
+        const regionToggle = document.getElementById('toggle-regions');
+
+        mockToggle.addEventListener('change', () => {
+          page.classList.toggle('is-mock-overlay', mockToggle.checked);
+        });
+
+        regionToggle.addEventListener('change', () => {
+          page.classList.toggle('is-region-outline', regionToggle.checked);
+        });
+
+        function fillRaceLane(el, pegCount, opp) {
+          const total = 30;
+          for (let i = 0; i < total; i++) {
+            const hole = document.createElement('span');
+            hole.className = 'match-race-hole' + (i < pegCount ? (opp ? ' is-peg is-peg--opp' : ' is-peg') : '');
+            el.appendChild(hole);
+          }
+        }
+
+        fillRaceLane(document.getElementById('race-fritz'), 8, true);
+        fillRaceLane(document.getElementById('race-you'), 5, false);
+      })();
+    </script>
+  </body>
+</html>

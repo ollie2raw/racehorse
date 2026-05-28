@@ -1,0 +1,15 @@
+/*
+ * Board CSS Namespace: board-interactions.css
+ *
+ * Future canonical owner:
+ * - selected / playable / highlight / unplayable / disabled states
+ * - hover / focus / active states
+ * - glow underline behavior
+ * - interaction responsibility currently split across:
+ *   - game-interactions.css
+ *   - rh-glow-underline.css
+ *
+ * Migration note:
+ * - shared interaction behavior belongs here
+ * - lesson/practice special cases should remain mode-scoped until migrated
+ */

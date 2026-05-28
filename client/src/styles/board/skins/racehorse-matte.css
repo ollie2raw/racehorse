@@ -1,0 +1,17 @@
+/*
+ * Board CSS Namespace: skins/racehorse-matte.css
+ *
+ * Future canonical owner:
+ * - premium black matte / gold-brass Racehorse board identity
+ * - mode accent variables
+ * - board color tokens
+ * - glow / shadow / texture values
+ *
+ * Intended role:
+ * - primary shared skin for Daily Fritz, Play vs Fritz, and Multiplayer
+ * - may later supply shared premium board tokens for Puzzle and Learn variants
+ *
+ * Migration note:
+ * - this file should not own layout structure
+ * - structure belongs in base board files
+ */

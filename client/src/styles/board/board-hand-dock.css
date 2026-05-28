@@ -1,0 +1,19 @@
+/*
+ * Board CSS Namespace: board-hand-dock.css
+ *
+ * Future canonical owner:
+ * - bottom hand dock shell
+ * - tray rail
+ * - hand row packing
+ * - scroll behavior
+ * - selectors currently split across:
+ *   - .rh-live-hand-deck
+ *   - .wl-hand-area
+ *   - .tray-rail
+ *   - .tray-center
+ *   - .hand-container
+ *   - .hand-row
+ *
+ * Migration note:
+ * - this file owns dock layout and shell behavior, not tile interaction states
+ */

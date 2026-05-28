@@ -1,0 +1,44 @@
+/*
+ * Board CSS Namespace: board-layout.css
+ *
+ * Future canonical owner:
+ * - viewport-level match layout
+ * - outer board route layout
+ * - vertical rhythm between HUD, board surface, and hand dock
+ * - shared layout responsibility currently spread across:
+ *   - .walnut-match-layout
+ *   - .game-layout-layer
+ *
+ * Migration note:
+ * - selector migrations should preserve exact parity with legacy source files
+ */
+
+.walnut-match-layout.game-layout-layer {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout {
+  padding: 18px 28px 0;
+  gap: 16px;
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout {
+    padding: 8px 10px 0;
+    gap: 7px;
+  }
+}
+
+@media (max-height: 760px) {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout {
+    padding-top: 10px;
+    gap: 10px;
+  }
+}

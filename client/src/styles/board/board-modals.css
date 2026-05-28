@@ -1,0 +1,13 @@
+/*
+ * Board CSS Namespace: board-modals.css
+ *
+ * Future canonical owner:
+ * - board-related modal shell / card systems
+ * - end-of-hand modal base
+ * - game-over modal base
+ * - Daily Fritz result modal base
+ *
+ * Migration note:
+ * - mode-specific accents and palette differences belong in skins
+ * - shared modal shell behavior belongs here
+ */

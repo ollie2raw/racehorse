@@ -1,0 +1,24 @@
+/*
+ * Board CSS namespace aggregator.
+ *
+ * Purpose:
+ * - provide one import target for the future canonical Racehorse board CSS stack
+ * - keep import order explicit once selector migration begins
+ *
+ * Current state:
+ * - all imported files are header/comment-only
+ * - there is no runtime styling effect in this patch
+ */
+
+@import './board-layout.css';
+@import './board-hud.css';
+@import './board-shell.css';
+@import './board-surface.css';
+@import './board-meta.css';
+@import './board-controls.css';
+@import './board-hand-dock.css';
+@import './board-tiles.css';
+@import './board-interactions.css';
+@import './board-overlays.css';
+@import './board-modals.css';
+@import './skins/racehorse-matte.css';

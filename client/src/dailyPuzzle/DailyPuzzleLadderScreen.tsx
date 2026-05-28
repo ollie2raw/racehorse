@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { Board, DominoTile, GlobalNav, MatchNblBoardFrame, RotateOverlay } from '../components';
+import { Board, DominoTile, GlobalNav, RotateOverlay } from '../components';
+import { InGameBoardShell } from '../match/InGameBoardShell';
 import { Button } from '../components/primitives';
 import {
   applyPlayMove,
@@ -1185,23 +1186,18 @@ export default function DailyPuzzleLadderScreen({
           </div>
         </div>
 
-        <div className="rh-live-studio-shell">
-          <div className="rh-live-board-zone" data-ui="live-board-zone">
-            <div className="wl-stage-shell">
-              <MatchNblBoardFrame>
-                <Board
-                  board={playingState.board}
-                  legalMoves={legalMoves}
-                  selectedTile={selectedTile}
-                  lastPlayedTile={lastPlayedTile}
-                  onPositionClick={onPositionClick}
-                  tileSize={84}
-                />
-              </MatchNblBoardFrame>
-            </div>
-          </div>
-
-          <div className="hand-area wl-hand-area" data-ui="tray">
+        <InGameBoardShell
+          board={
+            <Board
+              board={playingState.board}
+              legalMoves={legalMoves}
+              selectedTile={selectedTile}
+              lastPlayedTile={lastPlayedTile}
+              onPositionClick={onPositionClick}
+              tileSize={84}
+            />
+          }
+          hand={
             <div className="tray-rail">
               <div className="tray-center">
               <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
@@ -1238,9 +1234,9 @@ export default function DailyPuzzleLadderScreen({
                 ))}
               </div>
             </div>
-          </div>
-          </div>
-        </div>
+            </div>
+          }
+        />
 
       </div>
     </>

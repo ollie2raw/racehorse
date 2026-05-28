@@ -47,6 +47,14 @@
   --radius-pill: 999px;
   --hud-lift:    20px;
 
+  /* Match board arena (inGameBoardShell — Pass A playfield) */
+  --rh-arena-mount-bg: rgba(4, 9, 18, 0.96);
+  --rh-arena-surface: #060d18;
+  --rh-arena-surface-highlight: #0a1524;
+  --rh-arena-border-blue: rgba(88, 166, 255, 0.22);
+  --rh-arena-border-brass: rgba(231, 182, 74, 0.26);
+  --rh-arena-rim-glow: rgba(88, 166, 255, 0.14);
+
   /* Match HUD aliases (compact score cards, control pill) */
   --r-sm: 8px;
   --r-md: 12px;

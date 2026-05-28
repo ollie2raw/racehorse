@@ -1,0 +1,46 @@
+/**
+ * Match board design tokens — Phase 1 comp (source of truth until React port).
+ * Copy into client/src/match/board/matchBoard.tokens.css in Phase 2.
+ */
+
+:root {
+  /* Fritz / Daily Fritz */
+  --mb-gold: #c8a020;
+  --mb-gold-bright: #e7b64a;
+  --mb-gold-dim: rgba(210, 170, 30, 0.22);
+  --mb-gold-border: rgba(200, 160, 32, 0.38);
+  --mb-gold-glow: rgba(200, 160, 32, 0.22);
+
+  /* Shell */
+  --mb-bg: #060608;
+  --mb-bg-elevated: #0a0a0c;
+  --mb-surface: rgba(8, 9, 12, 0.94);
+  --mb-mat-center: #0f1014;
+  --mb-mat-edge: #070708;
+
+  /* Type */
+  --mb-text: #f2eee8;
+  --mb-text-muted: rgba(255, 255, 255, 0.5);
+  --mb-label: rgba(255, 255, 255, 0.45);
+  --mb-font-body: 'Outfit', system-ui, sans-serif;
+  --mb-font-display: 'Barlow Condensed', 'Segoe UI', sans-serif;
+
+  /* Layout (match shell only — region A is app nav, not included) */
+  --mb-shell-pad-x: 8px;
+  --mb-shell-pad-b: 6px;
+  --mb-hud-min: 88px;
+  --mb-race-min: 48px;
+  --mb-hand-min: 128px;
+  --mb-arena-pad: 0;
+
+  /* Radii */
+  --mb-radius-sm: 8px;
+  --mb-radius-md: 10px;
+  --mb-radius-lg: 12px;
+
+  /* Domino */
+  --mb-tile-ivory: #f2ead8;
+  --mb-tile-border: rgba(160, 140, 100, 0.28);
+  --mb-tile-shadow: 0 3px 10px rgba(0, 0, 0, 0.7), 0 1px 3px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}

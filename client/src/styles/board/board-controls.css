@@ -1,0 +1,15 @@
+/*
+ * Board CSS Namespace: board-controls.css
+ *
+ * Future canonical owner:
+ * - zoom controls
+ * - board utility buttons
+ * - mute / fullscreen / home control presentation
+ * - selectors currently split across:
+ *   - .board-zoom-tray
+ *   - .wl-controls-tray
+ *   - .control-pill
+ *
+ * Migration note:
+ * - this file should own shared board utility chrome, not route-specific logic
+ */

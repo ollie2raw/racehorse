@@ -1,0 +1,87 @@
+/*
+ * Board CSS Namespace: board-shell.css
+ *
+ * Future canonical owner:
+ * - shared board shell composition
+ * - studio shell
+ * - board zone
+ * - board-to-hand-dock relationship
+ * - shared shell responsibility currently spread across:
+ *   - .rh-live-studio-shell
+ *   - .rh-live-board-zone
+ *
+ * Migration note:
+ * - this file owns shell structure, not playfield surface styling
+ */
+
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-studio-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+}
+
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .wl-stage-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 0 !important;
+  overflow: visible;
+}
+
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .wl-stage-shell,
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .walnut-nbl-stage,
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-stage,
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .rh-board-stage,
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .nbl-board-frame,
+.screen.game-screen.walnut-live.rh-standard-live-board .rh-live-board-zone .rh-board-frame {
+  width: 100% !important;
+  height: 100%;
+  padding: 0 !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-studio-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-stage-shell {
+  padding: 0 !important;
+  overflow: visible;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .wl-stage-shell,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .walnut-nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .rh-board-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .nbl-board-frame,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .rh-board-frame {
+  width: 100% !important;
+  height: 100%;
+  padding: 0 !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-board-stage {
+  overflow: visible;
+}

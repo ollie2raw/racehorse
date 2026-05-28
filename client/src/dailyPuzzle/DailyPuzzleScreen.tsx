@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
-import { Board, BoneyardCountPill, BrandLogo, DominoTile, MatchNblBoardFrame, RotateOverlay } from '../components';
+import { Board, BoneyardCountPill, BrandLogo, DominoTile, RotateOverlay } from '../components';
+import { InGameBoardShell } from '../match/InGameBoardShell';
 import {
   applyPlayMove,
   getDisplayOpenEnds,
@@ -1545,41 +1546,39 @@ export default function DailyPuzzleScreen({
         </div>
       </div>
 
-      <div className="rh-live-studio-shell">
-        <div className="rh-live-board-zone" data-ui="live-board-zone">
-          <div className="wl-stage-shell">
-            <MatchNblBoardFrame>
-              {!runtimeState.gameOver && (
-                <div className="rh-board-meta-bar rh-board-meta-bar--count-only" data-ui="board-meta">
-                  <BoneyardCountPill count={runtimeState.boneyard.length} />
-                </div>
-              )}
-              <Board
-                board={runtimeState.board}
-                legalMoves={legalMoves}
-                selectedTile={selectedTile}
-                lastPlayedTile={lastPlayedTile}
-                onPositionClick={onPositionClick}
-                tileSize={84}
-              />
-          {solvableWarning && (
-            <div className="daily-puzzle-warning-banner">
-              Puzzle warning: {validation?.reason} (best score {validation?.bestScore}). You can
-              still play this puzzle.
-            </div>
-          )}
-          {import.meta.env.DEV && solvableWarning && (
-            <div className="daily-puzzle-dev-warning">
-              Dev: puzzle invalid · solvable={String(validation?.solvable)} · bestScore=
-              {validation?.bestScore} · hasScoringMove={String(validation?.hasScoringMove)} ·
-              explored={validation?.exploredStates}
-            </div>
-          )}
-            </MatchNblBoardFrame>
-          </div>
-        </div>
-
-        <div className="hand-area wl-hand-area" data-ui="tray">
+      <InGameBoardShell
+        boardMeta={
+          !runtimeState.gameOver ? (
+            <BoneyardCountPill count={runtimeState.boneyard.length} />
+          ) : undefined
+        }
+        boardMetaBarClassName="rh-board-meta-bar--count-only"
+        board={
+          <>
+            <Board
+              board={runtimeState.board}
+              legalMoves={legalMoves}
+              selectedTile={selectedTile}
+              lastPlayedTile={lastPlayedTile}
+              onPositionClick={onPositionClick}
+              tileSize={84}
+            />
+            {solvableWarning && (
+              <div className="daily-puzzle-warning-banner">
+                Puzzle warning: {validation?.reason} (best score {validation?.bestScore}). You can
+                still play this puzzle.
+              </div>
+            )}
+            {import.meta.env.DEV && solvableWarning && (
+              <div className="daily-puzzle-dev-warning">
+                Dev: puzzle invalid · solvable={String(validation?.solvable)} · bestScore=
+                {validation?.bestScore} · hasScoringMove={String(validation?.hasScoringMove)} ·
+                explored={validation?.exploredStates}
+              </div>
+            )}
+          </>
+        }
+        hand={
         <div className="tray-rail">
           <div className="tray-center">
             <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
@@ -1625,8 +1624,8 @@ export default function DailyPuzzleScreen({
             </div>
           </div>
         </div>
-        </div>
-      </div>
+        }
+      />
 
       {status !== 'IN_PROGRESS' && (
         <div className="rh-modal-overlay" role="dialog" aria-modal="true" style={{ ['--rh-accent-rgb' as string]: '240, 192, 64' }}>

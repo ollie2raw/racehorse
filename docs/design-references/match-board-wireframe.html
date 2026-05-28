@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Match Board Wireframe — boardmock1 (Phase 0)</title>
+    <style>
+      :root {
+        --mb-hud: 13%;
+        --mb-race: 6%;
+        --mb-hand: 20%;
+        --mb-arena-inset: 8px;
+        --wf-bg: #0a0a0c;
+        --wf-panel: #141418;
+        --wf-border: #3a3a44;
+        --wf-label: #8a8a96;
+        --wf-text: #e8e8ec;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #050508;
+        font-family: 'Outfit', system-ui, sans-serif;
+        color: var(--wf-text);
+      }
+
+      .wf-page {
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+        max-height: 100dvh;
+        overflow: hidden;
+        padding: 8px;
+        gap: 6px;
+      }
+
+      .wf-note {
+        flex: 0 0 auto;
+        font-size: 11px;
+        color: var(--wf-label);
+        text-align: center;
+        letter-spacing: 0.04em;
+        line-height: 1.45;
+      }
+
+      .match-board-shell {
+        flex: 1 1 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        background: var(--wf-bg);
+        border: 1px dashed var(--wf-border);
+        border-radius: 8px;
+        padding: 4px;
+      }
+
+      .wf-region {
+        position: relative;
+        border: 1px solid var(--wf-border);
+        background: var(--wf-panel);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+
+      .wf-region__tag {
+        position: absolute;
+        top: 6px;
+        left: 8px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--wf-label);
+        z-index: 2;
+      }
+
+      .wf-region__pct {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--wf-label);
+        z-index: 2;
+      }
+
+      .match-hud-bar {
+        flex: 0 0 var(--mb-hud);
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1.2fr auto 0.9fr;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+      }
+
+      .match-player-card {
+        min-width: 0;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 8px;
+        border: 1px dashed #4a4a56;
+        border-radius: 4px;
+        background: #1a1a20;
+        font-size: 10px;
+      }
+
+      .match-player-card--you {
+        justify-content: flex-end;
+        text-align: right;
+      }
+
+      .match-turn-badge {
+        padding: 10px 22px;
+        border: 1px dashed #5a5a66;
+        clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        text-align: center;
+      }
+
+      .match-race-strip {
+        flex: 0 0 var(--mb-race);
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 12px;
+        border-style: dashed;
+      }
+
+      .match-race-strip__note {
+        font-size: 9px;
+        color: var(--wf-label);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .match-race-strip__track {
+        flex: 1;
+        height: 12px;
+        margin-left: 10px;
+        border-radius: 999px;
+        background: repeating-linear-gradient(
+          90deg,
+          #2a2a32 0,
+          #2a2a32 8px,
+          #1e1e24 8px,
+          #1e1e24 16px
+        );
+        border: 1px solid #4a4a56;
+      }
+
+      .match-arena {
+        flex: 1 1 0;
+        min-height: 0;
+        padding: var(--mb-arena-inset);
+      }
+
+      .match-arena-mat {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border: 2px solid #5a5a66;
+        border-radius: 8px;
+        background: #101014;
+      }
+
+      .match-arena-board-slot {
+        position: absolute;
+        inset: 10% 8% 10% 8%;
+        border: 1px dashed #6a6a78;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: var(--wf-label);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .match-arena-meta {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .match-arena-meta__chip {
+        min-width: 108px;
+        padding: 6px 10px;
+        border: 1px solid #4a4a56;
+        border-radius: 4px;
+        font-size: 10px;
+        text-align: right;
+      }
+
+      .match-arena-controls {
+        position: absolute;
+        inset: auto 0 10px 0;
+        display: flex;
+        justify-content: space-between;
+        padding: 0 10px;
+      }
+
+      .match-arena-controls__cluster {
+        padding: 6px 10px;
+        border: 1px solid #4a4a56;
+        border-radius: 4px;
+        font-size: 10px;
+      }
+
+      .match-hand-dock {
+        flex: 0 0 var(--mb-hand);
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px;
+      }
+
+      .wf-tile {
+        width: 28px;
+        height: 52px;
+        border-radius: 4px;
+        background: #d8d8dc;
+        border: 1px solid #9a9aa4;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wf-page">
+      <p class="wf-note">
+        boardmock1 layout · no region A (app nav) · grayscale ·
+        <a href="boardmock1-annotated.html" style="color: #9ab">annotated mock</a>
+      </p>
+
+      <div class="match-board-shell" data-ui="match-board-shell">
+        <section class="wf-region match-hud-bar" data-ui="match-hud-bar">
+          <span class="wf-region__tag">B · HUD</span>
+          <span class="wf-region__pct">13%</span>
+          <div class="match-player-card" data-ui="match-player-card" data-side="opponent">
+            <span>Fritz · 0 · rack</span>
+          </div>
+          <div class="match-turn-badge" data-ui="match-turn-badge">Your move</div>
+          <div class="match-player-card match-player-card--you" data-ui="match-player-card" data-side="you">
+            <span>You · 0</span>
+          </div>
+        </section>
+
+        <section class="wf-region match-race-strip" data-ui="match-race-strip">
+          <span class="wf-region__tag">C · Race</span>
+          <span class="wf-region__pct">6%</span>
+          <span class="match-race-strip__note">not in mock · product</span>
+          <div class="match-race-strip__track" aria-hidden="true"></div>
+        </section>
+
+        <section class="wf-region match-arena" data-ui="match-arena">
+          <span class="wf-region__tag">D · Arena</span>
+          <span class="wf-region__pct">flex</span>
+          <div class="match-arena-mat" data-ui="match-arena-mat">
+            <div class="match-arena-board-slot" data-ui="match-arena-board-slot">D2 · Board</div>
+            <div class="match-arena-meta" data-ui="match-arena-meta">
+              <div class="match-arena-meta__chip">14 tiles left</div>
+              <div class="match-arena-meta__chip">0 open ends</div>
+            </div>
+            <div class="match-arena-controls" data-ui="match-arena-controls">
+              <div class="match-arena-controls__cluster">− +</div>
+              <div class="match-arena-controls__cluster">sound · fs · home</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="wf-region match-hand-dock" data-ui="match-hand-dock">
+          <span class="wf-region__tag">E1 · Hand</span>
+          <span class="wf-region__pct">20%</span>
+          <div class="wf-tile"></div>
+          <div class="wf-tile"></div>
+          <div class="wf-tile"></div>
+          <div class="wf-tile"></div>
+          <div class="wf-tile"></div>
+          <div class="wf-tile"></div>
+          <div class="wf-tile"></div>
+          <div class="wf-tile"></div>
+        </section>
+      </div>
+    </div>
+  </body>
+</html>

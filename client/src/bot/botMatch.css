@@ -78,31 +78,6 @@
   pointer-events: none;
 }
 
-@media (max-width: 600px) {
-  .bot-match-screen .bot-top-rail {
-    grid-template-columns: 1fr 1fr !important;
-    row-gap: 8px !important;
-  }
-
-  .bot-match-screen .bot-hud-left-cluster {
-    grid-column: 1;
-  }
-
-  .bot-match-screen .bot-hud-right-cluster {
-    grid-column: 2;
-    justify-self: end !important;
-  }
-
-  .bot-match-screen .bot-top-rail .wl-center-status {
-    grid-column: 1 / -1;
-    position: relative !important;
-    left: auto !important;
-    transform: none !important;
-    justify-self: center;
-    margin: 0 auto;
-  }
-}
-
 
 .bot-match-screen .bot-center-zone {
   min-width: 0;

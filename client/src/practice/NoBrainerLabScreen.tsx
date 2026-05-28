@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Board, DominoTile, MatchNblBoardFrame } from '../components';
+import { Board, DominoTile } from '../components';
+import { InGameBoardShell } from '../match/InGameBoardShell';
 import type { BoardHandle } from '../components';
 import { Button } from '../components/primitives';
 import '../components/primitives/Button.css';
@@ -324,64 +325,64 @@ export default function NoBrainerLabScreen({
         </header>
 
         <main className="nbl-stage rh-live-studio-shell">
-          <div className="rh-live-board-zone" data-ui="live-board-zone">
-            <div className="wl-stage-shell">
-              <MatchNblBoardFrame
-                toolbar={
-                  <div
-                    className="nbl-board-controls-pill control-pill"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      className="board-zoom-btn"
-                      title="Zoom out"
-                      aria-label="Zoom out"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        boardRef.current?.zoomOut();
-                      }}
-                    >
-                      −
-                    </button>
-                    <button
-                      type="button"
-                      className="board-zoom-btn"
-                      title="Zoom in"
-                      aria-label="Zoom in"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        boardRef.current?.zoomIn();
-                      }}
-                    >
-                      +
-                    </button>
-                    <span className="nbl-board-controls-divider" aria-hidden="true" />
-                    <button
-                      type="button"
-                      className="nbl-board-control-btn"
-                      onClick={toggleFullscreen}
-                      title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                      aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                    >
-                      <FullscreenIcon isFullscreen={isFullscreen} />
-                    </button>
-                    <button
-                      type="button"
-                      className="nbl-board-control-btn"
-                      onClick={onBack}
-                      title="Back to Single Player"
-                      aria-label="Back to Single Player"
-                    >
-                      <HomeIcon />
-                    </button>
-                  </div>
-                }
+          <InGameBoardShell
+            boardColumnOnly
+            boardToolbar={
+              <div
+                className="nbl-board-controls-pill control-pill"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
               >
+                <button
+                  type="button"
+                  className="board-zoom-btn"
+                  title="Zoom out"
+                  aria-label="Zoom out"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    boardRef.current?.zoomOut();
+                  }}
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  className="board-zoom-btn"
+                  title="Zoom in"
+                  aria-label="Zoom in"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    boardRef.current?.zoomIn();
+                  }}
+                >
+                  +
+                </button>
+                <span className="nbl-board-controls-divider" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="nbl-board-control-btn"
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                >
+                  <FullscreenIcon isFullscreen={isFullscreen} />
+                </button>
+                <button
+                  type="button"
+                  className="nbl-board-control-btn"
+                  onClick={onBack}
+                  title="Back to Single Player"
+                  aria-label="Back to Single Player"
+                >
+                  <HomeIcon />
+                </button>
+              </div>
+            }
+            board={
+              <>
                 {practiceState.status === 'won' ? (
                   <div className="nbl-win-banner" role="status">
                     Cleared — no brainer
@@ -397,9 +398,9 @@ export default function NoBrainerLabScreen({
                   onPositionClick={onPositionClick}
                   tileSize={84}
                 />
-              </MatchNblBoardFrame>
-            </div>
-          </div>
+              </>
+            }
+          />
 
           {showSolution ? (
             <section className="nbl-solution" aria-label="Solution sequence">

@@ -1,0 +1,18 @@
+/*
+ * Board CSS Namespace: board-meta.css
+ *
+ * Future canonical owner:
+ * - board-adjacent metadata pills
+ * - open ends pill
+ * - boneyard count pill
+ * - board status / meta bar
+ * - selectors currently split across:
+ *   - .rh-board-meta-bar
+ *   - .board-corner-pill
+ *   - .open-ends-pill
+ *   - .boneyard-pill
+ *
+ * Migration note:
+ * - structural and shared visual ownership belongs here
+ * - mode accent differences belong in skins
+ */
