@@ -1580,7 +1580,7 @@ export default function DailyFritzScreen({
             </article>
           </div>
 
-          <section className="df-pvf-control-panel" aria-label="Today's Set">
+          <section className="pvf-control-panel df-pvf-control-panel" aria-label="Today's Set">
             <div className="df-pvf-section">
               <div className="fritz-section-label">1. TODAY&apos;S SET</div>
               <div className="df-pvf-overview-grid" role="list" aria-label="Set details">

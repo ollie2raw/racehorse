@@ -932,7 +932,7 @@ export default function DailyPuzzleLadderScreen({
                 </article>
               </div>
 
-              <section className="df-pvf-control-panel" aria-label="Daily Ladder">
+              <section className="pvf-control-panel df-pvf-control-panel" aria-label="Daily Ladder">
                 <div className="df-pvf-section">
                   <div className="fritz-section-label">1. TODAY&apos;S LADDER</div>
                   <div className="df-pvf-overview-grid" role="list" aria-label="Ladder details">

@@ -5102,6 +5102,7 @@
   color: var(--text-secondary);
 }
 
+/* Shell (bg, border, shadow, radius, padding) — canonical .pvf-control-panel in _pvf-layout.css */
 .df-pvf-control-panel {
   min-width: 0;
   min-height: 0;
@@ -5109,13 +5110,6 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 24px 32px;
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(8, 12, 22, 0.96);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 18px 40px rgba(0, 0, 0, 0.3);
 }
 
 .df-pvf-section {
@@ -5390,14 +5384,16 @@
   color: rgba(203, 213, 225, 0.72);
 }
 
+/* Match Play vs Fritz .fritz-summary-strip (_fritz-screen-shell.css) */
 .df-pvf-summary-strip {
   display: flex;
   align-items: stretch;
+  justify-content: space-around;
   border-radius: var(--fritz-summary-radius);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--fritz-card-border);
+  background: var(--fritz-card-bg);
   overflow: hidden;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: var(--fritz-card-inset);
 }
 
 .df-pvf-summary-item {
@@ -5596,7 +5592,7 @@
     gap: 24px;
   }
 
-  .df-pvf-control-panel {
+  .df-shell--daily-fritz .pvf-control-panel.df-pvf-control-panel {
     padding: 20px 20px 18px;
   }
 }
