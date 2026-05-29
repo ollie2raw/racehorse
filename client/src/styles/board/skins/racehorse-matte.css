@@ -2,7 +2,7 @@
  * Racehorse matte skin — COLOR RECOLOR ONLY.
  * Layout/typography stay on walnut-live v3 (production). Do not reshape pills, mat, or dock here.
  * Scope: bot match — not Learn.
- * Tiles: ivory bodies preserved via walnut-live + tile overrides below.
+ * Tiles: ivory bodies + matte grain/bevel via rules below.
  */
 
 .screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) {
@@ -81,7 +81,7 @@
 }
 
 .screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .open-ends-count {
-  color: #f4d989 !important;
+  color: rgba(238, 244, 255, 0.95) !important;
 }
 
 /* Play mat — gold grid + matte depth + brass inset rim */
@@ -199,7 +199,129 @@
   text-shadow: none;
 }
 
-/* Hand playable + selected — brass outline (match underline glow; not bot-match blue) */
+/* Ivory tiles — bone grain + bevel (hand + board) */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-body {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 6px;
+  background-color: #f3ead8 !important;
+  background-image:
+    radial-gradient(ellipse 88% 72% at 14% 6%, rgba(255, 255, 255, 0.72), transparent 54%),
+    radial-gradient(ellipse 92% 78% at 86% 94%, rgba(58, 48, 34, 0.16), transparent 50%),
+    repeating-linear-gradient(
+      94deg,
+      rgba(255, 255, 255, 0.07) 0 1px,
+      transparent 1px 5px
+    ),
+    linear-gradient(168deg, #fffdf6 0%, #f5ebda 46%, #e6d9c0 100%) !important;
+  border: 2px solid rgba(98, 82, 58, 0.78) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -4px 10px rgba(72, 58, 38, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.38),
+    0 2px 4px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(72, 58, 38, 0.14) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.11;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 88px 88px;
+  mix-blend-mode: soft-light;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-body::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  pointer-events: none;
+  z-index: 2;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.62),
+    inset 0 -14px 22px rgba(48, 38, 26, 0.14),
+    inset 3px 0 8px rgba(48, 38, 26, 0.04),
+    inset -3px 0 8px rgba(48, 38, 26, 0.04);
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-tile.double .domino-body {
+  background-image:
+    radial-gradient(ellipse 88% 72% at 14% 6%, rgba(255, 255, 255, 0.76), transparent 54%),
+    radial-gradient(ellipse 92% 78% at 86% 94%, rgba(58, 48, 34, 0.14), transparent 50%),
+    repeating-linear-gradient(
+      94deg,
+      rgba(255, 255, 255, 0.08) 0 1px,
+      transparent 1px 5px
+    ),
+    linear-gradient(168deg, #fffef8 0%, #f7eede 50%, #e8dcc4 100%) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-body .pip-half,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-body .domino-divider {
+  position: relative;
+  z-index: 3;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-divider.vertical {
+  width: 2px !important;
+  background: linear-gradient(
+    180deg,
+    rgba(48, 42, 34, 0.16),
+    rgba(48, 42, 34, 0.52),
+    rgba(48, 42, 34, 0.16)
+  ) !important;
+  box-shadow:
+    1px 0 0 rgba(255, 255, 255, 0.28),
+    -1px 0 0 rgba(48, 38, 26, 0.12);
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .domino-tile:not(.disabled) {
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.34));
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen)
+  .board-canvas
+  .domino-tile.board-tile
+  .domino-body {
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -4px 11px rgba(72, 58, 38, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.38),
+    0 4px 6px rgba(0, 0, 0, 0.52),
+    0 14px 28px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(72, 58, 38, 0.16) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .board-canvas .board-tile-wrapper {
+  filter:
+    drop-shadow(0 2px 2px rgba(0, 0, 0, 0.65))
+    drop-shadow(0 12px 20px rgba(0, 0, 0, 0.42));
+}
+
+/* Pips — recessed drill holes; rainbow colors unchanged (DominoTile inline fill) */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .domino-body .pip {
+  border: none !important;
+  transform: scale(0.96);
+  transform-origin: center;
+  filter: saturate(0.92) brightness(0.96) contrast(1.03);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(0, 0, 0, 0.22),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(72, 58, 38, 0.14) !important;
+}
+
+/* Hand playable + selected — brass outline only (same tile face + pips as unplayable) */
 .screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) {
   --rh-hand-playable-accent: #e7b64a;
 }
@@ -223,8 +345,11 @@
   .domino-body {
   border-color: rgba(231, 182, 74, 0.92) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 0 0 2px rgba(231, 182, 74, 0.28),
-    0 12px 24px rgba(0, 0, 0, 0.36),
-    0 0 28px rgba(231, 182, 74, 0.18) !important;
+    inset 0 2px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -4px 10px rgba(72, 58, 38, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.38),
+    0 2px 4px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(72, 58, 38, 0.14),
+    0 0 0 2.5px rgba(231, 182, 74, 0.5) !important;
 }
