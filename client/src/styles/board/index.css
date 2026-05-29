@@ -21,4 +21,4 @@
 @import './board-interactions.css';
 @import './board-overlays.css';
 @import './board-modals.css';
-@import './skins/racehorse-matte.css';
+/* racehorse-matte.css loads from BotMatchScreen after route CSS for correct cascade */

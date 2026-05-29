@@ -1,17 +1,230 @@
 /*
- * Board CSS Namespace: skins/racehorse-matte.css
- *
- * Future canonical owner:
- * - premium black matte / gold-brass Racehorse board identity
- * - mode accent variables
- * - board color tokens
- * - glow / shadow / texture values
- *
- * Intended role:
- * - primary shared skin for Daily Fritz, Play vs Fritz, and Multiplayer
- * - may later supply shared premium board tokens for Puzzle and Learn variants
- *
- * Migration note:
- * - this file should not own layout structure
- * - structure belongs in base board files
+ * Racehorse matte skin — COLOR RECOLOR ONLY.
+ * Layout/typography stay on walnut-live v3 (production). Do not reshape pills, mat, or dock here.
+ * Scope: bot match — not Learn.
+ * Tiles: ivory bodies preserved via walnut-live + tile overrides below.
  */
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) {
+  --rh-brass: #e7b64a;
+  --rh-brass-border: rgba(226, 176, 72, 0.22);
+  --rh-brass-glow: rgba(231, 182, 74, 0.14);
+  background-color: #04070c !important;
+  background-image: none !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen)::before {
+  opacity: 0.12;
+  background:
+    linear-gradient(132deg, transparent 0 48%, rgba(231, 182, 74, 0.14) 48.06%, transparent 48.12%),
+    linear-gradient(48deg, transparent 0 59%, rgba(231, 182, 74, 0.08) 59.06%, transparent 59.12%);
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen)::after {
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 176, 72, 0.04),
+    inset 0 -90px 150px rgba(0, 0, 0, 0.4);
+}
+
+/* HUD — keep v3 layout; matte strip + brass divider (not blue botMatch bar) */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .bot-top-rail {
+  background: rgba(4, 7, 12, 0.96) !important;
+  border-bottom-color: rgba(226, 176, 72, 0.12) !important;
+}
+
+/* Score pills — v3 shape; swap blue chrome for brass */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-player-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-player-pill-btn {
+  border-color: rgba(226, 176, 72, 0.2) !important;
+  background: rgba(5, 9, 15, 0.82) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-player-pill.score-card .wl-player-label,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-player-pill-btn.score-card .wl-player-label {
+  color: rgba(244, 239, 228, 0.9) !important;
+  font-size: 1.48rem !important;
+  letter-spacing: 0.17em !important;
+}
+
+/* Meta bar — OPEN + boneyard stacked top-right (walnut v3 layout) */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin .rh-board-meta-bar {
+  top: 14px !important;
+  left: auto !important;
+  right: 14px !important;
+  width: auto !important;
+  display: flex !important;
+  flex-direction: column-reverse !important;
+  align-items: flex-end !important;
+  justify-content: flex-start !important;
+  padding: 0 !important;
+  gap: 8px !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .rh-board-meta-bar .board-corner-pill {
+  position: static !important;
+  min-height: 44px !important;
+  min-width: 92px !important;
+  padding: 8px 14px !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .board-corner-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .boneyard-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .board-zoom-tray.control-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-controls-tray.control-pill {
+  border-color: rgba(226, 176, 72, 0.18) !important;
+  background: rgba(5, 9, 15, 0.88) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .open-ends-pill.board-corner-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .rh-board-meta-bar .open-ends-pill.board-corner-pill {
+  border-color: rgba(226, 176, 72, 0.28) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .open-ends-count {
+  color: #f4d989 !important;
+}
+
+/* Play mat — gold grid + matte depth + brass inset rim */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .nbl-board-canvas,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .board-area.wl-board-area {
+  background-color: #0c0e12 !important;
+  background-image:
+    linear-gradient(rgba(231, 182, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(231, 182, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, #0f1014 0%, #0c0e12 52%, #080a0e 100%) !important;
+  background-size: 26px 26px, 26px 26px, 100% 100% !important;
+  background-repeat: repeat, repeat, no-repeat !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .nbl-board-canvas::before,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .board-area.wl-board-area::before {
+  content: none !important;
+  display: none !important;
+}
+
+/* Board mount */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .rh-live-board-zone {
+  border: 0 !important;
+  background: rgba(4, 7, 12, 0.92) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .rh-live-board-zone::before,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .rh-live-board-zone::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Racehorse logo watermark — center mat */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .nbl-board-watermark {
+  opacity: 0.048;
+  width: min(220px, 24%);
+  height: min(220px, 24%);
+  filter: none;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .nbl-board-watermark img {
+  object-fit: contain;
+  filter: grayscale(1) brightness(1.2);
+  mix-blend-mode: soft-light;
+}
+
+.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .nbl-board-watermark {
+  opacity: 0.052;
+  transition: opacity 0.35s ease;
+}
+
+.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz.df-board-has-play .nbl-board-watermark {
+  opacity: 0.028;
+}
+
+/* Hand dock — v3 layout; no extra gold box */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .rh-live-hand-deck {
+  border: 0 !important;
+  background: rgba(5, 9, 15, 0.9) !important;
+  box-shadow:
+    0 -18px 58px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Turn badge + placement — gold accents */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-turn-label.your-turn {
+  border-color: rgba(226, 176, 72, 0.38) !important;
+  color: #f2dc9a !important;
+  background: rgba(22, 18, 10, 0.92) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .placement-zone.active,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .placement-zone.highlighted {
+  border-color: rgba(231, 182, 74, 0.55) !important;
+  background: rgba(231, 182, 74, 0.1) !important;
+  box-shadow: 0 0 20px rgba(231, 182, 74, 0.18) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .rh-tile-rack {
+  border-color: rgba(226, 176, 72, 0.16) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-controls-tray button,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .board-zoom-tray .board-zoom-btn {
+  color: rgba(244, 217, 137, 0.88) !important;
+  opacity: 0.85;
+}
+
+/* Daily Fritz — kill frosted white glass from route sheet */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .wl-player-pill.score-card,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .wl-player-pill-btn.score-card,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .board-corner-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .boneyard-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .board-zoom-tray.control-pill,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .wl-controls-tray.control-pill,
+.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .daily-fritz-progress-pill {
+  background: rgba(5, 9, 15, 0.88) !important;
+  border: 1px solid rgba(226, 176, 72, 0.2) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  color: rgba(242, 238, 232, 0.98) !important;
+  text-shadow: none !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 30px rgba(0, 0, 0, 0.32) !important;
+}
+
+.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .wl-player-pill.score-card .wl-player-label,
+.bot-match-screen.racehorse-matte-skin.bot-match-mode-daily-fritz .wl-player-pill-btn.score-card .wl-player-label {
+  color: rgba(244, 239, 228, 0.9) !important;
+  font-size: 1.48rem !important;
+  text-shadow: none;
+}
+
+/* Hand playable + selected — brass outline (match underline glow; not bot-match blue) */
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) {
+  --rh-hand-playable-accent: #e7b64a;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen)
+  .hand-container
+  .domino-tile.highlight:not(.unplayable)::after {
+  background-color: rgba(231, 182, 74, 0.95) !important;
+  box-shadow:
+    0 0 12px rgba(231, 182, 74, 0.86),
+    0 0 28px rgba(231, 182, 74, 0.34) !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen)
+  .hand-container
+  .domino-tile.selected
+  .domino-body,
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen)
+  .hand-container
+  .domino-tile.highlight:not(.unplayable)
+  .domino-body {
+  border-color: rgba(231, 182, 74, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 2px rgba(231, 182, 74, 0.28),
+    0 12px 24px rgba(0, 0, 0, 0.36),
+    0 0 28px rgba(231, 182, 74, 0.18) !important;
+}

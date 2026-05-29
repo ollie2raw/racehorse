@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { BoardWatermark } from '../match/BoardWatermark';
 import '../practice/noBrainerLab.css';
 
 export interface MatchNblBoardFrameProps {
@@ -13,9 +14,7 @@ export function MatchNblBoardFrame({ children, toolbar, className }: MatchNblBoa
     <main className={`nbl-stage walnut-nbl-stage rh-board-stage${className ? ` ${className}` : ''}`}>
       <div className="nbl-board-frame rh-board-frame">
         <div className="nbl-board-canvas rh-board-canvas" data-ui="board">
-          <div className="nbl-board-watermark rh-board-watermark" aria-hidden="true">
-            <img src="/brand_logo.png" alt="" />
-          </div>
+          <BoardWatermark />
           {children}
           {toolbar ? <div className="nbl-board-toolbar">{toolbar}</div> : null}
         </div>

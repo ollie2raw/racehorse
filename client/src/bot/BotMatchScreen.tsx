@@ -114,6 +114,7 @@ import '../dailyFritz/dailyFritzMatchBoard.css';
 import './PlayVsFritz.css';
 import '../styles/shared-ui.css';
 import '../learn/learn.css';
+import '../styles/board/skins/racehorse-matte.css';
 import { useLearningCoach } from '../learning/useLearningCoach';
 import CoachPanel from '../learning/CoachPanel';
 import LearningHandRecap from '../learning/LearningHandRecap';
@@ -7065,7 +7066,7 @@ export default function BotMatchScreen({
       <RotateOverlay />
       <div
         ref={rootRef}
-        className={`screen game-screen walnut-live theme-green bot-match-screen bot-match-mode-${mode} ${isDailyFritzMode && dailyFritzBoardHasPlay ? 'df-board-has-play' : ''} ${isLessonLayoutMode ? 'learn-lesson-screen learn-pvf-root pvf-root tier-rookie claude-mode-screen-shell' : ''}`}
+        className={`screen game-screen walnut-live theme-green bot-match-screen bot-match-mode-${mode} ${isDailyFritzMode && dailyFritzBoardHasPlay ? 'df-board-has-play' : ''} ${!isLessonLayoutMode ? 'racehorse-matte-skin' : ''} ${isLessonLayoutMode ? 'learn-lesson-screen learn-pvf-root pvf-root tier-rookie claude-mode-screen-shell' : ''}`}
       >
       {isLessonLayoutMode && (
         <div className="home-bg" aria-hidden="true">
@@ -7786,18 +7787,16 @@ export default function BotMatchScreen({
                 <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <button
                     type="button"
-                    className="wl-player-pill wl-player-pill-btn score-card"
+                    className={`wl-player-pill wl-player-pill-btn score-card${botTurn ? ' is-active-turn' : ''}`}
                     ref={opponentPillRef}
                     onClick={() => setScoreTrackOpen(true)}
                     aria-label="Open score track"
                   >
                     <div className="wl-player-card-content">
                       <div className="wl-player-card-text">
-                        {ghostSubLabel && (
-                          <span className="wl-player-subtitle">
-                            {formatGhostName(ghostSubLabel)}
-                          </span>
-                        )}
+                        {ghostSubLabel ? (
+                          <span className="wl-player-subtitle">{formatGhostName(ghostSubLabel)}</span>
+                        ) : null}
                         <span className="wl-player-label">{opponentLabel}</span>
                       </div>
                       <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
@@ -7882,7 +7881,7 @@ export default function BotMatchScreen({
               rightSlot={
                 <button
                   type="button"
-                  className="wl-player-pill wl-player-pill-btn score-card is-you"
+                  className={`wl-player-pill wl-player-pill-btn score-card is-you${!botTurn ? ' is-active-turn' : ''}`}
                   onClick={() => setScoreTrackOpen(true)}
                   aria-label="Open score track"
                 >
