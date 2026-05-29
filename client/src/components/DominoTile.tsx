@@ -139,7 +139,6 @@ function DominoTileComponent({
   style,
 }: DominoTileProps) {
   const isDouble = tile.high === tile.low;
-  const liftY = selected ? -6 : highlight && !unplayable ? -4 : 0;
 
   const tileClass = [
     'domino-tile',
@@ -172,8 +171,8 @@ function DominoTileComponent({
         border: 'none',
         background: 'none',
         cursor: disabled ? 'default' : onClick ? 'pointer' : 'default',
-        transform: `translateY(${liftY}px) rotate(${rotation}deg)`,
-        transition: 'transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease',
+        transform: `rotate(${rotation}deg)`,
+        transition: 'filter 0.16s ease, opacity 0.16s ease',
         ...style,
       }}
     >

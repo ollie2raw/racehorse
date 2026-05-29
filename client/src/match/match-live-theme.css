@@ -530,6 +530,10 @@
 }
 
 /* Board tiles — same ivory face + depth as hand (legacy walnut board override was flattening placed tiles) */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-canvas .board-tile-wrapper {
+  animation: none;
+}
+
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
   .board-canvas
   .domino-tile.board-tile:not(.highlight) {
@@ -561,6 +565,54 @@
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
   --rh-hand-playable-accent: #e7b64a;
+}
+
+/* Hand tiles stay on the rack baseline — brass outline signals playable, no lift/bounce */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile:hover,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.selected,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.highlight,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .wl-hand-area
+  .hand-container
+  .domino-tile,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .wl-hand-area
+  .hand-container
+  .domino-tile:hover,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .wl-hand-area
+  .hand-container
+  .domino-tile.selected,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .wl-hand-area
+  .hand-container
+  .domino-tile.highlight {
+  transform: none !important;
+  scale: none !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.new-draw,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .wl-hand-area
+  .hand-container
+  .domino-tile.new-draw {
+  animation: none !important;
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
