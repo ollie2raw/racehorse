@@ -33,25 +33,30 @@
   box-shadow: 0 0 6px color-mix(in srgb, var(--rh-glow-underline-color, #3fa7ff) 25%, transparent);
 }
 
-/* Playable hand tile — separate neon underline below tile (stays visible when selected) */
+/* Playable hand tile — gold pill underline + downward bloom (deployed / racehorse-matte) */
 .hand-container .domino-tile.highlight:not(.unplayable)::after,
 .walnut-live .hand-container .domino-tile.highlight:not(.unplayable)::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: -6px;
+  bottom: -10px;
   transform: translateX(-50%);
-  width: 32px;
-  height: 2px;
+  width: 36px;
+  height: 2.5px;
   border-radius: 999px;
   pointer-events: none;
-  z-index: 0;
-  background-color: var(--rh-hand-playable-accent, rgba(231, 182, 74, 0.95));
+  z-index: 4;
+  background-color: color-mix(
+    in srgb,
+    var(--rh-hand-playable-accent, #e7b64a) 82%,
+    transparent
+  );
   box-shadow:
-    0 0 4px 1px color-mix(in srgb, var(--rh-hand-playable-accent, #e7b64a) 70%, transparent),
-    0 0 12px 4px color-mix(in srgb, var(--rh-hand-playable-accent, #e7b64a) 45%, transparent);
+    0 3px 8px color-mix(in srgb, var(--rh-hand-playable-accent, #e7b64a) 46%, transparent),
+    0 0 10px color-mix(in srgb, var(--rh-hand-playable-accent, #e7b64a) 50%, transparent),
+    0 0 18px color-mix(in srgb, var(--rh-hand-playable-accent, #e7b64a) 20%, transparent);
   opacity: 1;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.2s ease;
 }
 
 @starting-style {

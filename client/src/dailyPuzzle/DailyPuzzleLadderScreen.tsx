@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import { Board, DominoTile, GlobalNav, RotateOverlay } from '../components';
-import { InGameBoardShell } from '../match/InGameBoardShell';
+import { MatchLiveLayout } from '../match/board';
+import '../match/match-live.css';
 import { Button } from '../components/primitives';
 import {
   applyPlayMove,
@@ -1168,26 +1169,37 @@ export default function DailyPuzzleLadderScreen({
     <>
       {renderLadderOverlays()}
       <RotateOverlay />
-      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-standard-live-board">
-        <div className="wl-top-rail daily-top-rail" data-ui="hud">
-          <div className="wl-player-pill is-active daily-hud-pill">
-            <span className="wl-player-label">{getDailyPuzzleDisplayTitle(playingSlot.slotIndex, playingSlot.slotTitle)}</span>
-            <span className="wl-player-score">{displayScore}</span>
-          </div>
-          <div className="daily-center-zone">
-            <div className="wl-center-status">
+      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-match-live rh-match-solo-hud">
+        <MatchLiveLayout
+          hudLeft={
+            <div className="wl-player-pill wl-player-pill-btn score-card is-you">
+              <div className="wl-player-card-content">
+                <div className="wl-player-card-text">
+                  <span className="wl-player-label">
+                    {getDailyPuzzleDisplayTitle(playingSlot.slotIndex, playingSlot.slotTitle)}
+                  </span>
+                </div>
+                <span className="wl-player-score">{displayScore}</span>
+              </div>
+            </div>
+          }
+          hudCenter={
+            <div className="wl-center-status" data-ui="turn-status">
               <span className="wl-turn-label your-turn">DAILY PUZZLE LADDER</span>
               <span className="wl-room-code">Puzzle {playingSlot.slotIndex} / 3</span>
             </div>
-          </div>
-          <div className="daily-top-actions-pill">
-            <button className="btn text compact daily-chip-control rh-back-button" onClick={onBack}>← Back to Home</button>
-            <button className="btn text compact daily-chip-control" onClick={() => setLeaderboardOpen(true)}>Leaderboard</button>
-          </div>
-        </div>
-
-        <InGameBoardShell
-          board={
+          }
+          hudRight={
+            <div className="rh-match-solo-actions">
+              <button type="button" className="rh-match-solo-action-btn rh-back-button" onClick={onBack}>
+                ← Back to Home
+              </button>
+              <button type="button" className="rh-match-solo-action-btn" onClick={() => setLeaderboardOpen(true)}>
+                Leaderboard
+              </button>
+            </div>
+          }
+          boardInner={
             <Board
               board={playingState.board}
               legalMoves={legalMoves}
@@ -1197,47 +1209,46 @@ export default function DailyPuzzleLadderScreen({
               tileSize={84}
             />
           }
-          hand={
+          handDock={
             <div className="tray-rail">
               <div className="tray-center">
-              <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
-                {(handCompactStacked
-                  ? [
-                      playingState.players.you.hand.slice(0, Math.ceil(playingState.players.you.hand.length / 2)),
-                      playingState.players.you.hand.slice(Math.ceil(playingState.players.you.hand.length / 2)),
-                    ]
-                  : [playingState.players.you.hand]
-                ).map((row, rowIdx) => (
-                  <div key={`ladder-hand-row-${rowIdx}`} className="hand-row">
-                    {row.map((tile, idx) => {
-                      const playable = legalMoves.some((candidate) => candidate.tile && tileEquals(candidate.tile, tile));
-                      const inProgress = status === 'IN_PROGRESS';
-                      const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
-                      return (
-                        <DominoTile
-                          key={`ladder-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
-                          tile={tile}
-                          size={handTileSize}
-                          rotation={0}
-                          selected={isSelected}
-                          highlight={inProgress && playable}
-                          unplayable={inProgress && !playable}
-                          disabled={!inProgress}
-                          onClick={() => {
-                            if (!inProgress || !playable) return;
-                            setSelectedTile(tile);
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                ))}
+                <div className={`hand-container ${handCompactStacked ? 'is-stacked has-single-row' : 'has-single-row'}`}>
+                  {(handCompactStacked
+                    ? [
+                        playingState.players.you.hand.slice(0, Math.ceil(playingState.players.you.hand.length / 2)),
+                        playingState.players.you.hand.slice(Math.ceil(playingState.players.you.hand.length / 2)),
+                      ]
+                    : [playingState.players.you.hand]
+                  ).map((row, rowIdx) => (
+                    <div key={`ladder-hand-row-${rowIdx}`} className="hand-row">
+                      {row.map((tile, idx) => {
+                        const playable = legalMoves.some((candidate) => candidate.tile && tileEquals(candidate.tile, tile));
+                        const inProgress = status === 'IN_PROGRESS';
+                        const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
+                        return (
+                          <DominoTile
+                            key={`ladder-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
+                            tile={tile}
+                            size={handTileSize}
+                            rotation={0}
+                            selected={isSelected}
+                            highlight={inProgress && playable}
+                            unplayable={inProgress && !playable}
+                            disabled={!inProgress}
+                            onClick={() => {
+                              if (!inProgress || !playable) return;
+                              setSelectedTile(tile);
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
             </div>
           }
         />
-
       </div>
     </>
   );

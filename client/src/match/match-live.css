@@ -6,3 +6,5 @@
 @import '../bot/botMatch.css';
 @import '../dailyFritz/dailyFritzMatchBoard.css';
 @import './match-live-theme.css';
+@import './match-live-surface.css';
+@import './match-live-solo.css';

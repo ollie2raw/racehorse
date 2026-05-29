@@ -10,9 +10,12 @@ export interface MatchLiveLayoutProps {
   boardInner: ReactNode;
   boardToolbar?: ReactNode;
   handDock: ReactNode;
+  handFooter?: ReactNode;
   boardStageRef?: RefObject<HTMLDivElement | null>;
   boardStageClassName?: string;
   shellClassName?: string;
+  handStackClassName?: string;
+  handFooterClassName?: string;
 }
 
 /**
@@ -26,9 +29,12 @@ export function MatchLiveLayout({
   boardInner,
   boardToolbar,
   handDock,
+  handFooter,
   boardStageRef,
   boardStageClassName,
   shellClassName,
+  handStackClassName,
+  handFooterClassName,
 }: MatchLiveLayoutProps) {
   return (
     <InGameBoardShell className={shellClassName}>
@@ -42,8 +48,11 @@ export function MatchLiveLayout({
         boardInner={boardInner}
         boardToolbar={boardToolbar}
         handDock={handDock}
+        handFooter={handFooter}
         boardStageRef={boardStageRef}
         boardStageClassName={boardStageClassName}
+        handStackClassName={handStackClassName}
+        handFooterClassName={handFooterClassName}
       />
     </InGameBoardShell>
   );

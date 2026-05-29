@@ -3,7 +3,8 @@ import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import { Board, BoneyardCountPill, BrandLogo, DominoTile, RotateOverlay } from '../components';
-import { InGameBoardShell } from '../match/InGameBoardShell';
+import { MatchLiveLayout } from '../match/board';
+import '../match/match-live.css';
 import {
   applyPlayMove,
   getDisplayOpenEnds,
@@ -1500,7 +1501,7 @@ export default function DailyPuzzleScreen({
   return (
     <>
       <RotateOverlay />
-      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-standard-live-board">
+      <div className="screen game-screen walnut-live theme-green daily-puzzle-screen rh-match-live rh-match-solo-hud">
       <canvas
         ref={confettiCanvasRef}
         style={{
@@ -1513,48 +1514,40 @@ export default function DailyPuzzleScreen({
           display: status === 'SOLVED' ? 'block' : 'none',
         }}
       />
-      <div className="wl-top-rail daily-top-rail" data-ui="hud">
-        <div className="wl-player-pill is-active daily-hud-pill">
-          <span className="wl-player-label">{isArchiveMode ? 'Puzzle Archive' : 'Daily Puzzle'}</span>
-          <span className="wl-player-score">{runtimeState.players.you.score}</span>
-        </div>
-        <div className="daily-center-zone">
-          <div className="wl-center-status">
+      <MatchLiveLayout
+        hudLeft={
+          <div className="wl-player-pill wl-player-pill-btn score-card is-you">
+            <div className="wl-player-card-content">
+              <div className="wl-player-card-text">
+                <span className="wl-player-label">{isArchiveMode ? 'Puzzle Archive' : 'Daily Puzzle'}</span>
+              </div>
+              <span className="wl-player-score">{runtimeState.players.you.score}</span>
+            </div>
+          </div>
+        }
+        hudCenter={
+          <div className="wl-center-status" data-ui="turn-status">
             <span className="wl-turn-label your-turn">{isArchiveMode ? 'ARCHIVE PUZZLE' : 'DAILY PUZZLE'}</span>
             <span className="wl-room-code">{formattedPuzzleDate}</span>
           </div>
-        </div>
-        <div className="daily-top-actions-pill">
-          <button
-            className="btn text compact daily-chip-control"
-            onClick={resetAttempt}
-            style={{
-              fontWeight: 700,
-              fontSize: '0.88rem',
-              color: 'rgba(236, 248, 242, 0.92)',
-              letterSpacing: '0.02em',
-            }}
-          >
-            Play Again
-          </button>
-          <button
-            className="btn text compact daily-chip-control rh-back-button"
-            onClick={onBack}
-          >
-            ← Back to Home
-          </button>
-        </div>
-      </div>
-
-      <InGameBoardShell
-        boardMeta={
-          !runtimeState.gameOver ? (
-            <BoneyardCountPill count={runtimeState.boneyard.length} />
-          ) : undefined
         }
-        boardMetaBarClassName="rh-board-meta-bar--count-only"
-        board={
+        hudRight={
+          <div className="rh-match-solo-actions">
+            <button type="button" className="rh-match-solo-action-btn" onClick={resetAttempt}>
+              Play Again
+            </button>
+            <button type="button" className="rh-match-solo-action-btn rh-back-button" onClick={onBack}>
+              ← Back to Home
+            </button>
+          </div>
+        }
+        boardInner={
           <>
+            {!runtimeState.gameOver ? (
+              <div className="rh-board-meta-bar rh-board-meta-bar--count-only" data-ui="board-meta">
+                <BoneyardCountPill count={runtimeState.boneyard.length} />
+              </div>
+            ) : null}
             <Board
               board={runtimeState.board}
               legalMoves={legalMoves}
@@ -1578,52 +1571,52 @@ export default function DailyPuzzleScreen({
             )}
           </>
         }
-        hand={
-        <div className="tray-rail">
-          <div className="tray-center">
-            <div className={`hand-container ${handCompactStacked ? 'is-stacked' : ''}`}>
-              {(handCompactStacked
-                ? [
-                    runtimeState.players.you.hand.slice(
-                      0,
-                      Math.ceil(runtimeState.players.you.hand.length / 2),
-                    ),
-                    runtimeState.players.you.hand.slice(
-                      Math.ceil(runtimeState.players.you.hand.length / 2),
-                    ),
-                  ]
-                : [runtimeState.players.you.hand]
-              ).map((row, rowIdx) => (
-                <div key={`daily-hand-row-${rowIdx}`} className="hand-row">
-                  {row.map((tile, idx) => {
-                    const playable = legalMoves.some(
-                      (candidate) => candidate.tile && tileEquals(candidate.tile, tile),
-                    );
-                    const inProgress = status === 'IN_PROGRESS';
-                    const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
+        handDock={
+          <div className="tray-rail">
+            <div className="tray-center">
+              <div className={`hand-container ${handCompactStacked ? 'is-stacked has-single-row' : 'has-single-row'}`}>
+                {(handCompactStacked
+                  ? [
+                      runtimeState.players.you.hand.slice(
+                        0,
+                        Math.ceil(runtimeState.players.you.hand.length / 2),
+                      ),
+                      runtimeState.players.you.hand.slice(
+                        Math.ceil(runtimeState.players.you.hand.length / 2),
+                      ),
+                    ]
+                  : [runtimeState.players.you.hand]
+                ).map((row, rowIdx) => (
+                  <div key={`daily-hand-row-${rowIdx}`} className="hand-row">
+                    {row.map((tile, idx) => {
+                      const playable = legalMoves.some(
+                        (candidate) => candidate.tile && tileEquals(candidate.tile, tile),
+                      );
+                      const inProgress = status === 'IN_PROGRESS';
+                      const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
 
-                    return (
-                      <DominoTile
-                        key={`daily-curated-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
-                        tile={tile}
-                        size={handTileSize}
-                        rotation={0}
-                        selected={isSelected}
-                        highlight={inProgress && playable}
-                        unplayable={inProgress && !playable}
-                        disabled={!inProgress}
-                        onClick={() => {
-                          if (!inProgress || !playable) return;
-                          setSelectedTile(tile);
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
+                      return (
+                        <DominoTile
+                          key={`daily-curated-${rowIdx}-${idx}-${tile.low}-${tile.high}`}
+                          tile={tile}
+                          size={handTileSize}
+                          rotation={0}
+                          selected={isSelected}
+                          highlight={inProgress && playable}
+                          unplayable={inProgress && !playable}
+                          disabled={!inProgress}
+                          onClick={() => {
+                            if (!inProgress || !playable) return;
+                            setSelectedTile(tile);
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
         }
       />
 

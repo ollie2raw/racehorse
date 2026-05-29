@@ -3427,7 +3427,7 @@ button:hover:not(:disabled) {
   flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: clamp(10px, 1.2vw, 18px);
 }
 
 @media (max-width: 600px) {

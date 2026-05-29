@@ -25,6 +25,338 @@
     linear-gradient(180deg, #040b17 0%, #050c18 38%, #03080f 100%);
 }
 
+/* Live match shell — Lab uses purple accent identity (not match gold) */
+.practice-lab.rh-match-live {
+  --rh-brass: #c084fc;
+  --rh-brass-border: var(--nbl-accent-soft);
+  --rh-brass-glow: var(--nbl-accent-glow);
+  --rh-hand-playable-accent: #a855f7;
+  background: #04070c !important;
+  background-image: none !important;
+}
+
+/* ── Lab purple recolor (overrides rh-match-live gold for this screen only) ── */
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)::before {
+  opacity: 0.14;
+  background:
+    linear-gradient(132deg, transparent 0 48%, rgba(168, 85, 247, 0.16) 48.06%, transparent 48.12%),
+    linear-gradient(48deg, transparent 0 59%, rgba(168, 85, 247, 0.1) 59.06%, transparent 59.12%);
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)::after {
+  box-shadow:
+    inset 0 0 0 1px rgba(168, 85, 247, 0.05),
+    inset 0 -90px 150px rgba(0, 0, 0, 0.4);
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live.rh-match-solo-hud .rh-match-solo-action-btn {
+  border-color: var(--nbl-accent-soft) !important;
+  color: #faf5ff !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 20px rgba(0, 0, 0, 0.28),
+    0 0 18px rgba(168, 85, 247, 0.08);
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live.rh-match-solo-hud .rh-match-solo-action-btn:hover {
+  border-color: rgba(199, 125, 255, 0.62) !important;
+  color: #fff !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live.rh-match-solo-hud .wl-turn-label.your-turn {
+  border-color: var(--nbl-accent-soft) !important;
+  background: linear-gradient(
+    145deg,
+    rgba(168, 85, 247, 0.2) 0%,
+    rgba(8, 12, 22, 0.88) 100%
+  ) !important;
+  color: #faf5ff !important;
+  text-shadow: 0 0 28px rgba(168, 85, 247, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 24px rgba(0, 0, 0, 0.24),
+    0 0 32px var(--nbl-accent-glow) !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live.rh-match-solo-hud .rh-match-solo-meta {
+  border-color: var(--nbl-accent-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 20px rgba(0, 0, 0, 0.28),
+    0 0 20px rgba(168, 85, 247, 0.08);
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live.rh-match-solo-hud .rh-match-solo-meta strong {
+  color: rgba(199, 125, 255, 0.96);
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .nbl-board-canvas,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .board-area.wl-board-area {
+  background-image:
+    linear-gradient(rgba(168, 85, 247, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 85, 247, 0.06) 1px, transparent 1px),
+    linear-gradient(180deg, #0f1014 0%, #0c0e12 52%, #080a0e 100%) !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone {
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.34),
+    0 0 48px rgba(168, 85, 247, 0.06) !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .board-corner-pill,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .board-zoom-tray.control-pill,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .nbl-board-controls-pill.control-pill,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .wl-controls-tray.control-pill {
+  border-color: rgba(168, 85, 247, 0.28) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 20px rgba(0, 0, 0, 0.28),
+    0 0 16px rgba(168, 85, 247, 0.08) !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .board-zoom-tray .board-zoom-btn,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .wl-controls-tray button {
+  color: rgba(216, 180, 254, 0.92) !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) {
+  --rh-hand-playable-accent: #a855f7;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.highlight:not(.unplayable),
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)
+  .nbl-tray
+  .hand-container
+  .domino-tile.highlight:not(.unplayable),
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.selected,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)
+  .nbl-tray
+  .hand-container
+  .domino-tile.selected {
+  filter: drop-shadow(0 6px 16px rgba(168, 85, 247, 0.3)) drop-shadow(0 10px 16px rgba(0, 0, 0, 0.28));
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.selected
+  .domino-body,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)
+  .nbl-tray
+  .domino-tile.selected
+  .domino-body {
+  border: 2.5px solid rgba(216, 180, 254, 0.96) !important;
+  box-shadow:
+    0 0 0 1px rgba(168, 85, 247, 0.22),
+    0 0 0 2.5px rgba(168, 85, 247, 0.36),
+    0 9px 20px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86) !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .nbl-win-banner {
+  border-color: rgba(168, 85, 247, 0.45);
+  background: rgba(22, 12, 32, 0.92);
+  color: #e9d5ff;
+  box-shadow: 0 0 24px rgba(168, 85, 247, 0.18);
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .placement-zone.active,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .placement-zone.highlighted {
+  border-color: rgba(168, 85, 247, 0.55) !important;
+  background: rgba(168, 85, 247, 0.1) !important;
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.18) !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)
+  .nbl-tray
+  .domino-tile.highlight:not(.unplayable)
+  .domino-body,
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.highlight:not(.unplayable)
+  .domino-body {
+  border-width: 2.5px !important;
+  border-color: rgba(168, 85, 247, 0.92) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -4px 10px rgba(72, 58, 38, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.38),
+    0 2px 4px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(72, 58, 38, 0.14),
+    0 0 0 2.5px rgba(168, 85, 247, 0.4) !important;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live:not(.learn-lesson-screen) .placement-arrow {
+  color: rgba(216, 180, 254, 0.9) !important;
+}
+
+/* ── Live hand stack: tray + control bar (deployed NBL parity) ── */
+
+.practice-lab.rh-match-live .rh-live-hand-stack.nbl-live-hand-stack {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-height: 0;
+  overflow: visible;
+}
+
+.practice-lab.rh-match-live .rh-live-hand-stack .rh-live-hand-deck {
+  flex: 0 0 auto;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+.practice-lab.rh-match-live .rh-live-hand-footer-slot.nbl-live-hand-footer {
+  flex: 0 0 auto;
+  width: 100%;
+  overflow: visible;
+}
+
+.practice-lab.rh-match-live .nbl-tray {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 16px 20px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(168, 85, 247, 0.22);
+  background: rgba(5, 9, 15, 0.88);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 -4px 28px rgba(0, 0, 0, 0.32),
+    0 0 32px rgba(168, 85, 247, 0.06);
+  overflow: visible;
+}
+
+.practice-lab.rh-match-live .nbl-tray__hand.wl-hand-area {
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: visible !important;
+}
+
+.practice-lab.rh-match-live .nbl-tray .tray-rail {
+  display: flex !important;
+  grid-template-columns: unset !important;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  overflow: visible;
+}
+
+.practice-lab.rh-match-live .nbl-tray .tray-center {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  overflow: visible;
+}
+
+.practice-lab.rh-match-live .nbl-tray .hand-container,
+.practice-lab.rh-match-live .nbl-tray .hand-container.has-single-row {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  max-width: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.practice-lab.rh-match-live .nbl-tray .hand-row {
+  display: inline-flex !important;
+  justify-content: center !important;
+  align-items: flex-end !important;
+  gap: clamp(10px, 1.3vw, 22px) !important;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 8px 10px;
+  overflow: visible;
+}
+
+.practice-lab.rh-match-live .nbl-tray .hand-container .domino-tile {
+  flex: 0 0 auto;
+  margin: 0;
+  overflow: visible;
+  transition: transform 0.16s ease, filter 0.16s ease;
+}
+
+.practice-lab.rh-match-live .nbl-tray .hand-container .domino-tile:not(.disabled):not(.unplayable):hover {
+  transform: translateY(-8px) scale(1.03);
+  z-index: 2;
+}
+
+.practice-lab.rh-match-live .nbl-tray .hand-container .domino-tile.selected {
+  transform: translateY(-10px) scale(1.045) !important;
+  z-index: 4;
+}
+
+.practice-lab.rh-match-live .nbl-controls {
+  width: 100%;
+  border-color: rgba(168, 85, 247, 0.18);
+  background: rgba(5, 9, 15, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.28),
+    0 0 24px rgba(168, 85, 247, 0.06);
+}
+
+.practice-lab.rh-match-live .nbl-controls .rh-btn--secondary {
+  border-color: rgba(168, 85, 247, 0.22);
+  color: rgba(244, 239, 228, 0.92);
+}
+
+.practice-lab.rh-match-live .nbl-controls .rh-btn--secondary:hover {
+  border-color: rgba(199, 125, 255, 0.45);
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.practice-lab.rh-match-live .nbl-controls .rh-btn--outline {
+  border-color: rgba(168, 85, 247, 0.42);
+  color: #f3e8ff;
+  background: linear-gradient(
+    180deg,
+    rgba(168, 85, 247, 0.14) 0%,
+    rgba(168, 85, 247, 0.05) 100%
+  ) !important;
+}
+
 .practice-lab .home-bg {
   z-index: 0;
 }

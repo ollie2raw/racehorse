@@ -24,20 +24,23 @@
   z-index: 1;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .walnut-match-layout {
   padding: 18px 28px 0;
   gap: 16px;
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .walnut-match-layout {
     padding: 8px 10px 0;
     gap: 7px;
   }
 }
 
 @media (max-height: 760px) {
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .walnut-match-layout,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .walnut-match-layout {
     padding-top: 10px;
     gap: 10px;
   }

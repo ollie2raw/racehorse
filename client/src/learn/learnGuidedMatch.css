@@ -913,7 +913,7 @@
   display: flex !important;
   align-items: center;
   justify-content: center;
-  gap: clamp(8px, 0.9vw, 12px);
+  gap: clamp(10px, 1.2vw, 18px);
   min-width: 0;
   width: auto;
   max-width: 100%;
