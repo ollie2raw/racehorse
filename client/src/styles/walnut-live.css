@@ -1262,8 +1262,8 @@ body {
 /* ─── Match board navy surface (max specificity — beats theme-brown + App.css) ─── */
 .screen.game-screen.walnut-live .walnut-match-layout .wl-stage-shell .board-area.wl-board-area,
 .screen.game-screen.walnut-live.theme-brown .walnut-match-layout .wl-stage-shell .board-area.wl-board-area,
-.screen.game-screen.walnut-live.bot-match-screen .walnut-match-layout .wl-stage-shell .board-area.wl-board-area,
-.screen.game-screen.walnut-live.theme-brown.bot-match-screen .walnut-match-layout .wl-stage-shell .board-area.wl-board-area {
+.screen.game-screen.walnut-live.bot-match-screen:not(.rh-match-live) .walnut-match-layout .wl-stage-shell .board-area.wl-board-area,
+.screen.game-screen.walnut-live.theme-brown.bot-match-screen:not(.rh-match-live) .walnut-match-layout .wl-stage-shell .board-area.wl-board-area {
   background-color: var(--match-board-surface-mid, #121e32) !important;
   background-image:
     linear-gradient(rgba(148, 170, 204, 0.045) 1px, transparent 1px),
@@ -1298,8 +1298,8 @@ body {
   background: linear-gradient(180deg, #060c16 0%, #08111d 52%, #050a12 100%) !important;
 }
 
-.screen.game-screen.walnut-live .wl-top-rail,
-.screen.game-screen.walnut-live .bot-top-rail {
+.screen.game-screen.walnut-live:not(.rh-match-live) .wl-top-rail,
+.screen.game-screen.walnut-live:not(.rh-match-live) .bot-top-rail {
   width: 100% !important;
   max-width: none !important;
   margin: 0 !important;
@@ -1623,7 +1623,7 @@ body {
   text-shadow: none;
 }
 
-.screen.game-screen.walnut-live .hand-container .domino-tile.highlight:not(.unplayable)::after {
+.screen.game-screen.walnut-live:not(.rh-match-live) .hand-container .domino-tile.highlight:not(.unplayable)::after {
   width: 38px;
   height: 3px;
   background-color: rgba(84, 165, 255, 1);
@@ -1657,7 +1657,7 @@ body {
 }
 
 /* ─── Racehorse live board premium overhaul ─────────────────────────────── */
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) {
   --tray-height: 154px;
   --match-hud-min-height: 118px;
   --match-board-surface: #07111f;
@@ -1680,7 +1680,7 @@ body {
   isolation: isolate;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen)::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live)::before {
   background:
     linear-gradient(90deg, transparent 0 10%, rgba(88, 166, 255, 0.12) 10.08%, transparent 10.22%),
     linear-gradient(0deg, transparent 0 18%, rgba(88, 166, 255, 0.08) 18.08%, transparent 18.18%);
@@ -1690,7 +1690,7 @@ body {
   -webkit-mask-image: radial-gradient(ellipse 86% 66% at 50% 36%, black, transparent 78%);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen)::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live)::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -1701,7 +1701,7 @@ body {
     inset 0 -120px 180px rgba(0, 0, 0, 0.52);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-top-rail::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-top-rail::before {
   content: '';
   position: absolute;
   inset: 8px;
@@ -1710,18 +1710,18 @@ body {
   pointer-events: none;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-left-cluster,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-right-cluster {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .bot-hud-left-cluster,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .bot-hud-right-cluster {
   align-self: stretch;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-left-cluster > div,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-right-cluster {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .bot-hud-left-cluster > div,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .bot-hud-right-cluster {
   height: 100%;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill-btn {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill-btn {
   min-width: clamp(170px, 16vw, 238px);
   min-height: 82px !important;
   padding: 14px 20px !important;
@@ -1734,7 +1734,7 @@ body {
     0 16px 34px rgba(0, 0, 0, 0.34) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill.score-card::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill.score-card::after {
   content: '';
   position: absolute;
   left: 16px;
@@ -1747,12 +1747,12 @@ body {
   opacity: 0.72;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill.score-card.is-you::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill.score-card.is-you::after {
   background: rgba(231, 182, 74, 0.72);
   box-shadow: 0 0 18px rgba(231, 182, 74, 0.28);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-label {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-label {
   font-family: var(--font-display);
   font-size: 0.82rem !important;
   font-weight: 850 !important;
@@ -1760,7 +1760,7 @@ body {
   color: rgba(230, 238, 248, 0.86) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-score {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-score {
   font-family: 'Barlow Condensed', var(--font-display);
   font-size: clamp(2.55rem, 4.2vw, 4rem) !important;
   font-weight: 900 !important;
@@ -1768,7 +1768,7 @@ body {
   text-shadow: 0 0 28px rgba(88, 166, 255, 0.12);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-tile-rack {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-tile-rack {
   gap: 7px;
   padding: 10px 12px;
   border-radius: 15px;
@@ -1776,7 +1776,7 @@ body {
   background: rgba(3, 8, 16, 0.72);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-tile-rack__tile {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-tile-rack__tile {
   width: 34px;
   height: 54px;
   border-radius: 8px;
@@ -1787,11 +1787,11 @@ body {
     0 0 0 1px rgba(88, 166, 255, 0.06);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-center-status {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-center-status {
   z-index: 12;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-turn-label {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-turn-label {
   min-width: 206px;
   padding: 19px 42px !important;
   border-radius: 999px;
@@ -1809,7 +1809,7 @@ body {
     0 14px 32px rgba(0, 0, 0, 0.38) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-turn-label.opp-turn {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-turn-label.opp-turn {
   border-color: rgba(88, 166, 255, 0.34) !important;
   background: #07111f !important;
   color: rgba(224, 241, 255, 0.96) !important;
@@ -1819,11 +1819,11 @@ body {
     0 14px 32px rgba(0, 0, 0, 0.34) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-stage-shell {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-stage-shell {
   border-radius: 28px 28px 0 0;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-frame {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-frame {
   padding: 10px;
   border-radius: 30px 30px 18px 18px;
   border: 1px solid rgba(88, 166, 255, 0.22);
@@ -1835,7 +1835,7 @@ body {
     0 0 46px rgba(88, 166, 255, 0.07);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-frame::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-frame::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -1845,7 +1845,7 @@ body {
   z-index: 2;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-frame::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-frame::after {
   inset: 10px;
   border-radius: 22px 22px 12px 12px;
   border-color: rgba(88, 166, 255, 0.16);
@@ -1854,8 +1854,8 @@ body {
     inset 0 0 80px rgba(0, 0, 0, 0.62);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-canvas,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .board-area.wl-board-area {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-canvas,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .board-area.wl-board-area {
   border-radius: 22px 22px 12px 12px;
   background-color: #081321 !important;
   background-image:
@@ -1870,7 +1870,7 @@ body {
     inset 0 0 120px rgba(0, 0, 0, 0.46);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-canvas::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-canvas::before {
   content: '';
   position: absolute;
   inset: 18px;
@@ -1883,23 +1883,23 @@ body {
   z-index: 2;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-watermark {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-watermark {
   width: min(260px, 28%);
   height: min(260px, 28%);
   opacity: 0.034;
   filter: drop-shadow(0 0 34px rgba(88, 166, 255, 0.16));
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-board-meta-bar {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-board-meta-bar {
   top: 14px;
   left: 14px;
   right: 14px;
   padding: 0;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .board-corner-pill,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .boneyard-pill,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-controls-tray {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .board-corner-pill,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .boneyard-pill,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-controls-tray {
   min-height: 50px;
   padding: 11px 18px !important;
   border-radius: 999px !important;
@@ -1911,12 +1911,12 @@ body {
     0 0 22px rgba(88, 166, 255, 0.055) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .board-corner-pill:first-child {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .board-corner-pill:first-child {
   border-color: rgba(231, 182, 74, 0.23) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .open-ends-pill__label,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .boneyard-meta {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .open-ends-pill__label,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .boneyard-meta {
   color: rgba(216, 226, 241, 0.76) !important;
   font-family: var(--font-display);
   font-size: 1.167rem !important;
@@ -1924,30 +1924,30 @@ body {
   letter-spacing: 0.18em;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .open-ends-count,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .boneyard-count {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .open-ends-count,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .boneyard-count {
   font-family: 'Barlow Condensed', var(--font-display);
   font-size: var(--match-counter-value-size, clamp(1.1rem, 1.7vw, 1.675rem)) !important;
   font-weight: 900;
   color: #fffaf0;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .boneyard-icon {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .boneyard-icon {
   width: 22px !important;
   height: 22px !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-controls-tray {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-controls-tray {
   right: 24px !important;
   bottom: 22px !important;
   gap: 16px;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-controls-tray button {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-controls-tray button {
   color: rgba(238, 244, 252, 0.88);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .domino-body {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .domino-body {
   background: #fbf4e8 !important;
   border: 2px solid rgba(118, 102, 78, 0.94) !important;
   box-shadow:
@@ -1956,7 +1956,7 @@ body {
     0 0 0 1px rgba(255, 255, 255, 0.06) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .board-canvas .domino-tile.board-tile .domino-body {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .board-canvas .domino-tile.board-tile .domino-body {
   border-color: rgba(112, 96, 72, 0.98) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
@@ -1964,7 +1964,7 @@ body {
     0 0 0 1px rgba(255, 255, 255, 0.08) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .hand-container .domino-tile.highlight:not(.unplayable)::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .hand-container .domino-tile.highlight:not(.unplayable)::after {
   width: 52px;
   height: 4px;
   bottom: -9px;
@@ -1974,8 +1974,8 @@ body {
     0 0 28px rgba(53, 216, 255, 0.34);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .hand-container .domino-tile.selected .domino-body,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .hand-container .domino-tile.highlight:not(.unplayable) .domino-body {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .hand-container .domino-tile.selected .domino-body,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .hand-container .domino-tile.highlight:not(.unplayable) .domino-body {
   border-color: rgba(88, 166, 255, 0.92) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
@@ -1985,19 +1985,19 @@ body {
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) {
     --tray-height: 86px;
     --match-hud-min-height: 74px;
   }
 
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill,
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill-btn {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill,
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill-btn {
     min-height: 54px !important;
     min-width: 112px;
     padding: 8px 12px !important;
   }
 
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-turn-label {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-turn-label {
     min-width: 130px;
     padding: 10px 20px !important;
     font-size: 0.76rem !important;
@@ -2005,7 +2005,7 @@ body {
 }
 
 /* ─── Racehorse live board v2: studio cockpit, not old table chrome ─────── */
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) {
   --tray-height: 146px;
   --match-hud-min-height: 108px;
   background-color: #030811 !important;
@@ -2015,7 +2015,7 @@ body {
     linear-gradient(180deg, #030811 0%, #050b14 100%) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen)::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live)::before {
   opacity: 0.16;
   background:
     linear-gradient(128deg, transparent 0 47%, rgba(88, 166, 255, 0.18) 47.08%, transparent 47.18%),
@@ -2023,21 +2023,21 @@ body {
   background-size: 100% 100%;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-top-rail::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-top-rail::before {
   content: none;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-left-cluster,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-right-cluster {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .bot-hud-left-cluster,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .bot-hud-right-cluster {
   align-self: center;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-hud-left-cluster > div {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .bot-hud-left-cluster > div {
   gap: 18px !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill-btn {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill-btn {
   position: relative;
   min-width: clamp(210px, 18vw, 310px);
   min-height: 86px !important;
@@ -2052,7 +2052,7 @@ body {
   overflow: hidden;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill::before {
   content: '';
   position: absolute;
   inset: 12px auto 12px 0;
@@ -2062,30 +2062,30 @@ body {
   box-shadow: 0 0 22px rgba(88, 166, 255, 0.58);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill.is-you::before,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill.score-card.is-you::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill.is-you::before,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill.score-card.is-you::before {
   left: auto;
   right: 0;
   background: #e7b64a;
   box-shadow: 0 0 22px rgba(231, 182, 74, 0.46);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill.score-card::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill.score-card::after {
   content: none;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-label {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-label {
   font-size: 0.74rem !important;
   letter-spacing: 0.2em !important;
   color: rgba(231, 238, 248, 0.7) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-score {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-score {
   font-size: clamp(2.75rem, 4.7vw, 4.5rem) !important;
   line-height: 0.82 !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-tile-rack {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-tile-rack {
   padding: 13px 17px;
   border-radius: 22px;
   border: 1px solid rgba(93, 164, 245, 0.18);
@@ -2095,13 +2095,13 @@ body {
     0 18px 44px rgba(0, 0, 0, 0.32);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-tile-rack__tile {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-tile-rack__tile {
   width: 38px;
   height: 58px;
   border-radius: 10px;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-turn-label {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-turn-label {
   min-width: 242px;
   padding: 21px 46px !important;
   border-radius: 24px !important;
@@ -2116,7 +2116,7 @@ body {
     0 0 54px rgba(231, 182, 74, 0.17) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone {
   border-radius: 34px;
   padding: 12px;
   border: 1px solid rgba(88, 166, 255, 0.16);
@@ -2126,7 +2126,7 @@ body {
     0 30px 88px rgba(0, 0, 0, 0.44);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone::before {
   content: '';
   position: absolute;
   inset: 12px;
@@ -2136,7 +2136,7 @@ body {
   z-index: 3;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone::after {
   content: '';
   position: absolute;
   left: 8%;
@@ -2150,23 +2150,23 @@ body {
   z-index: 4;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .wl-stage-shell,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .walnut-nbl-stage,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .nbl-stage,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .nbl-board-frame {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone .wl-stage-shell,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone .walnut-nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone .nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone .nbl-board-frame {
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-frame::before,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-frame::after,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-canvas::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-frame::before,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-frame::after,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-canvas::before {
   content: none !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-canvas,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .board-area.wl-board-area {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-canvas,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .board-area.wl-board-area {
   border: 0 !important;
   border-radius: 24px !important;
   background-color: #07111f !important;
@@ -2179,21 +2179,21 @@ body {
     inset 0 -90px 150px rgba(0, 0, 0, 0.28) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-watermark {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-watermark {
   opacity: 0.026;
   width: min(300px, 26%);
   height: min(300px, 26%);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-board-meta-bar {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-board-meta-bar {
   top: 22px;
   left: 24px;
   right: 24px;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .board-corner-pill,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .boneyard-pill,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-controls-tray {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .board-corner-pill,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .boneyard-pill,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-controls-tray {
   min-height: 56px;
   padding: 13px 20px !important;
   border-radius: 18px !important;
@@ -2204,28 +2204,28 @@ body {
     0 18px 48px rgba(0, 0, 0, 0.34) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .board-corner-pill:first-child {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .board-corner-pill:first-child {
   border-color: rgba(231, 182, 74, 0.26) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-controls-tray {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-controls-tray {
   right: 32px !important;
   bottom: 30px !important;
 }
 
 @media (max-height: 760px) {
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) {
     --match-hud-min-height: 84px;
   }
 
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill,
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill-btn {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill,
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill-btn {
     min-height: 70px !important;
   }
 }
 
 /* ─── Racehorse live board v3: cleaner premium table direction ──────────── */
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) {
   --tray-height: 132px;
   --match-hud-min-height: 82px;
   --match-score-size: clamp(2.2rem, 3.4vw, 3.35rem);
@@ -2236,21 +2236,21 @@ body {
     linear-gradient(180deg, #03070f 0%, #050914 52%, #03070f 100%) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen)::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live)::before {
   opacity: 0.08;
   background:
     linear-gradient(132deg, transparent 0 48%, rgba(88, 166, 255, 0.22) 48.06%, transparent 48.12%),
     linear-gradient(48deg, transparent 0 59%, rgba(231, 182, 74, 0.16) 59.06%, transparent 59.12%);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen)::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live)::after {
   box-shadow:
     inset 0 0 0 1px rgba(88, 166, 255, 0.045),
     inset 0 -90px 150px rgba(0, 0, 0, 0.44);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-top-rail,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .bot-top-rail {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-top-rail,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .bot-top-rail {
   background: transparent !important;
   border: 0 !important;
   border-radius: 0;
@@ -2258,8 +2258,8 @@ body {
   overflow: visible;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill-btn {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill-btn {
   min-width: 144px;
   min-height: 58px !important;
   padding: 8px 18px 10px !important;
@@ -2271,7 +2271,7 @@ body {
     0 14px 38px rgba(0, 0, 0, 0.28) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-card-content {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-card-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2279,7 +2279,7 @@ body {
   width: 100%;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-card-text {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-card-text {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -2290,7 +2290,7 @@ body {
   padding-inline: 6px 2px;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-subtitle {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-subtitle {
   display: block;
   max-width: 100%;
   overflow: hidden;
@@ -2303,20 +2303,20 @@ body {
   white-space: nowrap;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill::before {
   inset: auto 0 0 0;
   width: auto;
   height: 2px;
   border-radius: 0 0 20px 20px;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill.is-you::before,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-pill.score-card.is-you::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill.is-you::before,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-pill.score-card.is-you::before {
   left: 0;
   right: 0;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-label {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-label {
   display: block;
   max-width: 100%;
   overflow: hidden;
@@ -2329,7 +2329,7 @@ body {
   white-space: nowrap;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-player-score {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-player-score {
   flex: 0 0 auto;
   font-size: var(--match-score-size, clamp(2.2rem, 3.4vw, 3.35rem)) !important;
   line-height: 0.82 !important;
@@ -2337,7 +2337,7 @@ body {
   text-align: right !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-tile-rack {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-tile-rack {
   max-width: min(42vw, 460px);
   overflow: hidden;
   padding: 7px 10px;
@@ -2348,13 +2348,13 @@ body {
   box-shadow: none;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-tile-rack__tile {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-tile-rack__tile {
   width: 30px;
   height: 48px;
   border-radius: 8px;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-turn-label {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-turn-label {
   min-width: 0;
   min-height: 40px;
   padding: 15px 29px !important;
@@ -2372,7 +2372,7 @@ body {
     0 0 18px rgba(241, 201, 96, 0.08) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone {
   padding: 0;
   border: 0;
   border-radius: 30px;
@@ -2382,23 +2382,23 @@ body {
     inset 0 0 0 1px rgba(88, 166, 255, 0.12);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone::before,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone::after {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone::before,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone::after {
   content: none;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .wl-stage-shell,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .walnut-nbl-stage,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .nbl-stage,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .nbl-board-frame {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone .wl-stage-shell,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone .walnut-nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone .nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-board-zone .nbl-board-frame {
   border: 0 !important;
   border-radius: 30px !important;
   background: transparent !important;
   box-shadow: none !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-canvas,
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .board-area.wl-board-area {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-canvas,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .board-area.wl-board-area {
   border-radius: 30px !important;
   background-color: #07111e !important;
   background-image:
@@ -2409,7 +2409,7 @@ body {
     inset 0 0 96px rgba(0, 0, 0, 0.34) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .nbl-board-watermark {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .nbl-board-watermark {
   opacity: 0.018;
   width: min(230px, 22%);
   height: min(230px, 22%);
@@ -2428,7 +2428,7 @@ body {
   --match-counter-value-size: clamp(1.1rem, 1.7vw, 1.675rem);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck {
   padding: 12px 20px 16px;
   border-radius: 28px 28px 0 0;
   border: 0;
@@ -2439,7 +2439,7 @@ body {
     inset 0 0 0 1px rgba(88, 166, 255, 0.11);
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .wl-hand-area {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .wl-hand-area {
   height: 100%;
   min-height: 0;
   max-height: none;
@@ -2454,25 +2454,25 @@ body {
   align-items: center;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .wl-hand-area::before {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .wl-hand-area::before {
   content: none;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .tray-center {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .tray-center {
   height: 100%;
   padding: 0;
   align-items: center;
   justify-content: center;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .hand-container {
   width: auto;
   height: 100%;
   margin: 0 auto;
   align-items: center;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.is-scrollable {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .hand-container.is-scrollable {
   justify-content: center !important;
   width: auto;
   max-width: 100%;
@@ -2481,20 +2481,20 @@ body {
 }
 
 /* Single-row rack: center tile + underline glow as one unit (do not touch has-multiple-rows) */
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .hand-container.has-single-row {
   transform: none;
   align-items: center;
   justify-content: center;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row .hand-row {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .hand-container.has-single-row .hand-row {
   align-items: center;
   justify-content: center;
   height: 100%;
 }
 
 /* Wrap = tile + external underline glow (glow stays below tile, not inset) */
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row .guided-tile-wrap {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .hand-container.has-single-row .guided-tile-wrap {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -2504,13 +2504,13 @@ body {
   box-sizing: border-box;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row .domino-tile {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck .hand-container.has-single-row .domino-tile {
   margin-top: 0;
   margin-bottom: 0;
   padding-bottom: 0;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-hand-area .tray-rail {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-hand-area .tray-rail {
   height: 100%;
   padding-top: 0;
   border-radius: 0;
@@ -2521,13 +2521,13 @@ body {
   align-items: center;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .wl-hand-area .hand-row {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .wl-hand-area .hand-row {
   gap: clamp(10px, 1.3vw, 22px);
   align-items: center;
 }
 
 @media (max-height: 760px) {
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) {
     --tray-height: 112px;
   }
 }

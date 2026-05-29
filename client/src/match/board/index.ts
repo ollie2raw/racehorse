@@ -7,5 +7,11 @@ export type { InGameBoardHudProps } from './InGameBoardHud';
 export { InGameBoardFrame } from './InGameBoardFrame';
 export type { InGameBoardFrameProps } from './InGameBoardFrame';
 
+export { MatchBoardCanvas } from './MatchBoardCanvas';
+export type { MatchBoardCanvasProps } from './MatchBoardCanvas';
+
+export { MatchLiveLayout } from './MatchLiveLayout';
+export type { MatchLiveLayoutProps } from './MatchLiveLayout';
+
 export { InGameOverlayStack } from './InGameOverlayStack';
 export type { InGameOverlayStackProps } from './InGameOverlayStack';

@@ -1,0 +1,590 @@
+/*
+ * Canonical live-match visual theme (bot + multiplayer).
+ * Target: walnut v3 layout + racehorse-matte recolor (Image 1 reference).
+ * Scope: .rh-match-live only — walnut-live bot-match layers are gated off.
+ */
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+  --tray-height: 132px;
+  --match-hud-min-height: 82px;
+  --match-score-size: clamp(2.2rem, 3.4vw, 3.35rem);
+  --match-counter-value-size: clamp(1.1rem, 1.7vw, 1.675rem);
+  --rh-brass: #e7b64a;
+  --rh-brass-border: rgba(226, 176, 72, 0.22);
+  --rh-brass-glow: rgba(231, 182, 74, 0.14);
+  --rh-hand-playable-accent: #e7b64a;
+  background-color: #04070c !important;
+  background-image: none !important;
+  color: #f7efe2;
+  isolation: isolate;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)::before {
+  opacity: 0.12;
+  background:
+    linear-gradient(132deg, transparent 0 48%, rgba(231, 182, 74, 0.14) 48.06%, transparent 48.12%),
+    linear-gradient(48deg, transparent 0 59%, rgba(231, 182, 74, 0.08) 59.06%, transparent 59.12%);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)::after {
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 176, 72, 0.04),
+    inset 0 -90px 150px rgba(0, 0, 0, 0.4);
+}
+
+/* ── HUD (v3 layout + brass recolor) ── */
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .bot-top-rail,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-top-rail {
+  padding: 10px 16px 8px !important;
+  min-height: var(--match-hud-min-height, 82px) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-center-status {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+  grid-column: 2 !important;
+  justify-self: center !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  pointer-events: none;
+}
+
+/* Override match-hud-polish vertical score-card stack → Image 3 horizontal pills */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.score-card,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.score-card {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  min-width: 144px;
+  min-height: 58px !important;
+  padding: 8px 18px 10px !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(226, 176, 72, 0.2) !important;
+  background: rgba(5, 9, 15, 0.82) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 38px rgba(0, 0, 0, 0.28) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-card-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-card-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding-inline: 6px 2px;
+}
+
+/* Opponent = blue edge accent; You = gold edge accent (Image 3) */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill::before,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn::before {
+  content: '' !important;
+  position: absolute;
+  inset: 12px auto 12px 0;
+  width: 3px;
+  height: auto;
+  border-radius: 999px;
+  background: #58a6ff;
+  box-shadow: 0 0 22px rgba(88, 166, 255, 0.58);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.is-you::before,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.is-you::before,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.score-card.is-you::before,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.score-card.is-you::before {
+  inset: 12px 0 12px auto;
+  left: auto;
+  right: 0;
+  background: #e7b64a;
+  box-shadow: 0 0 22px rgba(231, 182, 74, 0.46);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill.score-card::after,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn.score-card::after {
+  content: none !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(244, 239, 228, 0.9) !important;
+  font-size: 1.48rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.17em !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-score {
+  flex: 0 0 auto;
+  font-family: 'Barlow Condensed', var(--font-display);
+  font-size: var(--match-score-size) !important;
+  font-weight: 900 !important;
+  line-height: 0.82 !important;
+  margin-top: 0;
+  color: #fffaf0 !important;
+  text-align: right !important;
+  text-shadow: none;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack {
+  max-width: min(42vw, 460px);
+  overflow: hidden;
+  padding: 7px 10px;
+  gap: 8px;
+  border-radius: 18px;
+  border-color: rgba(226, 176, 72, 0.16) !important;
+  background: rgba(5, 9, 15, 0.52) !important;
+  box-shadow: none;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-tile-rack__tile {
+  width: 30px;
+  height: 48px;
+  border-radius: 8px;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-turn-label {
+  min-width: 0;
+  min-height: 40px;
+  padding: 15px 29px !important;
+  border-radius: 17px !important;
+  border: 1px solid rgba(241, 201, 96, 0.42) !important;
+  background: rgba(43, 34, 12, 0.82) !important;
+  color: #f4d98b !important;
+  font-size: clamp(1.2925rem, 1.52vw, 1.52rem) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.18em !important;
+  line-height: 1 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(0, 0, 0, 0.24),
+    0 0 18px rgba(241, 201, 96, 0.08) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-turn-label.your-turn {
+  border-color: rgba(226, 176, 72, 0.42) !important;
+  color: #f2dc9a !important;
+  background: rgba(22, 18, 10, 0.92) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-turn-label.opp-turn {
+  border-color: rgba(196, 212, 232, 0.28) !important;
+  color: rgba(210, 224, 244, 0.92) !important;
+  background: rgba(8, 12, 20, 0.92) !important;
+}
+
+/* ── Board arena (v3 flat mount + matte grid mat) ── */
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 30px;
+  background: rgba(4, 7, 12, 0.92) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone::before,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone::after {
+  content: none !important;
+  display: none !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .wl-stage-shell,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .walnut-nbl-stage,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .nbl-stage,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .nbl-board-frame {
+  border: 0 !important;
+  border-radius: 30px !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .nbl-board-frame::before,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .nbl-board-frame::after {
+  content: none !important;
+  display: none !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .nbl-board-canvas,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-area.wl-board-area {
+  border-radius: 30px !important;
+  border: 0 !important;
+  background-color: #0c0e12 !important;
+  background-image:
+    linear-gradient(rgba(231, 182, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(231, 182, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, #0f1014 0%, #0c0e12 52%, #080a0e 100%) !important;
+  background-size: 26px 26px, 26px 26px, 100% 100% !important;
+  background-repeat: repeat, repeat, no-repeat !important;
+  box-shadow: none !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .nbl-board-canvas::before,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-area.wl-board-area::before {
+  content: none !important;
+  display: none !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .nbl-board-watermark {
+  opacity: 0.048;
+  width: min(220px, 24%);
+  height: min(220px, 24%);
+  filter: none;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .nbl-board-watermark img {
+  object-fit: contain;
+  filter: grayscale(1) brightness(1.2);
+  mix-blend-mode: soft-light;
+}
+
+/* Meta bar */
+.screen.game-screen.walnut-live.rh-match-live .rh-board-meta-bar {
+  top: 14px !important;
+  left: auto !important;
+  right: 14px !important;
+  width: auto !important;
+  display: flex !important;
+  flex-direction: column-reverse !important;
+  align-items: flex-end !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding: 0 !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-meta-bar .board-corner-pill {
+  position: static !important;
+  min-height: 44px !important;
+  min-width: 92px !important;
+  padding: 8px 14px !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-corner-pill,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .boneyard-pill,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-zoom-tray.control-pill,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-controls-tray.control-pill {
+  border-color: rgba(226, 176, 72, 0.18) !important;
+  background: rgba(5, 9, 15, 0.88) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .open-ends-pill.board-corner-pill,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-board-meta-bar .open-ends-pill.board-corner-pill {
+  border-color: rgba(226, 176, 72, 0.28) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .open-ends-count {
+  color: rgba(238, 244, 255, 0.95) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-controls-tray button,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .board-zoom-tray .board-zoom-btn {
+  color: rgba(244, 217, 137, 0.88) !important;
+  opacity: 0.85;
+}
+
+/* Hand dock (v3) */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck {
+  padding: 12px 20px 16px;
+  border-radius: 28px 28px 0 0;
+  border: 0 !important;
+  background: rgba(5, 9, 15, 0.9) !important;
+  box-shadow:
+    0 -18px 58px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .wl-hand-area {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  flex-basis: auto;
+  margin: 0 !important;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  display: flex;
+  align-items: center;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .wl-hand-area::before {
+  content: none;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .tray-center {
+  height: 100%;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container {
+  width: auto;
+  height: 100%;
+  margin: 0 auto;
+  align-items: center;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row {
+  transform: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row .hand-row {
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .hand-container.has-single-row .guided-tile-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-bottom: 14px;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+/* Placement zones — gold */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-zone.active,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-zone.highlighted {
+  border-color: rgba(231, 182, 74, 0.55) !important;
+  background: rgba(231, 182, 74, 0.1) !important;
+  box-shadow: 0 0 20px rgba(231, 182, 74, 0.18) !important;
+  animation: none !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .placement-arrow {
+  color: rgba(242, 220, 154, 0.9) !important;
+}
+
+/* ── Ivory tiles ── */
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 6px;
+  background-color: #f3ead8 !important;
+  background-image:
+    radial-gradient(ellipse 88% 72% at 14% 6%, rgba(255, 255, 255, 0.72), transparent 54%),
+    radial-gradient(ellipse 92% 78% at 86% 94%, rgba(58, 48, 34, 0.16), transparent 50%),
+    repeating-linear-gradient(
+      94deg,
+      rgba(255, 255, 255, 0.07) 0 1px,
+      transparent 1px 5px
+    ),
+    linear-gradient(168deg, #fffdf6 0%, #f5ebda 46%, #e6d9c0 100%) !important;
+  border: 2px solid rgba(98, 82, 58, 0.78) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -4px 10px rgba(72, 58, 38, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.38),
+    0 2px 4px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(72, 58, 38, 0.14) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.11;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 88px 88px;
+  mix-blend-mode: soft-light;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+  pointer-events: none;
+  z-index: 2;
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.62),
+    inset 0 -14px 22px rgba(48, 38, 26, 0.14),
+    inset 3px 0 8px rgba(48, 38, 26, 0.04),
+    inset -3px 0 8px rgba(48, 38, 26, 0.04);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body .pip {
+  border: none !important;
+  transform: scale(0.96);
+  transform-origin: center;
+  filter: saturate(0.92) brightness(0.96) contrast(1.03);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(0, 0, 0, 0.22),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(72, 58, 38, 0.14) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-divider.vertical {
+  width: 2px !important;
+  background: linear-gradient(
+    180deg,
+    rgba(48, 42, 34, 0.16),
+    rgba(48, 42, 34, 0.52),
+    rgba(48, 42, 34, 0.16)
+  ) !important;
+  box-shadow:
+    1px 0 0 rgba(255, 255, 255, 0.28),
+    -1px 0 0 rgba(48, 38, 26, 0.12);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .domino-tile:not(.disabled) {
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.34));
+}
+
+/* Playable tiles — gold underline glow (Image 3 / racehorse-matte) */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.highlight:not(.unplayable)::after {
+  content: '' !important;
+  display: block !important;
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  width: 38px;
+  height: 3px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 4;
+  background-color: rgba(231, 182, 74, 0.95) !important;
+  box-shadow:
+    0 0 12px rgba(231, 182, 74, 0.86),
+    0 0 28px rgba(231, 182, 74, 0.34) !important;
+  opacity: 1;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.selected
+  .domino-body,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.highlight:not(.unplayable)
+  .domino-body {
+  border-color: rgba(98, 82, 58, 0.78) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -4px 10px rgba(72, 58, 38, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.38),
+    0 2px 4px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(72, 58, 38, 0.14) !important;
+}
+
+/* Daily Fritz GAME pill — same matte language as Image 3 */
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .daily-fritz-progress-pill {
+  background: rgba(5, 9, 15, 0.88) !important;
+  border: 1px solid rgba(226, 176, 72, 0.2) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: rgba(242, 238, 232, 0.98) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 30px rgba(0, 0, 0, 0.32) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .daily-fritz-progress-pill .hud-pill-label,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .daily-fritz-progress-pill .hud-pill-value {
+  color: rgba(244, 239, 228, 0.92) !important;
+  text-shadow: none !important;
+}
+
+/* ── Daily Fritz mode deltas ── */
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill.score-card,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .wl-player-pill-btn.score-card,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .board-corner-pill,
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .boneyard-pill {
+  background: rgba(5, 9, 15, 0.88) !important;
+  border: 1px solid rgba(226, 176, 72, 0.2) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz:not(.learn-lesson-screen) .nbl-board-canvas {
+  background-image:
+    linear-gradient(rgba(231, 182, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(231, 182, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, #0f1014 0%, #0c0e12 52%, #080a0e 100%) !important;
+  background-size: 26px 26px, 26px 26px, 100% 100% !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz .nbl-board-watermark {
+  opacity: 0.052;
+  transition: opacity 0.35s ease;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.bot-match-mode-daily-fritz.df-board-has-play .nbl-board-watermark {
+  opacity: 0.028;
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+    --tray-height: 86px;
+    --match-hud-min-height: 74px;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-turn-label {
+    min-width: 130px;
+    padding: 10px 20px !important;
+    font-size: 0.76rem !important;
+  }
+}
+
+@media (max-height: 760px) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) {
+    --tray-height: 112px;
+  }
+
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill,
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-player-pill-btn {
+    min-height: 70px !important;
+  }
+}

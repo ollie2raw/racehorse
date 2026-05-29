@@ -1,0 +1,8 @@
+/*
+ * Live match entry point — layout + theme for bot + multiplayer.
+ * Import once per live-match route (BotMatchScreen, App multiplayer).
+ */
+
+@import '../bot/botMatch.css';
+@import '../dailyFritz/dailyFritzMatchBoard.css';
+@import './match-live-theme.css';

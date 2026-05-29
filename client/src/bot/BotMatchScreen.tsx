@@ -109,12 +109,10 @@ import {
   warnHandLifecycleStuck,
   type HandLifecyclePhase,
 } from './handLifecycle';
-import './botMatch.css';
-import '../dailyFritz/dailyFritzMatchBoard.css';
+import '../match/match-live.css';
 import './PlayVsFritz.css';
 import '../styles/shared-ui.css';
 import '../learn/learn.css';
-import '../styles/board/skins/racehorse-matte.css';
 import { useLearningCoach } from '../learning/useLearningCoach';
 import CoachPanel from '../learning/CoachPanel';
 import LearningHandRecap from '../learning/LearningHandRecap';
@@ -131,9 +129,7 @@ import {
 } from '../components/handOver/handOverCopy';
 import { logLayoutDebug } from '../match/layoutDebug';
 import {
-  InGameBoardFrame,
-  InGameBoardHud,
-  InGameBoardShell,
+  MatchLiveLayout,
   InGameOverlayStack,
 } from '../match/board';
 import {
@@ -7066,7 +7062,7 @@ export default function BotMatchScreen({
       <RotateOverlay />
       <div
         ref={rootRef}
-        className={`screen game-screen walnut-live theme-green bot-match-screen bot-match-mode-${mode} ${isDailyFritzMode && dailyFritzBoardHasPlay ? 'df-board-has-play' : ''} ${!isLessonLayoutMode ? 'racehorse-matte-skin' : ''} ${isLessonLayoutMode ? 'learn-lesson-screen learn-pvf-root pvf-root tier-rookie claude-mode-screen-shell' : ''}`}
+        className={`screen game-screen walnut-live theme-green bot-match-screen rh-match-live bot-match-mode-${mode} ${isDailyFritzMode && dailyFritzBoardHasPlay ? 'df-board-has-play' : ''} ${isLessonLayoutMode ? 'learn-lesson-screen learn-pvf-root pvf-root tier-rookie claude-mode-screen-shell' : ''}`}
       >
       {isLessonLayoutMode && (
         <div className="home-bg" aria-hidden="true">
@@ -7779,125 +7775,110 @@ export default function BotMatchScreen({
         </div>
         </div>
       ) : (
-        <InGameBoardShell
-          topHud={
-            <InGameBoardHud
-              style={{ position: 'relative' }}
-              leftSlot={
-                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <button
-                    type="button"
-                    className={`wl-player-pill wl-player-pill-btn score-card${botTurn ? ' is-active-turn' : ''}`}
-                    ref={opponentPillRef}
-                    onClick={() => setScoreTrackOpen(true)}
-                    aria-label="Open score track"
-                  >
-                    <div className="wl-player-card-content">
-                      <div className="wl-player-card-text">
-                        {ghostSubLabel ? (
-                          <span className="wl-player-subtitle">{formatGhostName(ghostSubLabel)}</span>
-                        ) : null}
-                        <span className="wl-player-label">{opponentLabel}</span>
-                      </div>
-                      <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
-                    </div>
-                  </button>
-                  {wantsOriginalGuidedRecordMode ? (
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 6,
-                        marginLeft: 6,
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        maxWidth: 'min(420px, 40vw)',
-                      }}
-                    >
-                      {guidedRecordFritzPalette.map((tile, idx) => {
-                        const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
-                        return (
-                          <DominoTile
-                            key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
-                            tile={tile}
-                            size={28}
-                            rotation={0}
-                            selected={
-                              selectedController === 'bot' &&
-                              !!selectedTile &&
-                              tileEquals(selectedTile, tile)
-                            }
-                            highlight={playable}
-                            disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
-                            onClick={() => {
-                              if (!handActive || match.currentPlayer !== 'bot') return;
-                              if (!playable) return;
-                              setSelectedTile(tile);
-                              setSelectedController('bot');
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <TileRack
-                      count={match.players.bot.hand.length}
-                      isActive={botTurn}
-                      variant="default"
-                    />
-                  )}
+        <MatchLiveLayout
+          boardStageRef={boardStageRef}
+          boardStageClassName={ghostBoardPulse ? 'ghost-board-pulse' : undefined}
+          boardInner={boardStageInner}
+          handDock={handTray}
+          hudLeft={
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                className={`wl-player-pill wl-player-pill-btn score-card${botTurn ? ' is-active-turn' : ''}`}
+                ref={opponentPillRef}
+                onClick={() => setScoreTrackOpen(true)}
+                aria-label="Open score track"
+              >
+                <div className="wl-player-card-content">
+                  <div className="wl-player-card-text">
+                    {ghostSubLabel ? (
+                      <span className="wl-player-subtitle">{formatGhostName(ghostSubLabel)}</span>
+                    ) : null}
+                    <span className="wl-player-label">{opponentLabel}</span>
+                  </div>
+                  <AnimatedScore value={match.players.bot.score} className="wl-player-score" />
                 </div>
-              }
-              centerSlot={
-                showTurnStatusCluster ? (
-                  <div
-                    className="wl-center-status"
-                    data-ui="turn-status"
-                    style={{
-                      position: 'absolute',
-                      left: '50%',
-                      top: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {isDailyFritzMode && dailyFritzPackage && (
-                      <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
-                        <span className="hud-pill-label">GAME</span>
-                        <span className="hud-pill-value">
-                          {dailyFritzPackage.current_game_number ?? 1}
-                        </span>
-                      </div>
-                    )}
-                    {turnLabel && (
-                      <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
-                        {turnLabel}
-                      </span>
-                    )}
-                  </div>
-                ) : null
-              }
-              rightSlot={
-                <button
-                  type="button"
-                  className={`wl-player-pill wl-player-pill-btn score-card is-you${!botTurn ? ' is-active-turn' : ''}`}
-                  onClick={() => setScoreTrackOpen(true)}
-                  aria-label="Open score track"
+              </button>
+              {wantsOriginalGuidedRecordMode ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 6,
+                    marginLeft: 6,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    maxWidth: 'min(420px, 40vw)',
+                  }}
                 >
-                  <div className="wl-player-card-content">
-                    <div className="wl-player-card-text">
-                      <span className="wl-player-label">You</span>
-                    </div>
-                    <AnimatedScore value={match.players.you.score} className="wl-player-score" />
-                  </div>
-                </button>
-              }
-            />
+                  {guidedRecordFritzPalette.map((tile, idx) => {
+                    const playable = getGuidedRecordBotMovesForTile(tile).length > 0;
+                    return (
+                      <DominoTile
+                        key={`guided-bot-hand-${idx}-${tile.low}-${tile.high}`}
+                        tile={tile}
+                        size={28}
+                        rotation={0}
+                        selected={
+                          selectedController === 'bot' &&
+                          !!selectedTile &&
+                          tileEquals(selectedTile, tile)
+                        }
+                        highlight={playable}
+                        disabled={!handActive || match.currentPlayer !== 'bot' || !playable}
+                        onClick={() => {
+                          if (!handActive || match.currentPlayer !== 'bot') return;
+                          if (!playable) return;
+                          setSelectedTile(tile);
+                          setSelectedController('bot');
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <TileRack
+                  count={match.players.bot.hand.length}
+                  isActive={botTurn}
+                  variant="default"
+                />
+              )}
+            </div>
           }
-        >
-          <InGameBoardFrame boardStage={boardStage} handDock={handTray} />
-        </InGameBoardShell>
+          hudCenter={
+            showTurnStatusCluster ? (
+              <div className="wl-center-status" data-ui="turn-status">
+                {isDailyFritzMode && dailyFritzPackage && (
+                  <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
+                    <span className="hud-pill-label">GAME</span>
+                    <span className="hud-pill-value">
+                      {dailyFritzPackage.current_game_number ?? 1}
+                    </span>
+                  </div>
+                )}
+                {turnLabel && (
+                  <span className={`wl-turn-label ${botTurn ? 'opp-turn' : 'your-turn'}`}>
+                    {turnLabel}
+                  </span>
+                )}
+              </div>
+            ) : null
+          }
+          hudRight={
+            <button
+              type="button"
+              className={`wl-player-pill wl-player-pill-btn score-card is-you${!botTurn ? ' is-active-turn' : ''}`}
+              onClick={() => setScoreTrackOpen(true)}
+              aria-label="Open score track"
+            >
+              <div className="wl-player-card-content">
+                <div className="wl-player-card-text">
+                  <span className="wl-player-label">You</span>
+                </div>
+                <AnimatedScore value={match.players.you.score} className="wl-player-score" />
+              </div>
+            </button>
+          }
+        />
       )}
 
       <InGameOverlayStack>

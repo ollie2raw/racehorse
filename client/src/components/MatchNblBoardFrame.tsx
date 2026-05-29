@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { BoardWatermark } from '../match/BoardWatermark';
-import '../practice/noBrainerLab.css';
+import { MatchBoardCanvas } from '../match/board/MatchBoardCanvas';
 
 export interface MatchNblBoardFrameProps {
   children: ReactNode;
@@ -8,17 +7,11 @@ export interface MatchNblBoardFrameProps {
   className?: string;
 }
 
-/** No Brainer Lab board surface — grid frame, inset bezel, centered canvas. */
+/** @deprecated Prefer MatchLiveLayout + InGameBoardFrame. Kept for guided-learn board slot. */
 export function MatchNblBoardFrame({ children, toolbar, className }: MatchNblBoardFrameProps) {
   return (
-    <main className={`nbl-stage walnut-nbl-stage rh-board-stage${className ? ` ${className}` : ''}`}>
-      <div className="nbl-board-frame rh-board-frame">
-        <div className="nbl-board-canvas rh-board-canvas" data-ui="board">
-          <BoardWatermark />
-          {children}
-          {toolbar ? <div className="nbl-board-toolbar">{toolbar}</div> : null}
-        </div>
-      </div>
-    </main>
+    <MatchBoardCanvas className={className} toolbar={toolbar}>
+      {children}
+    </MatchBoardCanvas>
   );
 }

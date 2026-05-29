@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import type { Socket } from 'socket.io-client';
 import './App.css';
+import './match/match-live.css';
 import {
   AnimatedScore,
   Board,
@@ -14,7 +15,7 @@ import {
   RotateOverlay,
   ScoreTrackOverlay,
 } from './components';
-import { MatchNblBoardFrame } from './components/MatchNblBoardFrame';
+import { MatchLiveLayout } from './match/board';
 import LeaveGameModal from './components/LeaveGameModal';
 import { GameOverlayPortal } from './components/GameOverlayPortal';
 import HandOverModal from './components/handOver/HandOverModal';
@@ -5253,7 +5254,7 @@ export default function App() {
       {(isConnected || isRecoveringConnection) && joinedRoom && state && (
         <>
           <RotateOverlay />
-          <div className="screen game-screen walnut-live theme-green">
+          <div className="screen game-screen walnut-live theme-green bot-match-screen rh-match-live">
           {opponentDisconnected && opponentDisconnectMessage && roomRecoveryState === 'idle' && (
             <div
               style={{
@@ -5420,68 +5421,58 @@ export default function App() {
               })()}
             </GameOverlayPortal>
           )}
-          <div className="walnut-match-layout game-layout-layer">
-          <div className="wl-top-rail" data-ui="hud" style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <button
-                type="button"
-                ref={opponentPillRef}
-                style={{ margin: 8 }}
-                className={`wl-player-pill wl-player-pill-btn score-card ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
-                onClick={() => setScoreTrackOpen(true)}
-                aria-label="Open score track"
+          <MatchLiveLayout
+            hudLeft={
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  ref={opponentPillRef}
+                  style={{ margin: 8 }}
+                  className={`wl-player-pill wl-player-pill-btn score-card ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
+                  onClick={() => setScoreTrackOpen(true)}
+                  aria-label="Open score track"
+                >
+                  <div className="wl-pill-top">
+                    <span className="wl-player-label">{opponentName}</span>
+                  </div>
+                  <AnimatedScore value={opponentScore} className="wl-player-score" />
+                </button>
+                <TileRack count={opponentTileCount} isActive={!isMyTurn} />
+              </div>
+            }
+            hudCenter={
+              <div
+                className="wl-center-status"
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  display: isHandActive || tournamentMatch ? 'flex' : 'none',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
-                <div className="wl-pill-top">
-                  <span className="wl-player-label">{opponentName}</span>
-                </div>
-                <AnimatedScore value={opponentScore} className="wl-player-score" />
-              </button>
-              <TileRack
-                count={opponentTileCount}
-                isActive={!isMyTurn}
-              />
-            </div>
-            <div
-              className="wl-center-status"
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                display: isHandActive || tournamentMatch ? 'flex' : 'none',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {tournamentMatch ? (
-                <TournamentMatchHud
-                  round={tournamentMatch.round}
-                  turnLabel={
-                    isHandActive
-                      ? isMyTurn
-                        ? 'Your move'
-                        : 'Opponent thinking'
-                      : null
-                  }
-                  turnVariant={isMyTurn ? 'your-turn' : 'opp-turn'}
-                />
-              ) : isHandActive ? (
-                <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
-                  {isMyTurn ? 'Your move' : 'Opponent thinking'}
-                </span>
-              ) : null}
-            </div>
-            <div
-              className="hud-right-cluster"
-              style={{
-                gridColumn: 3,
-                justifySelf: 'end',
-                marginLeft: 'auto',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
+                {tournamentMatch ? (
+                  <TournamentMatchHud
+                    round={tournamentMatch.round}
+                    turnLabel={
+                      isHandActive
+                        ? isMyTurn
+                          ? 'Your move'
+                          : 'Opponent thinking'
+                        : null
+                    }
+                    turnVariant={isMyTurn ? 'your-turn' : 'opp-turn'}
+                  />
+                ) : isHandActive ? (
+                  <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
+                    {isMyTurn ? 'Your move' : 'Opponent thinking'}
+                  </span>
+                ) : null}
+              </div>
+            }
+            hudRight={
               <button
                 type="button"
                 style={{ margin: 8 }}
@@ -5494,130 +5485,122 @@ export default function App() {
                 </div>
                 <AnimatedScore value={hudRightScore} className="wl-player-score" />
               </button>
-            </div>
-          </div>
-
-          <div className="wl-stage-shell">
-            <MatchNblBoardFrame>
+            }
+            boardInner={
+              <>
                 {scoreToast && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 16,
+                      left: '50%',
+                      transform: scoreToast.visible
+                        ? 'translate(-50%, 0px) scale(1)'
+                        : 'translate(-50%, -14px) scale(0.95)',
+                      opacity: scoreToast.visible ? 1 : 0,
+                      transition: 'opacity 250ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                      zIndex: 14,
+                      background: 'rgba(255,255,255,0.06)',
+                      backdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: 999,
+                      padding: '10px 22px',
+                      color:
+                        scoreToast.tone === 'you'
+                          ? 'rgba(151, 241, 205, 0.98)'
+                          : 'rgba(255, 180, 180, 0.95)',
+                      fontSize: '1.24rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      pointerEvents: 'none',
+                      whiteSpace: 'nowrap',
+                      lineHeight: 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      boxShadow: scoreToast.tone === 'you'
+                        ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(100,220,160,0.1)'
+                        : 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(220,100,100,0.1)',
+                    }}
+                  >
+                    {renderScoreToastMessage(scoreToast.message)}
+                  </div>
+                )}
+                {!state.gameOver && (
+                  <div className="rh-board-meta-bar" data-ui="board-meta">
+                    <BoardOpenEndsPill board={state.board} openEndsSum={openEndsSum} />
+                    <BoneyardCountPill ref={boneyardRef} count={boneyardCount} />
+                  </div>
+                )}
                 <div
+                  className="wl-controls-tray control-pill"
                   style={{
                     position: 'absolute',
-                    top: 16,
-                    left: '50%',
-                    transform: scoreToast.visible
-                      ? 'translate(-50%, 0px) scale(1)'
-                      : 'translate(-50%, -14px) scale(0.95)',
-                    opacity: scoreToast.visible ? 1 : 0,
-                    transition: 'opacity 250ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                    zIndex: 14,
-                    background: 'rgba(255,255,255,0.06)',
-                    backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    borderRadius: 999,
-                    padding: '10px 22px',
-                    color:
-                      scoreToast.tone === 'you'
-                        ? 'rgba(151, 241, 205, 0.98)'
-                        : 'rgba(255, 180, 180, 0.95)',
-                    fontSize: '1.24rem',
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    pointerEvents: 'none',
-                    whiteSpace: 'nowrap',
-                    lineHeight: 1,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    boxShadow: scoreToast.tone === 'you'
-                      ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(100,220,160,0.1)'
-                      : 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(220,100,100,0.1)',
+                    bottom: 12,
+                    right: 12,
+                    zIndex: 20,
                   }}
                 >
-                  {renderScoreToastMessage(scoreToast.message)}
-                </div>
-              )}
-              {!state.gameOver && (
-                <div className="rh-board-meta-bar" data-ui="board-meta">
-                  <BoardOpenEndsPill board={state.board} openEndsSum={openEndsSum} />
-                  <BoneyardCountPill ref={boneyardRef} count={boneyardCount} />
-                </div>
-              )}              <div
-                className="wl-controls-tray control-pill"
-                style={{
-                  position: 'absolute',
-                  bottom: 12,
-                  right: 12,
-                  zIndex: 20,
-                }}
-              >
-                <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
-                <button
-                  type="button"
-                  className="btn text icon-btn volume-btn"
-                  onClick={() => setIsMuted((prev) => !prev)}
-                  title={isMuted ? 'Unmute' : 'Mute'}
-                >
-                  <VolumeIcon isMuted={isMuted} />
-                </button>
-                <button
-                  type="button"
-                  className="btn text icon-btn fullscreen-btn"
-                  onClick={toggleFullscreen}
-                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                >
-                  <FullscreenIcon isFullscreen={isFullscreen} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowLeaveConfirm(true)}
-                  title="Leave game"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                  <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
+                  <button
+                    type="button"
+                    className="btn text icon-btn volume-btn"
+                    onClick={() => setIsMuted((prev) => !prev)}
+                    title={isMuted ? 'Unmute' : 'Mute'}
                   >
-                    <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
-                    <polyline points="9 21 9 12 15 12 15 21" />
-                  </svg>
-                </button>
-              </div>
-              <Board
-                board={boardForDisplay}
-                legalMoves={boardLegalMoves}
-                selectedTile={boardSelectedTile}
-                lastPlayedTile={lastPlayedTile}
-                onPositionClick={play}
-                tileSize={84}
-                showOpenEndGlow={boardShowOpenEndGlow}
-              />
-            </MatchNblBoardFrame>
-          </div>
-
-          <div
-            ref={handAreaRef}
-            className="hand-area wl-hand-area"
-            data-ui="tray"
-          >
-            <div className="tray-rail">
-              <div className="tray-center" ref={trayCenterRef}>
-                <HandView
-                  hand={myHand}
-                  selectedTile={handSelectedTile}
-                  onSelect={handleTileTap}
-                  isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
-                  legalMoves={legalMoves}
-                  tileSize={handTileSize}
-                  compactStacked={handCompactStacked}
-                  drawPulseIndex={drawPulseIndex}
+                    <VolumeIcon isMuted={isMuted} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn text icon-btn fullscreen-btn"
+                    onClick={toggleFullscreen}
+                    title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                  >
+                    <FullscreenIcon isFullscreen={isFullscreen} />
+                  </button>
+                  <button type="button" onClick={() => setShowLeaveConfirm(true)} title="Leave game">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
+                      <polyline points="9 21 9 12 15 12 15 21" />
+                    </svg>
+                  </button>
+                </div>
+                <Board
+                  board={boardForDisplay}
+                  legalMoves={boardLegalMoves}
+                  selectedTile={boardSelectedTile}
+                  lastPlayedTile={lastPlayedTile}
+                  onPositionClick={play}
+                  tileSize={84}
+                  showOpenEndGlow={boardShowOpenEndGlow}
                 />
+              </>
+            }
+            handDock={
+              <div ref={handAreaRef} className="hand-area wl-hand-area" data-ui="tray">
+                <div className="tray-rail">
+                  <div className="tray-center" ref={trayCenterRef}>
+                    <HandView
+                      hand={myHand}
+                      selectedTile={handSelectedTile}
+                      onSelect={handleTileTap}
+                      isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
+                      legalMoves={legalMoves}
+                      tileSize={handTileSize}
+                      compactStacked={handCompactStacked}
+                      drawPulseIndex={drawPulseIndex}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          </div>
+            }
+          />
 
           {flyingTiles.length > 0 && (
             <GameOverlayPortal>

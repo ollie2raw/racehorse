@@ -1,8 +1,6 @@
 /*
- * Racehorse matte skin — COLOR RECOLOR ONLY.
- * Layout/typography stay on walnut-live v3 (production). Do not reshape pills, mat, or dock here.
- * Scope: bot match — not Learn.
- * Tiles: ivory bodies + matte grain/bevel via rules below.
+ * Racehorse matte skin — legacy alias; live match uses match-live-theme.css (.rh-match-live).
+ * Kept for any route still adding .racehorse-matte-skin without .rh-match-live.
  */
 
 .screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) {

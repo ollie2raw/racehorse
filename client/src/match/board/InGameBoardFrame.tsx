@@ -1,16 +1,23 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
+import { MatchBoardCanvas } from './MatchBoardCanvas';
 
 export interface InGameBoardFrameProps {
-  boardStage: ReactNode;
+  boardInner: ReactNode;
+  boardToolbar?: ReactNode;
   handDock?: ReactNode;
+  boardStageRef?: RefObject<HTMLDivElement | null>;
+  boardStageClassName?: string;
   studioShellClassName?: string;
   boardZoneClassName?: string;
   handDockClassName?: string;
 }
 
 export function InGameBoardFrame({
-  boardStage,
+  boardInner,
+  boardToolbar,
   handDock,
+  boardStageRef,
+  boardStageClassName,
   studioShellClassName,
   boardZoneClassName,
   handDockClassName,
@@ -24,7 +31,12 @@ export function InGameBoardFrame({
         className={`rh-live-board-zone${boardZoneClassName ? ` ${boardZoneClassName}` : ''}`}
         data-ui="live-board-zone"
       >
-        {boardStage}
+        <div
+          ref={boardStageRef}
+          className={`wl-stage-shell${boardStageClassName ? ` ${boardStageClassName}` : ''}`}
+        >
+          <MatchBoardCanvas toolbar={boardToolbar}>{boardInner}</MatchBoardCanvas>
+        </div>
       </div>
       {handDock ? (
         <div

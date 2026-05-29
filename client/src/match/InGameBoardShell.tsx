@@ -1,6 +1,5 @@
 import type { ReactNode, Ref } from 'react';
 import '../practice/noBrainerLab.css';
-import './inGameBoardShell.css';
 
 /** Inset board frame: watermark, canvas, optional toolbar. */
 export interface InGameBoardFrameProps {
