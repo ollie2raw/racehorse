@@ -322,9 +322,18 @@
   opacity: 0.85;
 }
 
-.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-controls-tray .board-zoom-btn {
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-controls-tray.control-pill {
+  gap: 2px !important;
+  padding: 4px 8px !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .wl-controls-tray .wl-control-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
   color: rgba(238, 244, 255, 0.95) !important;
-  opacity: 0.65;
+  opacity: 0.68;
 }
 
 /* Hand dock (v3) */
@@ -439,35 +448,30 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  border-radius: 6px;
-  background-color: #f3ead8 !important;
+  border-radius: 7px;
+  background-color: #f4ebda !important;
   background-image:
-    radial-gradient(ellipse 88% 72% at 14% 6%, rgba(255, 255, 255, 0.72), transparent 54%),
-    radial-gradient(ellipse 92% 78% at 86% 94%, rgba(58, 48, 34, 0.16), transparent 50%),
-    repeating-linear-gradient(
-      94deg,
-      rgba(255, 255, 255, 0.07) 0 1px,
-      transparent 1px 5px
-    ),
-    linear-gradient(168deg, #fffdf6 0%, #f5ebda 46%, #e6d9c0 100%) !important;
-  border: 2px solid rgba(98, 82, 58, 0.78) !important;
+    radial-gradient(ellipse 90% 68% at 18% 8%, rgba(255, 255, 255, 0.58), transparent 56%),
+    radial-gradient(ellipse 88% 72% at 84% 92%, rgba(58, 48, 34, 0.12), transparent 52%),
+    linear-gradient(168deg, #fffdf8 0%, #f5ebda 52%, #e8dcc4 100%) !important;
+  border: 2px solid rgba(108, 92, 68, 0.62) !important;
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.98),
-    inset 0 -4px 10px rgba(72, 58, 38, 0.18),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-    0 8px 18px rgba(0, 0, 0, 0.38),
-    0 2px 4px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(72, 58, 38, 0.14) !important;
+    inset 0 2px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -3px 8px rgba(72, 58, 38, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+    0 7px 14px rgba(0, 0, 0, 0.32),
+    0 2px 3px rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(72, 58, 38, 0.1) !important;
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.11;
+  opacity: 0.06;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
   background-size: 88px 88px;
   mix-blend-mode: soft-light;
@@ -477,39 +481,39 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   pointer-events: none;
   z-index: 2;
   box-shadow:
-    inset 0 2px 1px rgba(255, 255, 255, 0.62),
-    inset 0 -14px 22px rgba(48, 38, 26, 0.14),
-    inset 3px 0 8px rgba(48, 38, 26, 0.04),
-    inset -3px 0 8px rgba(48, 38, 26, 0.04);
+    inset 0 1px 1px rgba(255, 255, 255, 0.58),
+    inset 0 -10px 18px rgba(48, 38, 26, 0.1),
+    inset 2px 0 6px rgba(48, 38, 26, 0.03),
+    inset -2px 0 6px rgba(48, 38, 26, 0.03);
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body .pip {
   border: none !important;
-  transform: scale(0.96);
+  transform: scale(0.98);
   transform-origin: center;
-  filter: saturate(0.92) brightness(0.96) contrast(1.03);
+  filter: saturate(1.04) brightness(0.98) contrast(1.04);
   box-shadow:
-    inset 0 2px 3px rgba(0, 0, 0, 0.46),
-    inset 0 1px 0 rgba(0, 0, 0, 0.22),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.08),
-    0 0 0 1px rgba(72, 58, 38, 0.14) !important;
+    inset 0 2px 4px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(0, 0, 0, 0.18),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.1),
+    0 1px 0 rgba(255, 255, 255, 0.05) !important;
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-divider.vertical {
   width: 2px !important;
   background: linear-gradient(
     180deg,
-    rgba(48, 42, 34, 0.16),
-    rgba(48, 42, 34, 0.52),
-    rgba(48, 42, 34, 0.16)
+    rgba(48, 42, 34, 0.12),
+    rgba(48, 42, 34, 0.46),
+    rgba(48, 42, 34, 0.12)
   ) !important;
   box-shadow:
-    1px 0 0 rgba(255, 255, 255, 0.28),
-    -1px 0 0 rgba(48, 38, 26, 0.12);
+    1px 0 0 rgba(255, 255, 255, 0.24),
+    -1px 0 0 rgba(48, 38, 26, 0.1);
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-body .pip-half,
@@ -520,27 +524,22 @@
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .domino-tile.double .domino-body {
   background-image:
-    radial-gradient(ellipse 88% 72% at 14% 6%, rgba(255, 255, 255, 0.76), transparent 54%),
-    radial-gradient(ellipse 92% 78% at 86% 94%, rgba(58, 48, 34, 0.14), transparent 50%),
-    repeating-linear-gradient(
-      94deg,
-      rgba(255, 255, 255, 0.08) 0 1px,
-      transparent 1px 5px
-    ),
-    linear-gradient(168deg, #fffef8 0%, #f7eede 50%, #e8dcc4 100%) !important;
+    radial-gradient(ellipse 90% 68% at 18% 8%, rgba(255, 255, 255, 0.62), transparent 56%),
+    radial-gradient(ellipse 88% 72% at 84% 92%, rgba(58, 48, 34, 0.1), transparent 52%),
+    linear-gradient(168deg, #fffef9 0%, #f7eede 54%, #ebe0ca 100%) !important;
 }
 
 /* Board tiles — same ivory face + depth as hand (legacy walnut board override was flattening placed tiles) */
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
   .board-canvas
   .domino-tile.board-tile:not(.highlight) {
-  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.34));
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.3));
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
   .board-canvas
   .domino-tile.board-tile.highlight {
-  filter: drop-shadow(0 6px 16px rgba(231, 182, 74, 0.3)) drop-shadow(0 10px 16px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 5px 14px rgba(231, 182, 74, 0.28)) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.24));
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
@@ -548,15 +547,15 @@
   .domino-tile.board-tile.highlight
   .domino-body {
   border-width: 2.5px !important;
-  border-color: rgba(231, 182, 74, 0.88) !important;
+  border-color: rgba(231, 182, 74, 0.86) !important;
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.98),
-    inset 0 -4px 10px rgba(72, 58, 38, 0.18),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-    0 8px 18px rgba(0, 0, 0, 0.38),
-    0 2px 4px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(72, 58, 38, 0.14),
-    0 0 0 2.5px rgba(231, 182, 74, 0.36) !important;
+    inset 0 2px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -3px 8px rgba(72, 58, 38, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+    0 7px 14px rgba(0, 0, 0, 0.28),
+    0 2px 3px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(231, 182, 74, 0.16),
+    0 0 0 2.5px rgba(231, 182, 74, 0.34) !important;
   animation: none !important;
 }
 
@@ -568,7 +567,16 @@
   .rh-live-hand-deck
   .hand-container
   .domino-tile:not(.disabled):not(.highlight):not(.selected) {
-  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.34));
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.3));
+}
+
+/* Chain turns: keep non-playable tiles readable — brass outline on playable is the main cue */
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .rh-live-hand-deck
+  .hand-container
+  .domino-tile.unplayable:not(.board-tile) {
+  opacity: 0.92;
+  filter: saturate(0.96) brightness(0.98) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.28));
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
@@ -579,7 +587,8 @@
   .rh-live-hand-deck
   .hand-container
   .domino-tile.selected {
-  filter: drop-shadow(0 6px 16px rgba(231, 182, 74, 0.3)) drop-shadow(0 10px 16px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 5px 14px rgba(231, 182, 74, 0.28)) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.26));
+  z-index: 2;
 }
 
 /* Playable / selected — brass outline only (underline off for live match; easy to restore) */
@@ -601,12 +610,13 @@
   .hand-container
   .domino-tile.selected
   .domino-body {
-  border: 2.5px solid rgba(231, 182, 74, 0.96) !important;
+  border: 2.5px solid rgba(231, 182, 74, 0.94) !important;
   box-shadow:
-    0 0 0 1px rgba(231, 182, 74, 0.2),
-    0 0 0 2.5px rgba(231, 182, 74, 0.36),
-    0 9px 20px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.86) !important;
+    inset 0 2px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -3px 8px rgba(72, 58, 38, 0.14),
+    0 0 0 1px rgba(231, 182, 74, 0.18),
+    0 0 0 2.5px rgba(231, 182, 74, 0.32),
+    0 8px 18px rgba(0, 0, 0, 0.26) !important;
 }
 
 .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
@@ -615,15 +625,15 @@
   .domino-tile.highlight:not(.unplayable)
   .domino-body {
   border-width: 2.5px !important;
-  border-color: rgba(231, 182, 74, 0.92) !important;
+  border-color: rgba(231, 182, 74, 0.86) !important;
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.98),
-    inset 0 -4px 10px rgba(72, 58, 38, 0.18),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-    0 8px 18px rgba(0, 0, 0, 0.38),
-    0 2px 4px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(72, 58, 38, 0.14),
-    0 0 0 2.5px rgba(231, 182, 74, 0.4) !important;
+    inset 0 2px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -3px 8px rgba(72, 58, 38, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.32),
+    0 7px 14px rgba(0, 0, 0, 0.28),
+    0 2px 3px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(231, 182, 74, 0.16),
+    0 0 0 2.5px rgba(231, 182, 74, 0.34) !important;
 }
 
 /* Daily Fritz GAME pill — same matte language as Image 3 */

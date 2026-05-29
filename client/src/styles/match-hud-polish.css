@@ -182,73 +182,69 @@
 }
 
 .wl-controls-tray.control-pill {
-  gap: 14px;
-  padding: 8px 16px;
+  gap: 2px;
+  padding: 4px 8px;
 }
 
-.wl-controls-tray.control-pill .board-zoom-btn {
-  min-width: 32px;
-  min-height: 32px;
-  padding: 6px 8px;
-  margin: 0;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: #fff;
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.65;
-  transition: all 120ms ease;
-}
-
-.wl-controls-tray.control-pill .board-zoom-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  opacity: 1;
-}
-
-.wl-controls-tray.control-pill .board-zoom-btn:active {
-  transform: scale(0.92);
-}
-
-.wl-controls-tray.control-pill > button,
+.wl-controls-tray.control-pill .wl-control-btn,
+.wl-controls-tray.control-pill > button:not(.wl-control-btn),
 .wl-controls-tray.control-pill > .btn,
 .wl-controls-tray.control-pill .rr-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.65;
-  transition: all 120ms ease;
-  background: none;
-  border: none;
-  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   padding: 0;
-  color: #fff;
+  margin: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(238, 244, 255, 0.95);
+  opacity: 0.68;
+  cursor: pointer;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    transform 120ms ease;
 }
 
-.wl-controls-tray.control-pill > button:hover,
+.wl-controls-tray.control-pill .wl-control-btn:hover,
+.wl-controls-tray.control-pill > button:not(.wl-control-btn):hover,
 .wl-controls-tray.control-pill > .btn:hover,
 .wl-controls-tray.control-pill .rr-pill:hover {
   opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.wl-controls-tray.control-pill > button:active,
+.wl-controls-tray.control-pill .wl-control-btn:active,
+.wl-controls-tray.control-pill > button:not(.wl-control-btn):active,
 .wl-controls-tray.control-pill > .btn:active,
 .wl-controls-tray.control-pill .rr-pill:active {
   transform: scale(0.94);
 }
 
-.wl-controls-tray.control-pill svg,
 .wl-controls-tray.control-pill .icon-svg {
-  width: 20px;
-  height: 20px;
-  color: #fff;
-  stroke: #fff;
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
   fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wl-controls-tray.control-pill .volume-svg path:first-child {
+  fill: currentColor;
+  stroke: none;
+}
+
+.wl-controls-tray.control-pill .volume-svg .icon-slash {
+  stroke: #e55656;
+  stroke-width: 2.2;
 }
 
 .wl-top-rail {

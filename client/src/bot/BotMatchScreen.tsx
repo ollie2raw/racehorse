@@ -6,8 +6,13 @@ import {
   BoardOpenEndsPill,
   BoneyardCountPill,
   DominoTile,
+  FullscreenIcon,
+  HomeIcon,
   ScoreTrackOverlay,
   RotateOverlay,
+  VolumeIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from '../components';
 import type { BoardHandle } from '../components';
 import { MatchNblBoardFrame } from '../components/MatchNblBoardFrame';
@@ -367,43 +372,6 @@ function roundedRatingDelta(value: number | null | undefined): number | null {
 function formatRatingDelta(value: number): string {
   if (value === 0) return 'No change';
   return `${value > 0 ? '+' : ''}${value}`;
-}
-
-function FullscreenIcon({ isFullscreen, style }: { isFullscreen: boolean; style?: React.CSSProperties }) {
-  return (
-    <svg className="icon-svg" style={style} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      {isFullscreen ? (
-        <>
-          <path d="M4 9V4h5" />
-          <path d="M20 9V4h-5" />
-          <path d="M4 15v5h5" />
-          <path d="M20 15v5h-5" />
-        </>
-      ) : (
-        <>
-          <path d="M9 4H4v5" />
-          <path d="M15 4h5v5" />
-          <path d="M9 20H4v-5" />
-          <path d="M15 20h5v-5" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function VolumeIcon({ isMuted, style }: { isMuted: boolean; style?: React.CSSProperties }) {
-  return (
-    <svg className="icon-svg" style={style} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path className="icon-body" d="M3 10v4h4l5 4V6L7 10H3z" />
-      {!isMuted && (
-        <>
-          <path className="icon-wave" d="M16 8.5a5 5 0 010 7" />
-          <path className="icon-wave" d="M19 6a9 9 0 010 12" />
-        </>
-      )}
-      {isMuted && <path className="icon-slash" d="M5 5l14 14" />}
-    </svg>
-  );
 }
 
 function tileEquals(a: Tile, b: Tile): boolean {
@@ -6981,7 +6949,7 @@ export default function BotMatchScreen({
           >
             <button
               type="button"
-              className="board-zoom-btn"
+              className="wl-control-btn"
               title="Zoom out"
               aria-label="Zoom out"
               onClick={(e) => {
@@ -6990,11 +6958,11 @@ export default function BotMatchScreen({
                 boardRef.current?.zoomOut();
               }}
             >
-              −
+              <ZoomOutIcon />
             </button>
             <button
               type="button"
-              className="board-zoom-btn"
+              className="wl-control-btn"
               title="Zoom in"
               aria-label="Zoom in"
               onClick={(e) => {
@@ -7003,40 +6971,34 @@ export default function BotMatchScreen({
                 boardRef.current?.zoomIn();
               }}
             >
-              +
+              <ZoomInIcon />
             </button>
             <button
               type="button"
-              className="btn text icon-btn volume-btn"
+              className="wl-control-btn"
               onClick={() => setIsMuted((prev) => !prev)}
               title={isMuted ? 'Unmute' : 'Mute'}
+              aria-label={isMuted ? 'Unmute' : 'Mute'}
             >
               <VolumeIcon isMuted={isMuted} />
             </button>
             <button
               type="button"
-              className="btn text icon-btn fullscreen-btn"
+              className="wl-control-btn"
               onClick={toggleFullscreen}
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
             >
               <FullscreenIcon isFullscreen={isFullscreen} />
             </button>
             <button
               type="button"
+              className="wl-control-btn"
               onClick={() => setShowLeaveConfirm(true)}
               title="Leave game"
+              aria-label="Leave game"
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z" />
-                <polyline points="9 21 9 12 15 12 15 21" />
-              </svg>
+              <HomeIcon />
             </button>
           </div>
         )}

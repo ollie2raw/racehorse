@@ -22,3 +22,10 @@ export type { BoardOpenEndsPillProps } from './BoardOpenEndsPill';
 export { RotateOverlay } from './RotateOverlay';
 export { BrandLogo } from './BrandLogo';
 export { GlobalNav } from './GlobalNav';
+export {
+  ZoomOutIcon,
+  ZoomInIcon,
+  FullscreenIcon,
+  VolumeIcon,
+  HomeIcon,
+} from './MatchBoardControlIcons';

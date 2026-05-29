@@ -57,7 +57,7 @@ interface PipHalfProps {
 
 function PipHalf({ value, size }: PipHalfProps) {
   const positions = pipLayouts[value] || [];
-  const pipSize = Math.max(6, size / 4.5);
+  const pipSize = Math.max(6, size / 4.2);
   const cellSize = size / 3;
   const pipColor = PIP_COLORS[value] ?? '#1f2937';
 
@@ -81,8 +81,6 @@ function PipHalf({ value, size }: PipHalfProps) {
             height: pipSize,
             borderRadius: '50%',
             backgroundColor: pipColor,
-            boxShadow: 'none',
-            border: '1px solid rgba(0,0,0,0.18)',
             left: col * cellSize + cellSize / 2 - pipSize / 2,
             top: row * cellSize + cellSize / 2 - pipSize / 2,
           }}
@@ -141,6 +139,7 @@ function DominoTileComponent({
   style,
 }: DominoTileProps) {
   const isDouble = tile.high === tile.low;
+  const liftY = selected ? -6 : highlight && !unplayable ? -4 : 0;
 
   const tileClass = [
     'domino-tile',
@@ -173,7 +172,8 @@ function DominoTileComponent({
         border: 'none',
         background: 'none',
         cursor: disabled ? 'default' : onClick ? 'pointer' : 'default',
-        transform: `rotate(${rotation}deg)`,
+        transform: `translateY(${liftY}px) rotate(${rotation}deg)`,
+        transition: 'transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease',
         ...style,
       }}
     >
