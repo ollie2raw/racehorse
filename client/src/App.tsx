@@ -15,6 +15,7 @@ import {
   RotateOverlay,
   ScoreTrackOverlay,
 } from './components';
+import type { BoardHandle } from './components';
 import { MatchLiveLayout } from './match/board';
 import LeaveGameModal from './components/LeaveGameModal';
 import { GameOverlayPortal } from './components/GameOverlayPortal';
@@ -1266,6 +1267,7 @@ export default function App() {
   const flyingTileIdRef = useRef(0);
   const pendingForcedHandRevealRef = useRef<{ sequence: number; fullHand: Tile[] } | null>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<BoardHandle>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -5533,6 +5535,9 @@ export default function App() {
                 )}
                 <div
                   className="wl-controls-tray control-pill"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
                   style={{
                     position: 'absolute',
                     bottom: 12,
@@ -5540,6 +5545,32 @@ export default function App() {
                     zIndex: 20,
                   }}
                 >
+                  <button
+                    type="button"
+                    className="board-zoom-btn"
+                    title="Zoom out"
+                    aria-label="Zoom out"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      boardRef.current?.zoomOut();
+                    }}
+                  >
+                    −
+                  </button>
+                  <button
+                    type="button"
+                    className="board-zoom-btn"
+                    title="Zoom in"
+                    aria-label="Zoom in"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      boardRef.current?.zoomIn();
+                    }}
+                  >
+                    +
+                  </button>
                   <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
                   <button
                     type="button"
@@ -5572,6 +5603,8 @@ export default function App() {
                   </button>
                 </div>
                 <Board
+                  ref={boardRef}
+                  showZoomTray={false}
                   board={boardForDisplay}
                   legalMoves={boardLegalMoves}
                   selectedTile={boardSelectedTile}

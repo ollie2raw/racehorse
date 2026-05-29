@@ -378,9 +378,7 @@ export default function LearnHome({
                 const isLocked =
                   mode.id === 'howToPlay'
                     ? !canPreviewHowToPlay || !onOpenHowToPlay
-                    : mode.id === 'guided'
-                      ? !isAdmin
-                      : !mode.unlocked;
+                    : !mode.unlocked;
                 const cardDesc = mode.desc;
                 const cardBadges = mode.badges;
 

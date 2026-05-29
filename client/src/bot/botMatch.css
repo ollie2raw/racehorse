@@ -1094,8 +1094,8 @@
 }
 
 .screen.game-screen.walnut-live.bot-match-screen .rh-board-meta-bar .open-ends-pill__label {
-  font-size: calc(1rem + 3px) !important;
-  letter-spacing: 0.12em !important;
+  font-size: clamp(calc(1.25rem - 3px), calc(1.85vw - 2px), calc(1.55rem - 3px)) !important;
+  letter-spacing: 0.1em !important;
   opacity: 1 !important;
   color: rgba(238, 244, 255, 0.95) !important;
 }

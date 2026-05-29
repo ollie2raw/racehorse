@@ -5,7 +5,7 @@ import type { UserProfile } from '../auth/useAuth';
 import type { GhostProfileSummary } from '../ghost/api';
 import type { AppMode } from '../types';
 import BotMatchScreen from '../bot/BotMatchScreen';
-import { BrandLogo, GlobalNav } from '../components';
+import { BrandLogo, BoneyardStackIcon, GlobalNav } from '../components';
 import { Button } from '../components/primitives';
 import '../screens/RacehorseHomeArt.css';
 
@@ -102,16 +102,6 @@ const DfIconLock = () => (
     <path d="M7 11V8a5 5 0 0 1 10 0v3" strokeLinecap="round" />
     <rect x="5" y="11" width="14" height="10" rx="2" />
     <circle cx="12" cy="16" r="1.2" fill="currentColor" stroke="none" />
-  </svg>
-);
-
-const DfIconDomino = () => (
-  <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
-    <rect x="7" y="3.5" width="10" height="17" rx="2.5" />
-    <path d="M12 9v6" strokeLinecap="round" />
-    <circle cx="10" cy="7" r="1" fill="currentColor" stroke="none" />
-    <circle cx="14" cy="17" r="1" fill="currentColor" stroke="none" />
-    <circle cx="14" cy="13" r="1" fill="currentColor" stroke="none" />
   </svg>
 );
 
@@ -1688,7 +1678,7 @@ export default function DailyFritzScreen({
                 <div className="df-pvf-summary-divider" aria-hidden />
                 <div className="df-pvf-summary-item">
                   <div className="df-pvf-summary-icon" aria-hidden>
-                    <DfIconDomino />
+                    <BoneyardStackIcon size={22} />
                   </div>
                   <div>
                     <div className="df-pvf-summary-value">First to {winTarget}</div>

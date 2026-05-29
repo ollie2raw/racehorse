@@ -596,7 +596,7 @@ body {
     0 0 0 1px rgba(255, 255, 255, 0.06) !important;
 }
 
-.screen.game-screen.walnut-live .board-canvas .domino-tile.board-tile .domino-body {
+.screen.game-screen.walnut-live:not(.rh-match-live) .board-canvas .domino-tile.board-tile .domino-body {
   border-width: 2.5px !important;
   border-color: #6f6252 !important;
   background: linear-gradient(180deg, #fffffe 0%, #f6efe3 100%) !important;
@@ -606,7 +606,7 @@ body {
     0 0 0 1px rgba(255, 255, 255, 0.14) !important;
 }
 
-.screen.game-screen.walnut-live .board-canvas .domino-tile.board-tile.highlight .domino-body {
+.screen.game-screen.walnut-live:not(.rh-match-live) .board-canvas .domino-tile.board-tile.highlight .domino-body {
   border-color: rgba(231, 182, 74, 0.88) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.96),

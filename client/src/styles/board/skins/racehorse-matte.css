@@ -165,10 +165,14 @@
   border-color: rgba(226, 176, 72, 0.16) !important;
 }
 
-.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-controls-tray button,
 .screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .board-zoom-tray .board-zoom-btn {
   color: rgba(244, 217, 137, 0.88) !important;
   opacity: 0.85;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen.racehorse-matte-skin:not(.learn-lesson-screen) .wl-controls-tray .board-zoom-btn {
+  color: rgba(238, 244, 255, 0.95) !important;
+  opacity: 0.65;
 }
 
 /* Daily Fritz — kill frosted white glass from route sheet */

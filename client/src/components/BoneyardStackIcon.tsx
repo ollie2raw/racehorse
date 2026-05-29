@@ -1,18 +1,21 @@
-import React from 'react';
+import type { CSSProperties } from 'react';
 
 type BoneyardStackIconProps = {
   className?: string;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
+  size?: number;
 };
 
-export function BoneyardStackIcon({ className, style }: BoneyardStackIconProps) {
+/** Horizontal domino tile — boneyard pill + Fritz hub summary rows. */
+export function BoneyardStackIcon({ className, style, size = 16 }: BoneyardStackIconProps) {
+  const useSizeAttr = style?.width == null && style?.height == null;
+
   return (
     <svg
       className={className}
       style={style}
+      {...(useSizeAttr ? { width: size, height: size } : {})}
       viewBox="0 0 24 24"
-      width="16"
-      height="16"
       fill="none"
       aria-hidden="true"
       focusable="false"

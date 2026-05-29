@@ -9,6 +9,7 @@ import {
   ScoreTrackOverlay,
   RotateOverlay,
 } from '../components';
+import type { BoardHandle } from '../components';
 import { MatchNblBoardFrame } from '../components/MatchNblBoardFrame';
 import TileRack from '../components/TileRack';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
@@ -899,6 +900,7 @@ export default function BotMatchScreen({
   const fritzConfig = FRITZ_TIERS[fritzTier];
   const rootRef = useRef<HTMLDivElement>(null);
   const boardStageRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<BoardHandle>(null);
   const handAreaRef = useRef<HTMLDivElement>(null);
   const boneyardRef = useRef<HTMLDivElement>(null);
   const opponentPillRef = useRef<HTMLButtonElement>(null);
@@ -1271,13 +1273,6 @@ export default function BotMatchScreen({
     userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
-  const handOverUsesPlayVsFritzTierAccent =
-    mode === 'bot' &&
-    !isGuidedMode &&
-    !isAuthoringMode &&
-    !isAuthoringV2Mode &&
-    !isGuidedV2Mode &&
-    !isDailyPuzzleRun;
 
   const showDebug =
     typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
@@ -6957,6 +6952,8 @@ export default function BotMatchScreen({
           </div>
         )}
         <Board
+          ref={boardRef}
+          showZoomTray={isLessonLayoutMode}
           board={match.board}
           legalMoves={isLessonLayoutMode ? lessonBoardPlacementMoves : activePlacementMoves}
           selectedTile={selectedTile}
@@ -6972,6 +6969,9 @@ export default function BotMatchScreen({
         {!isLessonLayoutMode && (
           <div
             className="wl-controls-tray control-pill"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
             style={{
               position: 'absolute',
               bottom: 12,
@@ -6979,6 +6979,32 @@ export default function BotMatchScreen({
               zIndex: 20,
             }}
           >
+            <button
+              type="button"
+              className="board-zoom-btn"
+              title="Zoom out"
+              aria-label="Zoom out"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                boardRef.current?.zoomOut();
+              }}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="board-zoom-btn"
+              title="Zoom in"
+              aria-label="Zoom in"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                boardRef.current?.zoomIn();
+              }}
+            >
+              +
+            </button>
             <button
               type="button"
               className="btn text icon-btn volume-btn"
@@ -7090,7 +7116,6 @@ export default function BotMatchScreen({
         <GameOverlayPortal>
           <HandOverModal
             variant="sp"
-            accentTier={handOverUsesPlayVsFritzTierAccent ? fritzTier : null}
             pointsAwarded={handReveal.pointsAwarded}
             winnerSide={resolveWinnerSide(handReveal.winner)}
             winnerLabel={winnerDisplayLabel(resolveWinnerSide(handReveal.winner), opponentLabel)}

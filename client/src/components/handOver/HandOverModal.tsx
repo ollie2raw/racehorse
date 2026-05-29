@@ -1,10 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { DominoTile } from '../DominoTile';
-import type { FritzTier } from '../../bot/fritzConfig';
-import {
-  FRITZ_TIER_PVF_COLORS,
-  HAND_OVER_DEFAULT_ACCENT,
-} from '../../bot/fritzConfig';
+import { HAND_OVER_DEFAULT_ACCENT } from '../../bot/fritzConfig';
 import type { Tile } from '../../types';
 import type { HandOverTileReveal, HandOverWinnerSide } from './handOverCopy';
 import {
@@ -12,6 +8,8 @@ import {
   buildRemainingTilesMetric,
 } from './handOverCopy';
 import './handOverModal.css';
+
+const HAND_OVER_ACCENT = HAND_OVER_DEFAULT_ACCENT;
 
 export type HandOverModalVariant = 'sp' | 'mp';
 
@@ -30,24 +28,7 @@ export type HandOverModalProps = {
   progressTransitionMs?: number;
   footer?: ReactNode;
   learningRecap?: ReactNode;
-  /** When set (Play vs Fritz), accents follow tier; otherwise elite gold. */
-  accentTier?: FritzTier | null;
 };
-
-function resolveHandOverAccent(tier?: FritzTier | null): {
-  color: string;
-  tierClass: FritzTier;
-  usesPvfTier: boolean;
-} {
-  if (!tier) {
-    return { color: HAND_OVER_DEFAULT_ACCENT, tierClass: 'elite', usesPvfTier: false };
-  }
-  return {
-    color: FRITZ_TIER_PVF_COLORS[tier],
-    tierClass: tier,
-    usesPvfTier: true,
-  };
-}
 
 function handOverRewardCardStyle(accentColor: string): CSSProperties {
   return {
@@ -145,10 +126,8 @@ export function HandOverModal({
   progressTransitionMs,
   footer,
   learningRecap,
-  accentTier = null,
 }: HandOverModalProps) {
-  const { color: accentColor, tierClass, usesPvfTier } = resolveHandOverAccent(accentTier);
-  const panelStyle = { '--pvf-dynamic-color': accentColor } as CSSProperties;
+  const panelStyle = { '--pvf-dynamic-color': HAND_OVER_ACCENT } as CSSProperties;
   const showAutoAdvance = typeof progress === 'number';
   const clampedProgress = showAutoAdvance ? Math.max(0, Math.min(1, progress)) : 0;
   const scoredReveal = tileReveals.find((reveal) => reveal.isScoredHand && reveal.tiles.length > 0) ?? null;
@@ -173,7 +152,7 @@ export function HandOverModal({
   const pointsOwnerLabel = winnerLabel.toUpperCase();
   const showTilesSection = scoredReveal != null || secondaryReveal != null;
   const summaryIconColor =
-    winnerSide === 'you' ? accentColor : 'rgba(255, 255, 255, 0.72)';
+    winnerSide === 'you' ? HAND_OVER_ACCENT : 'rgba(255, 255, 255, 0.72)';
 
   return (
     <div
@@ -183,7 +162,7 @@ export function HandOverModal({
       aria-labelledby="hand-over-modal-title"
     >
       <div
-        className={`game-over-card hand-over-modal hand-over-modal--${variant} hand-over-modal--winner-${winnerSide} tier-${tierClass}${usesPvfTier ? ' hand-over-modal--pvf-tier' : ''}`}
+        className={`game-over-card hand-over-modal hand-over-modal--${variant} hand-over-modal--winner-${winnerSide} tier-elite`}
         style={panelStyle}
         onClick={(event) => event.stopPropagation()}
       >
@@ -200,7 +179,7 @@ export function HandOverModal({
             <div
               className="hand-over-modal__reward-card"
               aria-label="Points awarded this hand"
-              style={handOverRewardCardStyle(accentColor)}
+              style={handOverRewardCardStyle(HAND_OVER_ACCENT)}
             >
               <span className="hand-over-modal__reward-label">Points Awarded</span>
               <div
