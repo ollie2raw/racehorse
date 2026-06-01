@@ -1,6 +1,7 @@
 import {
   canApplyNextHand,
   getHandLifecyclePhase,
+  isDailyFritzAdvanceLocked,
   logHandLifecycle,
   resetHandLifecyclePhase,
   resolveDailyFritzNextHandCache,
@@ -25,6 +26,25 @@ function testLifecyclePhaseAdvancesOnLog(): void {
   assertEqual(getHandLifecyclePhase(), 'playing', 'initial phase');
   logHandLifecycle({ phase: 'showing-hand-result', handNumber: 1 });
   assertEqual(getHandLifecyclePhase(), 'showing-hand-result', 'after reveal');
+}
+
+function testDailyFritzAdvanceLockWindow(): void {
+  const minAdvanceAt = 10_000;
+  assertEqual(
+    isDailyFritzAdvanceLocked(minAdvanceAt, 9_999),
+    true,
+    'daily fritz guard stays locked before reveal window ends',
+  );
+  assertEqual(
+    isDailyFritzAdvanceLocked(minAdvanceAt, 10_000),
+    false,
+    'daily fritz guard unlocks exactly at min-advance gate',
+  );
+  assertEqual(
+    isDailyFritzAdvanceLocked(null, 9_000),
+    false,
+    'daily fritz guard does not block without a gate',
+  );
 }
 
 async function testResolveDailyFritzNextHandCache(): Promise<void> {
@@ -94,6 +114,7 @@ async function testResolveDailyFritzNextHandCache(): Promise<void> {
 async function run(): Promise<void> {
   testCanApplyNextHand();
   testLifecyclePhaseAdvancesOnLog();
+  testDailyFritzAdvanceLockWindow();
   await testResolveDailyFritzNextHandCache();
   console.log('handLifecycle.behaviorTests.ts: all passed');
 }

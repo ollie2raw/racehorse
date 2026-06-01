@@ -110,6 +110,7 @@ import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayView
 import {
   canApplyNextHand,
   emitHandLifecycleDebugLog,
+  isDailyFritzAdvanceLocked,
   logHandLifecycle,
   resolveDailyFritzNextHandCache,
   warnHandLifecycleStuck,
@@ -858,7 +859,7 @@ export default function BotMatchScreen({
   const initialPersistedDailyFritzMatch = loadPersistedDailyFritzMatch();
   const DRAW_STEP_MS = 700;
   const DAILY_FRITZ_REVEAL_DELAY_MS = 1400;
-  const DAILY_FRITZ_AUTO_ADVANCE_MS = 3500;
+  const DAILY_FRITZ_AUTO_ADVANCE_MS = 5000;
   const HAND_LIFECYCLE_DEBUG_ENDPOINT =
     'http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979';
   const HAND_LIFECYCLE_DEBUG_SESSION = '65d5db';
@@ -1099,6 +1100,7 @@ export default function BotMatchScreen({
   const advanceHandRef = useRef<() => void>(() => {});
   const handLifecyclePhaseRef = useRef<HandLifecyclePhase>('playing');
   const handRevealShownAtRef = useRef<number | null>(null);
+  const dailyFritzMinAdvanceAtRef = useRef<number | null>(null);
   const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameWinConfettiKeyRef = useRef('');
   const gameOverSoundKeyRef = useRef('');
@@ -3346,6 +3348,7 @@ export default function BotMatchScreen({
       handLifecyclePhaseRef.current = 'resolving-hand';
       if (isDailyFritzMode) {
         lastDailyFlowLabelRef.current = 'hand-complete';
+        dailyFritzMinAdvanceAtRef.current = Date.now() + DAILY_FRITZ_REVEAL_DELAY_MS + DAILY_FRITZ_AUTO_ADVANCE_MS;
         console.log('[daily-flow] hand complete detected', {
           handNumber: result.state.handNumber,
           winner: result.handEnded.winner,
@@ -5323,6 +5326,7 @@ export default function BotMatchScreen({
       setHandAdvanceError(null);
       setShowManualHandAdvance(false);
       setHandReveal(null);
+      dailyFritzMinAdvanceAtRef.current = null;
       traceHandLifecycle('dealing-next-hand', { source }, 'D');
       let applied = false;
       setMatch((prev) => {
@@ -5397,6 +5401,13 @@ export default function BotMatchScreen({
     setLastBotChoice(null);
 
     if (isDailyFritzMode && dailyFritzPackage) {
+      const minAdvanceAt = dailyFritzMinAdvanceAtRef.current;
+      const nowMs = Date.now();
+      if (isDailyFritzAdvanceLocked(minAdvanceAt, nowMs)) {
+        const remainingMs = (minAdvanceAt ?? nowMs) - nowMs;
+        scheduleHandAdvanceRetry(Math.max(80, Math.ceil(remainingMs)), 'reveal-window-guard');
+        return;
+      }
       handTransitionInFlightRef.current = true;
       if (handAutoAdvanceTimerRef.current) {
         window.clearTimeout(handAutoAdvanceTimerRef.current);
@@ -5409,6 +5420,7 @@ export default function BotMatchScreen({
         lastDailyFlowLabelRef.current = 'match-complete';
         handTransitionInFlightRef.current = false;
         dailyFritzNextHandRef.current = null;
+        dailyFritzMinAdvanceAtRef.current = null;
         setHandAdvanceError(null);
         setShowManualHandAdvance(false);
         setHandReveal(null);
@@ -5617,6 +5629,9 @@ export default function BotMatchScreen({
       setHandRevealProgress(1);
       setShowManualHandAdvance(false);
       handRevealShownAtRef.current = null;
+      if (match.gameOver) {
+        dailyFritzMinAdvanceAtRef.current = null;
+      }
       if (handAutoAdvanceTimerRef.current) {
         window.clearTimeout(handAutoAdvanceTimerRef.current);
         handAutoAdvanceTimerRef.current = null;
@@ -5625,6 +5640,10 @@ export default function BotMatchScreen({
       return;
     }
     handRevealShownAtRef.current = Date.now();
+    if (isDailyFritzMode) {
+      const revealGate = handRevealShownAtRef.current + DAILY_FRITZ_AUTO_ADVANCE_MS;
+      dailyFritzMinAdvanceAtRef.current = Math.max(dailyFritzMinAdvanceAtRef.current ?? 0, revealGate);
+    }
     traceHandLifecycle('showing-hand-result', {
       winner: handReveal.winner,
       pointsAwarded: handReveal.pointsAwarded,
@@ -5756,6 +5775,7 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     if (!match.handOver || match.gameOver || handReveal || handRevealTimerRef.current) return;
+    if (isDailyFritzMode) return;
     if (isGuidedV1MinimalMode) return;
     // In V1 guided on-line mode, the authored lesson owns progression.
     if (isGuidedV1OnlineMode) return;
@@ -5768,7 +5788,7 @@ export default function BotMatchScreen({
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [match.handOver, match.gameOver, handReveal, advanceHand, isGuidedV1MinimalMode, isGuidedV1OnlineMode]);
+  }, [match.handOver, match.gameOver, handReveal, advanceHand, isDailyFritzMode, isGuidedV1MinimalMode, isGuidedV1OnlineMode]);
 
   // ── Daily Fritz watchdog ──────────────────────────────────────────────────
   // If the game gets stuck in hand-over, recover whether the reveal is still

@@ -88,6 +88,16 @@ export async function resolveDailyFritzNextHandCache<T>(
   return createRequest();
 }
 
+/**
+ * True while Daily Fritz must keep showing hand-end reveal before advancing.
+ */
+export function isDailyFritzAdvanceLocked(
+  minAdvanceAt: number | null,
+  nowMs: number,
+): boolean {
+  return typeof minAdvanceAt === 'number' && nowMs < minAdvanceAt;
+}
+
 export function emitHandLifecycleDebugLog(
   sessionId: string,
   endpoint: string,
