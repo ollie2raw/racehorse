@@ -17,36 +17,18 @@ import {
 } from './persistence';
 import { humanJoinedAt, isBotUserId } from './matchDispatch';
 import { buildTournamentMeState } from './meState';
+import {
+  rejectMismatchedPayloadUserId,
+  requireAuthUserId,
+  sendAuthError,
+} from './tournamentAuth';
 
 async function requireAuth(
   req: Request,
   res: Response,
   opts: { allowAnonymous?: boolean } = {},
 ): Promise<string | null> {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) {
-    if (opts.allowAnonymous) return null;
-    res.status(401).json({ ok: false, error: 'not_authenticated' });
-    return null;
-  }
-  try {
-    const userData = await supabaseFetch<{ id?: string }>(
-      '/auth/v1/user',
-      { headers: { Authorization: `Bearer ${token}` } } as RequestInit,
-    );
-    const userId = userData?.id ?? null;
-    if (!isValidUuid(userId)) {
-      if (opts.allowAnonymous) return null;
-      res.status(401).json({ ok: false, error: 'not_authenticated' });
-      return null;
-    }
-    return userId.trim();
-  } catch {
-    if (opts.allowAnonymous) return null;
-    res.status(401).json({ ok: false, error: 'not_authenticated' });
-    return null;
-  }
+  return requireAuthUserId(req, res, opts);
 }
 
 function requireTournamentId(req: Request, res: Response): string | null {
@@ -338,9 +320,13 @@ export function registerTournamentRoutes(app: Express): void {
   app.post('/api/tournaments/:id/register', async (req: Request, res: Response) => {
     const tournamentId = requireTournamentId(req, res);
     if (!tournamentId) return;
-    const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : null;
-    if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
-    if (!isValidUuid(userId)) { res.status(400).json({ ok: false, error: 'invalid_user' }); return; }
+    const userId = await requireAuthUserId(req, res);
+    if (!userId) return;
+    const mismatch = rejectMismatchedPayloadUserId(userId, req.body?.userId);
+    if (mismatch) {
+      sendAuthError(res, mismatch);
+      return;
+    }
     try {
       const t = await fetchTournamentById(tournamentId);
       if (!t) { res.status(404).json({ ok: false, error: 'not_found' }); return; }
@@ -368,9 +354,13 @@ export function registerTournamentRoutes(app: Express): void {
   app.delete('/api/tournaments/:id/register', async (req: Request, res: Response) => {
     const tournamentId = requireTournamentId(req, res);
     if (!tournamentId) return;
-    const userId = typeof req.body?.userId === 'string' ? req.body.userId.trim() : null;
-    if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
-    if (!isValidUuid(userId)) { res.status(400).json({ ok: false, error: 'invalid_user' }); return; }
+    const userId = await requireAuthUserId(req, res);
+    if (!userId) return;
+    const mismatch = rejectMismatchedPayloadUserId(userId, req.body?.userId);
+    if (mismatch) {
+      sendAuthError(res, mismatch);
+      return;
+    }
     try {
       await withdrawRegistration(tournamentId, userId);
       res.json({ ok: true });

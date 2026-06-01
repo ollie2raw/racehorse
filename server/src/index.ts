@@ -64,8 +64,11 @@ import {
 import {
   buildDailyPuzzleLeaderboard,
   calculateDailyPuzzleAwardedPoints,
+  findLadderSlotsForAttemptSet,
   findReadyDailyPuzzleLadderSlots,
+  isDailyPuzzleAttemptFinalizeReady,
   isDailyPuzzleLadderReady,
+  resolveActiveSlotForAttempt,
   normalizeDailyPuzzleAttempt,
   normalizeDailyPuzzleSlot,
   normalizeDailyPuzzleSlotResult,
@@ -123,7 +126,8 @@ import { recordMatchEnd } from './matchmaking/persistence';
 import {
   bootstrapScheduledTournamentInfrastructure,
   initScheduledTournaments,
-  applyMatchResult as applyTournamentMatchResult,
+  applyTournamentGameOverFromRoom,
+  findTournamentMatchByRoom,
 } from './scheduledTournament';
 import {
   clearDisconnectGrace,
@@ -2323,6 +2327,22 @@ async function listDailyPuzzleSlotsForDate(runDate: string): Promise<DailyPuzzle
   return sortDailyPuzzleSlots(rows.map(normalizeDailyPuzzleSlot));
 }
 
+async function listDailyPuzzleSlotsForDateAndVersion(
+  runDate: string,
+  setVersion: number,
+): Promise<DailyPuzzleSlot[]> {
+  const rows = await supabaseFetch<DailyPuzzleSlotRow[]>(
+    `/rest/v1/daily_puzzles?select=id,puzzle_date,title,starting_board,starting_hand,max_moves,target_score,puzzle_type,deal_size,slot_index,slot_title,tier,slot_max_points,objective_type,objective_payload,set_version,published&published=eq.true&puzzle_date=eq.${encodeURIComponent(runDate)}&set_version=eq.${setVersion}&order=slot_index.asc,id.asc`,
+    { method: 'GET' },
+  );
+  return sortDailyPuzzleSlots(rows.map(normalizeDailyPuzzleSlot));
+}
+
+/** Slots bound to an in-flight or completed attempt (never today's latest ready set). */
+async function listDailyPuzzleSlotsForAttempt(attempt: DailyPuzzleAttempt): Promise<DailyPuzzleSlot[]> {
+  return listDailyPuzzleSlotsForDateAndVersion(attempt.puzzleDate, attempt.setVersion);
+}
+
 /** If no ready ladder exists for this Pacific date, generate and upsert three slots (idempotent). */
 async function listDailyPuzzleSlotsForDateWithAutoSeed(runDate: string): Promise<DailyPuzzleSlot[]> {
   try {
@@ -3072,21 +3092,30 @@ app.get('/api/daily-puzzle/today', async (req, res) => {
         });
       }
     }
+    const finalizeReady = attempt ? isDailyPuzzleAttemptFinalizeReady(attempt) : false;
     const nextAvailableSlotIndex = attempt
-      ? attempt.status === 'completed'
+      ? attempt.status === 'completed' || finalizeReady
         ? null
         : attempt.currentSlotIndex
       : ready
         ? 1
         : null;
+    let attemptSlots: DailyPuzzleSlot[] | undefined;
+    if (attempt) {
+      const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
+      const bound = findLadderSlotsForAttemptSet(versionSlots);
+      if (bound) attemptSlots = bound;
+    }
     res.json({
       ok: true,
       runDate,
       setVersion: slots[0]?.setVersion ?? 1,
       slots,
+      attemptSlots,
       attemptStatus: attempt?.status ?? 'none',
       attempt,
       nextAvailableSlotIndex,
+      finalizeReady,
       leaderboardPreview: leaderboard.slice(0, 10),
       legacySinglePuzzleDay: !ready,
     });
@@ -3117,29 +3146,39 @@ app.post('/api/daily-puzzle/start', async (req, res) => {
     const username = await getUsernameForUserId(authenticatedUserId);
     const replayed = Boolean(attempt);
     if (!attempt) {
+      const readySlots = findReadyDailyPuzzleLadderSlots(slots);
+      if (!readySlots) {
+        res.status(409).json({ error: 'Daily Puzzle ladder is not published for this date yet.', runDate });
+        return;
+      }
       attempt = await createDailyPuzzleAttempt({
         runDate,
         userId: authenticatedUserId,
         username,
-        setVersion: slots[0].setVersion,
+        setVersion: readySlots[0].setVersion,
       });
     }
-    const activeSlotIndex = attempt.status === 'completed'
-      ? (Math.min(Math.max(attempt.result.slots.length, 1), 3) as DailyPuzzleSlotIndex)
-      : attempt.currentSlotIndex;
-    const activeSlot = slots.find((slot) => slot.slotIndex === activeSlotIndex) ?? slots[slots.length - 1];
+    const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
+    const activeSlot = resolveActiveSlotForAttempt(attempt, versionSlots);
     if (!activeSlot) {
-      res.status(409).json({ error: 'Daily Puzzle ladder content is incomplete.', runDate });
+      res.status(409).json({ error: 'Daily Puzzle ladder content is incomplete for this attempt.', runDate });
       return;
     }
+    const finalizeReady = isDailyPuzzleAttemptFinalizeReady(attempt);
+    const nextAvailableSlotIndex = attempt.status === 'completed'
+      ? (Math.min(Math.max(attempt.result.slots.length, 1), 3) as DailyPuzzleSlotIndex)
+      : finalizeReady
+        ? null
+        : attempt.currentSlotIndex;
     res.json({
       ok: true,
       runDate,
       attempt,
       activeSlot,
-      nextAvailableSlotIndex: attempt.status === 'completed' ? activeSlotIndex : attempt.currentSlotIndex,
+      nextAvailableSlotIndex,
       practiceMode: attempt.reviewUnlocked ? 'review' : 'none',
       replayed,
+      finalizeReady,
     });
   } catch (error) {
     res.status(500).json({
@@ -3195,9 +3234,11 @@ app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
     const slotIndex = slotIndexRaw === 2 || slotIndexRaw === 3 ? slotIndexRaw : 1;
     const existing = attempt.result.slots.find((slot) => slot.slotIndex === slotIndex);
     if (existing) {
-      const slots = await listDailyPuzzleSlotsForDateWithAutoSeed(attempt.puzzleDate);
+      const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
       const ladderCompleted = attempt.result.slots.length >= 3;
-      const nextSlot = slots.find((slot) => slot.slotIndex === attempt.currentSlotIndex) ?? null;
+      const nextSlot = ladderCompleted
+        ? null
+        : versionSlots.find((slot) => slot.slotIndex === attempt.currentSlotIndex) ?? null;
       res.json({
         ok: true,
         runDate: attempt.puzzleDate,
@@ -3215,12 +3256,15 @@ app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
       res.status(409).json({ error: 'Daily Puzzle slot order is invalid.' });
       return;
     }
-    const slots = await listDailyPuzzleSlotsForDateWithAutoSeed(attempt.puzzleDate);
-    if (!isDailyPuzzleLadderReady(slots)) {
-      res.status(409).json({ error: 'Daily Puzzle ladder is not published for this date yet.' });
+    const versionSlots = await listDailyPuzzleSlotsForAttempt(attempt);
+    const ladderSlots = findLadderSlotsForAttemptSet(versionSlots);
+    if (!ladderSlots) {
+      res.status(409).json({
+        error: 'Daily Puzzle ladder content is unavailable for this attempt version.',
+      });
       return;
     }
-    const slot = slots.find((entry) => entry.slotIndex === slotIndex && entry.id === puzzleId);
+    const slot = ladderSlots.find((entry) => entry.slotIndex === slotIndex && entry.id === puzzleId);
     if (!slot) {
       res.status(404).json({ error: 'Daily Puzzle slot not found for this date.' });
       return;
@@ -3259,7 +3303,7 @@ app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
     const ladderCompleted = saved.result.slots.length >= 3;
     const nextSlot = ladderCompleted
       ? null
-      : slots.find((entry) => entry.slotIndex === saved.currentSlotIndex) ?? null;
+      : versionSlots.find((entry) => entry.slotIndex === saved.currentSlotIndex) ?? null;
     res.json({
       ok: true,
       runDate: saved.puzzleDate,
@@ -4290,26 +4334,31 @@ function createGameOverPersistScheduler(input: GameOverPersistInput): () => void
   return () => {
     void (async () => {
       try {
+        const winnerUserId =
+          winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
+        if (winnerUserId) {
+          const applied = await applyTournamentGameOverFromRoom(io, room, {
+            winnerUserId,
+            player1Score: scoreA,
+            player2Score: scoreB,
+          });
+          if (applied) return;
+        }
         if (room.scheduledTournamentMatchId) {
-          const winnerUserId =
-            winnerSeatId === a.id ? a.userId : winnerSeatId === b.id ? b.userId : null;
-          if (winnerUserId) {
-            console.log('[tournament:game-over] detected', {
+          if (!winnerUserId) {
+            console.warn('[tournament:game-over] missing winner user id', {
               roomCode: room.code,
               matchId: room.scheduledTournamentMatchId,
-              tournamentId: room.scheduledTournamentId ?? null,
-              winnerId: winnerUserId,
-              scores: { player1: scoreA, player2: scoreB },
             });
-            console.log('[tournament:game-over] applying result', {
-              matchId: room.scheduledTournamentMatchId,
-              winnerId: winnerUserId,
-            });
-            await applyTournamentMatchResult(io, {
-              matchId: room.scheduledTournamentMatchId,
-              winnerId: winnerUserId,
-              player1Score: scoreA,
-              player2Score: scoreB,
+          }
+          return;
+        }
+        const tournamentMatchByRoom = await findTournamentMatchByRoom(room.code).catch(() => null);
+        if (tournamentMatchByRoom) {
+          if (!winnerUserId) {
+            console.warn('[tournament:game-over] missing winner user id', {
+              roomCode: room.code,
+              matchId: tournamentMatchByRoom.id,
             });
           }
           return;

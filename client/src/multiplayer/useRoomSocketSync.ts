@@ -6,6 +6,7 @@ import { projectMultiplayerGameState } from './boardSnapshotGuards';
 import { hasHandIdentityMismatch } from './handIdentity';
 import { evaluateSequenceUpdate, wrapSocketHandler } from './socketGuards';
 import { drawAudit } from './drawAudit';
+import { isMpDebugEnabled, mpPerfMarkStateApplied } from './mpPerf';
 
 /** Per-step stagger; total chain capped so gameplay is not blocked. */
 const FORCED_DRAW_STAGGER_MS = 72;
@@ -95,6 +96,8 @@ type UseRoomSocketSyncParams = {
   matchStartedRef: MutableRefObject<boolean>;
   playerReadyEmittedRef: MutableRefObject<boolean>;
   trySchedulePlayerReadyRef: MutableRefObject<() => void>;
+  /** Called after a fresh authoritative snapshot passes sequence checks (gameplay pending UI). */
+  onAuthoritativeGameplayStateApplied?: (nextState: GameState | null) => void;
 };
 
 function clearDrawPreview(params: Pick<
@@ -214,13 +217,19 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
 
       const rawState = payload?.state ?? null;
       let nextState = rawState;
+      let projectionMs: number | undefined;
       if (nextState !== null) {
+        const projectionStart =
+          isMpDebugEnabled() && typeof performance !== 'undefined' ? performance.now() : null;
         const projected = projectMultiplayerGameState(nextState);
         if (!projected) {
           void params.fetchGameState('invalid_state_projection');
           return;
         }
         nextState = projected;
+        if (projectionStart != null) {
+          projectionMs = performance.now() - projectionStart;
+        }
       }
 
       /**
@@ -326,6 +335,11 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       params.setBoneyardDisplayCount(payload?.state?.boneyard?.length ?? null);
       params.setOpponentDisconnected(false);
       params.setOpponentDisconnectMessage('');
+
+      if (nextState && isMpDebugEnabled()) {
+        mpPerfMarkStateApplied(nextState.sequence, projectionMs);
+      }
+      params.onAuthoritativeGameplayStateApplied?.(nextState);
     };
 
     params.resyncFlushRef.current = () => {

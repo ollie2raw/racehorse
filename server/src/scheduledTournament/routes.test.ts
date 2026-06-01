@@ -406,21 +406,51 @@ describe('scheduled tournament routes auth/user guards', () => {
     expect(mocks.insertRegistration).not.toHaveBeenCalled();
   });
 
-  it('register rejects missing or empty userId cleanly', async () => {
+  it('register requires authentication', async () => {
     const { request } = makeHarness();
-    const missing = await request('POST', '/api/tournaments/:id/register', {
+    const response = await request('POST', '/api/tournaments/:id/register', {
       params: { id: validTournamentId },
-      body: {},
-    });
-    const empty = await request('POST', '/api/tournaments/:id/register', {
-      params: { id: validTournamentId },
-      body: { userId: '   ' },
+      body: { userId: validUserId },
     });
 
-    expect(missing).toEqual({ status: 400, body: { ok: false, error: 'missing_userId' } });
-    expect(empty).toEqual({ status: 400, body: { ok: false, error: 'missing_userId' } });
-    expect(mocks.fetchTournamentById).not.toHaveBeenCalled();
+    expect(response).toEqual({ status: 401, body: { ok: false, error: 'not_authenticated' } });
     expect(mocks.insertRegistration).not.toHaveBeenCalled();
+  });
+
+  it('register rejects userId spoofing', async () => {
+    const otherUserId = '33333333-3333-4333-8333-333333333333';
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    const { request } = makeHarness();
+    const response = await request('POST', '/api/tournaments/:id/register', {
+      params: { id: validTournamentId },
+      headers: { authorization: 'Bearer valid-token' },
+      body: { userId: otherUserId },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ ok: false, error: 'user_mismatch' });
+    expect(mocks.insertRegistration).not.toHaveBeenCalled();
+  });
+
+  it('register uses authenticated user id only', async () => {
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    mocks.fetchTournamentById.mockResolvedValue({
+      id: validTournamentId,
+      status: 'registration_open',
+      max_players: 8,
+    });
+    mocks.fetchRegistrations.mockResolvedValue([]);
+    mocks.fetchActiveRegistration.mockResolvedValue(null);
+    const { request } = makeHarness();
+    const response = await request('POST', '/api/tournaments/:id/register', {
+      params: { id: validTournamentId },
+      headers: { authorization: 'Bearer valid-token' },
+      body: {},
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(mocks.insertRegistration).toHaveBeenCalledWith(validTournamentId, validUserId);
   });
 
   it('withdraw rejects invalid tournament id before userId checks', async () => {
@@ -434,19 +464,43 @@ describe('scheduled tournament routes auth/user guards', () => {
     expect(mocks.withdrawRegistration).not.toHaveBeenCalled();
   });
 
-  it('withdraw rejects missing or empty userId cleanly', async () => {
+  it('withdraw requires authentication', async () => {
     const { request } = makeHarness();
-    const missing = await request('DELETE', '/api/tournaments/:id/register', {
+    const response = await request('DELETE', '/api/tournaments/:id/register', {
       params: { id: validTournamentId },
-      body: {},
-    });
-    const empty = await request('DELETE', '/api/tournaments/:id/register', {
-      params: { id: validTournamentId },
-      body: { userId: '' },
+      body: { userId: validUserId },
     });
 
-    expect(missing).toEqual({ status: 400, body: { ok: false, error: 'missing_userId' } });
-    expect(empty).toEqual({ status: 400, body: { ok: false, error: 'missing_userId' } });
+    expect(response).toEqual({ status: 401, body: { ok: false, error: 'not_authenticated' } });
     expect(mocks.withdrawRegistration).not.toHaveBeenCalled();
+  });
+
+  it('withdraw rejects userId spoofing', async () => {
+    const otherUserId = '33333333-3333-4333-8333-333333333333';
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    const { request } = makeHarness();
+    const response = await request('DELETE', '/api/tournaments/:id/register', {
+      params: { id: validTournamentId },
+      headers: { authorization: 'Bearer valid-token' },
+      body: { userId: otherUserId },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ ok: false, error: 'user_mismatch' });
+    expect(mocks.withdrawRegistration).not.toHaveBeenCalled();
+  });
+
+  it('withdraw uses authenticated user id only', async () => {
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    const { request } = makeHarness();
+    const response = await request('DELETE', '/api/tournaments/:id/register', {
+      params: { id: validTournamentId },
+      headers: { authorization: 'Bearer valid-token' },
+      body: {},
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(mocks.withdrawRegistration).toHaveBeenCalledWith(validTournamentId, validUserId);
   });
 });

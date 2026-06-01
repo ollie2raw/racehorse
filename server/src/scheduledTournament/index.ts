@@ -5,7 +5,12 @@ import { registerTournamentRoutes } from './routes';
 import { startTournamentScheduler } from './scheduler';
 import { recoverTournamentMatches } from './recovery';
 
-export { applyMatchResult, findTournamentMatchByRoom, TOURNAMENT_CONFIG } from './engine';
+export {
+  applyMatchResult,
+  applyTournamentGameOverFromRoom,
+  findTournamentMatchByRoom,
+  TOURNAMENT_CONFIG,
+} from './engine';
 export type { MatchRow, ScheduledTournamentRow, RegistrationRow, BracketView } from './types';
 
 let infrastructureInitialized = false;

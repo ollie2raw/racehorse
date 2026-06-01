@@ -395,6 +395,24 @@ describe('closeRegistrationAndStart', () => {
   });
 });
 
+describe('generateBracket idempotency', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('does not duplicate match rows when generateBracket runs twice', async () => {
+    const tournament = makeTournament();
+    const regs = ['u1', 'u2', 'u3', 'u4'].map(makeReg);
+    const { persistence, store } = makePersistence(tournament, regs);
+    const { io } = makeIoMock();
+
+    await generateBracket(io, 'tour-1', persistence);
+    const countAfterFirst = store.matches.length;
+    expect(countAfterFirst).toBe(7);
+
+    await generateBracket(io, 'tour-1', persistence);
+    expect(store.matches).toHaveLength(countAfterFirst);
+  });
+});
+
 describe('full bracket lifecycle (8 players)', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 

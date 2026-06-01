@@ -8,8 +8,16 @@ import {
   fetchRegistrations,
 } from './persistence';
 import { TOURNAMENT_CONFIG } from './engine';
+import {
+  getSocketUserId,
+  rejectMismatchedPayloadUserId,
+} from './tournamentAuth';
 
 type Ack = (resp: unknown) => void;
+
+function authErrorAck(ack: Ack | undefined, error: string): void {
+  ack?.({ ok: false, error });
+}
 
 export function registerTournamentSocketHandlers(io: Server, socket: Socket): void {
   socket.on('tournament:register', async (
@@ -17,25 +25,35 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
     ack?: Ack,
   ) => {
     try {
-      const { tournamentId, userId } = payload ?? {};
-      if (!tournamentId || !userId) { ack?.({ ok: false, error: 'missing_args' }); return; }
+      const authenticatedUserId = getSocketUserId(socket);
+      if (!authenticatedUserId) {
+        authErrorAck(ack, 'not_authenticated');
+        return;
+      }
+      const mismatch = rejectMismatchedPayloadUserId(authenticatedUserId, payload?.userId);
+      if (mismatch) {
+        authErrorAck(ack, mismatch);
+        return;
+      }
+      const tournamentId = payload?.tournamentId;
+      if (!tournamentId) { authErrorAck(ack, 'missing_args'); return; }
       const t = await fetchTournamentById(tournamentId);
-      if (!t) { ack?.({ ok: false, error: 'tournament_not_found' }); return; }
+      if (!t) { authErrorAck(ack, 'tournament_not_found'); return; }
       if (t.status !== 'registration_open') {
-        ack?.({ ok: false, error: 'registration_closed' });
+        authErrorAck(ack, 'registration_closed');
         return;
       }
       const regs = await fetchRegistrations(tournamentId);
       if (regs.filter((r) => r.status === 'registered').length >= t.max_players) {
-        ack?.({ ok: false, error: 'full' });
+        authErrorAck(ack, 'full');
         return;
       }
-      const existing = await fetchActiveRegistration(tournamentId, userId);
+      const existing = await fetchActiveRegistration(tournamentId, authenticatedUserId);
       if (existing && existing.status === 'registered') {
         ack?.({ ok: true, alreadyRegistered: true });
         return;
       }
-      await insertRegistration(tournamentId, userId);
+      await insertRegistration(tournamentId, authenticatedUserId);
       io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
     } catch (err) {
@@ -48,15 +66,25 @@ export function registerTournamentSocketHandlers(io: Server, socket: Socket): vo
     ack?: Ack,
   ) => {
     try {
-      const { tournamentId, userId } = payload ?? {};
-      if (!tournamentId || !userId) { ack?.({ ok: false, error: 'missing_args' }); return; }
-      const t = await fetchTournamentById(tournamentId);
-      if (!t) { ack?.({ ok: false, error: 'tournament_not_found' }); return; }
-      if (t.status !== 'registration_open' && t.status !== 'upcoming') {
-        ack?.({ ok: false, error: 'cannot_withdraw_after_start' });
+      const authenticatedUserId = getSocketUserId(socket);
+      if (!authenticatedUserId) {
+        authErrorAck(ack, 'not_authenticated');
         return;
       }
-      await withdrawRegistration(tournamentId, userId);
+      const mismatch = rejectMismatchedPayloadUserId(authenticatedUserId, payload?.userId);
+      if (mismatch) {
+        authErrorAck(ack, mismatch);
+        return;
+      }
+      const tournamentId = payload?.tournamentId;
+      if (!tournamentId) { authErrorAck(ack, 'missing_args'); return; }
+      const t = await fetchTournamentById(tournamentId);
+      if (!t) { authErrorAck(ack, 'tournament_not_found'); return; }
+      if (t.status !== 'registration_open' && t.status !== 'upcoming') {
+        authErrorAck(ack, 'cannot_withdraw_after_start');
+        return;
+      }
+      await withdrawRegistration(tournamentId, authenticatedUserId);
       io.emit('tournament:registration_updated', { tournamentId });
       ack?.({ ok: true });
     } catch (err) {

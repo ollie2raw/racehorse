@@ -681,6 +681,10 @@ export default function DailyFritzScreen({
   const initRequestIdRef = useRef(0);
   const initInFlightRef = useRef(false);
   const initSlowTimerRef = useRef<number | null>(null);
+  /** Prevents overlapping record-game API calls from rapid game-over callbacks. */
+  const recordGameInFlightRef = useRef(false);
+  /** Prevents duplicate complete-set posts for the same attempt. */
+  const completedAttemptIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     todayRef.current = today;
@@ -879,6 +883,9 @@ export default function DailyFritzScreen({
     currentHandIndex: number;
     boardContext: boolean;
   }) => {
+    if (completedAttemptIdRef.current === run.attempt_id) {
+      return;
+    }
     const totalMoves = setResult.games.reduce((sum, entry) => sum + Number(entry.movesUsed ?? 0), 0);
     const totalHands = setResult.games.reduce((sum, entry) => sum + Number(entry.handsPlayed ?? 0), 0);
 
@@ -918,6 +925,7 @@ export default function DailyFritzScreen({
         moveLog: setResult,
         setResult,
       });
+      completedAttemptIdRef.current = run.attempt_id;
 
       setSetSubmitError(null);
       if (boardContext) {
@@ -1037,6 +1045,8 @@ export default function DailyFritzScreen({
     if (!run) return;
     const priorSet = normalizeSetResult(run.set_result);
     if (priorSet?.setWinner) return;
+    if (recordGameInFlightRef.current) return;
+    recordGameInFlightRef.current = true;
     const gameNumber = getNextGameNumberFromSetResult(priorSet);
     const fallbackCompletedGame = buildCompletedGame(run, game, gameNumber);
     setSetSubmitError(null);
@@ -1112,6 +1122,8 @@ export default function DailyFritzScreen({
         error: message,
         game,
       });
+    } finally {
+      recordGameInFlightRef.current = false;
     }
   }, [buildCompletedGame, submitSetCompletion]);
 

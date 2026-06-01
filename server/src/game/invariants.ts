@@ -181,53 +181,7 @@ export function collectGameStateViolations(state: GameState): string[] {
 
   // ── hand-active tile invariants ───────────────────────────────────────────
   if (handActive) {
-    // Gather: all hand tiles + all boneyard tiles + all board tiles.
-    // deadTiles are a snapshot of the protected tail of boneyard — do NOT add them again.
-    const allTiles: Tile[] = [];
-    for (const id of playerIds) {
-      if (players[id]) allTiles.push(...players[id].hand);
-    }
-    allTiles.push(...boneyard);
-    allTiles.push(...tilesOnBoard(board));
-
-    // INV-11: total tile count
-    const total = allTiles.length;
-    if (total !== expectedTotal) {
-      const handTotal = allTiles.length - boneyard.length - boardTileCount(board);
-      v.push(
-        `tile count mismatch: expected ${expectedTotal} for double-${maxPips} set, ` +
-          `got ${total} (hands=${handTotal}, boneyard=${boneyard.length}, ` +
-          `board=${boardTileCount(board)})`,
-      );
-    }
-
-    // INV-12: no duplicate tiles across hands + boneyard + board
-    const seen = new Map<string, number>();
-    for (const tile of allTiles) {
-      const k = tileKey(tile);
-      seen.set(k, (seen.get(k) ?? 0) + 1);
-    }
-    for (const [k, count] of seen) {
-      if (count > 1) {
-        v.push(
-          `duplicate tile [${k}] appears ${count} times across hands+boneyard+board`,
-        );
-      }
-    }
-
-    // INV-09: deadTiles.length === config.deadTileCount
-    if (deadTiles.length !== deadTileCount) {
-      v.push(
-        `deadTiles.length should be ${deadTileCount}, got ${deadTiles.length}`,
-      );
-    }
-
-    // INV-10: boneyard.length >= deadTileCount
-    if (boneyard.length < deadTileCount) {
-      v.push(
-        `boneyard.length ${boneyard.length} is below deadTileCount ${deadTileCount}`,
-      );
-    }
+    v.push(...collectTileAccountingViolations(state));
   }
 
   // ── gameOver implies handOver ──────────────────────────────────────────────
@@ -262,10 +216,65 @@ export function collectGameStateViolations(state: GameState): string[] {
   return v;
 }
 
-// ─── Public assertion ──────────────────────────────────────────────────────
+/**
+ * Tile accounting invariants once a hand is active:
+ * total count, no duplicates across hands+boneyard+board, dead/boneyard tail rules.
+ */
+export function collectTileAccountingViolations(state: GameState): string[] {
+  const v: string[] = [];
+  const { config, playerIds, players, board, boneyard, deadTiles, handNumber } = state;
+  const { maxPips, deadTileCount } = config;
+  const expectedTotal = totalTilesInSet(maxPips);
 
-export function assertValidGameState(state: GameState, context = 'unknown'): void {
-  const violations = collectGameStateViolations(state);
+  if (handNumber <= 0) return v;
+
+  const allTiles: Tile[] = [];
+  for (const id of playerIds) {
+    if (players[id]) allTiles.push(...players[id].hand);
+  }
+  allTiles.push(...boneyard);
+  allTiles.push(...tilesOnBoard(board));
+
+  const total = allTiles.length;
+  if (total !== expectedTotal) {
+    const handTotal = allTiles.length - boneyard.length - boardTileCount(board);
+    v.push(
+      `tile count mismatch: expected ${expectedTotal} for double-${maxPips} set, ` +
+        `got ${total} (hands=${handTotal}, boneyard=${boneyard.length}, ` +
+        `board=${boardTileCount(board)})`,
+    );
+  }
+
+  const seen = new Map<string, number>();
+  for (const tile of allTiles) {
+    const k = tileKey(tile);
+    seen.set(k, (seen.get(k) ?? 0) + 1);
+  }
+  for (const [k, count] of seen) {
+    if (count > 1) {
+      v.push(`duplicate tile [${k}] appears ${count} times across hands+boneyard+board`);
+    }
+  }
+
+  if (deadTiles.length !== deadTileCount) {
+    v.push(`deadTiles.length should be ${deadTileCount}, got ${deadTiles.length}`);
+  }
+
+  if (boneyard.length < deadTileCount) {
+    v.push(`boneyard.length ${boneyard.length} is below deadTileCount ${deadTileCount}`);
+  }
+
+  for (const id of playerIds) {
+    const handLen = players[id]?.hand.length;
+    if (handLen !== undefined && (!Number.isFinite(handLen) || handLen < 0)) {
+      v.push(`player "${id}" has invalid hand length: ${handLen}`);
+    }
+  }
+
+  return v;
+}
+
+function throwIfViolations(violations: string[], context: string): void {
   if (violations.length === 0) return;
 
   const message =
@@ -277,4 +286,15 @@ export function assertValidGameState(state: GameState, context = 'unknown'): voi
   } else {
     throw new Error(message);
   }
+}
+
+/** Tile accounting subset — used after every gameplay mutation. */
+export function assertTileCountInvariant(state: GameState, context = 'unknown'): void {
+  throwIfViolations(collectTileAccountingViolations(state), context);
+}
+
+// ─── Public assertion ──────────────────────────────────────────────────────
+
+export function assertValidGameState(state: GameState, context = 'unknown'): void {
+  throwIfViolations(collectGameStateViolations(state), context);
 }

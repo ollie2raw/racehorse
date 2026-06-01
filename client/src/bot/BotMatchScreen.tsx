@@ -111,8 +111,12 @@ import {
   canApplyNextHand,
   emitHandLifecycleDebugLog,
   isDailyFritzAdvanceLocked,
+  isDailyFritzSetTerminal,
   logHandLifecycle,
   resolveDailyFritzNextHandCache,
+  shouldAllowBotAction,
+  shouldApplyBotActionResult,
+  shouldShowHandRevealForHand,
   warnHandLifecycleStuck,
   type HandLifecyclePhase,
 } from './handLifecycle';
@@ -3431,6 +3435,17 @@ export default function BotMatchScreen({
       const botRemainingTiles = result.state.players.bot.hand;
       if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
       handRevealTimerRef.current = window.setTimeout(() => {
+        const live = matchRef.current;
+        if (!shouldShowHandRevealForHand(live.handNumber, result.state.handNumber)) {
+          handRevealTimerRef.current = null;
+          if (import.meta.env.DEV) {
+            console.log('[hand-over] reveal skipped — stale hand timer', {
+              liveHandNumber: live.handNumber,
+              endedHandNumber: result.state.handNumber,
+            });
+          }
+          return;
+        }
         if (isDailyFritzMode) {
           lastDailyFlowLabelRef.current = 'reveal-start';
           console.log('[daily-flow] reveal start', {
@@ -4794,7 +4809,8 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     console.log('[BOT-EFFECT] fired', { currentPlayer: match.currentPlayer, handOver: match.handOver, gameOver: match.gameOver, drawSequenceActive: drawSequenceActiveRef.current, cancelled: false });
-    if (match.currentPlayer !== 'bot' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;
+    if (!shouldAllowBotAction(matchRef.current) || drawSequenceActiveRef.current) return;
+    if (isDailyFritzMode && isDailyFritzSetTerminal(dailyFritzPackage?.set_result)) return;
     if (isOriginalGuidedScriptedFritzMode) return;
     if (wantsOriginalGuidedRecordMode) return;
     if (isGuidedTranscriptMode) return;
@@ -4815,10 +4831,13 @@ export default function BotMatchScreen({
 
     const timer = setTimeout(() => {
       void (async () => {
-        console.log('[BOT-TURN] timer fired', { cancelled, currentPlayer: match.currentPlayer });
+        console.log('[BOT-TURN] timer fired', { cancelled, currentPlayer: matchRef.current.currentPlayer });
         try {
           if (!isLocalRunCurrent(runToken)) return;
-          let working = match;
+          const liveAtTurn = matchRef.current;
+          if (!shouldAllowBotAction(liveAtTurn)) return;
+          if (isDailyFritzMode && isDailyFritzSetTerminal(dailyFritzPackage?.set_result)) return;
+          let working = liveAtTurn;
           let result: BotActionResult | null = null;
           let chosen: BotChoice | null = null;
           let ghostChosen: GhostResolvedMove | null = null;
@@ -5080,6 +5099,18 @@ export default function BotMatchScreen({
             }
 
             if (!isLocalRunCurrent(runToken)) return;
+            if (!shouldApplyBotActionResult(matchRef.current, result)) {
+              if (import.meta.env.DEV) {
+                console.log('[BOT-TURN] apply skipped — stale result', {
+                  liveHandOver: matchRef.current.handOver,
+                  liveGameOver: matchRef.current.gameOver,
+                  resultHandOver: result.state.handOver,
+                  resultGameOver: result.state.gameOver,
+                  hasHandEnded: Boolean(result.handEnded),
+                });
+              }
+              return;
+            }
             applyAndNotify(result);
             flashLastPlayed(playedTileForHighlight);
           }
@@ -5134,6 +5165,7 @@ export default function BotMatchScreen({
       setLastBotChoice(null);
       setSelectedTile(null);
       if (!isLocalRunCurrent(runToken)) return;
+      if (!shouldApplyBotActionResult(matchRef.current, forcedResult)) return;
       finishLocalRun(runToken);
       applyAndNotify(forcedResult);
       flashLastPlayed(fallbackPlay.tile ?? null);
@@ -5163,6 +5195,8 @@ export default function BotMatchScreen({
     isMuted,
     toEngineBestFromChoice,
     captureGuidedMatchCandidateAction,
+    isDailyFritzMode,
+    dailyFritzPackage?.set_result,
   ]);
 
   // ── Sequential Bot Reply Replay ───────────────────────────────────────────
@@ -5368,6 +5402,15 @@ export default function BotMatchScreen({
   );
 
   const advanceHand = useCallback(() => {
+    const live = matchRef.current;
+    if (!isDailyFritzMode && live.gameOver) {
+      traceHandLifecycle('match-complete', { reason: 'advance-skipped-game-over' });
+      return;
+    }
+    if (isDailyFritzMode && isDailyFritzSetTerminal(dailyFritzPackage?.set_result)) {
+      traceHandLifecycle('set-complete', { reason: 'advance-skipped-set-terminal' });
+      return;
+    }
     if (handTransitionInFlightRef.current) {
       console.log('[daily-flow] advanceHand skipped — transition already in flight');
       // #region agent log
@@ -5592,6 +5635,7 @@ export default function BotMatchScreen({
 
     const previousState = matchRef.current;
     if (!canApplyNextHand(previousState)) return;
+    handTransitionInFlightRef.current = true;
     const useSeededDeal = isAuthoringMode || (isGuidedMode && frozenLesson !== null);
     const nextState = useSeededDeal
       ? startNextFixedBotHand(previousState, generateAuthoringHandDeal(previousState.handNumber))
@@ -5603,6 +5647,7 @@ export default function BotMatchScreen({
       opponentDrawCount: 0,
       opponentKnownMissing: [],
     });
+    handTransitionInFlightRef.current = false;
     traceHandLifecycle('playing');
   }, [
     applyDailyFritzNextHandResponse,

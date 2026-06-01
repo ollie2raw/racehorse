@@ -251,6 +251,11 @@ export async function generateBracket(
   const tournament = await persistence.fetchTournamentById(tournamentId);
   if (!tournament) throw new Error('Tournament not found');
 
+  const existingMatches = await persistence.fetchMatches(tournamentId);
+  if (existingMatches.length > 0) {
+    return existingMatches;
+  }
+
   const registrations = await persistence.fetchRegistrationsWithProfile(tournamentId);
   const eligible = registrations.filter((r) => r.status === 'registered');
   if (eligible.length < MIN_HUMANS_TO_START) {
@@ -689,6 +694,60 @@ export function isTournamentBracketLobbyPhase(input: {
   const closeMs = Date.parse(input.registration_close_at);
   const startMs = Date.parse(input.scheduled_start);
   return input.nowMs >= closeMs && input.nowMs < startMs;
+}
+
+/**
+ * Apply tournament match result after multiplayer game-over.
+ * Uses in-memory match id when present; otherwise resolves by room code in DB.
+ */
+export async function applyTournamentGameOverFromRoom(
+  io: Server,
+  room: { code: string; scheduledTournamentMatchId?: string; scheduledTournamentId?: string | null },
+  params: {
+    winnerUserId: string;
+    player1Score: number;
+    player2Score: number;
+  },
+  persistence: EnginePersistence = defaultEnginePersistence,
+  lookupMatchByRoom: (code: string) => Promise<MatchRow | null> = findTournamentMatchByRoom,
+): Promise<boolean> {
+  let matchId = room.scheduledTournamentMatchId ?? null;
+  if (!matchId && room.code) {
+    const byRoom = await lookupMatchByRoom(room.code);
+    if (byRoom) {
+      matchId = byRoom.id;
+      console.log('[tournament:game-over] resolved match by room code', {
+        roomCode: room.code,
+        matchId,
+        tournamentId: byRoom.tournament_id,
+      });
+    }
+  }
+  if (!matchId) {
+    console.warn('[tournament:game-over] no tournament match for room', {
+      roomCode: room.code,
+      scheduledTournamentMatchId: room.scheduledTournamentMatchId ?? null,
+    });
+    return false;
+  }
+  console.log('[tournament:game-over] applying result', {
+    roomCode: room.code,
+    matchId,
+    tournamentId: room.scheduledTournamentId ?? null,
+    winnerId: params.winnerUserId,
+    scores: { player1: params.player1Score, player2: params.player2Score },
+  });
+  await applyMatchResult(
+    io,
+    {
+      matchId,
+      winnerId: params.winnerUserId,
+      player1Score: params.player1Score,
+      player2Score: params.player2Score,
+    },
+    persistence,
+  );
+  return true;
 }
 
 /** Look up the tournament-match record (if any) associated with a room code. */

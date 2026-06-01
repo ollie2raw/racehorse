@@ -290,6 +290,62 @@ export function isDailyPuzzleLadderReady(slots: DailyPuzzleSlot[]): boolean {
   return findReadyDailyPuzzleLadderSlots(slots) !== null;
 }
 
+/**
+ * Returns the three ladder slots for an attempt's setVersion, or null if incomplete.
+ * Does not require full "readiness" metadata (best_possible_score); boards must be present.
+ */
+export function findLadderSlotsForAttemptSet(
+  slots: DailyPuzzleSlot[],
+): DailyPuzzleSlot[] | null {
+  if (slots.length < 3) return null;
+  const sorted = sortDailyPuzzleSlots(slots);
+  if (sorted[0]?.slotIndex !== 1 || sorted[1]?.slotIndex !== 2 || sorted[2]?.slotIndex !== 3) {
+    return null;
+  }
+  const hasPlayableData = (slot: DailyPuzzleSlot) =>
+    Boolean(slot.startingBoard) &&
+    Array.isArray(slot.startingHand) &&
+    slot.startingHand.length > 0;
+  if (!sorted.every(hasPlayableData)) return null;
+  return sorted;
+}
+
+/** Stricter readiness for publishing / today endpoint display. */
+export function isDailyPuzzleLadderReadyForVersion(slots: DailyPuzzleSlot[]): boolean {
+  if (slots.length !== 3) return false;
+  return slots.every(
+    (slot) =>
+      slot.published &&
+      slot.slotMaxPoints > 0 &&
+      (slot.bestPossibleScore ?? 0) > 0 &&
+      Boolean(slot.startingBoard) &&
+      Array.isArray(slot.startingHand) &&
+      slot.startingHand.length > 0,
+  );
+}
+
+export function isDailyPuzzleAttemptFinalizeReady(
+  attempt: Pick<DailyPuzzleAttempt, 'status' | 'result'>,
+): boolean {
+  return attempt.status === 'started' && attempt.result.slots.length >= 3;
+}
+
+export function resolveActiveSlotForAttempt(
+  attempt: Pick<DailyPuzzleAttempt, 'status' | 'currentSlotIndex' | 'result'>,
+  versionSlots: DailyPuzzleSlot[],
+): DailyPuzzleSlot | null {
+  const ladder = findLadderSlotsForAttemptSet(versionSlots);
+  if (!ladder) return null;
+  if (attempt.status === 'completed') {
+    const reviewIndex = Math.min(Math.max(attempt.result.slots.length, 1), 3) as DailyPuzzleSlotIndex;
+    return ladder.find((slot) => slot.slotIndex === reviewIndex) ?? ladder[ladder.length - 1];
+  }
+  const submitted = new Set(attempt.result.slots.map((slot) => slot.slotIndex));
+  const nextIndex =
+    ([1, 2, 3] as const).find((index) => !submitted.has(index)) ?? attempt.currentSlotIndex;
+  return ladder.find((slot) => slot.slotIndex === nextIndex) ?? ladder[0];
+}
+
 export function calculateDailyPuzzleAwardedPoints(
   rawScore: number,
   bestPossibleScore: number,

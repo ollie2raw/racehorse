@@ -206,6 +206,17 @@ export default function DailyPuzzleLadderScreen({
   const runningScoreRef = useRef(0);
   const moveTraceRef = useRef<Array<Record<string, unknown>>>([]);
   const lastPlayedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoFinalizeTriedRef = useRef(false);
+
+  const finalizeReady = useMemo(
+    () =>
+      Boolean(
+        attempt &&
+          attempt.status === 'started' &&
+          attempt.result.slots.length >= 3,
+      ),
+    [attempt],
+  );
 
   const completedSlots = attempt?.result.slots ?? [];
   const nextSlotIndex = attempt?.status === 'completed' ? null : (attempt?.currentSlotIndex ?? 1);
@@ -240,27 +251,75 @@ export default function DailyPuzzleLadderScreen({
     setPracticeOverlay(null);
   }, []);
 
+  const runFinalize = useCallback(async () => {
+    if (!attempt || finalizePending) return;
+    setFinalizePending(true);
+    setHubError(null);
+    try {
+      const completeResponse = await completeDailyPuzzleLadder({
+        attemptId: attempt.id,
+        puzzleDate: attempt.puzzleDate,
+      });
+      setAttempt(completeResponse.attempt);
+      setToday((current) => ({
+        ...current,
+        attemptStatus: completeResponse.attempt.status,
+        attempt: completeResponse.attempt,
+        finalizeReady: false,
+      }));
+      setFinalOverlay({ response: completeResponse });
+      recordSolvedStreak(completeResponse.attempt.puzzleDate);
+    } catch (error) {
+      setHubError(
+        error instanceof Error ? error.message : 'Unable to finalize ladder run. Try again.',
+      );
+    } finally {
+      setFinalizePending(false);
+    }
+  }, [attempt, finalizePending]);
+
+  useEffect(() => {
+    if (!finalizeReady || !attempt || finalOverlay || autoFinalizeTriedRef.current) return;
+    autoFinalizeTriedRef.current = true;
+    void runFinalize();
+  }, [attempt?.id, finalizeReady, finalOverlay, runFinalize]);
+
   const handleStartScored = useCallback(async () => {
-    if (startPending) return;
+    if (startPending || finalizePending) return;
+    if (finalizeReady && attempt) {
+      await runFinalize();
+      return;
+    }
     setStartPending(true);
     setHubError(null);
     try {
       const response = await startDailyPuzzleLadder(today.runDate);
       setAttempt(response.attempt);
-      setToday((current) => ({ ...current, attemptStatus: response.attempt.status, attempt: response.attempt }));
+      setToday((current) => ({
+        ...current,
+        attemptStatus: response.attempt.status,
+        attempt: response.attempt,
+        finalizeReady: response.finalizeReady ?? false,
+      }));
+      if (response.finalizeReady) {
+        await runFinalize();
+        return;
+      }
       launchSlot(response.activeSlot, response.practiceMode === 'none' ? 'scored' : 'practice');
     } catch (error) {
       setHubError(error instanceof Error ? error.message : 'Unable to start today’s ladder.');
     } finally {
       setStartPending(false);
     }
-  }, [launchSlot, startPending, today.runDate]);
+  }, [attempt, finalizePending, finalizeReady, launchSlot, runFinalize, startPending, today.runDate]);
+
+  const hubSlots = today.attemptSlots ?? today.slots;
 
   const handleStartPractice = useCallback((slotIndex: 1 | 2 | 3) => {
-    const slot = today.slots.find((entry) => entry.slotIndex === slotIndex);
+    const slot = hubSlots.find((entry) => entry.slotIndex === slotIndex);
     if (!slot) return;
     launchSlot(slot, 'practice');
-  }, [launchSlot, today.slots]);
+  }, [hubSlots, launchSlot]);
 
   const legalMoves = useMemo(() => {
     if (!runtimeState || status !== 'IN_PROGRESS') return [] as Move[];
@@ -337,20 +396,31 @@ export default function DailyPuzzleLadderScreen({
         attemptStatus: response.attempt.status,
         attempt: response.attempt,
       }));
-      if (response.ladderCompleted) {
+      if (response.ladderCompleted || response.requiresCompleteCall) {
         setFinalizePending(true);
-        const completeResponse = await completeDailyPuzzleLadder({
-          attemptId: response.attempt.id,
-          puzzleDate: response.attempt.puzzleDate,
-        });
-        setAttempt(completeResponse.attempt);
-        setToday((current) => ({
-          ...current,
-          attemptStatus: completeResponse.attempt.status,
-          attempt: completeResponse.attempt,
-        }));
-        setFinalOverlay({ response: completeResponse });
-        recordSolvedStreak(completeResponse.attempt.puzzleDate);
+        try {
+          const completeResponse = await completeDailyPuzzleLadder({
+            attemptId: response.attempt.id,
+            puzzleDate: response.attempt.puzzleDate,
+          });
+          setAttempt(completeResponse.attempt);
+          setToday((current) => ({
+            ...current,
+            attemptStatus: completeResponse.attempt.status,
+            attempt: completeResponse.attempt,
+            finalizeReady: false,
+          }));
+          setFinalOverlay({ response: completeResponse });
+          recordSolvedStreak(completeResponse.attempt.puzzleDate);
+        } catch (finalizeError) {
+          setHubError(
+            finalizeError instanceof Error
+              ? finalizeError.message
+              : 'Run scored. Finalize from the hub to save leaderboard progress.',
+          );
+        } finally {
+          setFinalizePending(false);
+        }
       } else {
         setSlotOverlay({ response, rawScore: rawScoreValue });
       }
@@ -358,7 +428,6 @@ export default function DailyPuzzleLadderScreen({
       setHubError(error instanceof Error ? error.message : 'Unable to submit slot result.');
     } finally {
       setSubmitPending(false);
-      setFinalizePending(false);
     }
   }, [activeSlot, attempt, movesUsed, playMode, submitPending]);
 
@@ -506,7 +575,7 @@ export default function DailyPuzzleLadderScreen({
 
   const ladderSlotRows = useMemo(() => {
     return [1, 2, 3].map((slotIndex) => {
-      const slot = today.slots.find((s) => s.slotIndex === slotIndex);
+      const slot = hubSlots.find((s) => s.slotIndex === slotIndex);
       const slotResult = completedSlots.find((e) => e.slotIndex === slotIndex);
       const isCompleteRun = attempt?.status === 'completed';
       const isAvailable = !isCompleteRun && nextSlotIndex === slotIndex;
@@ -539,7 +608,7 @@ export default function DailyPuzzleLadderScreen({
         isAvailable,
       };
     });
-  }, [attempt?.status, completedSlots, nextSlotIndex, today.slots]);
+  }, [attempt?.status, completedSlots, hubSlots, nextSlotIndex]);
   const ladderTotalPoints = useMemo(
     () => today.slots.reduce((sum, slot) => sum + (slot.slotMaxPoints ?? 0), 0),
     [today.slots],
@@ -822,19 +891,28 @@ export default function DailyPuzzleLadderScreen({
   if (!inActivePlay) {
     const showNav = Boolean(onNavigate && onOpenAuth);
     const isLadderComplete = attempt?.status === 'completed';
+    const needsFinalize = finalizeReady && !isLadderComplete;
     const ladderStateLabel = isLadderComplete
       ? 'Completed'
-      : attempt
-        ? `Live · Puzzle ${attempt.currentSlotIndex}`
-        : 'Ready to start';
+      : needsFinalize
+        ? 'Finalize run'
+        : attempt
+          ? `Live · Puzzle ${attempt.currentSlotIndex}`
+          : 'Ready to start';
     const primaryLabel = isLadderComplete
       ? 'Practice Mode'
-      : attempt
-        ? 'Resume Daily Ladder'
-        : 'Start Daily Ladder';
+      : needsFinalize
+        ? finalizePending
+          ? 'Finalizing…'
+          : 'Finalize Run'
+        : attempt
+          ? 'Resume Daily Ladder'
+          : 'Start Daily Ladder';
     const trustLine = isLadderComplete
       ? 'Practice any puzzle after your scored run.'
-      : 'Leaderboard updates after a scored run.';
+      : needsFinalize
+        ? 'All three puzzles are scored. Finalize to unlock review and the leaderboard.'
+        : 'Leaderboard updates after a scored run.';
 
     return (
       <>
@@ -1101,7 +1179,7 @@ export default function DailyPuzzleLadderScreen({
                       size="lg"
                       type="button"
                       className="df-start-match-btn df-pvf-start-btn dpl-pvf-start-btn"
-                      disabled={startPending}
+                      disabled={startPending || finalizePending}
                       onClick={() => {
                         void handleStartScored();
                       }}

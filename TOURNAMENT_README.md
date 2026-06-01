@@ -1,6 +1,6 @@
-# Racehorse — Scheduled Hourly Tournaments
+# Racehorse — Scheduled Tournaments
 
-8-player single-elimination brackets, fully automated, running every 2 hours on a fixed PST schedule.
+8-player single-elimination brackets, fully automated, running every **30 minutes** on a fixed America/Los_Angeles schedule.
 
 ---
 
@@ -9,17 +9,17 @@
 > **This system assumes the server runs as a single process.** Each tournament-match room is reserved in-memory via `createReservedRoom()` on the process that handles the bracket generation, and `room.scheduledTournamentMatchId` lives only in that process's memory. If you scale horizontally:
 >
 > - Match-found routing will send both players to the same reserved room code, but only one server actually owns that room — the other player's `room:join` will fail with `Room not found`.
-> - The game-over hook that calls `applyMatchResult()` reads `room.scheduledTournamentMatchId` from memory; on a non-owning process it would be `undefined` and the bracket would not advance.
+> - On a non-owning process, `room.scheduledTournamentMatchId` may be missing in memory even though the DB row has `room_code`.
 >
-> **Before scaling out**, persist the room → matchId mapping (use `findTournamentMatchByRoom(roomCode)` already implemented in `engine.ts`) and either (a) sticky-route all sockets for a given room to one server, or (b) move room state to Redis.
+> **Before scaling out**, use sticky routing or shared room state (Redis). Production game-over already falls back to `findTournamentMatchByRoom(room.code)` when the in-memory match id is absent, but rooms themselves still must live on the process players join.
 
 ---
 
 ## Schedule
 
 - **Timezone**: America/Los_Angeles (DST-aware).
-- **Slots**: 12 AM · 2 AM · 4 AM · 6 AM · 8 AM · 10 AM · 12 PM · 2 PM · 4 PM · 6 PM · 8 PM · 10 PM (PST/PDT).
-- **Registration**: opens 30 minutes before start, closes 5 minutes before start.
+- **Slots**: Every **:00** and **:30** each hour (PST/PDT), 48 slots per day.
+- **Registration**: opens **30 minutes** before start, closes **2 minutes** before start (bracket lobby until `scheduled_start`).
 
 ## Auto-reseed (always ≥ 30 days ahead)
 
@@ -46,7 +46,7 @@ select count(*) from public.scheduled_tournaments where scheduled_start > now();
 
 | Decision | Value | Reason |
 |---|---|---|
-| Min players to start | **4** | Top seeds get byes when 5–7 register |
+| Min humans to start | **1** (`MIN_HUMANS_TO_START`) | Empty bracket slots filled with **Fritz bots** up to 8 players |
 | Match win target | **First to 30** | Set per-room when reserving (not global) |
 | Disconnect handling | **Existing 30s reconnect window, then forfeit** | Reuses the battle-tested room reconnect system |
 | Rating impact | **None — tournament results don't touch Glicko** | Recorded only in `scheduled_tournament_matches` |

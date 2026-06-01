@@ -64,6 +64,12 @@ import type { FritzTier } from './bot/fritzConfig';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
 import { drawAudit, nextDrawRequestId } from './multiplayer/drawAudit';
+import {
+  mpPerfBeginAction,
+  mpPerfMarkAck,
+  mpPerfMarkPendingUiCleared,
+  mpPerfResetAction,
+} from './multiplayer/mpPerf';
 import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
 import {
   isRenderableMultiplayerSnapshot,
@@ -1070,6 +1076,10 @@ export default function App() {
     null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'
   >(null);
   const pendingActionRef = useRef<boolean>(false);
+  const pendingGameplayActionRef = useRef<{
+    kind: 'play' | 'draw' | 'pass';
+    baselineSequence: number;
+  } | null>(null);
   const {
     user: authUser,
     profile: authProfile,
@@ -1206,6 +1216,8 @@ export default function App() {
   }, [joinedRoom]);
 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const legalMovesRef = useRef<Move[]>(legalMoves);
+  const selectedTileRef = useRef<Tile | null>(null);
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [handTileSize, setHandTileSize] = useState(44);
   const autoTurnActionKeyRef = useRef<string>('');
@@ -1443,6 +1455,14 @@ export default function App() {
   }, [state]);
 
   useEffect(() => {
+    legalMovesRef.current = legalMoves;
+  }, [legalMoves]);
+
+  useEffect(() => {
+    selectedTileRef.current = selectedTile;
+  }, [selectedTile]);
+
+  useEffect(() => {
     if (state) return;
     if (drawSequenceTimeoutRef.current) {
       clearTimeout(drawSequenceTimeoutRef.current);
@@ -1519,6 +1539,8 @@ export default function App() {
     setOpponentDragging(false);
     draggingStateRef.current = false;
     pendingActionRef.current = false;
+    pendingGameplayActionRef.current = null;
+    mpPerfResetAction();
     setHandReveal(null);
     if (drawSequenceTimeoutRef.current) {
       clearTimeout(drawSequenceTimeoutRef.current);
@@ -2180,6 +2202,17 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [mpSubView, joinedRoom, state, fetchGameState]);
 
+  const clearPendingGameplayUiOnAuthoritativeState = useCallback((nextState: GameState | null) => {
+    const pending = pendingGameplayActionRef.current;
+    if (!pending || !nextState) return;
+    const sequence = nextState.sequence;
+    if (typeof sequence !== 'number' || !Number.isFinite(sequence)) return;
+    if (sequence <= pending.baselineSequence) return;
+
+    setPendingUiAction((prev) => (prev === pending.kind ? null : prev));
+    mpPerfMarkPendingUiCleared();
+  }, []);
+
   const roomSocketSyncParams = useMemo(
     () => ({
       socket,
@@ -2205,6 +2238,7 @@ export default function App() {
       matchStartedRef,
       playerReadyEmittedRef,
       trySchedulePlayerReadyRef,
+      onAuthoritativeGameplayStateApplied: clearPendingGameplayUiOnAuthoritativeState,
       setOpponentDisconnected,
       setOpponentDisconnectMessage,
       setLegalMoves,
@@ -2236,6 +2270,7 @@ export default function App() {
       setDrawSequenceActiveBoth,
       fetchGameState,
       resetClientGameSession,
+      clearPendingGameplayUiOnAuthoritativeState,
     ],
   );
 
@@ -2798,7 +2833,9 @@ export default function App() {
   // Game actions
   const draw = useCallback(async () => {
     setActionError('');
-    const boneyardLockedNow = (state?.boneyard.length ?? 0) <= 2;
+    const stateNow = stateRef.current;
+    const legalMovesNow = legalMovesRef.current;
+    const boneyardLockedNow = (stateNow?.boneyard.length ?? 0) <= 2;
     if (
       !socket ||
       !joinedRoom ||
@@ -2809,11 +2846,14 @@ export default function App() {
       return;
     }
     emitDraggingState(false);
+    const baselineSequence = stateNow?.sequence ?? -1;
+    pendingGameplayActionRef.current = { kind: 'draw', baselineSequence };
+    mpPerfBeginAction('draw', baselineSequence);
     setPendingUiAction('draw');
     pendingActionRef.current = true;
-    const boardEnds = getBoardEnds(state?.board ?? null);
-    const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
-    const validMoves = legalMoves
+    const boardEnds = getBoardEnds(stateNow?.board ?? null);
+    const handBefore = (stateNow?.players[you]?.hand ?? []).map(toTileTuple);
+    const validMoves = legalMovesNow
       .filter((m) => m.type === 'play' && m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
     const requestId = nextDrawRequestId();
@@ -2822,15 +2862,16 @@ export default function App() {
       roomCode: joinedRoom,
       playerId: you,
       handCount: handBefore.length,
-      boneyardCount: state?.boneyard.length ?? 0,
+      boneyardCount: stateNow?.boneyard.length ?? 0,
       legalMoveCount: validMoves.length,
       canDraw,
-      canPass: legalMoves.some((m) => m.type === 'pass'),
+      canPass: legalMovesNow.some((m) => m.type === 'pass'),
       reason: 'no_legal_play_drawable_boneyard',
     });
     drawAudit('emit', { event: 'game:action', actionType: 'DRAW', roomCode: joinedRoom, requestId });
     try {
       const resp = await emitWithAck<any>(socket, 'game:action', joinedRoom, { type: 'DRAW', requestId });
+      mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       drawAudit('ack', {
         requestId,
         ms: Date.now() - emitAt,
@@ -2855,11 +2896,11 @@ export default function App() {
         validMoves,
         pipDelta: 0,
         pointsScored: 0,
-        boardState: snapshotBoardState(state?.board ?? null),
-        boardRenderState: cloneBoardState(state?.board ?? null),
+        boardState: snapshotBoardState(stateNow?.board ?? null),
+        boardRenderState: cloneBoardState(stateNow?.board ?? null),
         handSnapshot: handBefore,
         engineBestMove: pickEngineBestMove(
-          legalMoves
+          legalMovesNow
             .filter((m) => m.type === 'play' && m.tile)
             .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
           boardEnds,
@@ -2867,27 +2908,35 @@ export default function App() {
         ),
       });
     } catch (e) {
+      mpPerfMarkAck(false);
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
       pendingActionRef.current = false;
+      pendingGameplayActionRef.current = null;
     }
-  }, [socket, joinedRoom, state, you, legalMoves, canDraw, appendMultiplayerMove, emitDraggingState, showToast, isGameplayActionBlocked]);
+  }, [socket, joinedRoom, you, canDraw, appendMultiplayerMove, emitDraggingState, showToast, isGameplayActionBlocked]);
 
   const pass = useCallback(async () => {
     setActionError('');
-    const hasPassMove = legalMoves.some((m) => m.type === 'pass');
+    const stateNow = stateRef.current;
+    const legalMovesNow = legalMovesRef.current;
+    const hasPassMove = legalMovesNow.some((m) => m.type === 'pass');
     if (!socket || !joinedRoom || !hasPassMove || isGameplayActionBlocked()) return;
     emitDraggingState(false);
+    const baselineSequence = stateNow?.sequence ?? -1;
+    pendingGameplayActionRef.current = { kind: 'pass', baselineSequence };
+    mpPerfBeginAction('pass', baselineSequence);
     setPendingUiAction('pass');
     pendingActionRef.current = true;
-    const boardEnds = getBoardEnds(state?.board ?? null);
-    const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
-    const validMoves = legalMoves
+    const boardEnds = getBoardEnds(stateNow?.board ?? null);
+    const handBefore = (stateNow?.players[you]?.hand ?? []).map(toTileTuple);
+    const validMoves = legalMovesNow
       .filter((m) => m.type === 'play' && m.tile)
       .map((m) => toTileTuple(m.tile as Tile));
     try {
       const resp = await emitWithAck<any>(socket, 'game:action', joinedRoom, { type: 'PASS' });
+      mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
       if (!resp?.ok) {
         setActionError(resp?.error ?? 'Unable to pass.');
         return;
@@ -2900,11 +2949,11 @@ export default function App() {
         validMoves,
         pipDelta: 0,
         pointsScored: 0,
-        boardState: snapshotBoardState(state?.board ?? null),
-        boardRenderState: cloneBoardState(state?.board ?? null),
+        boardState: snapshotBoardState(stateNow?.board ?? null),
+        boardRenderState: cloneBoardState(stateNow?.board ?? null),
         handSnapshot: handBefore,
         engineBestMove: pickEngineBestMove(
-          legalMoves
+          legalMovesNow
             .filter((m) => m.type === 'play' && m.tile)
             .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
           boardEnds,
@@ -2912,22 +2961,27 @@ export default function App() {
         ),
       });
     } catch (e) {
+      mpPerfMarkAck(false);
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
       pendingActionRef.current = false;
+      pendingGameplayActionRef.current = null;
     }
-  }, [socket, joinedRoom, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, isGameplayActionBlocked]);
+  }, [socket, joinedRoom, you, appendMultiplayerMove, emitDraggingState, showToast, isGameplayActionBlocked]);
 
   const play = useCallback(
     async (position: PlacementPosition) => {
       setActionError('');
+      const stateNow = stateRef.current;
+      const legalMovesNow = legalMovesRef.current;
+      const selectedTile = selectedTileRef.current;
       if (!socket || !joinedRoom || !selectedTile) return;
 
       if (isGameplayActionBlocked()) return;
 
       const tileToPlay = selectedTile;
-      const selectedMove = legalMoves.find(
+      const selectedMove = legalMovesNow.find(
         (m) =>
           m.type === 'play' &&
           m.tile &&
@@ -2941,13 +2995,16 @@ export default function App() {
         return;
       }
       emitDraggingState(false);
+      const baselineSequence = stateNow?.sequence ?? -1;
+      pendingGameplayActionRef.current = { kind: 'play', baselineSequence };
+      mpPerfBeginAction('play', baselineSequence);
       setPendingUiAction('play');
       pendingActionRef.current = true;
       setSelectedTile(null);
       setDrawStepMyHand(null);
-      const boardEnds = getBoardEnds(state?.board ?? null);
-      const handBefore = (state?.players[you]?.hand ?? []).map(toTileTuple);
-      const validMoves = legalMoves
+      const boardEnds = getBoardEnds(stateNow?.board ?? null);
+      const handBefore = (stateNow?.players[you]?.hand ?? []).map(toTileTuple);
+      const validMoves = legalMovesNow
         .filter((m) => m.type === 'play' && m.tile)
         .map((m) => toTileTuple(m.tile as Tile));
       const playedTile = toTileTuple(tileToPlay);
@@ -2963,6 +3020,7 @@ export default function App() {
           },
         );
 
+        mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
         if (!resp?.ok) {
           setActionError(resp?.error ?? 'Unable to play tile.');
           return;
@@ -2988,11 +3046,11 @@ export default function App() {
             }
             return 0;
           })(),
-          boardState: snapshotBoardState(state?.board ?? null),
-          boardRenderState: cloneBoardState(state?.board ?? null),
+          boardState: snapshotBoardState(stateNow?.board ?? null),
+          boardRenderState: cloneBoardState(stateNow?.board ?? null),
           handSnapshot: handBefore,
           engineBestMove: pickEngineBestMove(
-            legalMoves
+            legalMovesNow
               .filter((m) => m.type === 'play' && m.tile)
               .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
             boardEnds,
@@ -3000,13 +3058,15 @@ export default function App() {
           ),
         });
       } catch (e) {
+        mpPerfMarkAck(false);
         showToast(e instanceof Error ? e.message : 'Action failed', 2000);
       } finally {
         setPendingUiAction((prev) => (prev === 'play' ? null : prev));
         pendingActionRef.current = false;
+        pendingGameplayActionRef.current = null;
       }
     },
-    [socket, joinedRoom, selectedTile, state, you, legalMoves, appendMultiplayerMove, emitDraggingState, showToast, flashLastPlayed, isGameplayActionBlocked],
+    [socket, joinedRoom, you, appendMultiplayerMove, emitDraggingState, showToast, flashLastPlayed, isGameplayActionBlocked],
   );
 
   // Derived state
@@ -3141,7 +3201,6 @@ export default function App() {
       isMyTurn &&
       roomRecoveryState === 'idle' &&
       !isRecoveringConnection &&
-      !pendingActionRef.current &&
       pendingUiAction !== 'draw' &&
       pendingUiAction !== 'pass' &&
       pendingUiAction !== 'play'
@@ -3557,13 +3616,10 @@ export default function App() {
     }
 
     if (state.board) {
-      const projectedBoard = projectRenderableBoard(state.board);
-      if (projectedBoard) {
-        frozenHandOverBoardRef.current = {
-          handNumber: state.handNumber,
-          board: projectedBoard,
-        };
-      }
+      frozenHandOverBoardRef.current = {
+        handNumber: state.handNumber,
+        board: state.board,
+      };
       return;
     }
 
@@ -3579,9 +3635,8 @@ export default function App() {
       frozenHandOverBoardRef.current?.handNumber === state.handNumber
         ? frozenHandOverBoardRef.current.board
         : null);
-    if (!rawBoard) return null;
-    return projectRenderableBoard(rawBoard);
-  }, [state]);
+    return rawBoard ?? null;
+  }, [state?.board, state?.handOver, state?.handNumber]);
 
   useEffect(() => {
     if (!state) {

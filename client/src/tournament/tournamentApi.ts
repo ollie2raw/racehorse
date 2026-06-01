@@ -42,24 +42,40 @@ async function getAuthedJson<T>(path: string): Promise<T> {
   return body as T;
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function postAuthedJson<T>(path: string, body: unknown = {}): Promise<T> {
   const res = await fetch(`${serverUrl()}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    credentials: 'include',
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
-  return res.json() as Promise<T>;
+  const parsed = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error =
+      parsed && typeof parsed === 'object' && typeof (parsed as { error?: unknown }).error === 'string'
+        ? (parsed as { error: string }).error
+        : `POST ${path} failed: ${res.status}`;
+    throw new Error(error);
+  }
+  return parsed as T;
 }
 
-async function deleteJson<T>(path: string, body: unknown): Promise<T> {
+async function deleteAuthedJson<T>(path: string, body: unknown = {}): Promise<T> {
   const res = await fetch(`${serverUrl()}${path}`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    credentials: 'include',
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
-  return res.json() as Promise<T>;
+  const parsed = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error =
+      parsed && typeof parsed === 'object' && typeof (parsed as { error?: unknown }).error === 'string'
+        ? (parsed as { error: string }).error
+        : `DELETE ${path} failed: ${res.status}`;
+    throw new Error(error);
+  }
+  return parsed as T;
 }
 
 export async function fetchUpcoming(): Promise<ScheduledTournament[]> {
@@ -117,20 +133,16 @@ export async function fetchResult(tournamentId: string): Promise<TournamentResul
   return r.result;
 }
 
-export async function registerForTournament(tournamentId: string, userId: string): Promise<void> {
-  const cleanUserId = userId.trim();
-  if (!cleanUserId) throw new Error('missing_userId');
-  await postJson<{ ok: boolean }>(
+export async function registerForTournament(tournamentId: string, _userId: string): Promise<void> {
+  await postAuthedJson<{ ok: boolean }>(
     `/api/tournaments/${encodeURIComponent(tournamentId)}/register`,
-    { userId: cleanUserId },
+    {},
   );
 }
 
-export async function withdrawFromTournament(tournamentId: string, userId: string): Promise<void> {
-  const cleanUserId = userId.trim();
-  if (!cleanUserId) throw new Error('missing_userId');
-  await deleteJson<{ ok: boolean }>(
+export async function withdrawFromTournament(tournamentId: string, _userId: string): Promise<void> {
+  await deleteAuthedJson<{ ok: boolean }>(
     `/api/tournaments/${encodeURIComponent(tournamentId)}/register`,
-    { userId: cleanUserId },
+    {},
   );
 }

@@ -114,6 +114,20 @@ export function initRoomSession(io: Server, deps: RoomSessionDeps): void {
   });
 }
 
+/** Clears session-scoped maps between vitest cases (test environments only). */
+export function resetRoomSessionStoresForTests(): void {
+  roomPlayersByCode.clear();
+  reconnectSeatsByCode.clear();
+  for (const timer of botTurnTimersByRoom.values()) {
+    clearTimeout(timer);
+  }
+  botTurnTimersByRoom.clear();
+  for (const timer of roomCleanupTimersByCode.values()) {
+    clearTimeout(timer);
+  }
+  roomCleanupTimersByCode.clear();
+}
+
 function requireIo(): Server {
   if (!ioRef) {
     throw new Error('roomSession: initRoomSession must be called before use');

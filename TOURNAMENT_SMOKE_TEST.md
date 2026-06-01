@@ -15,15 +15,15 @@ In the Supabase SQL editor:
 
 ```sql
 select count(*) from public.scheduled_tournaments where status = 'upcoming';
--- Expected: 360 (12 slots/day × 30 days)
+-- Expected: many rows (48 slots/day × 30 days when fully seeded; ensure_tournament_seed_window keeps the window full)
 
 select scheduled_start, registration_open_at, registration_close_at, status
   from public.scheduled_tournaments
  where status = 'upcoming'
  order by scheduled_start asc
  limit 5;
--- Expected: 5 rows showing tomorrow's slots at every 2 hours PST,
--- with open_at = start - 30 min and close_at = start - 5 min.
+-- Expected: 5 rows at :00 and :30 PST/PDT,
+-- with open_at = start - 30 min and close_at = start - 2 min.
 ```
 
 Both queries must succeed. If `count` is 0, re-run the migration.
@@ -49,7 +49,7 @@ update public.scheduled_tournaments
 -- Note the returned id — call it $T1.
 ```
 
-- [ ] Within ~60 seconds (the scheduler tick), the row should flip to `status = 'registration_open'`.
+- [ ] Within ~30 seconds (the scheduler tick), the row should flip to `status = 'registration_open'`.
 - [ ] In Browser A, the corresponding card's status badge should change to a green **Open** pill and **Register** becomes clickable.
 
 ## 4. Register two users
@@ -75,7 +75,7 @@ update public.scheduled_tournaments
  where id = '$T1';
 ```
 
-Within ~60 seconds:
+Within ~30 seconds:
 
 - [ ] In DB: `select status from scheduled_tournaments where id = '$T1';` should be `in_progress`.
 - [ ] In DB: `select round, match_number, player1_id, player2_id, status, room_code from scheduled_tournament_matches where tournament_id = '$T1' order by round, match_number;` should show **7 rows** (4 QF + 2 SF + 1 Final).
@@ -143,7 +143,7 @@ update public.scheduled_tournaments
    set status = 'upcoming',
        winner_id = null,
        registration_open_at = scheduled_start - interval '30 minutes',
-       registration_close_at = scheduled_start - interval '5 minutes'
+       registration_close_at = scheduled_start - interval '2 minutes'
  where id = '$T1';
 ```
 

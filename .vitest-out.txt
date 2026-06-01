@@ -1,0 +1,114 @@
+npm warn Unknown env config "devdir". This will stop working in the next major version of npm.
+
+> server@1.0.0 test
+> vitest run --run src/multiplayer/registerRoomSessionHandlers.private.test.ts -t serializes concurrent
+
+
+ RUN  v4.0.18 /Users/olivermorid/racehorse-dominoes/server
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[room:create] socket=sock-Host
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[room:create] created room=XVZZC, players=1
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[room:join] socket=sock-Guest, code=XVZZC
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[room:join] identity user=Guest (guest-user)
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[room:join] joined room=XVZZC, players=2
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[game:start] socket=sock-Host, code=XVZZC
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[draw:audit] update-emitted { roomCode: 'XVZZC', reason: 'state_sync', privateHandsIncluded: true }
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[game:start] game started, handNumber=1, handOver=false
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[game:action] socket=sock-Host, code=XVZZC, action=MOVE
+[game:action] socket=sock-Host, code=XVZZC, action=MOVE
+[draw:audit] action-received {
+  roomCode: 'XVZZC',
+  userId: '30ee90be-9e7b-4e27-9c8b-b3a28c93f461',
+  actionType: 'MOVE',
+  requestId: undefined
+}
+[draw:audit] forced-draw-resolved {
+  roomCode: 'XVZZC',
+  playerId: '30ee90be-9e7b-4e27-9c8b-b3a28c93f461',
+  drawnCount: 1,
+  stoppedBecause: 'playable',
+  handCount: 7,
+  boneyardCount: 13
+}
+[mp-forced-draw] {
+  roomCode: 'XVZZC',
+  playerId: '30ee90be-9e7b-4e27-9c8b-b3a28c93f461',
+  action: 'MOVE',
+  event: 'forced_draw_resolved_sync',
+  sequence: 3,
+  tilesDrawn: 1,
+  stoppedReason: 'playable',
+  boneyardCount: 13,
+  handNumber: 1
+}
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[draw:audit] action-received {
+  roomCode: 'XVZZC',
+  userId: '30ee90be-9e7b-4e27-9c8b-b3a28c93f461',
+  actionType: 'MOVE',
+  requestId: undefined
+}
+[draw:audit] update-emitted {
+  roomCode: 'XVZZC',
+  reason: 'forced_draw_chain',
+  privateHandsIncluded: true
+}
+[mp-action-ack] {
+  roomCode: 'XVZZC',
+  playerId: 'sock-Host',
+  action: 'MOVE',
+  sequence: 3
+}
+
+stdout | src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+[game:action] ERROR: Player 30ee90be-9e7b-4e27-9c8b-b3a28c93f461 does not have tile [4|4] in hand.
+
+ ❯ src/multiplayer/registerRoomSessionHandlers.private.test.ts (2 tests | 1 failed | 1 skipped) 21ms
+     ↓ create → join → start → legal move syncs; wrong-turn move rejected
+     × serializes concurrent game:action requests for the same room 20ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/multiplayer/registerRoomSessionHandlers.private.test.ts > private room happy path > serializes concurrent game:action requests for the same room
+AssertionError: expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ src/multiplayer/registerRoomSessionHandlers.private.test.ts:229:47
+    227|     expect(okCount).toBe(1);
+    228|     expect(failCount).toBe(1);
+    229|     expect(getRoom(roomCode).state!.sequence).toBe(beforeSequence + 1);
+       |                                               ^
+    230|   });
+    231| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  21:56:25
+   Duration  497ms (transform 266ms, setup 0ms, import 317ms, tests 21ms, environment 0ms)
+

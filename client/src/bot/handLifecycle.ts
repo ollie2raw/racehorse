@@ -42,6 +42,52 @@ export function canApplyNextHand(match: { handOver: boolean; gameOver: boolean }
   return match.handOver && !match.gameOver;
 }
 
+export type BotMatchLifecycleSnapshot = {
+  currentPlayer: 'you' | 'bot';
+  handOver: boolean;
+  gameOver: boolean;
+};
+
+/** Fritz may act only on bot turn while the hand and game are still live. */
+export function shouldAllowBotAction(match: BotMatchLifecycleSnapshot): boolean {
+  return match.currentPlayer === 'bot' && !match.handOver && !match.gameOver;
+}
+
+export type BotActionApplySnapshot = {
+  handOver: boolean;
+  gameOver: boolean;
+};
+
+/**
+ * Drop stale bot async results (timer/effect) that would mutate state after the
+ * hand or game has already ended in the live match ref.
+ */
+export function shouldApplyBotActionResult(
+  live: BotActionApplySnapshot,
+  result: { handEnded?: unknown; state: BotActionApplySnapshot },
+): boolean {
+  if (live.gameOver && !result.state.gameOver) return false;
+  if (live.handOver && !result.handEnded) return false;
+  return true;
+}
+
+/** Daily Fritz set is finished — no further hands or bot actions in the embed. */
+export function isDailyFritzSetTerminal(
+  setResult: { setWinner?: string | null } | null | undefined,
+): boolean {
+  return Boolean(setResult?.setWinner);
+}
+
+/**
+ * Hand-end reveal timer fired for an older hand — do not show or replace reveal.
+ */
+export function shouldShowHandRevealForHand(
+  liveHandNumber: number,
+  endedHandNumber: number,
+): boolean {
+  return liveHandNumber === endedHandNumber;
+}
+
 export function logHandLifecycle(payload: HandLifecycleLogPayload): void {
   const previousPhase = payload.previousPhase ?? lastPhase;
   lastPhase = payload.phase;

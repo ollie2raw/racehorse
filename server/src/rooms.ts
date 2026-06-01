@@ -1,5 +1,6 @@
 import { GameState, Config, PlacementPosition, Move, Tile, BoardState } from './game/types';
-import { assertValidGameState } from './game/invariants';
+import { assertTileCountInvariant, assertValidGameState } from './game/invariants';
+import { withRoomGameplayLock } from './multiplayer/roomGameplayLock';
 import type { Server } from 'socket.io';
 import {
   createInitialState,
@@ -292,6 +293,12 @@ export function deleteRoom(code: string): boolean {
   return rooms.delete(code);
 }
 
+/** Clears in-memory room state between vitest cases (test environments only). */
+export function resetRoomRuntimeForTests(): void {
+  rooms.clear();
+  nextHandStartsByRoom.clear();
+}
+
 function appendResolutionEvents(room: Room, previousState: GameState, actorSocketId: string): void {
   if (!room.state) return;
   if (!previousState.handOver && room.state.handOver) {
@@ -468,6 +475,7 @@ export async function startGame(
   const state0 = createInitialState(room.players, room.config);
   const state1 = startNewHand(state0);
   room.state = state1;
+  assertTileCountInvariant(room.state, `startGame:${code}`);
   assertValidGameState(room.state, `startGame:${code}`);
   room.ghostMoveLogs = Object.fromEntries(room.players.map((playerId) => [playerId, []]));
   room.ghostTurnIndex = 0;
@@ -518,6 +526,7 @@ export async function nextHand(code: string, io: Server): Promise<Room> {
   room.asyncStateVersion += 1;
   const state1 = startNewHand(room.state);
   room.state = state1;
+  assertTileCountInvariant(room.state, `nextHand:${code}`);
   assertValidGameState(room.state, `nextHand:${code}`);
   room.ghostTurnIndex = 0;
   appendRoomEvent(room, {
@@ -632,6 +641,7 @@ export interface ActionPayload {
 function commitResolvedGameState(room: Room, assertLabel: string, nextState: GameState, autoPassExtras?: string[]) {
   const finalized = finalizeMandatoryAutoPasses(nextState);
   room.state = finalized.state;
+  assertTileCountInvariant(room.state, assertLabel);
   assertValidGameState(room.state, assertLabel);
   const extras = autoPassExtras?.filter(Boolean) ?? [];
   const merged = [...extras, ...finalized.autoPassedPlayerIds];
@@ -643,6 +653,18 @@ function commitResolvedGameState(room: Room, assertLabel: string, nextState: Gam
  * Note: `onStateReady` is passed through to `readyForNextHand` only. `act()` itself does not invoke it.
  */
 export async function act(
+  code: string,
+  playerSeatId: string,
+  action: ActionPayload,
+  io: Server,
+  onStateReady: (roomCode: string) => void,
+): Promise<ActResult> {
+  return withRoomGameplayLock(code, () =>
+    actUnlocked(code, playerSeatId, action, io, onStateReady),
+  );
+}
+
+async function actUnlocked(
   code: string,
   playerSeatId: string,
   action: ActionPayload,

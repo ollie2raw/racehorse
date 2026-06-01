@@ -2,9 +2,13 @@ import {
   canApplyNextHand,
   getHandLifecyclePhase,
   isDailyFritzAdvanceLocked,
+  isDailyFritzSetTerminal,
   logHandLifecycle,
   resetHandLifecyclePhase,
   resolveDailyFritzNextHandCache,
+  shouldAllowBotAction,
+  shouldApplyBotActionResult,
+  shouldShowHandRevealForHand,
 } from './handLifecycle.ts';
 
 function assertEqual<T>(actual: T, expected: T, label: string): void {
@@ -45,6 +49,70 @@ function testDailyFritzAdvanceLockWindow(): void {
     false,
     'daily fritz guard does not block without a gate',
   );
+}
+
+function testShouldAllowBotAction(): void {
+  assertEqual(
+    shouldAllowBotAction({ currentPlayer: 'bot', handOver: false, gameOver: false }),
+    true,
+    'bot turn active hand',
+  );
+  assertEqual(
+    shouldAllowBotAction({ currentPlayer: 'bot', handOver: true, gameOver: false }),
+    false,
+    'bot ignored when hand over',
+  );
+  assertEqual(
+    shouldAllowBotAction({ currentPlayer: 'bot', handOver: false, gameOver: true }),
+    false,
+    'bot ignored when game over',
+  );
+  assertEqual(
+    shouldAllowBotAction({ currentPlayer: 'you', handOver: false, gameOver: false }),
+    false,
+    'bot ignored on player turn',
+  );
+}
+
+function testShouldApplyBotActionResult(): void {
+  assertEqual(
+    shouldApplyBotActionResult(
+      { handOver: true, gameOver: false },
+      { state: { handOver: false, gameOver: false } },
+    ),
+    false,
+    'stale play after hand over without handEnded',
+  );
+  assertEqual(
+    shouldApplyBotActionResult(
+      { handOver: false, gameOver: true },
+      { state: { handOver: false, gameOver: false } },
+    ),
+    false,
+    'stale play after game over',
+  );
+  assertEqual(
+    shouldApplyBotActionResult(
+      { handOver: false, gameOver: false },
+      {
+        handEnded: { winner: 'you' },
+        state: { handOver: true, gameOver: false },
+      },
+    ),
+    true,
+    'hand-ending move still applies',
+  );
+}
+
+function testDailyFritzSetTerminal(): void {
+  assertEqual(isDailyFritzSetTerminal(null), false, 'no set');
+  assertEqual(isDailyFritzSetTerminal({ setWinner: 'player' }), true, 'set won');
+  assertEqual(isDailyFritzSetTerminal({ setWinner: null }), false, 'live set');
+}
+
+function testShouldShowHandRevealForHand(): void {
+  assertEqual(shouldShowHandRevealForHand(2, 2), true, 'same hand');
+  assertEqual(shouldShowHandRevealForHand(3, 2), false, 'stale reveal timer');
 }
 
 async function testResolveDailyFritzNextHandCache(): Promise<void> {
@@ -113,6 +181,10 @@ async function testResolveDailyFritzNextHandCache(): Promise<void> {
 
 async function run(): Promise<void> {
   testCanApplyNextHand();
+  testShouldAllowBotAction();
+  testShouldApplyBotActionResult();
+  testDailyFritzSetTerminal();
+  testShouldShowHandRevealForHand();
   testLifecyclePhaseAdvancesOnLog();
   testDailyFritzAdvanceLockWindow();
   await testResolveDailyFritzNextHandCache();

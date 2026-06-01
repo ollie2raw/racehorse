@@ -132,9 +132,13 @@ export interface DailyPuzzleTodayResponse {
   runDate: string;
   setVersion: number;
   slots: DailyPuzzleSlot[];
+  /** Slots for the user’s attempt setVersion (when an attempt exists). */
+  attemptSlots?: DailyPuzzleSlot[];
   attemptStatus: DailyPuzzleAttemptStatus;
   attempt: DailyPuzzleAttempt | null;
   nextAvailableSlotIndex: 1 | 2 | 3 | null;
+  /** All three slots scored but /complete not persisted yet. */
+  finalizeReady?: boolean;
   leaderboardPreview: DailyPuzzleLeaderboardRow[];
   legacySinglePuzzleDay: boolean;
 }
@@ -144,9 +148,10 @@ export interface DailyPuzzleStartResponse {
   runDate: string;
   attempt: DailyPuzzleAttempt;
   activeSlot: DailyPuzzleSlot;
-  nextAvailableSlotIndex: 1 | 2 | 3;
+  nextAvailableSlotIndex: 1 | 2 | 3 | null;
   practiceMode: DailyPuzzlePracticeMode;
   replayed: boolean;
+  finalizeReady?: boolean;
 }
 
 export interface DailyPuzzleSubmitSlotRequest {

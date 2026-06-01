@@ -4,11 +4,24 @@ import type {
   DailyFritzSetResult,
 } from './dailyFritz';
 
+/**
+ * Daily Fritz skunk rules (see docs/daily-fritz-skunk-source-of-truth.md).
+ *
+ * Definition: winning a game while the opponent finishes under 30 points (games 1–3).
+ *
+ * Mechanical set impact (games 1–2 only): a skunk counts as two game wins and ends the
+ * best-of-3 set immediately — including game 2 after a split (e.g. player wins G1, Fritz
+ * skunks player in G2 → Fritz wins the full set at 1–1 in games played).
+ *
+ * Game 3 skunk: recorded for display/ranking only; the set is already decided by the decider.
+ */
+
 export const DAILY_FRITZ_SKUNK_THRESHOLD = 30;
 
 export type DailyFritzSkunkSide = 'player' | 'fritz';
 
 export function isDailyFritzSkunk(losingScore: number): boolean {
+  // Opponent under 30 at game end — applies to games 1, 2, and 3 (G3 is metadata-only downstream).
   return Number.isFinite(losingScore) && losingScore < DAILY_FRITZ_SKUNK_THRESHOLD;
 }
 
@@ -104,6 +117,42 @@ export function resolveDailyFritzSetWins(
   return { playerGamesWon: playedWins, fritzGamesWon: playedLosses };
 }
 
+export type DailyFritzSetWinner = 'player' | 'fritz';
+
+export function resolveDailyFritzSetWinnerFromGames(
+  playedWins: number,
+  playedLosses: number,
+): DailyFritzSetWinner | undefined {
+  if (playedWins >= 2) return 'player';
+  if (playedLosses >= 2) return 'fritz';
+  return undefined;
+}
+
+/**
+ * Game 2 skunk with the set tied 1–1 in games played: the skunking side wins the full set
+ * immediately even though only one game is recorded for each side. Other G2 skunk paths
+ * (2–0 or 0–2 after G1) are resolved by normal two-win logic in resolveDailyFritzSetWinnerFromGames.
+ */
+export function resolveGame2SkunkSetWinner(
+  gameNumber: DailyFritzSetGameNumber,
+  skunk: boolean,
+  gamesPlayed: number,
+  playedWins: number,
+  playedLosses: number,
+  playerWonGame: boolean,
+): DailyFritzSetWinner | undefined {
+  if (
+    gameNumber === 2 &&
+    skunk &&
+    gamesPlayed === 2 &&
+    playedWins === 1 &&
+    playedLosses === 1
+  ) {
+    return playerWonGame ? 'player' : 'fritz';
+  }
+  return undefined;
+}
+
 export function appendDailyFritzGameToSet(
   current: DailyFritzSetResult,
   game: Omit<DailyFritzSetGameResult, 'skunk' | 'skunkBy'>,
@@ -118,8 +167,9 @@ export function appendDailyFritzGameToSet(
   };
   const games = [...current.games, enrichedGame];
 
+  // Game 1 skunk: mechanical 2–0 / 0–2 set win (instantSkunk).
   if (game.gameNumber === 1 && skunk && skunkBy) {
-    const setWinner = skunkBy === 'player' ? 'player' : 'fritz';
+    const setWinner: DailyFritzSetWinner = skunkBy === 'player' ? 'player' : 'fritz';
     return {
       version: 2,
       format: 'best_of_3',
@@ -137,20 +187,24 @@ export function appendDailyFritzGameToSet(
 
   const playedWins = games.filter((entry) => entry.playerWon).length;
   const playedLosses = games.length - playedWins;
-  let setWinner =
-    playedWins >= 2 ? 'player' : playedLosses >= 2 ? 'fritz' : undefined;
+  let setWinner: DailyFritzSetWinner | undefined = resolveDailyFritzSetWinnerFromGames(
+    playedWins,
+    playedLosses,
+  );
 
-  // Game 2 skunk finish: after a split start (1–1 in games played), a skunk in game 2 ends the set.
-  if (
-    game.gameNumber === 2 &&
-    skunk &&
-    games.length === 2 &&
-    playedWins === 1 &&
-    playedLosses === 1
-  ) {
-    setWinner = game.playerWon ? 'player' : 'fritz';
+  const game2SkunkWinner = resolveGame2SkunkSetWinner(
+    game.gameNumber,
+    skunk,
+    games.length,
+    playedWins,
+    playedLosses,
+    game.playerWon,
+  );
+  if (game2SkunkWinner) {
+    setWinner = game2SkunkWinner;
   }
 
+  // Game 3+: skunk flag on the game is metadata/ranking only (instantSkunk stays false).
   const skunkGames = games.filter((entry) => entry.skunk);
   const skunkGameNumber = skunkGames.length
     ? skunkGames[skunkGames.length - 1]!.gameNumber
@@ -203,8 +257,10 @@ export function normalizeDailyFritzSetSkunkFields(
 
   const playedWins = games.filter((game) => game.playerWon).length;
   const playedLosses = games.length - playedWins;
-  let setWinner: 'player' | 'fritz' | undefined =
-    playedWins >= 2 ? 'player' : playedLosses >= 2 ? 'fritz' : undefined;
+  let setWinner: DailyFritzSetWinner | undefined = resolveDailyFritzSetWinnerFromGames(
+    playedWins,
+    playedLosses,
+  );
   if (rec.setWinner === 'player' || rec.setWinner === 'fritz') {
     setWinner = rec.setWinner;
   } else if (rec.set_winner === 'player' || rec.set_winner === 'fritz') {

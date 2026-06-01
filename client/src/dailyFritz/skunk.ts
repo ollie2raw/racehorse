@@ -1,3 +1,8 @@
+/**
+ * Daily Fritz skunk — client labels and overlays.
+ * Rules: docs/daily-fritz-skunk-source-of-truth.md
+ * (G1–G2 skunk can end the set; G3 skunk is display/ranking metadata only.)
+ */
 import type {
   DailyFritzLeaderboardRow,
   DailyFritzSetGameNumber,
