@@ -3,6 +3,7 @@ import type { FritzTier } from "./fritzConfig";
 import type { BotDealSize } from "./botEngine";
 import type { AppMode } from "../types";
 import { DominoTile, GlobalNav } from "../components";
+import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
 import pvfHeroImg from "../assets/bot/playfritz2png.png";
 import "./PlayVsFritz.css";
 
@@ -125,14 +126,43 @@ const TIER_COLORS: Record<FritzTier, string> = {
 const DIFFICULTIES: Array<{
   id: FritzTier;
   label: string;
-  elo: number;
+  roleLabel: string;
+  approxStrength: string;
   desc: string;
   Icon: React.FC<any>;
 }> = [
-  { id: "rookie", label: "Rookie", elo: 600, desc: "Learning the game. Good for beginners.", Icon: IconRookie },
-  { id: "standard", label: "Standard", elo: 1000, desc: "Solid fundamentals. A real challenge.", Icon: IconBars },
-  { id: "elite", label: "Elite", elo: 1800, desc: "Maximum strength. Unforgiving.", Icon: IconCrown },
-  { id: "master", label: "Master", elo: 2400, desc: "Sampled endgame search. No mercy.", Icon: IconGoat },
+  {
+    id: "rookie",
+    label: "Rookie",
+    roleLabel: "Beginner",
+    approxStrength: "~600",
+    desc: "Fritz makes frequent mistakes — good for learning.",
+    Icon: IconRookie,
+  },
+  {
+    id: "standard",
+    label: "Standard",
+    roleLabel: "Balanced",
+    approxStrength: "~1000",
+    desc: "Best for most players — a fair, steady challenge.",
+    Icon: IconBars,
+  },
+  {
+    id: "elite",
+    label: "Elite",
+    roleLabel: "Competitive",
+    approxStrength: "~1800",
+    desc: "Daily Fritz Classic strength — sharp and punishing.",
+    Icon: IconCrown,
+  },
+  {
+    id: "master",
+    label: "Master",
+    roleLabel: "Expert",
+    approxStrength: "~2400",
+    desc: "Near-perfect endgame — for dominoes veterans.",
+    Icon: IconGoat,
+  },
 ];
 
 const DEAL_SIZES: Array<{ id: BotDealSize; label: string; sublabel: string; Icon: React.FC<any> }> = [
@@ -155,10 +185,15 @@ export default function PlayVsFritz({
   onOpenAuth, 
   onOpenAccount 
 }: PlayVsFritzProps) {
-  const [difficulty, setDifficulty] = useState<FritzTier>("elite");
+  const [difficulty, setDifficulty] = useState<FritzTier>(() => resolveDefaultPvfFritzTier());
   const [dealSize, setDealSize] = useState<BotDealSize>(7);
-  const selectedDiff = DIFFICULTIES.find((d) => d.id === difficulty) || DIFFICULTIES[2];
+  const selectedDiff = DIFFICULTIES.find((d) => d.id === difficulty) ?? DIFFICULTIES[1];
   const dynamicColor = TIER_COLORS[difficulty];
+
+  const selectDifficulty = (tier: FritzTier): void => {
+    setDifficulty(tier);
+    writeStoredPvfFritzTier(tier);
+  };
 
   return (
     <div className={`pvf-root pvf-root--setup tier-${difficulty}`} style={{ "--pvf-dynamic-color": dynamicColor } as React.CSSProperties}>
@@ -247,12 +282,12 @@ export default function PlayVsFritz({
           <div className="pvf-section">
             <div className="fritz-section-label">1. CHOOSE DIFFICULTY</div>
             <div className="pvf-difficulty-grid">
-              {DIFFICULTIES.map(({ id, label, elo, desc, Icon: IconComp }) => (
+              {DIFFICULTIES.map(({ id, label, roleLabel, approxStrength, desc, Icon: IconComp }) => (
                 <div
                   key={id}
                   data-tier={id}
                   className={`pvf-tier-card${difficulty === id ? " pvf-tier-card--selected" : ""}`}
-                  onClick={() => setDifficulty(id)}
+                  onClick={() => selectDifficulty(id)}
                   style={{ 
                     borderColor: difficulty === id ? dynamicColor : undefined,
                     boxShadow: difficulty === id ? `0 0 20px ${dynamicColor}22` : undefined
@@ -265,7 +300,8 @@ export default function PlayVsFritz({
                     <IconComp />
                   </div>
                   <div className="pvf-tier-name">{label}</div>
-                  <div className="pvf-tier-elo" style={{ color: TIER_COLORS[id] }}>{elo}</div>
+                  <div className="pvf-tier-elo" style={{ color: TIER_COLORS[id] }}>{roleLabel}</div>
+                  <div className="pvf-tier-approx">Approx. strength {approxStrength}</div>
                   <div className="pvf-tier-desc">{desc}</div>
                 </div>
               ))}
@@ -274,13 +310,22 @@ export default function PlayVsFritz({
             <div className="pvf-slider-row">
               <div className="pvf-slider-track" />
               <div className="pvf-slider-marks">
-                {DIFFICULTIES.map(({ id, elo }) => (
+                {DIFFICULTIES.map(({ id, roleLabel }) => (
                   <div
                     key={id}
                     className={`pvf-slider-mark${difficulty === id ? " pvf-slider-mark--active" : ""}`}
+                    onClick={() => selectDifficulty(id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectDifficulty(id);
+                      }
+                    }}
                   >
                     <div className="pvf-slider-dot" style={{ background: difficulty === id ? dynamicColor : undefined, boxShadow: difficulty === id ? `0 0 0 2px #040b17, 0 0 0 4px ${dynamicColor}` : undefined }} />
-                    <div className="pvf-slider-label" style={{ color: difficulty === id ? dynamicColor : undefined }}>{elo}</div>
+                    <div className="pvf-slider-label" style={{ color: difficulty === id ? dynamicColor : undefined }}>{roleLabel}</div>
                   </div>
                 ))}
               </div>
@@ -325,7 +370,7 @@ export default function PlayVsFritz({
                   <IconRobotNav />
                 </div>
                 <div>
-                  <div className="fritz-summary-value">Fritz {selectedDiff.label}</div>
+                  <div className="fritz-summary-value">{selectedDiff.label} · {selectedDiff.roleLabel}</div>
                   <div className="fritz-summary-key">Difficulty</div>
                 </div>
               </div>
@@ -357,7 +402,10 @@ export default function PlayVsFritz({
 
             <button
               className="pvf-start-btn"
-              onClick={() => onStart({ difficulty, dealSize })}
+              onClick={() => {
+                writeStoredPvfFritzTier(difficulty);
+                onStart({ difficulty, dealSize });
+              }}
               style={{ 
                 background: `linear-gradient(180deg, ${dynamicColor} 0%, ${dynamicColor}CC 100%)`,
                 boxShadow: `0 0 32px ${dynamicColor}33, inset 0 1px 0 rgba(255,255,255,0.4)`

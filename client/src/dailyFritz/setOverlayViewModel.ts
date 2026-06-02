@@ -46,6 +46,7 @@ export interface DailyFritzSetOverlayViewModel {
     skunk?: boolean;
     skunkLabel?: string | null;
   }>;
+  practiceHint?: string | null;
   onPrimary: () => void;
   onSecondary: () => void;
 }

@@ -61,6 +61,7 @@ import {
   computeOpenEndsSum,
 } from './game/openEndsGeometry';
 import type { FritzTier } from './bot/fritzConfig';
+import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from './bot/pvfTierPreference';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
 import { drawAudit, nextDrawRequestId } from './multiplayer/drawAudit';
@@ -958,7 +959,7 @@ export default function App() {
     const stored = window.localStorage.getItem('racehorse_bot_deal_size');
     return stored === '14' ? 14 : 7;
   });
-  const [botFritzTier, setBotFritzTier] = useState<FritzTier>('elite');
+  const [botFritzTier, setBotFritzTier] = useState<FritzTier>(() => resolveDefaultPvfFritzTier());
   const [isGuidedMode, setIsGuidedMode] = useState(false);
   const [isAuthoringMode, setIsAuthoringMode] = useState(false);
   const [isAuthoringV2Mode, setIsAuthoringV2Mode] = useState(false);
@@ -1409,6 +1410,10 @@ export default function App() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('racehorse_bot_deal_size', String(botDealSize));
   }, [botDealSize]);
+
+  useEffect(() => {
+    writeStoredPvfFritzTier(botFritzTier);
+  }, [botFritzTier]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

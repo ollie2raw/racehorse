@@ -525,7 +525,8 @@
 .pvf-tier-card[data-tier="master"]   { --accent-color: var(--color-master);   --icon-bg: color-mix(in srgb, var(--color-master) 10%, transparent);   --icon-border: var(--color-master); }
 
 .pvf-tier-name { font-family:'Outfit',sans-serif; font-size:16px; font-weight:700; color:#fff; margin-bottom:4px; }
-.pvf-tier-elo  { font-family: var(--font-display); font-size:17px; font-weight:700; color:var(--accent-color); margin-bottom:8px; }
+.pvf-tier-elo  { font-family: var(--font-display); font-size:17px; font-weight:700; color:var(--accent-color); margin-bottom:4px; }
+.pvf-tier-approx { font-size:10px; color:rgba(227,233,240,0.55); letter-spacing:0.02em; margin-bottom:8px; }
 .pvf-tier-desc { font-size:11.5px; color:var(--pvf-muted); line-height:1.35; }
 
 /* checkmark badge */

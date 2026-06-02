@@ -100,6 +100,10 @@ export function DailyFritzFinalResultOverlay({
             </div>
           ) : null}
 
+          {overlay.practiceHint ? (
+            <p className="daily-fritz-practice-hint">{overlay.practiceHint}</p>
+          ) : null}
+
           <button type="button" className="df-result-share-btn" onClick={onShare}>
             {shareDone ? '✓ Shared!' : 'Share Result'}
           </button>

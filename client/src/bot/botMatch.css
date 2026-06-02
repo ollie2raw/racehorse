@@ -904,6 +904,15 @@
   line-height: 1.42;
 }
 
+.daily-fritz-practice-hint {
+  margin: 0;
+  padding: 0 4px;
+  color: rgba(227, 233, 240, 0.68);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .daily-fritz-set-overlay-game-list {
   display: grid;
   gap: 0;

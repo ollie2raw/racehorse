@@ -7283,6 +7283,10 @@ export default function BotMatchScreen({
               </div>
             ) : null}
 
+            {dailyFritzSetOverlay.practiceHint ? (
+              <p className="daily-fritz-practice-hint">{dailyFritzSetOverlay.practiceHint}</p>
+            ) : null}
+
             {dailyFritzSetOverlay.errorMessage ? (
               <div className="hand-over-error-zone">
                 <span className="hand-over-error-text" title={dailyFritzSetOverlay.errorMessage}>

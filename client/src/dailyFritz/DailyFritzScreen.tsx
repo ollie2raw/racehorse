@@ -25,6 +25,7 @@ import {
   type DailyFritzTodayResponse,
 } from './api';
 import { formatOrdinalPlace } from './format';
+import { DAILY_FRITZ_CLASSIC_PRACTICE_HINT, playerLostDailyFritzGame } from './practiceHint';
 import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy, isDailyFritzSkunk } from './skunk';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 import dailyFritzHeroPng from '../assets/dailyFritz/playvsfritzdone.png';
@@ -266,7 +267,10 @@ function titleCaseTier(tier: string): string {
 }
 
 function tierDisplayLabel(tier: string): string {
-  if (tier === 'elite') return 'Elite (1800)';
+  if (tier === 'elite') return 'Elite · Competitive';
+  if (tier === 'standard') return 'Standard · Balanced';
+  if (tier === 'rookie') return 'Rookie · Beginner';
+  if (tier === 'master') return 'Master · Expert';
   return titleCaseTier(tier);
 }
 
@@ -571,7 +575,7 @@ function DailyFritzLoadingScreen({
     ? loadError ?? 'Please try again.'
     : isSlow || isRetrying
       ? 'The game server may be waking up.'
-      : 'Best of 3 vs Fritz. Same deal for everyone.';
+      : 'Best of 3 vs Elite Fritz — the competitive daily challenge.';
   const showRetry = isFailed || isSlow;
   const busy = !isFailed && phase !== 'still-preparing';
 
@@ -1294,6 +1298,9 @@ export default function DailyFritzScreen({
         },
         onSecondary: () => { setSetOverlay(null); setActiveRun(null); void loadToday(); },
         secondaryLabel: 'Return to Hub',
+        practiceHint: playerLostDailyFritzGame(g.playerScore, g.fritzScore)
+          ? DAILY_FRITZ_CLASSIC_PRACTICE_HINT
+          : null,
         tracker: [1, 2, 3].map(n => ({
           gameNumber: n as DailyFritzSetGameNumber,
           ...getSetTrackerStatus(sr, n as DailyFritzSetGameNumber, setOverlay.nextGameNumber)
@@ -1363,6 +1370,7 @@ export default function DailyFritzScreen({
         onPrimary: setOverlay.canViewLeaderboard ? openLeaderboard : returnToHub,
         onSecondary: setOverlay.canViewLeaderboard ? returnToHub : (): void => {},
         secondaryLabel: setOverlay.canViewLeaderboard ? 'Back Home' : null,
+        practiceHint: !setWonPlayer ? DAILY_FRITZ_CLASSIC_PRACTICE_HINT : null,
       };
     }
 
@@ -1535,7 +1543,7 @@ export default function DailyFritzScreen({
             <div className="df-pvf-header">
               <div className="df-pvf-label">DAILY FRITZ</div>
               <h1 className="df-pvf-title">Daily Fritz</h1>
-              <p className="df-pvf-subtitle">Best of 3. Same deal for everyone.</p>
+              <p className="df-pvf-subtitle">Best of 3 vs Elite Fritz — the competitive daily challenge.</p>
             </div>
 
             <article className="df-pvf-opponent-card" aria-label="Daily Fritz overview">
@@ -1547,9 +1555,9 @@ export default function DailyFritzScreen({
                   <div className="df-pvf-card-eyebrow">TODAY&apos;S OPPONENT</div>
                   <h2 className="df-pvf-card-name">Fritz</h2>
                   <p className="df-pvf-card-description">
-                    Same set. No resets.
+                    Same set for everyone. Elite Fritz — no resets.
                     <br />
-                    Beat Fritz today.
+                    Beat today&apos;s competitive daily challenge.
                   </p>
                 </div>
 
