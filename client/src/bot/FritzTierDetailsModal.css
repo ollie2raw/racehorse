@@ -1,0 +1,101 @@
+.pvf-tier-details-intro,
+.pvf-tier-details-daily-note {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: rgba(227, 233, 240, 0.82);
+}
+
+.pvf-tier-details-list {
+  list-style: none;
+  margin: 18px 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.pvf-tier-details-row {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--pvf-tier-accent) 35%, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--pvf-tier-accent) 8%, rgba(255, 255, 255, 0.03));
+}
+
+.pvf-tier-details-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.pvf-tier-details-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.pvf-tier-details-role {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--pvf-tier-accent);
+}
+
+.pvf-tier-details-strength {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: rgba(227, 233, 240, 0.55);
+}
+
+.pvf-tier-details-body {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: rgba(248, 245, 238, 0.88);
+}
+
+.pvf-tier-details-daily-note {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(231, 182, 74, 0.25);
+  background: rgba(231, 182, 74, 0.08);
+  color: rgba(248, 245, 238, 0.9);
+}
+
+.pvf-tier-details-close-btn {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.pvf-tier-details-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.pvf-tier-details-close-btn:focus-visible {
+  outline: 2px solid var(--tier-standard);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .pvf-tier-details-strength {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}

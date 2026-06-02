@@ -677,13 +677,23 @@
 }
 
 .pvf-view-tiers {
-  display:block; text-align:center;
+  display:block; width:100%;
+  text-align:center;
   color:#3FA7FF; /* Blue color as per mockup link */
   font-family: var(--font-display); font-size:12px; font-weight:700;
   text-decoration:none; opacity:0.8; transition:opacity 0.2s; letter-spacing:0.05em;
   margin-top: 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
 }
 .pvf-view-tiers:hover { opacity:1; }
+.pvf-view-tiers:focus-visible {
+  outline: 2px solid #3FA7FF;
+  outline-offset: 3px;
+  opacity: 1;
+}
 
 /* responsive */
 @media (max-width:1100px) {

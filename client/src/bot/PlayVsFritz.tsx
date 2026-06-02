@@ -4,6 +4,7 @@ import type { BotDealSize } from "./botEngine";
 import type { AppMode } from "../types";
 import { DominoTile, GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
+import { FritzTierDetailsModal } from "./FritzTierDetailsModal";
 import pvfHeroImg from "../assets/bot/playfritz2png.png";
 import "./PlayVsFritz.css";
 
@@ -187,6 +188,7 @@ export default function PlayVsFritz({
 }: PlayVsFritzProps) {
   const [difficulty, setDifficulty] = useState<FritzTier>(() => resolveDefaultPvfFritzTier());
   const [dealSize, setDealSize] = useState<BotDealSize>(7);
+  const [tierDetailsOpen, setTierDetailsOpen] = useState(false);
   const selectedDiff = DIFFICULTIES.find((d) => d.id === difficulty) ?? DIFFICULTIES[1];
   const dynamicColor = TIER_COLORS[difficulty];
 
@@ -415,12 +417,23 @@ export default function PlayVsFritz({
               <span className="pvf-start-arrow">›</span>
             </button>
 
-            <a className="pvf-view-tiers" href="#" onClick={(e) => e.preventDefault()}>
+            <button
+              type="button"
+              className="pvf-view-tiers"
+              onClick={() => {
+                // #region agent log
+                fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'07f153'},body:JSON.stringify({sessionId:'07f153',location:'PlayVsFritz.tsx:view-tiers-click',message:'tier details open requested',data:{tierDetailsOpenBefore:false},timestamp:Date.now(),hypothesisId:'H1-click'})}).catch(()=>{});
+                // #endregion
+                setTierDetailsOpen(true);
+              }}
+            >
               View tier details ›
-            </a>
+            </button>
           </div>
         </div>
       </div>
+
+      <FritzTierDetailsModal open={tierDetailsOpen} onClose={() => setTierDetailsOpen(false)} />
     </div>
   );
 }
