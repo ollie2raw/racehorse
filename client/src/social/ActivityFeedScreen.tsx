@@ -43,6 +43,8 @@ interface ActivityFeedScreenProps {
   onClose: () => void;
   onNavigateToFriends?: () => void;
   onNavigate?: (mode: AppMode) => void;
+  onOpenAuth?: () => void;
+  onOpenAccount?: () => void;
 }
 
 function formatMonthDay(value: string): string {
@@ -118,6 +120,8 @@ export default function ActivityFeedScreen({
   onClose,
   onNavigateToFriends,
   onNavigate,
+  onOpenAuth,
+  onOpenAccount,
 }: ActivityFeedScreenProps) {
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [friends, setFriends] = useState<FriendWithPresence[]>([]);
@@ -354,6 +358,8 @@ export default function ActivityFeedScreen({
         }
         onNavigate?.(mode);
       }}
+      onOpenAuth={onOpenAuth}
+      onOpenAccount={onOpenAccount}
     >
       <div className="rh-hub-inner rh-sf-page-inner social-page-inner">
         <div className="rh-hub-grid rh-sf-layout-grid social-layout-grid">

@@ -121,9 +121,38 @@ export interface PublicProfile {
   is_self: boolean;
   is_friend: boolean;
   has_pending_request: boolean;
+  /** Signed-in viewer's record vs this profile (always your W–L, not theirs). */
   h2h: { wins: number; losses: number } | null;
   presence: { status: PresenceStatus; current_mode: string | null };
   recent_matches: RecentMatch[];
+}
+
+type PublicProfileApiH2h = {
+  wins?: number;
+  losses?: number;
+  viewer_wins?: number;
+  viewer_losses?: number;
+};
+
+type PublicProfileApiResponse = Omit<PublicProfile, 'h2h'> & {
+  h2h: PublicProfileApiH2h | null;
+};
+
+function mapViewerH2h(raw: PublicProfileApiH2h | null | undefined): PublicProfile['h2h'] {
+  if (!raw) return null;
+  if (typeof raw.viewer_wins === 'number' && typeof raw.viewer_losses === 'number') {
+    return { wins: raw.viewer_wins, losses: raw.viewer_losses };
+  }
+  if (typeof raw.wins === 'number' && typeof raw.losses === 'number') {
+    // Legacy API: wins/losses were the profile owner's record vs you — invert for your record.
+    return { wins: raw.losses, losses: raw.wins };
+  }
+  return null;
+}
+
+function mapPublicProfileFromApi(data: PublicProfileApiResponse): PublicProfile {
+  const { h2h: rawH2h, ...rest } = data;
+  return { ...rest, h2h: mapViewerH2h(rawH2h) };
 }
 
 // ─── API calls ───────────────────────────────────────────────────────────────
@@ -202,8 +231,10 @@ export async function fetchUserActivity(userId: string): Promise<{ feed: FeedIte
 
 export async function fetchPublicProfile(username: string): Promise<{ profile: PublicProfile | null; error: string | null }> {
   try {
-    const data = await apiFetch<PublicProfile>(`/api/profile/${encodeURIComponent(username.replace(/^@/, ''))}`);
-    return { profile: data, error: null };
+    const data = await apiFetch<PublicProfileApiResponse>(
+      `/api/profile/${encodeURIComponent(username.replace(/^@/, ''))}`,
+    );
+    return { profile: mapPublicProfileFromApi(data), error: null };
   } catch (err) {
     return { profile: null, error: err instanceof Error ? err.message : 'Player not found.' };
   }

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import express from 'express';
 import cors, { type CorsOptions } from 'cors';
 import http from 'http';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'crypto';
 import { Server, Socket } from 'socket.io';
 import {
   completeGhostGame,
@@ -82,6 +82,7 @@ import {
   type DailyPuzzleSlotResultRow,
   type DailyPuzzleSlotRow,
 } from './dailyPuzzle';
+import { validateDailyPuzzleSubmission } from './dailyPuzzleSubmissionValidation';
 import { ensureDailyPuzzleLadderForDate } from './seedDailyPuzzleLadder';
 import {
   buildHomeDailySummary,
@@ -100,6 +101,11 @@ import {
 } from './ranking/glicko2';
 import { startRankingCron } from './ranking/cron';
 import { getLeaderboard, processRatingPeriod, processRealtimeMultiplayerGame } from './ranking/periodService';
+import {
+  buildRankedGameInsertPayload,
+  isRankedGameSourceColumnsEnabled,
+  type RankedGameSource,
+} from './ranking/rankedGamePayload';
 
 import {
   createRoom,
@@ -178,6 +184,12 @@ import {
 import { markMatchStartReady, tryStartMatchIfReady } from './multiplayer/matchStartReady';
 import type { BranchArm, GameState } from './game/types';
 import { assertValidGameState } from './game/invariants';
+import {
+  InMemoryRateLimiter,
+  createRateLimitMiddleware,
+  socketRateLimitKey,
+  type RateLimitRule,
+} from './rateLimit';
 
 const allowedOriginPatterns = [
   /^http:\/\/localhost(?::\d+)?$/i,
@@ -224,6 +236,30 @@ const corsOptions: CorsOptions = {
 const app = express();
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
+
+const restRateLimiter = new InMemoryRateLimiter({ windowMs: 5 * 60_000, max: 600 });
+const socketRateLimiter = new InMemoryRateLimiter({ windowMs: 60_000, max: 600 });
+const restApiLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 5 * 60_000, max: 600 }, 'rest:api');
+const dailySubmitLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 5 * 60_000, max: 90 }, 'rest:daily');
+const adminLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:admin');
+const cronLimit = createRateLimitMiddleware(restRateLimiter, { windowMs: 10 * 60_000, max: 20 }, 'rest:cron');
+
+app.use('/api/cron', cronLimit);
+app.use('/api/daily-puzzle/submit-slot', dailySubmitLimit);
+app.use('/api/daily-puzzle/complete', dailySubmitLimit);
+app.use('/api/daily-fritz/next-hand', dailySubmitLimit);
+app.use('/api/daily-fritz/record-game', dailySubmitLimit);
+app.use('/api/daily-fritz/complete', dailySubmitLimit);
+app.use('/api/daily-fritz/generate', adminLimit);
+app.use('/api/daily-fritz/invalidate', adminLimit);
+app.use('/api/daily-fritz/reset-attempt', adminLimit);
+app.use('/api/ranking/process', adminLimit);
+app.use('/league/run-forfeits', adminLimit);
+app.use('/league/run-rollover', adminLimit);
+app.use('/bot-matches/cleanup-stale', adminLimit);
+app.use('/api', restApiLimit);
+app.use('/league', restApiLimit);
+app.use('/bot-matches', restApiLimit);
 app.use('/api/social', socialRouter);
 app.use('/api/profile', socialRouter);
 
@@ -232,6 +268,19 @@ async function getAuthenticatedUserId(req: express.Request): Promise<string | nu
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   const token = match?.[1]?.trim();
   return getAuthenticatedUserIdFromToken(token ?? null);
+}
+
+function constantTimeEqualSecret(provided: unknown, expected: string | undefined): boolean {
+  if (typeof provided !== 'string' || !expected) return false;
+  const providedBuffer = Buffer.from(provided.trim());
+  const expectedBuffer = Buffer.from(expected.trim());
+  if (expectedBuffer.length === 0) return false;
+  if (providedBuffer.length !== expectedBuffer.length) return false;
+  return timingSafeEqual(providedBuffer, expectedBuffer);
+}
+
+function isAdminSecret(value: unknown): boolean {
+  return constantTimeEqualSecret(value, process.env.ADMIN_SECRET);
 }
 
 app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -246,6 +295,79 @@ app.use((error: unknown, _req: express.Request, res: express.Response, next: exp
   }
   next(error);
 });
+
+const READY_REQUIRED_ENV_VARS = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'] as const;
+const READY_RECOMMENDED_ENV_VARS = [
+  'ADMIN_SECRET',
+  'CLIENT_URL',
+  'CORS_ALLOWED_ORIGINS',
+  'DAILY_PUZZLE_CRON_SECRET',
+  'SERVER_URL',
+] as const;
+
+function getReleaseVersion(): string {
+  return (
+    process.env.RELEASE_VERSION?.trim() ||
+    process.env.RENDER_GIT_COMMIT?.trim() ||
+    process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+    process.env.npm_package_version?.trim() ||
+    'dev'
+  );
+}
+
+function getEnvPresence(names: readonly string[]): Record<string, boolean> {
+  return Object.fromEntries(names.map((name) => [name, Boolean(process.env[name]?.trim())]));
+}
+
+function getSafeErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return 'Unknown error';
+}
+
+function getProcessErrorLogPayload(error: unknown): { name?: string; message: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return { message: typeof error === 'string' ? error : JSON.stringify(error) };
+}
+
+function getRuntimeStatusPayload() {
+  const { roomCount, gamesInProgress } = getRoomRuntimeStats();
+  return {
+    ok: true,
+    release: getReleaseVersion(),
+    nodeEnv: process.env.NODE_ENV ?? 'development',
+    pid: process.pid,
+    uptimeSeconds: Math.round(process.uptime()),
+    connectedSockets: io.sockets.sockets.size,
+    roomCount,
+    gamesInProgress,
+  };
+}
+
+async function getSupabaseReadiness(): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
+  const startedAt = Date.now();
+  try {
+    await supabaseFetch('/rest/v1/profiles?select=id&limit=1', {
+      method: 'GET',
+      timeoutMs: 3_000,
+      headers: { Prefer: 'return=minimal' },
+    });
+    return { ok: true, latencyMs: Date.now() - startedAt };
+  } catch (error) {
+    console.error('[ready] Supabase readiness check failed', getProcessErrorLogPayload(error));
+    return {
+      ok: false,
+      latencyMs: Date.now() - startedAt,
+      error: getSafeErrorMessage(error),
+    };
+  }
+}
 
 async function getAuthenticatedUserIdFromToken(token: string | null): Promise<string | null> {
   if (!token) return null;
@@ -291,11 +413,38 @@ async function getAuthenticatedUserIdFromToken(token: string | null): Promise<st
 }
 
 app.get('/health', (_, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    release: getReleaseVersion(),
+    nodeEnv: process.env.NODE_ENV ?? 'development',
+    uptimeSeconds: Math.round(process.uptime()),
+  });
 });
 
 app.get('/ping', (_, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', release: getReleaseVersion() });
+});
+
+app.get('/ready', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+
+  const requiredEnv = getEnvPresence(READY_REQUIRED_ENV_VARS);
+  const recommendedEnv = getEnvPresence(READY_RECOMMENDED_ENV_VARS);
+  const requiredEnvOk = Object.values(requiredEnv).every(Boolean);
+  const supabase = requiredEnvOk
+    ? await getSupabaseReadiness()
+    : { ok: false, latencyMs: 0, error: 'missing_required_env' };
+  const ok = requiredEnvOk && supabase.ok;
+
+  res.status(ok ? 200 : 503).json({
+    ...getRuntimeStatusPayload(),
+    ok,
+    checks: {
+      requiredEnv,
+      recommendedEnv,
+      supabase,
+    },
+  });
 });
 
 /** Multiplayer process-local stats (in-memory rooms; resets on deploy / spin-down). */
@@ -462,9 +611,7 @@ app.get('/api/ranking/history/:userId', async (req, res) => {
 
 app.post('/api/ranking/process/:userId', async (req, res) => {
   const userId = typeof req.params.userId === 'string' ? req.params.userId.trim() : '';
-  const adminKey = req.body?.adminKey;
-
-  if (adminKey !== process.env.ADMIN_SECRET) {
+  if (!isAdminSecret(req.body?.adminKey)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -901,7 +1048,7 @@ app.post('/league/report-result', async (req, res) => {
 });
 
 app.post('/league/run-forfeits', async (req, res) => {
-  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+  if (!isAdminSecret(req.body?.adminKey)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -926,7 +1073,7 @@ app.post('/league/run-forfeits', async (req, res) => {
 });
 
 app.post('/league/run-rollover', async (req, res) => {
-  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+  if (!isAdminSecret(req.body?.adminKey)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -1109,7 +1256,9 @@ app.post('/bot-matches/cleanup-stale', async (_req, res) => {
         method: 'PATCH',
         body: JSON.stringify({ resolved: true }),
       });
-      await recordPendingFritzDisconnectLoss(row.user_id, row.fritz_tier);
+      await recordPendingFritzDisconnectLoss(row.user_id, row.fritz_tier, {
+        roomCode: typeof row.room_code === 'string' ? row.room_code : null,
+      });
       processed += 1;
     }
 
@@ -1154,6 +1303,37 @@ const io = new Server(server, {
 });
 
 const socketsByUserId = new Map<string, Set<string>>();
+
+const SOCKET_EVENT_LIMITS: Record<string, RateLimitRule> = {
+  'room:create': { windowMs: 60_000, max: 10 },
+  'room:join': { windowMs: 60_000, max: 30 },
+  'room:spectate': { windowMs: 60_000, max: 30 },
+  'queue:join': { windowMs: 60_000, max: 10 },
+  'friend:invite': { windowMs: 60_000, max: 20 },
+  'friend:invite:decline': { windowMs: 60_000, max: 60 },
+  'room:chat:send': { windowMs: 60_000, max: 30 },
+  'room:emote:send': { windowMs: 60_000, max: 60 },
+  'game:action': { windowMs: 60_000, max: 240 },
+  'hand:ready': { windowMs: 60_000, max: 120 },
+  'player:ready': { windowMs: 60_000, max: 120 },
+};
+const DEFAULT_SOCKET_EVENT_LIMIT: RateLimitRule = { windowMs: 60_000, max: 600 };
+
+function installSocketRateLimit(socket: Socket): void {
+  socket.use((packet, next) => {
+    const eventName = typeof packet[0] === 'string' ? packet[0] : 'unknown';
+    const rule = SOCKET_EVENT_LIMITS[eventName] ?? DEFAULT_SOCKET_EVENT_LIMIT;
+    const result = socketRateLimiter.take(`socket:${eventName}:${socketRateLimitKey(socket)}`, rule);
+    if (result.allowed) {
+      next();
+      return;
+    }
+    const ack = packet.find((arg): arg is AckFn => typeof arg === 'function');
+    ack?.({ ok: false, error: 'rate_limited', retryAfterMs: result.retryAfterMs });
+    socket.emit('rate_limited', { event: eventName, retryAfterMs: result.retryAfterMs });
+    next(new Error('rate_limited'));
+  });
+}
 
 /**
  * After Render/deploy the in-memory Map is empty but matchmaking still has an
@@ -2382,10 +2562,10 @@ function isAuthorizedDailyPuzzleCronRequest(req: express.Request): boolean {
   if (!secret) return false;
   const headerRaw = req.headers['x-daily-puzzle-cron-secret'];
   const fromHeader = typeof headerRaw === 'string' ? headerRaw.trim() : '';
-  if (fromHeader === secret) return true;
+  if (constantTimeEqualSecret(fromHeader, secret)) return true;
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
   const m = authHeader.match(/^Bearer\s+(.+)$/i);
-  return Boolean(m?.[1]?.trim() && m[1].trim() === secret);
+  return constantTimeEqualSecret(m?.[1]?.trim(), secret);
 }
 
 async function getDailyPuzzleAttempt(runDate: string, userId: string): Promise<DailyPuzzleAttempt | null> {
@@ -2857,27 +3037,58 @@ async function resolvePendingFritzMatch(roomCode: string) {
   );
 }
 
-async function recordPendingFritzDisconnectLoss(userId: string, fritzTier: unknown = 'elite') {
+function localMatchIdFromRoomCode(roomCode: string | null | undefined): string | null {
+  if (typeof roomCode !== 'string') return null;
+  return roomCode.startsWith('local:') ? roomCode.slice('local:'.length) || null : null;
+}
+
+async function resolveLocalFritzAbandonRankedSource(
+  userId: string,
+  source?: { localMatchId?: string | null; roomCode?: string | null; verifiedMatchId?: string | null },
+): Promise<RankedGameSource | null> {
+  if (!isRankedGameSourceColumnsEnabled()) return null;
+  const explicitVerifiedMatchId = source?.verifiedMatchId?.trim();
+  if (explicitVerifiedMatchId) {
+    return { sourceType: 'local_fritz_abandon', sourceMatchId: explicitVerifiedMatchId };
+  }
+
+  const localMatchId = source?.localMatchId?.trim() || localMatchIdFromRoomCode(source?.roomCode) || null;
+  if (!localMatchId) return null;
+
+  const verifiedMatch = await queryVerifiedSinglePlayerMatchByLocalKey(userId, localMatchId);
+  return {
+    sourceType: 'local_fritz_abandon',
+    sourceMatchId: verifiedMatch?.matchId ?? `local:${localMatchId}:abandon`,
+  };
+}
+
+async function recordPendingFritzDisconnectLoss(
+  userId: string,
+  fritzTier: unknown = 'elite',
+  source?: { localMatchId?: string | null; roomCode?: string | null; verifiedMatchId?: string | null },
+) {
   const profileRows = await supabaseFetch<any[]>(`/rest/v1/profiles?id=eq.${userId}&limit=1`);
   const profile = profileRows?.[0];
   if (!profile) {
     throw new Error(`Ranking profile not found for user ${userId}`);
   }
   const { fritzId, gameType } = getFritzIdentityForTier(fritzTier);
+  const rankedSource = await resolveLocalFritzAbandonRankedSource(userId, source);
 
   await supabaseFetch('/rest/v1/ranked_games', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({
-      player_id: userId,
-      opponent_id: fritzId,
-      player_score: 0,
-      opponent_score: 60,
-      game_type: gameType,
-      rating_before: profile.glicko_rating,
-      rd_before: profile.glicko_rd,
-      played_at: new Date().toISOString(),
-    }),
+    body: JSON.stringify(buildRankedGameInsertPayload({
+      playerId: userId,
+      opponentId: fritzId,
+      playerScore: 0,
+      opponentScore: 60,
+      gameType,
+      ratingBefore: profile.glicko_rating,
+      rdBefore: profile.glicko_rd,
+      playedAt: new Date().toISOString(),
+      source: rankedSource,
+    })),
   });
 
   await processRatingPeriod(userId);
@@ -3048,7 +3259,7 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
       method: 'PATCH',
       body: JSON.stringify({ resolved: true }),
     });
-    await recordPendingFritzDisconnectLoss(userId, pending.fritz_tier);
+    await recordPendingFritzDisconnectLoss(userId, pending.fritz_tier, { localMatchId, roomCode });
     res.json({ ok: true, processed: true });
   } catch (error) {
     res.status(500).json({
@@ -3192,8 +3403,8 @@ app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
   const puzzleDate = typeof req.body?.puzzleDate === 'string' ? req.body.puzzleDate.trim() : '';
   const puzzleId = typeof req.body?.puzzleId === 'string' ? req.body.puzzleId.trim() : '';
   const slotIndexRaw = Number(req.body?.slotIndex);
-  const rawScore = Number(req.body?.rawScore);
-  const movesUsed = Number(req.body?.movesUsed);
+  const clientRawScore = Number(req.body?.rawScore);
+  const clientMovesUsed = Number(req.body?.movesUsed);
   const elapsedSeconds = Number(req.body?.elapsedSeconds);
   const submittedLine = Array.isArray(req.body?.submittedLine)
     ? (req.body.submittedLine as Array<Record<string, unknown>>)
@@ -3207,7 +3418,7 @@ app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
     res.status(400).json({ error: 'attemptId, puzzleDate, puzzleId, and slotIndex are required.' });
     return;
   }
-  if (!Number.isFinite(rawScore) || !Number.isFinite(movesUsed) || !Number.isFinite(elapsedSeconds)) {
+  if (!Number.isFinite(clientRawScore) || !Number.isFinite(clientMovesUsed) || !Number.isFinite(elapsedSeconds)) {
     res.status(400).json({ error: 'rawScore, movesUsed, and elapsedSeconds are required.' });
     return;
   }
@@ -3270,20 +3481,40 @@ app.post('/api/daily-puzzle/submit-slot', async (req, res) => {
       return;
     }
     const bestPossibleScore = slot.bestPossibleScore ?? 0;
-    const awardedPoints = calculateDailyPuzzleAwardedPoints(rawScore, bestPossibleScore, slot.slotMaxPoints);
-    const solved = rawScore > 0;
-    const perfect = bestPossibleScore > 0 && rawScore >= bestPossibleScore;
+    let validation;
+    try {
+      validation = validateDailyPuzzleSubmission({
+        slot,
+        submittedLine,
+        elapsedSeconds,
+        clientRawScore,
+      });
+    } catch (error) {
+      res.status(400).json({
+        error: error instanceof Error ? error.message : 'Daily Puzzle submitted line is invalid.',
+      });
+      return;
+    }
+    const awardedPoints = calculateDailyPuzzleAwardedPoints(
+      validation.rawScore,
+      bestPossibleScore,
+      slot.slotMaxPoints,
+    );
     const slotResult = await createDailyPuzzleSlotResult({
       attempt,
       slot,
-      rawScore: Math.max(0, Math.round(rawScore)),
+      rawScore: validation.rawScore,
       awardedPoints,
-      solved,
-      perfect,
-      movesUsed: Math.max(0, Math.round(movesUsed)),
-      elapsedSeconds: Math.max(0, Math.round(elapsedSeconds)),
-      submittedLine,
-      result: clientResult,
+      solved: validation.solved,
+      perfect: validation.perfect,
+      movesUsed: validation.movesUsed,
+      elapsedSeconds: validation.elapsedSeconds,
+      submittedLine: validation.submittedLine,
+      result: {
+        ...clientResult,
+        ...validation.result,
+        clientMovesUsed: Number.isFinite(clientMovesUsed) ? Math.max(0, Math.round(clientMovesUsed)) : null,
+      },
     });
     const nextCurrentSlotIndex = Math.min(3, slot.slotIndex + 1) as DailyPuzzleSlotIndex;
     const nextAttempt: DailyPuzzleAttempt = {
@@ -4175,7 +4406,7 @@ app.get('/api/daily-fritz/leaderboard/:date', async (req, res) => {
 });
 
 app.post('/api/daily-fritz/generate', async (req, res) => {
-  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+  if (!isAdminSecret(req.body?.adminKey)) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -4210,7 +4441,7 @@ app.post('/api/daily-fritz/generate', async (req, res) => {
 });
 
 app.post('/api/daily-fritz/invalidate', async (req, res) => {
-  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+  if (!isAdminSecret(req.body?.adminKey)) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -4239,7 +4470,7 @@ app.post('/api/daily-fritz/invalidate', async (req, res) => {
 });
 
 app.post('/api/daily-fritz/reset-attempt', async (req, res) => {
-  if (req.body?.adminKey !== process.env.ADMIN_SECRET) {
+  if (!isAdminSecret(req.body?.adminKey)) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -4427,6 +4658,7 @@ function createGameOverPersistScheduler(input: GameOverPersistInput): () => void
         ];
         const rankingProfiles = new Map<string, any>();
         const insertedRankedGames = new Map<string, any>();
+        const rankedPlayedAt = new Date().toISOString();
 
         for (const p of rankingParticipants) {
           if (p.me.userId) {
@@ -4446,16 +4678,17 @@ function createGameOverPersistScheduler(input: GameOverPersistInput): () => void
                   headers: {
                     Prefer: 'return=representation',
                   },
-                  body: JSON.stringify({
-                    player_id: p.me.userId,
-                    opponent_id: opponentId,
-                    player_score: p.myScore,
-                    opponent_score: p.oppScore,
-                    game_type: opponentId === FRITZ_SYSTEM_ID ? 'fritz' : 'multiplayer',
-                    rating_before: profile.glicko_rating,
-                    rd_before: profile.glicko_rd,
-                    played_at: new Date().toISOString(),
-                  }),
+                  body: JSON.stringify(buildRankedGameInsertPayload({
+                    playerId: p.me.userId,
+                    opponentId,
+                    playerScore: p.myScore,
+                    opponentScore: p.oppScore,
+                    gameType: opponentId === FRITZ_SYSTEM_ID ? 'fritz' : 'multiplayer',
+                    ratingBefore: profile.glicko_rating,
+                    rdBefore: profile.glicko_rd,
+                    playedAt: rankedPlayedAt,
+                    source: { sourceType: 'live_room', sourceMatchId: room.matchId },
+                  })),
                 });
                 const insertedGame = insertedGames?.[0];
                 if (insertedGame) {
@@ -4614,6 +4847,7 @@ io.on('connection', (socket: Socket) => {
   socket.conn.on('upgrade', (transport) => {
     console.log(`[socket.io] transport upgraded id=${socket.id} -> ${transport.name}`);
   });
+  installSocketRateLimit(socket);
 
   /* Matchmaking queue handlers — additive, does not modify private-match flow. */
   registerMatchmakingHandlers(io, socket, (code) => broadcastStateUpdate(code));
@@ -5129,7 +5363,7 @@ io.on('connection', (socket: Socket) => {
             method: 'PATCH',
             body: JSON.stringify({ resolved: true }),
           });
-          await recordPendingFritzDisconnectLoss(verifiedUserId, pending.fritz_tier);
+          await recordPendingFritzDisconnectLoss(verifiedUserId, pending.fritz_tier, { roomCode });
         } catch (error) {
           console.error('[Fritz] disconnect loss handling failed:', error);
         }
@@ -5148,8 +5382,29 @@ function notifyClientsOfProcessShutdown(signal: string): void {
 }
 process.once('SIGTERM', () => notifyClientsOfProcessShutdown('SIGTERM'));
 process.once('SIGINT', () => notifyClientsOfProcessShutdown('SIGINT'));
+process.on('unhandledRejection', (reason) => {
+  console.error('[process] unhandledRejection', getProcessErrorLogPayload(reason));
+});
+process.on('uncaughtException', (error) => {
+  console.error('[process] uncaughtException', getProcessErrorLogPayload(error));
+});
 
 const PORT = Number.parseInt(process.env.PORT ?? '3001', 10) || 3001;
+
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `[server] Port ${PORT} is already in use. Another process is already listening there, likely an existing Racehorse server instance.`,
+    );
+    console.error(
+      `[server] Stop the existing process with "lsof -nP -iTCP:${PORT} -sTCP:LISTEN" and "kill <PID>", or run this server on another port with "PORT=${PORT + 1} npm run dev".`,
+    );
+    process.exit(1);
+  }
+
+  console.error('[server] Failed to start server:', error);
+  process.exit(1);
+});
 
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);

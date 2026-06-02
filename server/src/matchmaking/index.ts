@@ -10,6 +10,10 @@ const MATCH_FOUND_COUNTDOWN_MS = 3000;
 const ONLINE_BROADCAST_INTERVAL_MS = 2000;
 const DEFAULT_RATING = 800;
 
+export type QueueIdentityResolution =
+  | { ok: true; userId: string; username: string; authenticated: boolean }
+  | { ok: false; error: 'missing_identity' | 'not_authenticated' | 'user_mismatch' };
+
 function matchmakingDebugEnabled(): boolean {
   return process.env.MATCHMAKING_DEBUG === '1';
 }
@@ -37,6 +41,41 @@ async function fetchPlayerRating(userId: string): Promise<number> {
   }
 }
 
+function isUuidLike(value: string | null | undefined): boolean {
+  return Boolean(
+    value &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
+  );
+}
+
+export function resolveQueueIdentity(
+  socket: Pick<Socket, 'data'>,
+  payload: { userId?: string; username?: string } | null | undefined,
+): QueueIdentityResolution {
+  const payloadUserId = typeof payload?.userId === 'string' ? payload.userId.trim() : '';
+  const payloadUsername = typeof payload?.username === 'string' ? payload.username.trim() : '';
+  const socketUserId = typeof socket.data?.userId === 'string' ? socket.data.userId.trim() : '';
+  const socketUsername = typeof socket.data?.username === 'string' ? socket.data.username.trim() : '';
+  const username = socketUsername || payloadUsername;
+
+  if (socketUserId) {
+    if (payloadUserId && payloadUserId !== socketUserId) {
+      return { ok: false, error: 'user_mismatch' };
+    }
+    return { ok: true, userId: socketUserId, username: username || 'player', authenticated: true };
+  }
+
+  if (!payloadUserId || !payloadUsername) {
+    return { ok: false, error: 'missing_identity' };
+  }
+
+  if (isUuidLike(payloadUserId)) {
+    return { ok: false, error: 'not_authenticated' };
+  }
+
+  return { ok: true, userId: payloadUserId, username: payloadUsername, authenticated: false };
+}
+
 export function getOnlineCount(io: Server): number {
   return io.sockets.sockets.size;
 }
@@ -61,20 +100,21 @@ export function registerMatchmakingHandlers(
 
   socket.on('queue:join', async (payload: { userId?: string; username?: string }, ack?: (resp: unknown) => void) => {
     try {
-      if (!payload?.userId || !payload?.username) {
+      const identity = resolveQueueIdentity(socket, payload);
+      if (!identity.ok) {
         ack?.({
           ok: false,
-          error: 'missing_identity',
+          error: identity.error,
           online: getOnlineCount(io),
           queued: service.size(),
         });
         return;
       }
-      const rating = await fetchPlayerRating(payload.userId);
+      const rating = identity.authenticated ? await fetchPlayerRating(identity.userId) : DEFAULT_RATING;
       const result = service.join({
         socketId: socket.id,
-        userId: payload.userId,
-        username: payload.username,
+        userId: identity.userId,
+        username: identity.username,
         rating,
         isSim: false,
       });
@@ -82,7 +122,7 @@ export function registerMatchmakingHandlers(
         if (matchmakingDebugEnabled()) {
           console.log('[matchmaking][debug] queue:join rejected', {
             reason: result.reason,
-            userId: payload.userId,
+            userId: identity.userId,
             socketId: socket.id,
           });
         }
@@ -97,9 +137,10 @@ export function registerMatchmakingHandlers(
       if (matchmakingDebugEnabled()) {
         console.log('[matchmaking][debug] queue:join accepted', {
           socketId: socket.id,
-          userId: payload.userId,
-          username: payload.username,
+          userId: identity.userId,
+          username: identity.username,
           rating,
+          authenticated: identity.authenticated,
           queueSize: service.size(),
           online: getOnlineCount(io),
         });

@@ -83,7 +83,32 @@
 
 ---
 
-## Wiring fix (2026-06-01)
+## Stale dev server (2026-06-02)
+
+If you still see **600/1000** as the main tier number and a dead **View tier details** link, you are almost certainly on an **old Vite process** still bound to port **5173**.
+
+Runtime check (curl dev source):
+
+| Port | PlayVsFritz source |
+|------|-------------------|
+| `5173` | OLD — `elo: 600`, `<a href="#" preventDefault>` |
+| `5176` (fresh `npm run dev`) | NEW — `roleLabel`, `FritzTierDetailsModal` |
+
+**Fix:** stop all zombie Vite servers, then start one client dev server:
+
+```bash
+# macOS — free ports 5173–5176
+for p in 5173 5174 5175 5176; do lsof -ti tcp:$p | xargs kill -9 2>/dev/null; done
+cd client && npm run dev
+```
+
+Open **http://localhost:5173** only after a single Vite instance owns that port.
+
+`vite.config.ts` now sets `strictPort: true` so a second dev start fails loudly instead of silently using another port.
+
+**How to tell you have the new UI:** Rookie card shows **Beginner** (large) and **Approx. strength ~600** (small), not **600** as the main label.
+
+---
 
 **What was broken:** Click handler and state were correct, but the modal rendered as a child of `.pvf-root`, which uses `overflow: hidden` and `isolation: isolate`. The `position: fixed` backdrop was clipped/hidden inside that shell — clicks appeared to do nothing.
 

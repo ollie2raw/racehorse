@@ -175,6 +175,10 @@
  */
 .home-card-art--fritz {
   background-image: url("../assets/home/newHOMEdailyfritz.png");
+  background-image: image-set(
+    url("../assets/home/newHOMEdailyfritz.webp") type("image/webp"),
+    url("../assets/home/newHOMEdailyfritz.png") type("image/png")
+  );
   background-size: cover;
   background-position: 64% 42%;
   opacity: 0.88;
@@ -213,6 +217,10 @@
 /* Daily Puzzle — cool cyan domino board (not a full scene render) */
 .home-card-art--puzzle {
   background-image: url("../assets/home/homefinalpuzzle.png");
+  background-image: image-set(
+    url("../assets/home/homefinalpuzzle.webp") type("image/webp"),
+    url("../assets/home/homefinalpuzzle.png") type("image/png")
+  );
   opacity: var(--rh-img-home-art-puzzle-opacity);
   filter: brightness(var(--rh-img-home-art-puzzle-brightness))
     contrast(var(--rh-img-home-art-puzzle-contrast))
@@ -393,20 +401,6 @@
     inset -1px 0 0 rgba(32, 209, 199, 0.26),
     inset 0 -40px 70px rgba(0,0,0,0.28),
     0 22px 46px rgba(0,0,0,0.36) !important;
-}
-
-.home-card-art--ghost {
-  background-image: url("../assets/home/ghost-art.webp");
-  opacity: 0.68;
-  filter: brightness(0.88) contrast(0.94) saturate(0.90);
-  background-position: center;
-}
-
-.home-card-art--nobrainer {
-  background-image: url("../assets/home/nobrainer-art.webp");
-  opacity: 0.68;
-  filter: brightness(0.88) contrast(0.94) saturate(0.90);
-  background-position: center;
 }
 
 .home-card-content {

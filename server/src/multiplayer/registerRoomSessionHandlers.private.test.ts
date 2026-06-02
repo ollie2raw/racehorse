@@ -189,13 +189,13 @@ describe('private room happy path', () => {
     expect(guestUpdate?.state?.players?.[guestSeatId]?.hand?.length).toBeGreaterThan(0);
     expect(guestUpdate?.state?.players?.[hostSeatId]?.hand).toEqual([]);
 
-    const currentId = room.state!.playerIds[room.state!.currentPlayerIndex];
+    const { currentId, activeHandlers, playMove } = await findPlayMoveForCurrentTurn(
+      roomCode,
+      hostSeatId,
+      hostHandlers,
+      guestHandlers,
+    );
     const inactiveHandlers = currentId === hostSeatId ? guestHandlers : hostHandlers;
-    const activeHandlers = currentId === hostSeatId ? hostHandlers : guestHandlers;
-
-    const legalMoves = getRoomLegalMoves(roomCode, currentId);
-    const playMove = legalMoves.find((move) => move.type === 'play' && move.tile);
-    expect(playMove).toBeTruthy();
 
     const wrongTurnAck = vi.fn();
     await inactiveHandlers.get('game:action')?.(

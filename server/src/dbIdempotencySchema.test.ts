@@ -1,0 +1,41 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+function readRepoFile(relativePath: string): string {
+  return fs.readFileSync(path.resolve(__dirname, '../../', relativePath), 'utf8');
+}
+
+function compactSql(sql: string): string {
+  return sql.replace(/\s+/g, ' ').toLowerCase();
+}
+
+describe('DB idempotency schema guardrails', () => {
+  it('keeps Daily Puzzle attempt and slot-result uniqueness in the ladder migration', () => {
+    const sql = compactSql(readRepoFile('supabase/daily_puzzle_ladder_v1.sql'));
+
+    expect(sql).toContain('constraint daily_puzzle_attempts_puzzle_date_user_id_key unique (puzzle_date, user_id)');
+    expect(sql).toContain('constraint daily_puzzle_slot_results_attempt_slot_key unique (attempt_id, slot_index)');
+  });
+
+  it('keeps Daily Fritz one-attempt-per-user-per-run uniqueness', () => {
+    const sql = compactSql(readRepoFile('supabase/daily_fritz.sql'));
+
+    expect(sql).toContain('create unique index if not exists idx_daily_fritz_attempts_run_user on public.daily_fritz_attempts (run_date, user_id)');
+  });
+
+  it('keeps Ghost and verified single-player completion idempotency keys', () => {
+    const ghostSql = compactSql(readRepoFile('supabase/ghost.sql'));
+    const verifiedSql = compactSql(readRepoFile('supabase/verified_matches.sql'));
+
+    expect(ghostSql).toContain('add constraint ghost_games_match_id_unique unique (match_id)');
+    expect(verifiedSql).toContain('create table if not exists public.verified_single_player_matches ( match_id uuid primary key');
+    expect(verifiedSql).toContain('create unique index if not exists idx_verified_single_player_matches_user_local on public.verified_single_player_matches (user_id, local_match_id)');
+  });
+
+  it('keeps scheduled tournament bracket-slot uniqueness', () => {
+    const sql = compactSql(readRepoFile('supabase/migrations/2026-05-14_scheduled_tournaments.sql'));
+
+    expect(sql).toContain('unique (tournament_id, round, match_number)');
+  });
+});

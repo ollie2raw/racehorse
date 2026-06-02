@@ -1,5 +1,6 @@
 import { FRITZ_ELITE_ID, getFritzConfig, isFritzId } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
+import { buildRankedGameInsertPayload } from '../ranking/rankedGamePayload';
 import { getLegalMoves } from '../game/engine';
 import { computePlayScore, getOpenEnds, simulatePlacement } from '../game/scoring';
 import { parseBranchPosition } from '../game/types';
@@ -892,17 +893,20 @@ export async function completeGhostGame(params: {
       await supabaseFetch(`/rest/v1/ranked_games`, {
         method: 'POST',
         body: JSON.stringify([
-          {
-            player_id: params.userId,
-            opponent_id: fritzId,
-            player_score: Math.round(params.finalScore),
-            opponent_score: Math.round(params.opponentScore),
-            game_type: 'fritz',
-            played_at: now,
-            rating_before: rankingProfile.glicko_rating,
-            rd_before: rankingProfile.glicko_rd,
-            rating_after: null,
-          },
+          buildRankedGameInsertPayload({
+            playerId: params.userId,
+            opponentId: fritzId,
+            playerScore: Math.round(params.finalScore),
+            opponentScore: Math.round(params.opponentScore),
+            gameType: 'fritz',
+            playedAt: now,
+            ratingBefore: rankingProfile.glicko_rating,
+            rdBefore: rankingProfile.glicko_rd,
+            ratingAfter: null,
+            source: params.matchId
+              ? { sourceType: 'verified_single_player', sourceMatchId: params.matchId }
+              : null,
+          }),
         ]),
       });
 

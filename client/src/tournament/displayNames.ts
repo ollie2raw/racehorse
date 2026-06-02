@@ -6,16 +6,28 @@ export function isTournamentBotId(userId: string | null | undefined): boolean {
   return Boolean(userId && userId.startsWith('bot:fritz:'));
 }
 
+/** Stable 1-based index from `bot:fritz:{tournamentId}:{n}` */
+export function tournamentBotDisplayIndex(userId: string | null | undefined): number | null {
+  if (!isTournamentBotId(userId)) return null;
+  const segment = userId!.split(':').pop();
+  const n = segment ? Number.parseInt(segment, 10) : Number.NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export function botTierForRound(round: 1 | 2 | 3): BotTier {
   if (round === 3) return 'master';
   if (round === 2) return 'elite';
   return 'standard';
 }
 
-export function botDisplayNameFromTier(tier: BotTier | null | undefined): string {
-  if (tier === 'master') return 'Master Fritz';
-  if (tier === 'elite') return 'Elite Fritz';
-  return 'Fritz';
+export function botDisplayNameFromTier(
+  tier: BotTier | null | undefined,
+  botIndex?: number | null,
+): string {
+  const suffix = botIndex != null ? ` ${botIndex}` : '';
+  if (tier === 'master') return `Master Fritz${suffix}`;
+  if (tier === 'elite') return `Elite Fritz${suffix}`;
+  return `Fritz${suffix}`;
 }
 
 function looksLikeRawBotToken(value: string | null | undefined): boolean {
@@ -35,7 +47,7 @@ export function resolveTournamentPlayerName(
   if (!userId) return 'TBD';
   if (isTournamentBotId(userId)) {
     const tier = opts?.botTier ?? (opts?.round != null ? botTierForRound(opts.round) : null);
-    return botDisplayNameFromTier(tier);
+    return botDisplayNameFromTier(tier, tournamentBotDisplayIndex(userId));
   }
   const username = opts?.username?.trim();
   if (username && !looksLikeRawBotToken(username)) {

@@ -14,6 +14,8 @@ interface SinglePlayerHubScreenProps {
   userId?: string | null;
   onBack: () => void;
   onNavigate: (mode: AppMode) => void;
+  onOpenAuth?: () => void;
+  onOpenAccount?: () => void;
 }
 
 type CardConfig = {
@@ -136,6 +138,8 @@ export default function SinglePlayerHubScreen({
   userId = null,
   onBack,
   onNavigate,
+  onOpenAuth,
+  onOpenAccount,
 }: SinglePlayerHubScreenProps) {
   const hubStats = useSinglePlayerHubStats(userId);
 
@@ -155,7 +159,13 @@ export default function SinglePlayerHubScreen({
       </div>
 
       <div className="home-shell relative mx-auto flex min-h-0 w-full max-w-[1580px] flex-1 flex-col">
-        <GlobalNav currentMode="singlePlayerHub" activeColor="#E7B64A" onNavigate={onNavigate} />
+        <GlobalNav
+          currentMode="singlePlayerHub"
+          activeColor="#E7B64A"
+          onNavigate={onNavigate}
+          onOpenAuth={onOpenAuth}
+          onOpenAccount={onOpenAccount}
+        />
 
         <main className="sp-solo-main relative flex min-h-0 flex-1 flex-col overflow-hidden px-0 pb-5 pt-10 home-main">
           <div

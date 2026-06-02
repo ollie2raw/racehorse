@@ -236,12 +236,11 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
           <RatingSparkline matches={profile.recent_matches} />
           {profile.h2h && !profile.is_self && (
             <div className="rh-pp-h2h">
-              <span className="rh-pp-h2h-label">H2H</span>
+              <span className="rh-pp-h2h-label">Your record vs {profile.username}</span>
               <span className="rh-pp-h2h-record">
                 <span style={{ color: 'var(--tier-rookie)' }}>{profile.h2h.wins}W</span>
                 {' – '}
                 <span style={{ color: 'var(--accent-red, #ef4444)' }}>{profile.h2h.losses}L</span>
-                {' vs you'}
               </span>
             </div>
           )}

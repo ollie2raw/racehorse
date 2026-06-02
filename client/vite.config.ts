@@ -28,6 +28,7 @@ export default defineConfig({
     },
   },
   server: {
+    strictPort: true,
     proxy: {
       '/api': devApiProxy,
       '/league': devApiProxy,

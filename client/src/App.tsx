@@ -5,34 +5,9 @@ import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './compon
 import type { Socket } from 'socket.io-client';
 import './App.css';
 import './match/match-live.css';
-import {
-  AnimatedScore,
-  Board,
-  BoardOpenEndsPill,
-  BoneyardCountPill,
-  BrandLogo,
-  DominoTile,
-  FullscreenIcon,
-  HomeIcon,
-  RotateOverlay,
-  ScoreTrackOverlay,
-  VolumeIcon,
-  ZoomInIcon,
-  ZoomOutIcon,
-} from './components';
+import { BrandLogo } from './components';
 import type { BoardHandle } from './components';
-import { MatchLiveLayout } from './match/board';
-import LeaveGameModal from './components/LeaveGameModal';
-import { GameOverlayPortal } from './components/GameOverlayPortal';
-import HandOverModal from './components/handOver/HandOverModal';
-import {
-  buildHandOverReasonCopy,
-  buildMultiplayerHandOverReveals,
-  loserDisplayLabel,
-  resolveWinnerSide,
-  winnerDisplayLabel,
-} from './components/handOver/handOverCopy';
-import TileRack from './components/TileRack';
+import { LiveMatchScreen } from './match/LiveMatchScreen';
 import {
   playDrawSound,
   playMatchLoseSound,
@@ -40,14 +15,11 @@ import {
   playScoreSound,
   playTileSound,
 } from './utils/sound';
-import GameOverModal from './components/GameOverModal';
 import { isTemporaryUsername, useAuth } from './auth/useAuth';
 import LayoutScreen from './ui/LayoutScreen';
 import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from './analyzer/moveAnalyzer';
 import {
   type MoveEntry,
-  nextEndsForTile,
-  pickEngineBestMove,
   snapshotBoardState,
   cloneBoardState,
   toTileTuple,
@@ -64,23 +36,21 @@ import type { FritzTier } from './bot/fritzConfig';
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from './bot/pvfTierPreference';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
-import { drawAudit, nextDrawRequestId } from './multiplayer/drawAudit';
-import {
-  mpPerfBeginAction,
-  mpPerfMarkAck,
-  mpPerfMarkPendingUiCleared,
-  mpPerfResetAction,
-} from './multiplayer/mpPerf';
 import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
 import {
   isRenderableMultiplayerSnapshot,
-  projectMultiplayerGameState,
   projectRenderableBoard,
 } from './multiplayer/boardSnapshotGuards';
+import {
+  useLiveMatchSession,
+  findPlacedTile,
+  getBoardEnds,
+  getBoardTileCount,
+} from './match/session/useLiveMatchSession';
+import { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
 import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
 import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
 import { useRenderProfiler } from './debug/renderProfiler';
-import { buildPlayableTileKeys, getHandTileLegality } from './utils/handTileLegality';
 import {
   claudeRgb,
 } from './ui/claudeMode';
@@ -91,84 +61,35 @@ import {
 } from './learn/guidedAuthoring';
 import { resolveGuidedMatchStart } from './learn/lessonV2';
 import RacehorseHomeScreen from './screens/HomeScreen';
-import SinglePlayerHubScreen from './screens/SinglePlayerHubScreen';
 import { TournamentScreen } from './screens/TournamentScreen';
 import TournamentHubScreen from './tournament/TournamentHubScreen';
 import TournamentBracketScreen from './tournament/TournamentBracketScreen';
 import TournamentResultScreen from './tournament/TournamentResultScreen';
-import TournamentMatchHud from './tournament/TournamentMatchHud';
-import {
-  resolveTournamentOpponentLabel,
-  tournamentStageShortLabel,
-} from './tournament/displayNames';
+import { resolveTournamentOpponentLabel } from './tournament/displayNames';
 import { useTournament } from './tournament/useTournament';
 import * as tournamentApi from './tournament/tournamentApi';
-import type { TournamentResultView } from './tournament/types';
-import {
-  evaluateTournamentAttachGuard,
-  localHandCountFromJoinResponse,
-} from './tournament/tournamentAttachGuard';
-import {
-  deriveBracketTerminalState,
-  isTournamentBracketTerminal,
-  msUntilBracketAutoKick,
-} from './tournament/bracketTerminal';
-import {
-  isTerminalTournamentMatch,
-  markTerminalTournamentMatch,
-  markTournamentTerminal,
-  readTerminalTournamentMatchIds,
-  tournamentSubViewAfterMatchComplete,
-} from './tournament/terminalMatches';
+import { isTerminalTournamentMatch } from './tournament/terminalMatches';
 import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
 import IncomingFriendChallengeCard from './multiplayer/IncomingFriendChallengeCard';
 import type { OutboundChallenge } from './multiplayer/friendChallenge';
 import MatchmakingScreen from './matchmaking/MatchmakingScreen';
 import { MatchFoundOverlay } from './matchmaking/MatchFoundOverlay';
 import type { MatchFoundPayload } from './matchmaking/types';
-
-function emitWithAck<TResp>(
-  socket: { emit: (...args: any[]) => void },
-  event: string,
-  ...argsWithoutAck: any[]
-): Promise<TResp> {
-  return new Promise((resolve, reject) => {
-    const mpDebug =
-      typeof window !== 'undefined' && window.localStorage.getItem('mp_debug') === '1';
-    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    if (mpDebug) {
-      console.log('[mp-action-client] sent', {
-        event,
-        payload: argsWithoutAck[argsWithoutAck.length - 1],
-      });
-    }
-    const t = window.setTimeout(
-      () => {
-        if (mpDebug) {
-          const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-          console.warn('[mp-action-client] timeout', {
-            event,
-            elapsedMs: Number((endedAt - startedAt).toFixed(1)),
-          });
-        }
-        reject(new Error(`${event} timed out after 8000ms`));
-      },
-      8000,
-    );
-    socket.emit(event, ...argsWithoutAck, (resp: TResp) => {
-      window.clearTimeout(t);
-       if (mpDebug) {
-        const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        console.log('[mp-action-client] ack', {
-          event,
-          elapsedMs: Number((endedAt - startedAt).toFixed(1)),
-          response: resp,
-        });
-      }
-      resolve(resp);
-    });
-  });
-}
+import {
+  emitWithAck,
+  emitRoomAbandonMatch,
+  emitRoomCreate,
+  emitRoomJoin,
+  emitRoomLeave,
+} from './multiplayer/roomTransport';
+import {
+  clearLastRoomCode,
+  getOrCreateGuestIdentityId,
+  LAST_ROOM_STORAGE_KEY,
+  readRoomInviteCodeFromLocation,
+  saveLastRoomCode,
+  shouldPersistLastRoomCode,
+} from './match/recovery/matchRecovery';
 
 // ─── Utilities ───────────────────────────────────────────────
 type RoomPlayer = { id: string; username: string; userId: string | null };
@@ -207,8 +128,7 @@ type AppMode =
   | 'profile'
   | 'feed';
 
-const EMPTY_MOVES: Move[] = [];
-
+const SinglePlayerHubScreen = React.lazy(() => import('./screens/SinglePlayerHubScreen'));
 const NoBrainerLabScreen = React.lazy(() => import('./practice/NoBrainerLabScreen'));
 const BotMatchScreen = React.lazy(() => import('./bot/BotMatchScreen'));
 const PlayVsFritz = React.lazy(() => import('./bot/PlayVsFritz'));
@@ -253,18 +173,6 @@ function IconDominoes({ size = 16, style }: { size?: number; style?: React.CSSPr
   );
 }
 
-function tileEquals(a: Tile, b: Tile): boolean {
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
-}
-
-function tileListEquals(a: Tile[], b: Tile[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    if (!tileEquals(a[i], b[i])) return false;
-  }
-  return true;
-}
-
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
   return raw || 'Guest';
@@ -292,59 +200,6 @@ function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
     .filter((p) => Boolean(p.id));
 }
 
-const LAST_ROOM_STORAGE_KEY = 'racehorse_last_room_code';
-const GUEST_ID_STORAGE_KEY = 'racehorse_guest_identity_v1';
-
-function getOrCreateGuestIdentityId(): string {
-  const fallback = () => `guest_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-  if (typeof window === 'undefined') return fallback();
-  try {
-    const existing = window.localStorage.getItem(GUEST_ID_STORAGE_KEY);
-    if (existing?.startsWith('guest_')) return existing;
-    const next = fallback();
-    window.localStorage.setItem(GUEST_ID_STORAGE_KEY, next);
-    return next;
-  } catch {
-    return fallback();
-  }
-}
-
-function getBoardEnds(board: GameState['board']): [number, number] {
-  if (!board) return [-1, -1];
-  return [board.leftEnd, board.rightEnd];
-}
-
-
-function getBoardTileCount(board: GameState['board']): number {
-  if (!board) return 0;
-  let count = board.mainLine?.length ?? 0;
-  for (const hub of board.hubDoubles ?? []) {
-    for (const arm of hub?.branches ?? []) {
-      if (arm?.tiles?.length) count += arm.tiles.length;
-    }
-  }
-  return count;
-}
-
-function getBoardTiles(board: GameState['board']): Tile[] {
-  if (!board) return [];
-  const tiles: Tile[] = [];
-  for (const placed of board.mainLine ?? []) {
-    if (!placed?.tile) continue;
-    tiles.push(placed.tile);
-  }
-  for (const hub of board.hubDoubles ?? []) {
-    for (const branch of hub?.branches ?? []) {
-      if (!branch?.tiles) continue;
-      for (const placed of branch.tiles) {
-        if (!placed?.tile) continue;
-        tiles.push(placed.tile);
-      }
-    }
-  }
-  return tiles;
-}
-
 function ScreenLoader({ label = 'Loading…' }: { label?: string }) {
   return (
     <div className="rh-screen-loader" role="status" aria-live="polite" aria-busy="true">
@@ -362,317 +217,7 @@ function ScreenLoader({ label = 'Loading…' }: { label?: string }) {
   );
 }
 
-function tileKey(tile: Tile): string {
-  const low = Math.min(tile.low, tile.high);
-  const high = Math.max(tile.low, tile.high);
-  return `${low}-${high}`;
-}
-
-function findPlacedTile(
-  previousBoard: GameState['board'],
-  nextBoard: GameState['board'],
-): Tile | null {
-  const prevCounts = new Map<string, number>();
-  for (const tile of getBoardTiles(previousBoard)) {
-    const key = tileKey(tile);
-    prevCounts.set(key, (prevCounts.get(key) ?? 0) + 1);
-  }
-  for (const tile of getBoardTiles(nextBoard)) {
-    const key = tileKey(tile);
-    const prevCount = prevCounts.get(key) ?? 0;
-    if (prevCount <= 0) return tile;
-    prevCounts.set(key, prevCount - 1);
-  }
-  return null;
-}
-
-
 const LEARN_MODE_VISIBLE = true;
-
-// ─── Hand View ───────────────────────────────────────────────
-
-interface HandViewProps {
-  hand: Tile[];
-  selectedTile: Tile | null;
-  onSelect: (tile: Tile) => void;
-  isMyTurn: boolean;
-  legalMoves: Move[];
-  tileSize: number;
-  compactStacked: boolean;
-  drawPulseIndex: number | null;
-}
-
-const HandView = React.memo(function HandView({
-  hand,
-  selectedTile,
-  onSelect,
-  isMyTurn,
-  legalMoves,
-  tileSize,
-  compactStacked,
-  drawPulseIndex,
-}: HandViewProps) {
-  useRenderProfiler('HandView');
-  const playableTileKeys = useMemo(() => buildPlayableTileKeys(legalMoves), [legalMoves]);
-
-  const renderTile = (tile: Tile, idx: number) => {
-    const isSel = selectedTile && tileEquals(tile, selectedTile);
-    const { highlight, unplayable } = getHandTileLegality(tile, isMyTurn, playableTileKeys);
-    return (
-      <DominoTile
-        key={`${tile.low}-${tile.high}`}
-        tile={tile}
-        size={tileSize}
-        selected={isSel ?? false}
-        highlight={highlight}
-        unplayable={unplayable}
-        onClick={() => isMyTurn && onSelect(tile)}
-        disabled={!isMyTurn}
-        className={drawPulseIndex === idx ? 'new-draw' : ''}
-      />
-    );
-  };
-
-  if (compactStacked) {
-    const splitAt = Math.ceil(hand.length / 2);
-    const firstRow = hand.slice(0, splitAt);
-    const secondRow = hand.slice(splitAt);
-    return (
-      <div className="hand-container is-stacked">
-        <div className="hand-row">{firstRow.map((tile, idx) => renderTile(tile, idx))}</div>
-        <div className="hand-row">{secondRow.map((tile, idx) => renderTile(tile, splitAt + idx))}</div>
-      </div>
-    );
-  }
-
-  return <div className="hand-container">{hand.map((tile, idx) => renderTile(tile, idx))}</div>;
-}, (prev, next) => (
-  prev.hand === next.hand &&
-  prev.selectedTile === next.selectedTile &&
-  prev.onSelect === next.onSelect &&
-  prev.isMyTurn === next.isMyTurn &&
-  prev.legalMoves === next.legalMoves &&
-  prev.tileSize === next.tileSize &&
-  prev.compactStacked === next.compactStacked &&
-  prev.drawPulseIndex === next.drawPulseIndex
-));
-
-// ─── Game Over Overlay ───────────────────────────────────────
-
-interface GameOverOverlayProps {
-  state: GameState;
-  myId: string;
-  onPrimary: () => void;
-  primaryLabel: string;
-  onExit: () => void;
-  secondaryLabel: string;
-  waitingText?: string;
-  players: RoomPlayer[];
-  ratingSummary?: {
-    pending: boolean;
-    delta: number | null;
-    newRating: number | null;
-  } | null;
-  extraActionLabel?: string;
-  onExtraAction?: () => void;
-}
-
-type TournamentMatchContext = {
-  tournamentId: string;
-  matchId: string;
-  round: 1 | 2 | 3;
-  matchNumber: number;
-  roomCode: string | null;
-  stageLabel: 'Quarterfinal' | 'Semifinal' | 'Final';
-  isTournament: true;
-  opponentUserId: string | null;
-  opponentUsername: string | null;
-  opponentRating: number | null;
-};
-
-function getTournamentStageLabel(round: 1 | 2 | 3): TournamentMatchContext['stageLabel'] {
-  if (round === 3) return 'Final';
-  if (round === 2) return 'Semifinal';
-  return 'Quarterfinal';
-}
-
-interface HandEndedPayload {
-  handNumber: number;
-  opponentRemainingTiles: Tile[];
-  yourRemainingTiles: Tile[];
-  pointsAwarded: {
-    you: number;
-    opponent: number;
-  };
-  whoWentOut?: string | null;
-  winnerId?: string | null;
-  handWinnerId?: string | null;
-}
-
-function GameOverOverlay({
-  state,
-  myId,
-  onPrimary,
-  primaryLabel,
-  onExit,
-  secondaryLabel,
-  waitingText,
-  players,
-  ratingSummary = null,
-  extraActionLabel,
-  onExtraAction,
-}: GameOverOverlayProps) {
-  const winner = state.winnerId;
-  const getName = (pid: string, idx: number) => {
-    const p = players.find((pl) => pl.id === pid);
-    if (p?.username) return `@${p.username}`;
-    return pid === myId ? 'You' : `Player ${idx + 1}`;
-  };
-  const playerScores = state.playerIds.map((pid, idx) => ({
-    pid,
-    name: getName(pid, idx),
-    score: state.players[pid]?.score ?? 0,
-  }));
-  const myScore = state.players[myId]?.score ?? 0;
-  const opponent = playerScores.find((entry) => entry.pid !== myId) ?? null;
-  const opponentScore = opponent?.score ?? 0;
-  const margin = Math.abs(myScore - opponentScore);
-  const didWin = winner === myId;
-  const victoryTitle = winner ? (didWin ? 'Victory' : 'Defeat') : 'Match Complete';
-  const resultLabel = winner ? (didWin ? 'Victory' : 'Defeat') : 'Complete';
-  const subtitle = opponent
-    ? didWin
-      ? `You finished ahead of ${opponent.name}.`
-      : winner
-        ? `${opponent.name} closed out the match.`
-        : `Final standings are locked in against ${opponent.name}.`
-    : 'Final multiplayer standings.';
-
-  return (
-    <GameOverModal
-      open
-      ariaLabel="Game over"
-      matchKind="multiplayer"
-      primaryAccent="blue"
-      kicker="Multiplayer Result"
-      title={victoryTitle}
-      subtitle={subtitle}
-      tone={didWin ? 'blue' : 'red'}
-      stats={[
-        { label: 'Final Score', value: `${myScore}-${opponentScore}`, tone: winner ? (didWin ? 'blue' : 'red') : 'default' },
-        { label: 'Margin', value: winner ? `${didWin ? '+' : '-'}${margin}` : `${margin}`, tone: winner ? (didWin ? 'blue' : 'red') : 'default' },
-        { label: 'Result', value: resultLabel, tone: winner ? (didWin ? 'blue' : 'red') : 'default' },
-      ]}
-      scores={playerScores.map((row) => ({
-        label: row.name,
-        value: row.score,
-        winner: row.pid === winner,
-        showCrown: row.pid === winner,
-      }))}
-      primaryLabel={primaryLabel}
-      onPrimary={onPrimary}
-      secondaryLabel={secondaryLabel}
-      onSecondary={onExit}
-      extraActionLabel={extraActionLabel}
-      onExtraAction={onExtraAction}
-      onClose={onExit}
-    >
-      {ratingSummary && (
-        <div className="rh-go-rating">
-          <span>Rating</span>
-          <strong>
-            {ratingSummary.pending
-              ? 'Updating...'
-              : ratingSummary.delta != null && ratingSummary.newRating != null
-                ? `${ratingSummary.delta >= 0 ? '+' : ''}${ratingSummary.delta}  •  ${ratingSummary.newRating}`
-                : 'Updated'}
-          </strong>
-        </div>
-      )}
-      {waitingText && <p className="rh-go-waiting">{waitingText}</p>}
-    </GameOverModal>
-  );
-}
-
-function tournamentEliminationLabel(round: 1 | 2 | 3): string {
-  return tournamentStageShortLabel(round);
-}
-
-function TournamentGameOverOverlay({
-  state,
-  myId,
-  tournamentMatch,
-  myDisplayName,
-  opponentDisplayName,
-  onViewBracket,
-  onViewFinalResult,
-  onReturnToTournament,
-}: {
-  state: GameState;
-  myId: string;
-  tournamentMatch: TournamentMatchContext;
-  myDisplayName: string;
-  opponentDisplayName: string;
-  onViewBracket: () => void;
-  onViewFinalResult: () => void;
-  onReturnToTournament: () => void;
-}) {
-  const didWin = state.winnerId === myId;
-  const isFinal = tournamentMatch.round === 3;
-  const title = isFinal
-    ? didWin
-      ? 'Tournament Champion'
-      : 'Runner-up'
-    : didWin
-      ? tournamentMatch.round === 1
-        ? 'You advanced to the Semifinal'
-        : 'You advanced to the Final'
-      : `Eliminated in the ${tournamentEliminationLabel(tournamentMatch.round)}`;
-  const subtitle = isFinal
-    ? didWin
-      ? 'You won the tournament. View the bracket or final standings.'
-      : 'Strong run — view the bracket or return to the tournament hub.'
-    : didWin
-      ? `You beat ${opponentDisplayName}. View the bracket while the next round prepares.`
-      : `Eliminated by ${opponentDisplayName}. View the bracket or return to the tournament hub.`;
-  const myScore = state.players[myId]?.score ?? 0;
-  const opponentId = state.playerIds.find((pid) => pid !== myId) ?? null;
-  const opponentScore = opponentId ? (state.players[opponentId]?.score ?? 0) : 0;
-  const margin = Math.abs(myScore - opponentScore);
-  const roundLabel = tournamentEliminationLabel(tournamentMatch.round);
-
-  return (
-    <GameOverModal
-      open
-      ariaLabel="Tournament match complete"
-      matchKind="multiplayer"
-      primaryAccent={isFinal ? 'gold' : 'blue'}
-      kicker={isFinal ? 'Tournament Final' : `Tournament ${roundLabel}`}
-      title={title}
-      subtitle={subtitle}
-      tone={didWin ? 'gold' : 'red'}
-      stats={[
-        { label: 'Final Score', value: `${myScore}-${opponentScore}`, tone: didWin ? 'gold' : 'red' },
-        { label: 'Margin', value: `${didWin ? '+' : '-'}${margin}`, tone: didWin ? 'gold' : 'red' },
-        { label: isFinal ? 'Result' : 'Round', value: isFinal ? (didWin ? 'Champion' : 'Runner-Up') : roundLabel, tone: didWin ? 'gold' : 'red' },
-      ]}
-      scores={state.playerIds.map((pid) => ({
-        label: pid === myId ? myDisplayName : opponentDisplayName,
-        value: state.players[pid]?.score ?? 0,
-        winner: pid === state.winnerId,
-        showCrown: pid === state.winnerId,
-      }))}
-      primaryLabel={isFinal ? 'View Final Result' : 'View Bracket'}
-      onPrimary={isFinal ? onViewFinalResult : onViewBracket}
-      secondaryLabel={isFinal ? 'View Bracket' : 'Return to Tournament'}
-      onSecondary={isFinal ? onViewBracket : onReturnToTournament}
-      extraActionLabel={isFinal ? 'Return to Tournament' : undefined}
-      onExtraAction={isFinal ? onReturnToTournament : undefined}
-      onClose={onReturnToTournament}
-    />
-  );
-}
-
 
 function WeeklyStatsScreen({
   open,
@@ -941,15 +486,6 @@ export default function App() {
   const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(false);
   const [mpSubView, setMpSubView] = useState<'quick' | 'private'>('quick');
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
-  const [tournamentSubView, setTournamentSubView] = useState<'hub' | 'bracket' | 'result'>('hub');
-  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
-  const [tournamentMatch, setTournamentMatch] = useState<TournamentMatchContext | null>(null);
-  const [completedTournamentId, setCompletedTournamentId] = useState<string | null>(null);
-  const consumedTournamentGameOverMatchIdsRef = useRef<Set<string>>(new Set(readTerminalTournamentMatchIds()));
-  const dismissedTournamentIdsRef = useRef<Set<string>>(new Set());
-  const [tournamentResult, setTournamentResult] = useState<TournamentResultView | null>(null);
-  const [tournamentResultLoading, setTournamentResultLoading] = useState(false);
-  const [tournamentResultError, setTournamentResultError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('racehorse_muted') === '1';
@@ -1045,20 +581,21 @@ export default function App() {
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
   const [you, setYou] = useState<string>('');
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
-  const [state, setState] = useState<GameState | null>(null);
-  const [legalMoves, setLegalMoves] = useState<Move[]>([]);
-  const [canDraw, setCanDraw] = useState(false);
   const [error, setError] = useState<string>('');
-  const [actionError, setActionError] = useState<string>('');
   const [toast, setToast] = useState<string>('');
+
+  const showToast = useCallback((msg: string, duration = 3000) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToast(msg);
+    toastTimeoutRef.current = setTimeout(() => setToast(''), duration);
+  }, []);
   const [scoreToast, setScoreToast] = useState<{
     message: string;
     tone: 'you' | 'opp';
     visible: boolean;
   } | null>(null);
-  const [handReveal, setHandReveal] = useState<HandEndedPayload | null>(null);
-  const [rematchRequested, setRematchRequested] = useState(false);
-  const [rematchReadyIds, setRematchReadyIds] = useState<string[]>([]);
   const [scoreTrackOpen, setScoreTrackOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [abandonedMatchNotice, setAbandonedMatchNotice] = useState<{
@@ -1070,17 +607,8 @@ export default function App() {
   const [multiplayerMoveLog, setMultiplayerMoveLog] = useState<MoveEntry[]>([]);
   const multiplayerMoveCounterRef = useRef(1);
   const previousStateForAnalysisRef = useRef<GameState | null>(null);
-  const frozenHandOverBoardRef = useRef<{ handNumber: number; board: NonNullable<GameState['board']> } | null>(null);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
-  const [pendingUiAction, setPendingUiAction] = useState<
-    null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'
-  >(null);
-  const pendingActionRef = useRef<boolean>(false);
-  const pendingGameplayActionRef = useRef<{
-    kind: 'play' | 'draw' | 'pass';
-    baselineSequence: number;
-  } | null>(null);
   const {
     user: authUser,
     profile: authProfile,
@@ -1108,20 +636,6 @@ export default function App() {
     socket,
     userId: authUser?.id ?? null,
   });
-
-  // Auto-route to the result screen when a tournament the user is engaged in
-  // completes. "Engaged in" = they have a registration row for it, OR are
-  // currently in its match room. We listen directly here so App.tsx can flip
-  // `tournamentSubView` without screen-level coordination.
-  useEffect(() => {
-    if (!socket) return;
-    const handler = (payload: { tournamentId?: string }) => {
-      if (!payload?.tournamentId) return;
-      setCompletedTournamentId(payload.tournamentId);
-    };
-    socket.on('tournament:completed', handler);
-    return () => { socket.off('tournament:completed', handler); };
-  }, [socket]);
 
   const authUserRef = useRef(authUser);
   const authProfileRef = useRef(authProfile);
@@ -1185,17 +699,15 @@ export default function App() {
   }, [mpSubView]);
 
   const joinedRoomRef = useRef<string | null>(null);
-  const stateRef = useRef<GameState | null>(state);
   const reconnectRoomCodeRef = useRef<string | null>(null);
   const reconnectShouldJoinRef = useRef(false);
   const preventAutoRejoinRef = useRef(false);
   const autoJoinAttemptedRef = useRef(false);
   const joinInFlightRef = useRef(false);
-  const pendingTournamentAttachMatchIdRef = useRef<string | null>(null);
-  const attachedTournamentMatchIdRef = useRef<string | null>(null);
-  const failedTournamentAttachByMatchIdRef = useRef<Record<string, number>>({});
-  const [tournamentAttachPhase, setTournamentAttachPhase] = useState<'idle' | 'pending' | 'failed'>('idle');
-  const [tournamentAttachError, setTournamentAttachError] = useState<string | null>(null);
+  const clearRecoverableRoomStateRef = useRef<() => void>(() => {});
+  const resetMultiplayerRoomStateRef = useRef<
+    (options?: { keepPlayers?: boolean; clearRoomCode?: boolean }) => void
+  >(() => {});
   const createInFlightRef = useRef(false);
   const inviteJoinInFlightRef = useRef(false);
   const rejoinInFlightRef = useRef(false);
@@ -1216,16 +728,233 @@ export default function App() {
     roomMatchIdRef.current = null;
   }, [joinedRoom]);
 
-  const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
-  const legalMovesRef = useRef<Move[]>(legalMoves);
-  const selectedTileRef = useRef<Tile | null>(null);
-  const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
+  const isMutedRef = useRef(isMuted);
+  const applyRoomEventMetaRef = useRef<(meta?: RoomEventMeta | null) => void>(() => {});
+  const fetchGameStateRef = useRef<(reason: string) => Promise<boolean>>(async () => false);
+  const resetClientGameSessionRef = useRef<() => void>(() => {});
+  const resyncInFlightRef = useRef(false);
+  const resyncCooldownUntilRef = useRef(0);
+  const resyncBufferedUpdateRef = useRef<StateUpdatePayload | null>(null);
+  const resyncFlushRef = useRef<(() => void) | null>(null);
+  const playerReadyEmittedRef = useRef(false);
+  const isSeatedPlayerRef = useRef(false);
+  const matchStartedRef = useRef(false);
+  const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
+  const applyJoinedRoomResponseRef = useRef<(resp: any) => void>(() => {});
+  const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
+
+  const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber'>) => {
+    const moveNumber =
+      entry.player === 'you'
+        ? multiplayerMoveCounterRef.current++
+        : multiplayerMoveCounterRef.current;
+    setMultiplayerMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
+  }, []);
+
+  const liveMatch = useLiveMatchSession({
+    socket,
+    joinedRoom,
+    you,
+    isConnected,
+    showToast,
+    setError,
+    roomRecoveryState,
+    isRecoveringConnection,
+    rejoinInFlightRef,
+    fetchGameState: (reason) => fetchGameStateRef.current(reason),
+    normalizeRoomPlayers,
+    applyRoomEventMeta: (meta) => applyRoomEventMetaRef.current(meta),
+    setFriendInvite,
+    joinedRoomRef,
+    maxSequenceRef,
+    setPlayers,
+    roomPlayersRef,
+    setRoomRecoveryState,
+    setRoomRecoveryMessage,
+    isSeatedPlayerRef,
+    matchStartedRef,
+    playerReadyEmittedRef,
+    trySchedulePlayerReadyRef,
+    isMutedRef,
+    playDrawSound,
+    resyncInFlightRef,
+    resyncBufferedUpdateRef,
+    resyncFlushRef,
+    resetClientGameSession: () => resetClientGameSessionRef.current(),
+    onGameStart: () => {
+      setMultiplayerMoveLog([]);
+      multiplayerMoveCounterRef.current = 1;
+      previousStateForAnalysisRef.current = null;
+    },
+    appendMultiplayerMove,
+  });
+
+  const {
+    state,
+    setState,
+    legalMoves,
+    setLegalMoves,
+    canDraw,
+    setCanDraw,
+    selectedTile,
+    setSelectedTile,
+    optimisticPlayedTile,
+    setOptimisticPlayedTile,
+    pendingUiAction,
+    setPendingUiAction,
+    actionError,
+    setActionError,
+    handReveal,
+    setHandReveal,
+    rematchRequested,
+    setRematchRequested,
+    rematchReadyIds,
+    setRematchReadyIds,
+    drawStepMyHand,
+    setDrawStepMyHand,
+    drawStepActorId,
+    setDrawStepActorId,
+    drawStepOpponentHandCount,
+    setDrawStepOpponentHandCount,
+    flyingTiles,
+    setFlyingTiles,
+    drawSequenceActive,
+    opponentDragging,
+    setOpponentDragging,
+    opponentDisconnected,
+    setOpponentDisconnected,
+    opponentDisconnectMessage,
+    setOpponentDisconnectMessage,
+    lastPlayedTile,
+    boneyardDisplayCount,
+    setBoneyardDisplayCount,
+    drawPulseIndex,
+    setDrawPulseIndex,
+    handRevealAutoProgress,
+    inGame,
+    isMyTurn,
+    myHand,
+    opponentTileCount,
+    boneyardCount,
+    hasPlayMoves,
+    canDrawNow,
+    canPass,
+    boardForDisplay,
+    boardLegalMoves,
+    selectedTileHasLegalPlay,
+    boardSelectedTile,
+    boardShowOpenEndGlow,
+    handSelectedTile,
+    stateRef,
+    legalMovesRef,
+    selectedTileRef,
+    pendingActionRef,
+    pendingGameplayActionRef,
+    handRevealShownRef,
+    handRevealTimerRef,
+    draggingStateRef,
+    drawSequenceActiveRef,
+    drawSequenceTimeoutRef,
+    mpAutoDrawSuppressUntilSequenceRef,
+    autoTurnActionKeyRef,
+    frozenHandOverBoardRef,
+    rematchAwaitingStateRef,
+    pendingForcedHandRevealRef,
+    flyingTileIdRef,
+    boneyardRef,
+    handAreaRef,
+    opponentPillRef,
+    lastPlayedTileTimerRef,
+    youRef,
+    clearTransientRoomUi,
+    play,
+    draw,
+    pass,
+    startGame,
+    requestRematch,
+    continueAfterHandReveal,
+    emitDraggingState,
+    isGameplayActionBlocked,
+    handleTileTap,
+    setDrawSequenceActiveBoth,
+    flashLastPlayed,
+    applyJoinResponseGameState,
+    roomSocketSyncParams,
+  } = liveMatch;
+
+  const onTournamentMatchAbandoned = useCallback(
+    (notice: {
+      context: 'tournament';
+      title: string;
+      detail: string;
+      tournamentId: string;
+    }) => {
+      setAbandonedMatchNotice(notice);
+    },
+    [],
+  );
+  const onPrivateMatchAbandoned = useCallback(
+    (notice: { context: 'multiplayer'; title: string; detail: string }) => {
+      setAbandonedMatchNotice(notice);
+    },
+    [],
+  );
+
+  const tournamentSession = useTournamentMatchSession({
+    socket,
+    socketRef,
+    connectRef,
+    appMode,
+    appModeRef,
+    authUserId: authUser?.id ?? null,
+    multiplayerIdentityUserId,
+    joinedRoom,
+    joinedRoomRef,
+    joinedRoomResponseRef,
+    liveGameOver: state?.gameOver,
+    preventAutoRejoinRef,
+    reconnectShouldJoinRef,
+    reconnectRoomCodeRef,
+    applyJoinedRoomResponseRef,
+    clearRecoverableRoomStateRef,
+    resetMultiplayerRoomStateRef,
+    showToast,
+    setAppMode,
+    setActionError,
+    normalizeRoomCode,
+    tournament,
+    onTournamentMatchAbandoned,
+    onPrivateMatchAbandoned,
+  });
+
+  const {
+    tournamentSubView,
+    setTournamentSubView,
+    activeTournamentId,
+    setActiveTournamentId,
+    tournamentMatch,
+    setTournamentMatch,
+    currentTournamentContext,
+    tournamentAttachPhase,
+    tournamentAttachError,
+    tournamentResult,
+    setTournamentResult,
+    tournamentResultLoading,
+    setTournamentResultLoading,
+    tournamentResultError,
+    setTournamentResultError,
+    consumedTournamentGameOverMatchIdsRef,
+    clearTournamentAttachRefs,
+    applyTournamentMetadataFromJoin,
+    attachAssignedTournamentMatch,
+    exitToTournamentHub,
+    enterTournamentLobby,
+    navigateAfterTournamentMatch,
+  } = tournamentSession;
+
+  useRoomSocketSync(roomSocketSyncParams);
+
   const [handTileSize, setHandTileSize] = useState(44);
-  const autoTurnActionKeyRef = useRef<string>('');
-  /** Multiplayer: block auto draw/pass until `state:update` reaches the server ack sequence (avoids duplicate DRAW after MOVE). */
-  const mpAutoDrawSuppressUntilSequenceRef = useRef<number | null>(null);
-  const handRevealShownRef = useRef<number | null>(null);
-  const handRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevOppCountRef = useRef<number | null>(null);
   const [oppTilePulse, setOppTilePulse] = useState(false);
   const prevBoardTileCountRef = useRef(0);
@@ -1233,44 +962,17 @@ export default function App() {
   const [hudScorePulse, setHudScorePulse] = useState<Record<string, boolean>>({});
   const prevHudScoresRef = useRef<Record<string, number>>({});
   const prevMyHandLenRef = useRef(0);
-  const [drawPulseIndex, setDrawPulseIndex] = useState<number | null>(null);
-  const [boneyardDisplayCount, setBoneyardDisplayCount] = useState<number | null>(null);
-  const [drawStepMyHand, setDrawStepMyHand] = useState<Tile[] | null>(null);
-  const [drawStepActorId, setDrawStepActorId] = useState<string | null>(null);
-  const [optimisticPlayedTile, setOptimisticPlayedTile] = useState<Tile | null>(null);
-  const [drawStepOpponentHandCount, setDrawStepOpponentHandCount] = useState<number | null>(null);
-  const [drawSequenceActive, setDrawSequenceActive] = useState(false);
-  const drawSequenceActiveRef = useRef(false);
-  const drawSequenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [flyingTiles, setFlyingTiles] = useState<
-    { x: number; y: number; toX: number; toY: number; id: number }[]
-  >([]);
-  const flyingTileIdRef = useRef(0);
-  const pendingForcedHandRevealRef = useRef<{ sequence: number; fullHand: Tile[] } | null>(null);
-  const boneyardRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<BoardHandle>(null);
-  const handAreaRef = useRef<HTMLDivElement>(null);
-  const opponentPillRef = useRef<HTMLButtonElement>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [opponentDragging, setOpponentDragging] = useState(false);
-  const [opponentDisconnected, setOpponentDisconnected] = useState(false);
-  const [opponentDisconnectMessage, setOpponentDisconnectMessage] = useState('');
-  const draggingStateRef = useRef(false);
-  const handRevealAutoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handRevealAutoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [handRevealAutoProgress, setHandRevealAutoProgress] = useState(1);
-  const isMutedRef = useRef(isMuted);
   const roomIdentityRef = useRef<{
     username: string;
     userId: string | null;
     authToken: string | null;
   } | null>(null);
-  const youRef = useRef(you);
   const matchRecordKeyRef = useRef('');
   const prevGameOverRef = useRef(false);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastPlayedTileTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const isAdmin = Boolean(
     authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
@@ -1289,14 +991,6 @@ export default function App() {
     return Date.now() - dismissedAt < SNOOZE_MS;
   });
 
-  const showToast = useCallback((msg: string, duration = 3000) => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    setToast(msg);
-    toastTimeoutRef.current = setTimeout(() => setToast(''), duration);
-  }, []);
-
   const copyRoomCodeToClipboard = useCallback(async () => {
     const code = normalizeRoomCode(joinedRoom || roomCode);
     if (!code) {
@@ -1311,24 +1005,6 @@ export default function App() {
     }
   }, [joinedRoom, roomCode, showToast]);
 
-  const setDrawSequenceActiveBoth = useCallback((val: boolean) => {
-    drawSequenceActiveRef.current = val;
-    setDrawSequenceActive(val);
-  }, []);
-
-  const flashLastPlayed = useCallback((tile: Tile | null) => {
-    if (lastPlayedTileTimerRef.current) {
-      clearTimeout(lastPlayedTileTimerRef.current);
-    }
-    setLastPlayedTile(tile);
-    if (tile) {
-      lastPlayedTileTimerRef.current = setTimeout(() => {
-        setLastPlayedTile(null);
-        lastPlayedTileTimerRef.current = null;
-      }, 2400);
-    }
-  }, []);
-
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) {
@@ -1336,11 +1012,7 @@ export default function App() {
       }
       if (scoreToastHideTimerRef.current) clearTimeout(scoreToastHideTimerRef.current);
       if (scoreToastClearTimerRef.current) clearTimeout(scoreToastClearTimerRef.current);
-      if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
-      if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
       if (reconnectAttemptTimerRef.current) clearTimeout(reconnectAttemptTimerRef.current);
-      if (drawSequenceTimeoutRef.current) clearTimeout(drawSequenceTimeoutRef.current);
-      if (lastPlayedTileTimerRef.current) clearTimeout(lastPlayedTileTimerRef.current);
     };
   }, []);
 
@@ -1374,31 +1046,6 @@ export default function App() {
     },
     [showScoreLikeToast, you],
   );
-
-  const renderScoreToastMessage = useCallback((message: string) => {
-    const pointsMatch = message.match(/\+\d+/);
-    if (!pointsMatch || typeof pointsMatch.index !== 'number') return message;
-    const start = pointsMatch.index;
-    const end = start + pointsMatch[0].length;
-    return (
-      <>
-        {message.slice(0, start)}
-        <span
-          style={{
-            fontSize: '1.48rem',
-            fontWeight: 800,
-            lineHeight: 1,
-            letterSpacing: '0.01em',
-            display: 'inline-block',
-            margin: '0 2px',
-          }}
-        >
-          {pointsMatch[0]}
-        </span>
-        {message.slice(end)}
-      </>
-    );
-  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1448,24 +1095,8 @@ export default function App() {
   }, [justVerified, showToast]);
 
   useEffect(() => {
-    youRef.current = you;
-  }, [you]);
-
-  useEffect(() => {
     socketRef.current = socket;
   }, [socket]);
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  useEffect(() => {
-    legalMovesRef.current = legalMoves;
-  }, [legalMoves]);
-
-  useEffect(() => {
-    selectedTileRef.current = selectedTile;
-  }, [selectedTile]);
 
   useEffect(() => {
     if (state) return;
@@ -1506,19 +1137,23 @@ export default function App() {
 
   useEffect(() => {
     joinedRoomRef.current = joinedRoom;
-    if (typeof window === 'undefined') return;
-    if (!joinedRoom) return;
-    if (preventAutoRejoinRef.current) return;
-    if (state?.gameOver) return;
-    if (tournamentMatch?.matchId && isTerminalTournamentMatch(tournamentMatch.matchId)) return;
-    window.localStorage.setItem(LAST_ROOM_STORAGE_KEY, joinedRoom);
+    if (
+      shouldPersistLastRoomCode({
+        joinedRoom,
+        preventAutoRejoin: preventAutoRejoinRef.current,
+        gameOver: state?.gameOver,
+        isTerminalTournamentMatch: Boolean(
+          tournamentMatch?.matchId && isTerminalTournamentMatch(tournamentMatch.matchId),
+        ),
+      })
+    ) {
+      saveLastRoomCode(joinedRoom!);
+    }
   }, [joinedRoom, state?.gameOver, tournamentMatch?.matchId]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     if (inviteJoinInFlightRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    const linkedRoom = normalizeRoomCode(params.get('room'));
+    const linkedRoom = readRoomInviteCodeFromLocation();
     if (!linkedRoom) return;
     setRoomCode(linkedRoom);
     setAppMode('home');
@@ -1536,28 +1171,6 @@ export default function App() {
     pending.forEach((resolve) => resolve(code));
   }, []);
 
-  const clearTransientRoomUi = useCallback(() => {
-    setSelectedTile(null);
-    setPendingUiAction(null);
-    setActionError('');
-    setOptimisticPlayedTile(null);
-    setOpponentDragging(false);
-    draggingStateRef.current = false;
-    pendingActionRef.current = false;
-    pendingGameplayActionRef.current = null;
-    mpPerfResetAction();
-    setHandReveal(null);
-    if (drawSequenceTimeoutRef.current) {
-      clearTimeout(drawSequenceTimeoutRef.current);
-      drawSequenceTimeoutRef.current = null;
-    }
-    setDrawSequenceActiveBoth(false);
-    setDrawStepMyHand(null);
-    setDrawStepActorId(null);
-    setDrawStepOpponentHandCount(null);
-    setFlyingTiles([]);
-  }, [setDrawSequenceActiveBoth]);
-
   const resetClientGameSession = useCallback(() => {
     maxSequenceRef.current = -1;
     maxEventSequenceRef.current = -1;
@@ -1568,14 +1181,22 @@ export default function App() {
     playerReadyEmittedRef.current = false;
     matchStartedRef.current = false;
     rematchAwaitingStateRef.current = false;
-    pendingTournamentAttachMatchIdRef.current = null;
-    attachedTournamentMatchIdRef.current = null;
+    clearTournamentAttachRefs();
     resyncBufferedUpdateRef.current = null;
     setOpponentDisconnected(false);
     setOpponentDisconnectMessage('');
     setBoneyardDisplayCount(null);
     clearTransientRoomUi();
-  }, [clearTransientRoomUi]);
+  }, [
+    clearTournamentAttachRefs,
+    clearTransientRoomUi,
+    rematchAwaitingStateRef,
+    setBoneyardDisplayCount,
+    setOpponentDisconnected,
+    setOpponentDisconnectMessage,
+  ]);
+
+  resetClientGameSessionRef.current = resetClientGameSession;
 
   const resetMultiplayerRoomState = useCallback(
     (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
@@ -1598,8 +1219,9 @@ export default function App() {
       }
       resetClientGameSession();
     },
-    [resetClientGameSession],
+    [resetClientGameSession, setTournamentMatch],
   );
+  resetMultiplayerRoomStateRef.current = resetMultiplayerRoomState;
 
   const resetRoomRecoveryState = useCallback(() => {
     reconnectShouldJoinRef.current = false;
@@ -1611,218 +1233,23 @@ export default function App() {
 
   const clearRecoverableRoomState = useCallback(() => {
     resetRoomRecoveryState();
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
-    }
+    clearLastRoomCode();
     rejoinInFlightRef.current = false;
     reconnectAttemptCountRef.current = 0;
     tournament.clearPendingMatch();
     tournament.clearRecoveryMatch();
   }, [resetRoomRecoveryState, tournament]);
+  clearRecoverableRoomStateRef.current = clearRecoverableRoomState;
 
-  const finalizeTournamentMatchSession = useCallback(
-    (input: {
-      matchId: string;
-      tournamentId: string;
-      roomCode?: string | null;
-      round?: number;
-      routeView?: 'hub' | 'bracket' | 'result';
-      tournamentCompleted?: boolean;
-    }) => {
-      const { matchId, tournamentId, roomCode, round, routeView, tournamentCompleted } = input;
-      markTerminalTournamentMatch({ matchId, tournamentId, roomCode });
-      consumedTournamentGameOverMatchIdsRef.current.add(matchId);
-      attachedTournamentMatchIdRef.current = null;
-      pendingTournamentAttachMatchIdRef.current = null;
-      console.log('[tournament:complete] clearing live room state', {
-        roomCode: roomCode ?? joinedRoomRef.current,
-      });
-      clearRecoverableRoomState();
-      const activeSocket = socketRef.current;
-      const activeRoom = joinedRoomRef.current;
-      if (activeSocket?.connected && activeRoom) {
-        activeSocket.emit('room:leave', activeRoom);
-      }
-      resetMultiplayerRoomState({ keepPlayers: true });
-      const nextView =
-        routeView ?? tournamentSubViewAfterMatchComplete({ round, tournamentCompleted });
-      if (tournamentCompleted || round === 3) {
-        markTournamentTerminal({ tournamentId });
-      }
-      console.log('[tournament:complete] routing to result', {
-        tournamentId,
-        matchId,
-        nextView,
-      });
-      setActiveTournamentId(tournamentId);
-      if (nextView !== 'hub') {
-        void tournament.openBracket(tournamentId);
-      }
-      setTournamentSubView(nextView);
-      setAppMode('tournament');
-      tournament.clearPendingMatch();
-      tournament.clearRecoveryMatch();
-      void tournament.refresh();
-    },
-    [clearRecoverableRoomState, resetMultiplayerRoomState, tournament],
-  );
-
-  const exitToTournamentHub = useCallback(
-    (reason: string) => {
-      const tid = activeTournamentId ?? tournament.activeTournamentId ?? null;
-      console.log('[tournament:exit] back-to-tournament clicked', { reason, tournamentId: tid });
-      if (tid) {
-        dismissedTournamentIdsRef.current.add(tid);
-        markTournamentTerminal({ tournamentId: tid });
-      }
-      setActiveTournamentId(null);
-      tournament.clearPendingMatch();
-      tournament.clearRecoveryMatch();
-      attachedTournamentMatchIdRef.current = null;
-      pendingTournamentAttachMatchIdRef.current = null;
-      clearRecoverableRoomState();
-      const activeSocket = socketRef.current;
-      const activeRoom = joinedRoomRef.current;
-      if (activeSocket?.connected && activeRoom) {
-        activeSocket.emit('room:leave', activeRoom);
-      }
-      resetMultiplayerRoomState({ keepPlayers: true });
-      setTournamentSubView('hub');
-      setAppMode('tournament');
-      setTournamentResult(null);
-      setTournamentResultError(null);
-      if (typeof window !== 'undefined' && window.location.hash !== '#/tournament') {
-        window.location.hash = '#/tournament';
-      }
-      console.log('[tournament:exit] cleared stale tournament state', {
-        reason,
-        tournamentId: tid,
-      });
-      void tournament.refresh();
-    },
-    [
-      activeTournamentId,
-      clearRecoverableRoomState,
-      resetMultiplayerRoomState,
-      tournament,
-    ],
-  );
-
-  useEffect(() => {
-    if (!socket) return;
-    const onMatchCompleted = (payload: {
-      tournamentId?: string;
-      matchId?: string;
-      roomCode?: string | null;
-      round?: number;
-    }) => {
-      if (!payload?.tournamentId || !payload?.matchId) return;
-      if (isTerminalTournamentMatch(payload.matchId)) return;
-      finalizeTournamentMatchSession({
-        matchId: payload.matchId,
-        tournamentId: payload.tournamentId,
-        roomCode: payload.roomCode,
-        round: payload.round,
-        tournamentCompleted: payload.round === 3,
-      });
-    };
-    socket.on('tournament:match_completed', onMatchCompleted);
-    return () => {
-      socket.off('tournament:match_completed', onMatchCompleted);
-    };
-  }, [socket, finalizeTournamentMatchSession]);
-
-  useEffect(() => {
-    if (!completedTournamentId) return;
-    const ours =
-      completedTournamentId === activeTournamentId ||
-      tournament.registrations.some((r) => r.tournament_id === completedTournamentId);
-    if (ours) {
-      clearRecoverableRoomState();
-      resetMultiplayerRoomState({ keepPlayers: true });
-      setActiveTournamentId(completedTournamentId);
-      setTournamentSubView('result');
-      setAppMode('tournament');
-    }
-    setCompletedTournamentId(null);
-  }, [
-    completedTournamentId,
-    activeTournamentId,
-    tournament.registrations,
-    clearRecoverableRoomState,
-    resetMultiplayerRoomState,
-  ]);
-
-  useEffect(() => {
-    if (!socket) return;
-    const onMatchAbandoned = (payload: {
-      roomCode?: string;
-      abandonedUserId?: string | null;
-      abandonedUsername?: string | null;
-      winnerId?: string | null;
-      message?: string;
-      tournamentId?: string | null;
-      isTournament?: boolean;
-    }) => {
-      const currentUserId = authUser?.id ?? multiplayerIdentityUserId;
-      if (!payload?.roomCode || normalizeRoomCode(payload.roomCode) !== normalizeRoomCode(joinedRoomRef.current)) {
-        return;
-      }
-      if (payload.abandonedUserId && payload.abandonedUserId === currentUserId) {
-        return;
-      }
-      console.log('[leave-game] received opponent abandoned', {
-        roomCode: payload.roomCode,
-        abandonedUserId: payload.abandonedUserId ?? null,
-      });
-      clearRecoverableRoomState();
-      resetMultiplayerRoomState({ keepPlayers: true });
-      setActionError('');
-      if (payload.isTournament && payload.tournamentId) {
-        setActiveTournamentId(payload.tournamentId);
-        setTournamentSubView('bracket');
-        setAppMode('tournament');
-        void tournament.openBracket(payload.tournamentId);
-        void tournament.refresh();
-        setAbandonedMatchNotice({
-          context: 'tournament',
-          title: 'Opponent left the tournament match',
-          detail: `${payload.abandonedUsername ?? 'Your opponent'} left the game. You advance by forfeit.`,
-          tournamentId: payload.tournamentId,
-        });
-        return;
-      }
-      setAppMode('multiplayer');
-      setAbandonedMatchNotice({
-        context: 'multiplayer',
-        title: 'Opponent left the game',
-        detail: payload.message ?? `${payload.abandonedUsername ?? 'Your opponent'} left the game. You win by forfeit.`,
-      });
-    };
-    socket.on('room:match_abandoned', onMatchAbandoned);
-    return () => {
-      socket.off('room:match_abandoned', onMatchAbandoned);
-    };
-  }, [
-    socket,
-    authUser?.id,
-    multiplayerIdentityUserId,
-    clearRecoverableRoomState,
-    normalizeRoomCode,
-    resetMultiplayerRoomState,
-    tournament,
-  ]);
 
   /** Leave the current private room, stay connected, and return to Private Match create/join (not Quick Match). */
   const leavePrivateLobbyRoom = useCallback(() => {
     const code = normalizeRoomCode(joinedRoomRef.current);
     const s = socketRef.current;
     if (s?.connected && code) {
-      s.emit('room:leave', code);
+      emitRoomLeave(s, code);
     }
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
-    }
+    clearLastRoomCode();
     intentionalDisconnectRef.current = false;
     reconnectShouldJoinRef.current = false;
     reconnectRoomCodeRef.current = null;
@@ -1875,7 +1302,7 @@ export default function App() {
         const userId = multiplayerIdentityUserId;
         const authToken = multiplayerAuthToken;
 
-        const resp = await emitWithAck<any>(targetSocket, 'room:create', {
+        const resp = await emitRoomCreate(targetSocket, {
           username,
           userId,
           authToken,
@@ -1887,7 +1314,7 @@ export default function App() {
         applyJoinedRoomResponseRef.current(resp);
         autoJoinAttemptedRef.current = false;
         preventAutoRejoinRef.current = false;
-        resolvePendingCreate(resp.roomCode);
+        resolvePendingCreate(resp.roomCode ?? null);
         return resp;
       } catch (e) {
         resolvePendingCreate(null);
@@ -1896,19 +1323,6 @@ export default function App() {
     },
     [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate],
   );
-
-  const resyncInFlightRef = useRef(false);
-  const resyncCooldownUntilRef = useRef(0);
-  const resyncBufferedUpdateRef = useRef<StateUpdatePayload | null>(null);
-  const resyncFlushRef = useRef<(() => void) | null>(null);
-  const rematchAwaitingStateRef = useRef(false);
-  const playerReadyEmittedRef = useRef(false);
-  const isSeatedPlayerRef = useRef(false);
-  const matchStartedRef = useRef(false);
-  const fetchGameStateRef = useRef<(reason: string) => Promise<boolean>>(async () => false);
-  const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
-  const applyJoinedRoomResponseRef = useRef<(resp: any) => void>(() => {});
-  const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
 
   const applyJoinedRoomResponse = useCallback((resp: any) => {
     joinedRoomResponseRef.current = resp;
@@ -1930,52 +1344,23 @@ export default function App() {
       youRef.current = resolvedYou;
     }
 
-    const rawState = resp.state ?? null;
-    let nextState = rawState;
-    if (rawState !== null) {
-      const projected = projectMultiplayerGameState(rawState);
-      if (!projected) {
-        console.warn('[mp] room:join handshake state failed projection validation — resync scheduled');
-        void fetchGameStateRef.current('join_ack_projection_invalid');
-        nextState = null;
-      } else {
-        nextState = projected;
-      }
-    }
-
-    if (nextState && typeof nextState.sequence === 'number') {
-      maxSequenceRef.current = nextState.sequence;
+    const { ok, nextState } = applyJoinResponseGameState(resp);
+    if (!ok && resp.state != null) {
+      console.warn('[mp] room:join handshake state failed projection validation — resync scheduled');
+      void fetchGameStateRef.current('join_ack_projection_invalid');
     }
 
     setJoinedRoom(resp.roomCode);
     setRoomCode(resp.roomCode);
-    setState(nextState);
     const normalized = normalizeRoomPlayers(resp.players);
     roomPlayersRef.current = normalized;
     setPlayers(normalized);
-    clearTransientRoomUi();
-    setLegalMoves(Array.isArray(resp.legalMoves) ? resp.legalMoves : []);
-    setCanDraw(typeof resp.canDraw === 'boolean' ? resp.canDraw : false);
-    setBoneyardDisplayCount(nextState?.boneyard?.length ?? null);
     setRoomRecoveryState('idle');
     setRoomRecoveryMessage('');
-    // Tournament match metadata supplied by the server (replaces fragile regex).
-    if (resp.tournamentMatch && typeof resp.tournamentMatch.round === 'number') {
-      setTournamentMatch({
-        ...resp.tournamentMatch,
-        matchNumber:
-          typeof resp.tournamentMatch.matchNumber === 'number' ? resp.tournamentMatch.matchNumber : 1,
-        roomCode:
-          typeof resp.tournamentMatch.roomCode === 'string'
-            ? resp.tournamentMatch.roomCode
-            : typeof resp.roomCode === 'string'
-              ? resp.roomCode
-              : null,
-        stageLabel: getTournamentStageLabel(resp.tournamentMatch.round),
-        isTournament: true,
-      });
-    } else {
-      setTournamentMatch(null);
+    if (
+      applyTournamentMetadataFromJoin(resp, nextState) === 'terminal_handled'
+    ) {
+      return;
     }
 
     const roster = normalizeRoomPlayers(resp.players);
@@ -1996,42 +1381,10 @@ export default function App() {
     } else if (seated && !matchStartedRef.current) {
       trySchedulePlayerReadyRef.current();
     }
-
-    const tournamentMeta = resp.tournamentMatch;
-    const completedMatchId =
-      tournamentMeta && typeof tournamentMeta.matchId === 'string' ? tournamentMeta.matchId : null;
-    if (nextState?.gameOver && completedMatchId) {
-      const tournamentId =
-        typeof tournamentMeta.tournamentId === 'string' ? tournamentMeta.tournamentId : '';
-      if (
-        isTerminalTournamentMatch(completedMatchId) ||
-        consumedTournamentGameOverMatchIdsRef.current.has(completedMatchId)
-      ) {
-        if (tournamentId) {
-          finalizeTournamentMatchSession({
-            matchId: completedMatchId,
-            tournamentId,
-            roomCode: resp.roomCode ?? tournamentMeta.roomCode ?? null,
-            round: typeof tournamentMeta.round === 'number' ? tournamentMeta.round : undefined,
-          });
-        } else {
-          clearRecoverableRoomState();
-          resetMultiplayerRoomState({ keepPlayers: true });
-          setAppMode('tournament');
-        }
-        return;
-      }
-      preventAutoRejoinRef.current = true;
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
-      }
-    }
   }, [
     applyRoomEventMeta,
-    clearTransientRoomUi,
-    clearRecoverableRoomState,
-    finalizeTournamentMatchSession,
-    resetMultiplayerRoomState,
+    applyJoinResponseGameState,
+    applyTournamentMetadataFromJoin,
     socket?.id,
     authProfile?.username,
     multiplayerIdentityUserId,
@@ -2062,7 +1415,7 @@ export default function App() {
         };
 
       try {
-        const resp = await emitWithAck<any>(activeSocket, 'room:join', roomCode, identity);
+        const resp = await emitRoomJoin(activeSocket, roomCode, identity);
         if (!resp?.ok) {
           console.error('[mp] fetchGameState failed', { reason, error: resp?.error });
           return false;
@@ -2150,6 +1503,7 @@ export default function App() {
   }, [normalizeRoomCode, emitWithAck]);
 
   fetchGameStateRef.current = fetchGameState;
+  applyRoomEventMetaRef.current = applyRoomEventMeta;
   schedulePlayerReadyRef.current = schedulePlayerReady;
   applyJoinedRoomResponseRef.current = applyJoinedRoomResponse;
   trySchedulePlayerReadyRef.current = trySchedulePlayerReady;
@@ -2206,80 +1560,6 @@ export default function App() {
     }, 4000);
     return () => window.clearTimeout(timer);
   }, [mpSubView, joinedRoom, state, fetchGameState]);
-
-  const clearPendingGameplayUiOnAuthoritativeState = useCallback((nextState: GameState | null) => {
-    const pending = pendingGameplayActionRef.current;
-    if (!pending || !nextState) return;
-    const sequence = nextState.sequence;
-    if (typeof sequence !== 'number' || !Number.isFinite(sequence)) return;
-    if (sequence <= pending.baselineSequence) return;
-
-    setPendingUiAction((prev) => (prev === pending.kind ? null : prev));
-    mpPerfMarkPendingUiCleared();
-  }, []);
-
-  const roomSocketSyncParams = useMemo(
-    () => ({
-      socket,
-      showToast,
-      normalizeRoomPlayers,
-      applyRoomEventMeta,
-      setFriendInvite,
-      joinedRoomRef,
-      maxSequenceRef,
-      setPlayers,
-      roomPlayersRef,
-      setState,
-      setRoomRecoveryState,
-      setRoomRecoveryMessage,
-      setOptimisticPlayedTile,
-      fetchGameState,
-      resyncInFlightRef,
-      resyncBufferedUpdateRef,
-      resyncFlushRef,
-      rematchAwaitingStateRef,
-      resetClientGameSession,
-      isSeatedPlayerRef,
-      matchStartedRef,
-      playerReadyEmittedRef,
-      trySchedulePlayerReadyRef,
-      onAuthoritativeGameplayStateApplied: clearPendingGameplayUiOnAuthoritativeState,
-      setOpponentDisconnected,
-      setOpponentDisconnectMessage,
-      setLegalMoves,
-      setCanDraw,
-      drawSequenceActiveRef,
-      drawSequenceTimeoutRef,
-      setDrawSequenceActiveBoth,
-      setDrawStepMyHand,
-      setDrawStepActorId,
-      setDrawStepOpponentHandCount,
-      setFlyingTiles,
-      setBoneyardDisplayCount,
-      setDrawPulseIndex,
-      boneyardRef,
-      handAreaRef,
-      opponentPillRef,
-      youRef,
-      stateRef,
-      flyingTileIdRef,
-      pendingForcedHandRevealRef,
-      isMutedRef,
-      playDrawSound,
-      tileEquals,
-    }),
-    [
-      socket,
-      showToast,
-      applyRoomEventMeta,
-      setDrawSequenceActiveBoth,
-      fetchGameState,
-      resetClientGameSession,
-      clearPendingGameplayUiOnAuthoritativeState,
-    ],
-  );
-
-  useRoomSocketSync(roomSocketSyncParams);
 
   useEffect(() => {
     if (!friendInvite) return;
@@ -2571,90 +1851,8 @@ export default function App() {
     setBotDealSize(7);
   }, [appMode]);
 
-  const currentTournamentContext = tournamentMatch;
 
-  useEffect(() => {
-    if (!state?.gameOver || !tournamentMatch?.matchId) return;
-    preventAutoRejoinRef.current = true;
-    reconnectShouldJoinRef.current = false;
-    reconnectRoomCodeRef.current = null;
-    markTerminalTournamentMatch({
-      matchId: tournamentMatch.matchId,
-      tournamentId: tournamentMatch.tournamentId,
-      roomCode: tournamentMatch.roomCode ?? joinedRoom,
-    });
-    consumedTournamentGameOverMatchIdsRef.current.add(tournamentMatch.matchId);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(LAST_ROOM_STORAGE_KEY);
-    }
-  }, [
-    state?.gameOver,
-    tournamentMatch?.matchId,
-    tournamentMatch?.tournamentId,
-    tournamentMatch?.roomCode,
-    joinedRoom,
-  ]);
 
-  const navigateAfterTournamentMatch = useCallback((nextView: 'hub' | 'bracket' | 'result') => {
-    if (nextView === 'hub') {
-      exitToTournamentHub('postgame_hub');
-      return;
-    }
-    if (currentTournamentContext?.matchId) {
-      markTerminalTournamentMatch({
-        matchId: currentTournamentContext.matchId,
-        tournamentId: currentTournamentContext.tournamentId,
-        roomCode: currentTournamentContext.roomCode ?? joinedRoom,
-      });
-      consumedTournamentGameOverMatchIdsRef.current.add(currentTournamentContext.matchId);
-      console.log('[tournament:postgame] cleared gameover state', {
-        roomCode: currentTournamentContext.roomCode ?? joinedRoom,
-        matchId: currentTournamentContext.matchId,
-      });
-      if (nextView === 'result') {
-        console.log('[tournament:postgame] final result clicked', {
-          tournamentId: currentTournamentContext.tournamentId,
-          matchId: currentTournamentContext.matchId,
-        });
-      } else {
-        console.log('[tournament:postgame] returning to bracket', {
-          tournamentId: currentTournamentContext.tournamentId,
-          matchId: currentTournamentContext.matchId,
-        });
-      }
-    }
-    console.log('[app:navigation] tournament match close/home', {
-      fromMode: appModeRef.current,
-      toMode: 'tournament',
-      hash: typeof window !== 'undefined' ? window.location.hash : '',
-      hasRoom: Boolean(joinedRoom),
-      hasTournamentContext: Boolean(currentTournamentContext),
-      nextView,
-    });
-    clearRecoverableRoomState();
-    if (socket && joinedRoom) {
-      socket.emit('room:leave', joinedRoom);
-    }
-    if (currentTournamentContext?.tournamentId) {
-      setActiveTournamentId(currentTournamentContext.tournamentId);
-      void tournament.openBracket(currentTournamentContext.tournamentId);
-    }
-    tournament.clearPendingMatch();
-    tournament.clearRecoveryMatch();
-    resetMultiplayerRoomState({ keepPlayers: true });
-    setActionError('');
-    setTournamentSubView(nextView);
-    setAppMode('tournament');
-    void tournament.refresh();
-  }, [
-    currentTournamentContext,
-    clearRecoverableRoomState,
-    joinedRoom,
-    resetMultiplayerRoomState,
-    socket,
-    tournament,
-    exitToTournamentHub,
-  ]);
 
   const handlePostGame = useCallback(() => {
     resetRoomRecoveryState();
@@ -2695,7 +1893,7 @@ export default function App() {
       tournamentMatchId: currentTournamentContext?.matchId ?? null,
     });
     try {
-      const resp = await emitWithAck<any>(activeSocket, 'room:abandon_match', {
+      const resp = await emitRoomAbandonMatch(activeSocket, {
         roomCode: activeRoomCode,
         tournamentMatchId: currentTournamentContext?.matchId ?? null,
       });
@@ -2743,51 +1941,6 @@ export default function App() {
     tournament,
   ]);
 
-  const startGame = useCallback(async () => {
-    setError('');
-    setActionError('');
-    if (!socket || !joinedRoom) return setError('Not in a room.');
-    setPendingUiAction('start');
-    setMultiplayerMoveLog([]);
-    multiplayerMoveCounterRef.current = 1;
-    previousStateForAnalysisRef.current = null;
-    try {
-      const resp = await emitWithAck<any>(socket, 'game:start', joinedRoom);
-      if (!resp?.ok) return setError(resp?.error ?? 'Unable to start game.');
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-    } finally {
-      setPendingUiAction((prev) => (prev === 'start' ? null : prev));
-    }
-  }, [socket, joinedRoom, showToast]);
-
-  const requestRematch = useCallback(() => {
-    if (!socket || !joinedRoom || !state?.gameOver || rematchRequested) return;
-    setRematchRequested(true);
-    socket.emit('game:rematch', joinedRoom, (resp: any) => {
-      if (!resp?.ok) {
-        setRematchRequested(false);
-        showToast(resp?.error ?? 'Rematch failed.');
-        return;
-      }
-      // If the server already started the rematch (both players ready), clear
-      // the pending state immediately via the ack. The game:rematch:started
-      // broadcast will also reset it, but if that event is missed on a marginal
-      // connection this ack ensures the button is never stuck permanently.
-      if (resp?.started) {
-        setRematchRequested(false);
-      }
-    });
-  }, [socket, joinedRoom, state?.gameOver, rematchRequested, showToast]);
-
-  const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber'>) => {
-    const moveNumber =
-      entry.player === 'you'
-        ? multiplayerMoveCounterRef.current++
-        : multiplayerMoveCounterRef.current;
-    setMultiplayerMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
-  }, []);
-
   const openMultiplayerAnalyzer = useCallback(() => {
     const analysis = analyzeMoveLog(multiplayerMoveLog, true);
     setCurrentAnalysis(analysis);
@@ -2795,300 +1948,10 @@ export default function App() {
     setAnalyzerOpen(true);
   }, [multiplayerMoveLog]);
 
-  const emitDraggingState = useCallback(
-    (dragging: boolean) => {
-      if (draggingStateRef.current === dragging) return;
-      draggingStateRef.current = dragging;
-      if (!socket || !joinedRoom || !state || state.gameOver || state.handOver) return;
-      if (!state.playerIds.includes(you)) return;
-      socket.emit('player:dragging', joinedRoom, { dragging });
-    },
-    [socket, joinedRoom, state, you],
-  );
-
-  const isGameplayActionBlocked = useCallback(() => {
-    if (!socket || !joinedRoom || !state || !you) return true;
-    if (
-      !socket.connected ||
-      roomRecoveryState !== 'idle' ||
-      isRecoveringConnection ||
-      rejoinInFlightRef.current
-    ) {
-      showToast('Reconnecting...', 1200);
-      return true;
-    }
-    if (pendingActionRef.current) return true;
-    if (pendingUiAction === 'draw' || pendingUiAction === 'pass' || pendingUiAction === 'play') {
-      return true;
-    }
-    if (state.handOver || state.gameOver) return true;
-    if (!state.playerIds.includes(you)) return true;
-    return state.playerIds[state.currentPlayerIndex] !== you;
-  }, [
-    socket,
-    joinedRoom,
-    state,
-    you,
-    roomRecoveryState,
-    isRecoveringConnection,
-    pendingUiAction,
-    showToast,
-  ]);
-
-  // Game actions
-  const draw = useCallback(async () => {
-    setActionError('');
-    const stateNow = stateRef.current;
-    const legalMovesNow = legalMovesRef.current;
-    const boneyardLockedNow = (stateNow?.boneyard.length ?? 0) <= 2;
-    if (
-      !socket ||
-      !joinedRoom ||
-      boneyardLockedNow ||
-      !canDraw ||
-      isGameplayActionBlocked()
-    ) {
-      return;
-    }
-    emitDraggingState(false);
-    const baselineSequence = stateNow?.sequence ?? -1;
-    pendingGameplayActionRef.current = { kind: 'draw', baselineSequence };
-    mpPerfBeginAction('draw', baselineSequence);
-    setPendingUiAction('draw');
-    pendingActionRef.current = true;
-    const boardEnds = getBoardEnds(stateNow?.board ?? null);
-    const handBefore = (stateNow?.players[you]?.hand ?? []).map(toTileTuple);
-    const validMoves = legalMovesNow
-      .filter((m) => m.type === 'play' && m.tile)
-      .map((m) => toTileTuple(m.tile as Tile));
-    const requestId = nextDrawRequestId();
-    const emitAt = Date.now();
-    drawAudit('forced-state-detected', {
-      roomCode: joinedRoom,
-      playerId: you,
-      handCount: handBefore.length,
-      boneyardCount: stateNow?.boneyard.length ?? 0,
-      legalMoveCount: validMoves.length,
-      canDraw,
-      canPass: legalMovesNow.some((m) => m.type === 'pass'),
-      reason: 'no_legal_play_drawable_boneyard',
-    });
-    drawAudit('emit', { event: 'game:action', actionType: 'DRAW', roomCode: joinedRoom, requestId });
-    try {
-      const resp = await emitWithAck<any>(socket, 'game:action', joinedRoom, { type: 'DRAW', requestId });
-      mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
-      drawAudit('ack', {
-        requestId,
-        ms: Date.now() - emitAt,
-        ok: Boolean(resp?.ok),
-        forcedDraw: resp?.forcedDraw?.drewCount ?? 0,
-        drawnCount: resp?.forcedDraw?.drewCount,
-        error: resp?.error,
-      });
-      if (!resp?.ok) {
-        setActionError(resp?.error ?? 'Unable to draw.');
-        return;
-      }
-      if (joinedRoom && typeof resp.sequence === 'number' && Number.isFinite(resp.sequence)) {
-        mpAutoDrawSuppressUntilSequenceRef.current = resp.sequence;
-        autoTurnActionKeyRef.current = '';
-      }
-      appendMultiplayerMove({
-        player: 'you',
-        action: 'draw',
-        boardEnds,
-        handBefore,
-        validMoves,
-        pipDelta: 0,
-        pointsScored: 0,
-        boardState: snapshotBoardState(stateNow?.board ?? null),
-        boardRenderState: cloneBoardState(stateNow?.board ?? null),
-        handSnapshot: handBefore,
-        engineBestMove: pickEngineBestMove(
-          legalMovesNow
-            .filter((m) => m.type === 'play' && m.tile)
-            .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-          boardEnds,
-          handBefore,
-        ),
-      });
-    } catch (e) {
-      mpPerfMarkAck(false);
-      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-    } finally {
-      setPendingUiAction((prev) => (prev === 'draw' ? null : prev));
-      pendingActionRef.current = false;
-      pendingGameplayActionRef.current = null;
-    }
-  }, [socket, joinedRoom, you, canDraw, appendMultiplayerMove, emitDraggingState, showToast, isGameplayActionBlocked]);
-
-  const pass = useCallback(async () => {
-    setActionError('');
-    const stateNow = stateRef.current;
-    const legalMovesNow = legalMovesRef.current;
-    const hasPassMove = legalMovesNow.some((m) => m.type === 'pass');
-    if (!socket || !joinedRoom || !hasPassMove || isGameplayActionBlocked()) return;
-    emitDraggingState(false);
-    const baselineSequence = stateNow?.sequence ?? -1;
-    pendingGameplayActionRef.current = { kind: 'pass', baselineSequence };
-    mpPerfBeginAction('pass', baselineSequence);
-    setPendingUiAction('pass');
-    pendingActionRef.current = true;
-    const boardEnds = getBoardEnds(stateNow?.board ?? null);
-    const handBefore = (stateNow?.players[you]?.hand ?? []).map(toTileTuple);
-    const validMoves = legalMovesNow
-      .filter((m) => m.type === 'play' && m.tile)
-      .map((m) => toTileTuple(m.tile as Tile));
-    try {
-      const resp = await emitWithAck<any>(socket, 'game:action', joinedRoom, { type: 'PASS' });
-      mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
-      if (!resp?.ok) {
-        setActionError(resp?.error ?? 'Unable to pass.');
-        return;
-      }
-      appendMultiplayerMove({
-        player: 'you',
-        action: 'pass',
-        boardEnds,
-        handBefore,
-        validMoves,
-        pipDelta: 0,
-        pointsScored: 0,
-        boardState: snapshotBoardState(stateNow?.board ?? null),
-        boardRenderState: cloneBoardState(stateNow?.board ?? null),
-        handSnapshot: handBefore,
-        engineBestMove: pickEngineBestMove(
-          legalMovesNow
-            .filter((m) => m.type === 'play' && m.tile)
-            .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-          boardEnds,
-          handBefore,
-        ),
-      });
-    } catch (e) {
-      mpPerfMarkAck(false);
-      showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-    } finally {
-      setPendingUiAction((prev) => (prev === 'pass' ? null : prev));
-      pendingActionRef.current = false;
-      pendingGameplayActionRef.current = null;
-    }
-  }, [socket, joinedRoom, you, appendMultiplayerMove, emitDraggingState, showToast, isGameplayActionBlocked]);
-
-  const play = useCallback(
-    async (position: PlacementPosition) => {
-      setActionError('');
-      const stateNow = stateRef.current;
-      const legalMovesNow = legalMovesRef.current;
-      const selectedTile = selectedTileRef.current;
-      if (!socket || !joinedRoom || !selectedTile) return;
-
-      if (isGameplayActionBlocked()) return;
-
-      const tileToPlay = selectedTile;
-      const selectedMove = legalMovesNow.find(
-        (m) =>
-          m.type === 'play' &&
-          m.tile &&
-          m.position === position &&
-          tileEquals(m.tile, tileToPlay),
-      );
-      if (!selectedMove) {
-        emitDraggingState(false);
-        setSelectedTile(null);
-        setActionError('That tile cannot be played there.');
-        return;
-      }
-      emitDraggingState(false);
-      const baselineSequence = stateNow?.sequence ?? -1;
-      pendingGameplayActionRef.current = { kind: 'play', baselineSequence };
-      mpPerfBeginAction('play', baselineSequence);
-      setPendingUiAction('play');
-      pendingActionRef.current = true;
-      setSelectedTile(null);
-      setDrawStepMyHand(null);
-      const boardEnds = getBoardEnds(stateNow?.board ?? null);
-      const handBefore = (stateNow?.players[you]?.hand ?? []).map(toTileTuple);
-      const validMoves = legalMovesNow
-        .filter((m) => m.type === 'play' && m.tile)
-        .map((m) => toTileTuple(m.tile as Tile));
-      const playedTile = toTileTuple(tileToPlay);
-
-      try {
-        const resp = await emitWithAck<any>(
-          socket,
-          'game:action',
-          joinedRoom,
-          {
-            type: 'MOVE',
-            move: { tile: tileToPlay, position },
-          },
-        );
-
-        mpPerfMarkAck(Boolean(resp?.ok), resp?.sequence);
-        if (!resp?.ok) {
-          setActionError(resp?.error ?? 'Unable to play tile.');
-          return;
-        }
-        if (joinedRoom && typeof resp.sequence === 'number' && Number.isFinite(resp.sequence)) {
-          mpAutoDrawSuppressUntilSequenceRef.current = resp.sequence;
-          autoTurnActionKeyRef.current = '';
-        }
-        flashLastPlayed(selectedMove?.tile ?? tileToPlay);
-        appendMultiplayerMove({
-          player: 'you',
-          action: 'place',
-          tile: playedTile,
-          boardEnds,
-          handBefore,
-          validMoves,
-          pipDelta: -(playedTile[0] + playedTile[1]),
-          pointsScored: (() => {
-            const possibleEnds = nextEndsForTile(playedTile, boardEnds);
-            for (const ends of possibleEnds) {
-              const s = ends[0] + ends[1];
-              if (s > 0 && s % 5 === 0) return s / 5;
-            }
-            return 0;
-          })(),
-          boardState: snapshotBoardState(stateNow?.board ?? null),
-          boardRenderState: cloneBoardState(stateNow?.board ?? null),
-          handSnapshot: handBefore,
-          engineBestMove: pickEngineBestMove(
-            legalMovesNow
-              .filter((m) => m.type === 'play' && m.tile)
-              .map((m) => ({ tile: toTileTuple(m.tile as Tile), position: m.position })),
-            boardEnds,
-            handBefore,
-          ),
-        });
-      } catch (e) {
-        mpPerfMarkAck(false);
-        showToast(e instanceof Error ? e.message : 'Action failed', 2000);
-      } finally {
-        setPendingUiAction((prev) => (prev === 'play' ? null : prev));
-        pendingActionRef.current = false;
-        pendingGameplayActionRef.current = null;
-      }
-    },
-    [socket, joinedRoom, you, appendMultiplayerMove, emitDraggingState, showToast, flashLastPlayed, isGameplayActionBlocked],
-  );
-
-  // Derived state
-  const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
-  const isMyTurn = currentTurnId === you;
-  const authoritativeMyHand = state?.players[you]?.hand ?? [];
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-  const handForRenderBase = authoritativeMyHand;
-  const myHand = handForRenderBase;
   const handCompactStacked = myHand.length > 9;
 
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
-  const authoritativeOpponentTileCount =
-    state && opponentId
-      ? (state.handCounts?.[opponentId] ?? 0)
-      : 0;
-  const opponentTileCount = drawStepOpponentHandCount ?? authoritativeOpponentTileCount;
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
   const opponent = players.find((pl) => pl.id !== you) ?? null;
@@ -3146,7 +2009,6 @@ export default function App() {
   const weeklyRank: number | null = null;
   const hasSocialProofData =
     playersOnlineCount !== null && weeklyLeaderHandle !== null && weeklyRank !== null;
-  const inGame = Boolean(isConnected && joinedRoom && state);
   useRenderProfiler(inGame ? 'MultiplayerGameShell' : 'AppNonGame');
   const isSpectatingMatch = Boolean(tournamentId && joinedRoom && state && !state.playerIds.includes(you));
   const isTournamentMatch = Boolean(tournamentMatch?.isTournament || tournamentId || tournamentState?.status === 'running');
@@ -3158,10 +2020,6 @@ export default function App() {
   const hudRightScore =
     isSpectatingMatch && spectateRightPlayerId ? (state?.players[spectateRightPlayerId]?.score ?? 0) : myScore;
   const hudRightScorePulse = isSpectatingMatch && spectateRightPlayerId ? Boolean(hudScorePulse[spectateRightPlayerId]) : Boolean(hudScorePulse[you]);
-  const hasPlayMoves = legalMoves.some((m) => m.type === 'play');
-  const canDrawNow = canDraw && !hasPlayMoves;
-  const canPass = legalMoves.some((m) => m.type === 'pass');
-  const boneyardCount = boneyardDisplayCount ?? state?.boneyard.length ?? 0;
   const openEndsSum = state?.board ? computeOpenEndsSum(state.board) : 0;
   if (state?.board) {
     assertDisplayedOpenCountMatchesCanonical(state.board, openEndsSum, 'multiplayer');
@@ -3201,71 +2059,6 @@ export default function App() {
             authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : null,
         }
       : null;
-  const boardLegalMoves = useMemo(
-    () =>
-      isMyTurn &&
-      roomRecoveryState === 'idle' &&
-      !isRecoveringConnection &&
-      pendingUiAction !== 'draw' &&
-      pendingUiAction !== 'pass' &&
-      pendingUiAction !== 'play'
-        ? legalMoves
-        : EMPTY_MOVES,
-    [isMyTurn, legalMoves, roomRecoveryState, isRecoveringConnection, pendingUiAction],
-  );
-  const selectedTileHasLegalPlay = useMemo(
-    () =>
-      Boolean(
-        selectedTile &&
-          boardLegalMoves.some(
-            (m) =>
-              m.type === 'play' &&
-              m.tile &&
-              m.position &&
-              tileEquals(m.tile, selectedTile),
-          ),
-      ),
-    [boardLegalMoves, selectedTile],
-  );
-  const boardSelectedTile = useMemo(
-    () => (selectedTileHasLegalPlay ? selectedTile : null),
-    [selectedTileHasLegalPlay, selectedTile],
-  );
-  const boardShowOpenEndGlow = useMemo(
-    () => Boolean(isMyTurn && opponentDragging),
-    [isMyTurn, opponentDragging],
-  );
-  const handSelectedTile = useMemo(
-    () => (selectedTileHasLegalPlay ? selectedTile : null),
-    [selectedTileHasLegalPlay, selectedTile],
-  );
-
-  const handleTileTap = useCallback(
-    (tile: Tile) => {
-      if (
-        !isMyTurn ||
-        state?.handOver ||
-        state?.gameOver ||
-        roomRecoveryState !== 'idle' ||
-        isRecoveringConnection ||
-        pendingActionRef.current
-      ) {
-        return;
-      }
-      if (selectedTile && tileEquals(selectedTile, tile)) {
-        setSelectedTile(null);
-        emitDraggingState(false);
-        return;
-      }
-      setSelectedTile(tile);
-      emitDraggingState(true);
-    },
-    [isMyTurn, state?.handOver, state?.gameOver, roomRecoveryState, isRecoveringConnection, selectedTile, emitDraggingState],
-  );
-
-  useEffect(() => {
-    emitDraggingState(Boolean(selectedTile));
-  }, [selectedTile, emitDraggingState]);
 
   useEffect(() => {
     setRematchRequested(false);
@@ -3385,13 +2178,6 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (!isMyTurn || state?.gameOver || state?.handOver) {
-      emitDraggingState(false);
-      setSelectedTile(null);
-    }
-  }, [isMyTurn, state?.gameOver, state?.handOver, emitDraggingState]);
-
-  useEffect(() => {
     const updateHandTileSize = () => {
       const tileCount = Math.max(1, myHand.length);
       const isLandscape = window.innerWidth > window.innerHeight;
@@ -3426,222 +2212,6 @@ export default function App() {
     prevMyHandLenRef.current = myHand.length;
     setDrawPulseIndex(null);
   }, [inGame, myHand.length]);
-
-  useEffect(() => {
-    if (!inGame || !state || state.gameOver || !state.handOver) return;
-    if (handRevealShownRef.current === state.handNumber) return;
-    const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
-    handRevealShownRef.current = state.handNumber;
-    const tid = window.setTimeout(() => {
-      setHandReveal({
-        handNumber: state.handNumber,
-        yourRemainingTiles: state.players[you]?.hand ?? [],
-        opponentRemainingTiles: opponentIdFromState
-          ? (state.players[opponentIdFromState]?.hand ?? [])
-          : [],
-        pointsAwarded: { you: 0, opponent: 0 },
-      });
-    }, 1400);
-    return () => window.clearTimeout(tid);
-  }, [inGame, state, you]);
-
-  useEffect(() => {
-    if (!handReveal || !state || state.gameOver || !state.handOver) return;
-    const opponentIdFromState = state.playerIds.find((pid) => pid !== you) ?? null;
-    const nextYourRemaining = state.players[you]?.hand ?? [];
-    const nextOpponentRemaining = opponentIdFromState
-      ? (state.players[opponentIdFromState]?.hand ?? [])
-      : [];
-    if (
-      tileListEquals(handReveal.yourRemainingTiles, nextYourRemaining) &&
-      tileListEquals(handReveal.opponentRemainingTiles, nextOpponentRemaining)
-    ) {
-      return;
-    }
-    setHandReveal((prev) =>
-      prev
-        ? {
-            ...prev,
-            yourRemainingTiles: nextYourRemaining,
-            opponentRemainingTiles: nextOpponentRemaining,
-          }
-        : prev,
-    );
-  }, [handReveal, state, you]);
-
-
-  const continueAfterHandReveal = useCallback(() => {
-    const readyHandNumber = handReveal?.handNumber ?? state?.handNumber;
-    if (socket && joinedRoom) {
-      emitWithAck(socket, 'hand:ready', joinedRoom, readyHandNumber).catch((error) => {
-        if (import.meta.env.DEV) {
-          console.warn('[hand:ready] failed:', error instanceof Error ? error.message : error);
-        }
-      });
-    }
-    setHandReveal(null);
-  }, [socket, joinedRoom, handReveal?.handNumber, state?.handNumber]);
-
-  const continueAfterHandRevealRef = useRef(continueAfterHandReveal);
-  continueAfterHandRevealRef.current = continueAfterHandReveal;
-
-  // Recover lost hand:ready on reconnect — if the server says the hand is over but
-  // we're not in a reveal window, the hand:ready was lost during disconnect. Re-emit it.
-  const handReadyRecoveryRef = useRef(false);
-  useEffect(() => {
-    const needsReady =
-      Boolean(state?.handOver) &&
-      !state?.gameOver &&
-      !handReveal &&
-      handRevealShownRef.current !== state?.handNumber &&
-      Boolean(joinedRoom) &&
-      socket?.connected;
-    if (!needsReady) {
-      handReadyRecoveryRef.current = false;
-      return;
-    }
-    if (handReadyRecoveryRef.current) return;
-    handReadyRecoveryRef.current = true;
-    if (import.meta.env.DEV) {
-      console.log('[hand:ready] recovering lost hand:ready signal after reconnect');
-    }
-    emitWithAck(socket!, 'hand:ready', joinedRoom!, state?.handNumber).catch((error) => {
-      handReadyRecoveryRef.current = false;
-      showToast('Could not signal hand ready. Reconnecting…', 2500);
-      if (import.meta.env.DEV) {
-        console.warn('[hand:ready] recovery failed:', error instanceof Error ? error.message : error);
-      }
-    });
-  }, [state?.handOver, state?.gameOver, state?.handNumber, handReveal, joinedRoom, socket]);
-
-  useEffect(() => {
-    if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
-    if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
-
-    if (!handReveal || state?.gameOver) {
-      setHandRevealAutoProgress(1);
-      return;
-    }
-
-    const durationMs = 4000;
-    const start = Date.now();
-    setHandRevealAutoProgress(1);
-
-    handRevealAutoIntervalRef.current = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const nextProgress = Math.max(0, 1 - elapsed / durationMs);
-      setHandRevealAutoProgress(nextProgress);
-    }, 50);
-
-    handRevealAutoTimeoutRef.current = setTimeout(() => {
-      continueAfterHandRevealRef.current();
-    }, durationMs);
-
-    return () => {
-      if (handRevealAutoTimeoutRef.current) clearTimeout(handRevealAutoTimeoutRef.current);
-      if (handRevealAutoIntervalRef.current) clearInterval(handRevealAutoIntervalRef.current);
-    };
-  }, [handReveal, state?.gameOver]);
-
-  useEffect(() => {
-    const handActive = Boolean(state) && !state?.handOver && !state?.gameOver;
-
-    if (
-      joinedRoom &&
-      mpAutoDrawSuppressUntilSequenceRef.current != null &&
-      state &&
-      typeof state.sequence === 'number'
-    ) {
-      if (state.sequence < mpAutoDrawSuppressUntilSequenceRef.current) {
-        return;
-      }
-      mpAutoDrawSuppressUntilSequenceRef.current = null;
-      autoTurnActionKeyRef.current = '';
-    }
-
-    if (
-      !handActive ||
-      !isMyTurn ||
-      hasPlayMoves ||
-      roomRecoveryState !== 'idle' ||
-      isRecoveringConnection ||
-      pendingActionRef.current
-    ) {
-      autoTurnActionKeyRef.current = '';
-      return;
-    }
-
-    const autoAction: 'draw' | 'pass' | null = canDrawNow ? 'draw' : canPass ? 'pass' : null;
-    if (!autoAction) return;
-
-    const turnKey = `${state?.handNumber ?? 0}:${state?.currentPlayerIndex ?? -1}:${myHand.length}:${boneyardCount}:${autoAction}`;
-    if (autoTurnActionKeyRef.current === turnKey) return;
-
-    autoTurnActionKeyRef.current = turnKey;
-    if (autoAction === 'draw') {
-      drawAudit('forced-state-detected', {
-        roomCode: joinedRoom ?? '',
-        playerId: you,
-        handCount: myHand.length,
-        boneyardCount,
-        legalMoveCount: legalMoves.filter((m) => m.type === 'play').length,
-        canDraw,
-        canPass,
-        reason: 'auto_turn_effect',
-      });
-      draw();
-    } else {
-      drawAudit('auto-pass', {
-        roomCode: joinedRoom ?? '',
-        playerId: you,
-        boneyardCount,
-        reason: 'auto_turn_effect_blocked',
-      });
-      pass();
-    }
-  }, [
-    state,
-    joinedRoom,
-    isMyTurn,
-    hasPlayMoves,
-    canDrawNow,
-    canPass,
-    myHand.length,
-    boneyardCount,
-    draw,
-    pass,
-    roomRecoveryState,
-    isRecoveringConnection,
-  ]);
-
-  useEffect(() => {
-    if (!state) {
-      frozenHandOverBoardRef.current = null;
-      return;
-    }
-
-    if (state.board) {
-      frozenHandOverBoardRef.current = {
-        handNumber: state.handNumber,
-        board: state.board,
-      };
-      return;
-    }
-
-    if (!state.handOver) {
-      frozenHandOverBoardRef.current = null;
-    }
-  }, [state]);
-
-  const boardForDisplay = useMemo(() => {
-    const rawBoard =
-      state?.board ??
-      (state?.handOver &&
-      frozenHandOverBoardRef.current?.handNumber === state.handNumber
-        ? frozenHandOverBoardRef.current.board
-        : null);
-    return rawBoard ?? null;
-  }, [state?.board, state?.handOver, state?.handNumber]);
 
   useEffect(() => {
     if (!state) {
@@ -3877,456 +2447,6 @@ export default function App() {
     });
   }, [state, joinedRoom, players, supabaseEnabled, authUser, you, multiplayerMoveLog]);
 
-  const attemptTournamentAttach = useCallback(
-    async (
-      matchId: string,
-      opts?: { manual?: boolean; tournamentId?: string; matchStatus?: string },
-    ): Promise<boolean> => {
-      const socketConnected = Boolean(socketRef.current?.connected);
-      const guard = evaluateTournamentAttachGuard({
-        matchId,
-        socketConnected,
-        appMode: appModeRef.current,
-        pendingMatchId: pendingTournamentAttachMatchIdRef.current,
-        attachedMatchId: attachedTournamentMatchIdRef.current,
-        failedAtByMatchId: failedTournamentAttachByMatchIdRef.current,
-        terminalMatchIds: readTerminalTournamentMatchIds(),
-        manual: opts?.manual,
-      });
-
-      if (guard.reason === 'no-match') {
-        console.log('[tournament:attach-client] skip/no-match');
-        return false;
-      }
-      if (guard.reason === 'socket-disconnected') {
-        console.log('[tournament:attach-client] skip/socket-disconnected', { matchId });
-        if (!opts?.manual) {
-          connectRef.current();
-        }
-        return false;
-      }
-      if (guard.reason === 'already-pending') {
-        console.log('[tournament:attach-client] skip/already-pending', { matchId });
-        return false;
-      }
-      if (guard.reason === 'already-attached') {
-        console.log('[tournament:attach-client] skip/already-attached', {
-          matchId,
-          appMode: appModeRef.current,
-        });
-        return false;
-      }
-      if (guard.reason === 'backoff') {
-        console.log('[tournament:attach-client] skip/backoff', { matchId });
-        return false;
-      }
-      if (guard.reason === 'match-completed') {
-        console.log('[tournament:recovery] ignored completed match', { matchId });
-        tournament.clearRecoveryMatch();
-        return false;
-      }
-
-      pendingTournamentAttachMatchIdRef.current = matchId;
-      setTournamentAttachPhase('pending');
-      setTournamentAttachError(null);
-
-      console.log('[tournament:attach-client] start', {
-        matchId,
-        tournamentId: opts?.tournamentId ?? null,
-        status: opts?.matchStatus ?? null,
-        socketId: socketRef.current?.id ?? null,
-      });
-
-      try {
-        const activeSocket = socketRef.current;
-        if (!activeSocket?.connected) {
-          throw new Error('socket_not_connected');
-        }
-
-        const resp = await emitWithAck<
-          { ok: boolean; error?: string; tournamentId?: string; roomCode?: string } & Record<string, unknown>
-        >(activeSocket, 'tournament:attach_assigned_match', { matchId });
-
-        pendingTournamentAttachMatchIdRef.current = null;
-
-        if (resp?.ok) {
-          const handCount = localHandCountFromJoinResponse({
-            you: resp.you,
-            state: resp.state as { players?: Record<string, { hand?: unknown[] }> },
-          });
-          const roster = Array.isArray(resp.players) ? resp.players : [];
-          const localPlayerId = typeof resp.you === 'string' ? resp.you : '';
-          console.log('[tournament:attach-client] ack/success', {
-            matchId,
-            roomCode: resp.roomCode,
-            matchStatus: resp.matchStatus ?? opts?.matchStatus ?? null,
-            hasRoom: Boolean(resp.roomCode),
-            hasPlayers: roster.length > 0,
-            localPlayerId,
-            handCount,
-          });
-          attachedTournamentMatchIdRef.current = matchId;
-          const nextFailed = { ...failedTournamentAttachByMatchIdRef.current };
-          delete nextFailed[matchId];
-          failedTournamentAttachByMatchIdRef.current = nextFailed;
-          if (typeof resp.tournamentId === 'string') {
-            setActiveTournamentId(resp.tournamentId);
-          } else if (opts?.tournamentId) {
-            setActiveTournamentId(opts.tournamentId);
-          }
-          console.log('[tournament:attach-client] applying join response', {
-            roomCode: resp.roomCode,
-            handCount,
-          });
-          applyJoinedRoomResponse(resp);
-          const hydratedState = joinedRoomResponseRef.current?.state ?? resp.state;
-          const hydratedYou =
-            typeof joinedRoomResponseRef.current?.you === 'string'
-              ? joinedRoomResponseRef.current.you
-              : localPlayerId;
-          const hydratedHandCount = localHandCountFromJoinResponse({
-            you: hydratedYou,
-            state: hydratedState,
-          });
-          const playerIds = (hydratedState as { playerIds?: string[] } | null | undefined)?.playerIds;
-          console.log('[tournament:hydrate-check]', {
-            roomCode: resp.roomCode,
-            localUserId: multiplayerIdentityUserId,
-            localPlayerSeat: hydratedYou,
-            player1Id: playerIds?.[0] ?? null,
-            player2Id: playerIds?.[1] ?? null,
-            handCount: hydratedHandCount,
-            boneyardCount: (hydratedState as { boneyard?: unknown[] } | null | undefined)?.boneyard?.length ?? null,
-            currentTurnPlayerId:
-              typeof (hydratedState as { currentPlayerIndex?: number } | null)?.currentPlayerIndex === 'number' &&
-              playerIds
-                ? playerIds[(hydratedState as { currentPlayerIndex: number }).currentPlayerIndex] ?? null
-                : null,
-            appMode: appModeRef.current,
-          });
-          const hydratedGameOver = Boolean(
-            (hydratedState as { gameOver?: boolean } | null | undefined)?.gameOver,
-          );
-          if (hydratedGameOver && typeof resp.tournamentId === 'string') {
-            finalizeTournamentMatchSession({
-              matchId,
-              tournamentId: resp.tournamentId,
-              roomCode: resp.roomCode ?? null,
-              round:
-                resp.tournamentMatch && typeof (resp.tournamentMatch as { round?: number }).round === 'number'
-                  ? (resp.tournamentMatch as { round: number }).round
-                  : undefined,
-            });
-            setTournamentAttachPhase('idle');
-            setTournamentAttachError(null);
-            return true;
-          }
-          console.log('[tournament:attach-client] switching-to-multiplayer', {
-            matchId,
-            roomCode: resp.roomCode,
-          });
-          setAppMode('multiplayer');
-          setTournamentAttachPhase('idle');
-          setTournamentAttachError(null);
-          tournament.clearPendingMatch();
-          tournament.clearRecoveryMatch();
-          void tournament.recover();
-          return true;
-        }
-
-        const errorMessage = resp?.error ?? 'Could not join tournament match.';
-        failedTournamentAttachByMatchIdRef.current = {
-          ...failedTournamentAttachByMatchIdRef.current,
-          [matchId]: Date.now(),
-        };
-        setTournamentAttachPhase('failed');
-        setTournamentAttachError(errorMessage);
-        console.log('[tournament:attach-client] ack/error', { matchId, error: errorMessage });
-        if (errorMessage === 'match_completed') {
-          const tournamentId = opts?.tournamentId ?? activeTournamentId ?? null;
-          if (tournamentId) {
-            markTerminalTournamentMatch({ matchId, tournamentId, roomCode: null });
-            consumedTournamentGameOverMatchIdsRef.current.add(matchId);
-            finalizeTournamentMatchSession({
-              matchId,
-              tournamentId,
-              tournamentCompleted: tournament.tournamentPhase === 'completed',
-            });
-          } else {
-            tournament.clearPendingMatch();
-            tournament.clearRecoveryMatch();
-            clearRecoverableRoomState();
-            resetMultiplayerRoomState({ keepPlayers: true });
-            setAppMode('tournament');
-            void tournament.recover();
-          }
-        } else if (
-          errorMessage === 'match_not_ready' ||
-          errorMessage === 'tournament_not_assigned' ||
-          errorMessage === 'room_unavailable' ||
-          errorMessage === 'invalid_room'
-        ) {
-          tournament.clearPendingMatch();
-          tournament.clearRecoveryMatch();
-          void tournament.recover();
-        }
-        showToast(errorMessage, 2500);
-        return false;
-      } catch (err) {
-        pendingTournamentAttachMatchIdRef.current = null;
-        const message = err instanceof Error ? err.message : String(err);
-        const isTimeout = message.includes('timed out');
-        failedTournamentAttachByMatchIdRef.current = {
-          ...failedTournamentAttachByMatchIdRef.current,
-          [matchId]: Date.now(),
-        };
-        setTournamentAttachPhase('failed');
-        setTournamentAttachError(isTimeout ? 'Join timed out. Try again.' : message);
-        if (isTimeout) {
-          console.log('[tournament:attach-client] ack/timeout', { matchId });
-        } else {
-          console.log('[tournament:attach-client] ack/error', { matchId, error: message });
-        }
-        showToast(isTimeout ? 'Join timed out. Try again.' : message, 2500);
-        return false;
-      }
-    },
-    [
-      activeTournamentId,
-      applyJoinedRoomResponse,
-      clearRecoverableRoomState,
-      finalizeTournamentMatchSession,
-      resetMultiplayerRoomState,
-      showToast,
-      tournament.clearRecoveryMatch,
-      tournament.recover,
-      tournament.tournamentPhase,
-      multiplayerIdentityUserId,
-    ],
-  );
-
-  const attachAssignedTournamentMatch = useCallback(
-    (matchId: string) => {
-      void attemptTournamentAttach(matchId, { manual: true });
-    },
-    [attemptTournamentAttach],
-  );
-
-  // Route registered players into the bracket lobby / ready state without manual navigation.
-  useEffect(() => {
-    if (appMode !== 'tournament') return;
-    const tid = tournament.activeTournamentId;
-    const phase = tournament.tournamentPhase;
-    if (!tid || !phase) return;
-    if (dismissedTournamentIdsRef.current.has(tid)) return;
-
-    const bracket =
-      tournament.activeBracket?.tournament.id === tid ? tournament.activeBracket : null;
-    const terminal = deriveBracketTerminalState({
-      bracket,
-      userId: authUser?.id ?? null,
-      tournamentPhase: phase,
-      assignedMatch:
-        tournament.assignedMatch?.tournamentId === tid ? tournament.assignedMatch : null,
-    });
-    if (isTournamentBracketTerminal(terminal)) {
-      if (tournamentSubView === 'bracket') {
-        exitToTournamentHub('terminal_guard');
-      }
-      return;
-    }
-
-    if (phase === 'bracket_lobby' || phase === 'match_ready' || phase === 'in_match') {
-      setActiveTournamentId(tid);
-      if (tournamentSubView === 'hub') {
-        if (phase === 'bracket_lobby') {
-          console.log('[tournament:hub] bracket lobby detected, routing', { tournamentId: tid });
-        }
-        setTournamentSubView('bracket');
-      }
-      if (!tournament.activeBracket || tournament.activeBracket.tournament.id !== tid) {
-        void tournament.openBracket(tid);
-      }
-    }
-  }, [
-    appMode,
-    authUser?.id,
-    exitToTournamentHub,
-    tournament.activeTournamentId,
-    tournament.tournamentPhase,
-    tournament.activeBracket,
-    tournament.assignedMatch,
-    tournament.openBracket,
-    tournamentSubView,
-  ]);
-
-  useEffect(() => {
-    if (appMode !== 'tournament' || tournamentSubView !== 'bracket' || !activeTournamentId) return;
-    const bracket =
-      tournament.activeBracket?.tournament.id === activeTournamentId
-        ? tournament.activeBracket
-        : null;
-    if (!bracket) return;
-
-    const scheduleKick = () => {
-      const terminal = deriveBracketTerminalState({
-        bracket,
-        userId: authUser?.id ?? null,
-        tournamentPhase: tournament.tournamentPhase,
-        assignedMatch:
-          tournament.assignedMatch?.tournamentId === activeTournamentId
-            ? tournament.assignedMatch
-            : null,
-      });
-      if (!isTournamentBracketTerminal(terminal)) return null;
-      if (terminal.shouldAutoKickToHub) return 0;
-      return msUntilBracketAutoKick(terminal.completedAtMs);
-    };
-
-    const kick = () => {
-      const waitMs = scheduleKick();
-      if (waitMs == null) return;
-      console.log('[tournament:exit] final completed, routing hub', {
-        tournamentId: activeTournamentId,
-        waitMs,
-      });
-      exitToTournamentHub('auto_kick');
-    };
-
-    const initialWait = scheduleKick();
-    if (initialWait == null) return undefined;
-    if (initialWait === 0) {
-      kick();
-      return undefined;
-    }
-    const timer = window.setTimeout(kick, initialWait);
-    const interval = window.setInterval(() => {
-      const waitMs = scheduleKick();
-      if (waitMs === 0) kick();
-    }, 15_000);
-    return () => {
-      window.clearTimeout(timer);
-      window.clearInterval(interval);
-    };
-  }, [
-    activeTournamentId,
-    appMode,
-    authUser?.id,
-    exitToTournamentHub,
-    tournament.activeBracket,
-    tournament.assignedMatch,
-    tournament.tournamentPhase,
-    tournamentSubView,
-  ]);
-
-  // Auto-attach from recovery payload (stable matchId — object identity changes do not retrigger).
-  useEffect(() => {
-    const matchId = tournament.recoveryMatch?.matchId;
-    if (!matchId) return;
-    if (isTerminalTournamentMatch(matchId)) {
-      console.log('[tournament:recovery] ignored completed match', {
-        matchId,
-        roomCode: tournament.recoveryMatch?.roomCode ?? null,
-      });
-      tournament.clearRecoveryMatch();
-      return;
-    }
-    if (
-      tournament.tournamentPhase === 'completed' ||
-      tournament.tournamentPhase === 'eliminated'
-    ) {
-      tournament.clearRecoveryMatch();
-      return;
-    }
-    if (tournament.tournamentPhase === 'bracket_lobby') return;
-    void attemptTournamentAttach(matchId, {
-      tournamentId: tournament.recoveryMatch?.tournamentId,
-      matchStatus: tournament.recoveryMatch?.matchStatus,
-    });
-  }, [
-    tournament.recoveryMatch?.matchId,
-    tournament.recoveryMatch?.tournamentId,
-    tournament.recoveryMatch?.matchStatus,
-    tournament.tournamentPhase,
-    socket?.connected,
-    appMode,
-    attemptTournamentAttach,
-  ]);
-
-  // Drain tournament:match_ready — single-flight attach; keep pending until attach starts.
-  useEffect(() => {
-    const pending = tournament.pendingMatch;
-    if (!pending?.matchId) return;
-    if (tournament.tournamentPhase === 'bracket_lobby') return;
-    console.log('[tournament] match_ready received', {
-      matchId: pending.matchId,
-      tournamentId: pending.tournamentId,
-      roomCode: pending.roomCode,
-      source: 'pending_drain',
-    });
-    setActiveTournamentId(pending.tournamentId);
-    void attemptTournamentAttach(pending.matchId, {
-      tournamentId: pending.tournamentId,
-      matchStatus: pending.matchStatus,
-    }).then((started) => {
-      if (started) {
-        tournament.clearPendingMatch();
-      }
-    });
-  }, [
-    tournament.pendingMatch?.matchId,
-    tournament.pendingMatch?.tournamentId,
-    tournament.pendingMatch?.matchStatus,
-    tournament.tournamentPhase,
-    socket?.connected,
-    attemptTournamentAttach,
-    tournament.clearPendingMatch,
-  ]);
-
-  // Load bracket when the result screen is shown without a prior bracket visit.
-  useEffect(() => {
-    if (tournamentSubView === 'result' && activeTournamentId && !tournament.activeBracket) {
-      void tournament.openBracket(activeTournamentId);
-    }
-  }, [tournamentSubView, activeTournamentId, tournament.activeBracket, tournament.openBracket]);
-
-  useEffect(() => {
-    if (appMode !== 'tournament') return;
-    if (tournamentSubView === 'bracket' && !activeTournamentId) {
-      console.log('[app:navigation] invalid state fallback', {
-        appMode,
-        hash: typeof window !== 'undefined' ? window.location.hash : '',
-      });
-      setTournamentSubView('hub');
-    }
-  }, [appMode, tournamentSubView, activeTournamentId]);
-
-  useEffect(() => {
-    if (tournamentSubView !== 'result' || !activeTournamentId) {
-      setTournamentResult(null);
-      setTournamentResultError(null);
-      setTournamentResultLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setTournamentResultLoading(true);
-    setTournamentResultError(null);
-    void tournamentApi.fetchResult(activeTournamentId)
-      .then((result) => {
-        if (cancelled) return;
-        setTournamentResult(result);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setTournamentResultError(err instanceof Error ? err.message : 'Failed to load tournament result');
-      })
-      .finally(() => {
-        if (!cancelled) setTournamentResultLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tournamentSubView, activeTournamentId]);
 
   // ─── Render ───────────────────────────────────────────────
   const appRootClassName = 'app large-mode';
@@ -4341,69 +2461,80 @@ export default function App() {
     }
   })();
 
+  const handleOpenAuthModal = () => setAuthModalOpen(true);
+  const handleOpenAccountModal = () => setUsernameModalOpen(true);
+
+  const authModalsLayer = (
+    <Suspense fallback={null}>
+      <AuthModal
+        open={authModalOpen}
+        supabaseEnabled={supabaseEnabled}
+        supabaseConfigError={supabaseConfigError}
+        onClose={() => setAuthModalOpen(false)}
+        onSignIn={signIn}
+        onSignUp={signUp}
+        onResetPassword={resetPassword}
+      />
+      <UsernameModal
+        open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
+        currentUsername={authProfile?.username ?? null}
+        isProfileEdit={usernameModalOpen}
+        onSave={async (username) => {
+          const result = await updateUsername(username);
+          if (!result.error) {
+            window.localStorage.removeItem('username_onboarding_dismissed');
+            setOnboardingDismissed(false);
+            setUsernameModalOpen(false);
+          }
+          return result;
+        }}
+        onClose={() => {
+          window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
+          setOnboardingDismissed(true);
+          setUsernameModalOpen(false);
+        }}
+        onSignOut={async () => {
+          resetRoomRecoveryState();
+          setSigningOut(true);
+          setAppMode('home');
+          resetMultiplayerRoomState();
+          setError('');
+          setActionError('');
+          try {
+            void signOut().catch(() => {});
+          } catch {
+            // no-op
+          } finally {
+            setSigningOut(false);
+            setUsernameModalOpen(false);
+            setOnboardingDismissed(false);
+            setAuthModalOpen(true);
+          }
+        }}
+        signingOut={signingOut}
+      />
+    </Suspense>
+  );
+
+  const withAuthModals = (node: React.ReactNode) => (
+    <>
+      {node}
+      {authModalsLayer}
+    </>
+  );
+
   if (typeof window !== 'undefined' && (window.location.pathname === '/redesign' || window.location.pathname === '/') && appMode === 'home') {
-    return (
-      <>
-        <RacehorseHomeScreen
-          setAppMode={setAppMode}
-          onOpenAuth={() => setAuthModalOpen(true)}
-          onOpenAccount={() => setUsernameModalOpen(true)}
-        />
-        <Suspense fallback={null}>
-          <AuthModal
-            open={authModalOpen}
-            supabaseEnabled={supabaseEnabled}
-            supabaseConfigError={supabaseConfigError}
-            onClose={() => setAuthModalOpen(false)}
-            onSignIn={signIn}
-            onSignUp={signUp}
-            onResetPassword={resetPassword}
-          />
-          <UsernameModal
-            open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
-            currentUsername={authProfile?.username ?? null}
-            isProfileEdit={usernameModalOpen}
-            onSave={async (username) => {
-              const result = await updateUsername(username);
-              if (!result.error) {
-                window.localStorage.removeItem('username_onboarding_dismissed');
-                setOnboardingDismissed(false);
-                setUsernameModalOpen(false);
-              }
-              return result;
-            }}
-            onClose={() => {
-              window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
-              setOnboardingDismissed(true);
-              setUsernameModalOpen(false);
-            }}
-            onSignOut={async () => {
-              resetRoomRecoveryState();
-              setSigningOut(true);
-              setAppMode('home');
-              resetMultiplayerRoomState();
-              setError('');
-              setActionError('');
-              try {
-                void signOut().catch(() => {});
-              } catch {
-                // no-op
-              } finally {
-                setSigningOut(false);
-                setUsernameModalOpen(false);
-                setOnboardingDismissed(false);
-                setAuthModalOpen(true);
-              }
-            }}
-            signingOut={signingOut}
-          />
-        </Suspense>
-      </>
+    return withAuthModals(
+      <RacehorseHomeScreen
+        setAppMode={setAppMode}
+        onOpenAuth={handleOpenAuthModal}
+        onOpenAccount={handleOpenAccountModal}
+      />,
     );
   }
 
   if (appMode === 'noBrainer') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading No Brainer Lab…" />}>
           <NoBrainerLabScreen
@@ -4411,13 +2542,13 @@ export default function App() {
             onBack={() => setAppMode('singlePlayerHub')}
           />
         </Suspense>
-      </div>
+      </div>,
     );
   }
 
   if (appMode === 'learn' && LEARN_MODE_VISIBLE) {
     if (selectedLearnLessonId) {
-      return (
+      return withAuthModals(
         <div className={appRootClassName}>
           <Suspense fallback={<ScreenLoader label="Loading Lesson…" />}>
             <LearnPlayer
@@ -4431,7 +2562,7 @@ export default function App() {
       );
     }
     if (learnHowToPlayOpen && canOpenHowToPlayPreview) {
-      return (
+      return withAuthModals(
         <div className={appRootClassName}>
           <Suspense fallback={<ScreenLoader label="Loading Learn…" />}>
             <LearnHowToPlayRacehorse
@@ -4452,12 +2583,14 @@ export default function App() {
         </div>
       );
     }
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Learn Mode…" />}>
           <LearnHome
             onBack={() => setAppMode('home')}
             onNavigate={setAppMode}
+            onOpenAuth={handleOpenAuthModal}
+            onOpenAccount={handleOpenAccountModal}
             isAdmin={isAdmin}
             showAdminView={Boolean(isAdmin && showLearnAdminView)}
             canOpenHowToPlay={canOpenHowToPlayPreview}
@@ -4510,7 +2643,7 @@ export default function App() {
   }
 
   if (appMode === 'guidedMatchAnnotator') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Guided Match Annotator…" />}>
           <GuidedMatchAnnotatorScreen
@@ -4522,7 +2655,7 @@ export default function App() {
   }
 
   if (appMode === 'guidedMatchRecorder') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Guided Match Recorder…" />}>
           <GuidedMatchRecorderScreen
@@ -4535,7 +2668,7 @@ export default function App() {
   }
 
   if (appMode === 'botSetup') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Fritz Setup…" />}>
           <PlayVsFritz
@@ -4555,7 +2688,7 @@ export default function App() {
   }
 
   if (appMode === 'bot') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
           <BotMatchScreen
@@ -4602,7 +2735,7 @@ export default function App() {
   }
 
   if (appMode === 'ghostSetup') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Ghost Setup…" />}>
           <GhostSetupScreen
@@ -4625,7 +2758,7 @@ export default function App() {
   }
 
   if (appMode === 'ghost') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Ghost Match…" />}>
           <BotMatchScreen
@@ -4649,7 +2782,7 @@ export default function App() {
   }
 
   if (appMode === 'daily') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle…" />}>
           <DailyPuzzleScreen
@@ -4666,7 +2799,7 @@ export default function App() {
   }
 
   if (appMode === 'dailyFritz') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Daily Fritz…" />}>
           <DailyFritzScreen
@@ -4688,7 +2821,7 @@ export default function App() {
   }
 
   if (appMode === 'ratingHistory') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Rating History…" />}>
           <RatingHistoryPage
@@ -4702,7 +2835,7 @@ export default function App() {
   }
 
   if (appMode === 'friends') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Friends…" />}>
           <FriendsScreen
@@ -4724,7 +2857,7 @@ export default function App() {
   }
 
   if (appMode === 'stats') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Stats…" />}>
           <StatsScreen
@@ -4739,7 +2872,7 @@ export default function App() {
   }
 
   if (appMode === 'feed') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         {toast && <div className="toast">{toast}</div>}
         <Suspense fallback={<ScreenLoader label="Loading Feed…" />}>
@@ -4755,6 +2888,8 @@ export default function App() {
             onClose={() => setAppMode('home')}
             onNavigateToFriends={() => setAppMode('friends')}
             onNavigate={setAppMode}
+            onOpenAuth={handleOpenAuthModal}
+            onOpenAccount={handleOpenAccountModal}
           />
         </Suspense>
         {friendInvitePopup}
@@ -4763,7 +2898,7 @@ export default function App() {
   }
 
   if (appMode === 'leaderboard') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Leaderboard…" />}>
           <DailyFritzLeaderboardRoute
@@ -4780,7 +2915,7 @@ export default function App() {
   }
 
   if (appMode === 'profile') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Profile…" />}>
           <PublicProfileScreen
@@ -4796,13 +2931,17 @@ export default function App() {
   }
 
   if (appMode === 'singlePlayerHub') {
-    return (
+    return withAuthModals(
       <div className={appRootClassName}>
-        <SinglePlayerHubScreen
-          userId={authUser?.id ?? null}
-          onBack={() => setAppMode('home')}
-          onNavigate={(mode) => setAppMode(mode as any)}
-        />
+        <Suspense fallback={<ScreenLoader label="Loading Single Player…" />}>
+          <SinglePlayerHubScreen
+            userId={authUser?.id ?? null}
+            onBack={() => setAppMode('home')}
+            onNavigate={(mode) => setAppMode(mode as any)}
+            onOpenAuth={handleOpenAuthModal}
+            onOpenAccount={handleOpenAccountModal}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -4815,7 +2954,7 @@ export default function App() {
     void TournamentScreen;
 
     if (tournamentSubView === 'bracket' && activeTournamentId) {
-      return (
+      return withAuthModals(
         <TournamentBracketScreen
           identity={tIdentity}
           tournamentId={activeTournamentId}
@@ -4827,19 +2966,25 @@ export default function App() {
               : null
           }
           countdownAt={tournament.countdown?.at ?? null}
+          countdownKind={tournament.countdown?.kind ?? null}
           onLoadBracket={(id) => { void tournament.openBracket(id); }}
           onBack={() => exitToTournamentHub('bracket_back')}
           onExitToHub={() => exitToTournamentHub('bracket_back')}
+          onWithdraw={(id) => {
+            void tournament.withdraw(id).then(() => exitToTournamentHub('withdraw'));
+          }}
           onViewResult={() => {
             if (!activeTournamentId) return;
             setTournamentSubView('result');
             void tournament.openBracket(activeTournamentId);
           }}
           onNavigate={setAppMode}
+          onOpenAuth={handleOpenAuthModal}
+          onOpenAccount={handleOpenAccountModal}
           onAttachAssignedMatch={attachAssignedTournamentMatch}
           attachJoinPhase={tournamentAttachPhase}
           attachJoinError={tournamentAttachError}
-        />
+        />,
       );
     }
 
@@ -4863,7 +3008,7 @@ export default function App() {
           })()
         : '—';
 
-      return (
+      return withAuthModals(
         <TournamentResultScreen
           isLoading={tournamentResultLoading}
           error={tournamentResultError}
@@ -4889,11 +3034,11 @@ export default function App() {
             setActiveTournamentId(null);
             setTournamentResult(null);
           }}
-        />
+        />,
       );
     }
 
-    return (
+    return withAuthModals(
       <TournamentHubScreen
         identity={tIdentity}
         upcoming={tournament.upcoming}
@@ -4906,21 +3051,25 @@ export default function App() {
         activeBracketStatus={tournament.activeBracket?.tournament.status ?? null}
         activeTournamentId={tournament.activeTournamentId}
         onNavigate={setAppMode}
-        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenAuth={handleOpenAuthModal}
+        onOpenAccount={handleOpenAccountModal}
         onBackHome={() => setAppMode('home')}
-        onOpenBracket={(id) => {
-          setActiveTournamentId(id);
-          setTournamentSubView('bracket');
+        onOpenBracket={(id) => enterTournamentLobby(id)}
+        onRegister={async (id) => {
+          await tournament.register(id);
+          enterTournamentLobby(id);
         }}
-        onRegister={(id) => tournament.register(id)}
-        onWithdraw={(id) => tournament.withdraw(id)}
+        onWithdraw={async (id) => {
+          await tournament.withdraw(id);
+          if (activeTournamentId === id) exitToTournamentHub('withdraw');
+        }}
         onRetry={() => {
           void tournament.refresh();
         }}
         onAttachAssignedMatch={attachAssignedTournamentMatch}
         attachJoinPhase={tournamentAttachPhase}
         attachJoinError={tournamentAttachError}
-      />
+      />,
     );
   }
 
@@ -5016,7 +3165,7 @@ export default function App() {
     ) : null;
 
   if (appMode === 'home') {
-    return (
+    return withAuthModals(
       <div ref={appRootRef} className={appRootClassName}>
         <div className="layout-screen screen lobby-screen mode-home-screen mode-accent-multiplayer home-lobby-screen claude-home-shell claude-home-screen-shell">
           <div className="layout-screen-bg" aria-hidden="true" />
@@ -5091,66 +3240,17 @@ export default function App() {
           </div>
         </div>
         {welcomeModal}
-        <Suspense fallback={null}>
-          <AuthModal
-            open={authModalOpen}
-            supabaseEnabled={supabaseEnabled}
-            supabaseConfigError={supabaseConfigError}
-            onClose={() => setAuthModalOpen(false)}
-            onSignIn={signIn}
-            onSignUp={signUp}
-            onResetPassword={resetPassword}
-          />
-          <UsernameModal
-            open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
-            currentUsername={authProfile?.username ?? null}
-            isProfileEdit={usernameModalOpen}
-            onSave={async (username) => {
-              const result = await updateUsername(username);
-              if (!result.error) {
-                window.localStorage.removeItem('username_onboarding_dismissed');
-                setOnboardingDismissed(false);
-                setUsernameModalOpen(false);
-              }
-              return result;
-            }}
-            onClose={() => {
-              window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
-              setOnboardingDismissed(true);
-              setUsernameModalOpen(false);
-            }}
-            onSignOut={async () => {
-              resetRoomRecoveryState();
-              setSigningOut(true);
-              setAppMode('home');
-              resetMultiplayerRoomState();
-              setError('');
-              setActionError('');
-              try {
-                void signOut().catch(() => {});
-              } catch {
-                // no-op
-              } finally {
-                setSigningOut(false);
-                setUsernameModalOpen(false);
-                setOnboardingDismissed(false);
-                setAuthModalOpen(true);
-              }
-            }}
-            signingOut={signingOut}
-          />
-        </Suspense>
         <WeeklyStatsScreen
           open={weeklyStatsOpen}
           onClose={() => setWeeklyStatsOpen(false)}
           user={authUser}
         />
         {friendInvitePopup}
-</div>
+</div>,
     );
   }
 
-  return (
+  return withAuthModals(
     <div ref={appRootRef} className={appRootClassName}>
       {/* Toast */}
       {toast && <div className="toast">{toast}</div>}
@@ -5197,7 +3297,8 @@ export default function App() {
             }
             myWinStreak={privateLobbyHostWinStreak}
             onNavigate={setAppMode}
-            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAuth={handleOpenAuthModal}
+            onOpenAccount={handleOpenAccountModal}
             onBackHome={() => setAppMode('home')}
             onOpenPrivateMatch={() => setMpSubView('private')}
             onAutoJoinRoom={handleMatchmakingAutoJoin}
@@ -5280,513 +3381,107 @@ export default function App() {
         )
       ) : null}
 
-      {/* Game Screen */}
-      {(isConnected || isRecoveringConnection) && joinedRoom && state && (
-        <>
-          <RotateOverlay />
-          <div className="screen game-screen walnut-live theme-green bot-match-screen rh-match-live">
-          {opponentDisconnected && opponentDisconnectMessage && roomRecoveryState === 'idle' && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 12,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                zIndex: 1190,
-                padding: '8px 14px',
-                borderRadius: 999,
-                border: '1px solid rgba(251,191,36,0.35)',
-                background: 'rgba(15,25,20,0.82)',
-                color: 'rgba(255,236,200,0.95)',
-                fontSize: '0.84rem',
-                fontWeight: 600,
-              }}
-            >
-              {opponentDisconnectMessage}
-            </div>
-          )}
-          {roomRecoveryState !== 'idle' && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 12,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                zIndex: 1200,
-                padding: '8px 14px',
-                borderRadius: 999,
-                border: '1px solid rgba(236,252,245,0.24)',
-                background: 'rgba(15,25,20,0.82)',
-                color: 'rgba(232,245,240,0.95)',
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-              }}
-            >
-              <span>
-                {roomRecoveryState === 'reconnecting'
-                  ? 'Reconnecting…'
-                  : roomRecoveryState === 'resyncing'
-                    ? 'Syncing room…'
-                    : 'Reconnect failed'}
-              </span>
-              {roomRecoveryMessage && roomRecoveryState !== 'reconnecting' && (
-                <span style={{ fontWeight: 500, opacity: 0.9 }}>{roomRecoveryMessage}</span>
-              )}
-              {roomRecoveryState === 'failed' && (
-                <button
-                  onClick={retryRoomRecovery}
-                  style={{
-                    border: '1px solid rgba(236,252,245,0.24)',
-                    background: 'rgba(255,255,255,0.08)',
-                    color: 'inherit',
-                    borderRadius: 999,
-                    padding: '4px 10px',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Retry
-                </button>
-              )}
-            </div>
-          )}
-          <ScoreTrackOverlay
-            open={scoreTrackOpen}
-            onClose={() => setScoreTrackOpen(false)}
-            target={60}
-            players={[
-              { label: opponentName, score: opponentScore, tone: 'opp' },
-              { label: myName, score: myScore, tone: 'you' },
-            ]}
-          />
-          <canvas
-            ref={confettiCanvasRef}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              pointerEvents: 'none',
-              zIndex: 2100,
-              display: state.gameOver ? 'block' : 'none',
-            }}
-          />
-          {/* Game Over Overlay */}
-          {state.gameOver && tournamentMatch ? (
-            consumedTournamentGameOverMatchIdsRef.current.has(tournamentMatch.matchId) ? null : (
-              <TournamentGameOverOverlay
-                state={state}
-                myId={you}
-                tournamentMatch={tournamentMatch}
-                myDisplayName={tournamentMyLabel}
-                opponentDisplayName={tournamentOpponentLabel ?? 'Opponent'}
-                onViewBracket={() => navigateAfterTournamentMatch('bracket')}
-                onViewFinalResult={() => navigateAfterTournamentMatch('result')}
-                onReturnToTournament={() => navigateAfterTournamentMatch('hub')}
-              />
-            )
-          ) : state.gameOver ? (
-            <GameOverOverlay
-              state={state}
-              myId={you}
-              onPrimary={canUseRematch ? requestRematch : handlePostGame}
-              primaryLabel={canUseRematch ? (rematchRequested ? 'Rematch Requested' : 'Rematch') : 'New Game'}
-              onExit={handlePostGame}
-              secondaryLabel={canUseRematch ? 'Home' : 'Back'}
-              waitingText={canUseRematch ? rematchWaitingText : undefined}
-              players={players}
-              ratingSummary={multiplayerRatingSummary}
-              extraActionLabel="Analyze Game"
-              onExtraAction={openMultiplayerAnalyzer}
-            />
-          ) : null}
-          {handReveal && !state.gameOver && (
-            <GameOverlayPortal>
-              {(() => {
-                const youPoints = handReveal.pointsAwarded.you;
-                const opponentPoints = handReveal.pointsAwarded.opponent;
-                const winner =
-                  youPoints > opponentPoints ? 'you' : opponentPoints > youPoints ? 'opponent' : 'none';
-                const pointsAwarded = Math.max(youPoints, opponentPoints, 0);
-                const yourCount = handReveal.yourRemainingTiles.length;
-                const oppCount = handReveal.opponentRemainingTiles.length;
-                const whoWentOutRaw =
-                  handReveal.whoWentOut ?? handReveal.winnerId ?? handReveal.handWinnerId ?? null;
-                const youWentOut =
-                  whoWentOutRaw === 'you' || whoWentOutRaw === you || (whoWentOutRaw == null && yourCount === 0);
-                const oppWentOut =
-                  whoWentOutRaw === 'opponent' ||
-                  (Boolean(opponentId) && whoWentOutRaw === opponentId) ||
-                  (whoWentOutRaw == null && oppCount === 0);
-                const winnerSide = resolveWinnerSide(winner);
-
-                return (
-                  <HandOverModal
-                    variant="mp"
-                    pointsAwarded={pointsAwarded}
-                    winnerSide={winnerSide}
-                    winnerLabel={winnerDisplayLabel(winnerSide, opponentName)}
-                    loserLabel={loserDisplayLabel(winnerSide, opponentName)}
-                    reasonCopy={buildHandOverReasonCopy({
-                      youWentOut,
-                      opponentWentOut: oppWentOut,
-                      isBlocked: !youWentOut && !oppWentOut,
-                      opponentName,
-                      pointsAwarded,
-                    })}
-                    tileReveals={buildMultiplayerHandOverReveals(
-                      handReveal,
-                      winner,
-                      youWentOut,
-                      oppWentOut,
-                      opponentName,
-                    )}
-                    progress={handRevealAutoProgress}
-                  />
-                );
-              })()}
-            </GameOverlayPortal>
-          )}
-          <MatchLiveLayout
-            hudLeft={
-              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <button
-                  type="button"
-                  ref={opponentPillRef}
-                  style={{ margin: 8 }}
-                  className={`wl-player-pill wl-player-pill-btn score-card ${opponentId && hudScorePulse[opponentId] ? 'score-hit' : ''}`}
-                  onClick={() => setScoreTrackOpen(true)}
-                  aria-label="Open score track"
-                >
-                  <div className="wl-pill-top">
-                    <span className="wl-player-label">{opponentName}</span>
-                  </div>
-                  <AnimatedScore value={opponentScore} className="wl-player-score" />
-                </button>
-                <TileRack count={opponentTileCount} isActive={!isMyTurn} />
-              </div>
-            }
-            hudCenter={
-              <div
-                className="wl-center-status"
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  top: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  display: isHandActive || tournamentMatch ? 'flex' : 'none',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {tournamentMatch ? (
-                  <TournamentMatchHud
-                    round={tournamentMatch.round}
-                    turnLabel={
-                      isHandActive
-                        ? isMyTurn
-                          ? 'Your move'
-                          : 'Opponent thinking'
-                        : null
-                    }
-                    turnVariant={isMyTurn ? 'your-turn' : 'opp-turn'}
-                  />
-                ) : isHandActive ? (
-                  <span className={`wl-turn-label ${isMyTurn ? 'your-turn' : 'opp-turn'}`}>
-                    {isMyTurn ? 'Your move' : 'Opponent thinking'}
-                  </span>
-                ) : null}
-              </div>
-            }
-            hudRight={
-              <button
-                type="button"
-                style={{ margin: 8 }}
-                className={`wl-player-pill wl-player-pill-btn score-card is-you ${hudRightScorePulse ? 'score-hit' : ''}`}
-                onClick={() => setScoreTrackOpen(true)}
-                aria-label="Open score track"
-              >
-                <div className="wl-pill-top">
-                  <span className="wl-player-label">{hudRightLabel}</span>
-                </div>
-                <AnimatedScore value={hudRightScore} className="wl-player-score" />
-              </button>
-            }
-            boardInner={
-              <>
-                {scoreToast && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 16,
-                      left: '50%',
-                      transform: scoreToast.visible
-                        ? 'translate(-50%, 0px) scale(1)'
-                        : 'translate(-50%, -14px) scale(0.95)',
-                      opacity: scoreToast.visible ? 1 : 0,
-                      transition: 'opacity 250ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                      zIndex: 14,
-                      background: 'rgba(255,255,255,0.06)',
-                      backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      borderRadius: 999,
-                      padding: '10px 22px',
-                      color:
-                        scoreToast.tone === 'you'
-                          ? 'rgba(151, 241, 205, 0.98)'
-                          : 'rgba(255, 180, 180, 0.95)',
-                      fontSize: '1.24rem',
-                      fontWeight: 700,
-                      letterSpacing: '0.04em',
-                      pointerEvents: 'none',
-                      whiteSpace: 'nowrap',
-                      lineHeight: 1,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      boxShadow: scoreToast.tone === 'you'
-                        ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(100,220,160,0.1)'
-                        : 'inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25), 0 0 0 1px rgba(220,100,100,0.1)',
-                    }}
-                  >
-                    {renderScoreToastMessage(scoreToast.message)}
-                  </div>
-                )}
-                {!state.gameOver && (
-                  <div className="rh-board-meta-bar" data-ui="board-meta">
-                    <BoardOpenEndsPill board={state.board} openEndsSum={openEndsSum} />
-                    <BoneyardCountPill ref={boneyardRef} count={boneyardCount} />
-                  </div>
-                )}
-                <div
-                  className="wl-controls-tray control-pill"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={(e) => e.stopPropagation()}
-                  style={{
-                    position: 'absolute',
-                    bottom: 12,
-                    right: 12,
-                    zIndex: 20,
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="wl-control-btn"
-                    title="Zoom out"
-                    aria-label="Zoom out"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      boardRef.current?.zoomOut();
-                    }}
-                  >
-                    <ZoomOutIcon />
-                  </button>
-                  <button
-                    type="button"
-                    className="wl-control-btn"
-                    title="Zoom in"
-                    aria-label="Zoom in"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      boardRef.current?.zoomIn();
-                    }}
-                  >
-                    <ZoomInIcon />
-                  </button>
-                  <RoomReactions feed={roomReactions} onSendChat={sendRoomChat} onSendEmote={sendRoomEmote} />
-                  <button
-                    type="button"
-                    className="wl-control-btn"
-                    onClick={() => setIsMuted((prev) => !prev)}
-                    title={isMuted ? 'Unmute' : 'Mute'}
-                    aria-label={isMuted ? 'Unmute' : 'Mute'}
-                  >
-                    <VolumeIcon isMuted={isMuted} />
-                  </button>
-                  <button
-                    type="button"
-                    className="wl-control-btn"
-                    onClick={toggleFullscreen}
-                    title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                  >
-                    <FullscreenIcon isFullscreen={isFullscreen} />
-                  </button>
-                  <button
-                    type="button"
-                    className="wl-control-btn"
-                    onClick={() => setShowLeaveConfirm(true)}
-                    title="Leave game"
-                    aria-label="Leave game"
-                  >
-                    <HomeIcon />
-                  </button>
-                </div>
-                <Board
-                  ref={boardRef}
-                  showZoomTray={false}
-                  board={boardForDisplay}
-                  legalMoves={boardLegalMoves}
-                  selectedTile={boardSelectedTile}
-                  lastPlayedTile={lastPlayedTile}
-                  onPositionClick={play}
-                  tileSize={84}
-                  showOpenEndGlow={boardShowOpenEndGlow}
-                />
-              </>
-            }
-            handDock={
-              <div ref={handAreaRef} className="hand-area wl-hand-area" data-ui="tray">
-                <div className="tray-rail">
-                  <div className="tray-center" ref={trayCenterRef}>
-                    <HandView
-                      hand={myHand}
-                      selectedTile={handSelectedTile}
-                      onSelect={handleTileTap}
-                      isMyTurn={isMyTurn && !state.handOver && !state.gameOver}
-                      legalMoves={legalMoves}
-                      tileSize={handTileSize}
-                      compactStacked={handCompactStacked}
-                      drawPulseIndex={drawPulseIndex}
-                    />
-                  </div>
-                </div>
-              </div>
-            }
-          />
-
-          {flyingTiles.length > 0 && (
-            <GameOverlayPortal>
-              {flyingTiles.map((ft) => (
-                <div
-                  key={ft.id}
-                  className="flying-tile-overlay"
-                  style={
-                    {
-                      '--fly-from-x': `${ft.x}px`,
-                      '--fly-from-y': `${ft.y}px`,
-                      '--fly-to-x': `${ft.toX}px`,
-                      '--fly-to-y': `${ft.toY}px`,
-                    } as React.CSSProperties
-                  }
-                />
-              ))}
-            </GameOverlayPortal>
-          )}
-          </div>
-        </>
-      )}
-
-      <Suspense fallback={null}>
-        <GameReviewer
-          open={analyzerOpen}
-          onClose={() => setAnalyzerOpen(false)}
-          analysis={currentAnalysis}
-          title="Game Review"
-        />
-        <AuthModal
-          open={authModalOpen}
-          supabaseEnabled={supabaseEnabled}
-          supabaseConfigError={supabaseConfigError}
-          onClose={() => setAuthModalOpen(false)}
-          onSignIn={signIn}
-          onSignUp={signUp}
-          onResetPassword={resetPassword}
-        />
-        <UsernameModal
-          open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
-          currentUsername={authProfile?.username ?? null}
-          isProfileEdit={usernameModalOpen}
-          onSave={async (username) => {
-            const result = await updateUsername(username);
-            if (!result.error) {
-              window.localStorage.removeItem('username_onboarding_dismissed');
-              setOnboardingDismissed(false);
-              setUsernameModalOpen(false);
-            }
-            return result;
-          }}
-          onClose={() => {
-            window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
-            setOnboardingDismissed(true);
-            setUsernameModalOpen(false);
-          }}
-          onSignOut={async () => {
-            resetRoomRecoveryState();
-            setSigningOut(true);
-            setAppMode('home');
-            resetMultiplayerRoomState();
-            setError('');
-            setActionError('');
-            try {
-              void signOut().catch(() => {});
-            } catch {
-              // no-op
-            } finally {
-              setSigningOut(false);
-              setUsernameModalOpen(false);
-              setOnboardingDismissed(false);
-              setAuthModalOpen(true);
-            }
-          }}
-          signingOut={signingOut}
-        />
-      </Suspense>
-      {showLeaveConfirm && (
-        <LeaveGameModal
-          onCancel={() => setShowLeaveConfirm(false)}
-          title={currentTournamentContext ? 'Forfeit Tournament Match?' : 'Leave Match?'}
-          copy={
-            currentTournamentContext
-              ? 'Leaving will forfeit this tournament match. You will be eliminated from the bracket.'
-              : 'Leaving will forfeit this match. Your opponent will be notified.'
+      <LiveMatchScreen
+        visible={Boolean((isConnected || isRecoveringConnection) && joinedRoom && state)}
+        state={state}
+        you={you}
+        opponentId={opponentId}
+        opponentName={opponentName}
+        myName={myName}
+        myScore={myScore}
+        opponentScore={opponentScore}
+        opponentTileCount={opponentTileCount}
+        isMyTurn={isMyTurn}
+        isHandActive={isHandActive}
+        hudScorePulse={hudScorePulse}
+        hudRightLabel={hudRightLabel}
+        hudRightScore={hudRightScore}
+        hudRightScorePulse={hudRightScorePulse}
+        opponentPillRef={opponentPillRef}
+        boneyardRef={boneyardRef}
+        boneyardCount={boneyardCount}
+        openEndsSum={openEndsSum}
+        boardRef={boardRef}
+        handAreaRef={handAreaRef}
+        trayCenterRef={trayCenterRef}
+        confettiCanvasRef={confettiCanvasRef}
+        boardForDisplay={boardForDisplay}
+        boardLegalMoves={boardLegalMoves}
+        boardSelectedTile={boardSelectedTile}
+        lastPlayedTile={lastPlayedTile}
+        boardShowOpenEndGlow={boardShowOpenEndGlow}
+        onPositionClick={play}
+        myHand={myHand}
+        handSelectedTile={handSelectedTile}
+        onHandTileSelect={handleTileTap}
+        legalMoves={legalMoves}
+        handTileSize={handTileSize}
+        handCompactStacked={handCompactStacked}
+        drawPulseIndex={drawPulseIndex}
+        scoreToast={scoreToast}
+        scoreTrackOpen={scoreTrackOpen}
+        onScoreTrackOpenChange={setScoreTrackOpen}
+        roomReactions={roomReactions}
+        onSendRoomChat={sendRoomChat}
+        onSendRoomEmote={sendRoomEmote}
+        isMuted={isMuted}
+        onToggleMute={() => setIsMuted((prev) => !prev)}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+        opponentDisconnected={opponentDisconnected}
+        opponentDisconnectMessage={opponentDisconnectMessage}
+        roomRecoveryState={roomRecoveryState}
+        roomRecoveryMessage={roomRecoveryMessage}
+        onRetryRoomRecovery={retryRoomRecovery}
+        winTarget={state?.config?.winningScore ?? 60}
+        tournamentMatch={tournamentMatch}
+        consumedTournamentGameOverMatchIdsRef={consumedTournamentGameOverMatchIdsRef}
+        tournamentMyLabel={tournamentMyLabel}
+        tournamentOpponentLabel={tournamentOpponentLabel}
+        onTournamentViewBracket={() => navigateAfterTournamentMatch('bracket')}
+        onTournamentViewFinalResult={() => navigateAfterTournamentMatch('result')}
+        onTournamentReturnToHub={() => navigateAfterTournamentMatch('hub')}
+        canUseRematch={canUseRematch}
+        rematchRequested={rematchRequested}
+        rematchWaitingText={rematchWaitingText}
+        onRematch={requestRematch}
+        onPostGame={handlePostGame}
+        players={players}
+        multiplayerRatingSummary={multiplayerRatingSummary}
+        onOpenMultiplayerAnalyzer={openMultiplayerAnalyzer}
+        handReveal={handReveal}
+        handRevealAutoProgress={handRevealAutoProgress}
+        flyingTiles={flyingTiles}
+        showLeaveConfirm={showLeaveConfirm}
+        onRequestLeaveConfirm={() => setShowLeaveConfirm(true)}
+        onLeaveConfirmDismiss={() => setShowLeaveConfirm(false)}
+        leaveModalIsTournament={Boolean(currentTournamentContext)}
+        onConfirmLeaveMatch={() => {
+          setShowLeaveConfirm(false);
+          void abandonCurrentMatch();
+        }}
+        abandonedMatchNotice={abandonedMatchNotice}
+        onAbandonedPrimary={() => {
+          if (abandonedMatchNotice?.context === 'tournament' && abandonedMatchNotice.tournamentId) {
+            setActiveTournamentId(abandonedMatchNotice.tournamentId);
+            setTournamentSubView('bracket');
+            setAppMode('tournament');
+          } else {
+            setAppMode('multiplayer');
           }
-          confirmLabel={currentTournamentContext ? 'Forfeit Match' : 'Leave Match'}
-          onLeave={() => {
-            setShowLeaveConfirm(false);
-            void abandonCurrentMatch();
-          }}
-        />
-      )}
-
-      {abandonedMatchNotice ? (
-        <GameOverModal
-          open
-          ariaLabel="Match abandoned"
-          matchKind="multiplayer"
-          title={abandonedMatchNotice.title}
-          subtitle={abandonedMatchNotice.detail}
-          scores={[]}
-          primaryLabel={abandonedMatchNotice.context === 'tournament' ? 'Back to Bracket' : 'Back to Multiplayer'}
-          onPrimary={() => {
-            if (abandonedMatchNotice.context === 'tournament' && abandonedMatchNotice.tournamentId) {
-              setActiveTournamentId(abandonedMatchNotice.tournamentId);
-              setTournamentSubView('bracket');
-              setAppMode('tournament');
-            } else {
-              setAppMode('multiplayer');
-            }
-            setAbandonedMatchNotice(null);
-          }}
-          secondaryLabel={abandonedMatchNotice.context === 'tournament' ? 'Tournament Lobby' : 'Home'}
-          onSecondary={() => {
-            if (abandonedMatchNotice.context === 'tournament') {
-              setTournamentSubView('hub');
-              setAppMode('tournament');
-            } else {
-              setAppMode('home');
-            }
-            setAbandonedMatchNotice(null);
-          }}
-          onClose={() => setAbandonedMatchNotice(null)}
-        />
-      ) : null}
+          setAbandonedMatchNotice(null);
+        }}
+        onAbandonedSecondary={() => {
+          if (abandonedMatchNotice?.context === 'tournament') {
+            setTournamentSubView('hub');
+            setAppMode('tournament');
+          } else {
+            setAppMode('home');
+          }
+          setAbandonedMatchNotice(null);
+        }}
+        onAbandonedDismiss={() => setAbandonedMatchNotice(null)}
+      />
 
       {overlayPayload && (
         <MatchFoundOverlay
@@ -5797,6 +3492,6 @@ export default function App() {
           }}
         />
       )}
-    </div>
+    </div>,
   );
 }

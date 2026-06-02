@@ -84,7 +84,7 @@
 
 /* Bot-route live hand deck shell structure.
    Visual chrome remains legacy-owned in walnut-live.css until the final skin pass. */
-.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck {
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck {
   position: relative;
   flex: 0 0 142px;
   min-height: 0;
@@ -93,7 +93,7 @@
 }
 
 @media (max-height: 760px) {
-  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-hand-deck {
+  .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .rh-live-hand-deck {
     flex-basis: 116px;
   }
 }

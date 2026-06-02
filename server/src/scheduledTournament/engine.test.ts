@@ -245,9 +245,21 @@ describe('closeRegistrationAndStart', () => {
     expect(qf[0].player1_id).toBe('u1');
     expect(qf[0].player2_id).toMatch(/^bot:fritz:tour-1:/);
     expect(qf[0].status).toBe('waiting');
-    expect(qf.slice(1).every((m) => m.status === 'completed')).toBe(true);
-    expect(qf.slice(1).every((m) => m.winner_source === 'game_over')).toBe(true);
-    expect(qf.slice(1).every((m) => m.status_reason === 'bot_simulated')).toBe(true);
+    expect(qf.slice(1).every((m) => m.status === 'waiting')).toBe(true);
+    expect(qf.slice(1).every((m) => !m.winner_id)).toBe(true);
+
+    const atStart = await dispatchScheduledStartMatches(
+      io,
+      'tour-1',
+      persistence,
+      new Date(tournament.scheduled_start),
+    );
+    expect(atStart).toBeGreaterThan(0);
+    const qfAfterStart = store.matches
+      .filter((m) => m.round === 1)
+      .sort((a, b) => a.match_number - b.match_number);
+    expect(qfAfterStart.slice(1).every((m) => m.status === 'completed')).toBe(true);
+    expect(qfAfterStart.slice(1).every((m) => m.status_reason === 'bot_simulated')).toBe(true);
     expect(store.matches.filter((m) => m.player1_id?.startsWith('bot:fritz:') && m.player2_id?.startsWith('bot:fritz:') && m.status === 'in_progress')).toHaveLength(0);
     expect(qf.every((m) => m.bot_tier === 'standard')).toBe(true);
   });
@@ -369,13 +381,13 @@ describe('closeRegistrationAndStart', () => {
       player2Score: sf!.player2_id === 'u1' ? 30 : 20,
     }, persistence);
 
-    const final = store.matches.find(
-      (m) => m.round === 3 && (m.player1_id === 'u1' || m.player2_id === 'u1'),
-    );
+    const final = store.matches.find((m) => m.round === 3);
     expect(final).toBeDefined();
-    expect(final?.status).toBe('ready');
     expect(final?.winner_id).toBeNull();
-    expect([final?.player1_id, final?.player2_id].some((id) => id?.startsWith('bot:fritz:'))).toBe(true);
+    expect([final?.player1_id, final?.player2_id].includes('u1')).toBe(true);
+    expect(final?.status).not.toBe('completed');
+    // Other semifinal may still be open, so the final can stay waiting for the second slot.
+    expect(['waiting', 'ready']).toContain(final?.status);
   });
 
   it('does not leave bot-vs-bot matches stuck in_progress in a one-human bracket', async () => {
@@ -390,8 +402,60 @@ describe('closeRegistrationAndStart', () => {
       (m) => m.player1_id?.startsWith('bot:fritz:') && m.player2_id?.startsWith('bot:fritz:'),
     );
     expect(botOnlyMatches.length).toBeGreaterThan(0);
-    expect(botOnlyMatches.every((m) => m.status === 'completed')).toBe(true);
-    expect(botOnlyMatches.every((m) => m.winner_id?.startsWith('bot:fritz:'))).toBe(true);
+    expect(botOnlyMatches.every((m) => m.status === 'waiting')).toBe(true);
+
+    await dispatchScheduledStartMatches(io, 'tour-1', persistence, new Date(tournament.scheduled_start));
+
+    const botQfsAfterStart = store.matches.filter(
+      (m) =>
+        m.round === 1 &&
+        m.player1_id?.startsWith('bot:fritz:') &&
+        m.player2_id?.startsWith('bot:fritz:'),
+    );
+    expect(botQfsAfterStart.every((m) => m.status === 'completed')).toBe(true);
+    expect(botQfsAfterStart.every((m) => m.winner_id?.startsWith('bot:fritz:'))).toBe(true);
+  });
+
+  it('keeps bot quarterfinals waiting during bracket lobby before scheduled_start', async () => {
+    const tournament = makeTournament({
+      scheduled_start: new Date(Date.now() + 15 * 60_000).toISOString(),
+    });
+    const regs = [makeReg('u1')];
+    const { persistence, store } = makePersistence(tournament, regs);
+    const { io } = makeIoMock();
+
+    await closeRegistrationAndStart(io, 'tour-1', persistence);
+
+    const botQfs = store.matches.filter(
+      (m) =>
+        m.round === 1 &&
+        m.player1_id?.startsWith('bot:fritz:') &&
+        m.player2_id?.startsWith('bot:fritz:'),
+    );
+    expect(botQfs.length).toBeGreaterThan(0);
+    expect(botQfs.every((m) => m.status === 'waiting')).toBe(true);
+    expect(store.matches.filter((m) => m.round === 2).every((m) => m.status !== 'completed')).toBe(true);
+  });
+
+  it('does not complete semifinal bot-only matches before quarterfinals finish', async () => {
+    const tournament = makeTournament({
+      status: 'in_progress',
+      scheduled_start: new Date('2026-05-15T00:00:00Z').toISOString(),
+    });
+    const regs = [makeReg('u1')];
+    const { persistence, store } = makePersistence(tournament, regs);
+    const { io } = makeIoMock();
+
+    await closeRegistrationAndStart(io, 'tour-1', persistence);
+    await dispatchScheduledStartMatches(io, 'tour-1', persistence, new Date('2026-05-15T00:00:01Z'));
+
+    const humanQf = store.matches.find(
+      (m) => m.round === 1 && (m.player1_id === 'u1' || m.player2_id === 'u1'),
+    );
+    expect(humanQf?.status).toBe('ready');
+
+    const sfMatches = store.matches.filter((m) => m.round === 2);
+    expect(sfMatches.every((m) => m.status !== 'completed')).toBe(true);
   });
 });
 

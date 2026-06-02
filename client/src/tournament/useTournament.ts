@@ -151,7 +151,10 @@ export function useTournament({ socket, userId }: Args) {
   useEffect(() => {
     if (!socket) return;
     const onRegOpen = () => { void refresh(); };
-    const onRegUpdated = () => { void refresh(); };
+    const onRegUpdated = (payload: { tournamentId: string }) => {
+      void refresh();
+      void api.fetchBracket(payload.tournamentId).then(setActiveBracket).catch(() => undefined);
+    };
     const onBracket = (payload: { tournamentId: string }) => {
       void api.fetchBracket(payload.tournamentId).then(setActiveBracket).catch(() => undefined);
       void refresh();
@@ -242,7 +245,7 @@ export function useTournament({ socket, userId }: Args) {
         },
       ];
     });
-    void refresh();
+    await refresh();
   }, [userId, refresh]);
 
   const withdraw = useCallback(async (tournamentId: string) => {

@@ -124,6 +124,39 @@ describe('applyTournamentGameOverFromRoom', () => {
     expect(updated?.status).toBe('completed');
   });
 
+  it('applyMatchResult is idempotent after game_over completion', async () => {
+    const persistence = makeGameOverPersistence({ ...liveMatch });
+    const io = makeIoMock();
+    const { applyMatchResult } = await import('./engine');
+
+    await applyMatchResult(
+      io,
+      {
+        matchId: 'match-direct',
+        winnerId: 'u1',
+        player1Score: 30,
+        player2Score: 10,
+        winnerSource: 'game_over',
+      },
+      persistence,
+    );
+    await applyMatchResult(
+      io,
+      {
+        matchId: 'match-direct',
+        winnerId: 'u2',
+        player1Score: 30,
+        player2Score: 10,
+        winnerSource: 'game_over',
+      },
+      persistence,
+    );
+
+    const updated = await persistence.fetchMatchById('match-direct');
+    expect(updated?.status).toBe('completed');
+    expect(updated?.winner_id).toBe('u1');
+  });
+
   it('returns false without throwing when no tournament match resolves', async () => {
     const lookup = vi.fn().mockResolvedValue(null);
     const io = makeIoMock();

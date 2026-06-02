@@ -1965,23 +1965,23 @@ body {
 }
 
 .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .hand-container .domino-tile.highlight:not(.unplayable)::after {
-  width: 52px;
-  height: 4px;
-  bottom: -9px;
-  background-color: var(--rh-live-blue);
+  width: 48px;
+  height: 3px;
+  bottom: -7px;
+  background-color: rgba(231, 182, 74, 0.92);
   box-shadow:
-    0 0 12px rgba(88, 166, 255, 0.86),
-    0 0 28px rgba(53, 216, 255, 0.34);
+    0 0 3px 1px rgba(231, 182, 74, 0.68),
+    0 0 10px 3px rgba(231, 182, 74, 0.34);
 }
 
 .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .hand-container .domino-tile.selected .domino-body,
 .screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen):not(.rh-match-live) .hand-container .domino-tile.highlight:not(.unplayable) .domino-body {
-  border-color: rgba(88, 166, 255, 0.92) !important;
+  border-color: rgba(231, 182, 74, 0.92) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 0 0 2px rgba(88, 166, 255, 0.28),
+    0 0 0 2px rgba(231, 182, 74, 0.28),
     0 12px 24px rgba(0, 0, 0, 0.36),
-    0 0 28px rgba(88, 166, 255, 0.18) !important;
+    0 0 28px rgba(231, 182, 74, 0.18) !important;
 }
 
 @media (max-width: 900px) and (orientation: landscape) {

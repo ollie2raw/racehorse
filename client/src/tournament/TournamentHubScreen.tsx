@@ -21,6 +21,7 @@ export interface TournamentHubScreenProps {
   activeBracketStatus?: ScheduledTournament['status'] | null;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
+  onOpenAccount?: () => void;
   onBackHome: () => void;
   onOpenBracket: (tournamentId: string) => void;
   onRegister: (tournamentId: string) => void | Promise<void>;
@@ -135,6 +136,20 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
   );
 
   const nextTournamentRegistered = nextTournament ? isRegistered(nextTournament) : false;
+
+  const lobbyBracketTournamentId = useMemo(() => {
+    if (props.activeTournamentId) return props.activeTournamentId;
+    const regIds = new Set(
+      props.registrations
+        .filter((r) => r.status === 'registered' || r.status === 'active')
+        .map((r) => r.tournament_id),
+    );
+    return props.upcoming.find((t) => regIds.has(t.id))?.id ?? null;
+  }, [props.activeTournamentId, props.registrations, props.upcoming]);
+
+  const showLobbyBracketBanner =
+    Boolean(lobbyBracketTournamentId) &&
+    (props.tournamentPhase === 'registered' || props.tournamentPhase === 'bracket_lobby');
   const countdownTargetMs = nextTournament
     ? nextTournament.status === 'registration_open'
       ? Date.parse(nextTournament.registration_close_at)
@@ -156,6 +171,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
         currentMode={'tournament' as AppMode}
         onNavigate={props.onNavigate}
         onOpenAuth={props.onOpenAuth}
+        onOpenAccount={props.onOpenAccount}
         activeColor="var(--accent-amber)"
       />
       <div className="th-shell">
@@ -214,16 +230,22 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
               </span>
             </div>
 
-            {props.tournamentPhase === 'bracket_lobby' && props.activeTournamentId ? (
+            {showLobbyBracketBanner && lobbyBracketTournamentId ? (
               <div className="th-recovery-banner">
                 <div className="th-recovery-banner__copy">
-                  <span className="th-recovery-banner__eyebrow">Bracket locked</span>
-                  <span className="th-recovery-banner__title">View your bracket and opponent</span>
+                  <span className="th-recovery-banner__eyebrow">
+                    {props.tournamentPhase === 'bracket_lobby' ? 'Bracket locked' : 'Registered'}
+                  </span>
+                  <span className="th-recovery-banner__title">
+                    {props.tournamentPhase === 'bracket_lobby'
+                      ? 'View your bracket and opponent'
+                      : 'Return to the tournament lobby and bracket'}
+                  </span>
                 </div>
                 <button
                   className="th-cta"
                   type="button"
-                  onClick={() => props.onOpenBracket(props.activeTournamentId!)}
+                  onClick={() => props.onOpenBracket(lobbyBracketTournamentId)}
                 >
                   View Bracket ›
                 </button>

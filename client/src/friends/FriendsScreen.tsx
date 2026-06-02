@@ -393,7 +393,7 @@ export default function FriendsScreen({
               {/* H2H record */}
               {selectedProfile.h2h && (
                 <div className="friends-page-h2h">
-                  <span className="friends-page-section-label" style={{ margin: 0 }}>Head-to-Head vs you</span>
+                  <span className="friends-page-section-label" style={{ margin: 0 }}>Your record</span>
                   <span className="friends-page-h2h-record">
                     <span style={{ color: 'var(--tier-rookie)' }}>{selectedProfile.h2h.wins}W</span>
                     {' – '}

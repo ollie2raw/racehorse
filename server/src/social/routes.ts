@@ -550,9 +550,18 @@ socialRouter.get('/:username', async (req, res) => {
       const opp = m.winner_user_id === targetId ? m.loser_user_id : m.winner_user_id;
       return opp === requestorId;
     });
-    const h2hWins = h2hRows.filter((m) => m.winner_user_id === targetId).length;
-    const h2hLosses = h2hRows.filter((m) => m.loser_user_id === targetId).length;
-    const h2h = (h2hWins + h2hLosses > 0) ? { wins: h2hWins, losses: h2hLosses } : null;
+    const viewerH2hWins = h2hRows.filter((m) => m.winner_user_id === requestorId).length;
+    const viewerH2hLosses = h2hRows.filter((m) => m.loser_user_id === requestorId).length;
+    // Signed-in viewer's W–L vs this profile (not the profile owner's record).
+    const h2h =
+      viewerH2hWins + viewerH2hLosses > 0
+        ? {
+            viewer_wins: viewerH2hWins,
+            viewer_losses: viewerH2hLosses,
+            wins: viewerH2hWins,
+            losses: viewerH2hLosses,
+          }
+        : null;
 
     // Friendship status
     const reqEnc = encodeURIComponent(requestorId);

@@ -31,6 +31,7 @@ export interface MatchmakingScreenProps {
   myWinStreak?: number | null;
   onNavigate?: (mode: AppMode) => void;
   onOpenAuth?: () => void;
+  onOpenAccount?: () => void;
   onBackHome: () => void;
   onOpenPrivateMatch: () => void;
   onAutoJoinRoom: (payload: MatchFoundPayload) => void;
@@ -210,6 +211,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
         currentMode={'multiplayer' as AppMode}
         onNavigate={props.onNavigate}
         onOpenAuth={props.onOpenAuth}
+        onOpenAccount={props.onOpenAccount}
         activeColor="var(--tier-standard)"
       />
 
