@@ -671,9 +671,13 @@ function nextPlayer(player: BotPlayerId): BotPlayerId {
   return player === 'you' ? 'bot' : 'you';
 }
 
+/** Race-to-N: game ends only when at least one player has reached target and leads on points. */
 function winnerFromScores(scores: Record<BotPlayerId, number>, target: number): BotPlayerId | null {
-  if (scores.you < target && scores.bot < target) return null;
-  return scores.you >= scores.bot ? 'you' : 'bot';
+  const youQualified = scores.you >= target;
+  const botQualified = scores.bot >= target;
+  if (!youQualified && !botQualified) return null;
+  if (scores.you === scores.bot) return null;
+  return scores.you > scores.bot ? 'you' : 'bot';
 }
 
 function computeHandPenalty(hand: Tile[]): number {

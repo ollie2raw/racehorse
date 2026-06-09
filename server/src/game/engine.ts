@@ -64,15 +64,17 @@ function assertCurrentPlayer(state: GameState, playerId: string): void {
 }
 
 /**
- * Check if any player has reached the winning score.
+ * Check if any player has reached the winning score and leads.
+ * When multiple players are at or above target with the same top score, play continues.
  */
 function checkForGameWinner(state: GameState): string | null {
   const target = state.config.winningScore;
   const qualified = state.playerIds.filter((id) => state.players[id].score >= target);
   if (qualified.length === 0) return null;
-  return qualified.reduce((best, id) =>
-    state.players[id].score > state.players[best].score ? id : best,
-  );
+  const topScore = Math.max(...qualified.map((id) => state.players[id].score));
+  const leaders = qualified.filter((id) => state.players[id].score === topScore);
+  if (leaders.length !== 1) return null;
+  return leaders[0]!;
 }
 
 function validateConfig(playerCount: number, cfg: Config): void {

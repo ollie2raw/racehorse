@@ -1199,6 +1199,40 @@ describe('Game ends at 60 points', () => {
     expect(next.winnerId).toBeNull();
   });
 
+  it('after hand end, tied scores at or above 60 continue with tiebreaker hands', () => {
+    const state = setupState({
+      board: {
+        mainLine: [pt(1, 4)],
+        leftEnd: 1,
+        rightEnd: 4,
+        leftEndIsDouble: false,
+        rightEndIsDouble: false,
+        hubDoubles: [],
+      },
+      config: {
+        ...DEFAULT_CONFIG,
+        blockedHandRule: 'noScore',
+      },
+      currentPlayerIndex: 0,
+      players: {
+        A: { id: 'A', hand: [t(2, 2)], score: 61 },
+        B: { id: 'B', hand: [t(3, 3)], score: 61 },
+      },
+      boneyard: [],
+      deadTiles: [],
+      consecutivePasses: 0,
+    });
+
+    let { state: next } = applyMove(state, 'A', { type: 'pass' });
+    next = applyMove(next, 'B', { type: 'pass' }).state;
+
+    expect(next.players.A.score).toBe(61);
+    expect(next.players.B.score).toBe(61);
+    expect(next.handOver).toBe(true);
+    expect(next.gameOver).toBe(false);
+    expect(next.winnerId).toBeNull();
+  });
+
   it('after hand end, highest score wins even if another player reached 60 earlier', () => {
     const state = setupState({
       board: {
