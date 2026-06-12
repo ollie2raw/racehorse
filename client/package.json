@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "qa:daily-fritz:hand-lifecycle": "node scripts/dailyFritzHandLifecycleQa.mjs",
     "test:bot": "ts-node --esm src/bot/botHeuristics.behaviorTests.ts",
+    "test:bot:parity": "ts-node --esm src/bot/engineParity.behaviorTests.ts",
+    "test:bot:honesty": "ts-node --esm src/bot/botHonesty.behaviorTests.ts",
     "benchmark:tier": "ts-node --esm src/bot/benchmark.ts ladder 200",
     "test:bot:tier": "ts-node --esm src/bot/tierDifficulty.behaviorTests.ts",
     "test:hand-lifecycle": "ts-node --esm src/bot/handLifecycle.behaviorTests.ts",

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { FritzTier } from "./fritzConfig";
 import type { BotDealSize } from "./botEngine";
+import { FRITZ_DIFFICULTY_FAIRNESS_NOTE } from "./fritzTrustCopy";
 import type { AppMode } from "../types";
 import { DominoTile, GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
@@ -134,9 +135,9 @@ const DIFFICULTIES: Array<{
   {
     id: "rookie",
     label: "Rookie",
-    roleLabel: "Beginner",
+    roleLabel: "Learning",
     approxStrength: "~600",
-    desc: "Fritz makes frequent mistakes — good for learning.",
+    desc: "Forgiving learning opponent.",
     Icon: IconRookie,
   },
   {
@@ -144,7 +145,7 @@ const DIFFICULTIES: Array<{
     label: "Standard",
     roleLabel: "Balanced",
     approxStrength: "~1000",
-    desc: "Best for most players — a fair, steady challenge.",
+    desc: "Balanced casual opponent.",
     Icon: IconBars,
   },
   {
@@ -152,7 +153,7 @@ const DIFFICULTIES: Array<{
     label: "Elite",
     roleLabel: "Competitive",
     approxStrength: "~1800",
-    desc: "Daily Fritz Classic strength — sharp and punishing.",
+    desc: "Strong competitive opponent.",
     Icon: IconCrown,
   },
   {
@@ -160,7 +161,7 @@ const DIFFICULTIES: Array<{
     label: "Master",
     roleLabel: "Expert",
     approxStrength: "~2400",
-    desc: "Near-perfect endgame — for dominoes veterans.",
+    desc: "Brutal expert challenge.",
     Icon: IconGoat,
   },
 ];
@@ -244,6 +245,7 @@ export default function PlayVsFritz({
                   Fritz is a world-class dominoes bot built to challenge and sharpen your strategy.
                   Pick a difficulty, choose your format, and test your skills.
                 </p>
+                <p className="pvf-card-description pvf-card-description--muted">{FRITZ_DIFFICULTY_FAIRNESS_NOTE}</p>
               </div>
 
               {/* Bottom: Badges Row */}
