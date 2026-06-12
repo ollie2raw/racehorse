@@ -924,7 +924,31 @@ export function passTurn(state: BotMatchState, player: BotPlayerId): BotActionRe
   if (moved.boneyard.length <= BONEYARD_LOCKED_COUNT && nextConsecutive >= 2) {
     const youPips = sumPips(moved.players.you.hand);
     const botPips = sumPips(moved.players.bot.hand);
-    const winner: BotPlayerId = youPips <= botPips ? 'you' : 'bot';
+    if (youPips === botPips) {
+      const finalWinner = winnerFromScores(
+        { you: moved.players.you.score, bot: moved.players.bot.score },
+        moved.winningScore,
+      );
+      return {
+        state: {
+          ...moved,
+          handOver: true,
+          gameOver: finalWinner !== null,
+          winnerId: finalWinner,
+          lastHandWinner: null,
+          lastHandReason: 'blocked',
+        },
+        passed: { player },
+        handEnded: {
+          winner: null,
+          reason: 'blocked',
+          pointsAwarded: 0,
+          loserPips: youPips,
+          calcText: 'tie — no hand bonus',
+        },
+      };
+    }
+    const winner: BotPlayerId = youPips < botPips ? 'you' : 'bot';
     const loser: BotPlayerId = winner === 'you' ? 'bot' : 'you';
     const loserPips = sumPips(moved.players[loser].hand);
     const pointsAwarded = computeHandPenalty(moved.players[loser].hand);

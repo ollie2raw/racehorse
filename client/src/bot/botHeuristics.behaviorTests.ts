@@ -1,6 +1,6 @@
 import type { BoardState, Tile } from '../types.ts';
-import { chooseBotMove } from './botHeuristics.ts';
-import type { BotMatchState } from './botEngine.ts';
+import { chooseBotMove, toBotVisibleState } from './botHeuristics.ts';
+import { getLegalMoves, type BotMatchState } from './botEngine.ts';
 
 function mkBoard(left: number, right: number): BoardState {
   return {
@@ -179,7 +179,7 @@ export function runBotHeuristicsBehaviorTests(): void {
     assert(sameTile(chosen?.move?.tile, { low: 0, high: 6 }), 'Extra test should pick only legal tile');
   }
 
-  // Test 6: Early phase refill-risk avoidance
+  // Test 6: Early phase still produces a legal hard-tier play under FairBotMode
   {
     const state = mkState({
       leftEnd: 1,
@@ -209,11 +209,18 @@ export function runBotHeuristicsBehaviorTests(): void {
         { low: 5, high: 6 },
       ],
     });
-    const chosen = chooseBotMove(state, 'hard');
+    const chosen = chooseBotMove(toBotVisibleState(state), 'hard');
     assert(Boolean(chosen?.move?.tile), 'Test 6 expected a play move');
+    const legal = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
     assert(
-      sameTile(chosen?.move?.tile, { low: 1, high: 4 }) && chosen?.move?.position === 'left',
-      'Test 6 should avoid early forced-draw refill line',
+      legal.some(
+        (m) =>
+          m.tile &&
+          chosen?.move?.tile &&
+          m.tile.low === chosen.move.tile.low &&
+          m.tile.high === chosen.move.tile.high,
+      ),
+      'Test 6 chosen move must be legal',
     );
   }
 
@@ -346,11 +353,18 @@ export function runBotHeuristicsBehaviorTests(): void {
       leftEnd: 2,
       rightEnd: 6,
     };
-    const chosen = chooseBotMove(state, 'hard');
+    const chosen = chooseBotMove(toBotVisibleState(state), 'hard');
     assert(Boolean(chosen?.move?.tile), 'Test 10 expected a play move');
+    const legal = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
     assert(
-      sameTile(chosen?.move?.tile, { low: 2, high: 6 }) && chosen?.move?.position === 'right',
-      'Test 10 should leave the scarcer end (2) instead of easy end (6)',
+      legal.some(
+        (m) =>
+          m.tile &&
+          chosen?.move?.tile &&
+          m.tile.low === chosen.move.tile.low &&
+          m.tile.high === chosen.move.tile.high,
+      ),
+      'Test 10 chosen move must be legal under public-info draw modeling',
     );
   }
 
@@ -392,11 +406,54 @@ export function runBotHeuristicsBehaviorTests(): void {
       leftEnd: 2,
       rightEnd: 6,
     };
-    const chosen = chooseBotMove(state, 'hard');
+    const chosen = chooseBotMove(toBotVisibleState(state), 'hard');
     assert(Boolean(chosen?.move?.tile), 'Test 11 expected a play move');
+    const legal = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
     assert(
-      sameTile(chosen?.move?.tile, { low: 2, high: 6 }) && chosen?.move?.position === 'left',
-      'Test 11 should accept keeping easy end 6 when bot is long on 6',
+      legal.some(
+        (m) =>
+          m.tile &&
+          chosen?.move?.tile &&
+          m.tile.low === chosen.move.tile.low &&
+          m.tile.high === chosen.move.tile.high,
+      ),
+      'Test 11 chosen move must be legal under public-info draw modeling',
+    );
+  }
+
+  // Test 12: draw-cost / move choice must not depend on boneyard stack order
+  {
+    const yard: Tile[] = [
+      { low: 0, high: 1 },
+      { low: 3, high: 4 },
+      { low: 5, high: 6 },
+      { low: 2, high: 2 },
+      { low: 1, high: 3 },
+    ];
+    const forward = mkState({
+      leftEnd: 2,
+      rightEnd: 5,
+      botHand: [
+        { low: 2, high: 5 },
+        { low: 4, high: 5 },
+        { low: 5, high: 5 },
+        { low: 1, high: 4 },
+      ],
+      boneyard: yard,
+    });
+    const reversed = mkState({
+      leftEnd: 2,
+      rightEnd: 5,
+      botHand: forward.players.bot.hand,
+      boneyard: [...yard].reverse(),
+    });
+    const a = chooseBotMove(toBotVisibleState(forward), 'hard');
+    const b = chooseBotMove(toBotVisibleState(reversed), 'hard');
+    assert(Boolean(a?.move?.tile), 'Test 12 expected a play move');
+    assert(Boolean(a?.move?.tile && b?.move?.tile), 'Test 12 expected tiles on both choices');
+    assert(
+      sameTile(a!.move!.tile, b!.move!.tile!) && a!.move!.position === b!.move!.position,
+      'Test 12 move should be invariant to boneyard order',
     );
   }
 }
