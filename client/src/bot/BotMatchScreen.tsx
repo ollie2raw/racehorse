@@ -63,6 +63,7 @@ import {
 import { chooseBotMove, toBotVisibleState, type BotChoice } from './botHeuristics';
 import { fairnessLog } from './fairnessLog';
 import { FRITZ_TIERS, type FritzTier } from './fritzConfig';
+import { FRITZ_POSTGAME_TRUST_LINE } from './fritzTrustCopy';
 import { getLocalDateKey } from '../dailyPuzzle/date';
 import {
   completeGhostGame,
@@ -7405,6 +7406,8 @@ export default function BotMatchScreen({
               <p className="daily-fritz-practice-hint">{dailyFritzSetOverlay.practiceHint}</p>
             ) : null}
 
+            <p className="daily-fritz-trust-note">{FRITZ_POSTGAME_TRUST_LINE}</p>
+
             {dailyFritzSetOverlay.errorMessage ? (
               <div className="hand-over-error-zone">
                 <span className="hand-over-error-text" title={dailyFritzSetOverlay.errorMessage}>
@@ -7560,6 +7563,9 @@ export default function BotMatchScreen({
           }
           onClose={isGuidedMatchVictoryResult ? returnToLearn : exitMatch}
         >
+          {!isGuidedMatchVictoryResult && !isGhostMode && (
+            <p className="rh-go-trust-note">{FRITZ_POSTGAME_TRUST_LINE}</p>
+          )}
           {guidedMatchFinalDebrief ? (
             <GuidedMatchFinalDebriefPanel debrief={guidedMatchFinalDebrief} />
           ) : null}

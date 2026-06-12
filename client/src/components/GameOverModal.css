@@ -382,6 +382,14 @@
   color: rgba(245, 126, 126, 0.96);
 }
 
+.rh-go-trust-note {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--rh-go-text-dim);
+  text-align: center;
+}
+
 .rh-go-rating {
   display: flex;
   align-items: center;

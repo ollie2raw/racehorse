@@ -913,6 +913,15 @@
   text-align: center;
 }
 
+.daily-fritz-trust-note {
+  margin: 0;
+  padding: 0 8px;
+  color: rgba(227, 233, 240, 0.58);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .daily-fritz-set-overlay-game-list {
   display: grid;
   gap: 0;
