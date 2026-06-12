@@ -108,6 +108,7 @@ import {
 import { formatOrdinalPlace } from '../dailyFritz/format';
 import { buildShareText } from '../dailyFritz/shareCard';
 import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
+import { PlayVsFritzResultOverlay } from './PlayVsFritzResultOverlay';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 import {
   canApplyNextHand,
@@ -1264,6 +1265,15 @@ export default function BotMatchScreen({
   const isGhostMode = mode === 'ghost';
   const isDailyFritzMode = mode === 'daily-fritz';
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
+  const isPlayVsFritzGameOver =
+    mode === 'bot' &&
+    !isGhostMode &&
+    !isDailyFritzMode &&
+    !isDailyPuzzleRun &&
+    !isGuidedMode &&
+    !isAuthoringMode &&
+    !isAuthoringV2Mode &&
+    !isGuidedV2Mode;
   const isStandaloneFritzMatch = Boolean(
     userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
@@ -7439,7 +7449,42 @@ export default function BotMatchScreen({
         </div>
         </GameOverlayPortal>
       ) : null}
-      {match.gameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
+      {match.gameOver && isPlayVsFritzGameOver && (
+        <PlayVsFritzResultOverlay
+          won={match.winnerId === 'you'}
+          opponentLabel={opponentLabel}
+          dealSize={match.dealSize}
+          youScore={match.players.you.score}
+          botScore={match.players.bot.score}
+          ratingSlot={
+            ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null ? (
+              <div className="df-result-meta-pill">
+                <span className="df-result-meta-label">Rating</span>
+                <span className="df-result-meta-value">
+                  {ghostResultLoading
+                    ? (currentGlickoRating ?? matchStartGlickoRating) != null
+                      ? `${Math.round(Number(currentGlickoRating ?? matchStartGlickoRating))}  •  syncing...`
+                      : 'Syncing...'
+                    : fritzGlickoDelta != null && fritzNewGlickoRating != null
+                      ? `${formatRatingDelta(fritzGlickoDelta)}  •  ${fritzNewGlickoRating}`
+                      : fritzNewGlickoRating != null
+                        ? `${fritzNewGlickoRating}`
+                        : ghostResultError
+                          ? ghostResultError
+                          : ghostResult
+                            ? 'Saved, rating unavailable'
+                            : 'Rating unavailable'}
+                </span>
+              </div>
+            ) : undefined
+          }
+          onRematch={startFreshMatch}
+          onChangeSetup={exitMatch}
+          onHome={onNavigate ? goHome : undefined}
+          showHome={Boolean(onNavigate)}
+        />
+      )}
+      {match.gameOver && !isPlayVsFritzGameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
         <GameOverModal
           open
           ariaLabel={`${opponentLabel} match over`}
@@ -7563,7 +7608,7 @@ export default function BotMatchScreen({
           }
           onClose={isGuidedMatchVictoryResult ? returnToLearn : exitMatch}
         >
-          {!isGuidedMatchVictoryResult && !isGhostMode && (
+          {isDailyFritzMode && !isGuidedMatchVictoryResult && !isGhostMode && (
             <p className="rh-go-trust-note">{FRITZ_POSTGAME_TRUST_LINE}</p>
           )}
           {guidedMatchFinalDebrief ? (
@@ -7588,30 +7633,6 @@ export default function BotMatchScreen({
                   {guidedMatchCandidateSaveStatus}
                 </p>
               ) : null}
-            </div>
-          )}
-          {!isGuidedMode &&
-            !isGuidedV2Mode &&
-            !isGhostMode &&
-            !isDailyFritzMode &&
-            (ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null) && (
-            <div className="rh-go-rating">
-              <span>Rating</span>
-              <strong>
-                {ghostResultLoading
-                  ? (currentGlickoRating ?? matchStartGlickoRating) != null
-                    ? `${Math.round(Number(currentGlickoRating ?? matchStartGlickoRating))}  •  syncing...`
-                    : 'Syncing...'
-                  : fritzGlickoDelta != null && fritzNewGlickoRating != null
-                    ? `${formatRatingDelta(fritzGlickoDelta)}  •  ${fritzNewGlickoRating}`
-                  : fritzNewGlickoRating != null
-                    ? `${fritzNewGlickoRating}`
-                  : ghostResultError
-                    ? ghostResultError
-                  : ghostResult
-                      ? 'Saved, rating unavailable'
-                      : 'Rating unavailable'}
-              </strong>
             </div>
           )}
           {isDailyFritzMode && (
