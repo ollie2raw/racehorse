@@ -61,6 +61,8 @@ import {
   getDailyFritzSkunkWinRank,
   normalizeDailyFritzSetSkunkFields,
 } from './dailyFritzSkunk';
+import { resetDailyFritzQaAttempt } from './dailyFritz/qaReset';
+import { restartDailyFritzUnsafeAttempt } from './dailyFritz/restartUnsafe';
 import {
   buildDailyPuzzleLeaderboard,
   calculateDailyPuzzleAwardedPoints,
@@ -83,6 +85,11 @@ import {
   type DailyPuzzleSlotRow,
 } from './dailyPuzzle';
 import { validateDailyPuzzleSubmission } from './dailyPuzzleSubmissionValidation';
+import {
+  assessDailyPuzzleLadderReadiness,
+  isPastLadderReadinessGracePt,
+} from './dailyPuzzleLadderReadiness';
+import { scrubPartialPublishedLadderForDate } from './dailyPuzzleLadderPublish';
 import { ensureDailyPuzzleLadderForDate } from './seedDailyPuzzleLadder';
 import {
   buildHomeDailySummary,
@@ -434,7 +441,38 @@ app.get('/ready', async (_req, res) => {
   const supabase = requiredEnvOk
     ? await getSupabaseReadiness()
     : { ok: false, latencyMs: 0, error: 'missing_required_env' };
-  const ok = requiredEnvOk && supabase.ok;
+
+  const todayPt = getPacificDateKey();
+  let dailyPuzzleLadder: ReturnType<typeof assessDailyPuzzleLadderReadiness> & { ok: boolean };
+  try {
+    const slots = requiredEnvOk ? await listDailyPuzzleSlotsForDate(todayPt) : [];
+    const readiness = assessDailyPuzzleLadderReadiness(todayPt, slots);
+    dailyPuzzleLadder = {
+      ...readiness,
+      ok: readiness.ready || !readiness.shouldAlert,
+    };
+    if (readiness.shouldAlert) {
+      console.error('[daily-puzzle-ladder] readiness-alert', {
+        runDate: todayPt,
+        publishedSlotCount: readiness.publishedSlotCount,
+        missingSlotIndexes: readiness.missingSlotIndexes,
+        alertReason: readiness.alertReason,
+      });
+    }
+  } catch (error) {
+    dailyPuzzleLadder = {
+      runDate: todayPt,
+      ready: false,
+      publishedSlotCount: 0,
+      missingSlotIndexes: [1, 2, 3],
+      legacySinglePuzzleDay: true,
+      shouldAlert: isPastLadderReadinessGracePt(todayPt),
+      alertReason: error instanceof Error ? error.message : String(error),
+      ok: false,
+    };
+  }
+
+  const ok = requiredEnvOk && supabase.ok && dailyPuzzleLadder.ok;
 
   res.status(ok ? 200 : 503).json({
     ...getRuntimeStatusPayload(),
@@ -443,6 +481,7 @@ app.get('/ready', async (_req, res) => {
       requiredEnv,
       recommendedEnv,
       supabase,
+      dailyPuzzleLadder,
     },
   });
 });
@@ -2270,6 +2309,13 @@ function isTruthyEnvFlag(value: string | undefined): boolean {
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
 }
 
+/** Request-time ladder self-heal is on unless explicitly disabled. */
+function isRequestPuzzleGenerationEnabled(): boolean {
+  const raw = process.env.ENABLE_REQUEST_PUZZLE_GENERATION?.trim().toLowerCase();
+  if (raw === 'false' || raw === '0' || raw === 'no') return false;
+  return true;
+}
+
 /** Off by default in production; set ENABLE_STARTUP_FRITZ_WARMUP=true to run on boot. */
 function isStartupDailyFritzWarmupEnabled(): boolean {
   return isTruthyEnvFlag(process.env.ENABLE_STARTUP_FRITZ_WARMUP);
@@ -2528,7 +2574,20 @@ async function listDailyPuzzleSlotsForDateWithAutoSeed(runDate: string): Promise
   try {
     let slots = await listDailyPuzzleSlotsForDate(runDate);
     if (isDailyPuzzleLadderReady(slots)) return slots;
-    if (!isTruthyEnvFlag(process.env.ENABLE_REQUEST_PUZZLE_GENERATION)) {
+
+    if (!isDailyPuzzleLadderReady(slots) && slots.length > 0) {
+      const scrub = await scrubPartialPublishedLadderForDate(runDate);
+      if (scrub.scrubbed > 0) {
+        console.warn('[daily-puzzle-ladder] scrubbed-partial-on-read', {
+          runDate,
+          scrubbed: scrub.scrubbed,
+          missingSlotIndexes: scrub.readiness.missingSlotIndexes,
+        });
+        slots = [];
+      }
+    }
+
+    if (!isRequestPuzzleGenerationEnabled()) {
       console.warn('[daily-puzzle-ladder] request-time generation skipped', {
         runDate,
         reason: 'disabled',
@@ -4374,6 +4433,40 @@ app.post('/api/daily-fritz/abandon', async (req, res) => {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to abandon Daily Fritz attempt.',
     });
+   }
+});
+
+app.post('/api/daily-fritz/restart', async (req, res) => {
+  const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
+  if (!attemptId) {
+    res.status(400).json({ error: 'attempt_id is required.' });
+    return;
+  }
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const result = await restartDailyFritzUnsafeAttempt({
+      attemptId,
+      authenticatedUserId,
+    });
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'daily_fritz_restart_attempt_not_found') {
+      res.status(404).json({ error: 'Daily Fritz attempt not found.' });
+      return;
+    }
+    if (message.startsWith('daily_fritz_restart_attempt_locked:')) {
+      const status = message.split(':')[1] ?? 'locked';
+      res.status(409).json({ error: 'Daily Fritz attempt cannot be restarted.', status });
+      return;
+    }
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to restart Daily Fritz attempt.',
+    });
   }
 });
 
@@ -4503,6 +4596,41 @@ app.post('/api/daily-fritz/reset-attempt', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to reset Daily Fritz attempt.',
+    });
+  }
+});
+
+app.post('/api/daily-fritz/qa-reset', async (req, res) => {
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const runDate = typeof req.body?.run_date === 'string' ? req.body.run_date.trim() : undefined;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : 'qa_browser_reset';
+    const result = await resetDailyFritzQaAttempt({
+      runDate,
+      reason,
+      authenticatedUserId,
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.startsWith('qa_daily_fritz_reset_requires_') || message.startsWith('qa_daily_fritz_reset_blocked_')) {
+      res.status(403).json({ error: 'Daily Fritz QA reset is disabled.' });
+      return;
+    }
+    if (message === 'qa_daily_fritz_reset_forbidden_user') {
+      res.status(403).json({ error: 'Daily Fritz QA reset is limited to the configured QA account.' });
+      return;
+    }
+    if (message.startsWith('qa_daily_fritz_reset_refused_')) {
+      res.status(403).json({ error: 'Daily Fritz QA reset refused for this environment.' });
+      return;
+    }
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to reset Daily Fritz QA attempt.',
     });
   }
 });

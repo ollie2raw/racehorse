@@ -88,6 +88,48 @@ export function shouldShowHandRevealForHand(
   return liveHandNumber === endedHandNumber;
 }
 
+export const DAILY_FRITZ_HAND_REVEAL_DELAY_MS = 1400;
+export const DAILY_FRITZ_HAND_AUTO_ADVANCE_MS = 5000;
+
+/** Daily Fritz shows hand result immediately; guided/bot modes keep a short delay. */
+export function resolveHandRevealScheduleMode(isDailyFritzMode: boolean): 'immediate' | 'delayed' {
+  return isDailyFritzMode ? 'immediate' : 'delayed';
+}
+
+export function getDailyFritzWatchdogDelayMs(handRevealVisible: boolean): number {
+  return handRevealVisible
+    ? DAILY_FRITZ_HAND_AUTO_ADVANCE_MS + 4000
+    : DAILY_FRITZ_HAND_REVEAL_DELAY_MS + 3000;
+}
+
+/** Watchdog may advance only after the hand-result modal has been shown and the countdown gate opens. */
+export function shouldDailyFritzWatchdogAdvance(input: {
+  handOver: boolean;
+  gameOver: boolean;
+  handRevealVisible: boolean;
+  minAdvanceAt: number | null;
+  nowMs: number;
+}): boolean {
+  if (!input.handOver || input.gameOver) return false;
+  if (!input.handRevealVisible) return false;
+  if (isDailyFritzAdvanceLocked(input.minAdvanceAt, input.nowMs)) return false;
+  return true;
+}
+
+export type DailyFritzHandBreadcrumbEvent =
+  | 'reveal-skipped'
+  | 'reveal-restored'
+  | 'draw-fallback'
+  | 'manual-advance-shown';
+
+/** Production-visible trust breadcrumbs for Daily Fritz hand lifecycle debugging. */
+export function logDailyFritzHandBreadcrumb(
+  event: DailyFritzHandBreadcrumbEvent,
+  detail: Record<string, unknown>,
+): void {
+  console.log(`[daily-flow] ${event}`, detail);
+}
+
 export function logHandLifecycle(payload: HandLifecycleLogPayload): void {
   const previousPhase = payload.previousPhase ?? lastPhase;
   lastPhase = payload.phase;
