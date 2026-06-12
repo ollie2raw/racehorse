@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import type { FritzTier } from "./fritzConfig";
 import type { BotDealSize } from "./botEngine";
-import { FRITZ_DIFFICULTY_FAIRNESS_NOTE } from "./fritzTrustCopy";
 import type { AppMode } from "../types";
 import { DominoTile, GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
@@ -245,7 +244,6 @@ export default function PlayVsFritz({
                   Fritz is a world-class dominoes bot built to challenge and sharpen your strategy.
                   Pick a difficulty, choose your format, and test your skills.
                 </p>
-                <p className="pvf-card-description pvf-card-description--muted">{FRITZ_DIFFICULTY_FAIRNESS_NOTE}</p>
               </div>
 
               {/* Bottom: Badges Row */}
