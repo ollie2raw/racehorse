@@ -104,11 +104,6 @@ import {
   type DailyFritzStartResponse,
 } from '../dailyFritz/api';
 import { formatOrdinalPlace } from '../dailyFritz/format';
-import {
-  getDailyFritzMatchStorageKey,
-  loadPersistedDailyFritzMatchSnapshot,
-  persistDailyFritzMatchSnapshot,
-} from '../dailyFritz/storage';
 import { buildShareText } from '../dailyFritz/shareCard';
 import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
@@ -785,10 +780,7 @@ export default function BotMatchScreen({
 }: BotMatchScreenProps) {
   const dailyFritzStorageKey =
     mode === 'daily-fritz' && dailyFritzPackage
-      ? getDailyFritzMatchStorageKey(
-          dailyFritzPackage.attempt_id,
-          dailyFritzPackage.current_game_number ?? 1,
-        )
+      ? `racehorse:daily-fritz:v2:${dailyFritzPackage.attempt_id}:game:${dailyFritzPackage.current_game_number ?? 1}`
       : null;
   const [shareCopied, setShareCopied] = useState(false);
   const dailyFritzShareText = useMemo(
@@ -853,13 +845,26 @@ export default function BotMatchScreen({
       : `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const loadPersistedDailyFritzMatch = () => {
     if (!dailyFritzStorageKey || typeof window === 'undefined') return null;
-    return loadPersistedDailyFritzMatchSnapshot({
-      storageKey: dailyFritzStorageKey,
-      attemptId: dailyFritzPackage?.attempt_id,
-      currentHandIndex: Number(dailyFritzPackage?.current_hand_index ?? 0),
-      primaryStorage: window.localStorage,
-      fallbackStorage: window.sessionStorage,
-    });
+    try {
+      const raw = window.sessionStorage.getItem(dailyFritzStorageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        attemptId?: string;
+        currentHandIndex?: number;
+        match?: BotMatchState;
+        movesUsed?: number;
+        moveLog?: MoveEntry[];
+      };
+      if (parsed.attemptId !== dailyFritzPackage?.attempt_id || !parsed.match) return null;
+      const persistedHandIndex = Number(parsed.currentHandIndex);
+      const serverHandIndex = Number(dailyFritzPackage?.current_hand_index ?? 0);
+      if (!Number.isFinite(persistedHandIndex) || persistedHandIndex !== serverHandIndex) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
   };
   const initialPersistedDailyFritzMatch = loadPersistedDailyFritzMatch();
   const DRAW_STEP_MS = 700;
@@ -2451,32 +2456,20 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     if (!isDailyFritzMode || !dailyFritzStorageKey || typeof window === 'undefined') return;
-    const flushPending = () => {
-      const pending = dailyFritzStoragePendingRef.current;
-      if (!pending) return;
-      try {
-        persistDailyFritzMatchSnapshot(window.localStorage, pending.key, pending.payload);
-        dailyFritzStoragePendingRef.current = null;
-      } catch {
-        // localStorage may be unavailable; keep the pending snapshot in memory
-        // so the pagehide handler can take one more best-effort pass.
-      }
-    };
     if (match.gameOver) {
       if (dailyFritzStorageTimerRef.current) {
         clearTimeout(dailyFritzStorageTimerRef.current);
         dailyFritzStorageTimerRef.current = null;
       }
       const finalSnapshot = {
-        attemptId: dailyFritzPackage?.attempt_id ?? undefined,
+        attemptId: dailyFritzPackage?.attempt_id ?? null,
         currentHandIndex: dailyFritzHandIndex,
         match,
         movesUsed,
         moveLog,
       };
       dailyFritzStoragePendingRef.current = { key: dailyFritzStorageKey, payload: finalSnapshot };
-      persistDailyFritzMatchSnapshot(window.localStorage, dailyFritzStorageKey, finalSnapshot);
-      dailyFritzStoragePendingRef.current = null;
+      window.sessionStorage.setItem(dailyFritzStorageKey, JSON.stringify(finalSnapshot));
       return;
     }
     if (dailyFritzStorageTimerRef.current) clearTimeout(dailyFritzStorageTimerRef.current);
@@ -2484,7 +2477,7 @@ export default function BotMatchScreen({
     // JSON.stringify — the expensive part — by 1 s so rapid tile plays don't
     // serialize on every move.
     const snapshot = {
-      attemptId: dailyFritzPackage?.attempt_id ?? undefined,
+      attemptId: dailyFritzPackage?.attempt_id ?? null,
       currentHandIndex: dailyFritzHandIndex,
       match,
       movesUsed,
@@ -2494,7 +2487,7 @@ export default function BotMatchScreen({
     // latest state even if the debounce timer hasn't fired yet.
     dailyFritzStoragePendingRef.current = { key: dailyFritzStorageKey, payload: snapshot };
     dailyFritzStorageTimerRef.current = setTimeout(() => {
-      persistDailyFritzMatchSnapshot(window.localStorage, dailyFritzStorageKey, snapshot);
+      window.sessionStorage.setItem(dailyFritzStorageKey, JSON.stringify(snapshot));
       dailyFritzStoragePendingRef.current = null;
       dailyFritzStorageTimerRef.current = null;
     }, 1000);
@@ -2503,7 +2496,6 @@ export default function BotMatchScreen({
         clearTimeout(dailyFritzStorageTimerRef.current);
         dailyFritzStorageTimerRef.current = null;
       }
-      flushPending();
     };
   }, [dailyFritzHandIndex, dailyFritzPackage?.attempt_id, dailyFritzStorageKey, isDailyFritzMode, match, moveLog, movesUsed]);
 
@@ -2515,10 +2507,9 @@ export default function BotMatchScreen({
       const pending = dailyFritzStoragePendingRef.current;
       if (!pending) return;
       try {
-        persistDailyFritzMatchSnapshot(window.localStorage, pending.key, pending.payload);
-        dailyFritzStoragePendingRef.current = null;
+        window.sessionStorage.setItem(pending.key, JSON.stringify(pending.payload));
       } catch {
-        // localStorage may be unavailable during unload — fail silently
+        // sessionStorage may be unavailable during unload — fail silently
       }
     };
     window.addEventListener('pagehide', flush);
