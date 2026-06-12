@@ -9,6 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "qa:tournament:seed": "node dist/scripts/seedTournamentQa.js",
+    "qa:daily-fritz:reset": "node dist/scripts/resetDailyFritzQa.js",
     "check:daily-ladder": "node dist/checkDailyPuzzleLadder.js",
     "seed:daily-ladder": "node dist/seedDailyPuzzleLadder.js",
     "gen:puzzles": "bash ../scripts/gen-puzzles.sh",

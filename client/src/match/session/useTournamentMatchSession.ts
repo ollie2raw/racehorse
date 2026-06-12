@@ -21,6 +21,7 @@ import {
   readTerminalTournamentMatchIds,
   tournamentSubViewAfterMatchComplete,
 } from '../../tournament/terminalMatches';
+import { formatTournamentAttachError } from '../../tournament/tournamentAttachMessages';
 import { shouldDeferTournamentMatchFinalize } from '../../tournament/tournamentPostgamePolicy';
 import { emitTournamentAttachAssignedMatch } from '../../multiplayer/roomTransport';
 import { clearLastRoomCode } from '../recovery/matchRecovery';
@@ -457,8 +458,10 @@ export function useTournamentMatchSession(
       }
       if (guard.reason === 'socket-disconnected') {
         console.log('[tournament:attach-client] skip/socket-disconnected', { matchId });
-        if (!opts?.manual) {
-          connectRef.current();
+        connectRef.current();
+        if (opts?.manual) {
+          setTournamentAttachPhase('failed');
+          setTournamentAttachError(formatTournamentAttachError('socket_disconnected'));
         }
         return false;
       }
@@ -497,6 +500,7 @@ export function useTournamentMatchSession(
       try {
         const activeSocket = socketRef.current;
         if (!activeSocket?.connected) {
+          connectRef.current();
           throw new Error('socket_not_connected');
         }
 
@@ -592,14 +596,16 @@ export function useTournamentMatchSession(
           return true;
         }
 
-        const errorMessage = resp?.error ?? 'Could not join tournament match.';
+        const errorMessage = formatTournamentAttachError(
+          resp?.error ?? 'Could not join tournament match.',
+        );
         failedTournamentAttachByMatchIdRef.current = {
           ...failedTournamentAttachByMatchIdRef.current,
           [matchId]: Date.now(),
         };
         setTournamentAttachPhase('failed');
         setTournamentAttachError(errorMessage);
-        console.log('[tournament:attach-client] ack/error', { matchId, error: errorMessage });
+        console.log('[tournament:attach-client] ack/error', { matchId, error: resp?.error ?? errorMessage });
         if (errorMessage === 'match_completed') {
           const tournamentId = opts?.tournamentId ?? activeTournamentId ?? null;
           if (tournamentId) {
@@ -638,14 +644,17 @@ export function useTournamentMatchSession(
           ...failedTournamentAttachByMatchIdRef.current,
           [matchId]: Date.now(),
         };
+        const displayMessage = formatTournamentAttachError(
+          isTimeout ? 'Join timed out. Try again.' : message,
+        );
         setTournamentAttachPhase('failed');
-        setTournamentAttachError(isTimeout ? 'Join timed out. Try again.' : message);
+        setTournamentAttachError(displayMessage);
         if (isTimeout) {
           console.log('[tournament:attach-client] ack/timeout', { matchId });
         } else {
           console.log('[tournament:attach-client] ack/error', { matchId, error: message });
         }
-        showToast(isTimeout ? 'Join timed out. Try again.' : message, 2500);
+        showToast(displayMessage, 2500);
         return false;
       }
     },
@@ -830,11 +839,26 @@ export function useTournamentMatchSession(
   ]);
 
   useEffect(() => {
-    if (appMode !== 'tournament') return;
+    if (appMode !== 'tournament') {
+      // #region agent log
+      fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'useTournamentMatchSession.ts:autoRoute:skip',message:'auto-route skipped appMode',data:{appMode},timestamp:Date.now(),hypothesisId:'H-B',runId:'pre-fix'})}).catch(()=>{});
+      // #endregion
+      return;
+    }
     const tid = tournament.activeTournamentId;
     const phase = tournament.tournamentPhase;
-    if (!tid || !phase) return;
-    if (dismissedTournamentIdsRef.current.has(tid)) return;
+    if (!tid || !phase) {
+      // #region agent log
+      fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'useTournamentMatchSession.ts:autoRoute:skip',message:'auto-route skipped missing tid/phase',data:{tid,phase,tournamentSubView},timestamp:Date.now(),hypothesisId:'H-B',runId:'pre-fix'})}).catch(()=>{});
+      // #endregion
+      return;
+    }
+    if (dismissedTournamentIdsRef.current.has(tid)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'useTournamentMatchSession.ts:autoRoute:skip',message:'auto-route skipped dismissed tournament',data:{tid,phase,tournamentSubView},timestamp:Date.now(),hypothesisId:'H-B',runId:'pre-fix'})}).catch(()=>{});
+      // #endregion
+      return;
+    }
 
     const bracket =
       tournament.activeBracket?.tournament.id === tid ? tournament.activeBracket : null;
@@ -863,6 +887,9 @@ export function useTournamentMatchSession(
         if (phase === 'bracket_lobby' || phase === 'registered') {
           console.log('[tournament:hub] tournament lobby detected, routing', { tournamentId: tid, phase });
         }
+        // #region agent log
+        fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'useTournamentMatchSession.ts:autoRoute:hubToBracket',message:'auto-route hub to bracket',data:{tid,phase,countdownKind:tournament.countdown?.kind??null},timestamp:Date.now(),hypothesisId:'H-C',runId:'pre-fix'})}).catch(()=>{});
+        // #endregion
         setTournamentSubView('bracket');
       }
       if (!tournament.activeBracket || tournament.activeBracket.tournament.id !== tid) {
@@ -969,6 +996,57 @@ export function useTournamentMatchSession(
     tournament.recoveryMatch?.tournamentId,
     tournament.tournamentPhase,
     tournament.clearRecoveryMatch,
+  ]);
+
+  useEffect(() => {
+    if (appMode !== 'tournament') return;
+    if (tournamentSubView !== 'bracket') return;
+    const phase = tournament.tournamentPhase;
+    if (phase !== 'match_ready' && phase !== 'in_match') return;
+    const matchId =
+      tournament.recoveryMatch?.matchId ??
+      (tournament.assignedMatch?.tournamentId === tournament.activeTournamentId
+        ? tournament.assignedMatch?.matchId
+        : null) ??
+      tournament.pendingMatch?.matchId ??
+      null;
+    if (!matchId) return;
+    if (attachedTournamentMatchIdRef.current === matchId) return;
+    if (pendingTournamentAttachMatchIdRef.current === matchId) return;
+    // #region agent log
+    fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'useTournamentMatchSession.ts:bracketAutoAttach',message:'auto-attach from bracket on match_ready',data:{matchId,phase,tournamentSubView},timestamp:Date.now(),hypothesisId:'H-D',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
+    setActiveTournamentId(tournament.activeTournamentId ?? tournament.assignedMatch?.tournamentId ?? null);
+    void attemptTournamentAttach(matchId, {
+      tournamentId:
+        tournament.recoveryMatch?.tournamentId ??
+        tournament.assignedMatch?.tournamentId ??
+        tournament.pendingMatch?.tournamentId,
+      matchStatus:
+        tournament.recoveryMatch?.matchStatus ??
+        tournament.assignedMatch?.matchStatus ??
+        tournament.pendingMatch?.matchStatus,
+    }).then((started) => {
+      if (started) {
+        tournament.clearPendingMatch();
+      }
+    });
+  }, [
+    appMode,
+    attemptTournamentAttach,
+    tournament.activeTournamentId,
+    tournament.assignedMatch?.matchId,
+    tournament.assignedMatch?.matchStatus,
+    tournament.assignedMatch?.tournamentId,
+    tournament.clearPendingMatch,
+    tournament.pendingMatch?.matchId,
+    tournament.pendingMatch?.matchStatus,
+    tournament.pendingMatch?.tournamentId,
+    tournament.recoveryMatch?.matchId,
+    tournament.recoveryMatch?.matchStatus,
+    tournament.recoveryMatch?.tournamentId,
+    tournament.tournamentPhase,
+    tournamentSubView,
   ]);
 
   useEffect(() => {

@@ -499,7 +499,7 @@ export default function DailyFritzLeaderboardScreen({
                   <span className="rh-hub-tag dflb-eyebrow">Daily Fritz</span>
                   <h1 className="dflb-command__title">Leaderboard</h1>
                   <p className="dflb-command__sub">
-                    Global ranking · Compete daily against Fritz and the world.
+                    Global ranking · Compete daily against Fritz and the world. Beta — results may take a moment to sync.
                   </p>
                 </div>
                 <div className="dflb-command__aside">

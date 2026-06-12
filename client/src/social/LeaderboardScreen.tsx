@@ -207,6 +207,7 @@ export default function LeaderboardScreen({ user, onViewProfile, onClose }: Lead
         </button>
         <div className="rh-lb-title-block">
           <h1 className="rh-lb-title">Leaderboard</h1>
+          <p className="rh-lb-subtitle">Beta — standings may lag briefly after matches</p>
         </div>
         <div className="rh-lb-tabs">
           {(['global', 'friends', 'weekly', 'mode'] as Tab[]).map((t) => (

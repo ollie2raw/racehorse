@@ -135,7 +135,10 @@ export default function StatsScreen({
           <div className="stats-page-hero-strip__line" aria-hidden="true" />
           <div className="stats-page-hero-strip__inner">
             <div>
-              <p className="stats-page-hero-strip__eyebrow">{displayName.toUpperCase()} / RANKED RATING</p>
+              <p className="stats-page-hero-strip__eyebrow">
+                {displayName.toUpperCase()} / RANKED RATING · BETA
+              </p>
+              <p className="stats-page-hero-strip__beta-note">Stats and Ghost ratings may lag briefly after games.</p>
               <div className="stats-page-hero-strip__rating-row">
                 <span className="stats-page-hero-strip__rating">
                   {Math.round(rankingProfile.glicko_rating).toLocaleString()}

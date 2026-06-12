@@ -21,6 +21,7 @@ import {
   promoteScheduledMatchToInProgress,
 } from '../scheduledTournament/matchDispatch';
 import { applyMatchResult } from '../scheduledTournament/engine';
+import { applyQaTournamentRoomFixture } from '../scheduledTournament/qaSeedRoomFixture';
 import { defaultEnginePersistence } from '../scheduledTournament/persistenceInterface';
 import { recordMatchEnd } from '../matchmaking/persistence';
 import {
@@ -725,6 +726,38 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
           })();
           rejoinLegalMoves = getRoomLegalMoves(room.code, attached.joinedPlayerSeatId);
           rejoinCanDraw = getRoomCanDraw(room.code, attached.joinedPlayerSeatId);
+        }
+
+        const fixtureMatch = await fetchMatchById(match.id);
+        if (
+          fixtureMatch &&
+          attached.joinedPlayerSeatId &&
+          applyQaTournamentRoomFixture({
+            room,
+            match: fixtureMatch,
+            humanSeatId: attached.joinedPlayerSeatId,
+          })
+        ) {
+          room = getRoom(room.code);
+          const recipientId = attached.joinedPlayerSeatId;
+          stateWithCounts = room.state
+            ? (() => {
+                const m = maskStateForRecipient(room.state!, recipientId);
+                return { ...m, handCounts: getHandCounts(room.state!) };
+              })()
+            : stateWithCounts;
+          rejoinLegalMoves = room.state?.gameOver
+            ? []
+            : getRoomLegalMoves(room.code, attached.joinedPlayerSeatId);
+          rejoinCanDraw = room.state?.gameOver
+            ? false
+            : getRoomCanDraw(room.code, attached.joinedPlayerSeatId);
+          console.log('[tournament:qa-fixture] applied room snapshot', {
+            matchId: match.id,
+            roomCode: room.code,
+            statusReason: fixtureMatch.status_reason,
+            gameOver: Boolean(room.state?.gameOver),
+          });
         }
 
         const refreshed = await fetchMatchById(match.id);

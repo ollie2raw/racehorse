@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GlobalNav } from '../components';
 import type { AppMode } from '../types';
 import {
@@ -39,6 +39,8 @@ export interface TournamentBracketScreenProps {
   countdownAt?: string | null;
   countdownKind?: TournamentCountdownKind | null;
   onLoadBracket: (tournamentId: string) => void;
+  /** Refreshes /me phase (match_ready) when lobby countdown hits zero. */
+  onSyncTournamentState?: () => void;
   onBack: () => void;
   onExitToHub: () => void;
   onWithdraw?: (tournamentId: string) => void;
@@ -443,15 +445,28 @@ function WaitingRoomPanel({
 
 export default function TournamentBracketScreen(props: TournamentBracketScreenProps) {
   const userId = props.identity?.userId ?? null;
-  const { onLoadBracket } = props;
+  const { onLoadBracket, onSyncTournamentState } = props;
   const [now, setNow] = useState(Date.now());
   const isBracketLobby = props.tournamentPhase === 'bracket_lobby';
+  const startCountdownSyncRef = useRef(false);
 
   useEffect(() => {
     onLoadBracket(props.tournamentId);
-    const poll = window.setInterval(() => onLoadBracket(props.tournamentId), 20_000);
+    const pollMs =
+      props.tournamentPhase === 'bracket_lobby' &&
+      props.countdownKind === 'scheduled_start' &&
+      props.countdownAt
+        ? 5_000
+        : 20_000;
+    const poll = window.setInterval(() => onLoadBracket(props.tournamentId), pollMs);
     return () => window.clearInterval(poll);
-  }, [props.tournamentId, onLoadBracket]);
+  }, [
+    props.countdownAt,
+    props.countdownKind,
+    props.tournamentId,
+    props.tournamentPhase,
+    onLoadBracket,
+  ]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -495,7 +510,36 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
       })
     : 'Opponent';
   const countdownMs = props.countdownAt ? Date.parse(props.countdownAt) - now : null;
-  const countdownText = countdownMs != null ? padCountdown(countdownMs) : '--:--';
+  const countdownPastStart = countdownMs != null && countdownMs <= 0;
+  const countdownText =
+    countdownMs == null
+      ? '--:--'
+      : countdownPastStart && isBracketLobby
+        ? 'Starting…'
+        : padCountdown(countdownMs);
+
+  useEffect(() => {
+    if (!isBracketLobby || !onSyncTournamentState) return;
+    if (countdownMs == null || countdownMs > 0) {
+      startCountdownSyncRef.current = false;
+      return;
+    }
+    if (startCountdownSyncRef.current) return;
+    startCountdownSyncRef.current = true;
+    // #region agent log
+    fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'TournamentBracketScreen.tsx:startCountdownZero',message:'bracket lobby countdown reached zero, syncing state',data:{tournamentId:props.tournamentId,phase:props.tournamentPhase,countdownKind:props.countdownKind},timestamp:Date.now(),hypothesisId:'H-D',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
+    onSyncTournamentState();
+    const interval = window.setInterval(() => onSyncTournamentState(), 5_000);
+    return () => window.clearInterval(interval);
+  }, [
+    countdownMs,
+    isBracketLobby,
+    onSyncTournamentState,
+    props.countdownKind,
+    props.tournamentId,
+    props.tournamentPhase,
+  ]);
 
   const yourReadyMatch = useMemo(() => {
     if (!bracket || !userId || isBracketLobby) return null;
