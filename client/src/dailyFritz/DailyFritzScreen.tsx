@@ -17,7 +17,6 @@ import {
   DAILY_FRITZ_TODAY_CACHE_PREFIX,
   getTodayDailyFritz,
   recordDailyFritzGame,
-  restartUnsafeDailyFritz,
   startDailyFritz,
   type DailyFritzSetGameNumber,
   type DailyFritzSetGameResult,
@@ -25,20 +24,9 @@ import {
   type DailyFritzStartResponse,
   type DailyFritzTodayResponse,
 } from './api';
-import {
-  formatDailyFritzAbandonedHubCopy,
-  friendlyDailyFritzInitError,
-  isDailyFritzAbandonedAttemptStatus,
-  isDailyFritzAttemptLockedAbandoned,
-} from './dailyFritzErrors';
 import { formatOrdinalPlace } from './format';
 import { DAILY_FRITZ_CLASSIC_PRACTICE_HINT, playerLostDailyFritzGame } from './practiceHint';
 import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy, isDailyFritzSkunk } from './skunk';
-import {
-  getDailyFritzMatchStorageKey,
-  hasDailyFritzMatchSnapshot,
-  shouldBlockUnsafeDailyFritzResume,
-} from './storage';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
 import dailyFritzHeroPng from '../assets/dailyFritz/playvsfritzdone.png';
 import './dailyFritz.css';
@@ -171,6 +159,22 @@ function shouldClearStaleClientState(
   return false;
 }
 
+function friendlyDailyFritzInitError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    const message = error.message.trim().toLowerCase();
+    if (message.includes('unauthorized') || message.includes('sign in')) {
+      return 'Please sign in again to play Daily Fritz.';
+    }
+    if (message.includes('timed out') || message.includes('longer than expected') || message.includes('waking')) {
+      return 'The game server may be waking up.';
+    }
+    if (message.includes('failed to fetch') || message.includes('network')) {
+      return 'Please try again.';
+    }
+  }
+  return 'Please try again.';
+}
+
 interface DailyFritzScreenProps {
   user: User | null;
   profile: UserProfile | null;
@@ -233,11 +237,6 @@ interface DailyFritzGameCompletionPayload {
   handsPlayed: number;
   currentHandIndex: number;
   moveLog: unknown;
-}
-
-interface DailyFritzUnsafeResumeState {
-  attemptId: string;
-  message: string;
 }
 
 type BetweenGameTrackerTone = 'win' | 'loss' | 'next' | 'idle';
@@ -675,8 +674,6 @@ export default function DailyFritzScreen({
   const [setOverlay, setSetOverlay] = useState<DailyFritzOverlayState | null>(null);
   const [, setSetSubmitError] = useState<string | null>(null);
   const [startActionPending, setStartActionPending] = useState(false);
-  const [unsafeResumeState, setUnsafeResumeState] = useState<DailyFritzUnsafeResumeState | null>(null);
-  const [startAbandonedAck, setStartAbandonedAck] = useState(false);
   const [countdownTick, setCountdownTick] = useState(0);
 
   const cacheKey = useMemo(
@@ -732,13 +729,7 @@ export default function DailyFritzScreen({
       }
       setToday(response);
       persistTodayCache(response);
-      if (isDailyFritzAbandonedAttemptStatus(response.attempt_status)) {
-        setStartAbandonedAck(true);
-        setHubError(null);
-      } else {
-        setStartAbandonedAck(false);
-        setHubError(null);
-      }
+      setHubError(null);
     } catch (err) {
       setHubError(friendlyDailyFritzInitError(err));
     }
@@ -814,11 +805,6 @@ export default function DailyFritzScreen({
 
         setToday(response);
         persistTodayCache(response);
-        if (isDailyFritzAbandonedAttemptStatus(response.attempt_status)) {
-          setStartAbandonedAck(true);
-        } else {
-          setStartAbandonedAck(false);
-        }
         setInitPhase('ready');
         dfInitLog('state', { phase: 'ready' });
       } catch {
@@ -969,13 +955,7 @@ export default function DailyFritzScreen({
       setHubError(null);
       return completion;
     } catch (err) {
-      const rawMessage = err instanceof Error ? err.message : '';
-      const message =
-        rawMessage.includes('Completion hash mismatch')
-          ? 'Could not verify your result. Return to Daily Fritz and try again.'
-          : rawMessage.includes('attempt not found')
-            ? 'Daily Fritz session expired. Return to the hub and refresh.'
-            : rawMessage || 'Could not save your Daily Fritz result. Try again from the hub.';
+      const message = err instanceof Error ? err.message : 'Failed to finalize Daily Fritz set.';
       setSetSubmitError(message);
       if (boardContext) {
         setSetOverlay({
@@ -998,41 +978,8 @@ export default function DailyFritzScreen({
   const handleStartResponse = useCallback(async (
     started: DailyFritzStartResponse,
     fallbackSetResult: DailyFritzSetResult | null,
-    options?: { enforceResumeGuard?: boolean },
   ) => {
     const normalized = normalizeStartResponse(started, fallbackSetResult);
-    if (options?.enforceResumeGuard && typeof window !== 'undefined') {
-      const message =
-        "We couldn't safely recover this in-progress Daily Fritz hand on this device. Restart today's set to protect result integrity.";
-      const hasRecoverableSnapshot = hasDailyFritzMatchSnapshot({
-        storageKey: getDailyFritzMatchStorageKey(
-          normalized.attempt_id,
-          normalized.current_game_number ?? 1,
-        ),
-        attemptId: normalized.attempt_id,
-        currentHandIndex: Number(normalized.current_hand_index ?? 0),
-        primaryStorage: window.localStorage,
-        fallbackStorage: window.sessionStorage,
-      });
-      const shouldBlockResume = shouldBlockUnsafeDailyFritzResume({
-        hadStartedAttemptBefore: todayRef.current?.attempt_status === 'started',
-        hasRecoverableSnapshot,
-        currentHandIndex: Number(normalized.current_hand_index ?? 0),
-        currentGameNumber: normalized.current_game_number ?? 1,
-        setResult: normalized.set_result,
-      });
-      if (shouldBlockResume) {
-        setActiveRun(null);
-        setSetOverlay(null);
-        setUnsafeResumeState({
-          attemptId: normalized.attempt_id,
-          message,
-        });
-        setHubError(message);
-        return;
-      }
-    }
-    setUnsafeResumeState(null);
     if (normalized.needs_completion && normalized.set_result?.setWinner) {
       const completedGame =
         normalized.set_result.games[normalized.set_result.games.length - 1] ??
@@ -1061,47 +1008,27 @@ export default function DailyFritzScreen({
     setActiveRun(normalized);
   }, [buildCompletedGame, submitSetCompletion]);
 
-  const handleStartFailure = useCallback(
-    async (err: unknown) => {
-      if (isDailyFritzAttemptLockedAbandoned(err)) {
-        setStartAbandonedAck(true);
-        setHubError(null);
-        setUnsafeResumeState(null);
-        await refreshToday();
-        return;
-      }
-      setHubError(friendlyDailyFritzInitError(err));
-    },
-    [refreshToday],
-  );
-
   const beginRun = useCallback(async () => {
     if (startActionPending) return;
     setStartActionPending(true);
     setHubError(null);
     setSetSubmitError(null);
     setSetOverlay(null);
-    setUnsafeResumeState(null);
     try {
       const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
-      await handleStartResponse(
-        started,
-        normalizeSetResult(today?.set_result ?? today?.result),
-        { enforceResumeGuard: false },
-      );
+      await handleStartResponse(started, normalizeSetResult(today?.set_result ?? today?.result));
     } catch (err) {
-      await handleStartFailure(err);
+      setHubError(friendlyDailyFritzInitError(err));
     } finally {
       setStartActionPending(false);
     }
-  }, [handleStartFailure, handleStartResponse, startActionPending, today]);
+  }, [handleStartResponse, startActionPending, today]);
 
   const continueSet = useCallback(async () => {
     if (startActionPending) return;
     setStartActionPending(true);
     setHubError(null);
     setSetSubmitError(null);
-    setUnsafeResumeState(null);
     const fallbackSetResult =
       setOverlay != null && 'setResult' in setOverlay
         ? setOverlay.setResult
@@ -1109,41 +1036,13 @@ export default function DailyFritzScreen({
     try {
       const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
       setSetOverlay(null);
-      await handleStartResponse(started, fallbackSetResult, { enforceResumeGuard: true });
+      await handleStartResponse(started, fallbackSetResult);
     } catch (err) {
-      await handleStartFailure(err);
+      setHubError(friendlyDailyFritzInitError(err));
     } finally {
       setStartActionPending(false);
     }
-  }, [handleStartFailure, handleStartResponse, setOverlay, startActionPending, today]);
-
-  const restartBlockedRun = useCallback(async () => {
-    if (!unsafeResumeState || !user?.id || startActionPending) return;
-    setStartActionPending(true);
-    setHubError(null);
-    setSetSubmitError(null);
-    setSetOverlay(null);
-    try {
-      await restartUnsafeDailyFritz(unsafeResumeState.attemptId);
-      clearDailyFritzClientStorage(user.id);
-      setUnsafeResumeState(null);
-      const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
-      await handleStartResponse(
-        started,
-        normalizeSetResult(today?.set_result ?? today?.result),
-        { enforceResumeGuard: false },
-      );
-      await loadToday();
-    } catch (err) {
-      setHubError(
-        err instanceof Error && err.message.trim()
-          ? err.message
-          : 'Could not restart today’s Daily Fritz set. Please try again.',
-      );
-    } finally {
-      setStartActionPending(false);
-    }
-  }, [handleStartResponse, loadToday, startActionPending, today, unsafeResumeState, user?.id]);
+  }, [handleStartResponse, setOverlay, startActionPending, today]);
 
   const submitCompletedGame = useCallback(async (game: DailyFritzGameCompletionPayload) => {
     const run = activeRunRef.current;
@@ -1525,19 +1424,11 @@ export default function DailyFritzScreen({
   const winTarget = today?.winning_score ?? 60;
 
   const isComplete = today?.attempt_status === 'completed';
-  const isAbandoned =
-    isDailyFritzAbandonedAttemptStatus(today?.attempt_status) || startAbandonedAck;
-  const needsRestartRecovery = unsafeResumeState != null;
-  const isStarted = today?.attempt_status === 'started' && !needsRestartRecovery && !isAbandoned;
-  const abandonedHubCopy = isAbandoned ? formatDailyFritzAbandonedHubCopy() : null;
+  const isStarted = today?.attempt_status === 'started';
 
-  const primaryCtaLabel = isAbandoned
-    ? 'Come Back Tomorrow'
-    : isComplete
+  const primaryCtaLabel = isComplete
     ? 'Set complete'
-    : needsRestartRecovery
-      ? "Restart Today's Set"
-      : isStarted
+    : isStarted
       ? "Resume Today's Set"
       : "Play Today's Set";
 
@@ -1575,8 +1466,8 @@ export default function DailyFritzScreen({
       statusSub = res.playerWon ? 'Won' : 'Lost';
     } else if (isActive) {
       statusSub = n === 3 ? 'Decider' : 'Your move';
-      showPlay = !isComplete && !isAbandoned && !startActionPending;
-      unlockHint = needsRestartRecovery ? 'Restart required' : isStarted ? 'Resume now' : `First to ${winTarget}`;
+      showPlay = !isComplete && !startActionPending;
+      unlockHint = isStarted ? 'Resume now' : `First to ${winTarget}`;
     } else if (isNotNeeded) {
       statusSub = 'Not needed';
       unlockHint = skippedAfterSkunk && skunkGameNumber != null ? `Skunk ended set in G${skunkGameNumber}` : 'Game 3 not required';
@@ -1603,11 +1494,6 @@ export default function DailyFritzScreen({
   });
 
   const handleSetAction = () => {
-    if (isAbandoned || isComplete) return;
-    if (needsRestartRecovery) {
-      void restartBlockedRun();
-      return;
-    }
     if (isStarted) {
       void continueSet();
       return;
@@ -1623,31 +1509,9 @@ export default function DailyFritzScreen({
     : isComplete
       ? 'Leaderboard updates after your set'
       : 'Play today to appear on the leaderboard';
-  const setStatusLabel = isAbandoned
-    ? 'Abandoned'
-    : isComplete
-      ? 'Complete'
-      : needsRestartRecovery
-        ? 'Recovery Required'
-        : isStarted
-          ? 'In Progress'
-          : 'Ready';
-  const setStakesLabel = isAbandoned
-    ? 'Come back tomorrow for a fresh set'
-    : isComplete
-    ? 'Return tomorrow for a new set'
-    : needsRestartRecovery
-      ? 'Restart required for an honest resume'
-      : 'Leaderboard eligible';
-  const opponentBadgeLabel = isAbandoned
-    ? 'Set Locked'
-    : isComplete
-      ? 'Set Complete'
-      : isStarted
-        ? 'Resume Available'
-        : needsRestartRecovery
-          ? 'Recovery Required'
-          : 'Bot Opponent';
+  const setStatusLabel = isComplete ? 'Complete' : isStarted ? 'In Progress' : 'Ready';
+  const setStakesLabel = isComplete ? 'Return tomorrow for a new set' : 'Leaderboard eligible';
+  const opponentBadgeLabel = isComplete ? 'Set Complete' : isStarted ? 'Resume Available' : 'Bot Opponent';
 
   return (
     <div className="df-page">
@@ -1865,15 +1729,7 @@ export default function DailyFritzScreen({
             </div>
 
             <div className="df-pvf-actions">
-              {abandonedHubCopy ? (
-                <div className="df-hub-notice" role="status">
-                  <p>{abandonedHubCopy.primary}</p>
-                  <p>{abandonedHubCopy.secondary}</p>
-                  {abandonedHubCopy.qaHint ? (
-                    <p className="df-hub-notice-qa">{abandonedHubCopy.qaHint}</p>
-                  ) : null}
-                </div>
-              ) : hubError ? (
+              {hubError ? (
                 <p className="df-hub-error" role="alert">
                   {hubError}
                 </p>
@@ -1885,15 +1741,15 @@ export default function DailyFritzScreen({
                 className={[
                   'df-start-match-btn',
                   'df-pvf-start-btn',
-                  !isComplete && !isAbandoned && !startActionPending && !isStarted ? 'df-start-match-btn--ready-pulse' : '',
+                  !isComplete && !startActionPending && !isStarted ? 'df-start-match-btn--ready-pulse' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
                 onClick={() => void handleSetAction()}
-                disabled={startActionPending || isComplete || isAbandoned}
+                disabled={startActionPending || isComplete}
               >
                 {primaryCtaLabel}
-                {!isComplete && !isAbandoned ? <span className="df-start-match-chevron" aria-hidden> ›</span> : null}
+                {!isComplete ? <span className="df-start-match-chevron" aria-hidden> ›</span> : null}
               </Button>
               <div className="df-pvf-footer">
                 <Button type="button" variant="ghost" className="df-pvf-leaderboard-link" onClick={() => void openLeaderboard()}>

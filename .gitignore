@@ -13,4 +13,3 @@
 .vercel
 .env*.local
 server/.env
-client/.auth/

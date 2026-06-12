@@ -30,9 +30,6 @@ export function useTournament({ socket, userId }: Args) {
 
   const refresh = useCallback(async (): Promise<boolean> => {
     const cleanUserId = userId?.trim() || null;
-    // #region agent log
-    fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'useTournament.ts:refresh:start',message:'tournament refresh start',data:{hasUser:Boolean(cleanUserId)},timestamp:Date.now(),hypothesisId:'H-E',runId:'pre-fix'})}).catch(()=>{});
-    // #endregion
     setIsLoading(true);
     try {
       const u = await api.fetchUpcoming();
@@ -66,9 +63,6 @@ export function useTournament({ socket, userId }: Args) {
       setCountdown(me?.countdown ?? null);
       setError(null);
       setHasLoaded(true);
-      // #region agent log
-      fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'useTournament.ts:refresh:done',message:'tournament refresh done',data:{phase:me?.currentTournamentPhase??null,activeTournamentId:me?.activeTournamentId??null,countdownKind:me?.countdown?.kind??null,countdownAt:me?.countdown?.at??null,hasAssignedMatch:Boolean(me?.assignedMatch),recoveryMatchId:me?.activeAssignedMatch?.matchId??null},timestamp:Date.now(),hypothesisId:'H-A',runId:'pre-fix'})}).catch(()=>{});
-      // #endregion
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tournaments');
@@ -82,28 +76,23 @@ export function useTournament({ socket, userId }: Args) {
 
   useEffect(() => {
     if (!hasLoaded) return;
-    const kind = countdown?.kind;
-    if (kind !== 'registration_close' && kind !== 'scheduled_start') return;
-    const boundaryAtMs = Date.parse(countdown?.at ?? '');
-    if (!Number.isFinite(boundaryAtMs)) return;
+    if (countdown?.kind !== 'registration_close') return;
+    const closeAtMs = Date.parse(countdown.at);
+    if (!Number.isFinite(closeAtMs)) return;
 
     let cancelled = false;
     const runBoundaryRefresh = async () => {
-      if (cancelled || Date.now() < boundaryAtMs) return;
+      if (cancelled || Date.now() < closeAtMs) return;
       if (boundaryRefreshInFlightRef.current) return;
       boundaryRefreshInFlightRef.current = true;
-      // #region agent log
-      fetch('http://127.0.0.1:7623/ingest/c349b922-447d-4c33-a504-5ce40eaa2c91',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a715da'},body:JSON.stringify({sessionId:'a715da',location:'useTournament.ts:boundary',message:'countdown boundary fired',data:{kind,boundaryAtMs,nowMs:Date.now(),deltaMs:Date.now()-boundaryAtMs},timestamp:Date.now(),hypothesisId:'H-D',runId:'post-fix'})}).catch(()=>{});
-      // #endregion
-      console.log('[tournament:hub] countdown boundary reached, refreshing', { kind });
+      console.log('[tournament:hub] registration close reached, refreshing');
       try {
         const ok = await refresh();
         if (!ok) {
-          console.log('[tournament:hub] refresh after countdown failed', { kind, error: 'refresh_failed' });
+          console.log('[tournament:hub] refresh after countdown failed', { error: 'refresh_failed' });
         }
       } catch (err) {
         console.log('[tournament:hub] refresh after countdown failed', {
-          kind,
           error: err instanceof Error ? err.message : String(err),
         });
       } finally {
@@ -113,7 +102,7 @@ export function useTournament({ socket, userId }: Args) {
 
     const timeout = window.setTimeout(
       () => { void runBoundaryRefresh(); },
-      Math.max(0, boundaryAtMs - Date.now() + 250),
+      Math.max(0, closeAtMs - Date.now() + 250),
     );
     const interval = window.setInterval(() => { void runBoundaryRefresh(); }, 5_000);
     return () => {

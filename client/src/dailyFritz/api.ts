@@ -2,9 +2,6 @@ import { supabase } from '../lib/supabase';
 import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
-import { DailyFritzApiError } from './dailyFritzErrors';
-
-export { DailyFritzApiError, type DailyFritzAttemptStatus } from './dailyFritzErrors';
 
 const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
   import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
@@ -132,11 +129,7 @@ async function requestJson<T>(path: string, init?: RequestJsonOptions): Promise<
       }
     }
     if (!response.ok) {
-      throw new DailyFritzApiError(
-        parsed?.error ?? `${path} failed with ${response.status}`,
-        response.status,
-        parsed?.status,
-      );
+      throw new Error(parsed?.error ?? `${path} failed with ${response.status}`);
     }
     if (isDailyFritzInitPath(path)) {
       const initPayload = parsed as Record<string, unknown> | null;
@@ -584,14 +577,6 @@ export async function recordDailyFritzGame(input: {
 
 export async function abandonDailyFritz(attemptId: string): Promise<void> {
   await requestJson<{ ok: true }>('/api/daily-fritz/abandon', {
-    method: 'POST',
-    body: JSON.stringify({ attempt_id: attemptId }),
-  });
-}
-
-/** Deletes an in-progress attempt so the player can start a fresh honest set. */
-export async function restartUnsafeDailyFritz(attemptId: string): Promise<void> {
-  await requestJson<{ ok: true }>('/api/daily-fritz/restart', {
     method: 'POST',
     body: JSON.stringify({ attempt_id: attemptId }),
   });

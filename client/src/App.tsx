@@ -2967,13 +2967,7 @@ export default function App() {
           }
           countdownAt={tournament.countdown?.at ?? null}
           countdownKind={tournament.countdown?.kind ?? null}
-          onLoadBracket={(id) => {
-            void tournament.openBracket(id);
-            if (tournament.tournamentPhase === 'bracket_lobby') {
-              void tournament.refresh();
-            }
-          }}
-          onSyncTournamentState={() => { void tournament.refresh(); }}
+          onLoadBracket={(id) => { void tournament.openBracket(id); }}
           onBack={() => exitToTournamentHub('bracket_back')}
           onExitToHub={() => exitToTournamentHub('bracket_back')}
           onWithdraw={(id) => {

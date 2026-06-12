@@ -570,9 +570,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                     ›
                   </span>
                 </button>
-                <p className="mm-help-text">
-                  No opponent found after about 90 seconds. You can search again or play Fritz while you wait.
-                </p>
+                <p className="mm-help-text">No opponent joined within the wait window. You can keep searching.</p>
               </>
             ) : null}
               </div>

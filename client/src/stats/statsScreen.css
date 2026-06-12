@@ -111,13 +111,6 @@
   color: #00f0c8;
 }
 
-.stats-page-hero-strip__beta-note {
-  margin: 0 0 10px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
-  letter-spacing: 0.02em;
-}
-
 .stats-page-hero-strip__rating-row {
   display: flex;
   align-items: baseline;
