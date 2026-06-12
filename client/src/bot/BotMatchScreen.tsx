@@ -61,6 +61,7 @@ import {
   type BotPlayerId,
 } from './botEngine';
 import { chooseBotMove, toBotVisibleState, type BotChoice } from './botHeuristics';
+import { fairnessLog } from './fairnessLog';
 import { FRITZ_TIERS, type FritzTier } from './fritzConfig';
 import { getLocalDateKey } from '../dailyPuzzle/date';
 import {
@@ -1143,6 +1144,16 @@ export default function BotMatchScreen({
   const localRunIdRef = useRef(0);
   const activeLocalRunRef = useRef<LocalRunToken | null>(null);
   const matchRef = useRef(match);
+  useEffect(() => {
+    fairnessLog('match-init', {
+      mode,
+      handNumber: match.handNumber,
+      youHand: match.players.you.hand.map((tile) => `${tile.low}-${tile.high}`),
+      botHand: match.players.bot.hand.map((tile) => `${tile.low}-${tile.high}`),
+      boneyardCount: match.boneyard.length,
+      boneyardOrder: match.boneyard.map((tile) => `${tile.low}-${tile.high}`),
+    });
+  }, []);
   const prevTurnRef = useRef<BotPlayerId>(match.currentPlayer);
   const guidedFreeplayProcessedBotTurnRef = useRef<string | null>(null);
   const localPendingRegisteredRef = useRef(false);
@@ -3519,6 +3530,24 @@ export default function BotMatchScreen({
     showScoreToast,
   ]);
 
+  const logFritzFairnessDecision = useCallback((state: BotMatchState, choice: BotChoice | null) => {
+    if (!choice?.move) return;
+    fairnessLog('fritz-move', {
+      handNumber: state.handNumber,
+      turnIndex: state.turnIndex,
+      legalMoves: getLegalMoves(state, 'bot')
+        .filter((m) => m.type === 'play')
+        .map((m) => ({
+          tile: m.tile ? `${m.tile.low}-${m.tile.high}` : null,
+          position: m.position ?? null,
+        })),
+      chosen: choice.move.tile
+        ? { tile: `${choice.move.tile.low}-${choice.move.tile.high}`, position: choice.move.position ?? null }
+        : choice.move.type,
+      boneyardCount: state.boneyard.length,
+    });
+  }, []);
+
   const applyAndNotify = useCallback((result: BotActionResult) => {
     const adjustedState = result.state;
 
@@ -3543,6 +3572,14 @@ export default function BotMatchScreen({
         opponentKnownMissing: prev.opponentKnownMissing ?? adjustedState.opponentKnownMissing ?? [],
       };
     });
+    if (result.drew) {
+      fairnessLog('draw', {
+        player: result.drew.player,
+        tile: `${result.drew.tile.low}-${result.drew.tile.high}`,
+        handNumber: adjustedState.handNumber,
+        boneyardRemaining: adjustedState.boneyard.length,
+      });
+    }
     notifyBotActionResult({ ...result, state: adjustedState });
   }, [isDailyFritzMode, notifyBotActionResult]);
 
@@ -4957,6 +4994,7 @@ export default function BotMatchScreen({
                 });
               } else {
                 chosen = chooseBotMove(toBotVisibleState(working), fritzConfig.difficulty);
+                logFritzFairnessDecision(working, chosen);
               }
               playedTileForHighlight =
                 ghostChosen?.tile ?? chosen?.move?.tile ?? afterDraw[0]?.tile ?? null;
@@ -4988,6 +5026,7 @@ export default function BotMatchScreen({
               });
             } else {
               chosen = chooseBotMove(toBotVisibleState(working), fritzConfig.difficulty);
+              logFritzFairnessDecision(working, chosen);
             }
             playedTileForHighlight = ghostChosen?.tile ?? chosen?.move?.tile ?? botPlayable[0]?.tile ?? null;
             queueSound(() => playTileSound('deal', isMuted), 0);

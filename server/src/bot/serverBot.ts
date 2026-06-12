@@ -5,6 +5,7 @@
 import type { GameState, Move, Tile } from '../game/types';
 import { getLegalMoves, getOpenEnds } from '../game/engine';
 import { computeOpenEndsSum, computePlayScore, simulatePlacement } from '../game/scoring';
+import { drawableBoneyardCount, estimateDrawCostFromPublicInfo } from './publicDrawCost';
 
 const MC_SAMPLES = 8;
 const CHAIN_TREE_DEPTH = 5;
@@ -272,26 +273,100 @@ function exactOpponentThreat(
   return threat;
 }
 
-function estimateDrawCost(nextHand: Tile[], openEnds: number[], boneyard: readonly Tile[]): number {
-  const endSet = new Set(openEnds);
-  const playableAfter = nextHand.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
-  if (playableAfter > 0) return 0;
+function estimateDrawCostForState(
+  state: GameState,
+  botId: string,
+  nextHand: Tile[],
+  openEnds: number[],
+): number {
+  return estimateDrawCostFromPublicInfo(
+    nextHand,
+    openEnds,
+    buildUnseenPool(state, botId),
+    drawableBoneyardCount(state.boneyard.length, BONEYARD_LOCK),
+  );
+}
 
-  const boneyardAvailable = Math.max(0, boneyard.length - BONEYARD_LOCK);
-  if (boneyardAvailable === 0) return 15;
+function moveChoiceKey(move: Move): string {
+  if (move.type !== 'play' || !move.tile) return move.type;
+  return `${move.tile.low}-${move.tile.high}@${move.position ?? 'open'}`;
+}
 
-  const playableInBoneyard = boneyard
-    .slice(0, boneyardAvailable)
-    .filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
+function maskOpponentHandForSearch(
+  state: GameState,
+  opponentId: string,
+  sampledHand: Tile[],
+): GameState {
+  return {
+    ...state,
+    players: {
+      ...state.players,
+      [opponentId]: { ...state.players[opponentId], hand: sampledHand },
+    },
+  };
+}
 
-  if (playableInBoneyard === 0) return 20;
+function chooseEndgameMoveSampled(
+  state: GameState,
+  botId: string,
+  opponentId: string,
+  candidates: Move[],
+  tier: ServerBotTier,
+  opponentKnownMissing: Set<number>,
+): Move {
+  const pool = buildUnseenPool(state, botId);
+  const weights = opponentHoldWeights(pool, opponentKnownMissing);
+  const opponentHandSize = state.players[opponentId]?.hand?.length ?? 0;
+  const totalTiles = (state.players[botId]?.hand?.length ?? 0) + opponentHandSize;
+  const search = TIER_SEARCH[tier];
+  const sampleCount = tier === 'master' ? 16 : tier === 'elite' ? 10 : 8;
+  const sampledHands = sampleOpponentHands(pool, weights, opponentHandSize, sampleCount);
 
-  const expectedDraws = boneyardAvailable / playableInBoneyard;
-  const avgPip = boneyard.length > 0
-    ? boneyard.reduce((s, t) => s + t.low + t.high, 0) / boneyard.length
-    : 6;
+  const moveVotes = new Map<string, number>();
+  const moveScoreTotals = new Map<string, number>();
 
-  return Math.min(expectedDraws * avgPip * 0.4, 25);
+  for (const sampledHand of sampledHands) {
+    const masked = maskOpponentHandForSearch(state, opponentId, sampledHand);
+    let bestMove = candidates[0];
+    let bestVal = -Infinity;
+    const depth = search.endgameDepth(totalTiles);
+
+    for (const move of candidates) {
+      const p = previewPlayMove(masked, botId, move);
+      if (!p) continue;
+      const next = setCurrentPlayer(
+        {
+          ...masked,
+          board: p.nextBoard,
+          handOpen: true,
+          players: {
+            ...masked.players,
+            [botId]: { ...masked.players[botId], hand: p.nextHand },
+          },
+        },
+        p.turnContinues ? botId : opponentId,
+      );
+      const val =
+        p.immediateScore * 100 +
+        minimax(next, botId, opponentId, depth, p.turnContinues, -Infinity, Infinity, p.immediateScore);
+      if (val > bestVal) {
+        bestVal = val;
+        bestMove = move;
+      }
+    }
+
+    const key = moveChoiceKey(bestMove);
+    moveVotes.set(key, (moveVotes.get(key) ?? 0) + 1);
+    moveScoreTotals.set(key, (moveScoreTotals.get(key) ?? 0) + bestVal);
+  }
+
+  const ranked = [...moveVotes.entries()].sort((a, b) => {
+    const voteDiff = b[1] - a[1];
+    if (voteDiff !== 0) return voteDiff;
+    return (moveScoreTotals.get(b[0]) ?? -Infinity) - (moveScoreTotals.get(a[0]) ?? -Infinity);
+  });
+  const bestKey = ranked[0]?.[0];
+  return candidates.find((m) => moveChoiceKey(m) === bestKey) ?? candidates[0];
 }
 
 function searchChainTree(
@@ -311,7 +386,7 @@ function searchChainTree(
     finalOpenEnds: firstPreview.openEnds,
     finalOpenSum: firstPreview.openSum,
     finalBoard: firstPreview.nextBoard,
-    drawCostAccum: estimateDrawCost(firstPreview.nextHand, firstPreview.openEnds, state.boneyard),
+    drawCostAccum: estimateDrawCostForState(state, botId, firstPreview.nextHand, firstPreview.openEnds),
   };
 
   if (!firstPreview.turnContinues) return root;
@@ -360,7 +435,8 @@ function searchChainTree(
           finalOpenEnds: p.openEnds,
           finalOpenSum: p.openSum,
           finalBoard: p.nextBoard,
-          drawCostAccum: node.drawCostAccum + estimateDrawCost(p.nextHand, p.openEnds, state.boneyard),
+          drawCostAccum:
+            node.drawCostAccum + estimateDrawCostForState(state, botId, p.nextHand, p.openEnds),
         };
 
         if (p.turnContinues) nextFrontier.push(child);
@@ -637,34 +713,7 @@ export function chooseBotMoveServer(
   }
 
   if (totalTiles <= 6) {
-    let bestMove: Move = candidates[0];
-    let bestVal = -Infinity;
-    const search = TIER_SEARCH[tier];
-
-    for (const move of candidates) {
-      const p = previewPlayMove(aligned, botId, move);
-      if (!p) continue;
-      const next = setCurrentPlayer(
-        {
-          ...aligned,
-          board: p.nextBoard,
-          handOpen: true,
-          players: {
-            ...aligned.players,
-            [botId]: { ...aligned.players[botId], hand: p.nextHand },
-          },
-        },
-        p.turnContinues ? botId : opponentId,
-      );
-      const depth = search.endgameDepth(totalTiles);
-      const val = p.immediateScore * 100 + minimax(next, botId, opponentId, depth, p.turnContinues, -Infinity, Infinity, p.immediateScore);
-      if (val > bestVal) {
-        bestVal = val;
-        bestMove = move;
-      }
-    }
-
-    return bestMove;
+    return chooseEndgameMoveSampled(aligned, botId, opponentId, candidates, tier, opponentKnownMissing);
   }
 
   const scored = candidates

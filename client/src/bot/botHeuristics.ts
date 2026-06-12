@@ -16,6 +16,7 @@ import type { Move, Tile } from '../types.ts';
 export type { Move, Tile };
 import type { BotMatchState } from './botEngine.ts';
 import { computeOpenEndsSum, getLegalMoves, previewPlayMove } from './botEngine.ts';
+import { drawableBoneyardCount, estimateDrawCostFromPublicInfo } from './publicDrawCost.ts';
 
 export type BotDifficulty = 'casual' | 'standard' | 'hard' | 'master';
 
@@ -177,7 +178,7 @@ function stateSeedKey(state: BotEvalState, label: string): string {
     state.currentPlayer,
     state.players.bot.hand.map(tileKey).sort().join(','),
     getOpponentTileCount(state),
-    state.boneyard.map(tileKey).join(','),
+    `yard:${state.boneyard.length}`,
     boardStateKey(state),
   ].join('|');
 }
@@ -453,32 +454,19 @@ function hasExitInTwoMoves(state: BotMatchState): boolean {
   return false;
 }
 
-// ─── Draw anticipation ────────────────────────────────────────────────────────
+// ─── Draw anticipation (public info only — no boneyard stack order) ───────────
 
-function estimateDrawCost(
+function estimateDrawCostForState(
   nextHand: Tile[],
   openEnds: number[],
-  boneyard: Tile[],
+  state: BotEvalState,
 ): number {
-  const endSet = new Set(openEnds);
-  const playableAfter = nextHand.filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
-  if (playableAfter > 0) return 0;
-
-  const boneyardAvailable = Math.max(0, boneyard.length - 2);
-  if (boneyardAvailable === 0) return 15;
-
-  const playableInBoneyard = boneyard
-    .slice(0, boneyardAvailable)
-    .filter((t) => endSet.has(t.low) || endSet.has(t.high)).length;
-
-  if (playableInBoneyard === 0) return 20;
-
-  const expectedDraws = boneyardAvailable / playableInBoneyard;
-  const avgPip = boneyard.length > 0
-    ? boneyard.reduce((s, t) => s + t.low + t.high, 0) / boneyard.length
-    : 6;
-
-  return Math.min(expectedDraws * avgPip * 0.4, 25);
+  return estimateDrawCostFromPublicInfo(
+    nextHand,
+    openEnds,
+    buildUnseenPool(state),
+    drawableBoneyardCount(state.boneyard.length),
+  );
 }
 
 // ─── Chain tree search ────────────────────────────────────────────────────────
@@ -534,7 +522,7 @@ function searchExactTurnChain(
     finalOpenEnds: firstPreview.openEnds,
     finalOpenSum: firstPreview.openSum,
     finalBoard: firstPreview.nextBoard,
-    drawCostAccum: estimateDrawCost(firstPreview.nextHand, firstPreview.openEnds, state.boneyard),
+    drawCostAccum: estimateDrawCostForState(firstPreview.nextHand, firstPreview.openEnds, state),
   };
 
   if (!firstPreview.turnContinues) return root;
@@ -569,7 +557,7 @@ function searchExactTurnChain(
         finalOpenEnds: p.openEnds,
         finalOpenSum: p.openSum,
         finalBoard: p.nextBoard,
-        drawCostAccum: node.drawCostAccum + estimateDrawCost(p.nextHand, p.openEnds, state.boneyard),
+        drawCostAccum: node.drawCostAccum + estimateDrawCostForState(p.nextHand, p.openEnds, state),
       };
 
       if (p.turnContinues) dfs(child);
@@ -590,11 +578,7 @@ function searchChainTree(
   const firstPreview = previewPlayMove(state, 'bot', firstMove);
   if (!firstPreview) return null;
 
-  const drawCost = estimateDrawCost(
-    firstPreview.nextHand,
-    firstPreview.openEnds,
-    state.boneyard,
-  );
+  const drawCost = estimateDrawCostForState(firstPreview.nextHand, firstPreview.openEnds, state);
 
   const root: ChainNode = {
     totalPoints: firstPreview.immediateScore,
@@ -649,7 +633,7 @@ function searchChainTree(
         .slice(0, width) as Array<{ m: Move; p: NonNullable<ReturnType<typeof previewPlayMove>>; val: number }>;
 
       for (const { m, p } of scored) {
-        const dc = estimateDrawCost(p.nextHand, p.openEnds, state.boneyard);
+        const dc = estimateDrawCostForState(p.nextHand, p.openEnds, state);
         const child: ChainNode = {
           totalPoints: node.totalPoints + p.immediateScore,
           chainLength: node.chainLength + 1,
@@ -1198,25 +1182,28 @@ function twoPlyWorstCaseValue(
 
 const BONEYARD_LOCKED = 2; // mirrors botEngine constant
 
+/** Endgame search draw model: sample from unseen pool; never read boneyard stack order. */
 function simulateDrawUntilPlayable(
-  state: BotMatchState,
+  state: BotEvalState,
   player: 'bot' | 'you',
-): BotMatchState {
+  rng: () => number,
+): BotEvalState {
   let current = state;
-  // Draw from boneyard until we find a playable tile or boneyard locks
   while (current.boneyard.length > BONEYARD_LOCKED) {
-    const [drawn, ...rest] = current.boneyard;
+    const unseen = buildUnseenPool(current);
+    if (unseen.length === 0) break;
+    const drawn = unseen[Math.floor(rng() * unseen.length)]!;
     const newHand = [...current.players[player].hand, drawn];
     current = cloneState(current, {
-      boneyard: rest,
+      boneyard: current.boneyard.slice(0, -1),
       players: {
         ...current.players,
         [player]: { ...current.players[player], hand: newHand },
       },
     });
-    // Check if newly drawn tile is playable
-    const hasMoves = getLegalMoves(cloneState(current, { currentPlayer: player }), player)
-      .some((m) => m.type === 'play');
+    const hasMoves = getLegalMoves(cloneState(current, { currentPlayer: player }), player).some(
+      (m) => m.type === 'play',
+    );
     if (hasMoves) break;
   }
   return current;
@@ -1229,6 +1216,7 @@ function minimaxFull(
   alpha: number,
   beta: number,
   pointsAccum: number,
+  rng: () => number,
   passDepth: number = 0,
   deadlineMs: number = Infinity,
 ): number {
@@ -1255,13 +1243,13 @@ function minimaxFull(
     }
 
     if (state.boneyard.length > BONEYARD_LOCKED) {
-      const drawnState = simulateDrawUntilPlayable(state, player);
+      const drawnState = simulateDrawUntilPlayable(state, player, rng);
       const afterDrawState = cloneState(drawnState, { currentPlayer: player });
-      return minimaxFull(afterDrawState, depth - 1, isBot, alpha, beta, pointsAccum, passDepth, deadlineMs);
+      return minimaxFull(afterDrawState, depth - 1, isBot, alpha, beta, pointsAccum, rng, passDepth, deadlineMs);
     }
 
     const passedState = cloneState(state, { currentPlayer: isBot ? 'you' : 'bot' });
-    return minimaxFull(passedState, depth - 1, !isBot, alpha, beta, pointsAccum, passDepth + 1, deadlineMs);
+    return minimaxFull(passedState, depth - 1, !isBot, alpha, beta, pointsAccum, rng, passDepth + 1, deadlineMs);
   }
 
   const orderedMoves = [...moves].sort((a, b) => {
@@ -1282,7 +1270,17 @@ function minimaxFull(
         currentPlayer: p.turnContinues ? 'bot' : 'you',
         players: { ...state.players, bot: { ...state.players.bot, hand: p.nextHand } },
       });
-      const val = minimaxFull(next, depth - 1, p.turnContinues, alpha, beta, pointsAccum + p.immediateScore, 0, deadlineMs);
+      const val = minimaxFull(
+        next,
+        depth - 1,
+        p.turnContinues,
+        alpha,
+        beta,
+        pointsAccum + p.immediateScore,
+        rng,
+        0,
+        deadlineMs,
+      );
       best = Math.max(best, val);
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
@@ -1298,7 +1296,17 @@ function minimaxFull(
         currentPlayer: p.turnContinues ? 'you' : 'bot',
         players: { ...state.players, you: { ...state.players.you, hand: p.nextHand } },
       });
-      const val = minimaxFull(next, depth - 1, p.turnContinues ? false : true, alpha, beta, pointsAccum - p.immediateScore, 0, deadlineMs);
+      const val = minimaxFull(
+        next,
+        depth - 1,
+        p.turnContinues ? false : true,
+        alpha,
+        beta,
+        pointsAccum - p.immediateScore,
+        rng,
+        0,
+        deadlineMs,
+      );
       best = Math.min(best, val);
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
@@ -1635,6 +1643,7 @@ export function chooseBotMove(
     const SAMPLE_COUNT = 16;
     const depth = endgameDepth(totalTiles);
     const deadlineMs = performance.now() + MASTER_ENDGAME_BUDGET_MS;
+    const drawRng = createStatePrng(state, 'minimax-draw');
     const moveVotes = new Map<Move, number>();
     const moveScoreTotals = new Map<Move, number>();
 
@@ -1671,7 +1680,17 @@ export function chooseBotMove(
         });
         const val =
           p.immediateScore * 100 +
-          minimaxFull(next, depth, p.turnContinues, -Infinity, Infinity, p.immediateScore, 0, deadlineMs);
+          minimaxFull(
+            next,
+            depth,
+            p.turnContinues,
+            -Infinity,
+            Infinity,
+            p.immediateScore,
+            drawRng,
+            0,
+            deadlineMs,
+          );
         if (val > bestVal) {
           bestVal = val;
           bestMove = move;
