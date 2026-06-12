@@ -1,13 +1,18 @@
 import {
   canApplyNextHand,
+  DAILY_FRITZ_HAND_AUTO_ADVANCE_MS,
+  DAILY_FRITZ_HAND_REVEAL_DELAY_MS,
+  getDailyFritzWatchdogDelayMs,
   getHandLifecyclePhase,
   isDailyFritzAdvanceLocked,
   isDailyFritzSetTerminal,
   logHandLifecycle,
   resetHandLifecyclePhase,
   resolveDailyFritzNextHandCache,
+  resolveHandRevealScheduleMode,
   shouldAllowBotAction,
   shouldApplyBotActionResult,
+  shouldDailyFritzWatchdogAdvance,
   shouldShowHandRevealForHand,
 } from './handLifecycle.ts';
 
@@ -115,6 +120,57 @@ function testShouldShowHandRevealForHand(): void {
   assertEqual(shouldShowHandRevealForHand(3, 2), false, 'stale reveal timer');
 }
 
+function testHandRevealScheduleMode(): void {
+  assertEqual(resolveHandRevealScheduleMode(true), 'immediate', 'daily fritz immediate reveal');
+  assertEqual(resolveHandRevealScheduleMode(false), 'delayed', 'non-daily delayed reveal');
+}
+
+function testDailyFritzWatchdogGuards(): void {
+  assertEqual(
+    getDailyFritzWatchdogDelayMs(false),
+    DAILY_FRITZ_HAND_REVEAL_DELAY_MS + 3000,
+    'watchdog waits for reveal when hidden',
+  );
+  assertEqual(
+    getDailyFritzWatchdogDelayMs(true),
+    DAILY_FRITZ_HAND_AUTO_ADVANCE_MS + 4000,
+    'watchdog waits through countdown when visible',
+  );
+  assertEqual(
+    shouldDailyFritzWatchdogAdvance({
+      handOver: true,
+      gameOver: false,
+      handRevealVisible: false,
+      minAdvanceAt: null,
+      nowMs: 1000,
+    }),
+    false,
+    'watchdog cannot skip missing reveal',
+  );
+  assertEqual(
+    shouldDailyFritzWatchdogAdvance({
+      handOver: true,
+      gameOver: false,
+      handRevealVisible: true,
+      minAdvanceAt: 20_000,
+      nowMs: 10_000,
+    }),
+    false,
+    'watchdog respects min-advance gate',
+  );
+  assertEqual(
+    shouldDailyFritzWatchdogAdvance({
+      handOver: true,
+      gameOver: false,
+      handRevealVisible: true,
+      minAdvanceAt: 10_000,
+      nowMs: 10_000,
+    }),
+    true,
+    'watchdog may advance after reveal gate',
+  );
+}
+
 async function testResolveDailyFritzNextHandCache(): Promise<void> {
   let created = 0;
   const create = async () => {
@@ -185,6 +241,8 @@ async function run(): Promise<void> {
   testShouldApplyBotActionResult();
   testDailyFritzSetTerminal();
   testShouldShowHandRevealForHand();
+  testHandRevealScheduleMode();
+  testDailyFritzWatchdogGuards();
   testLifecyclePhaseAdvancesOnLog();
   testDailyFritzAdvanceLockWindow();
   await testResolveDailyFritzNextHandCache();

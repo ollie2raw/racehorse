@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "qa:daily-fritz:hand-lifecycle": "node scripts/dailyFritzHandLifecycleQa.mjs",
     "test:bot": "ts-node --esm src/bot/botHeuristics.behaviorTests.ts",
     "benchmark:tier": "ts-node --esm src/bot/benchmark.ts ladder 200",
     "test:bot:tier": "ts-node --esm src/bot/tierDifficulty.behaviorTests.ts",
@@ -42,6 +43,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "playwright": "^1.60.0",
     "postcss": "^8.5.14",
     "prettier": "^3.8.1",
     "tailwindcss": "^3.4.17",

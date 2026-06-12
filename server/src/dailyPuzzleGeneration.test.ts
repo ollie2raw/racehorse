@@ -97,7 +97,7 @@ describe('Daily Puzzle ladder generation budgets', () => {
     expect(result.topRejectionReasons.some((entry) => entry.reason === 'timeout')).toBe(true);
   });
 
-  it('classifies null branch tile errors as structural missing tile failures', async () => {
+  it('exhausts attempt budget on repeated missing tile builder failures instead of early abort', async () => {
     const result = await choosePuzzleForSlot('2026-05-17', tacticalProfile, {
       purpose: 'request',
       budget: {
@@ -110,15 +110,18 @@ describe('Daily Puzzle ladder generation budgets', () => {
         setupAndStrike: () => {
           throw new TypeError("Cannot read properties of null (reading 'tiles')");
         },
+        oneTurnHighScore: () => {
+          throw new TypeError("Cannot read properties of null (reading 'tiles')");
+        },
       },
       now: () => 1_000,
     });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reason).toBe('structural_failure');
-    expect(result.attemptsTried).toBe(4);
-    expect(result.topRejectionReasons).toContainEqual({ reason: 'missing_tiles', count: 4 });
+    expect(result.reason).toBe('attempt_limit');
+    expect(result.attemptsTried).toBe(20);
+    expect(result.topRejectionReasons).toContainEqual({ reason: 'missing_tiles', count: 20 });
   });
 
   it('uses a reported fallback tier when primary Tactical Setup fails but fallback type succeeds', async () => {
@@ -237,8 +240,9 @@ describe('Daily Puzzle ladder readiness and unavailable copy', () => {
     expect(getDailyPuzzleDisplayTitle(legacyFallbackSlot.slotIndex, legacyFallbackSlot.slotTitle)).toBe('Puzzle 2');
   });
 
-  it('keeps request-time generation behind an explicit env flag', () => {
+  it('keeps request-time generation opt-out via ENABLE_REQUEST_PUZZLE_GENERATION=false', () => {
     const source = readFileSync(resolve(__dirname, 'index.ts'), 'utf8');
+    expect(source).toContain('isRequestPuzzleGenerationEnabled');
     expect(source).toContain('ENABLE_REQUEST_PUZZLE_GENERATION');
     expect(source).toContain('request-time generation skipped');
   });

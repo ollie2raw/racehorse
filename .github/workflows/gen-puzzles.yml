@@ -33,3 +33,13 @@ jobs:
           # This ensures that each 6-hour run makes progress on missing dates without
           # wasting time re-generating thousands of existing puzzles.
           bash scripts/gen-puzzles.sh --from "$FROM" --days 365
+
+      - name: Verify today Pacific ladder is publish-ready
+        env:
+          SUPABASE_URL: https://fisfadjqllojdzibcdfx.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          export TZ=America/Los_Angeles
+          TODAY=$(date +%F)
+          echo "Diagnosing ladder readiness for $TODAY (Pacific)..."
+          npx tsx server/src/seedDailyPuzzleLadder.ts --date "$TODAY" --diagnose

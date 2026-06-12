@@ -3,16 +3,19 @@ import {
   isDailyPuzzleLadderReady,
   normalizeDailyPuzzleSlot,
   sortDailyPuzzleSlots,
-  type DailyPuzzleSlotRow,
 } from './dailyPuzzle';
+import {
+  isLadderReadyFromDatabase,
+  listPublishedLadderSlotRows,
+  publishGeneratedLadderSlots,
+  scrubPartialPublishedLadderForDate,
+  type GeneratedLadderSlot,
+} from './dailyPuzzleLadderPublish';
 import {
   computeBestPossiblePuzzleScore,
   createHighScorePuzzle,
   generateSetupAndStrikePuzzle,
 } from './generatePuzzles';
-
-const LADDER_SLOT_SELECT =
-  'id,puzzle_date,title,starting_board,starting_hand,max_moves,target_score,puzzle_type,deal_size,slot_index,slot_title,tier,slot_max_points,objective_type,objective_payload,set_version,published';
 
 export type DailyPuzzleGenerationPurpose = 'request' | 'scheduled' | 'startup' | 'manual';
 
@@ -484,7 +487,7 @@ export async function choosePuzzleForSlot(
         const reason = classifyGenerationError(error);
         recordRejection(reason);
         if (
-          (reason === 'missing_tiles' || reason === 'validation_exception') &&
+          reason === 'validation_exception' &&
           (rejectionCounts.get(reason) ?? 0) >= budget.structuralFailureThreshold
         ) {
           if (planIndex < plans.length - 1) break;
@@ -502,67 +505,6 @@ export async function choosePuzzleForSlot(
     'attempt_limit',
     `Unable to generate ${profile.slotTitle} candidate after ${attemptsTried} attempts.`,
   );
-}
-
-type PostgrestResponseLike = {
-  ok: boolean;
-  status: number;
-  text(): Promise<string>;
-  json(): Promise<unknown>;
-};
-
-async function postgrestFetch(
-  path: string,
-  init?: RequestInit,
-  timeoutMs = 5_000,
-): Promise<PostgrestResponseLike> {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  if (!supabaseUrl) throw new Error('SUPABASE_URL is required.');
-  if (!serviceKey) throw new Error('SUPABASE_SERVICE_KEY is required.');
-  const url = new URL(path, supabaseUrl);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      ...init,
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates,return=representation',
-        ...(init?.headers ?? {}),
-      },
-      signal: init?.signal ?? controller.signal,
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Supabase request timed out after ${timeoutMs}ms: ${path}`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function listPublishedLadderSlotRows(date: string): Promise<DailyPuzzleSlotRow[]> {
-  const response = await postgrestFetch(
-    `/rest/v1/daily_puzzles?select=${LADDER_SLOT_SELECT}&published=eq.true&puzzle_date=eq.${encodeURIComponent(date)}&order=set_version.asc,slot_index.asc,id.asc`,
-  );
-  if (!response.ok) return [];
-  const rows = (await response.json()) as DailyPuzzleSlotRow[];
-  return Array.isArray(rows) ? rows : [];
-}
-
-/** Same readiness contract as `/api/daily-puzzle/today` (three published slots, scoring metadata). */
-async function isLadderReadyFromDatabase(date: string): Promise<boolean> {
-  try {
-    const rawRows = await listPublishedLadderSlotRows(date);
-    const slots = sortDailyPuzzleSlots(rawRows.map(normalizeDailyPuzzleSlot));
-    return isDailyPuzzleLadderReady(slots);
-  } catch {
-    return false;
-  }
 }
 
 export async function diagnoseDailyPuzzleLadderForDate(date: string): Promise<{
@@ -611,51 +553,6 @@ export async function diagnoseDailyPuzzleLadderForDate(date: string): Promise<{
   };
 }
 
-async function upsertSlot(
-  date: string,
-  config: {
-    slotIndex: number;
-    slotTitle: string;
-    tier: string;
-    slotMaxPoints: number;
-    puzzleType: string;
-  },
-  puzzle: CuratedDailyPuzzle,
-  bestPossibleScore: number,
-): Promise<string[]> {
-  const response = await postgrestFetch(
-    '/rest/v1/daily_puzzles?on_conflict=puzzle_date,slot_index,set_version',
-    {
-      method: 'POST',
-      body: JSON.stringify([{
-        puzzle_date: date,
-        title: config.slotTitle,
-        starting_board: puzzle.startingBoard,
-        starting_hand: puzzle.startingHand,
-        max_moves: puzzle.maxMoves,
-        target_score: puzzle.targetScore,
-        puzzle_type: puzzle.puzzleType,
-        deal_size: puzzle.dealSize,
-        slot_index: config.slotIndex,
-        slot_title: config.slotTitle,
-        tier: config.tier,
-        slot_max_points: config.slotMaxPoints,
-        objective_type: puzzle.puzzleType,
-        objective_payload: {
-          best_possible_score: bestPossibleScore,
-        },
-        set_version: 1,
-        published: true,
-      }]),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to upsert slot ${config.slotIndex}: ${response.status} ${await response.text()}`);
-  }
-  const rows = (await response.json()) as Array<{ id?: string }> | null;
-  return Array.isArray(rows) ? rows.map((row) => row.id).filter((id): id is string => Boolean(id)) : [];
-}
-
 /**
  * Idempotently writes three published `daily_puzzles` rows for the Pacific calendar date.
  * Used by CLI, server startup/schedule, and lazy `/api/daily-puzzle/today` when missing.
@@ -671,8 +568,20 @@ export async function ensureDailyPuzzleLadderForDate(
       console.warn('[daily-puzzle-ladder-seed] invalid date key', date);
       return 'failed';
     }
-    if (!options?.force && (await isLadderReadyFromDatabase(date))) {
+    const alreadyReady = await isLadderReadyFromDatabase(date);
+    if (!options?.force && alreadyReady) {
       return 'skipped';
+    }
+    if (!alreadyReady) {
+      const scrub = await scrubPartialPublishedLadderForDate(date);
+      if (scrub.scrubbed > 0) {
+        console.warn('[daily-puzzle-ladder] scrubbed-partial-before-generation', {
+          date,
+          purpose,
+          scrubbed: scrub.scrubbed,
+          missingSlotIndexes: scrub.readiness.missingSlotIndexes,
+        });
+      }
     }
 
     console.log('[daily-puzzle-ladder] generation-start', JSON.stringify({
@@ -681,15 +590,14 @@ export async function ensureDailyPuzzleLadderForDate(
       budget: GENERATION_BUDGETS[purpose],
     }));
 
-    const results: Array<{
-      profile: LadderSlotGenerationProfile;
-      puzzle: CuratedDailyPuzzle;
-      bestPossibleScore: number;
+    const generated: GeneratedLadderSlot[] = [];
+    const generationMeta: Array<{
+      slotIndex: number;
+      slotTitle: string;
       attemptsTried: number;
       elapsedMs: number;
       strategy: string;
       fallbackTier: GenerationPlan['fallbackTier'];
-      publishedRowIds: string[];
       topRejectionReasons: Array<{ reason: string; count: number }>;
     }> = [];
 
@@ -709,37 +617,34 @@ export async function ensureDailyPuzzleLadderForDate(
         }));
         return 'failed';
       }
-      const publishedRowIds = await upsertSlot(
-        date,
-        {
-          slotIndex: profile.slotIndex,
-          slotTitle: profile.slotTitle,
-          tier: profile.tier,
-          slotMaxPoints: profile.slotMaxPoints,
-          puzzleType: result.puzzle.puzzleType,
-        },
-        result.puzzle,
-        result.bestPossibleScore,
-      );
-      results.push({ ...result, publishedRowIds, profile });
+      generated.push({
+        profile,
+        puzzle: result.puzzle,
+        bestPossibleScore: result.bestPossibleScore,
+      });
+      generationMeta.push({
+        slotIndex: profile.slotIndex,
+        slotTitle: profile.slotTitle,
+        attemptsTried: result.attemptsTried,
+        elapsedMs: result.elapsedMs,
+        strategy: result.strategy,
+        fallbackTier: result.fallbackTier,
+        topRejectionReasons: result.topRejectionReasons,
+      });
     }
+
+    const publishedRowIds = await publishGeneratedLadderSlots(date, generated);
 
     console.log('[daily-puzzle-ladder] seeded', JSON.stringify({
       date,
       purpose,
       totalMs: Date.now() - startedAt,
-      slots: results.map((res) => ({
-        slotIndex: res.profile.slotIndex,
-        slotTitle: res.profile.slotTitle,
-        puzzleType: res.puzzle.puzzleType,
-        handSize: res.puzzle.startingHand.length,
-        bestPossibleScore: res.bestPossibleScore,
-        attempts: res.attemptsTried,
-        elapsedMs: res.elapsedMs,
-        strategy: res.strategy,
-        fallbackTier: res.fallbackTier,
-        publishedRowIds: res.publishedRowIds,
-        topRejectionReasons: res.topRejectionReasons,
+      publishedRowIds,
+      slots: generationMeta.map((meta, index) => ({
+        ...meta,
+        puzzleType: generated[index]?.puzzle.puzzleType,
+        handSize: generated[index]?.puzzle.startingHand.length,
+        bestPossibleScore: generated[index]?.bestPossibleScore,
       })),
     }, null, 2));
     return 'seeded';

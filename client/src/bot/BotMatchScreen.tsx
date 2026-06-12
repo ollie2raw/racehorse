@@ -109,13 +109,19 @@ import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResul
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 import {
   canApplyNextHand,
+  DAILY_FRITZ_HAND_AUTO_ADVANCE_MS,
+  DAILY_FRITZ_HAND_REVEAL_DELAY_MS,
   emitHandLifecycleDebugLog,
+  getDailyFritzWatchdogDelayMs,
   isDailyFritzAdvanceLocked,
   isDailyFritzSetTerminal,
+  logDailyFritzHandBreadcrumb,
   logHandLifecycle,
   resolveDailyFritzNextHandCache,
+  resolveHandRevealScheduleMode,
   shouldAllowBotAction,
   shouldApplyBotActionResult,
+  shouldDailyFritzWatchdogAdvance,
   shouldShowHandRevealForHand,
   warnHandLifecycleStuck,
   type HandLifecyclePhase,
@@ -862,8 +868,8 @@ export default function BotMatchScreen({
   };
   const initialPersistedDailyFritzMatch = loadPersistedDailyFritzMatch();
   const DRAW_STEP_MS = 700;
-  const DAILY_FRITZ_REVEAL_DELAY_MS = 1400;
-  const DAILY_FRITZ_AUTO_ADVANCE_MS = 5000;
+  const DAILY_FRITZ_REVEAL_DELAY_MS = DAILY_FRITZ_HAND_REVEAL_DELAY_MS;
+  const DAILY_FRITZ_AUTO_ADVANCE_MS = DAILY_FRITZ_HAND_AUTO_ADVANCE_MS;
   const HAND_LIFECYCLE_DEBUG_ENDPOINT =
     'http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979';
   const HAND_LIFECYCLE_DEBUG_SESSION = '65d5db';
@@ -1099,6 +1105,9 @@ export default function BotMatchScreen({
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreToastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handRevealTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const pendingHandRevealRef = useRef<{ handNumber: number; reveal: BotHandReveal } | null>(null);
+  const handRevealRef = useRef<BotHandReveal | null>(null);
+  handRevealRef.current = handReveal;
   const handAutoAdvanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const handAdvanceRetryTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const advanceHandRef = useRef<() => void>(() => {});
@@ -3352,7 +3361,10 @@ export default function BotMatchScreen({
       handLifecyclePhaseRef.current = 'resolving-hand';
       if (isDailyFritzMode) {
         lastDailyFlowLabelRef.current = 'hand-complete';
-        dailyFritzMinAdvanceAtRef.current = Date.now() + DAILY_FRITZ_REVEAL_DELAY_MS + DAILY_FRITZ_AUTO_ADVANCE_MS;
+        dailyFritzMinAdvanceAtRef.current =
+          Date.now()
+          + (resolveHandRevealScheduleMode(true) === 'immediate' ? 0 : DAILY_FRITZ_REVEAL_DELAY_MS)
+          + DAILY_FRITZ_AUTO_ADVANCE_MS;
         console.log('[daily-flow] hand complete detected', {
           handNumber: result.state.handNumber,
           winner: result.handEnded.winner,
@@ -3433,17 +3445,28 @@ export default function BotMatchScreen({
       const handEndedData = result.handEnded;
       const yourRemainingTiles = result.state.players.you.hand;
       const botRemainingTiles = result.state.players.bot.hand;
-      if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
-      handRevealTimerRef.current = window.setTimeout(() => {
+      const revealPayload: BotHandReveal = {
+        winner: handEndedData.winner,
+        reason: handEndedData.reason,
+        pointsAwarded: handEndedData.pointsAwarded,
+        loserPips: handEndedData.loserPips,
+        calcText: handEndedData.calcText,
+        yourRemainingTiles,
+        botRemainingTiles,
+      };
+      pendingHandRevealRef.current = {
+        handNumber: result.state.handNumber,
+        reveal: revealPayload,
+      };
+      const showReveal = () => {
         const live = matchRef.current;
         if (!shouldShowHandRevealForHand(live.handNumber, result.state.handNumber)) {
           handRevealTimerRef.current = null;
-          if (import.meta.env.DEV) {
-            console.log('[hand-over] reveal skipped — stale hand timer', {
-              liveHandNumber: live.handNumber,
-              endedHandNumber: result.state.handNumber,
-            });
-          }
+          logDailyFritzHandBreadcrumb('reveal-skipped', {
+            liveHandNumber: live.handNumber,
+            endedHandNumber: result.state.handNumber,
+            mode: isDailyFritzMode ? 'daily-fritz' : mode,
+          });
           return;
         }
         if (isDailyFritzMode) {
@@ -3452,19 +3475,18 @@ export default function BotMatchScreen({
             handNumber: result.state.handNumber,
             handTransitionInFlight: handTransitionInFlightRef.current,
             prefetchReady: dailyFritzNextHandRef.current?.result != null,
+            schedule: resolveHandRevealScheduleMode(true),
           });
         }
-        setHandReveal({
-          winner: handEndedData.winner,
-          reason: handEndedData.reason,
-          pointsAwarded: handEndedData.pointsAwarded,
-          loserPips: handEndedData.loserPips,
-          calcText: handEndedData.calcText,
-          yourRemainingTiles,
-          botRemainingTiles,
-        });
+        setHandReveal(revealPayload);
         handRevealTimerRef.current = null;
-      }, DAILY_FRITZ_REVEAL_DELAY_MS);
+      };
+      if (handRevealTimerRef.current) clearTimeout(handRevealTimerRef.current);
+      if (resolveHandRevealScheduleMode(isDailyFritzMode) === 'immediate') {
+        showReveal();
+      } else {
+        handRevealTimerRef.current = window.setTimeout(showReveal, DAILY_FRITZ_REVEAL_DELAY_MS);
+      }
       if (result.handEnded.reason === 'blocked') {
         queueSound(() => playBlockedSound(isMuted), 0);
       }
@@ -3534,13 +3556,24 @@ export default function BotMatchScreen({
     }
 
     const boneyardEl = boneyardRef.current ?? guidedBoneyardAnchorRef.current;
-    if (!boneyardEl) return;
-    const from = boneyardEl.getBoundingClientRect();
     const targetEl =
       drawer === 'you'
         ? handAreaRef.current
         : opponentPillRef.current ?? guidedFritzAnchorRef.current;
-    if (!targetEl) return;
+    if (!boneyardEl || !targetEl) {
+      logDailyFritzHandBreadcrumb('draw-fallback', {
+        drawer,
+        hasBoneyardRef: Boolean(boneyardEl),
+        hasTargetRef: Boolean(targetEl),
+        handSize: drawer === 'you' ? nextState.players.you.hand.length : nextState.players.bot.hand.length,
+        usedPulse: drawer === 'you',
+      });
+      if (drawer === 'bot') {
+        showBoardToast(`${opponentLabel} drew a tile`, 'bot');
+      }
+      return;
+    }
+    const from = boneyardEl.getBoundingClientRect();
     const to = targetEl.getBoundingClientRect();
     const id = ++flyingTileIdRef.current;
     setFlyingTiles((prev) => [
@@ -3562,7 +3595,7 @@ export default function BotMatchScreen({
         ? document.body.querySelector('.flying-tile-overlay')
         : null,
     });
-  }, []);
+  }, [opponentLabel, showBoardToast]);
 
   const scheduleDrawStepAnimation = useCallback(
     (drawer: BotPlayerId, nextState: BotMatchState) => {
@@ -5360,6 +5393,7 @@ export default function BotMatchScreen({
       setHandAdvanceError(null);
       setShowManualHandAdvance(false);
       setHandReveal(null);
+      pendingHandRevealRef.current = null;
       dailyFritzMinAdvanceAtRef.current = null;
       traceHandLifecycle('dealing-next-hand', { source }, 'D');
       let applied = false;
@@ -5395,6 +5429,7 @@ export default function BotMatchScreen({
       } else {
         traceHandLifecycle('error', { source, reason: 'setMatch-noop' }, 'D');
         setHandAdvanceError('Could not start the next hand. Tap Continue to retry.');
+        logDailyFritzHandBreadcrumb('manual-advance-shown', { reason: 'setMatch-noop', source });
         setShowManualHandAdvance(true);
       }
     },
@@ -5565,12 +5600,24 @@ export default function BotMatchScreen({
           });
           // #endregion
           if (failureAttempt < 2) {
+            logDailyFritzHandBreadcrumb('manual-advance-shown', {
+              reason: 'next-hand-fetch-retry',
+              source,
+              failureAttempt,
+              error: errMsg,
+            });
             setShowManualHandAdvance(true);
             traceHandLifecycle('error', { source, error: errMsg, failureAttempt, willRetry: true }, 'C');
             scheduleHandAdvanceRetry(2500, 'next-hand-fetch-failed');
             return;
           }
           setHandAdvanceError(formatDailyFritzNextHandUserMessage(errMsg));
+          logDailyFritzHandBreadcrumb('manual-advance-shown', {
+            reason: 'next-hand-fetch-failed',
+            source,
+            failureAttempt,
+            error: errMsg,
+          });
           setShowManualHandAdvance(true);
           traceHandLifecycle('error', { source, error: errMsg, failureAttempt }, 'C');
           if (import.meta.env.DEV) {
@@ -5750,7 +5797,7 @@ export default function BotMatchScreen({
         // #endregion
       }
     };
-  }, [handReveal, match.gameOver, match.handNumber, isGuidedMode, isGuidedV2Mode, isDailyFritzMode, traceHandLifecycle]);
+  }, [handReveal, match.gameOver, isGuidedMode, isGuidedV2Mode, isDailyFritzMode, traceHandLifecycle]);
 
   useEffect(() => {
     if (!handReveal || match.gameOver || isGuidedMode || isGuidedV2Mode) {
@@ -5780,6 +5827,12 @@ export default function BotMatchScreen({
         data: { visibleMs, stallMs, inFlight: handTransitionInFlightRef.current },
       });
       // #endregion
+      logDailyFritzHandBreadcrumb('manual-advance-shown', {
+        reason: 'hand-reveal-stall',
+        visibleMs,
+        stallMs,
+        inFlight: handTransitionInFlightRef.current,
+      });
       setShowManualHandAdvance(true);
     }, stallMs);
     return () => window.clearTimeout(warnId);
@@ -5836,29 +5889,55 @@ export default function BotMatchScreen({
   }, [match.handOver, match.gameOver, handReveal, advanceHand, isDailyFritzMode, isGuidedV1MinimalMode, isGuidedV1OnlineMode]);
 
   // ── Daily Fritz watchdog ──────────────────────────────────────────────────
-  // If the game gets stuck in hand-over, recover whether the reveal is still
-  // hidden or already visible. This covers retryable next-hand fetch errors,
-  // hung prefetches, timer misses, and guard races.
+  // Restores a missing reveal when possible; only advances after the countdown gate.
   useEffect(() => {
     if (!isDailyFritzMode) return;
     if (!match.handOver || match.gameOver) return;
 
-    const watchdogMs = handReveal !== null ? 12_000 : 10_000;
+    const watchdogMs = getDailyFritzWatchdogDelayMs(handReveal !== null);
     const id = window.setTimeout(() => {
-      // Still stuck after the buffer window — attempt recovery.
-      if (!matchRef.current.handOver || matchRef.current.gameOver) return;
-      console.log('[daily-flow] watchdog fired — resetting guard and calling advanceHand', {
-        handNumber: match.handNumber,
+      const live = matchRef.current;
+      if (!live.handOver || live.gameOver) return;
+
+      if (!handRevealRef.current && pendingHandRevealRef.current) {
+        const pending = pendingHandRevealRef.current;
+        if (shouldShowHandRevealForHand(live.handNumber, pending.handNumber)) {
+          logDailyFritzHandBreadcrumb('reveal-restored', {
+            handNumber: pending.handNumber,
+            source: 'watchdog',
+          });
+          setHandReveal(pending.reveal);
+          return;
+        }
+      }
+
+      if (!shouldDailyFritzWatchdogAdvance({
+        handOver: live.handOver,
+        gameOver: live.gameOver,
+        handRevealVisible: handRevealRef.current !== null,
+        minAdvanceAt: dailyFritzMinAdvanceAtRef.current,
+        nowMs: Date.now(),
+      })) {
+        console.log('[daily-flow] watchdog skipped — reveal/countdown not finished', {
+          handNumber: live.handNumber,
+          revealVisible: handRevealRef.current !== null,
+          minAdvanceAt: dailyFritzMinAdvanceAtRef.current,
+        });
+        return;
+      }
+
+      console.log('[daily-flow] watchdog fired — advancing after reveal window', {
+        handNumber: live.handNumber,
         handTransitionInFlight: handTransitionInFlightRef.current,
         lastLabel: lastDailyFlowLabelRef.current,
-        revealVisible: handReveal !== null,
+        revealVisible: handRevealRef.current !== null,
       });
       handTransitionInFlightRef.current = false;
       advanceHandRef.current();
     }, watchdogMs);
 
     return () => window.clearTimeout(id);
-  }, [isDailyFritzMode, match.handOver, match.gameOver, handReveal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isDailyFritzMode, match.handOver, match.gameOver, handReveal]);
 
   useEffect(() => {
     if (match.currentPlayer !== 'you' || match.handOver || match.gameOver || drawSequenceActiveRef.current) return;

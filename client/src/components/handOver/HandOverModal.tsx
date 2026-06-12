@@ -157,6 +157,7 @@ export function HandOverModal({
   return (
     <div
       className="game-over-overlay hand-over-modal-overlay"
+      data-testid="hand-over-modal"
       role="dialog"
       aria-modal="true"
       aria-labelledby="hand-over-modal-title"
@@ -267,6 +268,7 @@ export function HandOverModal({
                     </div>
                     <div
                       className="hand-over-modal__progress-track"
+                      data-testid="hand-over-progress-track"
                       role="progressbar"
                       aria-valuemin={0}
                       aria-valuemax={100}
