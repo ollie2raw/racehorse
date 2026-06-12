@@ -251,3 +251,20 @@ export function loserDisplayLabel(
   if (winnerSide === 'opponent' || winnerSide === 'bot') return 'You';
   return '—';
 }
+
+/** Matches botEngine deal parity: odd hands → you deal first; even → opponent. */
+export function nextHandDealerForHandNumber(nextHandNumber: number): 'you' | 'bot' {
+  return nextHandNumber % 2 === 1 ? 'you' : 'bot';
+}
+
+export function buildNextHandDealingHint(opts: {
+  completedHandNumber: number;
+  isDailyFritzMode: boolean;
+  opponentLabel?: string;
+}): string {
+  const dealer = nextHandDealerForHandNumber(opts.completedHandNumber + 1);
+  if (dealer === 'you') return 'You are dealing the next race';
+  if (opts.isDailyFritzMode) return 'Daily Fritz is dealing the next race';
+  const name = opts.opponentLabel?.trim() || 'Fritz';
+  return `${name} is dealing the next race`;
+}

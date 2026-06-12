@@ -143,6 +143,7 @@ import HandOverModal from '../components/handOver/HandOverModal';
 import {
   buildBotHandOverReveals,
   buildHandOverReasonCopy,
+  buildNextHandDealingHint,
   loserDisplayLabel,
   resolveWinnerSide,
   winnerDisplayLabel,
@@ -7286,7 +7287,11 @@ export default function BotMatchScreen({
             })}
             tileReveals={buildBotHandOverReveals(handReveal, opponentLabel)}
             nextHandLabel="Next hand starting..."
-            nextHandHint="Daily Fritz is dealing the next race"
+            nextHandHint={buildNextHandDealingHint({
+              completedHandNumber: match.handNumber,
+              isDailyFritzMode,
+              opponentLabel,
+            })}
             progress={isGuidedMode || isGuidedV2Mode ? undefined : handRevealProgress}
             progressTransitionMs={
               isGuidedMode || isGuidedV2Mode ? undefined : DAILY_FRITZ_AUTO_ADVANCE_MS
