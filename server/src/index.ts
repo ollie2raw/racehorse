@@ -61,8 +61,6 @@ import {
   getDailyFritzSkunkWinRank,
   normalizeDailyFritzSetSkunkFields,
 } from './dailyFritzSkunk';
-import { resetDailyFritzQaAttempt } from './dailyFritz/qaReset';
-import { restartDailyFritzUnsafeAttempt } from './dailyFritz/restartUnsafe';
 import {
   buildDailyPuzzleLeaderboard,
   calculateDailyPuzzleAwardedPoints,
@@ -4436,40 +4434,6 @@ app.post('/api/daily-fritz/abandon', async (req, res) => {
    }
 });
 
-app.post('/api/daily-fritz/restart', async (req, res) => {
-  const attemptId = typeof req.body?.attempt_id === 'string' ? req.body.attempt_id.trim() : '';
-  if (!attemptId) {
-    res.status(400).json({ error: 'attempt_id is required.' });
-    return;
-  }
-  try {
-    const authenticatedUserId = await getAuthenticatedUserId(req);
-    if (!authenticatedUserId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-    const result = await restartDailyFritzUnsafeAttempt({
-      attemptId,
-      authenticatedUserId,
-    });
-    res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message === 'daily_fritz_restart_attempt_not_found') {
-      res.status(404).json({ error: 'Daily Fritz attempt not found.' });
-      return;
-    }
-    if (message.startsWith('daily_fritz_restart_attempt_locked:')) {
-      const status = message.split(':')[1] ?? 'locked';
-      res.status(409).json({ error: 'Daily Fritz attempt cannot be restarted.', status });
-      return;
-    }
-    res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to restart Daily Fritz attempt.',
-    });
-  }
-});
-
 app.get('/api/daily-fritz/leaderboard/:date', async (req, res) => {
   try {
     const authenticatedUserId = await getAuthenticatedUserId(req);
@@ -4596,41 +4560,6 @@ app.post('/api/daily-fritz/reset-attempt', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to reset Daily Fritz attempt.',
-    });
-  }
-});
-
-app.post('/api/daily-fritz/qa-reset', async (req, res) => {
-  try {
-    const authenticatedUserId = await getAuthenticatedUserId(req);
-    if (!authenticatedUserId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-    const runDate = typeof req.body?.run_date === 'string' ? req.body.run_date.trim() : undefined;
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : 'qa_browser_reset';
-    const result = await resetDailyFritzQaAttempt({
-      runDate,
-      reason,
-      authenticatedUserId,
-    });
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.startsWith('qa_daily_fritz_reset_requires_') || message.startsWith('qa_daily_fritz_reset_blocked_')) {
-      res.status(403).json({ error: 'Daily Fritz QA reset is disabled.' });
-      return;
-    }
-    if (message === 'qa_daily_fritz_reset_forbidden_user') {
-      res.status(403).json({ error: 'Daily Fritz QA reset is limited to the configured QA account.' });
-      return;
-    }
-    if (message.startsWith('qa_daily_fritz_reset_refused_')) {
-      res.status(403).json({ error: 'Daily Fritz QA reset refused for this environment.' });
-      return;
-    }
-    res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to reset Daily Fritz QA attempt.',
     });
   }
 });
