@@ -587,7 +587,9 @@ function mcEvaluateMove(
   pool: Tile[],
   holdWeights: Map<string, number>,
   search: TierSearchCfg,
+  tier: ServerBotTier,
 ): number {
+  const isMaster = tier === 'master';
   const botScore = state.players[botId]?.score ?? 0;
   const oppScore = state.players[opponentId]?.score ?? 0;
   const boneyardSize = state.boneyard.length;
@@ -607,19 +609,26 @@ function mcEvaluateMove(
   const strandedDoubles = finalHand.filter((t) => isDoubleTile(t) && !finalEndSet.has(t.low)).length;
   const finalPips = pipSum(finalHand);
   const isLateGame = boneyardSize <= 6 || finalHand.length <= 3;
-  const pipBurdenPenalty = isLateGame ? finalPips * 0.8 : finalPips * 0.1;
+  const pipBurdenPenalty = isLateGame ? finalPips * (isMaster ? 2.25 : 0.8) : finalPips * 0.1;
 
   const branchPen = branchPenalty(move, state, botId, holdWeights);
 
   const botProximity = botScore / WIN_TARGET;
   const oppProximity = oppScore / WIN_TARGET;
-  const aggressionBoost = botProximity >= 0.85 ? 1.4 : botProximity >= 0.7 ? 1.2 : 1.0;
-  const defenseMultiplier =
-    oppProximity >= 0.85 ? 3.0 :
-    oppProximity >= 0.7 ? 1.8 :
-    oppProximity >= 0.5 ? 1.2 : 1.0;
+  const aggressionBoost = isMaster
+    ? (botProximity >= 0.85 ? 1.25 : botProximity >= 0.7 ? 1.08 : 1.0)
+    : (botProximity >= 0.85 ? 1.4 : botProximity >= 0.7 ? 1.2 : 1.0);
+  const defenseMultiplier = isMaster
+    ? (oppProximity >= 0.85 ? 4.8 :
+       oppProximity >= 0.7 ? 2.75 :
+       oppProximity >= 0.5 ? 1.55 : 1.05)
+    : (oppProximity >= 0.85 ? 3.0 :
+       oppProximity >= 0.7 ? 1.8 :
+       oppProximity >= 0.5 ? 1.2 : 1.0);
 
   const opponentHandSize = (state.players[opponentId]?.hand ?? []).length;
+  const opponentLowTiles = opponentHandSize <= 2 && isLateGame;
+  const defenseBoost = opponentLowTiles && isMaster ? 1.22 : 1.0;
   const sampledHands = sampleOpponentHands(pool, holdWeights, opponentHandSize, search.mcSamples);
 
   let totalThreat = 0;
@@ -635,17 +644,22 @@ function mcEvaluateMove(
   const avgThreatBefore = sampledHands.length > 0 ? totalThreatBefore / sampledHands.length : 0;
   const threatDelta = avgThreatBefore - avgThreatAfter;
 
+  const threatDeltaWeight = isMaster ? 52 : 35;
+  const lingeringThreatWeight = isMaster ? 34 : 22;
+  const chainPointsWeight = isMaster ? 108 : 120;
+  const drawCostWeight = isMaster ? 18 : 12;
+
   return (
-    totalPoints * 120 * aggressionBoost +
+    totalPoints * chainPointsWeight * aggressionBoost +
     selfSetup * 25 +
-    threatDelta * 35 * defenseMultiplier +
-    -avgThreatAfter * 22 * defenseMultiplier +
-    mobilityAfter * 8 +
-    -strandedDoubles * 35 +
-    -branchPen +
-    -pipBurdenPenalty +
-    -drawCostAccum * 12 +
-    (chainLength > 1 ? chainLength * 5 : 0)
+    threatDelta * threatDeltaWeight * defenseMultiplier * defenseBoost +
+    -avgThreatAfter * lingeringThreatWeight * defenseMultiplier * defenseBoost +
+    mobilityAfter * (isMaster && isLateGame ? 10 : 8) +
+    -strandedDoubles * (isMaster ? 42 : 35) -
+    branchPen -
+    pipBurdenPenalty -
+    drawCostAccum * drawCostWeight +
+    (chainLength > 1 ? chainLength * (isMaster ? 6 : 5) : 0)
   );
 }
 
@@ -719,7 +733,7 @@ export function chooseBotMoveServer(
   const scored = candidates
     .map((move) => ({
       move,
-      score: mcEvaluateMove(move, aligned, botId, opponentId, pool, weights, TIER_SEARCH[tier]),
+      score: mcEvaluateMove(move, aligned, botId, opponentId, pool, weights, TIER_SEARCH[tier], tier),
     }))
     .sort((a, b) => b.score - a.score);
 

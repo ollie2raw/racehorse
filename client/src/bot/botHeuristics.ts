@@ -10,6 +10,8 @@
  * v3.6: master difficulty uses sampled-hand endgame search (fair IS-MCTS style)
  * v3.7: master gets elevated MC samples (20 vs 8), wider chain search, two-ply
  *       worst-case wrapper enabled, endgame IS-MCTS threshold raised 8 → 12 tiles
+ * v3.8: master-only endgame/defense/sacrifice weights — sharper near opponent win,
+ *       stronger pip/threat denial, without changing elite or fairness paths
  */
 
 import type { Move, Tile } from '../types.ts';
@@ -366,6 +368,11 @@ function handMobility(hand: Tile[], openEnds: number[]): number {
 }
 
 type HandPhase = 'early' | 'mid' | 'late';
+type TierStrength = 'base' | 'master';
+
+function tierStrengthFromDifficulty(difficulty: BotDifficulty): TierStrength {
+  return difficulty === 'master' ? 'master' : 'base';
+}
 
 function phaseFor(handSizeAfter: number, totalTilesAfter: number): HandPhase {
   if (handSizeAfter <= 3 || totalTilesAfter <= 8) return 'late';
@@ -898,6 +905,7 @@ function evaluateStrategicMove(
   state: BotEvalState,
   move: Move,
   holdWeights: Map<string, number>,
+  strength: TierStrength = 'base',
 ): StrategicEval {
   const p = previewPlayMove(state, 'bot', move);
   if (!p || !move.tile) {
@@ -1072,18 +1080,73 @@ function evaluateStrategicMove(
     endDangerPenalty *= 0.25;
   }
 
+  const winTarget = state.winningScore ?? WIN_TARGET;
+  const youScore = state.players.you.score;
+  const botScore = state.players.bot.score;
+  const youProximity = youScore / winTarget;
+  const botProximity = botScore / winTarget;
+  const oppNearWin = youProximity >= 0.85;
+  const oppTileCount = getOpponentTileCount(state);
+  const isMaster = strength === 'master';
+
+  let adjustedEndDanger = endDangerPenalty;
+  if (isMaster) {
+    if (oppNearWin) adjustedEndDanger *= 1.85;
+    else if (youProximity >= 0.7) adjustedEndDanger *= 1.35;
+    if (phase === 'late') adjustedEndDanger *= 1.2;
+    if (oppNearWin && oppTileCount <= 2) {
+      adjustedEndDanger += oppMobilityAfter * 14;
+    }
+  }
+
+  let adjustedSafeFinish = safeFinishBonus;
+  let outBlockBonus = 0;
+  if (isMaster && (oppNearWin || phase === 'late') && oppTileCount <= 3) {
+    adjustedSafeFinish *= oppNearWin ? 1.35 : 1.15;
+    if (afterUs && !afterUs.handOver && afterUs.currentPlayer === 'you') {
+      const blockEnds = inferOpenEndsFromState(afterUs);
+      const blockPool = buildUnseenPool(afterUs);
+      const blockProb = estimateOpponentCanPlayProbability(blockEnds, blockPool, oppTileCount);
+      if (blockProb < 0.45) {
+        outBlockBonus += 70 + (3 - oppTileCount) * 28;
+        if (blockProb < 0.25) outBlockBonus += 35;
+      }
+    }
+  }
+
+  let adjustedPressure = pressureScore;
+  if (isMaster && missingWeights.size > 0) {
+    adjustedPressure *= oppNearWin ? 1.4 : phase === 'late' ? 1.2 : 1.0;
+  }
+
+  let leadProtectBonus = 0;
+  if (isMaster && botProximity >= 0.85 && youProximity < 0.75 && phase === 'late') {
+    leadProtectBonus += 45;
+  }
+  if (isMaster && oppNearWin && p.immediateScore <= 2 && outBlockBonus > 0) {
+    leadProtectBonus += 30;
+  }
+
+  const immediateWeight =
+    isMaster && oppNearWin ? 22 :
+    isMaster && phase === 'late' ? 26 :
+    isMaster && phase === 'mid' && youProximity >= 0.5 ? 30 :
+    34;
+
   const unloadTieBreaker = (move.tile.low + move.tile.high) * 0.5;
   const score =
-    p.immediateScore * 34 +
+    p.immediateScore * immediateWeight +
     endControlScore -
-    endDangerPenalty -
+    adjustedEndDanger -
     trapPenalty +
-    pressureScore +
+    adjustedPressure +
     doubleScore +
     refillRiskScore +
     goldenBonus +
-    safeFinishBonus +
-    playableNext * 3 +
+    adjustedSafeFinish +
+    outBlockBonus +
+    leadProtectBonus +
+    playableNext * (isMaster && phase === 'late' ? 4 : 3) +
     unloadTieBreaker +
     exitBonus;
 
@@ -1144,6 +1207,7 @@ function twoPlyWorstCaseValue(
   state: BotEvalState,
   ourMove: Move,
   holdWeights: Map<string, number>,
+  strength: TierStrength = 'base',
 ): number {
   const afterUs = simulateAfterPlay(state, 'bot', ourMove);
   if (!afterUs) return -Infinity;
@@ -1153,7 +1217,7 @@ function twoPlyWorstCaseValue(
   if (afterUs.currentPlayer === 'bot') {
     const replies = getLegalMoves(afterUs, 'bot').filter((m) => m.type === 'play');
     if (replies.length === 0) return 120;
-    return Math.max(...replies.map((m) => evaluateStrategicMove(afterUs, m, holdWeights).score));
+    return Math.max(...replies.map((m) => evaluateStrategicMove(afterUs, m, holdWeights, strength).score));
   }
 
   const ends = inferOpenEndsFromState(afterUs);
@@ -1168,14 +1232,26 @@ function twoPlyWorstCaseValue(
   const draws = expectedDrawsApprox(ends, unseen);
   const totalTiles = afterUs.players.bot.hand.length + getOpponentTileCount(afterUs);
   const phase = phaseFor(afterUs.players.bot.hand.length, totalTiles);
+  const youProx = afterUs.players.you.score / WIN_TARGET;
+  const isMaster = strength === 'master';
+  const defenseScale =
+    isMaster && youProx >= 0.85 ? 1.65 :
+    isMaster && youProx >= 0.7 ? 1.3 :
+    1.0;
+  const threatWeight = isMaster ? 28 : 18;
+  const oppTiles = getOpponentTileCount(afterUs);
+  const lowTileBlock =
+    isMaster && oppTiles <= 2 && (phase === 'late' || youProx >= 0.7)
+      ? (1 - oppPlayProb) * 55
+      : 0;
 
   if (afterUs.boneyard.length > 2 && oppPlayProb < 0.35) {
     if (phase === 'early') return -260 - draws * 26;
-    if (phase === 'mid') return 110 - draws * 5;
-    return 230 + draws * 10;
+    if (phase === 'mid') return (110 - draws * 5) * defenseScale;
+    return (230 + draws * 10 + lowTileBlock) * defenseScale;
   }
 
-  return (1 - oppPlayProb) * 90 - oppPlayProb * 70 - threat * 18;
+  return (1 - oppPlayProb) * 90 * defenseScale - oppPlayProb * 70 * defenseScale - threat * threatWeight + lowTileBlock;
 }
 
 // ─── Endgame minimax ──────────────────────────────────────────────────────────
@@ -1328,6 +1404,7 @@ function mcEvaluateMove(
   const botScore = state.players.bot.score;
   const youScore = state.players.you.score;
   const boneyardSize = state.boneyard.length;
+  const isMaster = difficulty === 'master';
 
   const preview = previewPlayMove(state, 'bot', move);
   if (!preview) return -Infinity;
@@ -1337,7 +1414,7 @@ function mcEvaluateMove(
   const { depth, width } = dynamicChainParams(
     state.players.bot.hand.length,
     totalTiles,
-    difficulty === 'master' ? 'master' : 'base',
+    isMaster ? 'master' : 'base',
   );
   const chain = searchChainTree(state, move, depth, width);
   if (!chain) return -Infinity;
@@ -1350,19 +1427,26 @@ function mcEvaluateMove(
   const strandedDoubles = finalHand.filter((t) => isDoubleTile(t) && !finalEndSet.has(t.low)).length;
   const finalPips = pipSum(finalHand);
   const isLateGame = boneyardSize <= 6 || finalHand.length <= 3;
-  const pipBurdenPenalty = isLateGame ? finalPips * 1.5 : finalPips * 0.1;
+  const pipBurdenPenalty = isLateGame ? finalPips * (isMaster ? 2.25 : 1.5) : finalPips * 0.1;
 
   const branchPen = branchPenalty(move, state, holdWeights);
 
   const botProximity = botScore / WIN_TARGET;
   const youProximity = youScore / WIN_TARGET;
-  const aggressionBoost = botProximity >= 0.85 ? 1.4 : botProximity >= 0.7 ? 1.2 : 1.0;
-  const defenseMultiplier =
-    youProximity >= 0.85 ? 3.0 :
-    youProximity >= 0.7  ? 1.8 :
-    youProximity >= 0.5  ? 1.2 : 1.0;
+  const aggressionBoost = isMaster
+    ? (botProximity >= 0.85 ? 1.25 : botProximity >= 0.7 ? 1.08 : 1.0)
+    : (botProximity >= 0.85 ? 1.4 : botProximity >= 0.7 ? 1.2 : 1.0);
+  const defenseMultiplier = isMaster
+    ? (youProximity >= 0.85 ? 4.8 :
+       youProximity >= 0.7 ? 2.75 :
+       youProximity >= 0.5 ? 1.55 : 1.05)
+    : (youProximity >= 0.85 ? 3.0 :
+       youProximity >= 0.7 ? 1.8 :
+       youProximity >= 0.5 ? 1.2 : 1.0);
 
   const youHandSize = getOpponentTileCount(state);
+  const opponentLowTiles = youHandSize <= 2 && isLateGame;
+  const defenseBoost = opponentLowTiles && isMaster ? 1.22 : 1.0;
   const sampledHands = sampleOpponentHands(
     pool,
     holdWeights,
@@ -1385,17 +1469,22 @@ function mcEvaluateMove(
   const avgThreatBefore = sampledHands.length > 0 ? totalThreatBefore / sampledHands.length : 0;
   const threatDelta = avgThreatBefore - avgThreatAfter;
 
+  const threatDeltaWeight = isMaster ? 52 : 35;
+  const lingeringThreatWeight = isMaster ? 34 : 22;
+  const chainPointsWeight = isMaster ? 108 : 120;
+  const drawCostWeight = isMaster ? 18 : 12;
+
   return (
-    totalPoints * 120 * aggressionBoost +
+    totalPoints * chainPointsWeight * aggressionBoost +
     selfSetup * 25 +
-    threatDelta * 35 * defenseMultiplier +
-    -avgThreatAfter * 22 * defenseMultiplier +
-    mobilityAfter * 8 +
-    -strandedDoubles * 35 +
+    threatDelta * threatDeltaWeight * defenseMultiplier * defenseBoost +
+    -avgThreatAfter * lingeringThreatWeight * defenseMultiplier * defenseBoost +
+    mobilityAfter * (isMaster && isLateGame ? 10 : 8) +
+    -strandedDoubles * (isMaster ? 42 : 35) +
     -branchPen +
     -pipBurdenPenalty +
-    -drawCostAccum * 12 +
-    (chainLength > 1 ? chainLength * 5 : 0)
+    -drawCostAccum * drawCostWeight +
+    (chainLength > 1 ? chainLength * (isMaster ? 6 : 5) : 0)
   );
 }
 
@@ -1462,8 +1551,9 @@ export function evaluateMove(
   const pool = buildUnseenPool(state);
   const missing = inferMissingPips(state);
   const weights = opponentHoldWeights(pool, missing);
+  const strength = tierStrengthFromDifficulty(difficulty);
 
-  const strategic = evaluateStrategicMove(state, move, weights);
+  const strategic = evaluateStrategicMove(state, move, weights, strength);
   const mc = mcEvaluateMove(
     move,
     state,
@@ -1472,10 +1562,11 @@ export function evaluateMove(
     difficulty === 'master' ? 20 : MC_SAMPLES,
     difficulty,
   );
+  const mcBlend = difficulty === 'master' ? 0.45 : 0.35;
 
   return {
     move,
-    score: strategic.score + mc * 0.35,
+    score: strategic.score + mc * mcBlend,
     explanation: explainStrategicMove(move, strategic),
     breakdown: {
       immediate: p.immediateScore,
@@ -1634,11 +1725,15 @@ export function chooseBotMove(
   const missing = inferMissingPips(state);
   const weights = opponentHoldWeights(pool, missing);
   const totalTiles = totalTilesForLog;
+  const strength = tierStrengthFromDifficulty(difficulty);
+  const mcSampleCount = difficulty === 'master' ? 20 : MC_SAMPLES;
+  const mcBlend = difficulty === 'master' ? 0.45 : 0.35;
   // Seeded per-state PRNG for tier selection — deterministic for a given position
   // so Fritz doesn't oscillate unpredictably when the same board recurs.
   const tierRand = createStatePrng(state, 'tier-select');
 
   const masterEndgameThreshold = 12;
+  const youNearWin = state.players.you.score / (state.winningScore ?? WIN_TARGET) >= 0.85;
   if (difficulty === 'master' && totalTiles <= masterEndgameThreshold) {
     const SAMPLE_COUNT = 16;
     const depth = endgameDepth(totalTiles);
@@ -1678,6 +1773,8 @@ export function chooseBotMove(
           currentPlayer: p.turnContinues ? 'bot' : 'you',
           players: { ...knownState.players, bot: { ...knownState.players.bot, hand: p.nextHand } },
         });
+        const threatPenalty = opponentThreat(p.openEnds, p.openSum, weights);
+        const endgameDefenseWeight = youNearWin ? 48 : 22;
         const val =
           p.immediateScore * 100 +
           minimaxFull(
@@ -1690,7 +1787,8 @@ export function chooseBotMove(
             drawRng,
             0,
             deadlineMs,
-          );
+          ) -
+          threatPenalty * endgameDefenseWeight;
         if (val > bestVal) {
           bestVal = val;
           bestMove = move;
@@ -1737,13 +1835,13 @@ export function chooseBotMove(
   const prelim: HardScoredCandidate[] = candidates
     .map((move) => {
       const p = previewPlayMove(state, 'bot', move);
-      const strategic = evaluateStrategicMove(state, move, weights);
+      const strategic = evaluateStrategicMove(state, move, weights, strength);
       const mc = mcEvaluateMove(
         move,
         state,
         pool,
         weights,
-        difficulty === 'master' ? 20 : MC_SAMPLES,
+        mcSampleCount,
         difficulty,
       );
       return {
@@ -1751,7 +1849,7 @@ export function chooseBotMove(
         strategic,
         strategicScore: strategic.score,
         mcScore: mc,
-        score: strategic.score + mc * 0.35,
+        score: strategic.score + mc * mcBlend,
         breakdown: {
           immediate: p?.immediateScore ?? 0,
           doubleBias: move.tile && isDoubleTile(move.tile) ? 1 : 0,
@@ -1776,9 +1874,9 @@ export function chooseBotMove(
       const exact = searchExactTurnChain(state, prelim[i].move, exactDeadlineMs);
       if (!exact) continue;
       prelim[i].strategicScore +=
-        exact.totalPoints * 22 +
-        (exact.chainLength > 1 ? exact.chainLength * 8 : 0);
-      prelim[i].score = prelim[i].strategicScore + prelim[i].mcScore * 0.35;
+        exact.totalPoints * (strength === 'master' ? 26 : 22) +
+        (exact.chainLength > 1 ? exact.chainLength * (strength === 'master' ? 10 : 8) : 0);
+      prelim[i].score = prelim[i].strategicScore + prelim[i].mcScore * mcBlend;
     }
     prelim.sort((a, b) => {
       const scoreDiff = b.strategicScore - a.strategicScore;
@@ -1788,11 +1886,14 @@ export function chooseBotMove(
   }
 
   if ((ENABLE_TWO_PLY_WORST_CASE || difficulty === 'master') && prelim.length > 1) {
-    const N = Math.min(5, prelim.length);
+    const N = Math.min(strength === 'master' ? 6 : 5, prelim.length);
     const top = prelim.slice(0, N);
     for (const c of top) {
-      const worst = twoPlyWorstCaseValue(state, c.move, weights);
-      c.score = worst + c.strategicScore * 0.25 + c.mcScore * 0.1;
+      const worst = twoPlyWorstCaseValue(state, c.move, weights, strength);
+      c.score =
+        worst +
+        c.strategicScore * (strength === 'master' ? 0.14 : 0.25) +
+        c.mcScore * (strength === 'master' ? 0.28 : 0.1);
     }
     top.sort((a, b) => {
       const scoreDiff = b.score - a.score;

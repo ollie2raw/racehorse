@@ -10,15 +10,15 @@ export const FRITZ_ELITE_ID = '00000000-0000-0000-0000-000000000001';
 export const FRITZ_MASTER_ID = '00000000-0000-0000-0000-000000000004';
 export const FRITZ_GRANDMASTER_ID = '00000000-0000-0000-0000-000000000005';
 export const FRITZ_SYSTEM_ID = FRITZ_ELITE_ID;
-export const FRITZ_ROOKIE_RATING = 600;
+export const FRITZ_ROOKIE_RATING = 700;
 export const FRITZ_ROOKIE_RD = 50;
-export const FRITZ_STANDARD_RATING = 1000;
+export const FRITZ_STANDARD_RATING = 1100;
 export const FRITZ_STANDARD_RD = 50;
-export const FRITZ_RATING = 1800;
+export const FRITZ_RATING = 1700;
 export const FRITZ_RD = 50;
-export const FRITZ_MASTER_RATING = 2400;
+export const FRITZ_MASTER_RATING = 2100;
 export const FRITZ_MASTER_RD = 50;
-export const FRITZ_GRANDMASTER_RATING = 2400;
+export const FRITZ_GRANDMASTER_RATING = 2100;
 export const FRITZ_GRANDMASTER_RD = 45;
 
 export interface GlickoPlayer {
