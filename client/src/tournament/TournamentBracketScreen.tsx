@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { GlobalNav } from '../components';
 import type { AppMode } from '../types';
 import {
@@ -60,6 +60,11 @@ function padCountdown(ms: number): string {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+function buildCountdownLabel(targetMs: number | null): string {
+  if (targetMs == null || !Number.isFinite(targetMs)) return '--:--';
+  return padCountdown(targetMs - Date.now());
+}
+
 function formatTimePst(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', {
     timeZone: 'America/Los_Angeles',
@@ -78,24 +83,49 @@ function roundLabel(round: 1 | 2 | 3): string {
 
 function slotName(
   userId: string | null,
-  regs: Registration[],
+  registrationUsernameByUserId: ReadonlyMap<string, string | null | undefined>,
   match: TournamentMatch,
 ): string {
   if (!userId) return 'TBD';
-  const reg = regs.find((r) => r.user_id === userId);
-  return registrationNameFor(userId, reg?.username, match);
+  return registrationNameFor(userId, registrationUsernameByUserId.get(userId) ?? null, match);
 }
 
-function MatchCard({
+const CountdownText = memo(function CountdownText({
+  targetMs,
+  fallback = '--:--',
+}: {
+  targetMs: number | null;
+  fallback?: string;
+}) {
+  const [label, setLabel] = useState(() =>
+    targetMs != null && Number.isFinite(targetMs) ? buildCountdownLabel(targetMs) : fallback,
+  );
+
+  useEffect(() => {
+    if (targetMs == null || !Number.isFinite(targetMs)) {
+      setLabel(fallback);
+      return;
+    }
+    setLabel(buildCountdownLabel(targetMs));
+    const timer = window.setInterval(() => {
+      setLabel(buildCountdownLabel(targetMs));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [fallback, targetMs]);
+
+  return <>{label}</>;
+});
+
+const MatchCard = memo(function MatchCard({
   match,
-  regs,
+  registrationUsernameByUserId,
   youUserId,
   assignedMatchId,
   highlightOpponentId,
   bracketDisplay,
 }: {
   match: TournamentMatch;
-  regs: Registration[];
+  registrationUsernameByUserId: ReadonlyMap<string, string | null | undefined>;
   youUserId: string | null;
   assignedMatchId?: string | null;
   highlightOpponentId?: string | null;
@@ -109,8 +139,16 @@ function MatchCard({
   const isCompleted = isBracketMatchCompletedForDisplay(match, bracketDisplay);
   const isCurrent = assignedMatchId === match.id || (isYours && isLive);
   const isBye = match.status === 'bye';
-  const p1Name = slotName(match.player1_id, regs, match);
-  const p2Name = slotName(match.player2_id, regs, match);
+  const p1Name = slotName(
+    match.player1_id,
+    registrationUsernameByUserId,
+    match,
+  );
+  const p2Name = slotName(
+    match.player2_id,
+    registrationUsernameByUserId,
+    match,
+  );
   const showScores = isCompleted && !isBye;
 
   return (
@@ -178,9 +216,9 @@ function MatchCard({
       </div>
     </div>
   );
-}
+});
 
-function TerminalBracketBanner({
+const TerminalBracketBanner = memo(function TerminalBracketBanner({
   terminal,
   onExitToHub,
   onViewResult,
@@ -220,7 +258,7 @@ function TerminalBracketBanner({
       </div>
     </div>
   );
-}
+});
 
 const TOURNAMENT_FLOW_STEPS = [
   { id: 'register', label: 'Register' },
@@ -230,33 +268,119 @@ const TOURNAMENT_FLOW_STEPS = [
   { id: 'final', label: 'Final' },
 ] as const;
 
-function TournamentFlowRail({ currentStepId }: { currentStepId: (typeof TOURNAMENT_FLOW_STEPS)[number]['id'] }) {
+const TournamentFlowStepper = memo(function TournamentFlowStepper({
+  currentStepId,
+}: {
+  currentStepId: (typeof TOURNAMENT_FLOW_STEPS)[number]['id'];
+}) {
   const currentIndex = TOURNAMENT_FLOW_STEPS.findIndex((s) => s.id === currentStepId);
   return (
-    <nav className="tb-waiting__rail" aria-label="Tournament flow">
-      {TOURNAMENT_FLOW_STEPS.map((step, index) => {
-        const isCurrent = step.id === currentStepId;
-        const isPast = index < currentIndex;
-        return (
-          <span key={step.id} className="tb-waiting__rail-item">
-            {index > 0 ? <span className="tb-waiting__rail-sep" aria-hidden /> : null}
-            <span
+    <nav className="tb-waiting__flow" aria-label="Tournament progression">
+      <span className="tb-waiting__flow-title">What happens next</span>
+      <ol className="tb-waiting__flow-steps">
+        {TOURNAMENT_FLOW_STEPS.map((step, index) => {
+          const isCurrent = step.id === currentStepId;
+          const isPast = index < currentIndex;
+          return (
+            <li
+              key={step.id}
               className={[
-                'tb-waiting__rail-step',
-                isCurrent ? 'tb-waiting__rail-step--current' : '',
-                isPast ? 'tb-waiting__rail-step--past' : '',
+                'tb-waiting__flow-step',
+                isCurrent ? 'tb-waiting__flow-step--current' : '',
+                isPast ? 'tb-waiting__flow-step--past' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
             >
-              {step.label}
-            </span>
-          </span>
-        );
-      })}
+              <span className="tb-waiting__flow-step-index">{index + 1}</span>
+              <span className="tb-waiting__flow-step-label">{step.label}</span>
+            </li>
+          );
+        })}
+      </ol>
     </nav>
   );
-}
+});
+
+const BracketPreviewPanel = memo(function BracketPreviewPanel({
+  qfMatches,
+  youUserId,
+  hasPairings,
+}: {
+  qfMatches: TournamentMatch[];
+  youUserId: string | null;
+  hasPairings: boolean;
+}) {
+  const renderSlot = (userId: string | null, match?: TournamentMatch) => {
+    if (!userId) return { label: 'Open · Bot fill', pending: true, isYou: false };
+    if (userId === youUserId) return { label: 'You', pending: false, isYou: true };
+    return {
+      label: registrationNameFor(userId, null, match ?? null),
+      pending: false,
+      isYou: false,
+    };
+  };
+
+  const cards = hasPairings
+    ? qfMatches.map((match) => ({
+        key: match.id,
+        roundLabel: `QF ${match.match_number}`,
+        slot1: renderSlot(match.player1_id, match),
+        slot2: renderSlot(match.player2_id, match),
+      }))
+    : Array.from({ length: 4 }, (_, index) => ({
+        key: `qf-placeholder-${index}`,
+        roundLabel: `QF ${index + 1}`,
+        slot1: { label: 'Open · Bot fill', pending: true, isYou: false },
+        slot2: { label: 'Open · Bot fill', pending: true, isYou: false },
+      }));
+
+  return (
+    <div className="tb-waiting__preview-stack">
+      <div className="tb-waiting__preview-grid">
+        {cards.map((card) => {
+          const isYours = card.slot1.isYou || card.slot2.isYou;
+          return (
+            <div
+              key={card.key}
+              className={`tb-waiting__qf-card${isYours ? ' tb-waiting__qf-card--yours' : ''}`}
+            >
+              <span className="tb-waiting__qf-card-label">{card.roundLabel}</span>
+              <span
+                className={[
+                  'tb-waiting__qf-card-slot',
+                  card.slot1.pending ? 'tb-waiting__qf-card-slot--pending' : '',
+                  card.slot1.isYou ? 'tb-waiting__qf-card-slot--you' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
+                {card.slot1.label}
+              </span>
+              <span className="tb-waiting__qf-card-vs" aria-hidden>
+                vs
+              </span>
+              <span
+                className={[
+                  'tb-waiting__qf-card-slot',
+                  card.slot2.pending ? 'tb-waiting__qf-card-slot--pending' : '',
+                  card.slot2.isYou ? 'tb-waiting__qf-card-slot--you' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
+                {card.slot2.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="tb-waiting__preview-path">
+        Round 1 → Semifinal → Final · Winner advances
+      </p>
+    </div>
+  );
+});
 
 type WaitingFieldRow =
   | { kind: 'player'; seat: number; reg: Registration }
@@ -283,67 +407,92 @@ function buildWaitingFieldRows(
   return rows;
 }
 
-function WaitingRoomPanel({
+const WaitingRoomPanel = memo(function WaitingRoomPanel({
   bracket,
   youUserId,
   countdownAt,
   countdownKind,
-  now,
+  registrationUsernameByUserId,
   onWithdraw,
 }: {
   bracket: BracketView;
   youUserId: string | null;
   countdownAt: string | null;
   countdownKind: TournamentCountdownKind | null;
-  now: number;
+  registrationUsernameByUserId: ReadonlyMap<string, string | null | undefined>;
   onWithdraw?: (tournamentId: string) => void;
 }) {
   const maxPlayers = bracket.tournament.max_players;
-  const fieldRows = buildWaitingFieldRows(bracket.registrations, maxPlayers);
-  const entrants = fieldRows.filter((row): row is Extract<WaitingFieldRow, { kind: 'player' }> => row.kind === 'player');
+  const fieldRows = useMemo(
+    () => buildWaitingFieldRows(bracket.registrations, maxPlayers),
+    [bracket.registrations, maxPlayers],
+  );
+  const entrants = useMemo(
+    () =>
+      fieldRows.filter(
+        (row): row is Extract<WaitingFieldRow, { kind: 'player' }> => row.kind === 'player',
+      ),
+    [fieldRows],
+  );
   const openSeats = maxPlayers - entrants.length;
-  const closeIso =
-    countdownKind === 'registration_close' && countdownAt
-      ? countdownAt
-      : bracket.tournament.registration_close_at;
-  const closeMs = Date.parse(closeIso);
-  const countdownText = Number.isFinite(closeMs) ? padCountdown(closeMs - now) : '--:--';
+  const closeIso = useMemo(
+    () =>
+      countdownKind === 'registration_close' && countdownAt
+        ? countdownAt
+        : bracket.tournament.registration_close_at,
+    [bracket.tournament.registration_close_at, countdownAt, countdownKind],
+  );
+  const closeMs = useMemo(() => Date.parse(closeIso), [closeIso]);
   const startLabel = formatTimePst(bracket.tournament.scheduled_start);
   const fillPct = Math.max(0, Math.min(100, (entrants.length / maxPlayers) * 100));
   const fieldLocked = openSeats === 0;
   const fillSubtext = fieldLocked
-    ? 'Field locked'
-    : `${openSeats} seat${openSeats === 1 ? '' : 's'} still open · Fritz bots fill remaining seats at lock`;
+    ? 'Field locked — bracket incoming'
+    : `${openSeats} seat${openSeats === 1 ? '' : 's'} remaining · Fritz bots fill unclaimed seats at lock`;
 
-  const qfPreview =
-    bracket.matches
-      .filter((m) => m.round === 1)
-      .sort((a, b) => a.match_number - b.match_number) ?? [];
+  const qfPreview = useMemo(
+    () =>
+      bracket.matches
+        .filter((m) => m.round === 1)
+        .sort((a, b) => a.match_number - b.match_number),
+    [bracket.matches],
+  );
   const hasPairings = qfPreview.length > 0;
-  const previewTitle = hasPairings ? 'Bracket preview' : 'Projected bracket';
   const previewSub = hasPairings
     ? 'Quarterfinal pairings for this event'
-    : 'Pairings generate when registration closes';
-
-  const renderQfSlot = (userId: string | null, match?: (typeof qfPreview)[number]) => {
-    if (!userId) return 'TBD';
-    if (userId === youUserId) return 'You';
-    return registrationNameFor(userId, null, match ?? null);
-  };
+    : 'Matchups finalize when registration closes';
+  const isEarlyField = entrants.length <= 2;
 
   return (
     <div className="tb-waiting">
-      <div className="tb-waiting__top" aria-label="Event status">
-        <div className="tb-waiting__hero" aria-live="polite">
-          <span className="tb-waiting__hero-label">Registration closes in</span>
-          <span className="tb-waiting__hero-time">{countdownText}</span>
-          <span className="tb-waiting__hero-meta">
-            Locks at close · Starts {startLabel} PT
-          </span>
+      <header className="tb-waiting__hero-panel" aria-label="Tournament waiting room status">
+        <div className="tb-waiting__hero-panel-main">
+          <p className="tb-waiting__hero-eyebrow">Tournament lobby · Waiting room</p>
+          <div className="tb-waiting__hero-headline-row">
+            <h2 className="tb-waiting__hero-title">You&apos;re in</h2>
+            <span className="tb-waiting__status-chip">Seat confirmed</span>
+          </div>
+          <p className="tb-waiting__hero-lead">
+            Bracket locks at registration close. Round 1 begins at lock.
+          </p>
+          <ul className="tb-waiting__format-pills" aria-label="Tournament format">
+            <li>{maxPlayers} players</li>
+            <li>First to {bracket.tournament.win_target}</li>
+            <li>Single elimination</li>
+          </ul>
         </div>
-        <div className="tb-waiting__fill">
+
+        <div className="tb-waiting__hero-panel-clock" aria-live="polite">
+          <span className="tb-waiting__countdown-eyebrow">Bracket locks in</span>
+          <span className="tb-waiting__countdown-time">
+            <CountdownText targetMs={Number.isFinite(closeMs) ? closeMs : null} />
+          </span>
+          <span className="tb-waiting__countdown-meta">Starts {startLabel} PT</span>
+        </div>
+
+        <div className="tb-waiting__hero-panel-fill">
           <div className="tb-waiting__fill-head">
-            <span className="tb-waiting__fill-label">Field</span>
+            <span className="tb-waiting__fill-label">Seats filling</span>
             <span className="tb-waiting__fill-count">
               {entrants.length} / {maxPlayers}
             </span>
@@ -360,34 +509,31 @@ function WaitingRoomPanel({
           </div>
           <span className="tb-waiting__fill-sub">{fillSubtext}</span>
         </div>
-      </div>
+      </header>
 
-      <TournamentFlowRail currentStepId="register" />
+      <TournamentFlowStepper currentStepId="register" />
 
-      <div className="tb-waiting__deck">
-        <section className="tb-waiting__pane tb-waiting__pane--field" aria-label="Tournament field">
-          <header className="tb-waiting__pane-head">
+      <div className="tb-waiting__body">
+        <section className="tb-waiting__roster" aria-label="Projected field">
+          <header className="tb-waiting__section-head">
             <div>
-              <h3 className="tb-waiting__pane-title">Registered field</h3>
-              <p className="tb-waiting__pane-sub">Seats lock when registration closes</p>
+              <h3 className="tb-waiting__section-label">Projected field</h3>
+              <p className="tb-waiting__section-sub">
+                {entrants.length} registered · {openSeats} seat{openSeats === 1 ? '' : 's'} remaining
+                {isEarlyField
+                  ? ' · Early entry — seats fill until close; bots fill unclaimed seats at lock'
+                  : ''}
+              </p>
             </div>
-            {onWithdraw ? (
-              <button
-                type="button"
-                className="tb-waiting__withdraw"
-                onClick={() => onWithdraw(bracket.tournament.id)}
-              >
-                Withdraw
-              </button>
-            ) : null}
           </header>
-          <ul className="tb-waiting__seats">
+          <ul className="tb-waiting__roster-list">
             {fieldRows.map((row) => {
               if (row.kind === 'open') {
                 return (
                   <li key={`open-${row.seat}`} className="tb-waiting__seat tb-waiting__seat--open">
                     <span className="tb-waiting__seat-index">{row.seat}</span>
-                    <span className="tb-waiting__seat-name">Open</span>
+                    <span className="tb-waiting__seat-name">Open seat</span>
+                    <span className="tb-waiting__seat-badge tb-waiting__seat-badge--open">Bot fill at lock</span>
                   </li>
                 );
               }
@@ -396,7 +542,11 @@ function WaitingRoomPanel({
               const isBot = isTournamentBotId(reg.user_id);
               const displayName = isYou
                 ? 'You'
-                : registrationNameFor(reg.user_id, reg.username, null);
+                : registrationNameFor(
+                    reg.user_id,
+                    registrationUsernameByUserId.get(reg.user_id) ?? reg.username,
+                    null,
+                  );
               return (
                 <li
                   key={reg.id}
@@ -404,47 +554,51 @@ function WaitingRoomPanel({
                 >
                   <span className="tb-waiting__seat-index">{seat}</span>
                   <span className="tb-waiting__seat-name">{displayName}</span>
-                  {isYou ? <span className="tb-waiting__seat-tag">You</span> : null}
+                  {isYou ? (
+                    <span className="tb-waiting__seat-badge tb-waiting__seat-badge--you">Your seat</span>
+                  ) : isBot ? (
+                    <span className="tb-waiting__seat-badge tb-waiting__seat-badge--bot">Bot</span>
+                  ) : (
+                    <span className="tb-waiting__seat-badge tb-waiting__seat-badge--in">In</span>
+                  )}
                 </li>
               );
             })}
           </ul>
+          {onWithdraw ? (
+            <footer className="tb-waiting__roster-foot">
+              <button
+                type="button"
+                className="tb-waiting__withdraw"
+                onClick={() => onWithdraw(bracket.tournament.id)}
+              >
+                Withdraw
+              </button>
+            </footer>
+          ) : null}
         </section>
 
-        <section className="tb-waiting__pane tb-waiting__pane--bracket" aria-label={previewTitle}>
-          <header className="tb-waiting__pane-head">
+        <section className="tb-waiting__preview" aria-label="Bracket preview">
+          <header className="tb-waiting__section-head">
             <div>
-              <h3 className="tb-waiting__pane-title">{previewTitle}</h3>
-              <p className="tb-waiting__pane-sub">{previewSub}</p>
+              <h3 className="tb-waiting__section-label">Bracket preview</h3>
+              <p className="tb-waiting__section-sub">{previewSub}</p>
             </div>
           </header>
-          <div className="tb-waiting__qf-grid">
-            {hasPairings
-              ? qfPreview.map((match) => (
-                  <div key={match.id} className="tb-waiting__qf">
-                    <span className="tb-waiting__qf-label">QF {match.match_number}</span>
-                    <span className="tb-waiting__qf-slot">{renderQfSlot(match.player1_id, match)}</span>
-                    <span className="tb-waiting__qf-slot">{renderQfSlot(match.player2_id, match)}</span>
-                  </div>
-                ))
-              : Array.from({ length: 4 }, (_, i) => (
-                  <div key={i} className="tb-waiting__qf">
-                    <span className="tb-waiting__qf-label">QF {i + 1}</span>
-                    <span className="tb-waiting__qf-slot">TBD</span>
-                    <span className="tb-waiting__qf-slot">TBD</span>
-                  </div>
-                ))}
-          </div>
+          <BracketPreviewPanel
+            qfMatches={qfPreview}
+            youUserId={youUserId}
+            hasPairings={hasPairings}
+          />
         </section>
       </div>
     </div>
   );
-}
+});
 
 export default function TournamentBracketScreen(props: TournamentBracketScreenProps) {
   const userId = props.identity?.userId ?? null;
   const { onLoadBracket } = props;
-  const [now, setNow] = useState(Date.now());
   const isBracketLobby = props.tournamentPhase === 'bracket_lobby';
 
   useEffect(() => {
@@ -452,11 +606,6 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
     const poll = window.setInterval(() => onLoadBracket(props.tournamentId), 20_000);
     return () => window.clearInterval(poll);
   }, [props.tournamentId, onLoadBracket]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const bracket: BracketView | null =
     props.bracket?.tournament.id === props.tournamentId ? props.bracket : null;
@@ -478,6 +627,17 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
     );
   }, [props.tournamentPhase, bracket]);
 
+  const registrationUsernameByUserId = useMemo(
+    () =>
+      new Map(
+        (bracket?.registrations ?? []).map((registration) => [
+          registration.user_id,
+          registration.username,
+        ]),
+      ),
+    [bracket?.registrations],
+  );
+
   const waitingCountdownAt = useMemo(() => {
     if (props.countdownKind === 'registration_close' && props.countdownAt) {
       return props.countdownAt;
@@ -494,8 +654,10 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
         round: assigned.round,
       })
     : 'Opponent';
-  const countdownMs = props.countdownAt ? Date.parse(props.countdownAt) - now : null;
-  const countdownText = countdownMs != null ? padCountdown(countdownMs) : '--:--';
+  const bracketLobbyCountdownMs = useMemo(
+    () => (props.countdownAt ? Date.parse(props.countdownAt) : null),
+    [props.countdownAt],
+  );
 
   const yourReadyMatch = useMemo(() => {
     if (!bracket || !userId || isBracketLobby) return null;
@@ -511,22 +673,40 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
     );
   }, [bracket, userId, isBracketLobby]);
 
-  const qf = bracket?.matches.filter((m) => m.round === 1).sort((a, b) => a.match_number - b.match_number) ?? [];
-  const sf = bracket?.matches.filter((m) => m.round === 2).sort((a, b) => a.match_number - b.match_number) ?? [];
-  const fnl = bracket?.matches.filter((m) => m.round === 3) ?? [];
+  const qf = useMemo(
+    () =>
+      bracket?.matches
+        .filter((m) => m.round === 1)
+        .sort((a, b) => a.match_number - b.match_number) ?? [],
+    [bracket?.matches],
+  );
+  const sf = useMemo(
+    () =>
+      bracket?.matches
+        .filter((m) => m.round === 2)
+        .sort((a, b) => a.match_number - b.match_number) ?? [],
+    [bracket?.matches],
+  );
+  const fnl = useMemo(
+    () => bracket?.matches.filter((m) => m.round === 3) ?? [],
+    [bracket?.matches],
+  );
   const finalMatch = fnl[0] ?? null;
   const champion =
     finalMatch && isBracketMatchCompletedForDisplay(finalMatch, bracketDisplay)
       ? finalMatch.winner_id
       : null;
-  const championName =
-    champion && bracket
-      ? resolveTournamentPlayerName(champion, {
-          username: bracket.registrations.find((r) => r.user_id === champion)?.username,
-          botTier: fnl[0]?.bot_tier,
-          round: 3,
-        })
-      : null;
+  const championName = useMemo(
+    () =>
+      champion && bracket
+        ? resolveTournamentPlayerName(champion, {
+            username: registrationUsernameByUserId.get(champion) ?? null,
+            botTier: fnl[0]?.bot_tier,
+            round: 3,
+          })
+        : null,
+    [bracket, champion, fnl, registrationUsernameByUserId],
+  );
 
   const terminal = useMemo(
     () =>
@@ -556,6 +736,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
         onOpenAuth={props.onOpenAuth}
         onOpenAccount={props.onOpenAccount}
         activeColor="var(--accent-amber)"
+        compactChrome={isWaitingRoom}
       />
       <div className={`tb-shell${isWaitingRoom ? ' tb-shell--waiting' : ''}`}>
         <div className={`tb-toolbar${isWaitingRoom ? ' tb-toolbar--waiting' : ''}`}>
@@ -567,33 +748,40 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
             <span aria-hidden>←</span>{' '}
             {isTerminalBracket ? 'Back to Tournament Home' : 'Back to Tournament'}
           </button>
-          {isBracketLobby && assigned ? (
-            <div className="tb-countdown-card" aria-live="polite">
-              <span className="tb-countdown-card__eyebrow">Bracket locked</span>
-              <span className="tb-countdown-card__timer">{countdownText}</span>
-              <span className="tb-countdown-card__copy">
-                Your {roundLabel(assigned.round).toLowerCase()} starts soon
-              </span>
-              <span className="tb-countdown-card__matchup">
-                You vs <strong>{opponentDisplayName}</strong>
-              </span>
-            </div>
-          ) : (
-            <div className="tb-toolbar-spacer" aria-hidden />
-          )}
-          <div className="tb-head">
-            <div className="tb-kicker">
-              {isWaitingRoom ? 'Waiting room' : isBracketLobby ? 'Bracket locked' : 'Tournament'}
-            </div>
-            <h2 className="tb-title">
-              {isWaitingRoom ? 'Tournament Lobby' : isBracketLobby ? 'Bracket Lobby' : 'Bracket'}
-            </h2>
-            {isWaitingRoom && bracket ? (
-              <p className="tb-head-sub">
-                {bracket.tournament.max_players} players · First to {bracket.tournament.win_target} per match
-              </p>
-            ) : null}
-          </div>
+          {!isWaitingRoom ? (
+            <>
+              {isBracketLobby && assigned ? (
+                <div className="tb-countdown-card" aria-live="polite">
+                  <span className="tb-countdown-card__eyebrow">Bracket locked</span>
+                  <span className="tb-countdown-card__timer">
+                    <CountdownText
+                      targetMs={
+                        bracketLobbyCountdownMs != null && Number.isFinite(bracketLobbyCountdownMs)
+                          ? bracketLobbyCountdownMs
+                          : null
+                      }
+                    />
+                  </span>
+                  <span className="tb-countdown-card__copy">
+                    Your {roundLabel(assigned.round).toLowerCase()} starts soon
+                  </span>
+                  <span className="tb-countdown-card__matchup">
+                    You vs <strong>{opponentDisplayName}</strong>
+                  </span>
+                </div>
+              ) : (
+                <div className="tb-toolbar-spacer" aria-hidden />
+              )}
+              <div className="tb-head">
+                <div className="tb-kicker">
+                  {isBracketLobby ? 'Bracket locked' : 'Tournament'}
+                </div>
+                <h2 className="tb-title">
+                  {isBracketLobby ? 'Bracket Lobby' : 'Bracket'}
+                </h2>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {bracket && isWaitingRoom ? (
@@ -602,7 +790,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
             youUserId={userId}
             countdownAt={waitingCountdownAt}
             countdownKind={props.countdownKind ?? null}
-            now={now}
+            registrationUsernameByUserId={registrationUsernameByUserId}
             onWithdraw={props.onWithdraw}
           />
         ) : null}
@@ -619,7 +807,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
                   <MatchCard
                     key={m.id}
                     match={m}
-                    regs={bracket.registrations}
+                    registrationUsernameByUserId={registrationUsernameByUserId}
                     youUserId={userId}
                     assignedMatchId={attachMatchId}
                     highlightOpponentId={opponentUserId}
@@ -638,7 +826,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
                   <MatchCard
                     key={m.id}
                     match={m}
-                    regs={bracket.registrations}
+                    registrationUsernameByUserId={registrationUsernameByUserId}
                     youUserId={userId}
                     assignedMatchId={attachMatchId}
                     highlightOpponentId={opponentUserId}
@@ -657,7 +845,7 @@ export default function TournamentBracketScreen(props: TournamentBracketScreenPr
                   <MatchCard
                     key={m.id}
                     match={m}
-                    regs={bracket.registrations}
+                    registrationUsernameByUserId={registrationUsernameByUserId}
                     youUserId={userId}
                     assignedMatchId={attachMatchId}
                     highlightOpponentId={opponentUserId}

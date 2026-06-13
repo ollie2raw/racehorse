@@ -2440,6 +2440,15 @@ export default function BotMatchScreen({
     onNavigate?.('home');
   }, [invalidateLocalRuns, onNavigate]);
 
+  const returnToFritzSetup = useCallback(() => {
+    invalidateLocalRuns();
+    if (onNavigate) {
+      onNavigate('botSetup');
+      return;
+    }
+    onBack();
+  }, [invalidateLocalRuns, onNavigate, onBack]);
+
   const returnToLearn = useCallback(() => {
     invalidateLocalRuns();
     onNavigate?.('learn');
@@ -7484,7 +7493,7 @@ export default function BotMatchScreen({
             ) : undefined
           }
           onRematch={startFreshMatch}
-          onChangeSetup={exitMatch}
+          onChangeSetup={returnToFritzSetup}
           onHome={onNavigate ? goHome : undefined}
           showHome={Boolean(onNavigate)}
         />
@@ -7591,7 +7600,7 @@ export default function BotMatchScreen({
                 ? exitMatch
                 : isGhostMode
                   ? goHome
-                  : exitMatch
+                  : returnToFritzSetup
           }
           extraActionLabel={
             isGuidedMatchVictoryResult

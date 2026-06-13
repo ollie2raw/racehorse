@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { AppMode } from '../types';
 import { isGameServerSameOriginAsPage } from '../lib/gameServerUrl';
@@ -49,6 +49,67 @@ function ratingSegmentIndex(state: 'idle' | 'searching' | 'timeout', elapsedMs: 
   if (state === 'timeout') return 3;
   return Math.min(3, Math.floor(elapsedMs / 30_000));
 }
+
+const MatchmakingRatingTrack = memo(function MatchmakingRatingTrack({
+  queueState,
+  searchStartedAtMs,
+}: {
+  queueState: 'idle' | 'searching' | 'timeout';
+  searchStartedAtMs: number | null;
+}) {
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (queueState !== 'searching' || searchStartedAtMs == null) {
+      setElapsedMs(0);
+      return;
+    }
+    setElapsedMs(Math.max(0, Date.now() - searchStartedAtMs));
+    const timer = window.setInterval(() => {
+      setElapsedMs(Math.max(0, Date.now() - searchStartedAtMs));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [queueState, searchStartedAtMs]);
+
+  const ratingSegActive = ratingSegmentIndex(queueState, elapsedMs);
+
+  return (
+    <div className="mm-rating-track" role="list" aria-label="Rating search window over time">
+      {RATING_SEGMENTS.map((seg, i) => (
+        <div
+          key={seg.when}
+          role="listitem"
+          className={`mm-rating-seg${i === ratingSegActive ? ' is-active' : ''}`}
+        >
+          <span className="mm-rating-seg__range">{seg.range}</span>
+          <span className="mm-rating-seg__when">{seg.when}</span>
+        </div>
+      ))}
+    </div>
+  );
+});
+
+const SearchElapsedClock = memo(function SearchElapsedClock({
+  searchStartedAtMs,
+}: {
+  searchStartedAtMs: number | null;
+}) {
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (searchStartedAtMs == null) {
+      setElapsedMs(0);
+      return;
+    }
+    setElapsedMs(Math.max(0, Date.now() - searchStartedAtMs));
+    const timer = window.setInterval(() => {
+      setElapsedMs(Math.max(0, Date.now() - searchStartedAtMs));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [searchStartedAtMs]);
+
+  return <>{formatElapsed(elapsedMs)}</>;
+});
 
 function IconBolt({ size = 14 }: { size?: number }) {
   return (
@@ -192,7 +253,6 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const myUsername = props.identity?.username ?? null;
 
   const queueUiState = isSearching ? 'searching' : isTimeout ? 'timeout' : 'idle';
-  const ratingSegActive = ratingSegmentIndex(queueUiState, mm.elapsedMs);
 
   const matchedOpponent = mm.matched?.opponent ?? null;
   const showMatchedOpponent = mm.state === 'matched' && matchedOpponent != null;
@@ -400,18 +460,10 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                   <p className="mm-section-body">
                     We start with players near your rating, then widen the search every 30 seconds.
                   </p>
-                  <div className="mm-rating-track" role="list" aria-label="Rating search window over time">
-                    {RATING_SEGMENTS.map((seg, i) => (
-                      <div
-                        key={seg.when}
-                        role="listitem"
-                        className={`mm-rating-seg${i === ratingSegActive ? ' is-active' : ''}`}
-                      >
-                        <span className="mm-rating-seg__range">{seg.range}</span>
-                        <span className="mm-rating-seg__when">{seg.when}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <MatchmakingRatingTrack
+                    queueState={queueUiState}
+                    searchStartedAtMs={mm.searchStartedAtMs}
+                  />
                 </div>
 
                 <div className="mm-section">
@@ -465,18 +517,10 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                   <div className="fritz-section-label">2. RATING RANGE</div>
                   <h2 className="mm-section-heading">Expanding skill window</h2>
                   <p className="mm-section-body">Current search band updates as you wait.</p>
-                  <div className="mm-rating-track" role="list" aria-label="Rating search window over time">
-                    {RATING_SEGMENTS.map((seg, i) => (
-                      <div
-                        key={seg.when}
-                        role="listitem"
-                        className={`mm-rating-seg${i === ratingSegActive ? ' is-active' : ''}`}
-                      >
-                        <span className="mm-rating-seg__range">{seg.range}</span>
-                        <span className="mm-rating-seg__when">{seg.when}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <MatchmakingRatingTrack
+                    queueState={queueUiState}
+                    searchStartedAtMs={mm.searchStartedAtMs}
+                  />
                 </div>
 
                 <div className="mm-section">
@@ -486,7 +530,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
                       <span className="mm-search-core" />
                     </div>
                     <div className="mm-search-elapsed" aria-live="polite">
-                      {formatElapsed(mm.elapsedMs)}
+                      <SearchElapsedClock searchStartedAtMs={mm.searchStartedAtMs} />
                     </div>
                     <div className="mm-search-status">Looking for opponent…</div>
                   </div>

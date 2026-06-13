@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
 import type { Registration, ScheduledTournament } from './types';
@@ -45,6 +45,11 @@ function formatCountdown(ms: number): string {
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
+function buildTournamentCountdownLabel(targetMs: number | null): string {
+  if (targetMs == null || !Number.isFinite(targetMs)) return '--:--:--';
+  return formatCountdown(targetMs - Date.now());
+}
+
 function formatTimePst(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', {
     timeZone: 'America/Los_Angeles',
@@ -58,6 +63,158 @@ function statusFor(t: ScheduledTournament): { label: string; cls: string } {
   const startMs = Date.parse(t.scheduled_start);
   if (startMs - Date.now() < 30 * 60 * 1000) return { label: 'Starting Soon', cls: 'th-card__status--soon' };
   return { label: 'Upcoming', cls: 'th-card__status--upcoming' };
+}
+
+function useScheduledBoundaryTick(boundaryTimes: readonly number[]): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const boundaryKey = useMemo(() => boundaryTimes.join(','), [boundaryTimes]);
+
+  useEffect(() => {
+    if (boundaryTimes.length === 0) return;
+    const currentNow = Date.now();
+    const nextBoundary = boundaryTimes.find((ts) => ts > currentNow) ?? null;
+    if (nextBoundary == null) return;
+    const timer = window.setTimeout(
+      () => setNowMs(Date.now()),
+      Math.max(0, nextBoundary - currentNow + 50),
+    );
+    return () => window.clearTimeout(timer);
+  }, [boundaryKey, boundaryTimes]);
+
+  return nowMs;
+}
+
+const TournamentCountdownText = memo(function TournamentCountdownText({
+  targetMs,
+  fallback = '--:--:--',
+}: {
+  targetMs: number | null;
+  fallback?: string;
+}) {
+  const [label, setLabel] = useState(() =>
+    targetMs != null && Number.isFinite(targetMs)
+      ? buildTournamentCountdownLabel(targetMs)
+      : fallback,
+  );
+
+  useEffect(() => {
+    if (targetMs == null || !Number.isFinite(targetMs)) {
+      setLabel(fallback);
+      return;
+    }
+
+    setLabel(buildTournamentCountdownLabel(targetMs));
+    const timer = window.setInterval(() => {
+      setLabel(buildTournamentCountdownLabel(targetMs));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [fallback, targetMs]);
+
+  return <>{label}</>;
+});
+
+const TournamentCardStatus = memo(function TournamentCardStatus({
+  tournament,
+}: {
+  tournament: ScheduledTournament;
+}) {
+  const startSoonAtMs = useMemo(
+    () => Date.parse(tournament.scheduled_start) - 30 * 60 * 1000,
+    [tournament.scheduled_start],
+  );
+  const [status, setStatus] = useState(() => statusFor(tournament));
+
+  useEffect(() => {
+    setStatus(statusFor(tournament));
+    if (tournament.status === 'registration_open') return;
+    if (!Number.isFinite(startSoonAtMs) || Date.now() >= startSoonAtMs) return;
+    const timer = window.setTimeout(
+      () => setStatus(statusFor(tournament)),
+      Math.max(0, startSoonAtMs - Date.now() + 50),
+    );
+    return () => window.clearTimeout(timer);
+  }, [startSoonAtMs, tournament]);
+
+  return <span className={`th-card__status ${status.cls}`}>{status.label}</span>;
+});
+
+const TournamentCard = memo(function TournamentCard({
+  tournament,
+  registered,
+  userId,
+  onRegister,
+  onWithdraw,
+}: {
+  tournament: ScheduledTournament;
+  registered: boolean;
+  userId: string | null;
+  onRegister: (tournamentId: string) => void | Promise<void>;
+  onWithdraw: (tournamentId: string) => void | Promise<void>;
+}) {
+  const open = tournament.status === 'registration_open';
+  const count = tournament.registered_count ?? 0;
+  const isFull = count >= tournament.max_players;
+  const fillPct = Math.max(0, Math.min(100, (count / tournament.max_players) * 100));
+  const showFirstRegisterCopy = count === 0 && tournament.status === 'upcoming';
+
+  return (
+    <div className="th-card">
+      <div className="th-card__time">{formatTimePst(tournament.scheduled_start)}</div>
+      <div className="th-card__middle">
+        <div className="th-card__count">
+          {showFirstRegisterCopy
+            ? 'Be the first to register'
+            : `${count} / ${tournament.max_players} Registered`}
+        </div>
+        <div className="th-card__bar">
+          <span className="th-card__bar-fill" style={{ width: `${fillPct}%` }} />
+        </div>
+        {!showFirstRegisterCopy ? (
+          <div className="th-card__count-sub">
+            {isFull ? 'All seats claimed' : `${tournament.max_players - count} seats remaining`}
+          </div>
+        ) : (
+          <div className="th-card__count-sub">Registration opens 30 minutes before start.</div>
+        )}
+        <TournamentCardStatus tournament={tournament} />
+      </div>
+      <div className="th-card__actions">
+        {registered ? (
+          <>
+            <span className="th-card__registered">Registered ✓</span>
+            {open ? (
+              <button
+                className="th-card__withdraw"
+                onClick={() => void onWithdraw(tournament.id)}
+              >
+                Withdraw
+              </button>
+            ) : null}
+          </>
+        ) : isFull ? (
+          <span className="th-card__full">Full</span>
+        ) : !open ? (
+          <span className="th-card__soon">Opens soon</span>
+        ) : (
+          <button
+            className="th-cta"
+            disabled={!userId}
+            onClick={() => void onRegister(tournament.id)}
+          >
+            Register
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+function tournamentBoundaryTimes(tournament: ScheduledTournament | null): number[] {
+  if (!tournament) return [];
+  return [
+    Date.parse(tournament.registration_close_at),
+    Date.parse(tournament.scheduled_start),
+  ].filter((ts) => Number.isFinite(ts));
 }
 
 function Trophy() {
@@ -90,22 +247,21 @@ function CheckBadgeArt() {
 
 export default function TournamentHubScreen(props: TournamentHubScreenProps) {
   const userId = props.identity?.userId ?? null;
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, []);
-
   const nextTournament = props.upcoming[0] ?? null;
-  const isRegistered = useMemo(() => {
-    const ids = new Set(
-      props.registrations
-        .filter((r) => r.status === 'registered' || r.status === 'active')
-        .map((r) => r.tournament_id),
-    );
-    return (t: ScheduledTournament) => ids.has(t.id);
-  }, [props.registrations]);
+  const registeredTournamentIds = useMemo(
+    () =>
+      new Set(
+        props.registrations
+          .filter((r) => r.status === 'registered' || r.status === 'active')
+          .map((r) => r.tournament_id),
+      ),
+    [props.registrations],
+  );
+  const hubBoundaryTimes = useMemo(
+    () => tournamentBoundaryTimes(nextTournament),
+    [nextTournament],
+  );
+  const hubNowMs = useScheduledBoundaryTick(hubBoundaryTimes);
 
   const hubState = useMemo(
     () =>
@@ -119,7 +275,7 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
         isLoading: props.isLoading,
         hasLoaded: props.hasLoaded,
         error: props.error,
-        nowMs: now,
+        nowMs: hubNowMs,
       }),
     [
       props.upcoming,
@@ -131,39 +287,38 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
       props.isLoading,
       props.hasLoaded,
       props.error,
-      now,
+      hubNowMs,
     ],
   );
 
-  const nextTournamentRegistered = nextTournament ? isRegistered(nextTournament) : false;
+  const nextTournamentRegistered = nextTournament
+    ? registeredTournamentIds.has(nextTournament.id)
+    : false;
 
   const lobbyBracketTournamentId = useMemo(() => {
     if (props.activeTournamentId) return props.activeTournamentId;
-    const regIds = new Set(
-      props.registrations
-        .filter((r) => r.status === 'registered' || r.status === 'active')
-        .map((r) => r.tournament_id),
-    );
-    return props.upcoming.find((t) => regIds.has(t.id))?.id ?? null;
-  }, [props.activeTournamentId, props.registrations, props.upcoming]);
+    return props.upcoming.find((t) => registeredTournamentIds.has(t.id))?.id ?? null;
+  }, [props.activeTournamentId, props.upcoming, registeredTournamentIds]);
 
   const showLobbyBracketBanner =
     Boolean(lobbyBracketTournamentId) &&
     (props.tournamentPhase === 'registered' || props.tournamentPhase === 'bracket_lobby');
-  const countdownTargetMs = nextTournament
-    ? nextTournament.status === 'registration_open'
-      ? Date.parse(nextTournament.registration_close_at)
-      : Date.parse(nextTournament.scheduled_start)
-    : null;
-  const countdown = countdownTargetMs !== null
-    ? formatCountdown(countdownTargetMs - now)
-    : '--:--:--';
+  const countdownTargetMs = useMemo(
+    () =>
+      nextTournament
+        ? nextTournament.status === 'registration_open'
+          ? Date.parse(nextTournament.registration_close_at)
+          : Date.parse(nextTournament.scheduled_start)
+        : null,
+    [nextTournament],
+  );
   const countdownLabel = nextTournament?.status === 'registration_open'
     ? 'Registration Closes In'
     : 'Next Tournament In';
   const countdownDetail = nextTournament?.status === 'registration_open'
     ? 'Claim your seat before registration closes.'
     : hubState.detail;
+  const visibleUpcoming = useMemo(() => props.upcoming.slice(0, 3), [props.upcoming]);
 
   return (
     <div className="th-page">
@@ -224,7 +379,9 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
           <div className="th-panel">
             <div className="th-countdown">
               <span className="th-countdown__label">{nextTournament ? countdownLabel : hubState.title}</span>
-              <span className="th-countdown__time" aria-live="polite">{countdown}</span>
+              <span className="th-countdown__time" aria-live="polite">
+                <TournamentCountdownText targetMs={countdownTargetMs} />
+              </span>
               <span className="th-countdown__sub">
                 {nextTournament ? countdownDetail : hubState.detail}
               </span>
@@ -327,63 +484,16 @@ export default function TournamentHubScreen(props: TournamentHubScreenProps) {
                   </div>
                 </div>
               ) : null}
-              {props.upcoming.slice(0, 3).map((t) => {
-                const reg = isRegistered(t);
-                const open = t.status === 'registration_open';
-                const status = statusFor(t);
-                const count = t.registered_count ?? 0;
-                const isFull = count >= t.max_players;
-                const fillPct = Math.max(0, Math.min(100, (count / t.max_players) * 100));
-                const showFirstRegisterCopy = count === 0 && t.status === 'upcoming';
-                return (
-                  <div className="th-card" key={t.id}>
-                    <div className="th-card__time">{formatTimePst(t.scheduled_start)}</div>
-                    <div className="th-card__middle">
-                      <div className="th-card__count">
-                        {showFirstRegisterCopy ? 'Be the first to register' : `${count} / ${t.max_players} Registered`}
-                      </div>
-                      <div className="th-card__bar">
-                        <span className="th-card__bar-fill" style={{ width: `${fillPct}%` }} />
-                      </div>
-                      {!showFirstRegisterCopy ? (
-                        <div className="th-card__count-sub">
-                          {isFull ? 'All seats claimed' : `${t.max_players - count} seats remaining`}
-                        </div>
-                      ) : (
-                        <div className="th-card__count-sub">Registration opens 30 minutes before start.</div>
-                      )}
-                      <span className={`th-card__status ${status.cls}`}>{status.label}</span>
-                    </div>
-                    <div className="th-card__actions">
-                      {reg ? (
-                        <>
-                          <span className="th-card__registered">Registered ✓</span>
-                          {open ? (
-                            <button
-                              className="th-card__withdraw"
-                              onClick={() => void props.onWithdraw(t.id)}
-                            >
-                              Withdraw
-                            </button>
-                          ) : null}
-                        </>
-                      ) : isFull ? (
-                        <span className="th-card__full">Full</span>
-                      ) : !open ? (
-                        <span className="th-card__soon">Opens soon</span>
-                      ) : (
-                        <button
-                          className="th-cta"
-                          disabled={!userId}
-                          onClick={() => void props.onRegister(t.id)}
-                        >
-                          Register
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {visibleUpcoming.map((t) => (
+                <TournamentCard
+                  key={t.id}
+                  tournament={t}
+                  registered={registeredTournamentIds.has(t.id)}
+                  userId={userId}
+                  onRegister={props.onRegister}
+                  onWithdraw={props.onWithdraw}
+                />
+              ))}
               {props.hasLoaded && !props.error && props.upcoming.length === 0 ? (
                 <p className="th-empty">No upcoming tournaments. Check back soon.</p>
               ) : null}

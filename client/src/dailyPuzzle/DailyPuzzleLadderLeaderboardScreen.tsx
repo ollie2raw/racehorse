@@ -12,6 +12,11 @@ import {
   invokeLadderShareResult,
 } from './ladderShareCard';
 import { getDisplayStreak } from './streakStorage';
+import {
+  getDailyPuzzleBestSlotDisplay,
+  getDailyPuzzleLeaderboardSlotCode,
+  getDailyPuzzleLeaderboardSlotTitle,
+} from './presentation';
 import type { DailyPuzzleLeaderboardRow } from './types';
 import { formatCountdownHms, secondsUntilNextPacificMidnight } from '../dailyFritz/format';
 import '../components/hub/hubDesignTokens.css';
@@ -102,26 +107,48 @@ function RankIcon({ rank }: { rank: 1 | 2 | 3 }) {
   );
 }
 
-function PuzzleBreakdown({ row }: { row: DailyPuzzleLeaderboardRow }) {
+function PuzzleBreakdown({
+  row,
+  bestSlotIndex,
+}: {
+  row: DailyPuzzleLeaderboardRow;
+  bestSlotIndex: 1 | 2 | 3 | null;
+}) {
   const slotsByIndex = new Map(row.breakdown.map((slot) => [slot.slotIndex, slot] as const));
 
   return (
-    <div className="dflb-breakdown-chips">
+    <div className="dflb-breakdown-chips dpl-ladder-breakdown-chips">
       {SLOT_INDICES.map((slotIndex) => {
         const slot = slotsByIndex.get(slotIndex);
+        const slotCode = getDailyPuzzleLeaderboardSlotCode(slotIndex);
+        const slotTitle = getDailyPuzzleLeaderboardSlotTitle(slotIndex);
         if (!slot || !slot.solved) {
           return (
-            <span key={`${row.userId}-p${slotIndex}`} className="dflb-game-chip is-muted">
-              P{slotIndex} —
+            <span
+              key={`${row.userId}-p${slotIndex}`}
+              className="dflb-game-chip is-muted"
+              title={slotTitle}
+            >
+              <span className="dpl-pill-slot">{slotCode}</span>
+              <span className="dpl-pill-score">—</span>
             </span>
           );
         }
+        const isBest = bestSlotIndex === slotIndex;
+        const points = slot.awardedPoints ?? '—';
         return (
           <span
             key={`${row.userId}-p${slotIndex}`}
-            className={`dflb-game-chip ${slot.perfect ? 'is-win' : ''}`}
+            className={[
+              'dflb-game-chip',
+              isBest ? 'is-best' : slot.perfect ? 'is-win' : 'is-solved',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            title={`${slotTitle}: ${points}`}
           >
-            P{slotIndex} {slot.awardedPoints ?? '—'}
+            <span className="dpl-pill-slot">{slotCode}</span>
+            <span className="dpl-pill-score">{points}</span>
           </span>
         );
       })}
@@ -142,6 +169,7 @@ function LeaderboardRow({
   const isSelf = isCurrentUserRow(row, currentUserId, currentUsername);
   const showTier = row.rank <= 10;
   const ladderComplete = row.puzzlesCompleted >= 3;
+  const bestSlot = getDailyPuzzleBestSlotDisplay(row.breakdown);
 
   return (
     <article
@@ -171,14 +199,17 @@ function LeaderboardRow({
           {showTier ? <span className="dflb-tier-chip dflb-tier-chip--puzzle">Puzzle</span> : null}
         </div>
       </div>
-      <div className={`dflb-cell dflb-result ${ladderComplete ? 'is-win' : ''}`}>
-        {row.puzzlesCompleted}/3
+      <div className={`dflb-cell dpl-ladder-cell${ladderComplete ? ' is-complete' : ''}`}>
+        <span className="dpl-ladder-cell__ratio">{row.puzzlesCompleted}/3</span>
+        {ladderComplete ? <span className="dpl-ladder-cell__status">Complete</span> : null}
       </div>
-      <div className="dflb-cell dflb-set-score">{row.totalScore}</div>
-      <div className="dflb-cell dflb-margin is-win">{row.masterChainScore}</div>
+      <div className="dflb-cell dpl-total-score">{row.totalScore}</div>
+      <div className={`dflb-cell dpl-best-cell${bestSlot.slotIndex != null ? ' has-best' : ''}`}>
+        {bestSlot.label}
+      </div>
       <div className="dflb-cell dflb-finished">{formatCompletedAt(row.completedAt)}</div>
       <div className="dflb-breakdown">
-        <PuzzleBreakdown row={row} />
+        <PuzzleBreakdown row={row} bestSlotIndex={bestSlot.slotIndex} />
       </div>
     </article>
   );
@@ -537,12 +568,12 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                             <dd>{selfRow.totalScore}</dd>
                           </div>
                           <div>
-                            <dt>Done</dt>
+                            <dt>Ladder</dt>
                             <dd>{selfRow.puzzlesCompleted}/3</dd>
                           </div>
                           <div>
-                            <dt>Master</dt>
-                            <dd>{selfRow.masterChainScore}</dd>
+                            <dt>Best</dt>
+                            <dd>{getDailyPuzzleBestSlotDisplay(selfRow.breakdown).label}</dd>
                           </div>
                         </dl>
                       </div>
@@ -568,9 +599,9 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                   <div className="dflb-table-head" aria-hidden="true">
                     <span>Rank</span>
                     <span>Player</span>
-                    <span>Done</span>
+                    <span>Ladder</span>
                     <span>Total</span>
-                    <span>Master</span>
+                    <span>Best</span>
                     <span>Time</span>
                     <span>Puzzles</span>
                   </div>
@@ -622,9 +653,9 @@ export default function DailyPuzzleLadderLeaderboardScreen({
                         </svg>
                       </span>
                       <div className="dflb-standings-foot__copy">
-                        <p className="dflb-standings-foot__title">More climbers on the way</p>
+                        <p className="dflb-standings-foot__title">More ladder scores on the way</p>
                         <p className="dflb-standings-foot__sub">
-                          More climbers will appear as they finish today&apos;s ladder.
+                          Players will appear as they complete today&apos;s puzzle ladder.
                         </p>
                       </div>
                     </footer>

@@ -12,7 +12,7 @@ export type UseMatchmakingArgs = {
 
 export type UseMatchmakingReturn = {
   state: QueueUiState;
-  elapsedMs: number;
+  searchStartedAtMs: number | null;
   online: number;
   queued: number;
   matched: MatchFoundPayload | null;
@@ -36,13 +36,11 @@ export type UseMatchmakingReturn = {
  */
 export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakingArgs): UseMatchmakingReturn {
   const [state, setState] = useState<QueueUiState>('idle');
-  const [elapsedMs, setElapsedMs] = useState(0);
+  const [searchStartedAtMs, setSearchStartedAtMs] = useState<number | null>(null);
   const [online, setOnline] = useState(0);
   const [queued, setQueued] = useState(0);
   const [matched, setMatched] = useState<MatchFoundPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const elapsedTimer = useRef<number | null>(null);
-  const startMsRef = useRef<number>(0);
   const onMatchReadyRef = useRef(onMatchReady);
   /** Guards stale queue:join ack / timeout after cancel or disconnect */
   const joinGenerationRef = useRef(0);
@@ -60,22 +58,6 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
       window.clearTimeout(joinAckTimerRef.current);
       joinAckTimerRef.current = null;
     }
-  }, []);
-
-  const stopElapsedTimer = useCallback(() => {
-    if (elapsedTimer.current !== null) {
-      window.clearInterval(elapsedTimer.current);
-      elapsedTimer.current = null;
-    }
-  }, []);
-
-  const startElapsedTimer = useCallback(() => {
-    startMsRef.current = Date.now();
-    setElapsedMs(0);
-    if (elapsedTimer.current !== null) window.clearInterval(elapsedTimer.current);
-    elapsedTimer.current = window.setInterval(() => {
-      setElapsedMs(Date.now() - startMsRef.current);
-    }, 250);
   }, []);
 
   const applyOnlineAck = useCallback((resp: { online?: number; queued?: number } | undefined) => {
@@ -97,14 +79,12 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
       setQueued(evt?.queued ?? 0);
     };
     const handleMatched = (payload: MatchFoundPayload) => {
-      stopElapsedTimer();
       clearJoinAckTimer();
       setMatched(payload);
       setState('matched');
       onMatchReadyRef.current(payload);
     };
     const handleTimeout = () => {
-      stopElapsedTimer();
       clearJoinAckTimer();
       setState('timeout');
     };
@@ -115,7 +95,7 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
       setQueued(0);
       const prev = queueUiStateRef.current;
       if (prev === 'searching' || prev === 'matched') {
-        stopElapsedTimer();
+        setSearchStartedAtMs(null);
         setError('Lost connection to the game server.');
         setState('idle');
       }
@@ -137,7 +117,7 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
       socket.off('disconnect', handleDisconnect);
       socket.off('connect', handleConnect);
     };
-  }, [socket, stopElapsedTimer, clearJoinAckTimer, applyOnlineAck]);
+  }, [socket, clearJoinAckTimer, applyOnlineAck]);
 
   const findMatch = useCallback(() => {
     if (!socket?.connected) {
@@ -153,7 +133,7 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
     clearJoinAckTimer();
     const gen = (joinGenerationRef.current += 1);
     setState('searching');
-    startElapsedTimer();
+    setSearchStartedAtMs(Date.now());
     joinAckTimerRef.current = window.setTimeout(() => {
       joinAckTimerRef.current = null;
       if (joinGenerationRef.current !== gen) return;
@@ -161,7 +141,7 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
         'Matchmaking did not respond. The socket may be disconnected (try leaving Multiplayer and returning) or the server is slow to wake (Render free tier).',
       );
       setState('idle');
-      stopElapsedTimer();
+      setSearchStartedAtMs(null);
     }, 22_000);
     socket.emit('queue:join', identity, (resp: { ok: boolean; error?: string; online?: number; queued?: number } | undefined) => {
       if (joinGenerationRef.current !== gen) return;
@@ -170,45 +150,44 @@ export function useMatchmaking({ socket, identity, onMatchReady }: UseMatchmakin
       if (!resp?.ok) {
         setError(resp?.error ?? 'Failed to join queue.');
         setState('idle');
-        stopElapsedTimer();
+        setSearchStartedAtMs(null);
       }
     });
-  }, [socket, identity, startElapsedTimer, clearJoinAckTimer, stopElapsedTimer, applyOnlineAck]);
+  }, [socket, identity, clearJoinAckTimer, applyOnlineAck]);
 
   const cancel = useCallback(() => {
     joinGenerationRef.current += 1;
     clearJoinAckTimer();
-    stopElapsedTimer();
+    setSearchStartedAtMs(null);
     setState('idle');
     setError(null);
     if (socket?.connected) {
       socket.emit('queue:leave', {}, () => undefined);
     }
-  }, [socket, clearJoinAckTimer, stopElapsedTimer]);
+  }, [socket, clearJoinAckTimer]);
 
   const acceptTimeoutBotFallback = useCallback(() => {
     clearJoinAckTimer();
-    stopElapsedTimer();
+    setSearchStartedAtMs(null);
     setState('idle');
-  }, [clearJoinAckTimer, stopElapsedTimer]);
+  }, [clearJoinAckTimer]);
 
   const reset = useCallback(() => {
     joinGenerationRef.current += 1;
     clearJoinAckTimer();
-    stopElapsedTimer();
+    setSearchStartedAtMs(null);
     setMatched(null);
     setError(null);
     setState('idle');
-  }, [clearJoinAckTimer, stopElapsedTimer]);
+  }, [clearJoinAckTimer]);
 
   useEffect(() => () => {
     clearJoinAckTimer();
-    stopElapsedTimer();
-  }, [clearJoinAckTimer, stopElapsedTimer]);
+  }, [clearJoinAckTimer]);
 
   return {
     state,
-    elapsedMs,
+    searchStartedAtMs,
     online,
     queued,
     matched,
