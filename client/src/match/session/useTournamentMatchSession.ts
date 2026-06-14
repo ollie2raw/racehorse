@@ -25,6 +25,7 @@ import { shouldDeferTournamentMatchFinalize } from '../../tournament/tournamentP
 import { emitTournamentAttachAssignedMatch } from '../../multiplayer/roomTransport';
 import { clearLastRoomCode } from '../recovery/matchRecovery';
 import { useTournament } from '../../tournament/useTournament';
+import type { TournamentAttachRuntime } from '../../multiplayer/multiplayerRuntime';
 
 export type TournamentMatchContext = {
   tournamentId: string;
@@ -51,26 +52,13 @@ type TournamentHookApi = ReturnType<typeof useTournament>;
 
 export type UseTournamentMatchSessionParams = {
   socket: Socket | null;
-  socketRef: MutableRefObject<Socket | null>;
-  connectRef: MutableRefObject<() => void>;
+  attachRuntime: TournamentAttachRuntime;
   appMode: AppMode;
-  appModeRef: MutableRefObject<AppMode>;
   authUserId: string | null;
   multiplayerIdentityUserId: string;
   joinedRoom: string | null;
-  joinedRoomRef: MutableRefObject<string | null>;
-  joinedRoomResponseRef: MutableRefObject<unknown>;
   liveGameOver: boolean | undefined;
-  preventAutoRejoinRef: MutableRefObject<boolean>;
-  reconnectShouldJoinRef: MutableRefObject<boolean>;
-  reconnectRoomCodeRef: MutableRefObject<string | null>;
-  applyJoinedRoomResponseRef: MutableRefObject<(resp: unknown) => void>;
-  clearRecoverableRoomStateRef: MutableRefObject<() => void>;
-  resetMultiplayerRoomStateRef: MutableRefObject<
-    (options?: { keepPlayers?: boolean; clearRoomCode?: boolean }) => void
-  >;
   showToast: (message: string, duration?: number) => void;
-  setAppMode: Dispatch<SetStateAction<AppMode>>;
   setActionError: Dispatch<SetStateAction<string>>;
   normalizeRoomCode: (code: string | null | undefined) => string;
   tournament: TournamentHookApi;
@@ -138,30 +126,29 @@ export function useTournamentMatchSession(
 ): TournamentMatchSessionApi {
   const {
     socket,
-    socketRef,
-    connectRef,
+    attachRuntime,
     appMode,
-    appModeRef,
     authUserId,
     multiplayerIdentityUserId,
     joinedRoom,
-    joinedRoomRef,
-    joinedRoomResponseRef,
     liveGameOver,
-    preventAutoRejoinRef,
-    reconnectShouldJoinRef,
-    reconnectRoomCodeRef,
-    applyJoinedRoomResponseRef,
-    clearRecoverableRoomStateRef,
-    resetMultiplayerRoomStateRef,
     showToast,
-    setAppMode,
     setActionError,
     normalizeRoomCode,
     tournament,
     onTournamentMatchAbandoned,
     onPrivateMatchAbandoned,
   } = params;
+  const { socketRef, connectRef } = attachRuntime.socketRuntime;
+  const { joinedRoomRef, joinedRoomResponseRef } = attachRuntime.roomRuntime;
+  const { preventAutoRejoinRef, reconnectShouldJoinRef, reconnectRoomCodeRef } =
+    attachRuntime.reconnectRuntime;
+  const {
+    applyJoinedRoomResponseRef,
+    clearRecoverableRoomStateRef,
+    resetMultiplayerRoomStateRef,
+  } = attachRuntime.recoveryRuntime;
+  const { appModeRef, setAppMode } = attachRuntime.navigationRuntime;
 
   const [tournamentSubView, setTournamentSubView] = useState<TournamentSubView>('hub');
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);

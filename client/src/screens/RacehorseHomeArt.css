@@ -174,11 +174,7 @@
  * In-mode Daily Fritz screen uses playvsfritzdone.png.
  */
 .home-card-art--fritz {
-  background-image: url("../assets/home/newHOMEdailyfritz.png");
-  background-image: image-set(
-    url("../assets/home/newHOMEdailyfritz.webp") type("image/webp"),
-    url("../assets/home/newHOMEdailyfritz.png") type("image/png")
-  );
+  background-image: url("../assets/home/newHOMEdailyfritz.webp");
   background-size: cover;
   background-position: 64% 42%;
   opacity: 0.88;
@@ -216,11 +212,7 @@
 
 /* Daily Puzzle — cool cyan domino board (not a full scene render) */
 .home-card-art--puzzle {
-  background-image: url("../assets/home/homefinalpuzzle.png");
-  background-image: image-set(
-    url("../assets/home/homefinalpuzzle.webp") type("image/webp"),
-    url("../assets/home/homefinalpuzzle.png") type("image/png")
-  );
+  background-image: url("../assets/home/homefinalpuzzle.webp");
   opacity: var(--rh-img-home-art-puzzle-opacity);
   filter: brightness(var(--rh-img-home-art-puzzle-brightness))
     contrast(var(--rh-img-home-art-puzzle-contrast))

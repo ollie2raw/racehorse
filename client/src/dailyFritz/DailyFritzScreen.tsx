@@ -1,13 +1,13 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRef } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
 import type { GhostProfileSummary } from '../ghost/api';
 import type { AppMode } from '../types';
-import BotMatchScreen from '../bot/BotMatchScreen';
 import { DAILY_FRITZ_EXPECTATION_COPY } from '../bot/fritzTrustCopy';
 import { BrandLogo, BoneyardStackIcon, GlobalNav } from '../components';
 import { Button } from '../components/primitives';
+import { useDeferredAsset } from '../ui/useDeferredAsset';
 import '../screens/RacehorseHomeArt.css';
 
 import {
@@ -29,8 +29,9 @@ import { formatOrdinalPlace } from './format';
 import { DAILY_FRITZ_CLASSIC_PRACTICE_HINT, playerLostDailyFritzGame } from './practiceHint';
 import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy, isDailyFritzSkunk } from './skunk';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
-import dailyFritzHeroPng from '../assets/dailyFritz/playvsfritzdone.png';
 import './dailyFritz.css';
+
+const LazyBotMatchScreen = lazy(() => import('../bot/BotMatchScreen'));
 
 /* Same marks as Play vs Fritz left-panel badges (compact header icons). */
 const DfPvfIconRobotNav = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
@@ -676,6 +677,11 @@ export default function DailyFritzScreen({
   const [, setSetSubmitError] = useState<string | null>(null);
   const [startActionPending, setStartActionPending] = useState(false);
   const [countdownTick, setCountdownTick] = useState(0);
+  const loadHeroAsset = useCallback(
+    () => import('../assets/dailyFritz/playvsfritzdone.webp'),
+    [],
+  );
+  const heroSrc = useDeferredAsset('daily-fritz-hero', loadHeroAsset);
 
   const cacheKey = useMemo(
     () => (user?.id ? `${DAILY_FRITZ_TODAY_CACHE_PREFIX}${user.id}` : null),
@@ -1380,25 +1386,27 @@ export default function DailyFritzScreen({
 
   if (activeRun) {
     return (
-      <BotMatchScreen
-        key={`${activeRun.attempt_id}:${activeGameNumber}`}
-        onBack={() => { setActiveRun(null); void loadToday(); }}
-        mode="daily-fritz"
-        userId={user?.id ?? null}
-        username={profile?.username ?? null}
-        dealSize={activeRun.deal_size}
-        fritzTier={activeRun.fritz_tier}
-        winningScore={activeRun.winning_score}
-        currentGlickoRating={profile?.glicko_rating ?? null}
-        ghostProfile={ghostProfile}
-        onGhostProfileChange={onGhostProfileChange}
-        onProfileRefresh={onProfileRefresh}
-        onProfilePatch={onProfilePatch}
-        dailyFritzPackage={dailyFritzPackageForMatch}
-        dailyFritzSetOverlay={setOverlayConfig}
-        onDailyFritzGameComplete={(result) => { void handleDailyFritzGameComplete(result); }}
-        onDailyFritzComplete={() => { void finishEmbeddedRun(); }}
-      />
+      <Suspense fallback={<DailyFritzLoadingScreen phase="preparing" loadError={null} onBack={onBack} onRetry={() => {}} retryPending={false} />}>
+        <LazyBotMatchScreen
+          key={`${activeRun.attempt_id}:${activeGameNumber}`}
+          onBack={() => { setActiveRun(null); void loadToday(); }}
+          mode="daily-fritz"
+          userId={user?.id ?? null}
+          username={profile?.username ?? null}
+          dealSize={activeRun.deal_size}
+          fritzTier={activeRun.fritz_tier}
+          winningScore={activeRun.winning_score}
+          currentGlickoRating={profile?.glicko_rating ?? null}
+          ghostProfile={ghostProfile}
+          onGhostProfileChange={onGhostProfileChange}
+          onProfileRefresh={onProfileRefresh}
+          onProfilePatch={onProfilePatch}
+          dailyFritzPackage={dailyFritzPackageForMatch}
+          dailyFritzSetOverlay={setOverlayConfig}
+          onDailyFritzGameComplete={(result) => { void handleDailyFritzGameComplete(result); }}
+          onDailyFritzComplete={() => { void finishEmbeddedRun(); }}
+        />
+      </Suspense>
     );
   }
 
@@ -1548,7 +1556,14 @@ export default function DailyFritzScreen({
             </div>
 
             <article className="df-pvf-opponent-card" aria-label="Daily Fritz overview">
-              <img src={dailyFritzHeroPng} className="df-pvf-card-bg-img" alt="Fritz waiting at the domino table" />
+              {heroSrc ? (
+                <img
+                  src={heroSrc}
+                  className="df-pvf-card-bg-img"
+                  alt="Fritz waiting at the domino table"
+                  decoding="async"
+                />
+              ) : null}
               <div className="df-pvf-card-overlay" aria-hidden />
 
               <div className="df-pvf-card-content">

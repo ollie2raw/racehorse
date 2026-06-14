@@ -1145,8 +1145,8 @@
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--tier-elite) 22%, transparent),
     0 10px 28px color-mix(in srgb, var(--bg-obsidian) 50%, transparent);
-  backdrop-filter: blur(calc(var(--glass-blur) + 4px));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 4px));
+  backdrop-filter: blur(calc(var(--glass-blur) - 4px));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 4px));
 }
 
 .df-stat-pill .fritz-summary-strip--hero {
@@ -1163,8 +1163,8 @@
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--tier-elite) 12%, transparent),
     0 8px 24px color-mix(in srgb, var(--bg-obsidian) 45%, transparent);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(calc(var(--glass-blur) - 4px));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 4px));
 }
 
 .df-stat-pill .fritz-summary-icon--df-gold,
@@ -1208,8 +1208,8 @@
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--tier-elite) 18%, transparent),
     0 10px 28px color-mix(in srgb, var(--bg-obsidian) 50%, transparent);
-  backdrop-filter: blur(calc(var(--glass-blur) + 4px));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 4px));
+  backdrop-filter: blur(calc(var(--glass-blur) - 4px));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 4px));
 }
 
 .df-summary-card .fritz-summary-strip--hero,

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useMemo } from "react";
 import type { CSSProperties } from "react";
 import "./RacehorseHomeArt.css";
 import "./SinglePlayerModes.css";
@@ -6,9 +6,7 @@ import type { AppMode } from "../types";
 import { GlobalNav } from "../components";
 import { Button } from "../components/primitives";
 import { useSinglePlayerHubStats, type HubStatRow } from "./useSinglePlayerHubStats";
-import artFritzPng from "../assets/singlePlayerHub/fritzwave1.png";
-import artGhostPng from "../assets/singlePlayerHub/fritzghost2.png";
-import artLabPng from "../assets/singlePlayerHub/leftfacingfritzNOBRAINER.png";
+import { useDeferredAsset } from "../ui/useDeferredAsset";
 
 interface SinglePlayerHubScreenProps {
   userId?: string | null;
@@ -21,8 +19,6 @@ interface SinglePlayerHubScreenProps {
 type CardConfig = {
   key: AppMode;
   containerClass: string;
-  /** Vite-resolved URL — bundled with the client, not dependent on `/public` at runtime */
-  artSrc: string;
   sectionRounded: string;
   title: string;
   titleColor: string;
@@ -84,7 +80,6 @@ const MODES: CardConfig[] = [
     desc: "Fritz doesn't go easy. Find out if you're good enough.",
     variant: "tier-elite",
     chevronColor: "#FFD76A",
-    artSrc: artFritzPng,
   },
   {
     key: "ghostSetup" as AppMode,
@@ -95,7 +90,6 @@ const MODES: CardConfig[] = [
     desc: "Race against a model of your own game. Can you beat yourself?",
     variant: "tier-standard",
     chevronColor: "#4FC3F7",
-    artSrc: artGhostPng,
   },
   {
     key: "noBrainer" as AppMode,
@@ -106,7 +100,6 @@ const MODES: CardConfig[] = [
     desc: "Drill every no brainer combination until you never miss one.",
     variant: "tier-master",
     chevronColor: "#C77DFF",
-    artSrc: artLabPng,
   },
 ];
 
@@ -142,6 +135,29 @@ export default function SinglePlayerHubScreen({
   onOpenAccount,
 }: SinglePlayerHubScreenProps) {
   const hubStats = useSinglePlayerHubStats(userId);
+  const loadFritzArt = useCallback(
+    () => import("../assets/singlePlayerHub/fritzwave1.webp"),
+    [],
+  );
+  const loadGhostArt = useCallback(
+    () => import("../assets/singlePlayerHub/fritzghost2.webp"),
+    [],
+  );
+  const loadLabArt = useCallback(
+    () => import("../assets/singlePlayerHub/leftfacingfritzNOBRAINER.webp"),
+    [],
+  );
+  const artFritzSrc = useDeferredAsset("single-player-fritz-art", loadFritzArt);
+  const artGhostSrc = useDeferredAsset("single-player-ghost-art", loadGhostArt);
+  const artLabSrc = useDeferredAsset("single-player-lab-art", loadLabArt);
+  const modeArtByKey = useMemo(
+    () => ({
+      botSetup: artFritzSrc,
+      ghostSetup: artGhostSrc,
+      noBrainer: artLabSrc,
+    }),
+    [artFritzSrc, artGhostSrc, artLabSrc],
+  );
 
   return (
     <div
@@ -202,13 +218,16 @@ export default function SinglePlayerHubScreen({
                 onClick={() => onNavigate(mode.key)}
               >
                 <div className="sp-solo-mode-card__art-slot" aria-hidden>
-                  <img
-                    src={mode.artSrc}
-                    alt=""
-                    className="sp-solo-mode-card__art"
-                    draggable={false}
-                    aria-hidden
-                  />
+                  {modeArtByKey[mode.key as keyof typeof modeArtByKey] ? (
+                    <img
+                      src={modeArtByKey[mode.key as keyof typeof modeArtByKey] ?? undefined}
+                      alt=""
+                      className="sp-solo-mode-card__art"
+                      draggable={false}
+                      decoding="async"
+                      aria-hidden
+                    />
+                  ) : null}
                 </div>
                 <div className="home-card-scrim" aria-hidden="true" />
                 <div className="home-card-content relative grid h-[268px] grid-rows-[1fr_auto] gap-7">

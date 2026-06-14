@@ -7,26 +7,20 @@ import { hasHandIdentityMismatch } from './handIdentity';
 import { evaluateSequenceUpdate, wrapSocketHandler } from './socketGuards';
 import { drawAudit } from './drawAudit';
 import { isMpDebugEnabled, mpPerfMarkStateApplied } from './mpPerf';
+import type {
+  MultiplayerRoomSyncDomRuntime,
+  MultiplayerRoomSyncRuntime,
+  MultiplayerRoomSyncUiRuntime,
+  RoomRecoveryState,
+  StateUpdatePayload,
+} from './multiplayerRuntime';
+
+export type { StateUpdatePayload } from './multiplayerRuntime';
 
 /** Per-step stagger; total chain capped so gameplay is not blocked. */
 const FORCED_DRAW_STAGGER_MS = 72;
 const FORCED_DRAW_FLY_MS = 520;
 const FORCED_DRAW_CHAIN_CAP_MS = 640;
-
-export type StateUpdatePayload = {
-  you?: string;
-  state?: GameState | null;
-  legalMoves?: Move[];
-  canDraw?: boolean;
-  eventMeta?: RoomEventMeta | null;
-  /** Authoritative lobby flag from server — do not infer from local state shape. */
-  matchStarted?: boolean;
-  /** Set with `state` when the server aggregated a forced-draw chain after a PLAY. */
-  forcedDrawCount?: number;
-  forcedDrawActorId?: string;
-  /** Server auto-passed players (socket ids) this frame — show a brief notice. */
-  recentAutoPasses?: string[];
-};
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
 type RoomEventMeta = {
@@ -34,25 +28,23 @@ type RoomEventMeta = {
   lastEventSequence?: number;
   eventCount?: number;
 };
-type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 
-type HandTileTarget = HTMLDivElement | HTMLButtonElement | null;
+export type UseRoomSocketSyncParams = {
+  socket: Socket | null;
+  syncRuntime: MultiplayerRoomSyncRuntime;
+  syncUi: MultiplayerRoomSyncUiRuntime;
+  syncDom: MultiplayerRoomSyncDomRuntime;
+  setState: Dispatch<SetStateAction<GameState | null>>;
+  setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
+  roomPlayersRef: MutableRefObject<RoomPlayer[]>;
+};
 
-type UseRoomSocketSyncParams = {
+type FlatRoomSocketSyncParams = {
   socket: Socket | null;
   showToast: (message: string, duration?: number) => void;
   normalizeRoomPlayers: (value: unknown) => RoomPlayer[];
   applyRoomEventMeta: (meta?: RoomEventMeta | null) => void;
-  setFriendInvite: Dispatch<
-    SetStateAction<{
-      inviteId: string;
-      fromUsername: string;
-      fromUserId: string | null;
-      roomCode: string;
-      inviteUrl: string;
-      matchSummary: string;
-    } | null>
-  >;
+  setFriendInvite: MultiplayerRoomSyncUiRuntime['setFriendInvite'];
   joinedRoomRef: MutableRefObject<string | null>;
   maxSequenceRef: MutableRefObject<number>;
   setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
@@ -96,12 +88,27 @@ type UseRoomSocketSyncParams = {
   matchStartedRef: MutableRefObject<boolean>;
   playerReadyEmittedRef: MutableRefObject<boolean>;
   trySchedulePlayerReadyRef: MutableRefObject<() => void>;
-  /** Called after a fresh authoritative snapshot passes sequence checks (gameplay pending UI). */
   onAuthoritativeGameplayStateApplied?: (nextState: GameState | null) => void;
 };
 
+function flattenRoomSocketSyncParams(params: UseRoomSocketSyncParams): FlatRoomSocketSyncParams {
+  return {
+    socket: params.socket,
+    ...params.syncUi,
+    ...params.syncRuntime.roomRuntime,
+    ...params.syncRuntime.recoveryRuntime,
+    ...params.syncRuntime.sessionRefsRuntime,
+    setState: params.setState,
+    setPlayers: params.setPlayers,
+    roomPlayersRef: params.roomPlayersRef,
+    ...params.syncDom,
+  };
+}
+
+type HandTileTarget = HTMLDivElement | HTMLButtonElement | null;
+
 function clearDrawPreview(params: Pick<
-  UseRoomSocketSyncParams,
+  FlatRoomSocketSyncParams,
   | 'drawSequenceTimeoutRef'
   | 'setDrawSequenceActiveBoth'
   | 'setDrawStepMyHand'
@@ -144,8 +151,9 @@ function applySequenceToWatermark(
   return true;
 }
 
-export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
+export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
   useEffect(() => {
+    const params = flattenRoomSocketSyncParams(inputParams);
     const { socket } = params;
     if (!socket) return;
 
@@ -573,5 +581,5 @@ export function useRoomSocketSync(params: UseRoomSocketSyncParams) {
       socket.off('player:reconnect_timeout', onPlayerReconnectTimeout);
       clearPendingDrawAnimationTimers();
     };
-  }, [params]);
+  }, [inputParams]);
 }

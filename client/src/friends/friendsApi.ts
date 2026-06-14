@@ -20,6 +20,15 @@ type FriendsResult = {
   error: string | null;
 };
 
+type FriendsCacheEntry = {
+  value: FriendsResult;
+  expiresAt: number;
+};
+
+const friendsCache = new Map<string, FriendsCacheEntry>();
+const friendsInFlight = new Map<string, Promise<FriendsResult>>();
+const FRIENDS_CACHE_TTL_MS = 15_000;
+
 function normalizeDbError(message: string): string {
   const normalized = message.toLowerCase();
   if (
@@ -34,7 +43,38 @@ function normalizeDbError(message: string): string {
   return message;
 }
 
+function readFriendsCache(userId: string): FriendsResult | null {
+  const entry = friendsCache.get(userId);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    friendsCache.delete(userId);
+    return null;
+  }
+  return entry.value;
+}
+
+function writeFriendsCache(userId: string, value: FriendsResult): FriendsResult {
+  friendsCache.set(userId, {
+    value,
+    expiresAt: Date.now() + FRIENDS_CACHE_TTL_MS,
+  });
+  return value;
+}
+
+export function invalidateFriendsCache(userId?: string | null): void {
+  if (!userId) return;
+  friendsCache.delete(userId);
+  friendsInFlight.delete(userId);
+}
+
 export async function fetchFriends(userId: string): Promise<FriendsResult> {
+  const cached = readFriendsCache(userId);
+  if (cached) return cached;
+
+  const existing = friendsInFlight.get(userId);
+  if (existing) return existing;
+
+  const pending = (async (): Promise<FriendsResult> => {
   if (!supabase) return { friends: [], incoming: [], outgoing: [], error: 'Supabase not configured.' };
 
   const relationResp = await supabase
@@ -91,7 +131,15 @@ export async function fetchFriends(userId: string): Promise<FriendsResult> {
     }
   }
 
-  return { friends, incoming, outgoing, error: null };
+    return { friends, incoming, outgoing, error: null };
+  })()
+    .then((result) => writeFriendsCache(userId, result))
+    .finally(() => {
+      friendsInFlight.delete(userId);
+    });
+
+  friendsInFlight.set(userId, pending);
+  return pending;
 }
 
 export async function sendFriendRequest(userId: string, usernameQuery: string): Promise<{ error: string | null }> {
@@ -126,6 +174,7 @@ export async function sendFriendRequest(userId: string, usernameQuery: string): 
     .from('friends')
     .insert({ user_id: userId, friend_user_id: targetId, status: 'pending' });
   if (insertResp.error) return { error: normalizeDbError(insertResp.error.message) };
+  invalidateFriendsCache(userId);
   return { error: null };
 }
 
@@ -140,6 +189,7 @@ export async function acceptFriendRequest(
     .eq('id', requestId)
     .eq('friend_user_id', userId);
   if (resp.error) return { error: normalizeDbError(resp.error.message) };
+  invalidateFriendsCache(userId);
   return { error: null };
 }
 
@@ -150,6 +200,7 @@ export async function declineFriendRequest(
   if (!supabase) return { error: 'Supabase not configured.' };
   const resp = await supabase.from('friends').delete().eq('id', requestId).eq('friend_user_id', userId);
   if (resp.error) return { error: normalizeDbError(resp.error.message) };
+  invalidateFriendsCache(userId);
   return { error: null };
 }
 
@@ -164,5 +215,6 @@ export async function removeFriend(
     .eq('id', requestId)
     .or(`user_id.eq.${userId},friend_user_id.eq.${userId}`);
   if (resp.error) return { error: normalizeDbError(resp.error.message) };
+  invalidateFriendsCache(userId);
   return { error: null };
 }

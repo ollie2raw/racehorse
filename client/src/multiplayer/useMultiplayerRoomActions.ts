@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import {
@@ -9,6 +9,17 @@ import {
   type OutboundChallenge,
   type SendFriendChallengeResult,
 } from './friendChallenge';
+import type {
+  FriendInviteState,
+  MultiplayerJoinFlightRuntime,
+  MultiplayerNavigationRuntime,
+  MultiplayerReconnectRuntime,
+  MultiplayerRoomActionsAuth,
+  MultiplayerRoomActionsTransport,
+  MultiplayerRoomActionsUi,
+  MultiplayerRoomRuntime,
+  MultiplayerSocketRuntime,
+} from './multiplayerRuntime';
 
 type PendingUiAction = null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play';
 
@@ -18,16 +29,26 @@ type RoomJoinConfig = {
   authToken: string | null;
 };
 
-type FriendInvite = {
-  inviteId: string;
-  fromUsername: string;
-  fromUserId: string | null;
+export type UseMultiplayerRoomActionsParams = {
+  socket: Socket | null;
+  socketRuntime: MultiplayerSocketRuntime;
+  roomRuntime: Pick<MultiplayerRoomRuntime, 'joinedRoomRef' | 'roomIdentityRef'>;
+  joinFlightRuntime: MultiplayerJoinFlightRuntime;
+  reconnectRuntime: Pick<
+    MultiplayerReconnectRuntime,
+    'reconnectRoomCodeRef' | 'reconnectShouldJoinRef' | 'preventAutoRejoinRef'
+  >;
+  navigationRuntime: MultiplayerNavigationRuntime;
+  transport: MultiplayerRoomActionsTransport;
+  auth: MultiplayerRoomActionsAuth;
+  ui: MultiplayerRoomActionsUi;
   roomCode: string;
-  inviteUrl: string;
-  matchSummary: string;
-} | null;
+  friendInvite: FriendInviteState;
+  outboundChallenge: OutboundChallenge | null;
+  applyJoinedRoomResponse: (resp: unknown) => void;
+};
 
-type UseMultiplayerRoomActionsParams = {
+type FlatMultiplayerRoomActionsParams = {
   socket: Socket | null;
   socketRef: MutableRefObject<Socket | null>;
   connectRef: MutableRefObject<() => void>;
@@ -42,7 +63,7 @@ type UseMultiplayerRoomActionsParams = {
   reconnectRoomCodeRef: MutableRefObject<string | null>;
   reconnectShouldJoinRef: MutableRefObject<boolean>;
   roomCode: string;
-  friendInvite: FriendInvite;
+  friendInvite: FriendInviteState;
   authUsername: string;
   authUserId: string | null;
   authToken: string | null;
@@ -51,40 +72,13 @@ type UseMultiplayerRoomActionsParams = {
   authTokenRef: MutableRefObject<string | null>;
   normalizeRoomCode: (value: unknown) => string;
   normalizeRoomPlayers: (value: unknown) => any[];
-  emitWithAck: <TResp>(
-    socket: { emit: (...args: any[]) => void },
-    event: string,
-    ...argsWithoutAck: any[]
-  ) => Promise<TResp>;
+  emitWithAck: MultiplayerRoomActionsTransport['emitWithAck'];
   emitCreateRoom: (targetSocket: Socket) => Promise<any>;
   getInviteLink: (code: string) => string;
   resolvePendingCreate: (code: string | null) => void;
   applyJoinedRoomResponse: (resp: any) => void;
   showToast: (message: string, duration?: number) => void;
-  setAppMode: Dispatch<
-    SetStateAction<
-      | 'home'
-      | 'multiplayer'
-      | 'noBrainer'
-      | 'botSetup'
-      | 'bot'
-      | 'ghostSetup'
-      | 'ghost'
-      | 'daily'
-      | 'dailyFritz'
-      | 'learn'
-      | 'guidedMatchRecorder'
-      | 'guidedMatchAnnotator'
-      | 'friends'
-      | 'stats'
-      | 'ratingHistory'
-      | 'singlePlayerHub'
-      | 'tournament'
-      | 'leaderboard'
-      | 'profile'
-      | 'feed'
-    >
-  >;
+  setAppMode: MultiplayerNavigationRuntime['setAppMode'];
   setRoomCode: Dispatch<SetStateAction<string>>;
   setPlayers: Dispatch<SetStateAction<any[]>>;
   setError: Dispatch<SetStateAction<string>>;
@@ -92,7 +86,7 @@ type UseMultiplayerRoomActionsParams = {
   setPendingUiAction: Dispatch<SetStateAction<PendingUiAction>>;
   setRoomRecoveryState: Dispatch<SetStateAction<'idle' | 'reconnecting' | 'resyncing' | 'failed'>>;
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
-  setFriendInvite: Dispatch<SetStateAction<FriendInvite>>;
+  setFriendInvite: Dispatch<SetStateAction<FriendInviteState>>;
   setMpSubView: Dispatch<SetStateAction<'quick' | 'private'>>;
   outboundChallenge: OutboundChallenge | null;
   setOutboundChallenge: Dispatch<SetStateAction<OutboundChallenge | null>>;
@@ -104,7 +98,31 @@ type UseMultiplayerRoomActionsParams = {
   lastRoomStorageKey: string;
 };
 
-export function useMultiplayerRoomActions(params: UseMultiplayerRoomActionsParams) {
+function flattenMultiplayerRoomActionsParams(
+  params: UseMultiplayerRoomActionsParams,
+): FlatMultiplayerRoomActionsParams {
+  return {
+    socket: params.socket,
+    ...params.socketRuntime,
+    joinedRoomRef: params.roomRuntime.joinedRoomRef,
+    roomIdentityRef: params.roomRuntime.roomIdentityRef,
+    ...params.joinFlightRuntime,
+    ...params.reconnectRuntime,
+    roomCode: params.roomCode,
+    friendInvite: params.friendInvite,
+    outboundChallenge: params.outboundChallenge,
+    applyJoinedRoomResponse: params.applyJoinedRoomResponse,
+    ...params.auth,
+    ...params.transport,
+    ...params.ui,
+    setAppMode: params.navigationRuntime.setAppMode,
+  };
+}
+
+export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActionsParams) {
+  const flatParamsRef = useRef(flattenMultiplayerRoomActionsParams(inputParams));
+  flatParamsRef.current = flattenMultiplayerRoomActionsParams(inputParams);
+  const params = flatParamsRef.current;
   const roomJoinConfig = useCallback(
     (): RoomJoinConfig =>
       params.roomIdentityRef.current ?? {

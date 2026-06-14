@@ -1673,8 +1673,8 @@
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--bg-obsidian) 42%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   padding: 16px;
   animation: rh-fade 180ms ease;
 }
@@ -2099,7 +2099,10 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  transition: all 150ms ease;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
   font-size: 13px;
 }
 
@@ -2194,7 +2197,11 @@
   border-radius: 10px;
   position: relative;
   overflow: hidden;
-  transition: all 300ms ease;
+  transition:
+    transform 300ms ease,
+    background-color 300ms ease,
+    border-color 300ms ease,
+    box-shadow 300ms ease;
 }
 
 .loading-step-chip::after {
@@ -2249,7 +2256,11 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   cursor: pointer;
-  transition: all 160ms ease;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .rh-btn-home:hover {

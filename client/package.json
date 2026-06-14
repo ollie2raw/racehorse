@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "qa:capture-auth": "node scripts/captureAuthenticatedQaFixture.mjs",
     "qa:daily-fritz:hand-lifecycle": "node scripts/dailyFritzHandLifecycleQa.mjs",
     "test:bot": "ts-node --esm src/bot/botHeuristics.behaviorTests.ts",
     "test:bot:parity": "ts-node --esm src/bot/engineParity.behaviorTests.ts",

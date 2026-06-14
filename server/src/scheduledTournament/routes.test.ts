@@ -184,6 +184,48 @@ describe('scheduled tournament routes auth/user guards', () => {
     expect(mocks.fetchActiveAssignedMatchForUser).not.toHaveBeenCalled();
   });
 
+  it('/api/tournaments/my without auth rejects the caller', async () => {
+    const { request } = makeHarness();
+    const response = await request('GET', '/api/tournaments/my');
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ ok: false, error: 'not_authenticated' });
+    expect(mocks.fetchRegistrationsForUser).not.toHaveBeenCalled();
+  });
+
+  it('/api/tournaments/my ignores query userId and returns only the authenticated user registrations', async () => {
+    const { request } = makeHarness();
+    const otherUserId = '99999999-9999-4999-8999-999999999999';
+    const registrations = [{ id: 'reg-1', tournament_id: 'tour-1', user_id: validUserId, status: 'registered' }];
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    mocks.fetchRegistrationsForUser.mockResolvedValue(registrations);
+
+    const response = await request('GET', '/api/tournaments/my', {
+      headers: { authorization: 'Bearer valid-token' },
+      query: { userId: otherUserId },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true, registrations });
+    expect(mocks.fetchRegistrationsForUser).toHaveBeenCalledWith(validUserId);
+    expect(mocks.fetchRegistrationsForUser).not.toHaveBeenCalledWith(otherUserId);
+  });
+
+  it('/api/tournaments/my returns registrations for a valid authenticated caller', async () => {
+    const { request } = makeHarness();
+    const registrations = [{ id: 'reg-2', tournament_id: 'tour-2', user_id: validUserId, status: 'registered' }];
+    mocks.supabaseFetch.mockResolvedValue({ id: validUserId });
+    mocks.fetchRegistrationsForUser.mockResolvedValue(registrations);
+
+    const response = await request('GET', '/api/tournaments/my', {
+      headers: { authorization: 'Bearer valid-token' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true, registrations });
+    expect(mocks.fetchRegistrationsForUser).toHaveBeenCalledWith(validUserId);
+  });
+
   it('/api/tournaments/me returns activeAssignedMatch recovery payload with roomCode', async () => {
     const { request } = makeHarness();
     mocks.supabaseFetch.mockResolvedValue({ id: validUserId });

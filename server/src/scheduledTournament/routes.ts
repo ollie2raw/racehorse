@@ -68,9 +68,8 @@ export function registerTournamentRoutes(app: Express): void {
   });
 
   app.get('/api/tournaments/my', async (req: Request, res: Response) => {
-    const userId = typeof req.query.userId === 'string' ? req.query.userId.trim() : null;
-    if (!userId) { res.status(400).json({ ok: false, error: 'missing_userId' }); return; }
-    if (!isValidUuid(userId)) { res.status(400).json({ ok: false, error: 'invalid_user' }); return; }
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
     try {
       const regs = await fetchRegistrationsForUser(userId);
       res.json({ ok: true, registrations: regs });

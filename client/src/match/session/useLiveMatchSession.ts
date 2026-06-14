@@ -16,7 +16,7 @@ import {
   mpPerfMarkPendingUiCleared,
   mpPerfResetAction,
 } from '../../multiplayer/mpPerf';
-import { useRoomSocketSync, type StateUpdatePayload } from '../../multiplayer/useRoomSocketSync';
+import { useRoomSocketSync, type StateUpdatePayload, type UseRoomSocketSyncParams } from '../../multiplayer/useRoomSocketSync';
 import {
   type MoveEntry,
   cloneBoardState,
@@ -32,12 +32,18 @@ import {
   emitHandReady,
   type RoomAckResponse,
 } from '../../multiplayer/roomTransport';
+import type {
+  FriendInviteState,
+  MultiplayerLiveMatchRecoveryRuntime,
+  MultiplayerLiveMatchRoomRuntime,
+  MultiplayerRoomRecoverySetters,
+  MultiplayerSessionRefsRuntime,
+  RoomRecoveryState,
+} from '../../multiplayer/multiplayerRuntime';
 
 const EMPTY_MOVES: Move[] = [];
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
-
-type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 
 type RoomEventMeta = {
   matchId?: string;
@@ -71,35 +77,15 @@ export type UseLiveMatchSessionParams = {
   roomRecoveryState: RoomRecoveryState;
   isRecoveringConnection: boolean;
   rejoinInFlightRef: MutableRefObject<boolean>;
-  fetchGameState: (reason: string) => Promise<boolean>;
   normalizeRoomPlayers: (value: unknown) => RoomPlayer[];
   applyRoomEventMeta: (meta?: RoomEventMeta | null) => void;
-  setFriendInvite: Dispatch<
-    SetStateAction<{
-      inviteId: string;
-      fromUsername: string;
-      fromUserId: string | null;
-      roomCode: string;
-      inviteUrl: string;
-      matchSummary: string;
-    } | null>
-  >;
-  joinedRoomRef: MutableRefObject<string | null>;
-  maxSequenceRef: MutableRefObject<number>;
+  setFriendInvite: Dispatch<SetStateAction<FriendInviteState>>;
+  roomRuntime: MultiplayerLiveMatchRoomRuntime;
+  recoveryRuntime: MultiplayerLiveMatchRecoveryRuntime;
+  recoverySetters: MultiplayerRoomRecoverySetters;
+  sessionRefsRuntime: MultiplayerSessionRefsRuntime;
   setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
-  roomPlayersRef: MutableRefObject<RoomPlayer[]>;
-  setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
-  setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
-  isSeatedPlayerRef: MutableRefObject<boolean>;
-  matchStartedRef: MutableRefObject<boolean>;
-  playerReadyEmittedRef: MutableRefObject<boolean>;
-  trySchedulePlayerReadyRef: MutableRefObject<() => void>;
-  isMutedRef: MutableRefObject<boolean>;
   playDrawSound: (muted: boolean) => void;
-  resyncInFlightRef: MutableRefObject<boolean>;
-  resyncBufferedUpdateRef: MutableRefObject<StateUpdatePayload | null>;
-  resyncFlushRef: MutableRefObject<(() => void) | null>;
-  resetClientGameSession: () => void;
   onGameStart: () => void;
   appendMultiplayerMove: (entry: Omit<MoveEntry, 'moveNumber'>) => void;
 };
@@ -211,7 +197,71 @@ export type LiveMatchSessionApi = {
   roomSocketSyncParams: Parameters<typeof useRoomSocketSync>[0];
 };
 
-export function useLiveMatchSession(params: UseLiveMatchSessionParams): LiveMatchSessionApi {
+type FlatLiveMatchSessionParams = {
+  socket: Socket | null;
+  joinedRoom: string | null;
+  you: string;
+  isConnected: boolean;
+  showToast: (message: string, duration?: number) => void;
+  setError: Dispatch<SetStateAction<string>>;
+  roomRecoveryState: RoomRecoveryState;
+  isRecoveringConnection: boolean;
+  rejoinInFlightRef: MutableRefObject<boolean>;
+  fetchGameState: (reason: string) => Promise<boolean>;
+  normalizeRoomPlayers: (value: unknown) => RoomPlayer[];
+  applyRoomEventMeta: (meta?: RoomEventMeta | null) => void;
+  setFriendInvite: Dispatch<SetStateAction<FriendInviteState>>;
+  joinedRoomRef: MutableRefObject<string | null>;
+  maxSequenceRef: MutableRefObject<number>;
+  setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
+  roomPlayersRef: MutableRefObject<RoomPlayer[]>;
+  setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
+  setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
+  isSeatedPlayerRef: MutableRefObject<boolean>;
+  matchStartedRef: MutableRefObject<boolean>;
+  playerReadyEmittedRef: MutableRefObject<boolean>;
+  trySchedulePlayerReadyRef: MutableRefObject<() => void>;
+  isMutedRef: MutableRefObject<boolean>;
+  playDrawSound: (muted: boolean) => void;
+  resyncInFlightRef: MutableRefObject<boolean>;
+  resyncBufferedUpdateRef: MutableRefObject<StateUpdatePayload | null>;
+  resyncFlushRef: MutableRefObject<(() => void) | null>;
+  resetClientGameSession: () => void;
+  onGameStart: () => void;
+  appendMultiplayerMove: (entry: Omit<MoveEntry, 'moveNumber'>) => void;
+};
+
+function flattenLiveMatchSessionParams(params: UseLiveMatchSessionParams): FlatLiveMatchSessionParams {
+  return {
+    socket: params.socket,
+    joinedRoom: params.joinedRoom,
+    you: params.you,
+    isConnected: params.isConnected,
+    showToast: params.showToast,
+    setError: params.setError,
+    roomRecoveryState: params.roomRecoveryState,
+    isRecoveringConnection: params.isRecoveringConnection,
+    rejoinInFlightRef: params.rejoinInFlightRef,
+    fetchGameState: params.recoveryRuntime.fetchGameState,
+    normalizeRoomPlayers: params.normalizeRoomPlayers,
+    applyRoomEventMeta: params.applyRoomEventMeta,
+    setFriendInvite: params.setFriendInvite,
+    ...params.roomRuntime,
+    setPlayers: params.setPlayers,
+    ...params.recoverySetters,
+    ...params.sessionRefsRuntime,
+    playDrawSound: params.playDrawSound,
+    resyncInFlightRef: params.recoveryRuntime.resyncInFlightRef,
+    resyncBufferedUpdateRef: params.recoveryRuntime.resyncBufferedUpdateRef,
+    resyncFlushRef: params.recoveryRuntime.resyncFlushRef,
+    resetClientGameSession: params.recoveryRuntime.resetClientGameSession,
+    onGameStart: params.onGameStart,
+    appendMultiplayerMove: params.appendMultiplayerMove,
+  };
+}
+
+export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): LiveMatchSessionApi {
+  const params = flattenLiveMatchSessionParams(inputParams);
   const {
     socket,
     joinedRoom,
@@ -397,54 +447,66 @@ export function useLiveMatchSession(params: UseLiveMatchSessionParams): LiveMatc
   );
 
   const roomSocketSyncParams = useMemo(
-    () => ({
+    (): UseRoomSocketSyncParams => ({
       socket,
-      showToast,
-      normalizeRoomPlayers,
-      applyRoomEventMeta,
-      setFriendInvite,
-      joinedRoomRef,
-      maxSequenceRef,
+      syncRuntime: {
+        roomRuntime: {
+          joinedRoomRef,
+          maxSequenceRef,
+        },
+        recoveryRuntime: {
+          resyncInFlightRef,
+          resyncBufferedUpdateRef,
+          resyncFlushRef,
+          rematchAwaitingStateRef,
+          fetchGameState,
+          resetClientGameSession,
+        },
+        sessionRefsRuntime: {
+          isSeatedPlayerRef,
+          matchStartedRef,
+          playerReadyEmittedRef,
+          trySchedulePlayerReadyRef,
+          isMutedRef,
+        },
+      },
+      syncUi: {
+        showToast,
+        normalizeRoomPlayers,
+        applyRoomEventMeta,
+        setFriendInvite,
+        setRoomRecoveryState,
+        setRoomRecoveryMessage,
+        setOptimisticPlayedTile,
+        setLegalMoves,
+        setCanDraw,
+        setOpponentDisconnected,
+        setOpponentDisconnectMessage,
+        setDrawSequenceActiveBoth,
+        setDrawStepMyHand,
+        setDrawStepActorId,
+        setDrawStepOpponentHandCount,
+        setFlyingTiles,
+        setBoneyardDisplayCount,
+        setDrawPulseIndex,
+        playDrawSound,
+        tileEquals,
+        onAuthoritativeGameplayStateApplied: clearPendingGameplayUiOnAuthoritativeState,
+      },
+      syncDom: {
+        drawSequenceActiveRef,
+        drawSequenceTimeoutRef,
+        boneyardRef,
+        handAreaRef,
+        opponentPillRef,
+        youRef,
+        stateRef,
+        flyingTileIdRef,
+        pendingForcedHandRevealRef,
+      },
+      setState,
       setPlayers,
       roomPlayersRef,
-      setState,
-      setRoomRecoveryState,
-      setRoomRecoveryMessage,
-      setOptimisticPlayedTile,
-      fetchGameState,
-      resyncInFlightRef,
-      resyncBufferedUpdateRef,
-      resyncFlushRef,
-      rematchAwaitingStateRef,
-      resetClientGameSession,
-      isSeatedPlayerRef,
-      matchStartedRef,
-      playerReadyEmittedRef,
-      trySchedulePlayerReadyRef,
-      onAuthoritativeGameplayStateApplied: clearPendingGameplayUiOnAuthoritativeState,
-      setOpponentDisconnected,
-      setOpponentDisconnectMessage,
-      setLegalMoves,
-      setCanDraw,
-      drawSequenceActiveRef,
-      drawSequenceTimeoutRef,
-      setDrawSequenceActiveBoth,
-      setDrawStepMyHand,
-      setDrawStepActorId,
-      setDrawStepOpponentHandCount,
-      setFlyingTiles,
-      setBoneyardDisplayCount,
-      setDrawPulseIndex,
-      boneyardRef,
-      handAreaRef,
-      opponentPillRef,
-      youRef,
-      stateRef,
-      flyingTileIdRef,
-      pendingForcedHandRevealRef,
-      isMutedRef,
-      playDrawSound,
-      tileEquals,
     }),
     [
       socket,

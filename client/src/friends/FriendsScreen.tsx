@@ -7,6 +7,7 @@ import {
   fetchFriends,
   removeFriend,
   sendFriendRequest,
+  invalidateFriendsCache,
   type FriendRecord,
   type FriendRequestRecord,
 } from './friendsApi';
@@ -60,6 +61,110 @@ function timeAgo(isoDate: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+function friendRecordsEqual(a: FriendRecord[], b: FriendRecord[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i];
+    const right = b[i];
+    if (left.id !== right.id || left.userId !== right.userId || left.username !== right.username || left.online !== right.online) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function friendRequestsEqual(a: FriendRequestRecord[], b: FriendRequestRecord[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i];
+    const right = b[i];
+    if (left.id !== right.id || left.userId !== right.userId || left.username !== right.username) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function presenceMapsEqual(a: Map<string, PresenceStatus>, b: Map<string, PresenceStatus>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const [key, value] of a) {
+    if (b.get(key) !== value) return false;
+  }
+  return true;
+}
+
+function feedItemsEqual(a: FeedItem[], b: FeedItem[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i];
+    const right = b[i];
+    if (
+      left.id !== right.id ||
+      left.user_id !== right.user_id ||
+      left.username !== right.username ||
+      left.type !== right.type ||
+      left.created_at !== right.created_at
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function recentMatchesEqual(a: PublicProfile['recent_matches'], b: PublicProfile['recent_matches']): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i];
+    const right = b[i];
+    if (
+      left.opponent_username !== right.opponent_username ||
+      left.result !== right.result ||
+      left.score !== right.score ||
+      left.opponent_score !== right.opponent_score ||
+      left.mode !== right.mode ||
+      left.played_at !== right.played_at
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function profilesEqual(a: PublicProfile | null, b: PublicProfile | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.userId === b.userId &&
+    a.username === b.username &&
+    a.glicko_rating === b.glicko_rating &&
+    a.peak_rating === b.peak_rating &&
+    a.provisional === b.provisional &&
+    a.ranked_games_played === b.ranked_games_played &&
+    a.global_rank === b.global_rank &&
+    a.wins === b.wins &&
+    a.losses === b.losses &&
+    a.win_rate === b.win_rate &&
+    a.puzzles_completed === b.puzzles_completed &&
+    a.best_puzzle_score === b.best_puzzle_score &&
+    a.fritz_wins === b.fritz_wins &&
+    a.fritz_losses === b.fritz_losses &&
+    a.best_streak === b.best_streak &&
+    a.is_self === b.is_self &&
+    a.is_friend === b.is_friend &&
+    a.has_pending_request === b.has_pending_request &&
+    a.h2h?.wins === b.h2h?.wins &&
+    a.h2h?.losses === b.h2h?.losses &&
+    a.presence.status === b.presence.status &&
+    a.presence.current_mode === b.presence.current_mode &&
+    recentMatchesEqual(a.recent_matches, b.recent_matches)
+  );
+}
+
 export default function FriendsScreen({
   open,
   user,
@@ -84,40 +189,65 @@ export default function FriendsScreen({
   const [selectedActivity, setSelectedActivity] = useState<FeedItem[]>([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [copiedFriendId, setCopiedFriendId] = useState<string | null>(null);
+  const [isVisible, setIsVisible] = useState(
+    typeof document === 'undefined' ? true : document.visibilityState === 'visible',
+  );
 
   const loadFriends = useCallback(async () => {
     if (!open || !user) return;
     setLoading(true);
     const resp = await fetchFriends(user.id);
     setLoading(false);
-    setError(resp.error);
-    setFriends(resp.friends);
-    setIncoming(resp.incoming);
-    setOutgoing(resp.outgoing);
+    setError((current) => (current === resp.error ? current : resp.error));
+    setFriends((current) => (friendRecordsEqual(current, resp.friends) ? current : resp.friends));
+    setIncoming((current) => (friendRequestsEqual(current, resp.incoming) ? current : resp.incoming));
+    setOutgoing((current) => (friendRequestsEqual(current, resp.outgoing) ? current : resp.outgoing));
   }, [open, user]);
 
   const refreshPresence = useCallback(async () => {
-    if (!open || !user) return;
+    if (!open || !user || !isVisible || friends.length === 0) return;
     const result = await fetchFriendsWithPresence();
-    if (!result.error && result.friends.length > 0) {
+    if (!result.error) {
+      const friendUserIds = new Set(friends.map((friend) => friend.userId));
       const map = new Map<string, PresenceStatus>();
-      for (const f of result.friends) map.set(f.userId, f.presence_status);
-      setPresenceMap(map);
+      for (const friend of friends) {
+        map.set(friend.userId, 'offline');
+      }
+      for (const f of result.friends) {
+        if (friendUserIds.has(f.userId)) {
+          map.set(f.userId, f.presence_status);
+        }
+      }
+      setPresenceMap((current) => (presenceMapsEqual(current, map) ? current : map));
     }
-  }, [open, user]);
+  }, [friends, isVisible, open, user]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibilityChange = () => {
+      const visible = document.visibilityState === 'visible';
+      setIsVisible(visible);
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => { void loadFriends(); }, [loadFriends]);
 
   useEffect(() => {
+    if (!open || !user || !isVisible || friends.length === 0) return;
     void refreshPresence();
     const interval = setInterval(() => { void refreshPresence(); }, 30000);
     return () => clearInterval(interval);
-  }, [refreshPresence]);
+  }, [friends.length, isVisible, open, refreshPresence, user]);
 
   useEffect(() => {
-    if (!open || !socket || friends.length === 0) return;
+    if (!open || !socket || !isVisible || friends.length === 0) return;
     const friendUserIds = friends.map((f) => f.userId);
     const checkPresence = () => {
+      if (!isVisible) return;
       if (!socket.connected) return;
       socket.emit('presence:online', friendUserIds, (resp: { ok?: boolean; onlineUserIds?: string[] }) => {
         if (!resp?.ok) return;
@@ -125,18 +255,24 @@ export default function FriendsScreen({
         setPresenceMap((prev) => {
           const next = new Map(prev);
           for (const id of friendUserIds) {
-            if (!next.has(id)) next.set(id, set.has(id) ? 'online' : 'offline');
+            const nextStatus = set.has(id) ? 'online' : 'offline';
+            if (next.get(id) !== nextStatus) {
+              next.set(id, nextStatus);
+            }
           }
-          return next;
+          return presenceMapsEqual(prev, next) ? prev : next;
         });
       });
     };
     checkPresence();
     socket.on('connect', checkPresence);
     return () => { socket.off('connect', checkPresence); };
-  }, [open, socket, friends.length]);
+  }, [friends, isVisible, open, socket]);
 
   const handleSelectFriend = useCallback(async (friend: FriendRecord) => {
+    if (selectedFriend?.id === friend.id && (selectedProfile || selectedActivity.length > 0 || profileLoading)) {
+      return;
+    }
     setSelectedFriend(friend);
     setSelectedProfile(null);
     setSelectedActivity([]);
@@ -146,9 +282,19 @@ export default function FriendsScreen({
       fetchUserActivity(friend.userId),
     ]);
     setProfileLoading(false);
-    if (!profileResult.error && profileResult.profile) setSelectedProfile(profileResult.profile);
-    if (!activityResult.error) setSelectedActivity(activityResult.feed.slice(0, 5));
-  }, []);
+    if (!profileResult.error && profileResult.profile) {
+      setSelectedProfile((current) => (profilesEqual(current, profileResult.profile) ? current : profileResult.profile));
+    }
+    if (!activityResult.error) {
+      const nextActivity = activityResult.feed.slice(0, 5);
+      setSelectedActivity((current) => (feedItemsEqual(current, nextActivity) ? current : nextActivity));
+    }
+  }, [profileLoading, selectedActivity.length, selectedFriend?.id, selectedProfile]);
+
+  useEffect(() => {
+    if (open && user) return;
+    setPresenceMap((current) => (current.size === 0 ? current : new Map()));
+  }, [open, user]);
 
   const onlineCount = useMemo(
     () => friends.filter((f) => {
@@ -191,13 +337,14 @@ export default function FriendsScreen({
                   type="text"
                   placeholder="Add by username…"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={async (e) => {
-                    if (e.key !== 'Enter') return;
-                    const resp = await sendFriendRequest(user.id, query);
-                    if (resp.error) { setError(resp.error); return; }
-                    setQuery(''); setError(null); await loadFriends();
-                  }}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key !== 'Enter') return;
+                      const resp = await sendFriendRequest(user.id, query);
+                      if (resp.error) { setError(resp.error); return; }
+                      invalidateFriendsCache(user.id);
+                      setQuery(''); setError(null); await loadFriends();
+                    }}
                   className="friends-page-input"
                 />
                 <button
@@ -206,6 +353,7 @@ export default function FriendsScreen({
                   onClick={async () => {
                     const resp = await sendFriendRequest(user.id, query);
                     if (resp.error) { setError(resp.error); return; }
+                    invalidateFriendsCache(user.id);
                     setQuery(''); setError(null); await loadFriends();
                   }}
                 >
@@ -227,12 +375,14 @@ export default function FriendsScreen({
                           onClick={async () => {
                             const resp = await acceptFriendRequest(req.id, user.id);
                             if (resp.error) { setError(resp.error); return; }
+                            invalidateFriendsCache(user.id);
                             await loadFriends();
                           }}>Accept</button>
                         <button type="button" className="friends-page-action-btn friends-page-action-btn--danger"
                           onClick={async () => {
                             const resp = await declineFriendRequest(req.id, user.id);
                             if (resp.error) { setError(resp.error); return; }
+                            invalidateFriendsCache(user.id);
                             await loadFriends();
                           }}>Decline</button>
                       </div>
@@ -307,6 +457,7 @@ export default function FriendsScreen({
                             const resp = await removeFriend(friend.id, user.id);
                             if (resp.error) { setError(resp.error); return; }
                             if (selectedFriend?.id === friend.id) setSelectedFriend(null);
+                            invalidateFriendsCache(user.id);
                             await loadFriends();
                           }}
                         >

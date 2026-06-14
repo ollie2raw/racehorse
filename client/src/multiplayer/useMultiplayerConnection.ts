@@ -6,10 +6,23 @@ import { traceSocketEvent } from '../debug/socketTrace';
 import { playBlockedSound, playHandLoseSound, playHandWinSound } from '../utils/sound';
 import type { GameState, Move, Tile } from '../types';
 import { wrapSocketHandler } from './socketGuards';
+import type {
+  MultiplayerAuthRuntime,
+  MultiplayerConnectionConfig,
+  MultiplayerConnectionState,
+  MultiplayerConnectionUiSetters,
+  MultiplayerGameplayRefsRuntime,
+  MultiplayerJoinFlightRuntime,
+  MultiplayerNavigationRuntime,
+  MultiplayerRecoveryCallbacksRuntime,
+  MultiplayerReconnectRuntime,
+  MultiplayerRoomRuntime,
+  MultiplayerRoomSocialRuntime,
+  MultiplayerSocketRuntime,
+  RoomRecoveryState,
+} from './multiplayerRuntime';
 
 type SocketWithPing = Socket & { __mpPingTimer?: ReturnType<typeof setInterval> };
-
-type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 
 type HandEndedPayload = {
   handNumber: number;
@@ -24,40 +37,36 @@ type HandEndedPayload = {
   handWinnerId?: string | null;
 };
 
-type UseMultiplayerConnectionParams = {
-  emitWithAck: <TResp>(
-    socket: { emit: (...args: any[]) => void },
-    event: string,
-    ...argsWithoutAck: any[]
-  ) => Promise<TResp>;
-  normalizeRoomCode: (value: unknown) => string;
+export type UseMultiplayerConnectionParams = {
+  config: MultiplayerConnectionConfig;
+  connectionState: MultiplayerConnectionState;
+  socketRuntime: MultiplayerSocketRuntime;
+  roomRuntime: MultiplayerRoomRuntime;
+  reconnectRuntime: MultiplayerReconnectRuntime;
+  joinFlightRuntime: MultiplayerJoinFlightRuntime;
+  authRuntime: MultiplayerAuthRuntime;
+  navigationRuntime: MultiplayerNavigationRuntime;
+  gameplayRefsRuntime: MultiplayerGameplayRefsRuntime & {
+    isMutedRef: MutableRefObject<boolean>;
+    rematchAwaitingStateRef: MutableRefObject<boolean>;
+  };
+  recoveryRuntime: MultiplayerRecoveryCallbacksRuntime;
+  roomSocialRuntime: MultiplayerRoomSocialRuntime;
+  uiSetters: MultiplayerConnectionUiSetters;
+};
+
+type FlatMultiplayerConnectionParams = {
+  emitWithAck: MultiplayerConnectionConfig['emitWithAck'];
+  normalizeRoomCode: MultiplayerConnectionConfig['normalizeRoomCode'];
   lastRoomStorageKey: string;
   serverUrl: string;
+  showToast: MultiplayerConnectionConfig['showToast'];
+  emitCreateRoom: MultiplayerConnectionConfig['emitCreateRoom'];
   socket: Socket | null;
   isConnecting: boolean;
   isConnected: boolean;
   roomRecoveryState: RoomRecoveryState;
-  appMode:
-    | 'home'
-    | 'multiplayer'
-    | 'noBrainer'
-    | 'botSetup'
-    | 'bot'
-    | 'ghostSetup'
-    | 'ghost'
-    | 'daily'
-    | 'dailyFritz'
-    | 'learn'
-    | 'guidedMatchRecorder'
-    | 'guidedMatchAnnotator'
-    | 'friends'
-    | 'stats'
-    | 'ratingHistory'
-    | 'singlePlayerHub'
-    | 'tournament'
-    | 'leaderboard'
-    | 'profile'
-    | 'feed';
+  appMode: MultiplayerConnectionState['appMode'];
   authUserId?: string | null;
   authEmail?: string | null;
   authProfileUsername?: string | null;
@@ -117,17 +126,15 @@ type UseMultiplayerConnectionParams = {
   setTournamentState: Dispatch<SetStateAction<any>>;
   setTournamentActiveRoom: Dispatch<SetStateAction<string | null>>;
   setRoomCode: Dispatch<SetStateAction<string>>;
-  setAppMode: Dispatch<SetStateAction<UseMultiplayerConnectionParams['appMode']>>;
-  setRoomReactions: Dispatch<SetStateAction<Array<RoomChatEvent | RoomEmoteEvent>>>;
+  setAppMode: Dispatch<SetStateAction<MultiplayerConnectionState['appMode']>>;
+  appendRoomReactionRef: MultiplayerRoomSocialRuntime['appendRoomReactionRef'];
   setHandReveal: Dispatch<SetStateAction<HandEndedPayload | null>>;
   setPlayers: Dispatch<SetStateAction<any[]>>;
   setSelectedTile: Dispatch<SetStateAction<Tile | null>>;
   setPendingUiAction: Dispatch<
     SetStateAction<null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'>
   >;
-  showToast: (message: string, duration?: number) => void;
   applyJoinedRoomResponse: (resp: any) => void;
-  emitCreateRoom: (targetSocket: Socket) => Promise<any>;
   clearReconnectAttemptTimer: () => void;
   clearTransientRoomUi: () => void;
   fetchGameState: (reason: string) => Promise<boolean>;
@@ -135,13 +142,33 @@ type UseMultiplayerConnectionParams = {
   rematchAwaitingStateRef: MutableRefObject<boolean>;
 };
 
+function flattenMultiplayerConnectionParams(
+  params: UseMultiplayerConnectionParams,
+): FlatMultiplayerConnectionParams {
+  return {
+    ...params.config,
+    ...params.connectionState,
+    ...params.socketRuntime,
+    ...params.roomRuntime,
+    ...params.reconnectRuntime,
+    ...params.joinFlightRuntime,
+    ...params.authRuntime,
+    ...params.gameplayRefsRuntime,
+    ...params.recoveryRuntime,
+    ...params.roomSocialRuntime,
+    ...params.uiSetters,
+    setAppMode: params.navigationRuntime.setAppMode,
+  };
+}
+
 export function useMultiplayerConnection(params: UseMultiplayerConnectionParams) {
-  const latestRef = useRef(params);
-  latestRef.current = params;
+  const latestRef = useRef(flattenMultiplayerConnectionParams(params));
+  latestRef.current = flattenMultiplayerConnectionParams(params);
+  const { connectionState, config } = params;
 
   const scheduleReconnectAttempt = useCallback(
     (
-      current: UseMultiplayerConnectionParams,
+      current: FlatMultiplayerConnectionParams,
       message: string,
       details: Record<string, unknown> = {},
     ) => {
@@ -495,20 +522,14 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     s.on(
       'room:chat',
       wrapSocketHandler('room:chat', (msg: RoomChatEvent) => {
-      latestRef.current.setRoomReactions((prev) => {
-        const next = prev.concat(msg);
-        return next.length > 50 ? next.slice(next.length - 50) : next;
-      });
+      latestRef.current.appendRoomReactionRef.current(msg);
       }),
     );
 
     s.on(
       'room:emote',
       wrapSocketHandler('room:emote', (evt: RoomEmoteEvent) => {
-      latestRef.current.setRoomReactions((prev) => {
-        const next = prev.concat(evt);
-        return next.length > 50 ? next.slice(next.length - 50) : next;
-      });
+      latestRef.current.appendRoomReactionRef.current(evt);
       }),
     );
 
@@ -775,7 +796,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       }
     }, 2000);
     return () => clearTimeout(timer);
-  }, [params.isConnected, params.roomRecoveryState]);
+  }, [connectionState.isConnected, connectionState.roomRecoveryState]);
 
   useEffect(() => {
     const p = latestRef.current;
@@ -785,7 +806,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     p.intentionalDisconnectRef.current = false;
     p.autoConnectAttemptedRef.current = true;
     connect();
-  }, [params.appMode, params.serverUrl, connect]);
+  }, [connectionState.appMode, config.serverUrl, connect]);
 
   useEffect(() => {
     const p = latestRef.current;
@@ -793,7 +814,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     if (p.socket) return;
     p.intentionalDisconnectRef.current = false;
     connect();
-  }, [params.appMode, params.socket, connect]);
+  }, [connectionState.appMode, connectionState.socket, connect]);
 
   useEffect(() => {
     const p = latestRef.current;
@@ -801,7 +822,13 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     if (!p.serverUrl || p.socket || p.isConnecting) return;
     if (p.intentionalDisconnectRef.current) return;
     connect();
-  }, [params.authUserId, params.serverUrl, params.socket, params.isConnecting, connect]);
+  }, [
+    connectionState.authUserId,
+    config.serverUrl,
+    connectionState.socket,
+    connectionState.isConnecting,
+    connect,
+  ]);
 
   return {
     connect,

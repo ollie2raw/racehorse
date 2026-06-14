@@ -36,6 +36,7 @@ import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
 import { recordPublicOnlineMatch } from './stats/recordPublicMatch';
 import { socialRouter } from './social/routes';
+import { registerFriendInviteHandlers } from './social/registerFriendInviteHandlers';
 import { upsertPresence } from './social/presence';
 import { writeMatchActivity, writePuzzleActivity, writeDailyFritzActivity } from './social/activityWriter';
 import { supabaseFetch } from './supabaseUtils';
@@ -4962,57 +4963,11 @@ io.on('connection', (socket: Socket) => {
     cb?.({ ok: true, onlineUserIds });
   });
 
-  socket.on(
-    'friend:invite',
-    (
-      payload: {
-        toUserId: string;
-        fromUsername: string;
-        fromUserId?: string;
-        roomCode: string;
-        inviteUrl: string;
-        inviteId?: string;
-        matchSummary?: string;
-      },
-      cb?: AckFn,
-    ) => {
-      const roomCode = String(payload?.roomCode ?? '').trim().toUpperCase();
-      try {
-        getRoom(roomCode);
-      } catch {
-        console.log(`[friend:invite] ERROR room_not_found code=${roomCode} from=${socket.id}`);
-        socket.emit('friend:invite:error', { ok: false, error: 'room_not_found' });
-        cb?.({ ok: false, error: 'room_not_found' });
-        return;
-      }
-      const toUserId = normalizeUserId(payload?.toUserId);
-      if (!toUserId) {
-        cb?.({ ok: false, error: 'invalid_target' });
-        return;
-      }
-      const targetSockets = socketsByUserId.get(toUserId);
-      if (!targetSockets || targetSockets.size === 0) {
-        cb?.({ ok: false, error: 'recipient_unreachable' });
-        return;
-      }
-      const fromUserId =
-        normalizeUserId(payload?.fromUserId) ??
-        normalizeUserId(socket.data?.userId as string | undefined);
-      const inviteId = String(payload?.inviteId ?? `${Date.now()}-${roomCode}`).slice(0, 80);
-      const matchSummary = String(payload?.matchSummary ?? '7-Tile · First to 60 · Untimed').slice(0, 120);
-      for (const socketId of targetSockets) {
-        io.to(socketId).emit('friend:invited', {
-          inviteId,
-          fromUsername: normalizeUsername(payload?.fromUsername),
-          fromUserId,
-          roomCode,
-          inviteUrl: String(payload?.inviteUrl ?? ''),
-          matchSummary,
-        });
-      }
-      cb?.({ ok: true, delivered: true, inviteId });
-    },
-  );
+  registerFriendInviteHandlers(io, socket, socketsByUserId, {
+    normalizeUserId,
+    normalizeUsername,
+    isAuthenticatedUserId: isUuidLike,
+  });
 
   socket.on(
     'friend:invite:decline',

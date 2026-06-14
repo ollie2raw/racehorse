@@ -108,6 +108,57 @@ function formatWeeklyReset(totalSeconds: number): string {
   return `Resets in ${days}d ${hours}h`;
 }
 
+function friendsEqual(a: FriendWithPresence[], b: FriendWithPresence[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (
+      left.id !== right.id ||
+      left.userId !== right.userId ||
+      left.username !== right.username ||
+      left.presence_status !== right.presence_status ||
+      left.current_mode !== right.current_mode
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function ratingsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+  if (a === b) return true;
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
+function trendingPlayersEqual(
+  a: { rank: number; username: string; rating: number; delta: string }[],
+  b: { rank: number; username: string; rating: number; delta: string }[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (
+      left.rank !== right.rank ||
+      left.username !== right.username ||
+      left.rating !== right.rating ||
+      left.delta !== right.delta
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export default function ActivityFeedScreen({
   user,
   socket = null,
@@ -143,7 +194,7 @@ export default function ActivityFeedScreen({
 
     void fetchFriendsWithPresence().then((result) => {
       if (cancelled || result.error) return;
-      setFriends(result.friends);
+      setFriends((current) => (friendsEqual(current, result.friends) ? current : result.friends));
     });
 
     return () => {
@@ -173,7 +224,7 @@ export default function ActivityFeedScreen({
     let cancelled = false;
 
     if (onlineFriends.length === 0) {
-      setFriendRatings({});
+      setFriendRatings((current) => (Object.keys(current).length === 0 ? current : {}));
       return () => {
         cancelled = true;
       };
@@ -191,7 +242,8 @@ export default function ActivityFeedScreen({
       }),
     ).then((entries) => {
       if (cancelled) return;
-      setFriendRatings(Object.fromEntries(entries));
+      const nextRatings = Object.fromEntries(entries);
+      setFriendRatings((current) => (ratingsEqual(current, nextRatings) ? current : nextRatings));
     });
 
     return () => {
@@ -231,17 +283,25 @@ export default function ActivityFeedScreen({
   }, [connect, socket?.connected, user]);
 
   useEffect(() => {
+    let cancelled = false;
+
     void fetchGlobalLeaderboard().then((result) => {
-      if (result.error) return;
-      setTrendingPlayers(
+      if (cancelled || result.error) return;
+      const nextTrendingPlayers =
         result.leaderboard.slice(0, 3).map((entry, index) => ({
           rank: index + 1,
           username: entry.username,
           rating: entry.glicko_rating,
           delta: index === 0 ? '+22' : index === 1 ? '+18' : '+12',
-        })),
-      );
+        }));
+      setTrendingPlayers((current) => (
+        trendingPlayersEqual(current, nextTrendingPlayers) ? current : nextTrendingPlayers
+      ));
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const weeklyHighlights = useMemo(() => {

@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { GhostProfileSummary } from './api';
 import { fetchGhostProfileSummary, fetchGhostProfileSummaryByUsername } from './api';
 import { fetchFriends, type FriendRecord } from '../friends/friendsApi';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
-import ghostHeroImg from '../assets/ghost/ghostblue.png';
+import { useDeferredAsset } from '../ui/useDeferredAsset';
 import '../bot/PlayVsFritz.css';
 import './ghostMode.css';
 
@@ -96,6 +96,11 @@ export default function GhostSetupScreen({
   const [selectedUsername, setSelectedUsername] = useState<string>('Your Ghost');
   const [featuredUserId, setFeaturedUserId] = useState<string | null>(null);
   const [featuredUsername, setFeaturedUsername] = useState<string>(FEATURED_GHOST_USERNAME);
+  const loadHeroAsset = useCallback(
+    () => import('../assets/ghost/ghostblue.webp'),
+    [],
+  );
+  const heroSrc = useDeferredAsset('ghost-setup-hero', loadHeroAsset);
   const isViewingOwnGhost = selectedUserId === userId;
   const isLocked = Boolean(userId) && isViewingOwnGhost && fritzGamesPlayed < UNLOCK_THRESHOLD;
   const canPlay = Boolean(summary) && !loading && !isLocked;
@@ -287,7 +292,14 @@ export default function GhostSetupScreen({
           </div>
 
           <div className="pvf-opponent-card ghost-pvf-opponent-card">
-            <img src={ghostHeroImg} className="pvf-card-bg-img ghost-pvf-card-bg-img" alt="" />
+            {heroSrc ? (
+              <img
+                src={heroSrc}
+                className="pvf-card-bg-img ghost-pvf-card-bg-img"
+                alt=""
+                decoding="async"
+              />
+            ) : null}
             <div className="pvf-card-overlay ghost-pvf-card-overlay" />
             <div className="pvf-card-content">
               <div className="pvf-card-header">

@@ -200,6 +200,24 @@ function filterItems(
   }
 }
 
+function feedItemsEqual(a: FeedItem[], b: FeedItem[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (
+      left.id !== right.id ||
+      left.username !== right.username ||
+      left.type !== right.type ||
+      left.created_at !== right.created_at
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export default function ActivityFeedPanel({
   user,
   filter,
@@ -226,8 +244,8 @@ export default function ActivityFeedPanel({
       onFeedChange?.([]);
       return;
     }
-    setFeed(result.feed);
-    setVisibleCount(10);
+    setFeed((current) => (feedItemsEqual(current, result.feed) ? current : result.feed));
+    setVisibleCount((current) => (current === 10 ? current : 10));
     onFeedChange?.(result.feed);
   }, [onFeedChange, user]);
 

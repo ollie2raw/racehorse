@@ -349,10 +349,42 @@ function parseGuidedLessonCoachContent(
   };
 }
 
+const BOT_MATCH_DEBUG_ENV =
+  import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_BOT_MATCH === 'true';
+const DAILY_FRITZ_DEBUG_ENV =
+  BOT_MATCH_DEBUG_ENV || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
+
+function hasDebugLocalStorageFlag(key: string): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(key) === '1';
+}
+
+function shouldLogBotMatchDebug(): boolean {
+  return BOT_MATCH_DEBUG_ENV || hasDebugLocalStorageFlag('BOT_DEBUG');
+}
+
+function shouldLogDailyFritzDebug(): boolean {
+  return (
+    DAILY_FRITZ_DEBUG_ENV ||
+    hasDebugLocalStorageFlag('BOT_DEBUG') ||
+    hasDebugLocalStorageFlag('DAILY_FRITZ_DEBUG') ||
+    hasDebugLocalStorageFlag('DAILY_FRITZ_PROFILE')
+  );
+}
+
+function botMatchDebugLog(...args: unknown[]): void {
+  if (shouldLogBotMatchDebug()) console.log(...args);
+}
+
+function dailyFritzDebugLog(...args: unknown[]): void {
+  if (shouldLogDailyFritzDebug()) console.log(...args);
+}
+
 function traceDailyFritzEvent(
   tag: string,
   payload: Record<string, unknown>,
 ): void {
+  if (!shouldLogDailyFritzDebug()) return;
   if (typeof window === 'undefined') return;
   const timestamp =
     typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -367,7 +399,7 @@ function traceDailyFritzEvent(
   if (bucket.length > 400) {
     bucket.splice(0, bucket.length - 400);
   }
-  console.log(tag, entry);
+  dailyFritzDebugLog(tag, entry);
 }
 
 function getGhostResultMessage(playerScore: number, ghostScore: number): string {
@@ -878,7 +910,7 @@ export default function BotMatchScreen({
     'http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979';
   const HAND_LIFECYCLE_DEBUG_SESSION = '65d5db';
 
-  console.log('[mode-debug]', { mode, isGuidedModeProp, isGuidedMode, isLearnAcademyMode });
+  botMatchDebugLog('[mode-debug]', { mode, isGuidedModeProp, isGuidedMode, isLearnAcademyMode });
 
   const fritzConfig = FRITZ_TIERS[fritzTier];
   const rootRef = useRef<HTMLDivElement>(null);
@@ -895,12 +927,12 @@ export default function BotMatchScreen({
     const frozen = loadFrozenLesson();
     if (frozen) {
       // ── [guided-debug] log step0 hand and attempt matchStateJson parse ──────
-      console.log('[guided-debug] frozen step0 hand =', frozen.steps[0]?.playerHand ?? []);
+      botMatchDebugLog('[guided-debug] frozen step0 hand =', frozen.steps[0]?.playerHand ?? []);
       const firstReal = frozen.steps.find((s) => s.chosenMove !== null);
       if (firstReal?.matchStateJson) {
         try {
           const ms = JSON.parse(firstReal.matchStateJson) as BotMatchState;
-          console.log(
+          botMatchDebugLog(
             '[guided-debug] parsed matchStateJson hand =',
             ms.players.you.hand.map((t) => `${t.low}|${t.high}`),
           );
@@ -1188,8 +1220,8 @@ export default function BotMatchScreen({
   const [isOffAuthoredLine, setIsOffAuthoredLine] = useState(false);
   const [guidedV1Replay, setGuidedV1Replay] = useState<{ stepIndex: number; replyIndex: number } | null>(null);
 
-  console.log('[BOTMATCH VERSION]', 'v1-click-debug-001');
-  console.log('[mode-debug]', { mode, isGuidedMode, isLearnAcademyMode, lessonStepIndex });
+  botMatchDebugLog('[BOTMATCH VERSION]', 'v1-click-debug-001');
+  botMatchDebugLog('[mode-debug]', { mode, isGuidedMode, isLearnAcademyMode, lessonStepIndex });
 
   // ── Guided Authoring state (admin-only, no server calls) ─────────────────
   const [authoringSteps, setAuthoringSteps] = useState<AuthoredStep[]>(() => {
@@ -1280,8 +1312,7 @@ export default function BotMatchScreen({
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
 
-  const showDebug =
-    typeof window !== 'undefined' && window.localStorage.getItem('BOT_DEBUG') === '1';
+  const showDebug = hasDebugLocalStorageFlag('BOT_DEBUG');
   const enableDailyFritzProfiling =
     import.meta.env.DEV &&
     isDailyFritzMode &&
@@ -2142,7 +2173,7 @@ export default function BotMatchScreen({
   useEffect(() => {
     if (!isDailyFritzMode) return;
     lastDailyFlowLabelRef.current = 'match-init';
-    console.log('[daily-flow] match init', {
+    dailyFritzDebugLog('[daily-flow] match init', {
       handNumber: match.handNumber,
       currentPlayer: match.currentPlayer,
       attemptId: dailyFritzPackage?.attempt_id ?? null,
@@ -2153,7 +2184,7 @@ export default function BotMatchScreen({
   useEffect(() => {
     if (!isDailyFritzMode) return;
     lastDailyFlowLabelRef.current = 'hand-init';
-    console.log('[daily-flow] hand init', {
+    dailyFritzDebugLog('[daily-flow] hand init', {
       handNumber: match.handNumber,
       yourScore: match.players.you.score,
       botScore: match.players.bot.score,
@@ -2168,14 +2199,14 @@ export default function BotMatchScreen({
     if (match.handOver || match.gameOver) return;
     if (match.currentPlayer === 'you') {
       lastDailyFlowLabelRef.current = 'player-turn';
-      console.log('[daily-flow] player turn start', {
+      dailyFritzDebugLog('[daily-flow] player turn start', {
         handNumber: match.handNumber,
         yourScore: match.players.you.score,
         botScore: match.players.bot.score,
       });
     } else {
       lastDailyFlowLabelRef.current = 'bot-turn';
-      console.log('[daily-flow] bot turn start', {
+      dailyFritzDebugLog('[daily-flow] bot turn start', {
         handNumber: match.handNumber,
         yourScore: match.players.you.score,
         botScore: match.players.bot.score,
@@ -2186,7 +2217,7 @@ export default function BotMatchScreen({
   useEffect(() => {
     if (!isDailyFritzMode || !match.gameOver) return;
     lastDailyFlowLabelRef.current = 'match-complete';
-    console.log('[daily-flow] match complete', {
+    dailyFritzDebugLog('[daily-flow] match complete', {
       handNumber: match.handNumber,
       yourScore: match.players.you.score,
       botScore: match.players.bot.score,
@@ -2699,7 +2730,7 @@ export default function BotMatchScreen({
     if (!isDailyFritzMode || onDailyFritzGameComplete || !dailyFritzPackage || !userId || !match.gameOver) return;
     if (dailyFritzSubmitSucceededRef.current || dailyFritzAutoSubmitBlockedRef.current) return;
 
-    console.log('[daily-complete] game over reached');
+    dailyFritzDebugLog('[daily-complete] game over reached');
 
     const completionKey = [
       dailyFritzPackage.attempt_id,
@@ -2710,13 +2741,18 @@ export default function BotMatchScreen({
     ].join(':');
 
     if (dailyFritzCompleteKeyRef.current === completionKey) {
-      console.log('[daily-complete] modal state = dedup-skipped key=' + completionKey);
+      dailyFritzDebugLog('[daily-complete] modal state = dedup-skipped key=' + completionKey);
       return;
     }
     dailyFritzCompleteKeyRef.current = completionKey;
 
-    console.log('[daily-complete] submit start key=' + completionKey);
-    console.log('[daily-flow] submit start', { key: completionKey, handNumber: match.handNumber, yourScore: match.players.you.score, botScore: match.players.bot.score });
+    dailyFritzDebugLog('[daily-complete] submit start key=' + completionKey);
+    dailyFritzDebugLog('[daily-flow] submit start', {
+      key: completionKey,
+      handNumber: match.handNumber,
+      yourScore: match.players.you.score,
+      botScore: match.players.bot.score,
+    });
     setGhostResultLoading(true);
     setGhostResultError(null);
 
@@ -2755,21 +2791,24 @@ export default function BotMatchScreen({
         });
         dailyFritzSubmitSucceededRef.current = true;
         dailyFritzAutoSubmitBlockedRef.current = false;
-        console.log('[daily-complete] submit success');
-        console.log('[daily-flow] submit success', { key: completionKey, rank: response.rank ?? null });
+        dailyFritzDebugLog('[daily-complete] submit success');
+        dailyFritzDebugLog('[daily-flow] submit success', {
+          key: completionKey,
+          rank: response.rank ?? null,
+        });
         setDailyFritzLeaderboard(response.leaderboard_preview);
         setDailyFritzRank(response.rank ?? null);
         setGhostResultLoading(false);
-        console.log('[daily-complete] modal state = complete');
+        dailyFritzDebugLog('[daily-complete] modal state = complete');
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : 'Daily Fritz submission failed.';
         dailyFritzAutoSubmitBlockedRef.current = true;
         dailyFritzCompleteKeyRef.current = '';
-        console.log('[daily-complete] submit error', errMsg);
-        console.log('[daily-flow] submit error', { key: completionKey, error: errMsg });
+        dailyFritzDebugLog('[daily-complete] submit error', errMsg);
+        dailyFritzDebugLog('[daily-flow] submit error', { key: completionKey, error: errMsg });
         setGhostResultLoading(false);
         setGhostResultError(errMsg);
-        console.log('[daily-complete] modal state = error');
+        dailyFritzDebugLog('[daily-complete] modal state = error');
       }
     })();
   }, [
@@ -2800,7 +2839,7 @@ export default function BotMatchScreen({
     if (!isDailyFritzMode || onDailyFritzGameComplete || !dailyFritzPackage || !userId) return;
 
     if (!match.gameOver) {
-      console.log('[daily-complete] modal state = not-game-over');
+      dailyFritzDebugLog('[daily-complete] modal state = not-game-over');
       if (!dailyFritzSubmitSucceededRef.current) {
         dailyFritzCompleteKeyRef.current = '';
         dailyFritzAutoSubmitBlockedRef.current = false;
@@ -2811,12 +2850,12 @@ export default function BotMatchScreen({
     }
 
     if (dailyFritzSubmitSucceededRef.current) {
-      console.log('[daily-complete] modal state = already-succeeded (permanent guard)');
+      dailyFritzDebugLog('[daily-complete] modal state = already-succeeded (permanent guard)');
       return;
     }
 
     if (dailyFritzAutoSubmitBlockedRef.current) {
-      console.log('[daily-complete] modal state = waiting-for-manual-retry');
+      dailyFritzDebugLog('[daily-complete] modal state = waiting-for-manual-retry');
       return;
     }
 
@@ -2864,7 +2903,7 @@ export default function BotMatchScreen({
 
     const effectiveOpponentUserId = isGhostMode ? opponentUserId : (opponentUserId || fritzConfig.id);
 
-    console.log('[Fritz Rating] calling completeGhostGame', {
+    botMatchDebugLog('[Fritz Rating] calling completeGhostGame', {
       userId,
       effectiveOpponentUserId,
       finalScore: match.players.you.score,
@@ -2892,7 +2931,7 @@ export default function BotMatchScreen({
       accessToken: accessTokenRef.current,
     })
       .then((result) => {
-        console.log('[Fritz Rating] success:', result);
+        botMatchDebugLog('[Fritz Rating] success:', result);
         setGhostResult(result);
         setGhostResultLoading(false);
         if (!isGhostMode) {
@@ -3397,7 +3436,7 @@ export default function BotMatchScreen({
           Date.now()
           + (resolveHandRevealScheduleMode(true) === 'immediate' ? 0 : DAILY_FRITZ_REVEAL_DELAY_MS)
           + DAILY_FRITZ_AUTO_ADVANCE_MS;
-        console.log('[daily-flow] hand complete detected', {
+        dailyFritzDebugLog('[daily-flow] hand complete detected', {
           handNumber: result.state.handNumber,
           winner: result.handEnded.winner,
           reason: result.handEnded.reason,
@@ -3406,7 +3445,7 @@ export default function BotMatchScreen({
           botScore: result.state.players.bot.score,
           isGameOver: result.state.gameOver,
         });
-        console.log('[daily-flow] hand scoring applied', {
+        dailyFritzDebugLog('[daily-flow] hand scoring applied', {
           pointsAwarded: result.handEnded.pointsAwarded,
           winner: result.handEnded.winner,
           yourScore: result.state.players.you.score,
@@ -3418,7 +3457,7 @@ export default function BotMatchScreen({
       // result so advanceHand can transition instantly if already resolved.
       if (isDailyFritzMode && dailyFritzPackage && !result.state.gameOver) {
         const gameNumber = dailyFritzPackage.current_game_number ?? 1;
-        console.log('[daily-fritz-hand] requesting next hand', {
+        dailyFritzDebugLog('[daily-fritz-hand] requesting next hand', {
           source: 'prefetch',
           gameNumber,
           completedHandIndex: dailyFritzHandIndex,
@@ -3451,7 +3490,7 @@ export default function BotMatchScreen({
         cache.promise
           .then((r) => {
             const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-            console.log('[daily-fritz-hand] next hand response', {
+            dailyFritzDebugLog('[daily-fritz-hand] next hand response', {
               source: 'prefetch',
               gameNumber: r.game_number ?? gameNumber,
               currentHandIndex: r.current_hand_index,
@@ -3463,12 +3502,14 @@ export default function BotMatchScreen({
           })
           .catch((e) => {
             const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-            console.warn('[daily-fritz-hand] next hand error', {
-              source: 'prefetch',
-              gameNumber,
-              error: e instanceof Error ? e.message : String(e),
-              durationMs: Number((requestEndedAt - requestStartedAt).toFixed(1)),
-            });
+            if (shouldLogDailyFritzDebug()) {
+              console.warn('[daily-fritz-hand] next hand error', {
+                source: 'prefetch',
+                gameNumber,
+                error: e instanceof Error ? e.message : String(e),
+                durationMs: Number((requestEndedAt - requestStartedAt).toFixed(1)),
+              });
+            }
             cache.error = e;
           });
         dailyFritzNextHandRef.current = cache;
@@ -3503,7 +3544,7 @@ export default function BotMatchScreen({
         }
         if (isDailyFritzMode) {
           lastDailyFlowLabelRef.current = 'reveal-start';
-          console.log('[daily-flow] reveal start', {
+          dailyFritzDebugLog('[daily-flow] reveal start', {
             handNumber: result.state.handNumber,
             handTransitionInFlight: handTransitionInFlightRef.current,
             prefetchReady: dailyFritzNextHandRef.current?.result != null,
@@ -4899,7 +4940,13 @@ export default function BotMatchScreen({
   ]);
 
   useEffect(() => {
-    console.log('[BOT-EFFECT] fired', { currentPlayer: match.currentPlayer, handOver: match.handOver, gameOver: match.gameOver, drawSequenceActive: drawSequenceActiveRef.current, cancelled: false });
+    botMatchDebugLog('[BOT-EFFECT] fired', {
+      currentPlayer: match.currentPlayer,
+      handOver: match.handOver,
+      gameOver: match.gameOver,
+      drawSequenceActive: drawSequenceActiveRef.current,
+      cancelled: false,
+    });
     if (!shouldAllowBotAction(matchRef.current) || drawSequenceActiveRef.current) return;
     if (isDailyFritzMode && isDailyFritzSetTerminal(dailyFritzPackage?.set_result)) return;
     if (isOriginalGuidedScriptedFritzMode) return;
@@ -4912,7 +4959,7 @@ export default function BotMatchScreen({
     // In V2 guided on-line mode the Fritz auto-apply effect owns all bot turns.
     // Letting the live AI also run would produce dual state mutations.
     if (isGuidedV2Mode && !isGuidedV2OffLine) return;
-    console.log('[BOT-EFFECT] passed guard, scheduling turn');
+    botMatchDebugLog('[BOT-EFFECT] passed guard, scheduling turn');
     let cancelled = false;
     let actionResolved = false;
     let playedTileForHighlight: Tile | null = null;
@@ -4922,7 +4969,10 @@ export default function BotMatchScreen({
 
     const timer = setTimeout(() => {
       void (async () => {
-        console.log('[BOT-TURN] timer fired', { cancelled, currentPlayer: matchRef.current.currentPlayer });
+        botMatchDebugLog('[BOT-TURN] timer fired', {
+          cancelled,
+          currentPlayer: matchRef.current.currentPlayer,
+        });
         try {
           if (!isLocalRunCurrent(runToken)) return;
           const liveAtTurn = matchRef.current;
@@ -5116,7 +5166,7 @@ export default function BotMatchScreen({
               });
             }
             if (isDailyFritzMode) {
-              console.log('[daily-flow] bot move applied', {
+              dailyFritzDebugLog('[daily-flow] bot move applied', {
                 handNumber: result.state.handNumber,
                 handOver: result.state.handOver,
                 gameOver: result.state.gameOver,
@@ -5432,7 +5482,7 @@ export default function BotMatchScreen({
     }
     handAdvanceRetryTimerRef.current = window.setTimeout(() => {
       handAdvanceRetryTimerRef.current = null;
-      console.log('[hand-over] retry-scheduled', { reason, delayMs });
+      dailyFritzDebugLog('[hand-over] retry-scheduled', { reason, delayMs });
       advanceHandRef.current();
     }, delayMs);
   }, []);
@@ -5440,7 +5490,7 @@ export default function BotMatchScreen({
   const applyDailyFritzNextHandResponse = useCallback(
     (response: DailyFritzNextHandResponse, source: string) => {
       lastDailyFlowLabelRef.current = 'next-hand-start';
-      console.log('[daily-fritz-hand] applying next hand', {
+      dailyFritzDebugLog('[daily-fritz-hand] applying next hand', {
         source,
         gameNumber: response.game_number ?? dailyFritzPackage?.current_game_number ?? 1,
         currentHandIndex: response.current_hand_index,
@@ -5507,7 +5557,7 @@ export default function BotMatchScreen({
       return;
     }
     if (handTransitionInFlightRef.current) {
-      console.log('[daily-flow] advanceHand skipped — transition already in flight');
+      dailyFritzDebugLog('[daily-flow] advanceHand skipped — transition already in flight');
       // #region agent log
       emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
         location: 'BotMatchScreen.tsx:advanceHand',
@@ -5526,7 +5576,7 @@ export default function BotMatchScreen({
 
     if (isDailyFritzMode) {
       lastDailyFlowLabelRef.current = 'reveal-end';
-      console.log('[daily-flow] reveal end', {
+      dailyFritzDebugLog('[daily-flow] reveal end', {
         handNumber: matchRef.current.handNumber,
         prefetchReady: dailyFritzNextHandRef.current?.result != null,
         handTransitionInFlight: handTransitionInFlightRef.current,
@@ -5550,11 +5600,14 @@ export default function BotMatchScreen({
       if (handAutoAdvanceTimerRef.current) {
         window.clearTimeout(handAutoAdvanceTimerRef.current);
         handAutoAdvanceTimerRef.current = null;
-        console.log('[hand-over] timer-cleared', { reason: 'advance-start' });
+        dailyFritzDebugLog('[hand-over] timer-cleared', { reason: 'advance-start' });
       }
 
       const handleEndOfRun = (reason: string) => {
-        console.log('[daily-flow] end-of-run detected from server', { reason, handNumber: matchRef.current.handNumber });
+        dailyFritzDebugLog('[daily-flow] end-of-run detected from server', {
+          reason,
+          handNumber: matchRef.current.handNumber,
+        });
         lastDailyFlowLabelRef.current = 'match-complete';
         handTransitionInFlightRef.current = false;
         dailyFritzNextHandRef.current = null;
@@ -5579,7 +5632,7 @@ export default function BotMatchScreen({
       }
 
       if (cacheSnapshot?.result) {
-        console.log('[hand-over] advancing-next-hand', { source: 'prefetch-hit' });
+        dailyFritzDebugLog('[hand-over] advancing-next-hand', { source: 'prefetch-hit' });
         applyDailyFritzNextHandResponse(cacheSnapshot.result, 'prefetch-hit');
         return;
       }
@@ -5611,7 +5664,7 @@ export default function BotMatchScreen({
       }
 
       const activeCache = dailyFritzNextHandRef.current!;
-      console.log('[daily-fritz-hand] requesting next hand', {
+      dailyFritzDebugLog('[daily-fritz-hand] requesting next hand', {
         source,
         gameNumber,
         completedHandIndex: dailyFritzHandIndex,
@@ -5623,7 +5676,7 @@ export default function BotMatchScreen({
         .then((response) => {
           activeCache.result = response;
           const requestEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-          console.log('[daily-fritz-hand] next hand response', {
+          dailyFritzDebugLog('[daily-fritz-hand] next hand response', {
             source,
             gameNumber: response.game_number ?? gameNumber,
             currentHandIndex: response.current_hand_index,
@@ -5689,12 +5742,14 @@ export default function BotMatchScreen({
               handNumber: matchRef.current.handNumber,
             });
           }
-          console.warn('[daily-fritz-hand] next hand error', {
-            source,
-            gameNumber,
-            error: errMsg,
-            handNumber: matchRef.current.handNumber,
-          });
+          if (shouldLogDailyFritzDebug()) {
+            console.warn('[daily-fritz-hand] next hand error', {
+              source,
+              gameNumber,
+              error: errMsg,
+              handNumber: matchRef.current.handNumber,
+            });
+          }
           scheduleHandAdvanceRetry(4000, 'next-hand-fetch-failed');
         });
       return;
@@ -5787,7 +5842,9 @@ export default function BotMatchScreen({
       if (handAutoAdvanceTimerRef.current) {
         window.clearTimeout(handAutoAdvanceTimerRef.current);
         handAutoAdvanceTimerRef.current = null;
-        console.log('[hand-over] timer-cleared', { reason: handReveal ? 'game-complete' : 'hidden' });
+        dailyFritzDebugLog('[hand-over] timer-cleared', {
+          reason: handReveal ? 'game-complete' : 'hidden',
+        });
       }
       return;
     }
@@ -5800,7 +5857,7 @@ export default function BotMatchScreen({
       winner: handReveal.winner,
       pointsAwarded: handReveal.pointsAwarded,
     });
-    console.log('[hand-over] shown', {
+    dailyFritzDebugLog('[hand-over] shown', {
       mode,
       handWinner: handReveal.winner,
       pointsAwarded: handReveal.pointsAwarded,
@@ -5812,14 +5869,14 @@ export default function BotMatchScreen({
     dailyFritzNextHandFailureCountRef.current = 0;
     if (isGuidedMode || isGuidedV2Mode) return;
     if (isDailyFritzMode) {
-      console.log('[daily-flow] reveal countdown started', {
+      dailyFritzDebugLog('[daily-flow] reveal countdown started', {
         handNumber: match.handNumber,
         autoAdvanceMs: DAILY_FRITZ_AUTO_ADVANCE_MS,
         handTransitionInFlight: handTransitionInFlightRef.current,
         prefetchReady: dailyFritzNextHandRef.current?.result != null,
       });
     }
-    console.log('[hand-over] timer-start', { delayMs: DAILY_FRITZ_AUTO_ADVANCE_MS });
+    dailyFritzDebugLog('[hand-over] timer-start', { delayMs: DAILY_FRITZ_AUTO_ADVANCE_MS });
     // #region agent log
     emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
       location: 'BotMatchScreen.tsx:handRevealAutoAdvance',
@@ -5846,7 +5903,7 @@ export default function BotMatchScreen({
       if (handAutoAdvanceTimerRef.current) {
         window.clearTimeout(handAutoAdvanceTimerRef.current);
         handAutoAdvanceTimerRef.current = null;
-        console.log('[hand-over] timer-cleared', { reason: 'effect-cleanup' });
+        dailyFritzDebugLog('[hand-over] timer-cleared', { reason: 'effect-cleanup' });
         // #region agent log
         emitHandLifecycleDebugLog(HAND_LIFECYCLE_DEBUG_SESSION, HAND_LIFECYCLE_DEBUG_ENDPOINT, {
           location: 'BotMatchScreen.tsx:handRevealAutoAdvance',
@@ -5978,7 +6035,7 @@ export default function BotMatchScreen({
         minAdvanceAt: dailyFritzMinAdvanceAtRef.current,
         nowMs: Date.now(),
       })) {
-        console.log('[daily-flow] watchdog skipped — reveal/countdown not finished', {
+        dailyFritzDebugLog('[daily-flow] watchdog skipped — reveal/countdown not finished', {
           handNumber: live.handNumber,
           revealVisible: handRevealRef.current !== null,
           minAdvanceAt: dailyFritzMinAdvanceAtRef.current,
@@ -5986,7 +6043,7 @@ export default function BotMatchScreen({
         return;
       }
 
-      console.log('[daily-flow] watchdog fired — advancing after reveal window', {
+      dailyFritzDebugLog('[daily-flow] watchdog fired — advancing after reveal window', {
         handNumber: live.handNumber,
         handTransitionInFlight: handTransitionInFlightRef.current,
         lastLabel: lastDailyFlowLabelRef.current,
@@ -6060,7 +6117,7 @@ export default function BotMatchScreen({
           boneyardLocked &&
           asPlayMoves(getLegalMoves({ ...match, currentPlayer: 'bot' }, 'bot')).length === 0;
         if (isDailyFritzMode && boneyardLocked && botAlsoStuck) {
-          console.log('[daily-flow] locked boneyard no-move detected', {
+          dailyFritzDebugLog('[daily-flow] locked boneyard no-move detected', {
             handNumber: match.handNumber,
             yourScore: match.players.you.score,
             botScore: match.players.bot.score,
@@ -6075,14 +6132,14 @@ export default function BotMatchScreen({
               : { ...match, consecutivePasses: 1 };
           const fastResult = passTurn(resolveBase, 'you');
           if (!isLocalRunCurrent(runToken)) return;
-          console.log('[daily-flow] blocked hand resolved', {
+          dailyFritzDebugLog('[daily-flow] blocked hand resolved', {
             handEnded: Boolean(fastResult.handEnded),
             yourScore: fastResult.state.players.you.score,
             botScore: fastResult.state.players.bot.score,
             gameOver: fastResult.state.gameOver,
           });
           if (fastResult.state.gameOver) {
-            console.log('[daily-flow] winning score already reached -> match complete', {
+            dailyFritzDebugLog('[daily-flow] winning score already reached -> match complete', {
               handNumber: fastResult.state.handNumber,
               winnerId: fastResult.state.winnerId,
               yourScore: fastResult.state.players.you.score,
@@ -6388,19 +6445,21 @@ export default function BotMatchScreen({
     guidedMatchCaptureStatus.enabled &&
     guidedMatchCaptureStatus.candidateStatus === 'complete';
 
-  if (isGuidedMode && !isAuthoringMode) {
-    console.log('[guided-move] rendered match player hand =', match.players.you.hand.map(toTileKey));
-    console.log('[guided-move] rendered match board mainLine length =', match.board?.mainLine.length);
-    console.log('[guided-move] lessonStepIndex =', lessonStepIndex);
+  if (shouldLogBotMatchDebug() && isGuidedMode && !isAuthoringMode) {
+    botMatchDebugLog('[guided-move] rendered match player hand =', match.players.you.hand.map(toTileKey));
+    botMatchDebugLog('[guided-move] rendered match board mainLine length =', match.board?.mainLine.length);
+    botMatchDebugLog('[guided-move] lessonStepIndex =', lessonStepIndex);
   }
 
-  const openEnds = getDisplayOpenEnds(match);
-  const openEndsSum = match.board ? computeOpenEndsSum(match.board) : 0;
-  if (match.board) {
+  const openEnds = useMemo(() => getDisplayOpenEnds(match), [match.board]);
+  const openEndsSum = useMemo(() => (match.board ? computeOpenEndsSum(match.board) : 0), [match.board]);
+
+  useEffect(() => {
+    if (!match.board) return;
     assertDisplayedOpenCountMatchesCanonical(match.board, openEndsSum, 'bot-match');
-  }
+  }, [match.board, openEndsSum]);
 
-  if (isGuidedMode && !isAuthoringMode) {
+  if (shouldLogBotMatchDebug() && isGuidedMode && !isAuthoringMode) {
     // ── BUG B INSTRUMENTATION ────────────────────────────────────────────
     // The tile-row highlight and userPlayMoves BOTH source from match.board.
     // The visible open ends (what's rendered in the main-line and hub branches)
@@ -6419,20 +6478,20 @@ export default function BotMatchScreen({
             : [],
         ).filter(Boolean),
       ];
-      console.log('[guided-legal] visible rendered open ends =', rawRenderedEnds);
+      botMatchDebugLog('[guided-legal] visible rendered open ends =', rawRenderedEnds);
 
       const legalityEnds = getMatchableOpenEnds(match.board).map((e) => ({
         position: e.position,
         val: e.matchValue,
       }));
-      console.log('[guided-legal] legality source open ends =', legalityEnds);
+      botMatchDebugLog('[guided-legal] legality source open ends =', legalityEnds);
 
       // Per-tile placement targets (what the legality layer thinks each tile can do)
       const perTileTargets = match.players.you.hand.map((tile) => ({
         tile: toTileKey(tile),
         targets: getPlacementTargetsForTile(match.board, tile),
       }));
-      console.log('[guided-legal] placement targets for each tile in hand =', perTileTargets);
+      botMatchDebugLog('[guided-legal] placement targets for each tile in hand =', perTileTargets);
 
       // Mismatch detection: any legality end that isn't present among visible ends
       const visibleSet = new Set(rawRenderedEnds.map((e: any) => `${e.val}`));
@@ -6441,8 +6500,8 @@ export default function BotMatchScreen({
         legalityExtras.length > 0
           ? `legality has values not visible: ${legalityExtras.map((e) => `${e.position}=${e.val}`).join(', ')}`
           : 'none';
-      console.log('[guided-legal] mismatch reason =', mismatchReason);
-      console.log('[GUIDED-CURRENT-SCREEN]', {
+      botMatchDebugLog('[guided-legal] mismatch reason =', mismatchReason);
+      botMatchDebugLog('[GUIDED-CURRENT-SCREEN]', {
         lessonStepIndex,
         renderedHand: match.players.you.hand.map(toTileKey),
         renderedMainLineLen: match.board?.mainLine?.length ?? 0,
@@ -6461,6 +6520,10 @@ export default function BotMatchScreen({
       });
     }
   }
+  const handRevealTileReveals = useMemo(
+    () => (handReveal ? buildBotHandOverReveals(handReveal, opponentLabel) : []),
+    [handReveal, opponentLabel],
+  );
   const ghostAverageLabel =
     ghostProfile?.avgScore == null ? '—' : `${ghostProfile.avgScore} pts`;
   const ghostResultMessage = getGhostResultMessage(match.players.you.score, match.players.bot.score);
@@ -7294,7 +7357,7 @@ export default function BotMatchScreen({
               opponentName: opponentLabel,
               pointsAwarded: handReveal.pointsAwarded,
             })}
-            tileReveals={buildBotHandOverReveals(handReveal, opponentLabel)}
+            tileReveals={handRevealTileReveals}
             nextHandLabel="Next hand starting..."
             nextHandHint={buildNextHandDealingHint({
               completedHandNumber: match.handNumber,

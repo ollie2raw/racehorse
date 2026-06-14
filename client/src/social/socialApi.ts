@@ -12,12 +12,91 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+async function authCacheScope(): Promise<string> {
+  if (!supabase) return 'anon';
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id ?? 'anon';
+}
+
 async function apiFetch<T>(path: string): Promise<T> {
   const headers = await authHeaders();
   const res = await fetch(`${resolveBaseUrl()}${path}`, { headers, credentials: 'include' });
   const body = (await res.json()) as T & { error?: string };
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `Request failed: ${res.status}`);
   return body;
+}
+
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const friendsWithPresenceCache = new Map<string, CacheEntry<{ friends: FriendWithPresence[]; error: string | null }>>();
+const activityFeedCache = new Map<string, CacheEntry<{ feed: FeedItem[]; error: string | null }>>();
+const userActivityCache = new Map<string, CacheEntry<{ feed: FeedItem[]; error: string | null }>>();
+const globalLeaderboardCache = new Map<
+  string,
+  CacheEntry<{ leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null; error: string | null }>
+>();
+const publicProfileCache = new Map<string, CacheEntry<{ profile: PublicProfile | null; error: string | null }>>();
+
+const friendsWithPresenceInFlight = new Map<string, Promise<{ friends: FriendWithPresence[]; error: string | null }>>();
+const activityFeedInFlight = new Map<string, Promise<{ feed: FeedItem[]; error: string | null }>>();
+const userActivityInFlight = new Map<string, Promise<{ feed: FeedItem[]; error: string | null }>>();
+const globalLeaderboardInFlight = new Map<
+  string,
+  Promise<{ leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null; error: string | null }>
+>();
+const publicProfileInFlight = new Map<string, Promise<{ profile: PublicProfile | null; error: string | null }>>();
+
+const FRIENDS_WITH_PRESENCE_TTL_MS = 15_000;
+const ACTIVITY_FEED_TTL_MS = 15_000;
+const USER_ACTIVITY_TTL_MS = 30_000;
+const GLOBAL_LEADERBOARD_TTL_MS = 30_000;
+const PUBLIC_PROFILE_TTL_MS = 5 * 60_000;
+
+function readCache<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function writeCache<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T, ttlMs: number): T {
+  cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  return value;
+}
+
+async function withCachedRequest<T>({
+  cache,
+  inFlight,
+  cacheKey,
+  ttlMs,
+  load,
+}: {
+  cache: Map<string, CacheEntry<T>>;
+  inFlight: Map<string, Promise<T>>;
+  cacheKey: string;
+  ttlMs: number;
+  load: () => Promise<T>;
+}): Promise<T> {
+  const cached = readCache(cache, cacheKey);
+  if (cached !== null) return cached;
+
+  const existing = inFlight.get(cacheKey);
+  if (existing) return existing;
+
+  const pending = load()
+    .then((value) => writeCache(cache, cacheKey, value, ttlMs))
+    .finally(() => {
+      inFlight.delete(cacheKey);
+    });
+
+  inFlight.set(cacheKey, pending);
+  return pending;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -158,30 +237,57 @@ function mapPublicProfileFromApi(data: PublicProfileApiResponse): PublicProfile 
 // ─── API calls ───────────────────────────────────────────────────────────────
 
 export async function fetchFriendsWithPresence(): Promise<{ friends: FriendWithPresence[]; error: string | null }> {
-  try {
-    const data = await apiFetch<{ ok: boolean; friends: FriendWithPresence[] }>('/api/social/friends/with-presence');
-    return { friends: data.friends, error: null };
-  } catch (err) {
-    return { friends: [], error: err instanceof Error ? err.message : 'Failed to load friends.' };
-  }
+  const cacheScope = await authCacheScope();
+  return withCachedRequest({
+    cache: friendsWithPresenceCache,
+    inFlight: friendsWithPresenceInFlight,
+    cacheKey: `friends-with-presence:${cacheScope}`,
+    ttlMs: FRIENDS_WITH_PRESENCE_TTL_MS,
+    load: async () => {
+      try {
+        const data = await apiFetch<{ ok: boolean; friends: FriendWithPresence[] }>('/api/social/friends/with-presence');
+        return { friends: data.friends, error: null };
+      } catch (err) {
+        return { friends: [], error: err instanceof Error ? err.message : 'Failed to load friends.' };
+      }
+    },
+  });
 }
 
 export async function fetchActivityFeed(): Promise<{ feed: FeedItem[]; error: string | null }> {
-  try {
-    const data = await apiFetch<{ ok: boolean; feed: FeedItem[] }>('/api/social/feed');
-    return { feed: data.feed, error: null };
-  } catch (err) {
-    return { feed: [], error: err instanceof Error ? err.message : 'Failed to load feed.' };
-  }
+  const cacheScope = await authCacheScope();
+  return withCachedRequest({
+    cache: activityFeedCache,
+    inFlight: activityFeedInFlight,
+    cacheKey: `activity-feed:${cacheScope}`,
+    ttlMs: ACTIVITY_FEED_TTL_MS,
+    load: async () => {
+      try {
+        const data = await apiFetch<{ ok: boolean; feed: FeedItem[] }>('/api/social/feed');
+        return { feed: data.feed, error: null };
+      } catch (err) {
+        return { feed: [], error: err instanceof Error ? err.message : 'Failed to load feed.' };
+      }
+    },
+  });
 }
 
 export async function fetchGlobalLeaderboard(): Promise<{ leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null; error: string | null }> {
-  try {
-    const data = await apiFetch<{ ok: boolean; leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null }>('/api/social/leaderboard/global');
-    return { leaderboard: data.leaderboard, self: data.self, error: null };
-  } catch (err) {
-    return { leaderboard: [], self: null, error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
-  }
+  const cacheScope = await authCacheScope();
+  return withCachedRequest({
+    cache: globalLeaderboardCache,
+    inFlight: globalLeaderboardInFlight,
+    cacheKey: `global-leaderboard:${cacheScope}`,
+    ttlMs: GLOBAL_LEADERBOARD_TTL_MS,
+    load: async () => {
+      try {
+        const data = await apiFetch<{ ok: boolean; leaderboard: GlobalLeaderboardEntry[]; self: GlobalLeaderboardEntry | null }>('/api/social/leaderboard/global');
+        return { leaderboard: data.leaderboard, self: data.self, error: null };
+      } catch (err) {
+        return { leaderboard: [], self: null, error: err instanceof Error ? err.message : 'Failed to load leaderboard.' };
+      }
+    },
+  });
 }
 
 export async function fetchFriendsLeaderboard(): Promise<{ leaderboard: LeaderboardEntry[]; error: string | null }> {
@@ -221,21 +327,40 @@ export async function fetchRivals(): Promise<{ rivals: RivalEntry[]; error: stri
 }
 
 export async function fetchUserActivity(userId: string): Promise<{ feed: FeedItem[]; error: string | null }> {
-  try {
-    const data = await apiFetch<{ ok: boolean; feed: FeedItem[] }>(`/api/social/feed/user/${encodeURIComponent(userId)}`);
-    return { feed: data.feed, error: null };
-  } catch (err) {
-    return { feed: [], error: err instanceof Error ? err.message : 'Activity unavailable.' };
-  }
+  const cacheScope = await authCacheScope();
+  return withCachedRequest({
+    cache: userActivityCache,
+    inFlight: userActivityInFlight,
+    cacheKey: `${cacheScope}:${userId}`,
+    ttlMs: USER_ACTIVITY_TTL_MS,
+    load: async () => {
+      try {
+        const data = await apiFetch<{ ok: boolean; feed: FeedItem[] }>(`/api/social/feed/user/${encodeURIComponent(userId)}`);
+        return { feed: data.feed, error: null };
+      } catch (err) {
+        return { feed: [], error: err instanceof Error ? err.message : 'Activity unavailable.' };
+      }
+    },
+  });
 }
 
 export async function fetchPublicProfile(username: string): Promise<{ profile: PublicProfile | null; error: string | null }> {
-  try {
-    const data = await apiFetch<PublicProfileApiResponse>(
-      `/api/profile/${encodeURIComponent(username.replace(/^@/, ''))}`,
-    );
-    return { profile: mapPublicProfileFromApi(data), error: null };
-  } catch (err) {
-    return { profile: null, error: err instanceof Error ? err.message : 'Player not found.' };
-  }
+  const normalizedUsername = username.replace(/^@/, '').trim().toLowerCase();
+  const cacheScope = await authCacheScope();
+  return withCachedRequest({
+    cache: publicProfileCache,
+    inFlight: publicProfileInFlight,
+    cacheKey: `${cacheScope}:${normalizedUsername}`,
+    ttlMs: PUBLIC_PROFILE_TTL_MS,
+    load: async () => {
+      try {
+        const data = await apiFetch<PublicProfileApiResponse>(
+          `/api/profile/${encodeURIComponent(normalizedUsername)}`,
+        );
+        return { profile: mapPublicProfileFromApi(data), error: null };
+      } catch (err) {
+        return { profile: null, error: err instanceof Error ? err.message : 'Player not found.' };
+      }
+    },
+  });
 }

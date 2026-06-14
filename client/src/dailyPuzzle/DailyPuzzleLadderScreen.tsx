@@ -26,7 +26,7 @@ import type {
   DailyPuzzleTodayResponse,
 } from './types';
 import DailyPuzzleLadderLeaderboardScreen from './DailyPuzzleLadderLeaderboardScreen';
-import dailyLadderHeroImg from '../assets/dailyPuzzle/newnewladderfinal.png';
+import { useDeferredAsset } from '../ui/useDeferredAsset';
 import {
   buildLadderShareData,
   buildLadderShareText,
@@ -207,6 +207,11 @@ export default function DailyPuzzleLadderScreen({
   const moveTraceRef = useRef<Array<Record<string, unknown>>>([]);
   const lastPlayedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoFinalizeTriedRef = useRef(false);
+  const loadHeroAsset = useCallback(
+    () => import('../assets/dailyPuzzle/newnewladderfinal.webp'),
+    [],
+  );
+  const heroSrc = useDeferredAsset('daily-puzzle-ladder-hero', loadHeroAsset);
 
   const finalizeReady = useMemo(
     () =>
@@ -960,13 +965,14 @@ export default function DailyPuzzleLadderScreen({
                 </div>
 
                 <article className="df-pvf-opponent-card" aria-label="Daily Ladder overview">
-                  <img
-                    src={dailyLadderHeroImg}
-                    className="df-pvf-card-bg-img dpl-ladder-hero-img"
-                    alt="Daily Ladder puzzle boards"
-                    decoding="async"
-                    loading="eager"
-                  />
+                  {heroSrc ? (
+                    <img
+                      src={heroSrc}
+                      className="df-pvf-card-bg-img dpl-ladder-hero-img"
+                      alt="Daily Ladder puzzle boards"
+                      decoding="async"
+                    />
+                  ) : null}
                   <div className="df-pvf-card-overlay" aria-hidden />
 
                   <div className="df-pvf-card-content">

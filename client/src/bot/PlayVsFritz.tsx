@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import type { FritzTier } from "./fritzConfig";
 import type { BotDealSize } from "./botEngine";
 import type { AppMode } from "../types";
 import { DominoTile, GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
-import pvfHeroImg from "../assets/bot/playfritz2png.png";
+import { useDeferredAsset } from "../ui/useDeferredAsset";
 import "./PlayVsFritz.css";
 
 /* ---- High-Fidelity Home Icons ---- */
@@ -189,6 +189,11 @@ export default function PlayVsFritz({
   const [dealSize, setDealSize] = useState<BotDealSize>(7);
   const selectedDiff = DIFFICULTIES.find((d) => d.id === difficulty) ?? DIFFICULTIES[1];
   const dynamicColor = TIER_COLORS[difficulty];
+  const loadHeroAsset = useCallback(
+    () => import("../assets/bot/playfritz2png.webp"),
+    [],
+  );
+  const heroSrc = useDeferredAsset("play-vs-fritz-hero", loadHeroAsset);
 
   const selectDifficulty = (tier: FritzTier): void => {
     setDifficulty(tier);
@@ -229,7 +234,15 @@ export default function PlayVsFritz({
 
           <div className="pvf-opponent-card">
             {/* 1. Background Image */}
-            <img src={pvfHeroImg} className="pvf-card-bg-img" alt="Fritz Robot" />
+            {heroSrc ? (
+              <img
+                src={heroSrc}
+                className="pvf-card-bg-img"
+                alt="Fritz Robot"
+                decoding="async"
+                fetchPriority="high"
+              />
+            ) : null}
             
             {/* 2. Gradient Overlay */}
             <div className="pvf-card-overlay" />

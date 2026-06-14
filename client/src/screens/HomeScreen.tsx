@@ -204,6 +204,13 @@ export default function RacehorseHomeScreen({
   }, [authUser?.id, fritzStatus, puzzleStatus]);
 
   useEffect(() => {
+    if (!authUser?.id) {
+      setFritzStreak(0);
+      setFritzStatus('none');
+      setFritzOutcome(null);
+      return;
+    }
+
     getTodayDailyFritz()
       .then((data) => {
         setFritzStreak(data.streak ?? 0);
@@ -213,8 +220,12 @@ export default function RacehorseHomeScreen({
         const lost = data.set_result?.setWinner === 'fritz' || (data.set_result?.won === false && s === 'completed');
         setFritzOutcome(s === 'completed' ? (won ? 'win' : lost ? 'loss' : null) : null);
       })
-      .catch(() => { setFritzStreak(0); setFritzStatus('none'); setFritzOutcome(null); });
-  }, []);
+      .catch(() => {
+        setFritzStreak(0);
+        setFritzStatus('none');
+        setFritzOutcome(null);
+      });
+  }, [authUser?.id]);
 
   useEffect(() => {
     getTodayDailyPuzzleLadder()

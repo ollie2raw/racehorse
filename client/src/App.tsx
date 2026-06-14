@@ -1,13 +1,10 @@
 import React, { Suspense, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User } from '@supabase/supabase-js';
-import { RoomReactions, type RoomChatEvent, type RoomEmoteEvent } from './components/RoomReactions';
 import type { Socket } from 'socket.io-client';
 import './App.css';
 import './match/match-live.css';
-import { BrandLogo } from './components';
 import type { BoardHandle } from './components';
-import { LiveMatchScreen } from './match/LiveMatchScreen';
+import { ScreenLoader } from './ui/ScreenLoader';
 import {
   playDrawSound,
   playMatchLoseSound,
@@ -16,17 +13,15 @@ import {
   playTileSound,
 } from './utils/sound';
 import { isTemporaryUsername, useAuth } from './auth/useAuth';
-import LayoutScreen from './ui/LayoutScreen';
-import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from './analyzer/moveAnalyzer';
+import type { GameAnalysis } from './analyzer/moveAnalyzer';
 import {
   type MoveEntry,
   snapshotBoardState,
   cloneBoardState,
   toTileTuple,
 } from './analyzer/moveLogger';
-import { fetchUserStatsByUserId, fetchWeeklyRecap, recordMatchResult } from './stats/statsApi';
 import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api';
-import type { Tile, PlacementPosition, GameState, Move, StateUpdate } from './types';
+import type { GameState } from './types';
 import type { BotDealSize } from './bot/botEngine';
 import {
   assertDisplayedOpenCountMatchesCanonical,
@@ -37,10 +32,7 @@ import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from './bot/pvfTi
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { useRoomSocketSync, type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
 import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
-import {
-  isRenderableMultiplayerSnapshot,
-  projectRenderableBoard,
-} from './multiplayer/boardSnapshotGuards';
+import { isRenderableMultiplayerSnapshot } from './multiplayer/boardSnapshotGuards';
 import {
   useLiveMatchSession,
   findPlacedTile,
@@ -48,39 +40,27 @@ import {
   getBoardTileCount,
 } from './match/session/useLiveMatchSession';
 import { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
-import { useMultiplayerConnection } from './multiplayer/useMultiplayerConnection';
-import { useMultiplayerRoomActions } from './multiplayer/useMultiplayerRoomActions';
+import { useMultiplayerConnectionHostParams } from './multiplayer/useMultiplayerConnectionHostParams';
+import { useMultiplayerConnectionActionsBridge } from './multiplayer/useMultiplayerConnectionContext';
+import { useMultiplayerRoomSocialRuntimeBridge } from './multiplayer/useMultiplayerLobbyController';
+import { useMultiplayerLobbyHostProps } from './multiplayer/useMultiplayerLobbyHostProps';
+import { AuthModalsLayer, FriendInvitePopupOverlay } from './AppOverlays';
+import type {
+  MultiplayerLiveMatchRecoveryRuntime,
+  MultiplayerLiveMatchRoomRuntime,
+  MultiplayerRoomRecoverySetters,
+  MultiplayerSessionRefsRuntime,
+} from './multiplayer/multiplayerRuntime';
 import { useRenderProfiler } from './debug/renderProfiler';
-import {
-  claudeRgb,
-} from './ui/claudeMode';
-import {
-  loadAuthoringSession,
-  saveFrozenLesson,
-  loadFrozenLesson,
-} from './learn/guidedAuthoring';
-import { resolveGuidedMatchStart } from './learn/lessonV2';
-import RacehorseHomeScreen from './screens/HomeScreen';
-import { TournamentScreen } from './screens/TournamentScreen';
-import TournamentHubScreen from './tournament/TournamentHubScreen';
-import TournamentBracketScreen from './tournament/TournamentBracketScreen';
-import TournamentResultScreen from './tournament/TournamentResultScreen';
-import { resolveTournamentOpponentLabel } from './tournament/displayNames';
 import { useTournament } from './tournament/useTournament';
-import * as tournamentApi from './tournament/tournamentApi';
 import { isTerminalTournamentMatch } from './tournament/terminalMatches';
-import PrivateMatchLobbyScreen from './multiplayer/PrivateMatchLobbyScreen';
-import IncomingFriendChallengeCard from './multiplayer/IncomingFriendChallengeCard';
 import type { OutboundChallenge } from './multiplayer/friendChallenge';
-import MatchmakingScreen from './matchmaking/MatchmakingScreen';
-import { MatchFoundOverlay } from './matchmaking/MatchFoundOverlay';
 import type { MatchFoundPayload } from './matchmaking/types';
 import {
   emitWithAck,
   emitRoomAbandonMatch,
   emitRoomCreate,
   emitRoomJoin,
-  emitRoomLeave,
 } from './multiplayer/roomTransport';
 import {
   clearLastRoomCode,
@@ -99,79 +79,17 @@ type RoomEventMeta = {
   eventCount?: number;
 };
 type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
-type TournamentPlayer = {
-  socketId: string;
-  username: string;
-  userId?: string | null;
-  isBot?: boolean;
-};
 
-type AppMode =
-  | 'home'
-  | 'multiplayer'
-  | 'noBrainer'
-  | 'botSetup'
-  | 'bot'
-  | 'ghostSetup'
-  | 'ghost'
-  | 'daily'
-  | 'dailyFritz'
-  | 'learn'
-  | 'guidedMatchRecorder'
-  | 'guidedMatchAnnotator'
-  | 'friends'
-  | 'stats'
-  | 'ratingHistory'
-  | 'singlePlayerHub'
-  | 'tournament'
-  | 'leaderboard'
-  | 'profile'
-  | 'feed';
+import type { AppMode } from './appRouteTypes';
+import { LEARN_MODE_VISIBLE } from './appRouteTypes';
+import { useAppRoutesProps } from './useAppRoutesProps';
+import { useAppRoutesInput } from './useAppRoutesInput';
+import { useAppSessionRuntime } from './useAppSessionRuntime';
 
-const SinglePlayerHubScreen = React.lazy(() => import('./screens/SinglePlayerHubScreen'));
-const NoBrainerLabScreen = React.lazy(() => import('./practice/NoBrainerLabScreen'));
-const BotMatchScreen = React.lazy(() => import('./bot/BotMatchScreen'));
-const PlayVsFritz = React.lazy(() => import('./bot/PlayVsFritz'));
-const GhostSetupScreen = React.lazy(() => import('./ghost/GhostSetupScreen'));
-const DailyPuzzleScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleScreen'));
-const DailyFritzScreen = React.lazy(() => import('./dailyFritz/DailyFritzScreen'));
-const DailyPuzzleAdminScreen = React.lazy(() => import('./dailyPuzzle/DailyPuzzleAdminScreen'));
-const RatingHistoryPage = React.lazy(() => import('./ranking/RatingHistoryPage'));
-const GameReviewer = React.lazy(() => import('./analyzer/GameReviewer'));
-const AuthModal = React.lazy(() => import('./auth/AuthModal'));
-const UsernameModal = React.lazy(() => import('./auth/UsernameModal'));
-const StatsScreen = React.lazy(() => import('./stats/StatsScreen'));
-const FriendsScreen = React.lazy(() => import('./friends/FriendsScreen'));
-const DailyFritzLeaderboardRoute = React.lazy(() => import('./dailyFritz/DailyFritzLeaderboardRoute'));
-const PublicProfileScreen = React.lazy(() => import('./social/PublicProfileScreen'));
-const ActivityFeedScreen = React.lazy(() => import('./social/ActivityFeedScreen'));
-const LearnHome = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.LearnHome })),
-);
-const GuidedMatchRecorderScreen = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.GuidedMatchRecorderScreen })),
-);
-const GuidedMatchAnnotatorScreen = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.GuidedMatchAnnotatorScreen })),
-);
-const LearnHowToPlayRacehorse = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.LearnHowToPlayRacehorse })),
-);
-const LearnPlayer = React.lazy(() =>
-  import('./learn').then((module) => ({ default: module.LearnPlayer })),
-);
+const AppRoutes = React.lazy(() => import('./AppRoutes'));
 
-function IconDominoes({ size = 16, style }: { size?: number; style?: React.CSSProperties }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden style={style}>
-      <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" strokeWidth="2" />
-      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" />
-      <circle cx="9" cy="7" r="1.2" fill="currentColor" />
-      <circle cx="15" cy="7" r="1.2" fill="currentColor" />
-      <circle cx="12" cy="17" r="1.2" fill="currentColor" />
-    </svg>
-  );
-}
+
+
 
 function normalizeUsername(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : '';
@@ -200,242 +118,6 @@ function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
     .filter((p) => Boolean(p.id));
 }
 
-function ScreenLoader({ label = 'Loading…' }: { label?: string }) {
-  return (
-    <div className="rh-screen-loader" role="status" aria-live="polite" aria-busy="true">
-      <div className="rh-screen-loader__bg" aria-hidden />
-      <div className="rh-screen-loader__panel">
-        <div className="rh-screen-loader__brand">
-          <BrandLogo iconSize={30} showWordmark />
-        </div>
-        <p className="rh-screen-loader__label">{label}</p>
-        <div className="rh-screen-loader__rail" aria-hidden>
-          <div className="rh-screen-loader__rail-fill" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const LEARN_MODE_VISIBLE = true;
-
-function WeeklyStatsScreen({
-  open,
-  onClose,
-  user,
-}: {
-  open: boolean;
-  onClose: () => void;
-  user: User | null;
-}) {
-  const [recap, setRecap] = useState<any | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !user) {
-      setRecap(null);
-      setError(null);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    setError(null);
-    void fetchWeeklyRecap(user)
-      .then((resp) => {
-        if (!active) return;
-        setLoading(false);
-        if (resp.error || !resp.data) {
-          setError(resp.error ?? 'Unable to load weekly recap.');
-          setRecap(null);
-          return;
-        }
-        setRecap(resp.data);
-      })
-      .catch(() => {
-        if (!active) return;
-        setLoading(false);
-        setError('Unable to load weekly recap.');
-      });
-    return () => {
-      active = false;
-    };
-  }, [open, user]);
-
-  const recapSections = recap
-    ? [
-        {
-          title: 'Fritz This Week',
-          icon: '🤖',
-          tone: 'rgba(94, 234, 212, 0.16)',
-          rows: [
-            { label: 'Ranked Games', value: recap.fritz.gamesThisWeek },
-            {
-              label: 'Rating Δ',
-              value:
-                Math.round(recap.fritz.ratingChangeThisWeek) === 0
-                  ? '0'
-                  : `${recap.fritz.ratingChangeThisWeek > 0 ? '+' : ''}${Math.round(recap.fritz.ratingChangeThisWeek)}`,
-            },
-            {
-              label: 'Best Win',
-              value: recap.fritz.bestWinMarginThisWeek == null ? '—' : `${recap.fritz.bestWinMarginThisWeek} pts`,
-            },
-          ],
-        },
-        {
-          title: 'Ghost This Week',
-          icon: '👻',
-          tone: 'rgba(216, 180, 254, 0.16)',
-          rows: [
-            { label: 'Ghost Games', value: recap.ghost.gamesThisWeek },
-            {
-              label: 'Rating Δ',
-              value:
-                Math.round(recap.ghost.ratingChangeThisWeek) === 0
-                  ? '0'
-                  : `${recap.ghost.ratingChangeThisWeek > 0 ? '+' : ''}${Math.round(recap.ghost.ratingChangeThisWeek)}`,
-            },
-            {
-              label: 'Best Win',
-              value: recap.ghost.bestWinMarginThisWeek == null ? '—' : `${recap.ghost.bestWinMarginThisWeek} pts`,
-            },
-          ],
-        },
-        {
-          title: 'Puzzle This Week',
-          icon: '🧩',
-          tone: 'rgba(240, 192, 64, 0.16)',
-          rows: [
-            { label: 'Completions', value: recap.puzzle.completionsThisWeek },
-            { label: 'Best Today', value: recap.puzzle.bestScoreToday == null ? '—' : recap.puzzle.bestScoreToday },
-          ],
-        },
-        {
-          title: 'Multiplayer This Week',
-          icon: '🌐',
-          tone: 'rgba(148, 163, 184, 0.16)',
-          rows: [
-            { label: 'Online Games', value: recap.multiplayer.gamesThisWeek },
-            { label: 'Wins', value: recap.multiplayer.wins },
-            { label: 'Losses', value: recap.multiplayer.losses },
-          ],
-        },
-      ]
-    : [];
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Weekly stats"
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1900,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'rgba(6, 10, 18, 0.62)',
-        backdropFilter: 'blur(4px)',
-        pointerEvents: open ? 'auto' : 'none',
-        opacity: open ? 1 : 0,
-        visibility: open ? 'visible' : 'hidden',
-        transform: open ? 'scale(1)' : 'scale(0.97)',
-        transition: 'opacity 180ms ease, transform 180ms ease',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          position: 'relative',
-          zIndex: 1901,
-          pointerEvents: 'auto',
-          width: 'min(1120px, calc(100vw - 32px))',
-          maxHeight: 'min(92vh, 920px)',
-          borderRadius: '20px',
-          border: '1px solid rgba(236,252,245,0.2)',
-          background: 'linear-gradient(170deg, rgba(18,26,39,0.92), rgba(9,15,26,0.96))',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
-          padding: '22px',
-          color: 'rgba(235,245,242,0.96)',
-          display: 'grid',
-          gap: '16px',
-          overflow: 'auto',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span aria-hidden="true">🏆</span>
-              <span>Weekly Recap</span>
-            </h3>
-            <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', fontSize: '1.12rem' }}>
-              {recap?.weekLabel ?? 'This week'}
-            </p>
-          </div>
-          <button className="mode-inline-btn" onClick={onClose}>
-            Close
-          </button>
-        </div>
-
-        {loading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading weekly recap...</p>}
-        {error && <p className="auth-inline-error" style={{ margin: 0 }}>{error}</p>}
-
-        {!loading && !error && recapSections.length > 0 ? (
-          <div style={{ display: 'grid', gap: 14 }}>
-            {recapSections.map((section) => (
-              <div
-                key={section.title}
-                style={{
-                  borderRadius: '12px',
-                  border: '1px solid rgba(255,255,255,0.14)',
-                  background: 'rgba(12,20,34,0.68)',
-                  padding: '16px',
-                  display: 'grid',
-                  gap: 14,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span aria-hidden="true" style={{ fontSize: '1.22rem' }}>{section.icon}</span>
-                  <strong style={{ fontSize: '1.16rem', color: 'rgba(240,248,255,0.96)' }}>{section.title}</strong>
-                </div>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                    gap: 12,
-                  }}
-                >
-                  {section.rows.map((row) => (
-                    <div
-                      key={row.label}
-                      style={{
-                        borderRadius: '10px',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        background: section.tone,
-                        padding: '14px 16px',
-                        display: 'grid',
-                        gap: 6,
-                      }}
-                    >
-                      <span style={{ fontSize: '0.98rem', color: 'rgba(191,213,223,0.88)', fontWeight: 700 }}>{row.label}</span>
-                      <strong style={{ fontSize: '1.56rem', color: '#f8fafc' }}>{row.value}</strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>
-            No weekly recap available yet.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 
 // ─── Main App ────────────────────────────────────────────────
@@ -469,6 +151,7 @@ export default function App() {
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const connectRef = useRef<() => void>(() => {});
+  const connectionActions = useMultiplayerConnectionActionsBridge(connectRef);
   const pendingCreateOnConnectRef = useRef(false);
   const pendingCreateResolversRef = useRef<Array<(code: string | null) => void>>([]);
   const [serverUrl] = useState(() => resolveGameServerUrl());
@@ -511,7 +194,7 @@ export default function App() {
   const [tournamentId, setTournamentId] = useState<string | null>(null);
   const [tournamentState, setTournamentState] = useState<any>(null);
   const [tournamentActiveRoom, setTournamentActiveRoom] = useState<string | null>(null);
-  const [roomReactions, setRoomReactions] = useState<Array<RoomChatEvent | RoomEmoteEvent>>([]);
+  const roomSocialRuntime = useMultiplayerRoomSocialRuntimeBridge();
   const [multiplayerRatingBaseline, setMultiplayerRatingBaseline] = useState<number | null>(null);
   const [multiplayerRatingPending, setMultiplayerRatingPending] = useState(false);
   const multiplayerRatingRefreshKeyRef = useRef('');
@@ -536,47 +219,6 @@ export default function App() {
       setLearnHowToPlayOpen(false);
     }
   }, [appMode]);
-
-  const sendRoomChat = (text: string) => {
-    const t = String(text ?? '').trim();
-    if (!t) return;
-
-    const localMsg = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      t: Date.now(),
-      from: { userId: null as string | null, username: 'you' },
-      text: t,
-    };
-
-    setRoomReactions((prev) => {
-      const next = prev.concat(localMsg as any);
-      return next.length > 50 ? next.slice(next.length - 50) : next;
-    });
-
-    if (!socket) return;
-    socket.emit('room:chat:send', { text: t });
-  };
-
-  const sendRoomEmote = (emote: string) => {
-    const e = String(emote ?? '').trim();
-    if (!e) return;
-
-    const localEvt = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      t: Date.now(),
-      from: { userId: null as string | null, username: 'you' },
-      emote: e,
-    };
-
-    setRoomReactions((prev) => {
-      const next = prev.concat(localEvt as any);
-      return next.length > 50 ? next.slice(next.length - 50) : next;
-    });
-
-    if (!socket) return;
-    socket.emit('room:emote:send', { emote: e });
-  };
-
 
   const [joinedRoom, setJoinedRoom] = useState<string | null>(null);
   const [you, setYou] = useState<string>('');
@@ -690,6 +332,11 @@ export default function App() {
   const mpSubViewRef = useRef(mpSubView);
   const roomPlayersRef = useRef<RoomPlayer[]>([]);
   const joinedRoomResponseRef = useRef<any>(null);
+  const roomIdentityRef = useRef<{
+    username: string;
+    userId: string | null;
+    authToken: string | null;
+  } | null>(null);
 
   useEffect(() => {
     appModeRef.current = appMode;
@@ -751,6 +398,45 @@ export default function App() {
     setMultiplayerMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
   }, []);
 
+  const liveMatchRoomRuntime = useMemo(
+    (): MultiplayerLiveMatchRoomRuntime => ({
+      joinedRoomRef,
+      maxSequenceRef,
+      roomPlayersRef,
+    }),
+    [],
+  );
+
+  const liveMatchRecoverySetters = useMemo(
+    (): MultiplayerRoomRecoverySetters => ({
+      setRoomRecoveryState,
+      setRoomRecoveryMessage,
+    }),
+    [],
+  );
+
+  const liveMatchSessionRefsRuntime = useMemo(
+    (): MultiplayerSessionRefsRuntime => ({
+      isSeatedPlayerRef,
+      matchStartedRef,
+      playerReadyEmittedRef,
+      trySchedulePlayerReadyRef,
+      isMutedRef,
+    }),
+    [],
+  );
+
+  const liveMatchRecoveryRuntime = useMemo(
+    (): MultiplayerLiveMatchRecoveryRuntime => ({
+      resyncInFlightRef,
+      resyncBufferedUpdateRef,
+      resyncFlushRef,
+      fetchGameState: (reason) => fetchGameStateRef.current(reason),
+      resetClientGameSession: () => resetClientGameSessionRef.current(),
+    }),
+    [],
+  );
+
   const liveMatch = useLiveMatchSession({
     socket,
     joinedRoom,
@@ -761,26 +447,15 @@ export default function App() {
     roomRecoveryState,
     isRecoveringConnection,
     rejoinInFlightRef,
-    fetchGameState: (reason) => fetchGameStateRef.current(reason),
     normalizeRoomPlayers,
     applyRoomEventMeta: (meta) => applyRoomEventMetaRef.current(meta),
     setFriendInvite,
-    joinedRoomRef,
-    maxSequenceRef,
+    roomRuntime: liveMatchRoomRuntime,
+    recoveryRuntime: liveMatchRecoveryRuntime,
+    recoverySetters: liveMatchRecoverySetters,
+    sessionRefsRuntime: liveMatchSessionRefsRuntime,
     setPlayers,
-    roomPlayersRef,
-    setRoomRecoveryState,
-    setRoomRecoveryMessage,
-    isSeatedPlayerRef,
-    matchStartedRef,
-    playerReadyEmittedRef,
-    trySchedulePlayerReadyRef,
-    isMutedRef,
     playDrawSound,
-    resyncInFlightRef,
-    resyncBufferedUpdateRef,
-    resyncFlushRef,
-    resetClientGameSession: () => resetClientGameSessionRef.current(),
     onGameStart: () => {
       setMultiplayerMoveLog([]);
       multiplayerMoveCounterRef.current = 1;
@@ -900,26 +575,58 @@ export default function App() {
     [],
   );
 
-  const tournamentSession = useTournamentMatchSession({
-    socket,
+  const {
+    socketRuntime,
+    joinFlightRuntime,
+    reconnectRuntime,
+    authRuntime,
+    navigationRuntime,
+    roomRuntime,
+    tournamentAttachRuntime,
+  } = useAppSessionRuntime({
     socketRef,
     connectRef,
-    appMode,
+    pendingCreateOnConnectRef,
+    pendingCreateResolversRef,
+    autoJoinAttemptedRef,
+    joinInFlightRef,
+    createInFlightRef,
+    inviteJoinInFlightRef,
+    autoConnectAttemptedRef,
+    reconnectRoomCodeRef,
+    reconnectShouldJoinRef,
+    preventAutoRejoinRef,
+    reconnectAttemptTimerRef,
+    reconnectAttemptCountRef,
+    intentionalDisconnectRef,
+    rejoinInFlightRef,
+    authUserRef,
+    authProfileRef,
+    authAccessTokenRef,
+    multiplayerIdentityUserIdRef,
     appModeRef,
-    authUserId: authUser?.id ?? null,
-    multiplayerIdentityUserId,
-    joinedRoom,
+    setAppMode,
     joinedRoomRef,
     joinedRoomResponseRef,
-    liveGameOver: state?.gameOver,
-    preventAutoRejoinRef,
-    reconnectShouldJoinRef,
-    reconnectRoomCodeRef,
+    roomIdentityRef,
+    youRef,
+    stateRef,
+    maxSequenceRef,
+    roomPlayersRef,
     applyJoinedRoomResponseRef,
     clearRecoverableRoomStateRef,
     resetMultiplayerRoomStateRef,
+  });
+
+  const tournamentSession = useTournamentMatchSession({
+    socket,
+    attachRuntime: tournamentAttachRuntime,
+    appMode,
+    authUserId: authUser?.id ?? null,
+    multiplayerIdentityUserId,
+    joinedRoom,
+    liveGameOver: state?.gameOver,
     showToast,
-    setAppMode,
     setActionError,
     normalizeRoomCode,
     tournament,
@@ -964,11 +671,6 @@ export default function App() {
   const prevMyHandLenRef = useRef(0);
   const boardRef = useRef<BoardHandle>(null);
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
-  const roomIdentityRef = useRef<{
-    username: string;
-    userId: string | null;
-    authToken: string | null;
-  } | null>(null);
   const matchRecordKeyRef = useRef('');
   const prevGameOverRef = useRef(false);
   const scoreToastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -990,20 +692,6 @@ export default function App() {
     const SNOOZE_MS = 24 * 60 * 60 * 1000;
     return Date.now() - dismissedAt < SNOOZE_MS;
   });
-
-  const copyRoomCodeToClipboard = useCallback(async () => {
-    const code = normalizeRoomCode(joinedRoom || roomCode);
-    if (!code) {
-      showToast('No room code to copy.');
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(code);
-      showToast('Room code copied.');
-    } catch {
-      showToast('Could not copy room code.');
-    }
-  }, [joinedRoom, roomCode, showToast]);
 
   useEffect(() => {
     return () => {
@@ -1241,42 +929,6 @@ export default function App() {
   }, [resetRoomRecoveryState, tournament]);
   clearRecoverableRoomStateRef.current = clearRecoverableRoomState;
 
-
-  /** Leave the current private room, stay connected, and return to Private Match create/join (not Quick Match). */
-  const leavePrivateLobbyRoom = useCallback(() => {
-    const code = normalizeRoomCode(joinedRoomRef.current);
-    const s = socketRef.current;
-    if (s?.connected && code) {
-      emitRoomLeave(s, code);
-    }
-    clearLastRoomCode();
-    intentionalDisconnectRef.current = false;
-    reconnectShouldJoinRef.current = false;
-    reconnectRoomCodeRef.current = null;
-    clearReconnectAttemptTimer();
-    reconnectAttemptCountRef.current = 0;
-    rejoinInFlightRef.current = false;
-    preventAutoRejoinRef.current = false;
-    autoJoinAttemptedRef.current = false;
-    setIsRecoveringConnection(false);
-    setRoomRecoveryState('idle');
-    setRoomRecoveryMessage('');
-    setRoomReactions([]);
-    resetMultiplayerRoomState({ clearRoomCode: true });
-    clearOutboundChallenge();
-    /* Stay on Private Match → create / join lobby; do not jump to Quick Match. */
-    setMpSubView('private');
-  }, [
-    normalizeRoomCode,
-    clearReconnectAttemptTimer,
-    clearOutboundChallenge,
-    resetMultiplayerRoomState,
-    setMpSubView,
-    setIsRecoveringConnection,
-    setRoomRecoveryState,
-    setRoomRecoveryMessage,
-    setRoomReactions,
-  ]);
 
   const applyRoomEventMeta = useCallback((meta?: RoomEventMeta | null) => {
     if (!meta) return;
@@ -1635,11 +1287,17 @@ export default function App() {
     }
   }, []);
 
-  const { connect, retryRoomRecovery, disconnect } = useMultiplayerConnection({
+  const {
+    multiplayerConnectionHostParams,
+    multiplayerConnectionConfig,
+    multiplayerConnectionState,
+  } = useMultiplayerConnectionHostParams({
     emitWithAck,
     normalizeRoomCode,
     lastRoomStorageKey: LAST_ROOM_STORAGE_KEY,
     serverUrl,
+    showToast,
+    emitCreateRoom,
     socket,
     isConnecting,
     isConnected,
@@ -1651,34 +1309,23 @@ export default function App() {
     tournamentId,
     tournamentStateStatus: tournamentState?.status ?? null,
     roomCode,
-    connectRef,
-    socketRef,
-    authUserRef,
-    authProfileRef,
-    authAccessTokenRef,
-    multiplayerIdentityUserIdRef,
-    joinedRoomRef,
-    youRef,
-    stateRef,
-    pendingCreateOnConnectRef,
-    reconnectRoomCodeRef,
-    reconnectShouldJoinRef,
-    preventAutoRejoinRef,
-    autoJoinAttemptedRef,
-    joinInFlightRef,
-    createInFlightRef,
-    inviteJoinInFlightRef,
-    rejoinInFlightRef,
-    intentionalDisconnectRef,
-    reconnectAttemptTimerRef,
-    reconnectAttemptCountRef,
-    autoConnectAttemptedRef,
+    socketRuntime,
+    roomRuntime,
+    reconnectRuntime,
+    joinFlightRuntime,
+    authRuntime,
+    navigationRuntime,
+    roomSocialRuntime,
     draggingStateRef,
-    isMutedRef,
     handRevealShownRef,
     handRevealTimerRef,
-    maxSequenceRef,
-    roomIdentityRef,
+    isMutedRef,
+    rematchAwaitingStateRef,
+    applyJoinedRoomResponse,
+    fetchGameState,
+    resetClientGameSession,
+    clearReconnectAttemptTimer,
+    clearTransientRoomUi,
     setSocket,
     setIsConnected,
     setIsConnecting,
@@ -1700,95 +1347,13 @@ export default function App() {
     setTournamentState,
     setTournamentActiveRoom,
     setRoomCode,
-    setAppMode,
-    setRoomReactions,
     setHandReveal,
     setPlayers,
     setSelectedTile,
     setPendingUiAction,
-    showToast,
-    applyJoinedRoomResponse,
-    emitCreateRoom,
-    clearReconnectAttemptTimer,
-    clearTransientRoomUi,
-    fetchGameState,
-    resetClientGameSession,
-    rematchAwaitingStateRef,
   });
 
-  const authUsernameRef = useRef(authProfile?.username ?? 'Guest');
-  const authUserIdRef = useRef<string | null>(multiplayerIdentityUserId);
-  const authTokenRef = useRef<string | null>(multiplayerAuthToken);
-  useEffect(() => {
-    authUsernameRef.current = authProfile?.username ?? 'Guest';
-    authUserIdRef.current = multiplayerIdentityUserId;
-    authTokenRef.current = multiplayerAuthToken;
-  }, [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken]);
-
-  const {
-    onCreatePrivateRoom,
-    copyInviteLink,
-    createRoom,
-    joinRoom,
-    acceptFriendInvite,
-    declineFriendInvite,
-    sendFriendChallenge,
-  } = useMultiplayerRoomActions({
-    socket,
-    socketRef,
-    connectRef,
-    joinedRoomRef,
-    pendingCreateOnConnectRef,
-    pendingCreateResolversRef,
-    autoJoinAttemptedRef,
-    preventAutoRejoinRef,
-    joinInFlightRef,
-    createInFlightRef,
-    inviteJoinInFlightRef,
-    reconnectRoomCodeRef,
-    reconnectShouldJoinRef,
-    roomCode,
-    friendInvite,
-    authUsername: authProfile?.username ?? 'Guest',
-    authUserId: multiplayerIdentityUserId,
-    authToken: multiplayerAuthToken,
-    authUsernameRef,
-    authUserIdRef,
-    authTokenRef,
-    normalizeRoomCode,
-    normalizeRoomPlayers,
-    emitWithAck,
-    emitCreateRoom,
-    getInviteLink,
-    resolvePendingCreate,
-    applyJoinedRoomResponse,
-    showToast,
-    setAppMode,
-    setRoomCode,
-    setPlayers,
-    setError,
-    setActionError,
-    setPendingUiAction,
-    setRoomRecoveryState,
-    setRoomRecoveryMessage,
-    setFriendInvite,
-    setMpSubView,
-    outboundChallenge,
-    setOutboundChallenge,
-    roomIdentityRef,
-    lastRoomStorageKey: LAST_ROOM_STORAGE_KEY,
-  });
-
-  const friendInvitePopup = friendInvite ? (
-    <IncomingFriendChallengeCard
-      invite={friendInvite}
-      joining={pendingUiAction === 'join'}
-      onAccept={() => {
-        void acceptFriendInvite();
-      }}
-      onDecline={declineFriendInvite}
-    />
-  ) : null;
+  const { connect, disconnect, retryRoomRecovery } = connectionActions;
 
   useEffect(() => {
     if (!weeklyStatsOpen) return;
@@ -1942,10 +1507,12 @@ export default function App() {
   ]);
 
   const openMultiplayerAnalyzer = useCallback(() => {
-    const analysis = analyzeMoveLog(multiplayerMoveLog, true);
-    setCurrentAnalysis(analysis);
-    saveGameAnalysis('multiplayer', analysis);
-    setAnalyzerOpen(true);
+    void import('./analyzer/moveAnalyzer').then(({ analyzeMoveLog, saveGameAnalysis }) => {
+      const analysis = analyzeMoveLog(multiplayerMoveLog, true);
+      setCurrentAnalysis(analysis);
+      saveGameAnalysis('multiplayer', analysis);
+      setAnalyzerOpen(true);
+    });
   }, [multiplayerMoveLog]);
 
   const isHandActive = Boolean(state) && !state?.handOver && !state?.gameOver;
@@ -1955,14 +1522,7 @@ export default function App() {
   const myScore = state?.players[you]?.score ?? 0;
   const opponentScore = opponentId ? (state?.players[opponentId]?.score ?? 0) : 0;
   const opponent = players.find((pl) => pl.id !== you) ?? null;
-  const tournamentOpponentLabel = tournamentMatch
-    ? resolveTournamentOpponentLabel({
-        opponentUserId: tournamentMatch.opponentUserId,
-        opponentUsername: tournamentMatch.opponentUsername,
-        round: tournamentMatch.round,
-        roomOpponentUsername: opponent?.username ?? null,
-      })
-    : null;
+  const [tournamentOpponentLabel, setTournamentOpponentLabel] = useState<string | null>(null);
   const tournamentMyLabel = authProfile?.username
     ? authProfile.username.replace(/^@/, '')
     : 'You';
@@ -2061,6 +1621,35 @@ export default function App() {
       : null;
 
   useEffect(() => {
+    if (!tournamentMatch) {
+      setTournamentOpponentLabel(null);
+      return;
+    }
+
+    let cancelled = false;
+    void import('./tournament/displayNames').then(({ resolveTournamentOpponentLabel }) => {
+      if (cancelled) return;
+      setTournamentOpponentLabel(
+        resolveTournamentOpponentLabel({
+          opponentUserId: tournamentMatch.opponentUserId,
+          opponentUsername: tournamentMatch.opponentUsername,
+          round: tournamentMatch.round,
+          roomOpponentUsername: opponent?.username ?? null,
+        }),
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    opponent?.username,
+    tournamentMatch?.opponentUserId,
+    tournamentMatch?.opponentUsername,
+    tournamentMatch?.round,
+  ]);
+
+  useEffect(() => {
     setRematchRequested(false);
     setRematchReadyIds([]);
     setMultiplayerMoveLog([]);
@@ -2088,14 +1677,16 @@ export default function App() {
       return;
     }
     let cancelled = false;
-    void fetchUserStatsByUserId(authUser.id).then((res) => {
-      if (cancelled) return;
-      if (res.error || !res.data) {
-        setPrivateLobbyHostWinStreak(null);
-        return;
-      }
-      setPrivateLobbyHostWinStreak(res.data.currentWinStreak);
-    });
+    void import('./stats/statsApi')
+      .then(({ fetchUserStatsByUserId }) => fetchUserStatsByUserId(authUser.id))
+      .then((res) => {
+        if (cancelled) return;
+        if (res.error || !res.data) {
+          setPrivateLobbyHostWinStreak(null);
+          return;
+        }
+        setPrivateLobbyHostWinStreak(res.data.currentWinStreak);
+      });
     return () => {
       cancelled = true;
     };
@@ -2403,1095 +1994,322 @@ export default function App() {
 
     const winnerScore = finalState.players[winnerSocketId]?.score ?? null;
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
-    const matchAnalysis = analyzeMoveLog(multiplayerMoveLog, true);
-    const avgMoveQuality =
-      matchAnalysis.analyzedMoves.length > 0 && matchAnalysis.accuracy > 0
-        ? matchAnalysis.accuracy
-        : undefined;
 
-    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-      // eslint-disable-next-line no-console
-      console.log('[StatsDebug] about to record match', {
-        joinedRoom,
-        you,
-        winnerSocketId,
-        loserSocketId,
-        winnerUserId,
-        loserUserId,
-        winnerScore,
-        loserScore,
+    void Promise.all([
+      import('./analyzer/moveAnalyzer'),
+      import('./stats/statsApi'),
+    ])
+      .then(([{ analyzeMoveLog }, { recordMatchResult }]) => {
+        const matchAnalysis = analyzeMoveLog(multiplayerMoveLog, true);
+        const avgMoveQuality =
+          matchAnalysis.analyzedMoves.length > 0 && matchAnalysis.accuracy > 0
+            ? matchAnalysis.accuracy
+            : undefined;
+
+        if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+          // eslint-disable-next-line no-console
+          console.log('[StatsDebug] about to record match', {
+            joinedRoom,
+            you,
+            winnerSocketId,
+            loserSocketId,
+            winnerUserId,
+            loserUserId,
+            winnerScore,
+            loserScore,
+          });
+        }
+
+        return recordMatchResult({
+          mode: 'online',
+          opponentType: 'online',
+          winnerUserId,
+          loserUserId,
+          winnerScore,
+          loserScore,
+          avgMoveQuality,
+          moveCount: null,
+          roomCode: joinedRoom,
+          metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
+        });
+      })
+      .then(({ error }) => {
+        if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+          // eslint-disable-next-line no-console
+          console.log('[StatsDebug] recordMatchResult response', { error });
+        }
+
+        if (error && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+          // eslint-disable-next-line no-console
+          console.error('[Stats] recordMatchResult failed:', error);
+        }
       });
-    }
-
-    void recordMatchResult({
-      mode: 'online',
-      opponentType: 'online',
-      winnerUserId,
-        loserUserId,
-        winnerScore,
-        loserScore,
-        avgMoveQuality,
-        moveCount: null,
-        roomCode: joinedRoom,
-        metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
-    }).then(({ error }) => {
-      if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-        // eslint-disable-next-line no-console
-        console.log('[StatsDebug] recordMatchResult response', { error });
-      }
-
-      if (error && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-        // eslint-disable-next-line no-console
-        console.error('[Stats] recordMatchResult failed:', error);
-      }
-    });
   }, [state, joinedRoom, players, supabaseEnabled, authUser, you, multiplayerMoveLog]);
 
 
-  // ─── Render ───────────────────────────────────────────────
-  const appRootClassName = 'app large-mode';
-  const showLearnAdminView = (() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const raw = params.get('learnAdmin')?.trim().toLowerCase();
-      return raw === '1' || raw === 'true' || raw === 'yes';
-    } catch {
-      return false;
-    }
-  })();
 
-  const handleOpenAuthModal = () => setAuthModalOpen(true);
-  const handleOpenAccountModal = () => setUsernameModalOpen(true);
+  // ─── Render ───────────────────────────────────────────────
+  const friendInvitePopup = (
+    <FriendInvitePopupOverlay invite={friendInvite} joining={pendingUiAction === 'join'} />
+  );
 
   const authModalsLayer = (
-    <Suspense fallback={null}>
-      <AuthModal
-        open={authModalOpen}
-        supabaseEnabled={supabaseEnabled}
-        supabaseConfigError={supabaseConfigError}
-        onClose={() => setAuthModalOpen(false)}
-        onSignIn={signIn}
-        onSignUp={signUp}
-        onResetPassword={resetPassword}
-      />
-      <UsernameModal
-        open={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
-        currentUsername={authProfile?.username ?? null}
-        isProfileEdit={usernameModalOpen}
-        onSave={async (username) => {
-          const result = await updateUsername(username);
-          if (!result.error) {
-            window.localStorage.removeItem('username_onboarding_dismissed');
-            setOnboardingDismissed(false);
-            setUsernameModalOpen(false);
-          }
-          return result;
-        }}
-        onClose={() => {
-          window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
-          setOnboardingDismissed(true);
+    <AuthModalsLayer
+      authModalOpen={authModalOpen}
+      supabaseEnabled={supabaseEnabled}
+      supabaseConfigError={supabaseConfigError}
+      onAuthModalClose={() => setAuthModalOpen(false)}
+      onSignIn={signIn}
+      onSignUp={signUp}
+      onResetPassword={resetPassword}
+      usernameModalOpen={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
+      currentUsername={authProfile?.username ?? null}
+      usernameIsProfileEdit={usernameModalOpen}
+      onUsernameSave={async (username) => {
+        const result = await updateUsername(username);
+        if (!result.error) {
+          window.localStorage.removeItem('username_onboarding_dismissed');
+          setOnboardingDismissed(false);
           setUsernameModalOpen(false);
-        }}
-        onSignOut={async () => {
-          resetRoomRecoveryState();
-          setSigningOut(true);
-          setAppMode('home');
-          resetMultiplayerRoomState();
-          setError('');
-          setActionError('');
-          try {
-            void signOut().catch(() => {});
-          } catch {
-            // no-op
-          } finally {
-            setSigningOut(false);
-            setUsernameModalOpen(false);
-            setOnboardingDismissed(false);
-            setAuthModalOpen(true);
-          }
-        }}
-        signingOut={signingOut}
-      />
+        }
+        return result;
+      }}
+      onUsernameClose={() => {
+        window.localStorage.setItem('username_onboarding_dismissed', Date.now().toString());
+        setOnboardingDismissed(true);
+        setUsernameModalOpen(false);
+      }}
+      onUsernameSignOut={async () => {
+        resetRoomRecoveryState();
+        setSigningOut(true);
+        setAppMode('home');
+        resetMultiplayerRoomState();
+        setError('');
+        setActionError('');
+        try {
+          void signOut().catch(() => {});
+        } catch {
+          // no-op
+        } finally {
+          setSigningOut(false);
+          setUsernameModalOpen(false);
+          setOnboardingDismissed(false);
+          setAuthModalOpen(true);
+        }
+      }}
+      signingOut={signingOut}
+    />
+  );
+
+  const multiplayerLobbyHostProps = useMultiplayerLobbyHostProps({
+    socket,
+    socketRuntime,
+    roomRuntime,
+    joinFlightRuntime,
+    reconnectRuntime,
+    navigationRuntime,
+    roomSocialRuntime,
+    roomCode,
+    joinedRoom,
+    friendInvite,
+    outboundChallenge,
+    applyJoinedRoomResponse,
+    emitCreateRoom,
+    showToast,
+    normalizeRoomCode,
+    normalizeRoomPlayers,
+    getInviteLink,
+    resolvePendingCreate,
+    clearReconnectAttemptTimer,
+    clearOutboundChallenge,
+    resetMultiplayerRoomState,
+    setIsRecoveringConnection,
+    authProfile,
+    multiplayerIdentityUserId,
+    multiplayerAuthToken,
+    setRoomCode,
+    setPlayers,
+    setError,
+    setActionError,
+    setPendingUiAction,
+    setRoomRecoveryState,
+    setRoomRecoveryMessage,
+    setFriendInvite,
+    setMpSubView,
+    setOutboundChallenge,
+    intentionalDisconnectRef,
+    reconnectAttemptCountRef,
+    rejoinInFlightRef,
+    autoJoinAttemptedRef,
+  });
+
+  const appRoutesInput = useAppRoutesInput({
+    host: {
+      multiplayerConnectionHostParams,
+      connectionActions,
+      multiplayerLobbyHostProps,
+      authModalsLayer,
+    },
+    multiplayerConnectionState,
+    multiplayerConnectionConfig,
+    connect,
+    retryRoomRecovery,
+    isRecoveringConnection,
+    serverWaking,
+    roomRecoveryMessage,
+    setAppMode,
+    overlayPayload,
+    setOverlayPayload,
+    handleMatchmakingAutoJoin,
+    isRoomHost,
+    privateLobbyHostWinStreak,
+    you,
+    players,
+    pendingUiAction,
+    opponentId,
+    opponentName,
+    myName,
+    myScore,
+    opponentScore,
+    opponentTileCount,
+    isMyTurn,
+    isHandActive,
+    hudScorePulse,
+    hudRightLabel,
+    hudRightScore,
+    hudRightScorePulse,
+    opponentPillRef,
+    boneyardRef,
+    boneyardCount,
+    openEndsSum,
+    boardRef,
+    handAreaRef,
+    trayCenterRef,
+    confettiCanvasRef,
+    boardForDisplay,
+    boardLegalMoves,
+    boardSelectedTile,
+    lastPlayedTile,
+    boardShowOpenEndGlow,
+    play,
+    myHand,
+    handSelectedTile,
+    handleTileTap,
+    legalMoves,
+    handTileSize,
+    handCompactStacked,
+    drawPulseIndex,
+    scoreToast,
+    scoreTrackOpen,
+    setScoreTrackOpen,
+    isMuted,
+    setIsMuted,
+    isFullscreen,
+    toggleFullscreen,
+    opponentDisconnected,
+    opponentDisconnectMessage,
+    handReveal,
+    handRevealAutoProgress,
+    flyingTiles,
+    canUseRematch,
+    rematchRequested,
+    rematchWaitingText,
+    requestRematch,
+    handlePostGame,
+    multiplayerRatingSummary,
+    openMultiplayerAnalyzer,
+    showLeaveConfirm,
+    setShowLeaveConfirm,
+    abandonCurrentMatch,
+    abandonedMatchNotice,
+    setAbandonedMatchNotice,
+    tournamentMatch,
+    consumedTournamentGameOverMatchIdsRef,
+    tournamentMyLabel,
+    tournamentOpponentLabel,
+    navigateAfterTournamentMatch,
+    currentTournamentContext,
+    appMode,
+    appRootRef,
+    canOpenHowToPlayPreview,
+    isAdmin,
+    authUser,
+    authProfile,
+    supabaseEnabled,
+    supabaseConfigError,
+    selectedLearnLessonId,
+    setSelectedLearnLessonId,
+    learnHowToPlayOpen,
+    setLearnHowToPlayOpen,
+    setIsGuidedMode,
+    setIsAuthoringMode,
+    setIsAuthoringV2Mode,
+    setIsGuidedV2Mode,
+    setBotFritzTier,
+    setBotDealSize,
+    botDealSize,
+    botFritzTier,
+    isGuidedMode,
+    isAuthoringMode,
+    isAuthoringV2Mode,
+    isGuidedV2Mode,
+    refreshAuthProfile,
+    applyProfilePatch,
+    ghostProfile,
+    setGhostProfile,
+    ghostOpponentName,
+    ghostOpponentUserId,
+    setGhostOpponentName,
+    setGhostOpponentUserId,
+    setAuthModalOpen,
+    setUsernameModalOpen,
+    socket,
+    joinedRoom,
+    showToast,
+    outboundChallenge,
+    clearOutboundChallenge,
+    profileTarget,
+    setProfileTarget,
+    friendInvitePopup,
+    toast,
+    error,
+    actionError,
+    state,
+    setError,
+    setActionError,
+    mpSubView,
+    startGame,
+    myHandle,
+    homeRatingLabel,
+    activeHomeMode,
+    setActiveHomeMode,
+    welcomeOpen,
+    setWelcomeOpen,
+    weeklyStatsOpen,
+    setWeeklyStatsOpen,
+    tournament,
+    tournamentSubView,
+    activeTournamentId,
+    tournamentAttachPhase,
+    tournamentAttachError,
+    tournamentResult,
+    tournamentResultLoading,
+    tournamentResultError,
+    setTournamentSubView,
+    setActiveTournamentId,
+    setTournamentResult,
+    setTournamentResultLoading,
+    setTournamentResultError,
+    exitToTournamentHub,
+    enterTournamentLobby,
+    attachAssignedTournamentMatch,
+  });
+
+  const appRoutesProps = useAppRoutesProps(appRoutesInput);
+
+  return (
+    <Suspense fallback={<ScreenLoader label="Loading…" />}>
+      <AppRoutes {...appRoutesProps} />
     </Suspense>
-  );
-
-  const withAuthModals = (node: React.ReactNode) => (
-    <>
-      {node}
-      {authModalsLayer}
-    </>
-  );
-
-  if (typeof window !== 'undefined' && (window.location.pathname === '/redesign' || window.location.pathname === '/') && appMode === 'home') {
-    return withAuthModals(
-      <RacehorseHomeScreen
-        setAppMode={setAppMode}
-        onOpenAuth={handleOpenAuthModal}
-        onOpenAccount={handleOpenAccountModal}
-      />,
-    );
-  }
-
-  if (appMode === 'noBrainer') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading No Brainer Lab…" />}>
-          <NoBrainerLabScreen
-            userId={authUser?.id ?? null}
-            onBack={() => setAppMode('singlePlayerHub')}
-          />
-        </Suspense>
-      </div>,
-    );
-  }
-
-  if (appMode === 'learn' && LEARN_MODE_VISIBLE) {
-    if (selectedLearnLessonId) {
-      return withAuthModals(
-        <div className={appRootClassName}>
-          <Suspense fallback={<ScreenLoader label="Loading Lesson…" />}>
-            <LearnPlayer
-              lessonId={selectedLearnLessonId}
-              onExit={() => {
-                setSelectedLearnLessonId(null);
-              }}
-            />
-          </Suspense>
-        </div>
-      );
-    }
-    if (learnHowToPlayOpen && canOpenHowToPlayPreview) {
-      return withAuthModals(
-        <div className={appRootClassName}>
-          <Suspense fallback={<ScreenLoader label="Loading Learn…" />}>
-            <LearnHowToPlayRacehorse
-              onBack={() => setLearnHowToPlayOpen(false)}
-              onNavigate={setAppMode}
-              onStartGuidedMatch={() => {
-                setLearnHowToPlayOpen(false);
-                const start = resolveGuidedMatchStart();
-                if (!start.route) return;
-                setIsGuidedMode(start.route === 'v1');
-                setIsGuidedV2Mode(start.route === 'v2');
-                setBotFritzTier('standard');
-                setBotDealSize(7);
-                setAppMode('bot');
-              }}
-            />
-          </Suspense>
-        </div>
-      );
-    }
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Learn Mode…" />}>
-          <LearnHome
-            onBack={() => setAppMode('home')}
-            onNavigate={setAppMode}
-            onOpenAuth={handleOpenAuthModal}
-            onOpenAccount={handleOpenAccountModal}
-            isAdmin={isAdmin}
-            showAdminView={Boolean(isAdmin && showLearnAdminView)}
-            canOpenHowToPlay={canOpenHowToPlayPreview}
-            onOpenHowToPlay={
-              canOpenHowToPlayPreview ? () => setLearnHowToPlayOpen(true) : undefined
-            }
-            onStartGuidedGame={() => {
-              setIsGuidedMode(true);
-              setBotFritzTier('standard');
-              setBotDealSize(7);
-              setAppMode('bot');
-            }}
-            onStartGuidedAuthoring={() => {
-              setIsAuthoringMode(true);
-              setBotFritzTier('elite');
-              setBotDealSize(7);
-              setAppMode('bot');
-            }}
-            onFreezeLesson={() => {
-              const session = loadAuthoringSession();
-              if (session) {
-                saveFrozenLesson(session);
-              }
-            }}
-            onStartGuidedV2Game={() => {
-              const start = resolveGuidedMatchStart();
-              if (!start.route) return;
-              setIsGuidedMode(start.route === 'v1');
-              setIsGuidedV2Mode(start.route === 'v2');
-              setBotFritzTier('standard');
-              setBotDealSize(7);
-              setAppMode('bot');
-            }}
-            onStartAuthoringV2={() => {
-              setIsAuthoringV2Mode(true);
-              setBotFritzTier('elite');
-              setBotDealSize(7);
-              setAppMode('bot');
-            }}
-            onStartGuidedMatchRecorder={() => {
-              setAppMode('guidedMatchRecorder');
-            }}
-            onOpenGuidedMatchAnnotator={() => {
-              setAppMode('guidedMatchAnnotator');
-            }}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'guidedMatchAnnotator') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Guided Match Annotator…" />}>
-          <GuidedMatchAnnotatorScreen
-            onBack={() => setAppMode('learn')}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'guidedMatchRecorder') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Guided Match Recorder…" />}>
-          <GuidedMatchRecorderScreen
-            onBack={() => setAppMode('learn')}
-            onNavigate={setAppMode}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'botSetup') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Fritz Setup…" />}>
-          <PlayVsFritz
-            onStart={({ difficulty, dealSize }) => {
-              setBotFritzTier(difficulty);
-              setBotDealSize(dealSize);
-              setAppMode('bot');
-            }}
-            onBack={() => setAppMode('home')}
-            onNavigate={setAppMode}
-            onOpenAuth={() => setAuthModalOpen(true)}
-            onOpenAccount={() => setUsernameModalOpen(true)}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'bot') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
-          <BotMatchScreen
-            onBack={() => {
-              setIsGuidedMode(false);
-              setIsAuthoringMode(false);
-              setIsAuthoringV2Mode(false);
-              setIsGuidedV2Mode(false);
-              setAppMode('home');
-            }}
-            onNavigate={(mode) => {
-              if (mode === 'learn') {
-                setIsGuidedMode(false);
-                setIsAuthoringMode(false);
-                setIsAuthoringV2Mode(false);
-                setIsGuidedV2Mode(false);
-              }
-              setAppMode(mode);
-            }}
-            dealSize={botDealSize}
-            fritzTier={botFritzTier}
-            isGuidedMode={isGuidedMode}
-            isAuthoringMode={isAuthoringMode}
-            isAuthoringV2Mode={isAuthoringV2Mode}
-            isGuidedV2Mode={isGuidedV2Mode}
-            enableGuidedMatchCandidateCapture={
-              Boolean(isAdmin) &&
-              !isGuidedMode &&
-              !isAuthoringMode &&
-              !isAuthoringV2Mode &&
-              !isGuidedV2Mode &&
-              botFritzTier === 'standard' &&
-              botDealSize === 7
-            }
-            userId={authUser?.id ?? null}
-            username={authProfile?.username ?? null}
-            currentGlickoRating={authProfile?.glicko_rating ?? null}
-            onProfileRefresh={refreshAuthProfile}
-            onProfilePatch={applyProfilePatch}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'ghostSetup') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Ghost Setup…" />}>
-          <GhostSetupScreen
-            userId={authUser?.id ?? null}
-            fritzGamesPlayed={authProfile?.ranked_games_played ?? 0}
-            onBack={() => setAppMode('home')}
-            onNavigate={setAppMode}
-            onOpenAuth={() => setAuthModalOpen(true)}
-            onOpenAccount={() => setUsernameModalOpen(true)}
-            onStart={(summary, opponentName, opponentUserId) => {
-              setGhostProfile(summary);
-              setGhostOpponentName(opponentName);
-              setGhostOpponentUserId(opponentUserId);
-              setAppMode('ghost');
-            }}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'ghost') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Ghost Match…" />}>
-          <BotMatchScreen
-            onBack={() => setAppMode('home')}
-            onNavigate={setAppMode}
-            dealSize={botDealSize}
-            mode="ghost"
-            userId={authUser?.id ?? null}
-            username={authProfile?.username ?? null}
-            opponentName={ghostOpponentName}
-            opponentUserId={ghostOpponentUserId}
-            currentGlickoRating={authProfile?.glicko_rating ?? null}
-            ghostProfile={ghostProfile}
-            onGhostProfileChange={setGhostProfile}
-            onProfileRefresh={refreshAuthProfile}
-            onProfilePatch={applyProfilePatch}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'daily') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle…" />}>
-          <DailyPuzzleScreen
-            user={authUser}
-            profile={authProfile}
-            onBack={() => setAppMode('home')}
-            onNavigate={setAppMode}
-            onOpenAuth={() => setAuthModalOpen(true)}
-            onOpenAccount={() => setUsernameModalOpen(true)}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'dailyFritz') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Daily Fritz…" />}>
-          <DailyFritzScreen
-            user={authUser}
-            profile={authProfile}
-            ghostProfile={ghostProfile}
-            onGhostProfileChange={setGhostProfile}
-            onProfileRefresh={refreshAuthProfile}
-            onProfilePatch={applyProfilePatch}
-            onOpenAuth={() => setAuthModalOpen(true)}
-            onOpenAccount={() => setUsernameModalOpen(true)}
-            onBack={() => setAppMode('home')}
-            onNavigate={setAppMode}
-          />
-
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'ratingHistory') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Rating History…" />}>
-          <RatingHistoryPage
-            userId={authUser?.id ?? null}
-            username={authProfile?.username ?? null}
-            onBack={() => setAppMode('home')}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'friends') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Friends…" />}>
-          <FriendsScreen
-            open={true}
-            user={authUser}
-            socket={socket}
-            joinedRoom={joinedRoom}
-            currentUsername={authProfile?.username ?? ''}
-            showToast={showToast}
-            onCopyInviteLink={copyInviteLink}
-            onCreatePrivateRoom={onCreatePrivateRoom}
-            onClose={() => setAppMode('home')}
-            onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
-          />
-        </Suspense>
-        {friendInvitePopup}
-      </div>
-    );
-  }
-
-  if (appMode === 'stats') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Stats…" />}>
-          <StatsScreen
-            open={true}
-            user={authUser}
-            profile={authProfile}
-            onClose={() => setAppMode('home')}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'feed') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        {toast && <div className="toast">{toast}</div>}
-        <Suspense fallback={<ScreenLoader label="Loading Feed…" />}>
-          <ActivityFeedScreen
-            user={authUser}
-            socket={socket}
-            connect={connect}
-            sendFriendChallenge={sendFriendChallenge}
-            showToast={showToast}
-            outboundChallenge={outboundChallenge}
-            clearOutboundChallenge={clearOutboundChallenge}
-            onViewProfile={(username) => { setProfileTarget(username); setAppMode('profile'); }}
-            onClose={() => setAppMode('home')}
-            onNavigateToFriends={() => setAppMode('friends')}
-            onNavigate={setAppMode}
-            onOpenAuth={handleOpenAuthModal}
-            onOpenAccount={handleOpenAccountModal}
-          />
-        </Suspense>
-        {friendInvitePopup}
-      </div>
-    );
-  }
-
-  if (appMode === 'leaderboard') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Leaderboard…" />}>
-          <DailyFritzLeaderboardRoute
-            user={authUser}
-            profile={authProfile}
-            onClose={() => setAppMode('home')}
-            onNavigate={setAppMode}
-            onOpenAuth={() => setAuthModalOpen(true)}
-            onOpenAccount={() => setUsernameModalOpen(true)}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'profile') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Profile…" />}>
-          <PublicProfileScreen
-            username={profileTarget ?? ''}
-            user={authUser}
-            showToast={showToast}
-            onClose={() => setAppMode('home')}
-            onChallenge={() => setAppMode('multiplayer')}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-
-  if (appMode === 'singlePlayerHub') {
-    return withAuthModals(
-      <div className={appRootClassName}>
-        <Suspense fallback={<ScreenLoader label="Loading Single Player…" />}>
-          <SinglePlayerHubScreen
-            userId={authUser?.id ?? null}
-            onBack={() => setAppMode('home')}
-            onNavigate={(mode) => setAppMode(mode as any)}
-            onOpenAuth={handleOpenAuthModal}
-            onOpenAccount={handleOpenAccountModal}
-          />
-        </Suspense>
-      </div>
-    );
-  }
-  if (appMode === 'tournament') {
-    const tIdentity = authUser?.id
-      ? { userId: authUser.id, username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player' }
-      : null;
-
-    // Reference legacy screen so the import isn't flagged as unused.
-    void TournamentScreen;
-
-    if (tournamentSubView === 'bracket' && activeTournamentId) {
-      return withAuthModals(
-        <TournamentBracketScreen
-          identity={tIdentity}
-          tournamentId={activeTournamentId}
-          bracket={tournament.activeBracket}
-          tournamentPhase={tournament.tournamentPhase}
-          assignedMatch={
-            tournament.assignedMatch?.tournamentId === activeTournamentId
-              ? tournament.assignedMatch
-              : null
-          }
-          countdownAt={tournament.countdown?.at ?? null}
-          countdownKind={tournament.countdown?.kind ?? null}
-          onLoadBracket={(id) => { void tournament.openBracket(id); }}
-          onBack={() => exitToTournamentHub('bracket_back')}
-          onExitToHub={() => exitToTournamentHub('bracket_back')}
-          onWithdraw={(id) => {
-            void tournament.withdraw(id).then(() => exitToTournamentHub('withdraw'));
-          }}
-          onViewResult={() => {
-            if (!activeTournamentId) return;
-            setTournamentSubView('result');
-            void tournament.openBracket(activeTournamentId);
-          }}
-          onNavigate={setAppMode}
-          onOpenAuth={handleOpenAuthModal}
-          onOpenAccount={handleOpenAccountModal}
-          onAttachAssignedMatch={attachAssignedTournamentMatch}
-          attachJoinPhase={tournamentAttachPhase}
-          attachJoinError={tournamentAttachError}
-        />,
-      );
-    }
-
-    if (tournamentSubView === 'result' && activeTournamentId) {
-      const myUserId = authUser?.id ?? null;
-      const yourPlacement =
-        (myUserId
-          ? tournamentResult?.placements.find((placement) => placement.userId === myUserId)?.placementLabel
-          : null) ?? null;
-
-      const nextSlot = tournament.upcoming[0];
-      const nextCountdown = nextSlot
-        ? (() => {
-            const ms = Math.max(0, Date.parse(nextSlot.scheduled_start) - Date.now());
-            const total = Math.floor(ms / 1000);
-            const h = Math.floor(total / 3600);
-            const m = Math.floor((total % 3600) / 60);
-            const s = total % 60;
-            const pad = (n: number) => String(n).padStart(2, '0');
-            return `${pad(h)}:${pad(m)}:${pad(s)}`;
-          })()
-        : '—';
-
-      return withAuthModals(
-        <TournamentResultScreen
-          isLoading={tournamentResultLoading}
-          error={tournamentResultError}
-          championName={tournamentResult?.championName ?? null}
-          yourPlacement={yourPlacement}
-          nextTournamentCountdown={nextCountdown}
-          onRetry={() => {
-            if (activeTournamentId) {
-              setTournamentResultLoading(true);
-              void tournamentApi.fetchResult(activeTournamentId)
-                .then((result) => {
-                  setTournamentResult(result);
-                  setTournamentResultError(null);
-                })
-                .catch((err) => {
-                  setTournamentResultError(err instanceof Error ? err.message : 'Failed to load tournament result');
-                })
-                .finally(() => setTournamentResultLoading(false));
-            }
-          }}
-          onNextTournament={() => {
-            setTournamentSubView('hub');
-            setActiveTournamentId(null);
-            setTournamentResult(null);
-          }}
-        />,
-      );
-    }
-
-    return withAuthModals(
-      <TournamentHubScreen
-        identity={tIdentity}
-        upcoming={tournament.upcoming}
-        registrations={tournament.registrations}
-        recoveryMatch={tournament.recoveryMatch}
-        tournamentPhase={tournament.tournamentPhase}
-        error={tournament.error}
-        isLoading={tournament.isLoading}
-        hasLoaded={tournament.hasLoaded}
-        activeBracketStatus={tournament.activeBracket?.tournament.status ?? null}
-        activeTournamentId={tournament.activeTournamentId}
-        onNavigate={setAppMode}
-        onOpenAuth={handleOpenAuthModal}
-        onOpenAccount={handleOpenAccountModal}
-        onBackHome={() => setAppMode('home')}
-        onOpenBracket={(id) => enterTournamentLobby(id)}
-        onRegister={async (id) => {
-          await tournament.register(id);
-          enterTournamentLobby(id);
-        }}
-        onWithdraw={async (id) => {
-          await tournament.withdraw(id);
-          if (activeTournamentId === id) exitToTournamentHub('withdraw');
-        }}
-        onRetry={() => {
-          void tournament.refresh();
-        }}
-        onAttachAssignedMatch={attachAssignedTournamentMatch}
-        attachJoinPhase={tournamentAttachPhase}
-        attachJoinError={tournamentAttachError}
-      />,
-    );
-  }
-
-  const dismissWelcome = () => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('hasSeenWelcome', 'true');
-    }
-    setWelcomeOpen(false);
-  };
-  const welcomeModal =
-    appMode === 'home' && welcomeOpen ? (
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Welcome to Racehorse Dominoes"
-        onClick={dismissWelcome}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 1600,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(4px)',
-          display: 'grid',
-          placeItems: 'center',
-          padding: 12,
-        }}
-      >
-        <div
-          className="card welcome-modal-card"
-          onClick={(e) => e.stopPropagation()}
-          style={{ textAlign: 'left' }}
-        >
-          <h3 className="welcome-modal-title" style={{ margin: 0, lineHeight: 1.2 }}>
-            How to Play
-          </h3>
-          <p className="welcome-modal-subtitle">
-            Quick guide to each game mode.
-          </p>
-          <div className="welcome-mode-list">
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#38bdf8' }} aria-hidden="true" />
-                Multiplayer Online
-              </div>
-              <div className="welcome-mode-desc">Play live 1v1 against a friend with a room code</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#e05c6a' }} aria-hidden="true" />
-                Tournament Mode
-              </div>
-              <div className="welcome-mode-desc">Round robin (4+ players), matches to 30, play everyone once</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#f59e0b' }} aria-hidden="true" />
-                Daily Puzzle
-              </div>
-              <div className="welcome-mode-desc">One puzzle per day, compete on the leaderboard</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#60a5fa' }} aria-hidden="true" />
-                vs Bot
-              </div>
-              <div className="welcome-mode-desc">Practice against an AI opponent</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#a78bfa' }} aria-hidden="true" />
-                No Brainer Lab
-              </div>
-              <div className="welcome-mode-desc">Practice clearing all 7 tiles in one turn</div>
-            </div>
-            <div className="welcome-mode-row">
-              <div className="welcome-mode-name">
-                <span className="welcome-mode-dot" style={{ background: '#34d399' }} aria-hidden="true" />
-                Stats &amp; Leaderboard
-              </div>
-              <div className="welcome-mode-desc">Track your wins, streaks, and weekly rank</div>
-            </div>
-          </div>
-          <div style={{ marginTop: 12, display: 'flex' }}>
-            <button
-              className="mode-inline-btn welcome-cta"
-              onClick={dismissWelcome}
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null;
-
-  if (appMode === 'home') {
-    return withAuthModals(
-      <div ref={appRootRef} className={appRootClassName}>
-        <div className="layout-screen screen lobby-screen mode-home-screen mode-accent-multiplayer home-lobby-screen claude-home-shell claude-home-screen-shell">
-          <div className="layout-screen-bg" aria-hidden="true" />
-          <div className="layout-screen-beam" aria-hidden="true" />
-          <div className="layout-screen-vignette" aria-hidden="true" />
-          <div className="layout-screen-inner home-lobby-shell">
-            <div className="claude-accordion-home">
-              <div className="claude-accordion-home__topbar">
-                <div className="claude-accordion-home__brand">RACEHORSE</div>
-                <div className="claude-accordion-home__utilities">
-                  {authUser ? (
-                    <button className="claude-accordion-home__utility" onClick={() => setUsernameModalOpen(true)}>
-                      {myHandle} · {homeRatingLabel}
-                    </button>
-                  ) : (
-                    <button className="claude-accordion-home__utility" onClick={() => setAuthModalOpen(true)}>
-                      Sign In · Profile
-                    </button>
-                  )}
-                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setAppMode('friends')}>
-                    Friends
-                  </button>
-                  <button className="claude-accordion-home__utility is-secondary" onClick={() => setAppMode('stats')}>
-                    Stats
-                  </button>
-                </div>
-              </div>
-              <div className="claude-accordion-home__body">
-                {[
-                  { id: 'multiplayer', short: 'MULTI', label: 'Multiplayer Online', desc: 'Create a private room and play head to head in real time', accent: '#38bdf8', live: true, action: () => setAppMode('multiplayer') },
-                  { id: 'singlePlayerHub', short: 'SOLO', label: 'Single Player Modes', desc: 'Play vs Fritz, Ghost Mode & No Brainer Lab', accent: '#a78bfa', action: () => setAppMode('singlePlayerHub') },
-                  { id: 'dailyFritz', short: 'FRITZ', label: 'Daily Fritz Set', desc: 'One fixed best of 3 Fritz set per day. Same deals for everyone.', accent: '#e05c6a', action: () => setAppMode('dailyFritz') },
-                  { id: 'daily', short: 'PUZZLE', label: 'Daily Puzzle', desc: 'Solve today’s featured scenario and compare leaderboard results', accent: '#f0c040', action: () => setAppMode('daily') },
-                  { id: 'tournament', short: 'TOURN', label: 'Tournament Mode', desc: 'Round robin (4+ players), matches to 30, play everyone once', accent: '#fb923c', action: () => { setError(''); setAppMode('tournament'); } },
-                  { id: 'learn', short: 'LEARN', label: 'Learn Academy', desc: 'New to dominoes? Learn how to play and win.', accent: '#34d399', action: () => setAppMode('learn') },
-                ].map((mode, index, all) => {
-                  const isActive = activeHomeMode === mode.id;
-                  const hasActive = activeHomeMode !== null;
-                  return (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      className={`claude-accordion-home__panel${isActive ? ' is-active' : ''}${hasActive ? ' has-active' : ''}`}
-                      style={{ ['--panel-accent' as string]: mode.accent, ['--panel-accent-rgb' as string]: claudeRgb(mode.accent), borderRight: index < all.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}
-                      onMouseEnter={() => setActiveHomeMode(mode.id as typeof activeHomeMode)}
-                      onFocus={() => setActiveHomeMode(mode.id as typeof activeHomeMode)}
-                      onClick={mode.action}
-                    >
-                      <div className="claude-accordion-home__panel-atmo" />
-                      <div className="claude-accordion-home__big-number">{index + 1}</div>
-                      {mode.live ? <div className="claude-accordion-home__live">LIVE</div> : null}
-                      <div className="claude-accordion-home__panel-content">
-                        <div className="claude-accordion-home__mode-number">MODE {String(index + 1).padStart(2, '0')}</div>
-                        <div className="claude-accordion-home__mode-title">{mode.label}</div>
-                        <div className="claude-accordion-home__mode-desc">{mode.desc}</div>
-                        <div className="claude-accordion-home__enter">Enter</div>
-                      </div>
-                      <div className="claude-accordion-home__collapsed">
-                        <div className="claude-accordion-home__collapsed-label">{mode.short}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {!supabaseEnabled && (
-              <p className="lobby-server mode-subtitle" style={{ marginTop: 12 }}>
-                {supabaseConfigError ?? 'Supabase not configured.'}
-              </p>
-            )}
-          </div>
-        </div>
-        {welcomeModal}
-        <WeeklyStatsScreen
-          open={weeklyStatsOpen}
-          onClose={() => setWeeklyStatsOpen(false)}
-          user={authUser}
-        />
-        {friendInvitePopup}
-</div>,
-    );
-  }
-
-  return withAuthModals(
-    <div ref={appRootRef} className={appRootClassName}>
-      {/* Toast */}
-      {toast && <div className="toast">{toast}</div>}
-      {friendInvitePopup}
-
-      {/* Error Banner */}
-      {error && (
-        <div className="error-banner">
-          {error}
-          <button onClick={() => setError('')}>×</button>
-        </div>
-      )}
-
-      {/* Action Error Banner */}
-      {actionError && state && !state.handOver && !state.gameOver && (
-        <div className="error-banner">
-          {actionError}
-          <button onClick={() => setActionError('')}>×</button>
-        </div>
-      )}
-
-      {(!isConnected && !isRecoveringConnection) ||
-      (isConnected && !joinedRoom) ||
-      (isConnected && joinedRoom && !state) ? (
-        mpSubView === 'quick' && !joinedRoom ? (
-          <MatchmakingScreen
-            socket={socket}
-            isConnected={isConnected}
-            isConnecting={isConnecting}
-            serverUrl={serverUrl}
-            onRetryConnect={connect}
-            identity={
-              authUser?.id
-                ? {
-                    userId: authUser.id,
-                    username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player',
-                  }
-                : null
-            }
-            myRating={
-              authProfile?.glicko_rating != null
-                ? Math.round(Number(authProfile.glicko_rating))
-                : null
-            }
-            myWinStreak={privateLobbyHostWinStreak}
-            onNavigate={setAppMode}
-            onOpenAuth={handleOpenAuthModal}
-            onOpenAccount={handleOpenAccountModal}
-            onBackHome={() => setAppMode('home')}
-            onOpenPrivateMatch={() => setMpSubView('private')}
-            onAutoJoinRoom={handleMatchmakingAutoJoin}
-          />
-        ) : mpSubView === 'quick' && joinedRoom && !state ? (
-          <div
-            className="mp-quick-starting"
-            style={{
-              flex: '1 1 0',
-              minHeight: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-secondary, rgba(255,255,255,0.72))',
-              fontSize: '1.05rem',
-              letterSpacing: '0.04em',
-            }}
-          >
-            Starting match…
-          </div>
-        ) : (
-          <PrivateMatchLobbyScreen
-            phase={
-              !isConnected && !isRecoveringConnection
-                ? 'disconnected'
-                : isConnected && !joinedRoom
-                  ? 'lobby'
-                  : 'room'
-            }
-            onNavigate={setAppMode}
-            onOpenAuth={() => setAuthModalOpen(true)}
-            onOpenAccount={() => setUsernameModalOpen(true)}
-            onBackHome={() => {
-              setMpSubView('quick');
-              setAppMode('home');
-            }}
-            isConnecting={isConnecting}
-            serverWaking={serverWaking}
-            serverUrl={serverUrl}
-            onConnect={connect}
-            roomCode={roomCode}
-            onRoomCodeChange={setRoomCode}
-            onCreateRoom={createRoom}
-            onJoinRoom={joinRoom}
-            pendingLobbyAction={
-              pendingUiAction === 'create' || pendingUiAction === 'join' ? pendingUiAction : null
-            }
-            joinedRoom={joinedRoom ?? ''}
-            players={players}
-            you={you}
-            isRoomHost={isRoomHost}
-            onLeaveRoom={leavePrivateLobbyRoom}
-            onStartGame={startGame}
-            pendingStart={pendingUiAction === 'start'}
-            onCopyInviteLink={copyInviteLink}
-            onCopyRoomCode={copyRoomCodeToClipboard}
-            myRating={
-              authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : null
-            }
-            myUsername={authProfile?.username ?? null}
-            roomChatFeed={roomReactions}
-            onSendRoomChat={sendRoomChat}
-            winTarget={60}
-            roomRecoveryState={roomRecoveryState}
-            roomRecoveryMessage={roomRecoveryMessage}
-            onRetryRoomRecovery={retryRoomRecovery}
-            hostWinStreak={privateLobbyHostWinStreak}
-            onOpenQuickMatch={() => setMpSubView('quick')}
-            socket={socket}
-            pendingChallenge={
-              outboundChallenge && players.length < 2
-                ? {
-                    friendUsername: outboundChallenge.friendUsername,
-                    matchSummary: outboundChallenge.matchSummary,
-                    expiresAt: outboundChallenge.expiresAt,
-                  }
-                : null
-            }
-          />
-        )
-      ) : null}
-
-      <LiveMatchScreen
-        visible={Boolean((isConnected || isRecoveringConnection) && joinedRoom && state)}
-        state={state}
-        you={you}
-        opponentId={opponentId}
-        opponentName={opponentName}
-        myName={myName}
-        myScore={myScore}
-        opponentScore={opponentScore}
-        opponentTileCount={opponentTileCount}
-        isMyTurn={isMyTurn}
-        isHandActive={isHandActive}
-        hudScorePulse={hudScorePulse}
-        hudRightLabel={hudRightLabel}
-        hudRightScore={hudRightScore}
-        hudRightScorePulse={hudRightScorePulse}
-        opponentPillRef={opponentPillRef}
-        boneyardRef={boneyardRef}
-        boneyardCount={boneyardCount}
-        openEndsSum={openEndsSum}
-        boardRef={boardRef}
-        handAreaRef={handAreaRef}
-        trayCenterRef={trayCenterRef}
-        confettiCanvasRef={confettiCanvasRef}
-        boardForDisplay={boardForDisplay}
-        boardLegalMoves={boardLegalMoves}
-        boardSelectedTile={boardSelectedTile}
-        lastPlayedTile={lastPlayedTile}
-        boardShowOpenEndGlow={boardShowOpenEndGlow}
-        onPositionClick={play}
-        myHand={myHand}
-        handSelectedTile={handSelectedTile}
-        onHandTileSelect={handleTileTap}
-        legalMoves={legalMoves}
-        handTileSize={handTileSize}
-        handCompactStacked={handCompactStacked}
-        drawPulseIndex={drawPulseIndex}
-        scoreToast={scoreToast}
-        scoreTrackOpen={scoreTrackOpen}
-        onScoreTrackOpenChange={setScoreTrackOpen}
-        roomReactions={roomReactions}
-        onSendRoomChat={sendRoomChat}
-        onSendRoomEmote={sendRoomEmote}
-        isMuted={isMuted}
-        onToggleMute={() => setIsMuted((prev) => !prev)}
-        isFullscreen={isFullscreen}
-        onToggleFullscreen={toggleFullscreen}
-        opponentDisconnected={opponentDisconnected}
-        opponentDisconnectMessage={opponentDisconnectMessage}
-        roomRecoveryState={roomRecoveryState}
-        roomRecoveryMessage={roomRecoveryMessage}
-        onRetryRoomRecovery={retryRoomRecovery}
-        winTarget={state?.config?.winningScore ?? 60}
-        tournamentMatch={tournamentMatch}
-        consumedTournamentGameOverMatchIdsRef={consumedTournamentGameOverMatchIdsRef}
-        tournamentMyLabel={tournamentMyLabel}
-        tournamentOpponentLabel={tournamentOpponentLabel}
-        onTournamentViewBracket={() => navigateAfterTournamentMatch('bracket')}
-        onTournamentViewFinalResult={() => navigateAfterTournamentMatch('result')}
-        onTournamentReturnToHub={() => navigateAfterTournamentMatch('hub')}
-        canUseRematch={canUseRematch}
-        rematchRequested={rematchRequested}
-        rematchWaitingText={rematchWaitingText}
-        onRematch={requestRematch}
-        onPostGame={handlePostGame}
-        players={players}
-        multiplayerRatingSummary={multiplayerRatingSummary}
-        onOpenMultiplayerAnalyzer={openMultiplayerAnalyzer}
-        handReveal={handReveal}
-        handRevealAutoProgress={handRevealAutoProgress}
-        flyingTiles={flyingTiles}
-        showLeaveConfirm={showLeaveConfirm}
-        onRequestLeaveConfirm={() => setShowLeaveConfirm(true)}
-        onLeaveConfirmDismiss={() => setShowLeaveConfirm(false)}
-        leaveModalIsTournament={Boolean(currentTournamentContext)}
-        onConfirmLeaveMatch={() => {
-          setShowLeaveConfirm(false);
-          void abandonCurrentMatch();
-        }}
-        abandonedMatchNotice={abandonedMatchNotice}
-        onAbandonedPrimary={() => {
-          if (abandonedMatchNotice?.context === 'tournament' && abandonedMatchNotice.tournamentId) {
-            setActiveTournamentId(abandonedMatchNotice.tournamentId);
-            setTournamentSubView('bracket');
-            setAppMode('tournament');
-          } else {
-            setAppMode('multiplayer');
-          }
-          setAbandonedMatchNotice(null);
-        }}
-        onAbandonedSecondary={() => {
-          if (abandonedMatchNotice?.context === 'tournament') {
-            setTournamentSubView('hub');
-            setAppMode('tournament');
-          } else {
-            setAppMode('home');
-          }
-          setAbandonedMatchNotice(null);
-        }}
-        onAbandonedDismiss={() => setAbandonedMatchNotice(null)}
-      />
-
-      {overlayPayload && (
-        <MatchFoundOverlay
-          payload={overlayPayload}
-          yourUsername={authProfile?.username ?? 'Guest'}
-          onComplete={() => {
-            setOverlayPayload(null);
-          }}
-        />
-      )}
-    </div>,
   );
 }

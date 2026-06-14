@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import type { User } from '@supabase/supabase-js';
 import type { UserProfile } from '../auth/useAuth';
@@ -7,7 +7,6 @@ import { MatchLiveLayout } from '../match/board';
 import '../match/match-live.css';
 import {
   applyPlayMove,
-  getDisplayOpenEnds,
   getLegalMoves,
   type BotMatchState,
 } from '../bot/botEngine';
@@ -33,9 +32,10 @@ import {
   ClaudeSectionLabel,
   ClaudeStatLine,
 } from '../ui/claudeMode';
-import DailyPuzzleLadderScreen from './DailyPuzzleLadderScreen';
 import { getDailyPuzzleStepPresentation } from './presentation';
 import './dailyPuzzle.css';
+
+const LazyDailyPuzzleLadderScreen = lazy(() => import('./DailyPuzzleLadderScreen'));
 
 function DailyPuzzleLoadingScreen({ onBack }: { onBack: () => void }) {
   const loadingSteps = [1, 2, 3].map((slotIndex) => getDailyPuzzleStepPresentation(slotIndex));
@@ -127,6 +127,10 @@ function puzzleCacheKey(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzle
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
+}
+
+function tileKey(tile: Tile): string {
+  return `${tile.low}-${tile.high}`;
 }
 
 function progressKey(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): string {
@@ -770,6 +774,13 @@ export default function DailyPuzzleScreen({
     if (!runtimeState || status !== 'IN_PROGRESS') return [] as Move[];
     return getLegalMoves(runtimeState, 'you').filter((move) => move.type === 'play');
   }, [runtimeState, status]);
+  const playableTileKeys = useMemo(() => {
+    return new Set(
+      legalMoves
+        .map((move) => (move.tile ? tileKey(move.tile) : null))
+        .filter((value): value is string => value !== null),
+    );
+  }, [legalMoves]);
 
   useEffect(() => {
     if (!runtimeState) return;
@@ -907,12 +918,14 @@ export default function DailyPuzzleScreen({
     );
     if (!move) return;
 
-    const beforeEnds = getDisplayOpenEnds(runtimeState);
     const result = applyPlayMove(runtimeState, 'you', move);
     const nextState = result.state;
     const pointsAwarded = result.scored?.points ?? 0;
     const nextMoves = movesUsed + 1;
     const totalScore = nextState.players.you.score;
+    const upcomingPlayMoves = getLegalMoves(nextState, 'you').filter(
+      (candidate) => candidate.type === 'play',
+    );
 
     setRuntimeState(nextState);
     setSelectedTile(null);
@@ -920,16 +933,11 @@ export default function DailyPuzzleScreen({
     setLastMovePoints(pointsAwarded);
     flashLastPlayed(move.tile ?? null);
 
-    const afterEnds = getDisplayOpenEnds(nextState);
-    // eslint-disable-next-line no-console
-    console.log('[DailyPuzzle]', { beforeEnds, afterEnds, pointsAwarded, totalScore });
-
     if (puzzle.puzzleType === 'one_turn_high_score') {
       const isDouble = move.tile!.low === move.tile!.high;
       const newRunningScore = runningScoreRef.current + pointsAwarded;
-      const upcoming = getLegalMoves(nextState, 'you').filter((c) => c.type === 'play');
 
-      if ((pointsAwarded === 0 && !isDouble) || upcoming.length === 0) {
+      if ((pointsAwarded === 0 && !isDouble) || upcomingPlayMoves.length === 0) {
         runningScoreRef.current = newRunningScore;
         setFinalScore(newRunningScore);
         setStatus('SOLVED');
@@ -963,10 +971,7 @@ export default function DailyPuzzleScreen({
       return;
     }
 
-    const upcoming = getLegalMoves(nextState, 'you').filter(
-      (candidate) => candidate.type === 'play',
-    );
-    if (upcoming.length === 0) {
+    if (upcomingPlayMoves.length === 0) {
       setStatus('FAILED');
       setStatusMessage('Failed: No legal moves remaining.');
       finalizeResult('FAILED', null, totalScore);
@@ -1012,15 +1017,17 @@ export default function DailyPuzzleScreen({
   }, [status, puzzle?.puzzleType, finalScore, runtimeState, bestPossibleScore]);
 
   const currentUserId = user?.id ?? null;
-  const currentLeaderboardRow = useMemo(
-    () => leaderboard.find((row) => Boolean(currentUserId) && row.userId === currentUserId) ?? null,
-    [currentUserId, leaderboard],
-  );
+  const currentLeaderboardIndex = useMemo(() => {
+    if (!currentUserId) return -1;
+    return leaderboard.findIndex((row) => row.userId === currentUserId);
+  }, [currentUserId, leaderboard]);
+  const currentLeaderboardRow =
+    currentLeaderboardIndex >= 0 ? leaderboard[currentLeaderboardIndex] ?? null : null;
   const leaderboardSummaryCards = useMemo<LeaderboardSummaryCard[]>(() => {
     return [
       {
         label: 'Your Rank',
-        value: currentLeaderboardRow ? `#${leaderboard.indexOf(currentLeaderboardRow) + 1}` : '—',
+        value: currentLeaderboardIndex >= 0 ? `#${currentLeaderboardIndex + 1}` : '—',
         sublabel: 'Today’s placement',
         tone: 'accent',
       },
@@ -1043,7 +1050,7 @@ export default function DailyPuzzleScreen({
         tone: 'neutral',
       },
     ];
-  }, [currentLeaderboardRow, leaderboard]);
+  }, [currentLeaderboardIndex, currentLeaderboardRow]);
 
   if (entryMode === 'checking' && selectedDateSeed === localDateKey) {
     return <DailyPuzzleLoadingScreen onBack={handleBackHome} />;
@@ -1127,15 +1134,17 @@ export default function DailyPuzzleScreen({
 
   if (entryMode === 'ladder' && ladderToday && selectedDateSeed === localDateKey) {
     return (
-      <DailyPuzzleLadderScreen
-        user={user}
-        profile={profile}
-        initialToday={ladderToday}
-        onBack={onBack}
-        onNavigate={onNavigate}
-        onOpenAuth={onOpenAuth}
-        onOpenAccount={onOpenAccount}
-      />
+      <Suspense fallback={<DailyPuzzleLoadingScreen onBack={handleBackHome} />}>
+        <LazyDailyPuzzleLadderScreen
+          user={user}
+          profile={profile}
+          initialToday={ladderToday}
+          onBack={onBack}
+          onNavigate={onNavigate}
+          onOpenAuth={onOpenAuth}
+          onOpenAccount={onOpenAccount}
+        />
+      </Suspense>
     );
   }
 
@@ -1475,17 +1484,20 @@ export default function DailyPuzzleScreen({
   const isOneTurnHighScore = puzzle.puzzleType === 'one_turn_high_score';
   const formattedPuzzleDate = formatPuzzleDateLabel(puzzle.puzzleDate);
   const currentScore = runtimeState?.players.you.score ?? 0;
-  const completedScore = isOneTurnHighScore
-    ? (finalScore ?? currentScore)
-    : currentScore;
-  const completionRatio = bestPossibleScore > 0 ? completedScore / bestPossibleScore : 1;
-  const completionMessage =
-    completedScore >= bestPossibleScore
-      ? { text: '🏆 Perfect!', color: '#d8b56f' }
-      : completionRatio >= 0.8
-        ? { text: '⭐ Great solve!', color: 'rgba(125, 241, 197, 0.95)' }
-        : { text: 'Keep practicing!', color: 'rgba(232,245,240,0.85)' };
-  const modalLeaderboard = leaderboard.slice(0, 20);
+  const completedScore = isOneTurnHighScore ? (finalScore ?? currentScore) : currentScore;
+  const completionSummary = useMemo(() => {
+    const completionRatio = bestPossibleScore > 0 ? completedScore / bestPossibleScore : 1;
+    const completionMessage =
+      completedScore >= bestPossibleScore
+        ? { text: '🏆 Perfect!', color: '#d8b56f' }
+        : completionRatio >= 0.8
+          ? { text: '⭐ Great solve!', color: 'rgba(125, 241, 197, 0.95)' }
+          : { text: 'Keep practicing!', color: 'rgba(232,245,240,0.85)' };
+    return {
+      completionMessage,
+      modalLeaderboard: leaderboard.slice(0, 20),
+    };
+  }, [bestPossibleScore, completedScore, leaderboard]);
 
   if (!runtimeState) {
     return (
@@ -1589,9 +1601,7 @@ export default function DailyPuzzleScreen({
                 ).map((row, rowIdx) => (
                   <div key={`daily-hand-row-${rowIdx}`} className="hand-row">
                     {row.map((tile, idx) => {
-                      const playable = legalMoves.some(
-                        (candidate) => candidate.tile && tileEquals(candidate.tile, tile),
-                      );
+                      const playable = playableTileKeys.has(tileKey(tile));
                       const inProgress = status === 'IN_PROGRESS';
                       const isSelected = selectedTile ? tileEquals(selectedTile, tile) : false;
 
@@ -1629,8 +1639,8 @@ export default function DailyPuzzleScreen({
                 <span>{completedScore}</span>
                 <span className="rh-result__score-suffix">PTS</span>
               </div>
-              <div className="rh-result__feedback" style={{ color: completionMessage.color }}>
-                {completionMessage.text}
+              <div className="rh-result__feedback" style={{ color: completionSummary.completionMessage.color }}>
+                {completionSummary.completionMessage.text}
               </div>
             </header>
 
@@ -1663,7 +1673,7 @@ export default function DailyPuzzleScreen({
                   <span style={{ textAlign: 'right' }}>MOVES</span>
                   <span style={{ textAlign: 'right' }}>TIME</span>
                 </div>
-                {modalLeaderboard.map((row, idx) => {
+                {completionSummary.modalLeaderboard.map((row, idx) => {
                   const isYou = Boolean(currentUserId) && row.userId === currentUserId;
                   const initials = getDisplayName(row.username).replace(/^@/, '').slice(0, 2).toUpperCase() || 'P';
                   return (
