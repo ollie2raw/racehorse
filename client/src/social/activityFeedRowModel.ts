@@ -147,6 +147,9 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
       const opp = 'Fritz';
       const playerScore = meta.player_score as number | undefined;
       const fritzScore = meta.fritz_score as number | undefined;
+      const gameNumberRaw = meta.game_number;
+      const gameNumber =
+        gameNumberRaw === 1 || gameNumberRaw === 2 || gameNumberRaw === 3 ? gameNumberRaw : null;
       const won = result === 'win';
       const skunk = meta.skunk === true;
       const skunkBy = meta.skunk_by === 'player' || meta.skunk_by === 'fritz' ? meta.skunk_by : null;
@@ -160,7 +163,7 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
               : won
                 ? `won against ${opp}`
                 : `lost to ${opp}`,
-        secondary: 'Elite run',
+        secondary: gameNumber != null ? `Game ${gameNumber} · Elite run` : 'Elite run',
         modeBadge: { label: 'Daily Fritz', tone: 'gold' },
         scoreLine:
           playerScore != null && fritzScore != null

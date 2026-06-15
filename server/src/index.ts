@@ -38,7 +38,11 @@ import { recordPublicOnlineMatch } from './stats/recordPublicMatch';
 import { socialRouter } from './social/routes';
 import { registerFriendInviteHandlers } from './social/registerFriendInviteHandlers';
 import { upsertPresence } from './social/presence';
-import { writeMatchActivity, writePuzzleActivity, writeDailyFritzActivity } from './social/activityWriter';
+import {
+  writeMatchActivity,
+  writePuzzleActivity,
+  writeDailyFritzGameActivity,
+} from './social/activityWriter';
 import { supabaseFetch } from './supabaseUtils';
 import {
   buildDailyFritzCompletionHash,
@@ -4217,6 +4221,18 @@ app.post('/api/daily-fritz/record-game', async (req, res) => {
     }
     const saved = await upsertDailyFritzAttempt(attempt);
     const savedSetResult = normalizeDailyFritzSetResult(saved.result);
+    const recordedGame = (savedSetResult ?? setResult).games.find((game) => game.gameNumber === gameNumber);
+    if (recordedGame) {
+      void writeDailyFritzGameActivity({
+        userId: authenticatedUserId,
+        gameNumber: recordedGame.gameNumber,
+        playerWon: recordedGame.playerWon,
+        playerScore: recordedGame.playerScore,
+        fritzScore: recordedGame.fritzScore,
+        skunk: recordedGame.skunk,
+        skunkBy: recordedGame.skunkBy,
+      }).catch(() => {});
+    }
     res.json({
       ok: true,
       set_result: savedSetResult ?? setResult,
@@ -4369,19 +4385,6 @@ app.post('/api/daily-fritz/complete', async (req, res) => {
 
     const leaderboard = await buildDailyFritzLeaderboard(runDate);
     const rank = leaderboard.find((entry) => entry.userId === authenticatedUserId)?.rank ?? null;
-    void writeDailyFritzActivity({
-      userId: authenticatedUserId,
-      finalScore: attempt.finalScore ?? null,
-      won: attempt.won,
-      games: setResult?.games.map((game) => ({
-        gameNumber: game.gameNumber,
-        playerWon: game.playerWon,
-        playerScore: game.playerScore,
-        fritzScore: game.fritzScore,
-        ...(game.skunk ? { skunk: true } : {}),
-        ...(game.skunkBy ? { skunkBy: game.skunkBy } : {}),
-      })),
-    }).catch(() => {});
     res.json({
       ok: true,
       rank,

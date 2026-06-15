@@ -55,6 +55,25 @@ export async function writePuzzleActivity(params: {
   }
 }
 
+export async function writeDailyFritzGameActivity(params: {
+  userId: string;
+  gameNumber: number;
+  playerWon: boolean;
+  playerScore: number;
+  fritzScore: number;
+  skunk?: boolean;
+  skunkBy?: 'player' | 'fritz';
+}): Promise<void> {
+  await writeActivity(params.userId, 'daily_fritz', {
+    result: params.playerWon ? 'win' : 'loss',
+    game_number: params.gameNumber,
+    player_score: params.playerScore,
+    fritz_score: params.fritzScore,
+    ...(params.skunk ? { skunk: true } : {}),
+    ...(params.skunkBy ? { skunk_by: params.skunkBy } : {}),
+  });
+}
+
 export async function writeDailyFritzActivity(params: {
   userId: string;
   finalScore: number | null;
@@ -71,13 +90,14 @@ export async function writeDailyFritzActivity(params: {
   if (params.games?.length) {
     await Promise.all(
       params.games.map((game) =>
-        writeActivity(params.userId, 'daily_fritz', {
-          result: game.playerWon ? 'win' : 'loss',
-          game_number: game.gameNumber,
-          player_score: game.playerScore,
-          fritz_score: game.fritzScore,
-          ...(game.skunk ? { skunk: true } : {}),
-          ...(game.skunkBy ? { skunk_by: game.skunkBy } : {}),
+        writeDailyFritzGameActivity({
+          userId: params.userId,
+          gameNumber: game.gameNumber,
+          playerWon: game.playerWon,
+          playerScore: game.playerScore,
+          fritzScore: game.fritzScore,
+          skunk: game.skunk,
+          skunkBy: game.skunkBy,
         }),
       ),
     );

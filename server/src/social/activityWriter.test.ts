@@ -9,6 +9,7 @@ import {
   writeMatchActivity,
   writePuzzleActivity,
   writeDailyFritzActivity,
+  writeDailyFritzGameActivity,
   writeTournamentActivity,
 } from './activityWriter';
 
@@ -83,6 +84,44 @@ describe('writePuzzleActivity', () => {
   it('does not write streak row on non-milestone 5', async () => {
     await writePuzzleActivity({ userId: 'u1', score: 300, streak: 5 });
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('writeDailyFritzGameActivity', () => {
+  it('writes a single daily_fritz row with game metadata', async () => {
+    await writeDailyFritzGameActivity({
+      userId: 'u1',
+      gameNumber: 1,
+      playerWon: true,
+      playerScore: 66,
+      fritzScore: 52,
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(body.type).toBe('daily_fritz');
+    expect(body.metadata).toMatchObject({
+      result: 'win',
+      game_number: 1,
+      player_score: 66,
+      fritz_score: 52,
+    });
+  });
+
+  it('includes skunk metadata when present', async () => {
+    await writeDailyFritzGameActivity({
+      userId: 'u1',
+      gameNumber: 2,
+      playerWon: true,
+      playerScore: 66,
+      fritzScore: 18,
+      skunk: true,
+      skunkBy: 'player',
+    });
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(body.metadata).toMatchObject({
+      skunk: true,
+      skunk_by: 'player',
+    });
   });
 });
 

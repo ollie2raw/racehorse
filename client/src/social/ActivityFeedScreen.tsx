@@ -74,10 +74,14 @@ function trendLabel(item: FeedItem): string {
   if (item.type === 'daily_fritz') {
     const playerScore = item.metadata.player_score;
     const fritzScore = item.metadata.fritz_score;
+    const gameNumberRaw = item.metadata.game_number;
+    const gameNumber =
+      gameNumberRaw === 1 || gameNumberRaw === 2 || gameNumberRaw === 3 ? gameNumberRaw : null;
+    const gamePrefix = gameNumber != null ? `Game ${gameNumber} · ` : '';
     if (playerScore != null && fritzScore != null) {
-      return `Daily Fritz · ${String(playerScore)}-${String(fritzScore)}`;
+      return `${gamePrefix}Daily Fritz · ${String(playerScore)}-${String(fritzScore)}`;
     }
-    return `Daily Fritz · ${String(item.metadata.score ?? '—')} pts`;
+    return `${gamePrefix}Daily Fritz · ${String(item.metadata.score ?? '—')} pts`;
   }
   return 'Recent ranked result';
 }
