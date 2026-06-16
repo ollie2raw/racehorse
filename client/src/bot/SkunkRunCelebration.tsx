@@ -9,8 +9,6 @@ function SkunkSprite() {
     <svg
       className="skunk-run-sprite-svg"
       viewBox="0 0 120 72"
-      width="120"
-      height="72"
       aria-hidden
     >
       <ellipse className="skunk-run-shadow" cx="58" cy="64" rx="34" ry="5" />
