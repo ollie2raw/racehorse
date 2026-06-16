@@ -33,7 +33,6 @@ import { tournamentStageShortLabel } from '../tournament/displayNames';
 import { shouldShowTournamentGameOverOverlay } from '../tournament/tournamentPostgamePolicy';
 import type { TournamentMatchContext } from './session/useTournamentMatchSession';
 import { tileEquals } from './session/useLiveMatchSession';
-import { useSkunkRunCelebration } from './useSkunkRunCelebration';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
 import type { GameState, Move, PlacementPosition, Tile } from '../types';
@@ -513,20 +512,7 @@ export function LiveMatchScreen({
   onAbandonedSecondary,
   onAbandonedDismiss,
 }: LiveMatchScreenProps) {
-  const skunkRunKey =
-    state?.gameOver && state.winnerId
-      ? `${state.winnerId}:${myScore}:${opponentScore}:${state.playerIds.join('|')}`
-      : '';
-
-  const { skunkRunOverlay, readyForPostGameOverlay } = useSkunkRunCelebration({
-    active: Boolean(visible && state?.gameOver && state.winnerId),
-    youScore: myScore,
-    opponentScore,
-    localWon: state?.winnerId ? state.winnerId === you : null,
-    runKey: skunkRunKey,
-  });
-
-  const showGameOverOverlay = Boolean(state?.gameOver && readyForPostGameOverlay);
+  const showGameOverOverlay = Boolean(state?.gameOver);
 
   if (!visible || !state) {
     return (
@@ -966,7 +952,6 @@ export function LiveMatchScreen({
                 ))}
               </GameOverlayPortal>
             )}
-            {skunkRunOverlay}
           </div>
       </>
 

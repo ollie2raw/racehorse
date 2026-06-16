@@ -109,7 +109,6 @@ import { formatOrdinalPlace } from '../dailyFritz/format';
 import { buildShareText } from '../dailyFritz/shareCard';
 import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
 import { PlayVsFritzResultOverlay } from './PlayVsFritzResultOverlay';
-import { useSkunkRunCelebration } from '../match/useSkunkRunCelebration';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 import {
   canApplyNextHand,
@@ -1312,21 +1311,7 @@ export default function BotMatchScreen({
     userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
-  const skunkRunKey =
-    match.gameOver && match.winnerId
-      ? `${match.handNumber}:${match.players.you.score}:${match.players.bot.score}:${match.winnerId}`
-      : '';
-
-  const { skunkRunOverlay, readyForPostGameOverlay } = useSkunkRunCelebration({
-    active: match.gameOver && Boolean(match.winnerId),
-    youScore: match.players.you.score,
-    opponentScore: match.players.bot.score,
-    localWon: match.winnerId ? match.winnerId === 'you' : null,
-    runKey: skunkRunKey,
-    enabled: !isAuthoringMode && !isAuthoringV2Mode,
-  });
-
-  const showPostGameOverlays = match.gameOver && readyForPostGameOverlay;
+  const showPostGameOverlays = match.gameOver;
 
   const showDebug = hasDebugLocalStorageFlag('BOT_DEBUG');
   const enableDailyFritzProfiling =
@@ -7451,7 +7436,6 @@ export default function BotMatchScreen({
           />
         </GameOverlayPortal>
       )}
-      {skunkRunOverlay}
       {showPostGameOverlays && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind === 'final' ? (
         <GameOverlayPortal>
           <DailyFritzFinalResultOverlay
