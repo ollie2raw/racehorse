@@ -1,4 +1,5 @@
 import type { FeedItem } from './socialApi';
+import { isDailyFritzSkunk } from '../dailyFritz/skunk';
 
 export type FeedIconKind =
   | 'trophy'
@@ -74,6 +75,54 @@ function isFritzBotMode(mode: unknown): boolean {
   return value === 'bot' || value.includes('fritz');
 }
 
+function inferFeedSkunk(meta: Record<string, unknown>, won: boolean): boolean {
+  if (meta.skunk === true) return true;
+
+  const playerScore = meta.player_score;
+  const fritzScore = meta.fritz_score;
+  if (playerScore != null && fritzScore != null) {
+    const loser = won ? Number(fritzScore) : Number(playerScore);
+    return isDailyFritzSkunk(loser);
+  }
+
+  const score = meta.score;
+  const opponentScore = meta.opponent_score;
+  if (score != null && opponentScore != null) {
+    const loser = won ? Number(opponentScore) : Number(score);
+    return isDailyFritzSkunk(loser);
+  }
+
+  return false;
+}
+
+function resolveFeedSkunkBy(
+  meta: Record<string, unknown>,
+  won: boolean,
+  skunk: boolean,
+): 'player' | 'fritz' | null {
+  if (!skunk) return null;
+  if (meta.skunk_by === 'player' || meta.skunk_by === 'fritz') return meta.skunk_by;
+  return won ? 'player' : 'fritz';
+}
+
+function feedOutcomeBadge(won: boolean, skunk: boolean): { label: string; tone: FeedBadgeTone } {
+  if (skunk) return { label: 'SKUNK', tone: 'gold' };
+  if (won) return { label: 'Winner', tone: 'teal' };
+  return { label: 'Loss', tone: 'red' };
+}
+
+function feedSkunkAction(
+  opp: string,
+  won: boolean,
+  skunk: boolean,
+  skunkBy: 'player' | 'fritz' | null,
+): string {
+  if (skunk && won) return `skunked ${opp}`;
+  if (skunk && skunkBy === 'fritz') return `was skunked by ${opp}`;
+  if (skunk && !won) return `was skunked by ${opp}`;
+  return won ? `won against ${opp}` : `lost to ${opp}`;
+}
+
 function formatFritzTierLabel(meta: Record<string, unknown>): string {
   const tier = meta.fritz_tier;
   if (typeof tier === 'string' && tier.trim()) {
@@ -88,24 +137,13 @@ function formatFritzTierLabel(meta: Record<string, unknown>): string {
 }
 
 function fritzBotFeedDetails(meta: Record<string, unknown>, won: boolean) {
-  const skunk = meta.skunk === true;
-  const skunkBy = meta.skunk_by === 'player' || meta.skunk_by === 'fritz' ? meta.skunk_by : null;
+  const skunk = inferFeedSkunk(meta, won);
+  const skunkBy = resolveFeedSkunkBy(meta, won, skunk);
   const opp = 'Fritz';
   return {
-    action:
-      skunk && won
-        ? `skunked ${opp}`
-        : skunk && skunkBy === 'fritz'
-          ? `was skunked by ${opp}`
-          : won
-            ? `won against ${opp}`
-            : `lost to ${opp}`,
+    action: feedSkunkAction(opp, won, skunk, skunkBy),
     secondary: formatFritzTierLabel(meta),
-    badge: skunk
-      ? { label: 'SKUNK', tone: 'skunk' as FeedBadgeTone }
-      : won
-        ? { label: 'Winner', tone: 'teal' as FeedBadgeTone }
-        : { label: 'Loss', tone: 'red' as FeedBadgeTone },
+    badge: feedOutcomeBadge(won, skunk),
   };
 }
 
@@ -128,14 +166,16 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
       const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
       const isFritzBot = isFritzBotMode(meta.mode);
+      const skunk = inferFeedSkunk(meta, true);
+      const skunkBy = resolveFeedSkunkBy(meta, true, skunk);
       const fritzDetails = isFritzBot ? fritzBotFeedDetails(meta, true) : null;
       return {
         icon: isFritzBot ? 'robot' : 'trophy',
-        action: fritzDetails?.action ?? `won against ${opp}`,
+        action: fritzDetails?.action ?? feedSkunkAction(opp, true, skunk, skunkBy),
         secondary: fritzDetails?.secondary ?? `${mode}${tilesSuffix(meta)}`,
         modeBadge: { label: mode, tone: isFritzBot ? 'gold' : 'green' },
         scoreLine: scorePair(meta),
-        badge: fritzDetails?.badge,
+        badge: fritzDetails?.badge ?? (skunk ? feedOutcomeBadge(true, true) : undefined),
         ratingDelta: isFritzBot
           ? undefined
           : meta.rating_change != null
@@ -147,14 +187,16 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
       const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
       const isFritzBot = isFritzBotMode(meta.mode);
+      const skunk = inferFeedSkunk(meta, false);
+      const skunkBy = resolveFeedSkunkBy(meta, false, skunk);
       const fritzDetails = isFritzBot ? fritzBotFeedDetails(meta, false) : null;
       return {
         icon: isFritzBot ? 'robot' : 'swords',
-        action: fritzDetails?.action ?? `lost to ${opp}`,
+        action: fritzDetails?.action ?? feedSkunkAction(opp, false, skunk, skunkBy),
         secondary: fritzDetails?.secondary ?? `${mode}${tilesSuffix(meta)}`,
         modeBadge: { label: mode, tone: isFritzBot ? 'gold' : 'gray' },
         scoreLine: scorePair(meta, true),
-        badge: fritzDetails?.badge ?? { label: 'Loss', tone: 'red' },
+        badge: fritzDetails?.badge ?? feedOutcomeBadge(false, skunk),
       };
     }
     case 'streak': {
@@ -200,29 +242,18 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
       const gameNumber =
         gameNumberRaw === 1 || gameNumberRaw === 2 || gameNumberRaw === 3 ? gameNumberRaw : null;
       const won = result === 'win';
-      const skunk = meta.skunk === true;
-      const skunkBy = meta.skunk_by === 'player' || meta.skunk_by === 'fritz' ? meta.skunk_by : null;
+      const skunk = inferFeedSkunk(meta, won);
+      const skunkBy = resolveFeedSkunkBy(meta, won, skunk);
       return {
         icon: 'robot',
-        action:
-          skunk && won
-            ? `skunked ${opp}`
-            : skunk && skunkBy === 'fritz'
-              ? `was skunked by ${opp}`
-              : won
-                ? `won against ${opp}`
-                : `lost to ${opp}`,
+        action: feedSkunkAction(opp, won, skunk, skunkBy),
         secondary: gameNumber != null ? `Game ${gameNumber} · Elite run` : 'Elite run',
         modeBadge: { label: 'Daily Fritz', tone: 'gold' },
         scoreLine:
           playerScore != null && fritzScore != null
             ? `${playerScore} - ${fritzScore}`
             : undefined,
-        badge: skunk
-          ? { label: 'SKUNK', tone: 'skunk' }
-          : won
-            ? { label: 'Winner', tone: 'teal' }
-            : { label: 'Loss', tone: 'red' },
+        badge: feedOutcomeBadge(won, skunk),
       };
     }
     default:

@@ -72,6 +72,22 @@ describe('writeMatchActivity', () => {
     expect(body.metadata.skunk).toBe(true);
     expect(body.metadata.skunk_by).toBe('player');
   });
+
+  it('writes skunk metadata for multiplayer wins', async () => {
+    await writeMatchActivity({
+      winnerUserId: 'w1',
+      loserUserId: 'l1',
+      winnerUsername: 'alice',
+      loserUsername: 'bob',
+      mode: 'online',
+      winnerScore: 64,
+      loserScore: 21,
+    });
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(body.metadata.skunk).toBe(true);
+    expect(body.metadata.skunk_by).toBe('player');
+    expect(body.metadata.fritz_tier).toBeUndefined();
+  });
 });
 
 describe('writePuzzleActivity', () => {

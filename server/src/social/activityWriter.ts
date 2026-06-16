@@ -20,17 +20,18 @@ async function writeActivity(
   }
 }
 
-function buildBotMatchActivityMetadata(params: {
+function buildMatchActivityMetadata(params: {
   mode: string;
   fritzTier?: string | null;
   isWinnerRow: boolean;
   score: number | null;
   opponentScore: number | null;
 }): Record<string, unknown> {
-  if (params.mode !== 'bot') return {};
   const metadata: Record<string, unknown> = {};
-  const tier = typeof params.fritzTier === 'string' ? params.fritzTier.trim().toLowerCase() : '';
-  if (tier) metadata.fritz_tier = tier;
+  if (params.mode === 'bot') {
+    const tier = typeof params.fritzTier === 'string' ? params.fritzTier.trim().toLowerCase() : '';
+    if (tier) metadata.fritz_tier = tier;
+  }
   const losingScore = params.isWinnerRow ? params.opponentScore : params.score;
   if (losingScore != null && isDailyFritzSkunk(losingScore)) {
     metadata.skunk = true;
@@ -57,7 +58,7 @@ export async function writeMatchActivity(params: {
       mode,
       score: winnerScore,
       opponent_score: loserScore,
-      ...buildBotMatchActivityMetadata({
+      ...buildMatchActivityMetadata({
         mode,
         fritzTier,
         isWinnerRow: true,
@@ -72,7 +73,7 @@ export async function writeMatchActivity(params: {
       mode,
       score: loserScore,
       opponent_score: winnerScore,
-      ...buildBotMatchActivityMetadata({
+      ...buildMatchActivityMetadata({
         mode,
         fritzTier,
         isWinnerRow: false,
