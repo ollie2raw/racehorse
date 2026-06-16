@@ -891,6 +891,7 @@ app.post('/api/ghost/complete', async (req, res) => {
         mode: 'bot',
         winnerScore: playerWon ? roundedPlayerScore : roundedFritzScore,
         loserScore: playerWon ? roundedFritzScore : roundedPlayerScore,
+        fritzTier: verifiedMatch.fritzTier ?? 'elite',
       }).catch(() => {});
     }
     res.json({ ok: true, result });
@@ -4711,6 +4712,7 @@ function createGameOverPersistScheduler(input: GameOverPersistInput): () => void
           mode: fritzActivityCtx ? 'bot' : 'online',
           winnerScore: winnerSeatId === aId ? scoreA : scoreB,
           loserScore: winnerSeatId === aId ? scoreB : scoreA,
+          fritzTier: fritzActivityCtx?.fritzTier ?? null,
         }).catch(() => {});
 
         if (a.userId && b.userId && !fritzActivityCtx) {

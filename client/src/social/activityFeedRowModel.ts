@@ -69,6 +69,46 @@ function scorePair(meta: Record<string, unknown>, flip = false): string | undefi
   return flip ? `${b} - ${a}` : `${a} - ${b}`;
 }
 
+function isFritzBotMode(mode: unknown): boolean {
+  const value = typeof mode === 'string' ? mode.toLowerCase() : '';
+  return value === 'bot' || value.includes('fritz');
+}
+
+function formatFritzTierLabel(meta: Record<string, unknown>): string {
+  const tier = meta.fritz_tier;
+  if (typeof tier === 'string' && tier.trim()) {
+    const normalized = tier.trim().toLowerCase();
+    if (normalized === 'grandmaster') return 'Grandmaster';
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }
+  const opponent = typeof meta.opponent_username === 'string' ? meta.opponent_username : '';
+  const match = opponent.match(/Fritz \((.+)\)/i);
+  if (match?.[1]) return match[1].trim();
+  return 'Elite';
+}
+
+function fritzBotFeedDetails(meta: Record<string, unknown>, won: boolean) {
+  const skunk = meta.skunk === true;
+  const skunkBy = meta.skunk_by === 'player' || meta.skunk_by === 'fritz' ? meta.skunk_by : null;
+  const opp = 'Fritz';
+  return {
+    action:
+      skunk && won
+        ? `skunked ${opp}`
+        : skunk && skunkBy === 'fritz'
+          ? `was skunked by ${opp}`
+          : won
+            ? `won against ${opp}`
+            : `lost to ${opp}`,
+    secondary: formatFritzTierLabel(meta),
+    badge: skunk
+      ? { label: 'SKUNK', tone: 'skunk' as FeedBadgeTone }
+      : won
+        ? { label: 'Winner', tone: 'teal' as FeedBadgeTone }
+        : { label: 'Loss', tone: 'red' as FeedBadgeTone },
+  };
+}
+
 function tournamentAction(meta: Record<string, unknown>): string {
   const name = String(meta.tournament_name ?? 'Tournament');
   const placement = typeof meta.placement === 'string' ? meta.placement : '';
@@ -87,27 +127,34 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
     case 'win': {
       const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
-      const isFritzBot = typeof meta.mode === 'string' && (meta.mode === 'bot' || meta.mode.toLowerCase().includes('fritz'));
+      const isFritzBot = isFritzBotMode(meta.mode);
+      const fritzDetails = isFritzBot ? fritzBotFeedDetails(meta, true) : null;
       return {
         icon: isFritzBot ? 'robot' : 'trophy',
-        action: `won against ${opp}`,
-        secondary: `${mode}${tilesSuffix(meta)}`,
+        action: fritzDetails?.action ?? `won against ${opp}`,
+        secondary: fritzDetails?.secondary ?? `${mode}${tilesSuffix(meta)}`,
         modeBadge: { label: mode, tone: isFritzBot ? 'gold' : 'green' },
         scoreLine: scorePair(meta),
-        ratingDelta: meta.rating_change != null ? `+${meta.rating_change}` : '+22',
+        badge: fritzDetails?.badge,
+        ratingDelta: isFritzBot
+          ? undefined
+          : meta.rating_change != null
+            ? `+${meta.rating_change}`
+            : '+22',
       };
     }
     case 'loss': {
       const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
-      const isFritzBot = typeof meta.mode === 'string' && (meta.mode === 'bot' || meta.mode.toLowerCase().includes('fritz'));
+      const isFritzBot = isFritzBotMode(meta.mode);
+      const fritzDetails = isFritzBot ? fritzBotFeedDetails(meta, false) : null;
       return {
         icon: isFritzBot ? 'robot' : 'swords',
-        action: `lost to ${opp}`,
-        secondary: `${mode}${tilesSuffix(meta)}`,
+        action: fritzDetails?.action ?? `lost to ${opp}`,
+        secondary: fritzDetails?.secondary ?? `${mode}${tilesSuffix(meta)}`,
         modeBadge: { label: mode, tone: isFritzBot ? 'gold' : 'gray' },
         scoreLine: scorePair(meta, true),
-        badge: { label: 'Loss', tone: 'red' },
+        badge: fritzDetails?.badge ?? { label: 'Loss', tone: 'red' },
       };
     }
     case 'streak': {

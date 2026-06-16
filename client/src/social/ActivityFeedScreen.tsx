@@ -60,59 +60,6 @@ function initials(username: string): string {
   return username.slice(0, 2).toUpperCase();
 }
 
-function trendingIcon(item: FeedItem): string {
-  if (item.type === 'streak') return '🔥';
-  if (item.type === 'daily_fritz') return '🤖';
-  if (item.type === 'win' || item.type === 'loss') {
-    const mode = typeof item.metadata.mode === 'string' ? item.metadata.mode.toLowerCase() : '';
-    if (mode === 'bot' || mode.includes('fritz')) return '🤖';
-  }
-  if (item.type === 'win') return '🏆';
-  return '';
-}
-
-function trendLabel(item: FeedItem): string {
-  if (item.type === 'streak') {
-    return `${String(item.metadata.streak ?? '—')} Win Streak`;
-  }
-  if (item.type === 'daily_fritz') {
-    const playerScore = item.metadata.player_score;
-    const fritzScore = item.metadata.fritz_score;
-    const gameNumberRaw = item.metadata.game_number;
-    const gameNumber =
-      gameNumberRaw === 1 || gameNumberRaw === 2 || gameNumberRaw === 3 ? gameNumberRaw : null;
-    const gamePrefix = gameNumber != null ? `Game ${gameNumber} · ` : '';
-    if (playerScore != null && fritzScore != null) {
-      return `${gamePrefix}Daily Fritz · ${String(playerScore)}-${String(fritzScore)}`;
-    }
-    return `${gamePrefix}Daily Fritz · ${String(item.metadata.score ?? '—')} pts`;
-  }
-  if (item.type === 'win' || item.type === 'loss') {
-    const mode = typeof item.metadata.mode === 'string' ? item.metadata.mode.toLowerCase() : '';
-    if (mode === 'bot' || mode.includes('fritz')) {
-      const playerScore = item.metadata.score;
-      const fritzScore = item.metadata.opponent_score;
-      if (playerScore != null && fritzScore != null) {
-        return `Play vs Fritz · ${String(playerScore)}-${String(fritzScore)}`;
-      }
-      return 'Play vs Fritz';
-    }
-  }
-  return 'Recent ranked result';
-}
-
-function trendMode(item: FeedItem): string {
-  if (item.type === 'daily_fritz') return 'Daily Fritz';
-  if (item.type === 'streak') return 'Play vs Fritz';
-  return 'Racehorse';
-}
-
-function trendDetailClass(item: FeedItem): string {
-  if (item.type === 'streak') return 'rh-sf-trend-detail rh-sf-trend-detail--streak';
-  if (item.type === 'daily_fritz') return 'rh-sf-trend-detail rh-sf-trend-detail--fritz';
-  return 'rh-sf-trend-detail';
-}
-
 function tournamentTitle(item: FeedItem): string {
   return String(item.metadata.tournament_name ?? 'Tournament result');
 }
@@ -270,21 +217,6 @@ export default function ActivityFeedScreen({
     };
   }, [onlineFriends]);
 
-  const trendingMoments = useMemo(
-    () =>
-      feedItems
-        .filter((item) => {
-          if (item.type === 'streak' || item.type === 'daily_fritz') return true;
-          if (item.type === 'win' || item.type === 'loss') {
-            const mode = typeof item.metadata.mode === 'string' ? item.metadata.mode.toLowerCase() : '';
-            return mode === 'bot' || mode.includes('fritz');
-          }
-          return false;
-        })
-        .slice(0, 3),
-    [feedItems],
-  );
-
   const recentTournaments = useMemo(
     () => feedItems.filter((item) => item.type === 'tournament').slice(0, 3),
     [feedItems],
@@ -338,6 +270,11 @@ export default function ActivityFeedScreen({
       if (item.type === 'win') {
         winCounts.set(item.username, (winCounts.get(item.username) ?? 0) + 1);
         const score = Number(item.metadata.score ?? 0);
+        if (score > topScore.value) topScore = { username: item.username, value: score };
+      }
+      if (item.type === 'daily_fritz' && item.metadata.result === 'win') {
+        winCounts.set(item.username, (winCounts.get(item.username) ?? 0) + 1);
+        const score = Number(item.metadata.player_score ?? 0);
         if (score > topScore.value) topScore = { username: item.username, value: score };
       }
       if (item.type === 'streak') {
@@ -538,38 +475,6 @@ export default function ActivityFeedScreen({
                     <span aria-hidden="true">›</span>
                   </button>
                 ) : null}
-              </section>
-
-              <section className="rh-sf-widget rh-social-card social-right-card">
-                <div className="rh-sf-widget-head">
-                  <h2 className="rh-sf-widget-title">Daily Fritz Highlights</h2>
-                  <span className="rh-sf-widget-online is-muted">Today</span>
-                </div>
-                <div className="rh-sf-widget-list">
-                  {trendingMoments.length > 0 ? trendingMoments.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="rh-sf-trend"
-                      onClick={() => onViewProfile(item.username)}
-                    >
-                      <span className={`rh-sf-trend-icon rh-sf-trend-icon--${item.type}`} aria-hidden="true">
-                        {trendingIcon(item)}
-                      </span>
-                      <span className="rh-sf-trend-copy">
-                        <strong>{item.username}</strong>
-                        <span className={trendDetailClass(item)}>{trendLabel(item)}</span>
-                      </span>
-                      <span className="rh-sf-trend-mode">{trendMode(item)}</span>
-                      <span className="rh-sf-row-chevron" aria-hidden="true">›</span>
-                    </button>
-                  )) : (
-                    <div className="rh-sf-widget-empty rh-sf-widget-empty--rich">
-                      <span className="rh-sf-widget-empty-icon" aria-hidden="true">🤖</span>
-                      <p>No standout Daily Fritz runs yet. Today’s best scores will surface here.</p>
-                    </div>
-                  )}
-                </div>
               </section>
 
               <SideRailCard

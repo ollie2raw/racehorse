@@ -1,3 +1,4 @@
+import { isDailyFritzSkunk } from '../dailyFritzSkunk';
 import { supabaseFetch } from '../supabaseUtils';
 
 type ActivityType = 'win' | 'loss' | 'streak' | 'tournament' | 'puzzle' | 'daily_fritz';
@@ -19,6 +20,25 @@ async function writeActivity(
   }
 }
 
+function buildBotMatchActivityMetadata(params: {
+  mode: string;
+  fritzTier?: string | null;
+  isWinnerRow: boolean;
+  score: number | null;
+  opponentScore: number | null;
+}): Record<string, unknown> {
+  if (params.mode !== 'bot') return {};
+  const metadata: Record<string, unknown> = {};
+  const tier = typeof params.fritzTier === 'string' ? params.fritzTier.trim().toLowerCase() : '';
+  if (tier) metadata.fritz_tier = tier;
+  const losingScore = params.isWinnerRow ? params.opponentScore : params.score;
+  if (losingScore != null && isDailyFritzSkunk(losingScore)) {
+    metadata.skunk = true;
+    metadata.skunk_by = params.isWinnerRow ? 'player' : 'fritz';
+  }
+  return metadata;
+}
+
 export async function writeMatchActivity(params: {
   winnerUserId: string | null;
   loserUserId: string | null;
@@ -27,17 +47,38 @@ export async function writeMatchActivity(params: {
   mode: string;
   winnerScore: number | null;
   loserScore: number | null;
+  fritzTier?: string | null;
 }): Promise<void> {
-  const { winnerUserId, loserUserId, winnerUsername, loserUsername, mode, winnerScore, loserScore } = params;
+  const { winnerUserId, loserUserId, winnerUsername, loserUsername, mode, winnerScore, loserScore, fritzTier } = params;
   const writes: Promise<void>[] = [];
   if (winnerUserId) {
     writes.push(writeActivity(winnerUserId, 'win', {
-      opponent_username: loserUsername, mode, score: winnerScore, opponent_score: loserScore,
+      opponent_username: loserUsername,
+      mode,
+      score: winnerScore,
+      opponent_score: loserScore,
+      ...buildBotMatchActivityMetadata({
+        mode,
+        fritzTier,
+        isWinnerRow: true,
+        score: winnerScore,
+        opponentScore: loserScore,
+      }),
     }));
   }
   if (loserUserId) {
     writes.push(writeActivity(loserUserId, 'loss', {
-      opponent_username: winnerUsername, mode, score: loserScore, opponent_score: winnerScore,
+      opponent_username: winnerUsername,
+      mode,
+      score: loserScore,
+      opponent_score: winnerScore,
+      ...buildBotMatchActivityMetadata({
+        mode,
+        fritzTier,
+        isWinnerRow: false,
+        score: loserScore,
+        opponentScore: winnerScore,
+      }),
     }));
   }
   await Promise.all(writes);

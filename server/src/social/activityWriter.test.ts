@@ -55,6 +55,23 @@ describe('writeMatchActivity', () => {
     });
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  it('writes Fritz tier and skunk metadata for bot wins', async () => {
+    await writeMatchActivity({
+      winnerUserId: 'w1',
+      loserUserId: null,
+      winnerUsername: 'alice',
+      loserUsername: 'Fritz (Elite)',
+      mode: 'bot',
+      winnerScore: 64,
+      loserScore: 21,
+      fritzTier: 'elite',
+    });
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(body.metadata.fritz_tier).toBe('elite');
+    expect(body.metadata.skunk).toBe(true);
+    expect(body.metadata.skunk_by).toBe('player');
+  });
 });
 
 describe('writePuzzleActivity', () => {
