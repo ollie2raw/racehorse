@@ -878,6 +878,21 @@ app.post('/api/ghost/complete', async (req, res) => {
         },
       );
     }
+    if (isFritzMatch) {
+      const playerWon = Math.round(finalScore) > Math.round(opponentScore);
+      const fritzLabel = formatFritzActivityOpponentLabel(verifiedMatch.fritzTier ?? 'elite');
+      const roundedPlayerScore = Math.round(finalScore);
+      const roundedFritzScore = Math.round(opponentScore);
+      void writeMatchActivity({
+        winnerUserId: playerWon ? userId : null,
+        loserUserId: playerWon ? null : userId,
+        winnerUsername: playerWon ? 'Player' : fritzLabel,
+        loserUsername: playerWon ? fritzLabel : 'Player',
+        mode: 'bot',
+        winnerScore: playerWon ? roundedPlayerScore : roundedFritzScore,
+        loserScore: playerWon ? roundedFritzScore : roundedPlayerScore,
+      }).catch(() => {});
+    }
     res.json({ ok: true, result });
   } catch (error) {
     res.status(500).json({

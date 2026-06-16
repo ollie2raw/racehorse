@@ -63,6 +63,10 @@ function initials(username: string): string {
 function trendingIcon(item: FeedItem): string {
   if (item.type === 'streak') return '🔥';
   if (item.type === 'daily_fritz') return '🤖';
+  if (item.type === 'win' || item.type === 'loss') {
+    const mode = typeof item.metadata.mode === 'string' ? item.metadata.mode.toLowerCase() : '';
+    if (mode === 'bot' || mode.includes('fritz')) return '🤖';
+  }
   if (item.type === 'win') return '🏆';
   return '';
 }
@@ -82,6 +86,17 @@ function trendLabel(item: FeedItem): string {
       return `${gamePrefix}Daily Fritz · ${String(playerScore)}-${String(fritzScore)}`;
     }
     return `${gamePrefix}Daily Fritz · ${String(item.metadata.score ?? '—')} pts`;
+  }
+  if (item.type === 'win' || item.type === 'loss') {
+    const mode = typeof item.metadata.mode === 'string' ? item.metadata.mode.toLowerCase() : '';
+    if (mode === 'bot' || mode.includes('fritz')) {
+      const playerScore = item.metadata.score;
+      const fritzScore = item.metadata.opponent_score;
+      if (playerScore != null && fritzScore != null) {
+        return `Play vs Fritz · ${String(playerScore)}-${String(fritzScore)}`;
+      }
+      return 'Play vs Fritz';
+    }
   }
   return 'Recent ranked result';
 }
@@ -258,7 +273,14 @@ export default function ActivityFeedScreen({
   const trendingMoments = useMemo(
     () =>
       feedItems
-        .filter((item) => item.type === 'streak' || item.type === 'daily_fritz')
+        .filter((item) => {
+          if (item.type === 'streak' || item.type === 'daily_fritz') return true;
+          if (item.type === 'win' || item.type === 'loss') {
+            const mode = typeof item.metadata.mode === 'string' ? item.metadata.mode.toLowerCase() : '';
+            return mode === 'bot' || mode.includes('fritz');
+          }
+          return false;
+        })
         .slice(0, 3),
     [feedItems],
   );

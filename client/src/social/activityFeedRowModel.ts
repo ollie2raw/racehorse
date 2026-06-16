@@ -87,11 +87,12 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
     case 'win': {
       const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
+      const isFritzBot = typeof meta.mode === 'string' && (meta.mode === 'bot' || meta.mode.toLowerCase().includes('fritz'));
       return {
-        icon: 'trophy',
+        icon: isFritzBot ? 'robot' : 'trophy',
         action: `won against ${opp}`,
         secondary: `${mode}${tilesSuffix(meta)}`,
-        modeBadge: { label: mode, tone: 'green' },
+        modeBadge: { label: mode, tone: isFritzBot ? 'gold' : 'green' },
         scoreLine: scorePair(meta),
         ratingDelta: meta.rating_change != null ? `+${meta.rating_change}` : '+22',
       };
@@ -99,11 +100,12 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
     case 'loss': {
       const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
+      const isFritzBot = typeof meta.mode === 'string' && (meta.mode === 'bot' || meta.mode.toLowerCase().includes('fritz'));
       return {
-        icon: 'swords',
+        icon: isFritzBot ? 'robot' : 'swords',
         action: `lost to ${opp}`,
         secondary: `${mode}${tilesSuffix(meta)}`,
-        modeBadge: { label: mode, tone: 'gray' },
+        modeBadge: { label: mode, tone: isFritzBot ? 'gold' : 'gray' },
         scoreLine: scorePair(meta, true),
         badge: { label: 'Loss', tone: 'red' },
       };
