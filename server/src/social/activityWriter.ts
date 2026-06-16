@@ -163,3 +163,27 @@ export async function writeTournamentActivity(params: {
     tournament_name: params.tournamentName ?? 'Scheduled Tournament',
   });
 }
+
+export async function writeForfeitActivity(params: {
+  userId: string;
+  opponentUsername: string;
+  mode: string;
+  score?: number | null;
+  opponentScore?: number | null;
+  fritzTier?: string | null;
+  sourceMatchId?: string | null;
+}): Promise<void> {
+  const metadata: Record<string, unknown> = {
+    forfeit: true,
+    opponent_username: params.opponentUsername,
+    mode: params.mode,
+  };
+  if (params.score != null) metadata.score = params.score;
+  if (params.opponentScore != null) metadata.opponent_score = params.opponentScore;
+  if (params.sourceMatchId) metadata.source_match_id = params.sourceMatchId;
+  if (params.mode === 'bot') {
+    const tier = typeof params.fritzTier === 'string' ? params.fritzTier.trim().toLowerCase() : '';
+    if (tier) metadata.fritz_tier = tier;
+  }
+  await writeActivity(params.userId, 'loss', metadata);
+}

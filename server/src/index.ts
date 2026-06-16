@@ -41,7 +41,9 @@ import { upsertPresence } from './social/presence';
 import {
   writeMatchActivity,
   writePuzzleActivity,
+  writeDailyFritzActivity,
   writeDailyFritzGameActivity,
+  writeForfeitActivity,
 } from './social/activityWriter';
 import { supabaseFetch } from './supabaseUtils';
 import {
@@ -1314,8 +1316,10 @@ app.post('/bot-matches/cleanup-stale', async (_req, res) => {
         method: 'PATCH',
         body: JSON.stringify({ resolved: true }),
       });
-      await recordPendingFritzDisconnectLoss(row.user_id, row.fritz_tier, {
-        roomCode: typeof row.room_code === 'string' ? row.room_code : null,
+      await finalizeFritzForfeit({
+        userId: row.user_id,
+        fritzTier: row.fritz_tier,
+        source: { roomCode: typeof row.room_code === 'string' ? row.room_code : null },
       });
       processed += 1;
     }
@@ -3069,7 +3073,6 @@ function getPendingFritzMatchContext(room: Room): { realPlayer: RoomPlayer; frit
   };
 }
 
-/** Activity feed copy: "Fritz (Elite)", "Fritz (Master)", etc. */
 function formatFritzActivityOpponentLabel(rawTier: string): string {
   const tier = rawTier.trim().toLowerCase();
   if (tier === 'grandmaster') return 'Fritz (Grandmaster)';
@@ -3077,6 +3080,71 @@ function formatFritzActivityOpponentLabel(rawTier: string): string {
     return `Fritz (${tier.charAt(0).toUpperCase()}${tier.slice(1)})`;
   }
   return 'Fritz';
+}
+
+function parseOptionalActivityScore(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : null;
+}
+
+function readFritzForfeitScoresFromRoom(
+  roomCode: string,
+  userId: string,
+): { youScore: number; botScore: number } | null {
+  try {
+    const room = getRoom(roomCode);
+    const context = getPendingFritzMatchContext(room);
+    if (!context || context.realPlayer.userId !== userId || !room.state?.players) return null;
+    const humanSeat = context.realPlayer.id;
+    const botSeat = room.players.find((seatId) => seatId !== humanSeat) ?? null;
+    if (!botSeat) return null;
+    const youScore = room.state.players[humanSeat]?.score;
+    const botScore = room.state.players[botSeat]?.score;
+    if (youScore == null || botScore == null) return null;
+    return { youScore, botScore };
+  } catch {
+    return null;
+  }
+}
+
+async function writeFritzForfeitActivityFeed(params: {
+  userId: string;
+  fritzTier: unknown;
+  source?: { localMatchId?: string | null; roomCode?: string | null; verifiedMatchId?: string | null };
+  youScore?: number | null;
+  botScore?: number | null;
+}): Promise<void> {
+  const tier = typeof params.fritzTier === 'string' && params.fritzTier.trim()
+    ? params.fritzTier.trim().toLowerCase()
+    : 'elite';
+  const localMatchId = params.source?.localMatchId?.trim() || localMatchIdFromRoomCode(params.source?.roomCode) || null;
+  const sourceMatchId = localMatchId
+    ? `local:${localMatchId}:forfeit`
+    : params.source?.roomCode
+      ? `${params.source.roomCode}:forfeit`
+      : params.source?.verifiedMatchId
+        ? `${params.source.verifiedMatchId}:forfeit`
+        : null;
+  await writeForfeitActivity({
+    userId: params.userId,
+    opponentUsername: formatFritzActivityOpponentLabel(tier),
+    mode: 'bot',
+    score: params.youScore ?? null,
+    opponentScore: params.botScore ?? null,
+    fritzTier: tier,
+    sourceMatchId,
+  });
+}
+
+async function finalizeFritzForfeit(params: {
+  userId: string;
+  fritzTier: unknown;
+  source?: { localMatchId?: string | null; roomCode?: string | null; verifiedMatchId?: string | null };
+  youScore?: number | null;
+  botScore?: number | null;
+}): Promise<void> {
+  await recordPendingFritzDisconnectLoss(params.userId, params.fritzTier, params.source);
+  await writeFritzForfeitActivityFeed(params);
 }
 
 function getFritzIdentityForTier(rawTier: unknown): { fritzId: string; gameType: string } {
@@ -3337,7 +3405,13 @@ app.post('/api/bot-matches/local/abandon', async (req, res) => {
       method: 'PATCH',
       body: JSON.stringify({ resolved: true }),
     });
-    await recordPendingFritzDisconnectLoss(userId, pending.fritz_tier, { localMatchId, roomCode });
+    await finalizeFritzForfeit({
+      userId,
+      fritzTier: pending.fritz_tier,
+      source: { localMatchId, roomCode },
+      youScore: parseOptionalActivityScore(req.body?.youScore ?? req.body?.score),
+      botScore: parseOptionalActivityScore(req.body?.botScore ?? req.body?.opponentScore),
+    });
     res.json({ ok: true, processed: true });
   } catch (error) {
     res.status(500).json({
@@ -5395,7 +5469,14 @@ io.on('connection', (socket: Socket) => {
             method: 'PATCH',
             body: JSON.stringify({ resolved: true }),
           });
-          await recordPendingFritzDisconnectLoss(verifiedUserId, pending.fritz_tier, { roomCode });
+          const scores = roomCode ? readFritzForfeitScoresFromRoom(roomCode, verifiedUserId) : null;
+          await finalizeFritzForfeit({
+            userId: verifiedUserId,
+            fritzTier: pending.fritz_tier,
+            source: { roomCode },
+            youScore: scores?.youScore ?? null,
+            botScore: scores?.botScore ?? null,
+          });
         } catch (error) {
           console.error('[Fritz] disconnect loss handling failed:', error);
         }

@@ -11,6 +11,7 @@ import {
   writeDailyFritzActivity,
   writeDailyFritzGameActivity,
   writeTournamentActivity,
+  writeForfeitActivity,
 } from './activityWriter';
 
 const mockFetch = supabaseFetch as ReturnType<typeof vi.fn>;
@@ -212,5 +213,30 @@ describe('writeTournamentActivity', () => {
     expect(body.metadata.placement).toBe('Champion');
     expect(body.metadata.tournament_id).toBe('t-123');
     expect(body.metadata.tournament_name).toBe('Scheduled Tournament');
+  });
+});
+
+describe('writeForfeitActivity', () => {
+  it('writes a loss row with forfeit metadata and scores', async () => {
+    await writeForfeitActivity({
+      userId: 'u1',
+      opponentUsername: 'Fritz (Elite)',
+      mode: 'bot',
+      score: 16,
+      opponentScore: 38,
+      fritzTier: 'elite',
+      sourceMatchId: 'local:abc:forfeit',
+    });
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(body.type).toBe('loss');
+    expect(body.metadata).toMatchObject({
+      forfeit: true,
+      opponent_username: 'Fritz (Elite)',
+      mode: 'bot',
+      score: 16,
+      opponent_score: 38,
+      fritz_tier: 'elite',
+      source_match_id: 'local:abc:forfeit',
+    });
   });
 });

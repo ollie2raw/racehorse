@@ -123,6 +123,20 @@ function feedSkunkAction(
   return won ? `won against ${opp}` : `lost to ${opp}`;
 }
 
+function isForfeit(meta: Record<string, unknown>): boolean {
+  return meta.forfeit === true;
+}
+
+function forfeitFeedDetails(meta: Record<string, unknown>, opp: string) {
+  const isFritzBot = isFritzBotMode(meta.mode);
+  const opponent = isFritzBot ? 'Fritz' : opp;
+  return {
+    action: `forfeited against ${opponent}`,
+    secondary: isFritzBot ? formatFritzTierLabel(meta) : formatMode(meta.mode),
+    badge: { label: 'Forfeit', tone: 'gray' as FeedBadgeTone },
+  };
+}
+
 function formatFritzTierLabel(meta: Record<string, unknown>): string {
   const tier = meta.fritz_tier;
   if (typeof tier === 'string' && tier.trim()) {
@@ -187,6 +201,17 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
       const opp = normalizeName(meta.opponent_username, 'an opponent');
       const mode = formatMode(meta.mode);
       const isFritzBot = isFritzBotMode(meta.mode);
+      if (isForfeit(meta)) {
+        const forfeitDetails = forfeitFeedDetails(meta, opp);
+        return {
+          icon: isFritzBot ? 'robot' : 'swords',
+          action: forfeitDetails.action,
+          secondary: forfeitDetails.secondary,
+          modeBadge: { label: mode, tone: isFritzBot ? 'gold' : 'gray' },
+          scoreLine: scorePair(meta),
+          badge: forfeitDetails.badge,
+        };
+      }
       const skunk = inferFeedSkunk(meta, false);
       const skunkBy = resolveFeedSkunkBy(meta, false, skunk);
       const fritzDetails = isFritzBot ? fritzBotFeedDetails(meta, false) : null;
@@ -195,7 +220,7 @@ export function buildFeedRowViewModel(item: FeedItem): FeedRowViewModel {
         action: fritzDetails?.action ?? feedSkunkAction(opp, false, skunk, skunkBy),
         secondary: fritzDetails?.secondary ?? `${mode}${tilesSuffix(meta)}`,
         modeBadge: { label: mode, tone: isFritzBot ? 'gold' : 'gray' },
-        scoreLine: scorePair(meta, true),
+        scoreLine: scorePair(meta),
         badge: fritzDetails?.badge ?? feedOutcomeBadge(false, skunk),
       };
     }

@@ -1442,10 +1442,13 @@ export default function BotMatchScreen({
   const abandonStandaloneFritzMatch = useCallback(
     async (useBeacon = false) => {
       if (!isStandaloneFritzMatch || !userId || localPendingResolvedRef.current) return;
+      const live = matchRef.current;
       const payload = {
         userId,
         localMatchId: activeLocalMatchId,
         accessToken: accessTokenRef.current,
+        youScore: live.players.you.score,
+        botScore: live.players.bot.score,
       };
       localPendingResolvedRef.current = true;
       if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
