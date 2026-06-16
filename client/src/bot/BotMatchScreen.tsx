@@ -109,6 +109,7 @@ import { formatOrdinalPlace } from '../dailyFritz/format';
 import { buildShareText } from '../dailyFritz/shareCard';
 import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
 import { PlayVsFritzResultOverlay } from './PlayVsFritzResultOverlay';
+import { useSkunkRunCelebration } from '../match/useSkunkRunCelebration';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 import {
   canApplyNextHand,
@@ -1311,6 +1312,21 @@ export default function BotMatchScreen({
     userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
+  const skunkRunKey =
+    match.gameOver && match.winnerId
+      ? `${match.handNumber}:${match.players.you.score}:${match.players.bot.score}:${match.winnerId}`
+      : '';
+
+  const { skunkRunOverlay, readyForPostGameOverlay } = useSkunkRunCelebration({
+    active: match.gameOver && Boolean(match.winnerId),
+    youScore: match.players.you.score,
+    opponentScore: match.players.bot.score,
+    localWon: match.winnerId ? match.winnerId === 'you' : null,
+    runKey: skunkRunKey,
+    enabled: !isAuthoringMode && !isAuthoringV2Mode,
+  });
+
+  const showPostGameOverlays = match.gameOver && readyForPostGameOverlay;
 
   const showDebug = hasDebugLocalStorageFlag('BOT_DEBUG');
   const enableDailyFritzProfiling =
@@ -7432,7 +7448,8 @@ export default function BotMatchScreen({
           />
         </GameOverlayPortal>
       )}
-      {match.gameOver && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind === 'final' ? (
+      {skunkRunOverlay}
+      {showPostGameOverlays && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind === 'final' ? (
         <GameOverlayPortal>
           <DailyFritzFinalResultOverlay
             overlay={dailyFritzSetOverlay}
@@ -7441,7 +7458,7 @@ export default function BotMatchScreen({
           />
         </GameOverlayPortal>
       ) : null}
-      {match.gameOver && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind !== 'final' ? (
+      {showPostGameOverlays && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind !== 'final' ? (
         <GameOverlayPortal>
         <div className="game-over-overlay daily-fritz-set-overlay" role="dialog" aria-label="Daily Fritz set interstitial">
           <div className="game-over-card daily-fritz-set-overlay-card" onClick={(event) => event.stopPropagation()}>
@@ -7526,7 +7543,7 @@ export default function BotMatchScreen({
         </div>
         </GameOverlayPortal>
       ) : null}
-      {match.gameOver && isPlayVsFritzGameOver && (
+      {showPostGameOverlays && isPlayVsFritzGameOver && (
         <PlayVsFritzResultOverlay
           won={match.winnerId === 'you'}
           opponentLabel={opponentLabel}
@@ -7561,7 +7578,7 @@ export default function BotMatchScreen({
           showHome={Boolean(onNavigate)}
         />
       )}
-      {match.gameOver && !isPlayVsFritzGameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
+      {showPostGameOverlays && !isPlayVsFritzGameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
         <GameOverModal
           open
           ariaLabel={`${opponentLabel} match over`}
