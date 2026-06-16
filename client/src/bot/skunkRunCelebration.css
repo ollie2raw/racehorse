@@ -5,16 +5,16 @@
   pointer-events: none;
   overflow: hidden;
   background: rgba(4, 7, 12, 0.28);
-  --skunk-run-duration: 4.1s;
   --skunk-sprite-width: min(92vw, 500px);
+  --skunk-run-duration: 5s;
 }
 
 .skunk-run-overlay--player {
-  --skunk-run-duration: 4s;
+  --skunk-run-duration: 4.85s;
 }
 
 .skunk-run-overlay--fritz {
-  --skunk-run-duration: 4.25s;
+  --skunk-run-duration: 5.15s;
 }
 
 .skunk-run-track {
@@ -25,7 +25,43 @@
   height: auto;
   aspect-ratio: 120 / 72;
   transform: translateY(-50%);
-  animation: skunk-run-across var(--skunk-run-duration) cubic-bezier(0.42, 0, 0.18, 1) forwards;
+  animation: skunk-run-across var(--skunk-run-duration) ease-in-out forwards;
+  will-change: transform;
+}
+
+.skunk-run-ground-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 3%;
+  z-index: 0;
+  width: 62%;
+  height: 10%;
+  border-radius: 999px;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.45) 0%, transparent 72%);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: skunk-run-ground-shadow-pulse 0.24s ease-in-out infinite alternate;
+}
+
+@keyframes skunk-run-ground-shadow-pulse {
+  from {
+    transform: translateX(-50%) scale(0.9);
+    opacity: 0.5;
+  }
+  to {
+    transform: translateX(-50%) scale(1.06);
+    opacity: 0.72;
+  }
+}
+
+.skunk-run-sprite-svg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.35));
+  animation: skunk-run-bob 0.24s ease-in-out infinite alternate;
 }
 
 @keyframes skunk-run-across {
@@ -37,14 +73,6 @@
   }
 }
 
-.skunk-run-sprite-svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5));
-  animation: skunk-run-bob 0.24s ease-in-out infinite alternate;
-}
-
 @keyframes skunk-run-bob {
   from {
     transform: translateY(0) rotate(-3deg);
@@ -54,22 +82,6 @@
   }
 }
 
-.skunk-run-shadow {
-  fill: rgba(0, 0, 0, 0.35);
-  transform-origin: 58px 64px;
-  animation: skunk-run-shadow-pulse 0.18s ease-in-out infinite alternate;
-}
-
-@keyframes skunk-run-shadow-pulse {
-  from {
-    transform: scaleX(0.85);
-    opacity: 0.55;
-  }
-  to {
-    transform: scaleX(1.08);
-    opacity: 0.75;
-  }
-}
 
 .skunk-run-body {
   fill: #1a1d24;
@@ -151,34 +163,6 @@
   }
 }
 
-.skunk-run-dust {
-  position: absolute;
-  top: calc(40% + var(--skunk-sprite-width) * 0.28);
-  left: 0;
-  width: calc(var(--skunk-sprite-width) * 0.3);
-  height: calc(var(--skunk-sprite-width) * 0.05);
-  border-radius: 999px;
-  background: radial-gradient(ellipse, rgba(231, 182, 74, 0.22) 0%, transparent 72%);
-  opacity: 0;
-  animation: skunk-run-dust var(--skunk-run-duration) linear forwards;
-}
-
-@keyframes skunk-run-dust {
-  0% {
-    opacity: 0;
-    transform: translate(-80px, 0) scale(0.6);
-  }
-  8% {
-    opacity: 0.85;
-  }
-  92% {
-    opacity: 0.65;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(calc(100vw + 40px), 0) scale(1.1);
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .skunk-run-overlay {

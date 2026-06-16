@@ -11,7 +11,6 @@ function SkunkSprite() {
       viewBox="0 0 120 72"
       aria-hidden
     >
-      <ellipse className="skunk-run-shadow" cx="58" cy="64" rx="34" ry="5" />
       <g className="skunk-run-body-group">
         <path
           className="skunk-run-tail"
@@ -64,9 +63,9 @@ export function SkunkRunCelebration({ side, onComplete }: SkunkRunCelebrationPro
         aria-hidden
       >
         <div className="skunk-run-track">
+          <div className="skunk-run-ground-shadow" aria-hidden />
           <SkunkSprite />
         </div>
-        <div className="skunk-run-dust" aria-hidden />
       </div>
     </GameOverlayPortal>
   );

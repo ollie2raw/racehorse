@@ -22,4 +22,4 @@ export function resolveSkunkCelebrationSide(params: {
   return null;
 }
 
-export const SKUNK_RUN_DURATION_MS = 4300;
+export const SKUNK_RUN_DURATION_MS = 5200;
