@@ -209,6 +209,12 @@ import {
   type RateLimitRule,
 } from './rateLimit';
 
+/** Production custom domain — always allowed even when CLIENT_URL still points at Vercel. */
+const canonicalProductionClientOrigins = [
+  'https://playracehorse.com',
+  'https://www.playracehorse.com',
+];
+
 const allowedOriginPatterns = [
   /^http:\/\/localhost(?::\d+)?$/i,
   /^http:\/\/127\.0\.0\.1(?::\d+)?$/i,
@@ -228,6 +234,7 @@ const CLIENT_DEPLOY_URL = process.env.CLIENT_URL?.trim() || undefined;
 
 const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) return true;
+  if (canonicalProductionClientOrigins.includes(origin)) return true;
   if (CLIENT_DEPLOY_URL && origin === CLIENT_DEPLOY_URL) return true;
   if (configuredCorsOrigins.includes(origin)) return true;
   return allowedOriginPatterns.some((pattern) => pattern.test(origin));
@@ -237,18 +244,26 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
 const socketIoExplicitOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  ...canonicalProductionClientOrigins,
   ...(CLIENT_DEPLOY_URL ? [CLIENT_DEPLOY_URL] : []),
   ...configuredCorsOrigins,
 ];
 const uniqueSocketIoExplicitOrigins = [...new Set(socketIoExplicitOrigins)];
 
+const reflectCorsOrigin = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean | string) => void,
+): void => {
+  if (isAllowedOrigin(origin)) {
+    callback(null, origin ?? true);
+    return;
+  }
+  callback(null, false);
+};
+
 const corsOptions: CorsOptions = {
   origin(origin, callback) {
-    if (isAllowedOrigin(origin)) {
-      callback(null, true);
-      return;
-    }
-    callback(new Error(`CORS blocked for origin: ${origin ?? 'unknown'}`));
+    reflectCorsOrigin(origin, callback);
   },
   credentials: true,
 };
@@ -1353,14 +1368,10 @@ const io = new Server(server, {
         return;
       }
       if (uniqueSocketIoExplicitOrigins.includes(origin)) {
-        callback(null, true);
+        callback(null, origin);
         return;
       }
-      if (isAllowedOrigin(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(new Error(`Socket.IO CORS blocked for origin: ${origin ?? 'unknown'}`));
+      reflectCorsOrigin(origin, callback);
     },
     methods: ['GET', 'POST'],
     credentials: true,
