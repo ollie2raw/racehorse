@@ -253,6 +253,8 @@ interface BotMatchScreenProps {
   onProfileRefresh?: (() => Promise<void> | void) | null;
   onProfilePatch?: ((patch: { glicko_rating?: number | null }) => void) | null;
   dailyFritzPackage?: DailyFritzStartResponse | null;
+  /** Parent-owned stable instance key (Daily Fritz embedded match). Used for remount diagnostics. */
+  matchInstanceKey?: string | null;
   onDailyFritzComplete?: (() => void) | null;
   dailyFritzSetOverlay?: DailyFritzSetOverlayViewModel | null;
   onDailyFritzGameComplete?: ((result: {
@@ -866,6 +868,7 @@ export default function BotMatchScreen({
   onProfileRefresh = null,
   onProfilePatch = null,
   dailyFritzPackage = null,
+  matchInstanceKey = null,
   onDailyFritzComplete = null,
   dailyFritzSetOverlay = null,
   onDailyFritzGameComplete = null,
@@ -2368,6 +2371,22 @@ export default function BotMatchScreen({
 
   // ── Daily Fritz lifecycle logging ──────────────────────────────────────────
   useEffect(() => {
+    if (!isDailyFritzMode) return;
+    console.log('[df-scripted-draw] BotMatchScreen mount', {
+      matchInstanceKey,
+      attemptId: dailyFritzPackage?.attempt_id ?? null,
+    });
+    return () => {
+      console.log('[df-scripted-draw] BotMatchScreen unmount', {
+        matchInstanceKey,
+        attemptId: dailyFritzPackage?.attempt_id ?? null,
+      });
+    };
+  // Log mount/unmount only — omit package fields that would fire on every deal update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     if (!isDailyFritzMode || !dailyFritzPackage) return;
 
     const deckIds = new Set(initPreGameDraw().tiles.map((slot) => slot.id));
@@ -2387,6 +2406,7 @@ export default function BotMatchScreen({
         : null;
 
     logDailyFritzScriptedDrawMount({
+      matchInstanceKey,
       attemptId: dailyFritzPackage.attempt_id ?? null,
       gameNumber: dailyFritzPackage.current_game_number ?? null,
       handIndex: dailyFritzPackage.current_hand_index ?? null,
@@ -2438,6 +2458,7 @@ export default function BotMatchScreen({
     });
   }, [
     isDailyFritzMode,
+    matchInstanceKey,
     dailyFritzPackage,
     dailyFritzPackage?.attempt_id,
     dailyFritzPackage?.current_game_number,

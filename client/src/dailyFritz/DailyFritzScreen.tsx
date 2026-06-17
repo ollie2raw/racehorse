@@ -673,6 +673,8 @@ export default function DailyFritzScreen({
   const [initRetryPending, setInitRetryPending] = useState(false);
   const [hubError, setHubError] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<DailyFritzStartResponse | null>(null);
+  /** Stable React key for embedded BotMatchScreen — set once per open, not re-derived from set_result. */
+  const [embeddedMatchKey, setEmbeddedMatchKey] = useState<string | null>(null);
   const [setOverlay, setSetOverlay] = useState<DailyFritzOverlayState | null>(null);
   const [, setSetSubmitError] = useState<string | null>(null);
   const [startActionPending, setStartActionPending] = useState(false);
@@ -850,6 +852,17 @@ export default function DailyFritzScreen({
 
   const loadToday = refreshToday;
 
+  const closeEmbeddedRun = useCallback(() => {
+    setEmbeddedMatchKey(null);
+    setActiveRun(null);
+  }, []);
+
+  const openEmbeddedRun = useCallback((normalized: DailyFritzStartResponse) => {
+    const gameSlot = normalized.current_game_number ?? 1;
+    setEmbeddedMatchKey(`${normalized.attempt_id}:${gameSlot}`);
+    setActiveRun(normalized);
+  }, []);
+
   const openLeaderboard = useCallback(() => {
     onNavigate?.('leaderboard');
   }, [onNavigate]);
@@ -978,9 +991,9 @@ export default function DailyFritzScreen({
   }, [loadToday]);
 
   const finishEmbeddedRun = useCallback(async () => {
-    setActiveRun(null);
+    closeEmbeddedRun();
     await loadToday();
-  }, [loadToday]);
+  }, [closeEmbeddedRun, loadToday]);
 
   const handleStartResponse = useCallback(async (
     started: DailyFritzStartResponse,
@@ -1012,8 +1025,8 @@ export default function DailyFritzScreen({
       }
       return;
     }
-    setActiveRun(normalized);
-  }, [buildCompletedGame, submitSetCompletion]);
+    openEmbeddedRun(normalized);
+  }, [buildCompletedGame, openEmbeddedRun, submitSetCompletion]);
 
   const beginRun = useCallback(async () => {
     if (startActionPending) return;
@@ -1168,6 +1181,19 @@ export default function DailyFritzScreen({
     };
   }, [activeRun, activeGameNumber, activeSetResult]);
 
+  useEffect(() => {
+    if (!activeRun || !embeddedMatchKey) return;
+    const inferredKey = `${activeRun.attempt_id}:${activeGameNumber}`;
+    if (inferredKey !== embeddedMatchKey) {
+      console.warn('[df-scripted-draw] embedded key drift (stable key held)', {
+        embeddedMatchKey,
+        inferredKey,
+        activeGameNumber,
+        storedGameNumber: activeRun.current_game_number ?? null,
+      });
+    }
+  }, [activeRun, activeGameNumber, embeddedMatchKey]);
+
   const setOverlayConfig = useMemo((): DailyFritzSetOverlayViewModel | null => {
     if (!setOverlay) return null;
     
@@ -1226,7 +1252,7 @@ export default function DailyFritzScreen({
         secondaryLabel: 'Return to Hub',
         onSecondary: () => {
           setSetOverlay(null);
-          setActiveRun(null);
+          closeEmbeddedRun();
           void loadToday();
         },
         gameScoreLabel: 'This game',
@@ -1265,7 +1291,7 @@ export default function DailyFritzScreen({
         primaryLabel: 'Back Home',
         onPrimary: () => {
           setSetOverlay(null);
-          setActiveRun(null);
+          closeEmbeddedRun();
           void loadToday();
         },
         gameScoreLabel: 'Set score',
@@ -1303,7 +1329,7 @@ export default function DailyFritzScreen({
         onPrimary: (): void => {
           void continueSet();
         },
-        onSecondary: () => { setSetOverlay(null); setActiveRun(null); void loadToday(); },
+        onSecondary: () => { setSetOverlay(null); closeEmbeddedRun(); void loadToday(); },
         secondaryLabel: 'Return to Hub',
         practiceHint: playerLostDailyFritzGame(g.playerScore, g.fritzScore)
           ? DAILY_FRITZ_CLASSIC_PRACTICE_HINT
@@ -1338,12 +1364,12 @@ export default function DailyFritzScreen({
       });
       const returnToHub = (): void => {
         setSetOverlay(null);
-        setActiveRun(null);
+        closeEmbeddedRun();
         void loadToday();
       };
       const openLeaderboard = (): void => {
         setSetOverlay(null);
-        setActiveRun(null);
+        closeEmbeddedRun();
         void loadToday();
         const rd = activeRun?.run_date ?? setOverlay.setResult.run_date ?? today?.run_date ?? '';
         if (rd) openLeaderboardForRunDate();
@@ -1382,14 +1408,15 @@ export default function DailyFritzScreen({
     }
 
     return base;
-  }, [setOverlay, continueSet, loadToday, today, activeRun, profile?.glicko_rating, openLeaderboardForRunDate, submitCompletedGame]);
+  }, [setOverlay, continueSet, loadToday, today, activeRun, profile?.glicko_rating, openLeaderboardForRunDate, submitCompletedGame, closeEmbeddedRun]);
 
-  if (activeRun) {
+  if (activeRun && embeddedMatchKey) {
     return (
       <Suspense fallback={<DailyFritzLoadingScreen phase="preparing" loadError={null} onBack={onBack} onRetry={() => {}} retryPending={false} />}>
         <LazyBotMatchScreen
-          key={`${activeRun.attempt_id}:${activeGameNumber}`}
-          onBack={() => { setActiveRun(null); void loadToday(); }}
+          key={embeddedMatchKey}
+          matchInstanceKey={embeddedMatchKey}
+          onBack={() => { closeEmbeddedRun(); void loadToday(); }}
           mode="daily-fritz"
           userId={user?.id ?? null}
           username={profile?.username ?? null}
