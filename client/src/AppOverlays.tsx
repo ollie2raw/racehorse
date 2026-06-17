@@ -20,7 +20,7 @@ export type AuthModalsLayerProps = {
     password: string,
     username?: string,
   ) => Promise<{ error: string | null; message?: string | null; pendingVerification?: boolean }>;
-  onResetPassword: (email: string) => Promise<{ error: string | null }>;
+  onResetPassword: (email: string) => Promise<{ error: string | null; message?: string | null }>;
   passwordRecoveryPending: boolean;
   onUpdatePassword: (password: string) => Promise<{ error: string | null; message?: string | null }>;
   onPasswordRecoveryClose: () => void;

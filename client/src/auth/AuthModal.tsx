@@ -22,7 +22,7 @@ interface AuthModalProps {
     password: string,
     username?: string,
   ) => Promise<{ error: string | null; message?: string | null; pendingVerification?: boolean }>;
-  onResetPassword: (email: string) => Promise<{ error: string | null }>;
+  onResetPassword: (email: string) => Promise<{ error: string | null; message?: string | null }>;
 }
 
 export default function AuthModal({
@@ -283,6 +283,7 @@ export default function AuthModal({
                     } else {
                       setResetSent(true);
                       setError(null);
+                      setNotice(result.message ?? 'If that email has an account, we sent a reset link.');
                     }
                   }}
                 >

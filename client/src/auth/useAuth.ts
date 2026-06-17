@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { formatAuthErrorMessage } from './authErrors';
+import { getAuthEmailRedirectTo } from './authRedirect';
 import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
 
 export interface UserProfile {
@@ -500,7 +502,7 @@ export function useAuth() {
             email,
             password,
             options: {
-              emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+              emailRedirectTo: typeof window !== 'undefined' ? getAuthEmailRedirectTo() : undefined,
               data: {
                 preferred_username: normalizedUsername,
                 username: normalizedUsername,
@@ -519,7 +521,7 @@ export function useAuth() {
           result = await runSignUp();
         }
         const { data, error } = result;
-        if (error) return { error: error.message };
+        if (error) return { error: formatAuthErrorMessage(error) };
 
         if (data.user) {
           void hydrateProfile(data.user);
@@ -570,7 +572,7 @@ export function useAuth() {
           result = await runSignIn();
         }
         const { data, error } = result;
-        if (error) return { error: error.message };
+        if (error) return { error: formatAuthErrorMessage(error) };
 
         if (data.user) {
           void hydrateProfile(data.user);
@@ -705,17 +707,23 @@ export function useAuth() {
 
   const resetPassword = useCallback(async (email: string): Promise<AuthResult> => {
     if (!supabase) return { error: getSupabaseConfigError() };
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return { error: 'Enter your email address.' };
     try {
       const { error } = await withTimeout(
-        supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}`,
+        supabase.auth.resetPasswordForEmail(normalizedEmail, {
+          redirectTo: getAuthEmailRedirectTo(),
         }),
         AUTH_REQUEST_TIMEOUT_MS,
       );
-      if (error) return { error: error.message };
-      return { error: null };
+      if (error) return { error: formatAuthErrorMessage(error) };
+      return { error: null, message: 'If that email has an account, we sent a reset link.' };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'Unable to send reset email.' };
+      return {
+        error: formatAuthErrorMessage(
+          err instanceof Error ? { message: err.message } : { message: 'Unable to send reset email.' },
+        ),
+      };
     }
   }, []);
 
