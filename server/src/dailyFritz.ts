@@ -97,7 +97,9 @@ function createSeededPrng(seed: string): () => number {
 }
 
 function cloneTile(tile: Tile): Tile {
-  return { low: tile.low, high: tile.high };
+  const low = Math.min(tile.low, tile.high);
+  const high = Math.max(tile.low, tile.high);
+  return { low, high };
 }
 
 function buildDoubleSixSet(): Tile[] {

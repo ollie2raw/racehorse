@@ -3,6 +3,7 @@ import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import type { Tile } from '../types.ts';
+import { normalizePreGameDrawTile } from '../match/preGameDraw/preGameDrawLogic.ts';
 
 const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
   import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
@@ -303,6 +304,24 @@ export interface DailyFritzLeaderboardResponse {
   leaderboard: DailyFritzLeaderboardRow[];
 }
 
+function normalizeDailyFritzDrawWinner(value: unknown): DailyFritzDrawWinner | null {
+  return value === 'you' || value === 'bot' ? value : null;
+}
+
+function normalizeDailyFritzStartDrawFields(
+  payload: DailyFritzStartResponse,
+): DailyFritzStartResponse {
+  const drawPlayerTile = normalizePreGameDrawTile(payload.draw_player_tile);
+  const drawFritzTile = normalizePreGameDrawTile(payload.draw_fritz_tile);
+  const drawWinner = normalizeDailyFritzDrawWinner(payload.draw_winner);
+  return {
+    ...payload,
+    ...(drawPlayerTile ? { draw_player_tile: drawPlayerTile } : {}),
+    ...(drawFritzTile ? { draw_fritz_tile: drawFritzTile } : {}),
+    ...(drawWinner ? { draw_winner: drawWinner } : {}),
+  };
+}
+
 export async function getTodayDailyFritz(options?: {
   timeoutMs?: number;
 }): Promise<DailyFritzTodayResponse> {
@@ -315,11 +334,20 @@ export async function getTodayDailyFritz(options?: {
 export async function startDailyFritz(options?: {
   timeoutMs?: number;
 }): Promise<DailyFritzStartResponse> {
-  return requestJson<DailyFritzStartResponse>('/api/daily-fritz/start', {
+  const response = await requestJson<DailyFritzStartResponse>('/api/daily-fritz/start', {
     method: 'POST',
     body: JSON.stringify({}),
     timeoutMs: options?.timeoutMs,
   });
+  const normalized = normalizeDailyFritzStartDrawFields(response);
+  console.log('[df-scripted-draw] start response', {
+    drawWinner: normalized.draw_winner ?? null,
+    rawDrawPlayerTile: response.draw_player_tile ?? null,
+    rawDrawFritzTile: response.draw_fritz_tile ?? null,
+    normalizedDrawPlayerTile: normalized.draw_player_tile ?? null,
+    normalizedDrawFritzTile: normalized.draw_fritz_tile ?? null,
+  });
+  return normalized;
 }
 
 export async function fetchDailyFritzLeaderboard(date: string): Promise<DailyFritzLeaderboardRow[]> {

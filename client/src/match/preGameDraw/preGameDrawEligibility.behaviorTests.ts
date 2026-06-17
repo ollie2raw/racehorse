@@ -37,16 +37,34 @@ function testExcludedModes(): void {
     false,
     'guided excluded',
   );
+}
+
+function testDailyFritzBaseEligibility(): void {
   assertEqual(
-    isPreGameDrawEligible({ ...baseEligible, isDailyFritzMode: true }),
+    isPreGameDrawEligible({
+      ...baseEligible,
+      mode: 'daily-fritz',
+      isDailyFritzMode: true,
+    }),
+    true,
+    'daily fritz eligible at base gate when deal is 7 and match is fresh',
+  );
+  assertEqual(
+    isPreGameDrawEligible({
+      ...baseEligible,
+      mode: 'daily-fritz',
+      isDailyFritzMode: true,
+      hasPersistedDailyFritzMatch: true,
+    }),
     false,
-    'daily fritz excluded',
+    'resumed daily fritz mid-match skips draw',
   );
 }
 
 function run(): void {
   testDealSizeSevenRequired();
   testExcludedModes();
+  testDailyFritzBaseEligibility();
   console.log('preGameDrawEligibility.behaviorTests: all passed');
 }
 

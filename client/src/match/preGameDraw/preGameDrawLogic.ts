@@ -34,8 +34,36 @@ export interface PreGameDrawState {
 
 export type Rng = () => number;
 
+/** Canonical domino identity for the pre-game draw deck (`low-high`, smaller pip first). */
+export function normalizePreGameDrawTile(value: unknown): Tile | null {
+  if (Array.isArray(value) && value.length === 2) {
+    const a = Number(value[0]);
+    const b = Number(value[1]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    const low = Math.min(a, b);
+    const high = Math.max(a, b);
+    if (low < 0 || high > 6 || !Number.isInteger(low) || !Number.isInteger(high)) return null;
+    return { low, high };
+  }
+  if (!value || typeof value !== 'object') return null;
+  const rec = value as Record<string, unknown>;
+  const a = Number(rec.low);
+  const b = Number(rec.high);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  const low = Math.min(a, b);
+  const high = Math.max(a, b);
+  if (low < 0 || high > 6 || !Number.isInteger(low) || !Number.isInteger(high)) return null;
+  return { low, high };
+}
+
+export function toPreGameDrawTileId(tile: Tile | null | undefined): string | null {
+  const normalized = tile ? normalizePreGameDrawTile(tile) : null;
+  if (!normalized) return null;
+  return `${normalized.low}-${normalized.high}`;
+}
+
 function tileKey(tile: Tile): string {
-  return `${tile.low}-${tile.high}`;
+  return toPreGameDrawTileId(tile)!;
 }
 
 export function generateDoubleSixSet(): Tile[] {

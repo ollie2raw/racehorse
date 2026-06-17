@@ -9,8 +9,10 @@ import {
   generateDoubleSixSet,
   getPickableTileIds,
   initPreGameDraw,
+  normalizePreGameDrawTile,
   simulateDrawRound,
   tilePipSum,
+  toPreGameDrawTileId,
 } from './preGameDrawLogic.ts';
 
 function assertEqual<T>(actual: T, expected: T, label: string): void {
@@ -154,8 +156,21 @@ function testMultipleTieRoundsBeforeWinner(): void {
   assertEqual(resolved.remainingDeck?.length, 22, 'six tiles removed after two ties + win');
 }
 
+function testCanonicalTileIdUsesSmallerPipFirst(): void {
+  const swapped = normalizePreGameDrawTile({ low: 5, high: 3 });
+  assertEqual(swapped, { low: 3, high: 5 }, 'swapped tile normalized');
+  assertEqual(toPreGameDrawTileId({ low: 5, high: 3 }), '3-5', 'canonical id');
+
+  const state = initPreGameDraw();
+  const hasCanonical = state.tiles.some((slot) => slot.id === '3-5');
+  assertTrue(hasCanonical, 'deck contains canonical 3-5 id');
+  const hasSwapped = state.tiles.some((slot) => slot.id === '5-3');
+  assertTrue(!hasSwapped, 'deck does not contain reversed 5-3 id');
+}
+
 function run(): void {
   testInitHasTwentyEightPickableTiles();
+  testCanonicalTileIdUsesSmallerPipFirst();
   testWinnerRemovesBothTilesAndLeavesTwentySixForDeal();
   testResolvedWinnerKeepsBothTilesVisibleOnBoard();
   testTieRedrawRemovesBothAndReopensPicks();

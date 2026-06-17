@@ -267,7 +267,15 @@ export function usePreGameDraw({
             const tileId = pickRandomOpponentTileId(stateAfterPlayerPick, rngRef.current);
             afterOpponent = applyOpponentPick(stateAfterPlayerPick, tileId);
           }
-        } catch {
+        } catch (err) {
+          console.error('[df-scripted-draw] opponent resolve failed', {
+            scriptedFritzTileId,
+            scriptedWinner,
+            error: err instanceof Error ? err.message : String(err),
+            pickableTileIds: stateAfterPlayerPick.tiles
+              .filter((slot) => !slot.outOfPlay && !slot.revealed)
+              .map((slot) => slot.id),
+          });
           // In scripted mode a mismatch between scripted ids and the underlying shuffled
           // deck should not permanently wedge the UI — just fall back to waiting for a retry.
           setUiPhase('pick-player');
@@ -335,7 +343,15 @@ export function usePreGameDraw({
       let afterPlayer: PreGameDrawState;
       try {
         afterPlayer = applyPlayerPick(drawState, effectiveTileId);
-      } catch {
+      } catch (err) {
+        console.error('[df-scripted-draw] player pick failed', {
+          tappedTileId: tileId,
+          effectiveTileId,
+          scriptedMode,
+          scriptedPlayerTileId,
+          error: err instanceof Error ? err.message : String(err),
+          deckTileIds: drawState.tiles.map((slot) => slot.id),
+        });
         return;
       }
 

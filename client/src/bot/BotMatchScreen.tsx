@@ -227,6 +227,11 @@ import {
   isPreGameDrawEligible,
 } from '../match/preGameDraw/preGameDrawEligibility';
 import { PreGameTileDrawBoard } from '../match/preGameDraw/PreGameTileDrawBoard';
+import {
+  initPreGameDraw,
+  normalizePreGameDrawTile,
+  toPreGameDrawTileId,
+} from '../match/preGameDraw/preGameDrawLogic';
 import { usePreGameDraw, type PreGameDrawCompletePayload } from '../match/preGameDraw/usePreGameDraw';
 import '../match/preGameDraw/preGameDraw.css';
 
@@ -452,15 +457,6 @@ function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
 }
 
-function isValidPreGameDrawTile(tile: Tile | null | undefined): tile is Tile {
-  return tile != null && Number.isFinite(tile.low) && Number.isFinite(tile.high);
-}
-
-function toPreGameDrawTileId(tile: Tile | null | undefined): string | null {
-  if (!isValidPreGameDrawTile(tile)) return null;
-  return `${tile.low}-${tile.high}`;
-}
-
 function isDailyFritzScriptedDrawReady(
   pkg: DailyFritzStartResponse | null | undefined,
 ): pkg is DailyFritzStartResponse & {
@@ -470,7 +466,14 @@ function isDailyFritzScriptedDrawReady(
 } {
   if (!pkg) return false;
   if (pkg.draw_winner !== 'you' && pkg.draw_winner !== 'bot') return false;
-  return isValidPreGameDrawTile(pkg.draw_player_tile) && isValidPreGameDrawTile(pkg.draw_fritz_tile);
+  return (
+    normalizePreGameDrawTile(pkg.draw_player_tile) != null &&
+    normalizePreGameDrawTile(pkg.draw_fritz_tile) != null
+  );
+}
+
+function logDailyFritzScriptedDrawMount(payload: Record<string, unknown>): void {
+  console.log('[df-scripted-draw] mount', payload);
 }
 
 function buildDoubleSixTiles(): Tile[] {
@@ -1537,16 +1540,20 @@ export default function BotMatchScreen({
   );
 
   const dailyFritzScriptedDraw = dailyFritzScriptedDrawReady ? dailyFritzPackage : null;
+  const scriptedPlayerTile = dailyFritzScriptedDraw
+    ? normalizePreGameDrawTile(dailyFritzScriptedDraw.draw_player_tile)
+    : null;
+  const scriptedFritzTile = dailyFritzScriptedDraw
+    ? normalizePreGameDrawTile(dailyFritzScriptedDraw.draw_fritz_tile)
+    : null;
+  const scriptedPlayerTileId = scriptedPlayerTile ? toPreGameDrawTileId(scriptedPlayerTile) : null;
+  const scriptedFritzTileId = scriptedFritzTile ? toPreGameDrawTileId(scriptedFritzTile) : null;
 
   const preGameDraw = usePreGameDraw({
     enabled: preGameDrawActive,
     opponentLabel,
-    scriptedPlayerTileId: dailyFritzScriptedDraw
-      ? toPreGameDrawTileId(dailyFritzScriptedDraw.draw_player_tile)
-      : null,
-    scriptedFritzTileId: dailyFritzScriptedDraw
-      ? toPreGameDrawTileId(dailyFritzScriptedDraw.draw_fritz_tile)
-      : null,
+    scriptedPlayerTileId,
+    scriptedFritzTileId,
     scriptedWinner: dailyFritzScriptedDraw ? dailyFritzScriptedDraw.draw_winner : null,
     onComplete: handlePreGameDrawComplete,
   });
@@ -2344,19 +2351,63 @@ export default function BotMatchScreen({
 
   // ── Daily Fritz lifecycle logging ──────────────────────────────────────────
   useEffect(() => {
-    if (!isDailyFritzMode) return;
+    if (!isDailyFritzMode || !dailyFritzPackage) return;
+
+    const deckIds = new Set(initPreGameDraw().tiles.map((slot) => slot.id));
+    const rawPlayer = dailyFritzPackage.draw_player_tile ?? null;
+    const rawFritz = dailyFritzPackage.draw_fritz_tile ?? null;
+    const normalizedPlayer = normalizePreGameDrawTile(rawPlayer);
+    const normalizedFritz = normalizePreGameDrawTile(rawFritz);
+    const playerTileId = normalizedPlayer ? toPreGameDrawTileId(normalizedPlayer) : null;
+    const fritzTileId = normalizedFritz ? toPreGameDrawTileId(normalizedFritz) : null;
+    const rawPlayerId =
+      rawPlayer && typeof rawPlayer === 'object' && 'low' in rawPlayer && 'high' in rawPlayer
+        ? `${(rawPlayer as Tile).low}-${(rawPlayer as Tile).high}`
+        : null;
+    const rawFritzId =
+      rawFritz && typeof rawFritz === 'object' && 'low' in rawFritz && 'high' in rawFritz
+        ? `${(rawFritz as Tile).low}-${(rawFritz as Tile).high}`
+        : null;
+
+    logDailyFritzScriptedDrawMount({
+      attemptId: dailyFritzPackage.attempt_id ?? null,
+      gameNumber: dailyFritzPackage.current_game_number ?? null,
+      handIndex: dailyFritzPackage.current_hand_index ?? null,
+      drawWinner: dailyFritzPackage.draw_winner ?? null,
+      rawDrawPlayerTile: rawPlayer,
+      rawDrawFritzTile: rawFritz,
+      rawPlayerTileId: rawPlayerId,
+      rawFritzTileId: rawFritzId,
+      normalizedDrawPlayerTile: normalizedPlayer,
+      normalizedDrawFritzTile: normalizedFritz,
+      playerTileId,
+      fritzTileId,
+      playerTileIdInDeck: playerTileId ? deckIds.has(playerTileId) : false,
+      fritzTileIdInDeck: fritzTileId ? deckIds.has(fritzTileId) : false,
+      rawPlayerIdMismatch: rawPlayerId != null && playerTileId != null && rawPlayerId !== playerTileId,
+      rawFritzIdMismatch: rawFritzId != null && fritzTileId != null && rawFritzId !== fritzTileId,
+      scriptedDrawReady: dailyFritzScriptedDrawReady,
+      preGameDrawEligible,
+      preGameDrawActive,
+      scriptedMode:
+        scriptedPlayerTileId != null &&
+        scriptedFritzTileId != null &&
+        (dailyFritzPackage.draw_winner === 'you' || dailyFritzPackage.draw_winner === 'bot'),
+    });
+
     dailyFritzDebugLog('[daily-flow] package boot', {
-      attemptId: dailyFritzPackage?.attempt_id ?? null,
-      gameNumber: dailyFritzPackage?.current_game_number ?? null,
-      handIndex: dailyFritzPackage?.current_hand_index ?? null,
-      hasSetResult: Boolean(dailyFritzPackage?.set_result),
-      drawWinner: dailyFritzPackage?.draw_winner ?? null,
-      drawPlayerTile: dailyFritzPackage?.draw_player_tile ?? null,
-      drawFritzTile: dailyFritzPackage?.draw_fritz_tile ?? null,
+      attemptId: dailyFritzPackage.attempt_id ?? null,
+      gameNumber: dailyFritzPackage.current_game_number ?? null,
+      handIndex: dailyFritzPackage.current_hand_index ?? null,
+      hasSetResult: Boolean(dailyFritzPackage.set_result),
+      drawWinner: dailyFritzPackage.draw_winner ?? null,
+      drawPlayerTile: dailyFritzPackage.draw_player_tile ?? null,
+      drawFritzTile: dailyFritzPackage.draw_fritz_tile ?? null,
       scriptedDrawReady: dailyFritzScriptedDrawReady,
     });
   }, [
     isDailyFritzMode,
+    dailyFritzPackage,
     dailyFritzPackage?.attempt_id,
     dailyFritzPackage?.current_game_number,
     dailyFritzPackage?.current_hand_index,
@@ -2365,6 +2416,10 @@ export default function BotMatchScreen({
     dailyFritzPackage?.draw_player_tile,
     dailyFritzPackage?.draw_fritz_tile,
     dailyFritzScriptedDrawReady,
+    preGameDrawEligible,
+    preGameDrawActive,
+    scriptedPlayerTileId,
+    scriptedFritzTileId,
   ]);
 
   useEffect(() => {

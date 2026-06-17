@@ -19,8 +19,11 @@ export interface PreGameDrawEligibilityInput {
  *
  * Gate rules (explicit — do not rely on createBotMatchWithStarter throw):
  * - dealSize must be 7 (14-tile deals need all 28 tiles; draw removes 2)
- * - mode must be standard Fritz bot (not ghost / daily-fritz)
+ * - mode must be standard Fritz bot or daily-fritz (ghost excluded)
  * - no scripted/fixed-deal paths (guided, authoring, resumed daily fritz)
+ *
+ * Daily Fritz also requires scripted draw fields on the start package; BotMatchScreen
+ * applies that gate via `isDailyFritzScriptedDrawReady` before enabling the draw UI.
  */
 export function isPreGameDrawEligible(input: PreGameDrawEligibilityInput): boolean {
   if (input.dealSize !== 7) return false;
