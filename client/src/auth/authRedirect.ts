@@ -1,5 +1,10 @@
 /** Production client origin — must match Supabase Auth Site URL + Redirect URLs. */
-const CANONICAL_CLIENT_ORIGIN = 'https://racehorsedoms.vercel.app';
+const CANONICAL_CLIENT_ORIGIN = 'https://playracehorse.com';
+
+const LEGACY_CLIENT_ORIGINS = new Set([
+  'https://racehorsedoms.vercel.app',
+  'https://playracehorse.com',
+]);
 
 /**
  * Redirect target for Supabase auth emails (signup confirm + password recovery).
@@ -14,7 +19,7 @@ export function getAuthEmailRedirectTo(): string {
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return origin;
   }
-  if (hostname.endsWith('.vercel.app')) {
+  if (hostname.endsWith('.vercel.app') || LEGACY_CLIENT_ORIGINS.has(origin)) {
     return CANONICAL_CLIENT_ORIGIN;
   }
   return origin;

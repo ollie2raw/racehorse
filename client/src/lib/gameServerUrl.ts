@@ -9,6 +9,11 @@
  *   setups) still work.
  */
 let warnedMissingViteServerUrl = false;
+const KNOWN_STATIC_PRODUCTION_HOSTS = new Set([
+  'racehorsedoms.vercel.app',
+  'playracehorse.com',
+  'www.playracehorse.com',
+]);
 const KNOWN_PRODUCTION_GAME_SERVER_URL = 'https://racehorse.onrender.com';
 
 function isLocalBrowserHost(hostname: string): boolean {
@@ -20,7 +25,7 @@ export function resolveGameServerUrl(): string {
   if (configured) return configured.replace(/\/$/, '');
   if (import.meta.env.DEV) return 'http://localhost:3001';
   if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'racehorsedoms.vercel.app') {
+    if (KNOWN_STATIC_PRODUCTION_HOSTS.has(window.location.hostname)) {
       if (import.meta.env.PROD && !warnedMissingViteServerUrl) {
         warnedMissingViteServerUrl = true;
         console.warn(

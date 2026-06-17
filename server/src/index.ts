@@ -213,6 +213,8 @@ const allowedOriginPatterns = [
   /^http:\/\/localhost(?::\d+)?$/i,
   /^http:\/\/127\.0\.0\.1(?::\d+)?$/i,
   /^https:\/\/racehorsedoms\.vercel\.app$/i,
+  /^https:\/\/playracehorse\.com$/i,
+  /^https:\/\/www\.playracehorse\.com$/i,
   /^https:\/\/.*\.vercel\.app$/i,
 ];
 
