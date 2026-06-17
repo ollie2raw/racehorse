@@ -4085,6 +4085,7 @@ app.post('/api/daily-fritz/start', async (req, res) => {
       runDate: run.runDate,
       gameNumber: gameNumberForDraw,
       metadata: run.metadata,
+      drawWinner,
     });
     console.log('[daily-fritz:start] draw package', {
       runDate: run.runDate,
@@ -4208,6 +4209,7 @@ app.post('/api/daily-fritz/next-hand', async (req, res) => {
         runDate: run.runDate,
         gameNumber,
         metadata: run.metadata,
+        drawWinner,
       });
       console.log('[daily-fritz-next-hand] draw package', {
         attemptId,

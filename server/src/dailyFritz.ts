@@ -146,22 +146,63 @@ export interface DailyFritzDrawTiles {
   fritzTile: Tile;
 }
 
-export function getDailyFritzDrawTilesFromGameSeed(gameSeed: string): DailyFritzDrawTiles {
+export function dailyFritzTilePipSum(tile: Tile): number {
+  return tile.low + tile.high;
+}
+
+/** True when visible pip totals match who opens (higher pip wins the draw). */
+export function dailyFritzDrawTilesMatchWinner(
+  tiles: DailyFritzDrawTiles,
+  drawWinner: DailyFritzDrawWinner,
+): boolean {
+  const playerPips = dailyFritzTilePipSum(tiles.playerTile);
+  const fritzPips = dailyFritzTilePipSum(tiles.fritzTile);
+  if (playerPips === fritzPips) return false;
+  return drawWinner === 'you' ? playerPips > fritzPips : fritzPips > playerPips;
+}
+
+/**
+ * Deterministic draw pair for a game seed, aligned with the predetermined draw winner.
+ * Higher pip sum wins the draw — tiles are chosen so the reveal matches `drawWinner`.
+ */
+export function getDailyFritzDrawTilesFromGameSeed(
+  gameSeed: string,
+  drawWinner: DailyFritzDrawWinner,
+): DailyFritzDrawTiles {
   const prng = createSeededPrng(`${gameSeed}:draw-tiles`);
   const shuffled = shuffleWithPrng(buildDoubleSixSet(), prng).map(cloneTile);
+
+  for (let i = 0; i < shuffled.length; i += 1) {
+    for (let j = i + 1; j < shuffled.length; j += 1) {
+      const tileA = shuffled[i]!;
+      const tileB = shuffled[j]!;
+      const sumA = dailyFritzTilePipSum(tileA);
+      const sumB = dailyFritzTilePipSum(tileB);
+      if (sumA === sumB) continue;
+
+      const higherIsA = sumA > sumB;
+      if (drawWinner === 'you') {
+        return higherIsA
+          ? { playerTile: cloneTile(tileA), fritzTile: cloneTile(tileB) }
+          : { playerTile: cloneTile(tileB), fritzTile: cloneTile(tileA) };
+      }
+      return higherIsA
+        ? { playerTile: cloneTile(tileB), fritzTile: cloneTile(tileA) }
+        : { playerTile: cloneTile(tileA), fritzTile: cloneTile(tileB) };
+    }
+  }
+
   const playerTile = shuffled[0]!;
   const fritzTile = shuffled[1]!;
-  return {
-    playerTile,
-    fritzTile,
-  };
+  return { playerTile, fritzTile };
 }
 
 export function getDailyFritzDrawTiles(
   runDate: string,
   gameNumber: DailyFritzSetGameNumber,
 ): DailyFritzDrawTiles {
-  return getDailyFritzDrawTilesFromGameSeed(getDailyFritzGameSeed(runDate, gameNumber));
+  const drawWinner = getDailyFritzDrawWinner(runDate, gameNumber);
+  return getDailyFritzDrawTilesFromGameSeed(getDailyFritzGameSeed(runDate, gameNumber), drawWinner);
 }
 
 export function resolveDailyFritzDrawWinner(params: {
@@ -183,7 +224,22 @@ export function resolveDailyFritzDrawTiles(params: {
   runDate: string;
   gameNumber: DailyFritzSetGameNumber;
   metadata?: Record<string, unknown> | null;
+  drawWinner?: DailyFritzDrawWinner | null;
 }): DailyFritzDrawTiles {
+  const drawWinner =
+    params.drawWinner ??
+    resolveDailyFritzDrawWinner({
+      runDate: params.runDate,
+      gameNumber: params.gameNumber,
+      metadata: params.metadata,
+    });
+
+  const alignedFromSeed = (): DailyFritzDrawTiles =>
+    getDailyFritzDrawTilesFromGameSeed(
+      getDailyFritzGameSeed(params.runDate, params.gameNumber),
+      drawWinner,
+    );
+
   const byGame = params.metadata?.draw_tiles_by_game;
   if (byGame && typeof byGame === 'object') {
     const raw =
@@ -205,14 +261,17 @@ export function resolveDailyFritzDrawTiles(params: {
         typeof f.low === 'number' &&
         typeof f.high === 'number'
       ) {
-        return {
+        const fromMeta = {
           playerTile: cloneTile(p),
           fritzTile: cloneTile(f),
         };
+        if (dailyFritzDrawTilesMatchWinner(fromMeta, drawWinner)) {
+          return fromMeta;
+        }
       }
     }
   }
-  return getDailyFritzDrawTiles(params.runDate, params.gameNumber);
+  return alignedFromSeed();
 }
 
 /**
@@ -281,9 +340,18 @@ export function generateDailyFritzRun(
     DailyFritzSetGameNumber,
     { playerTile: Tile; fritzTile: Tile }
   > = {
-    1: getDailyFritzDrawTiles(runDate, 1),
-    2: getDailyFritzDrawTiles(runDate, 2),
-    3: getDailyFritzDrawTiles(runDate, 3),
+    1: getDailyFritzDrawTilesFromGameSeed(
+      getDailyFritzGameSeed(runDate, 1),
+      drawWinnersByGame[1],
+    ),
+    2: getDailyFritzDrawTilesFromGameSeed(
+      getDailyFritzGameSeed(runDate, 2),
+      drawWinnersByGame[2],
+    ),
+    3: getDailyFritzDrawTilesFromGameSeed(
+      getDailyFritzGameSeed(runDate, 3),
+      drawWinnersByGame[3],
+    ),
   };
 
   return {
