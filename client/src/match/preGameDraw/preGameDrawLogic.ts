@@ -162,6 +162,22 @@ function resolveTie(state: PreGameDrawState, tiles: PreGameDrawTileSlot[]): PreG
   };
 }
 
+/** Both picks revealed with equal pips — tiles still on the scatter before redraw. */
+export function isTieHoldState(state: PreGameDrawState): boolean {
+  const { you, bot } = state.currentRound;
+  return (
+    state.phase === 'pick-opponent' &&
+    you != null &&
+    bot != null &&
+    you.pipSum === bot.pipSum &&
+    state.winner == null
+  );
+}
+
+export function commitTieRedraw(state: PreGameDrawState): PreGameDrawState {
+  return resolveTie(state, markRoundTilesOutOfPlay(state.tiles));
+}
+
 export function applyPlayerPick(state: PreGameDrawState, tileId: string): PreGameDrawState {
   if (state.phase !== 'pick-player') {
     throw new Error(`Cannot pick player tile while phase is ${state.phase}`);
@@ -293,10 +309,14 @@ export function applyOpponentPick(state: PreGameDrawState, tileId: string): PreG
 
   const youPick = state.currentRound.you;
   if (youPick.pipSum === botPick.pipSum) {
-    return resolveTie(
-      { ...state, tiles, currentRound: { you: youPick, bot: botPick } },
-      markRoundTilesOutOfPlay(tiles),
-    );
+    return {
+      ...state,
+      phase: 'pick-opponent',
+      tiles,
+      currentRound: { you: youPick, bot: botPick },
+      winner: null,
+      remainingDeck: null,
+    };
   }
 
   const winner: PreGameDrawPlayer = youPick.pipSum > botPick.pipSum ? 'you' : 'bot';
@@ -315,5 +335,6 @@ export function simulateDrawRound(
   playerTileId: string,
   opponentTileId: string,
 ): PreGameDrawState {
-  return applyOpponentPick(applyPlayerPick(state, playerTileId), opponentTileId);
+  const afterOpponent = applyOpponentPick(applyPlayerPick(state, playerTileId), opponentTileId);
+  return isTieHoldState(afterOpponent) ? commitTieRedraw(afterOpponent) : afterOpponent;
 }

@@ -994,7 +994,6 @@ export default function BotMatchScreen({
   const [preGameDrawCompleted, setPreGameDrawCompleted] = useState(() =>
     Boolean(resumablePersistedDailyFritzMatch),
   );
-  const [preGameDrawRematchNonce, setPreGameDrawRematchNonce] = useState(0);
   const preGameDrawActive = preGameDrawEligible && !preGameDrawCompleted;
   const preGameDrawActiveRef = useRef(preGameDrawActive);
   preGameDrawActiveRef.current = preGameDrawActive;
@@ -1600,11 +1599,6 @@ export default function BotMatchScreen({
       return isDrawShell ? current : createPreGameDrawShellMatch(winningScore, dealSize);
     });
   }, [preGameDrawActive, winningScore, dealSize]);
-
-  useEffect(() => {
-    if (!preGameDrawActive || preGameDrawRematchNonce === 0) return;
-    preGameDraw.reset();
-  }, [preGameDrawActive, preGameDrawRematchNonce, preGameDraw.reset]);
 
   useEffect(() => {
     if (!isDailyFritzMode || !preGameDrawActive || !dailyFritzStorageKey) return;
@@ -2882,7 +2876,6 @@ export default function BotMatchScreen({
     setActiveLocalMatchId(createLocalMatchId());
     if (preGameDrawEligible) {
       setPreGameDrawCompleted(false);
-      setPreGameDrawRematchNonce((nonce) => nonce + 1);
       setMatch(createPreGameDrawShellMatch(winningScore, dealSize));
     } else {
       setPreGameDrawCompleted(true);

@@ -9,7 +9,9 @@ import {
   applyOpponentPick,
   applyPlayerPick,
   applyScriptedPlayerPick,
+  commitTieRedraw,
   initPreGameDraw,
+  isTieHoldState,
   pickRandomOpponentTileId,
   type PreGameDrawPlayer,
   type PreGameDrawRoundPick,
@@ -19,13 +21,16 @@ import {
 
 export const PRE_GAME_DRAW_OPPONENT_PICK_DELAY_MS = 1000;
 /** Both flipped tiles stay face-up with result pill visible before deal. */
-export const PRE_GAME_DRAW_REVEAL_PAUSE_MS = 1500;
+export const PRE_GAME_DRAW_REVEAL_PAUSE_MS = 2000;
 export const PRE_GAME_DRAW_RESULT_DISPLAY_MS = 1000;
+export const PRE_GAME_DRAW_TIE_HOLD_MS = 800;
+export const PRE_GAME_DRAW_TIE_MESSAGE = 'Tie — tap again';
 
 export type UsePreGameDrawUiPhase =
   | 'idle'
   | 'pick-player'
   | 'pick-opponent'
+  | 'showing-tie'
   | 'showing-reveal'
   | 'showing-result'
   | 'done';
@@ -175,6 +180,7 @@ export function usePreGameDraw({
   const opponentPickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revealPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tieHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasEnabledRef = useRef(enabled);
   const restoredSnapshot = enabled ? readRestorableDrawSnapshot(persistenceKey) : null;
   const didRestoreSnapshotRef = useRef(Boolean(restoredSnapshot));
@@ -213,11 +219,19 @@ export function usePreGameDraw({
     }
   }, []);
 
+  const clearTieHoldTimer = useCallback(() => {
+    if (tieHoldTimerRef.current) {
+      clearTimeout(tieHoldTimerRef.current);
+      tieHoldTimerRef.current = null;
+    }
+  }, []);
+
   const clearAllTimers = useCallback(() => {
     clearOpponentPickTimer();
     clearRevealPauseTimer();
     clearResultTimer();
-  }, [clearOpponentPickTimer, clearRevealPauseTimer, clearResultTimer]);
+    clearTieHoldTimer();
+  }, [clearOpponentPickTimer, clearRevealPauseTimer, clearResultTimer, clearTieHoldTimer]);
 
   const reset = useCallback(() => {
     clearAllTimers();
@@ -245,6 +259,7 @@ export function usePreGameDraw({
       clearOpponentPickTimer();
       clearRevealPauseTimer();
       clearResultTimer();
+      clearTieHoldTimer();
       setUiPhase('idle');
       setDrawState(null);
       setResultMessage(null);
@@ -268,7 +283,7 @@ export function usePreGameDraw({
     }
     setDrawState(createFreshDrawState(rngRef.current));
     setUiPhase('pick-player');
-  }, [enabled, persistenceKey, clearOpponentPickTimer, clearRevealPauseTimer, clearResultTimer]);
+  }, [enabled, persistenceKey, clearOpponentPickTimer, clearRevealPauseTimer, clearResultTimer, clearTieHoldTimer]);
 
   useEffect(() => {
     if (!initPending) return;
@@ -314,6 +329,20 @@ export function usePreGameDraw({
 
         setDrawState(afterOpponent);
 
+        if (isTieHoldState(afterOpponent)) {
+          setResultMessage(PRE_GAME_DRAW_TIE_MESSAGE);
+          setUiPhase('showing-tie');
+          clearTieHoldTimer();
+          tieHoldTimerRef.current = setTimeout(() => {
+            tieHoldTimerRef.current = null;
+            const finalized = commitTieRedraw(afterOpponent);
+            setDrawState(finalized);
+            setResultMessage(null);
+            setUiPhase('pick-player');
+          }, PRE_GAME_DRAW_TIE_HOLD_MS);
+          return;
+        }
+
         if (afterOpponent.phase === 'pick-player') {
           setUiPhase('pick-player');
           return;
@@ -358,6 +387,7 @@ export function usePreGameDraw({
       clearOpponentPickTimer,
       clearRevealPauseTimer,
       clearResultTimer,
+      clearTieHoldTimer,
       opponentLabel,
       opponentPickDelayMs,
       revealPauseMs,
