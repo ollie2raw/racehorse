@@ -193,6 +193,68 @@ export function applyPlayerPick(state: PreGameDrawState, tileId: string): PreGam
   };
 }
 
+/**
+ * Scripted draw (Daily Fritz): player may tap any tile, but the canonical player tile
+ * is fixed server-side. Reveal the tapped slot with the scripted pips so the flip
+ * matches the user's touch target (not a different tile elsewhere on the scatter).
+ */
+export function applyScriptedPlayerPick(
+  state: PreGameDrawState,
+  tappedTileId: string,
+  scriptedPlayerTileId: string,
+  scriptedFritzTileId?: string | null,
+): PreGameDrawState {
+  if (
+    tappedTileId === scriptedPlayerTileId ||
+    (scriptedFritzTileId != null && tappedTileId === scriptedFritzTileId)
+  ) {
+    return applyPlayerPick(state, scriptedPlayerTileId);
+  }
+
+  if (state.phase !== 'pick-player') {
+    throw new Error(`Cannot pick player tile while phase is ${state.phase}`);
+  }
+
+  const tappedSlot = findSlot(state, tappedTileId);
+  const scriptedSlot = findSlot(state, scriptedPlayerTileId);
+  if (!tappedSlot || tappedSlot.outOfPlay || tappedSlot.revealed) {
+    throw new Error(`Tile ${tappedTileId} is not available to pick`);
+  }
+  if (!scriptedSlot || scriptedSlot.outOfPlay) {
+    throw new Error(`Scripted player tile ${scriptedPlayerTileId} is not available`);
+  }
+
+  const scriptedTile = scriptedSlot.tile;
+  const tiles = state.tiles.map((entry) => {
+    if (entry.id === tappedTileId) {
+      return {
+        ...entry,
+        revealed: true,
+        tile: { low: scriptedTile.low, high: scriptedTile.high },
+      };
+    }
+    if (entry.id === scriptedPlayerTileId) {
+      return { ...entry, outOfPlay: true };
+    }
+    return entry;
+  });
+
+  return {
+    ...state,
+    phase: 'pick-opponent',
+    tiles,
+    currentRound: {
+      you: {
+        player: 'you',
+        tileId: scriptedPlayerTileId,
+        tile: { low: scriptedTile.low, high: scriptedTile.high },
+        pipSum: tilePipSum(scriptedTile),
+      },
+      bot: null,
+    },
+  };
+}
+
 export function pickRandomOpponentTileId(
   state: PreGameDrawState,
   rng: Rng = Math.random,

@@ -19,17 +19,20 @@ export function PreGameTileDrawBoard({
   isPlayerPickEnabled,
   onTileTap,
 }: PreGameTileDrawBoardProps) {
+  const tileOrderKey = drawState.tiles.map((slot) => slot.id).join('|');
+  const scatterById = useMemo(() => {
+    // Lock scatter to the full shuffled deck order — filtering outOfPlay tiles used to
+    // recompute positions mid-draw and made the board jump back to a "fresh" scatter.
+    const positions = computePreGameDrawScatterPositions(drawState.tiles.map((slot) => slot.id));
+    return new Map(positions.map((pos) => [pos.tileId, pos]));
+  }, [tileOrderKey]);
+
   const visibleSlots = useMemo(
     () => drawState.tiles.filter((slot) => !slot.outOfPlay),
     [drawState.tiles],
   );
 
-  const scatterById = useMemo(() => {
-    const positions = computePreGameDrawScatterPositions(visibleSlots.map((slot) => slot.id));
-    return new Map(positions.map((pos) => [pos.tileId, pos]));
-  }, [visibleSlots]);
-
-  const hasRevealedTiles = visibleSlots.some((slot) => slot.revealed);
+  const hasRevealedTiles = drawState.tiles.some((slot) => slot.revealed && !slot.outOfPlay);
 
   return (
     <div
@@ -48,6 +51,7 @@ export function PreGameTileDrawBoard({
 
           const pickable = isPlayerPickEnabled && !slot.revealed;
           const isFaceDown = !slot.revealed;
+          const isRevealed = slot.revealed;
           const tileWidth = tileSize * 2;
 
           return (
@@ -55,7 +59,7 @@ export function PreGameTileDrawBoard({
               key={slot.id}
               className={[
                 'pre-game-draw-board__tile-slot',
-                slot.revealed ? 'is-revealed' : 'is-face-down',
+                isRevealed ? 'is-revealed' : 'is-face-down',
                 pickable ? 'is-pickable' : '',
               ]
                 .filter(Boolean)

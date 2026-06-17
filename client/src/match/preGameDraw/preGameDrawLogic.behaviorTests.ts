@@ -6,6 +6,7 @@ import {
 import {
   applyOpponentPick,
   applyPlayerPick,
+  applyScriptedPlayerPick,
   generateDoubleSixSet,
   getPickableTileIds,
   initPreGameDraw,
@@ -168,9 +169,37 @@ function testCanonicalTileIdUsesSmallerPipFirst(): void {
   assertTrue(!hasSwapped, 'deck does not contain reversed 5-3 id');
 }
 
+function testScriptedPlayerPickRevealsTappedSlotWithScriptedPips(): void {
+  const state = initPreGameDraw();
+  const tappedId = '3-5';
+  const scriptedId = '0-4';
+  const after = applyScriptedPlayerPick(state, tappedId, scriptedId, '0-1');
+
+  assertEqual(after.phase, 'pick-opponent', 'advances to opponent pick');
+  assertEqual(after.currentRound.you?.tileId, scriptedId, 'canonical scripted id stored');
+
+  const tapped = after.tiles.find((slot) => slot.id === tappedId)!;
+  assertTrue(tapped.revealed, 'tapped slot flips face-up');
+  assertEqual(tapped.tile, { low: 0, high: 4 }, 'tapped slot shows scripted pips');
+
+  const hiddenScripted = after.tiles.find((slot) => slot.id === scriptedId)!;
+  assertTrue(hiddenScripted.outOfPlay, 'true scripted slot removed from scatter');
+  assertTrue(!hiddenScripted.revealed, 'true scripted slot stays face-down off-board');
+}
+
+function testScriptedPlayerPickFritzTapFallsBackToScriptedPlayerSlot(): void {
+  const state = initPreGameDraw();
+  const after = applyScriptedPlayerPick(state, '0-1', '0-4', '0-1');
+  const playerSlot = after.tiles.find((slot) => slot.id === '0-4')!;
+  assertTrue(playerSlot.revealed, 'scripted player tile reveals at its position');
+  assertEqual(after.phase, 'pick-opponent', 'still advances');
+}
+
 function run(): void {
   testInitHasTwentyEightPickableTiles();
   testCanonicalTileIdUsesSmallerPipFirst();
+  testScriptedPlayerPickRevealsTappedSlotWithScriptedPips();
+  testScriptedPlayerPickFritzTapFallsBackToScriptedPlayerSlot();
   testWinnerRemovesBothTilesAndLeavesTwentySixForDeal();
   testResolvedWinnerKeepsBothTilesVisibleOnBoard();
   testTieRedrawRemovesBothAndReopensPicks();

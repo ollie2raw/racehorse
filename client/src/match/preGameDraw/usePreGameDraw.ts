@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  clearPreGameDrawSnapshot,
+  readPreGameDrawSnapshot,
+  writePreGameDrawSnapshot,
+} from './preGameDrawPersistence.ts';
 import type { Tile } from '../../types.ts';
 import {
   applyOpponentPick,
   applyPlayerPick,
+  applyScriptedPlayerPick,
   initPreGameDraw,
   pickRandomOpponentTileId,
   type PreGameDrawPlayer,
@@ -50,6 +56,8 @@ export interface UsePreGameDrawOptions {
   scriptedPlayerTileId?: string | null;
   scriptedFritzTileId?: string | null;
   scriptedWinner?: PreGameDrawPlayer | null;
+  /** Survives React StrictMode remounts / parent re-renders for the same draw session. */
+  persistenceKey?: string | null;
   onComplete: (payload: PreGameDrawCompletePayload) => void;
 }
 
@@ -77,13 +85,8 @@ function resolveScriptedOutcome({
     slot.id === scriptedFritzTileId ? { ...slot, revealed: true } : slot,
   );
 
-  // Exclude revealed tiles from the deal pool (same behavior as resolveWinner()).
-  const tilesOutOfPlay = tilesRevealed.map((slot) =>
-    slot.revealed ? { ...slot, outOfPlay: true } : slot,
-  );
-
-  const remainingDeck = tilesOutOfPlay
-    .filter((slot) => !slot.outOfPlay)
+  const remainingDeck = tilesRevealed
+    .filter((slot) => !slot.outOfPlay && !slot.revealed)
     .map((slot) => ({ low: slot.tile.low, high: slot.tile.high }));
 
   const botPick: PreGameDrawRoundPick = {
@@ -96,7 +99,8 @@ function resolveScriptedOutcome({
   return {
     ...stateAfterPlayerPick,
     phase: 'resolved',
-    tiles: tilesOutOfPlay,
+    // Keep both flipped tiles on the board for reveal/result UI; deal pool excludes them.
+    tiles: tilesRevealed,
     winner: scriptedWinner,
     remainingDeck,
     currentRound: { you: youPick, bot: botPick },
@@ -127,6 +131,13 @@ function createFreshDrawState(rng?: Rng): PreGameDrawState {
   return initPreGameDraw(undefined, rng);
 }
 
+function readRestorableDrawSnapshot(persistenceKey: string | null | undefined) {
+  if (!persistenceKey) return null;
+  const saved = readPreGameDrawSnapshot(persistenceKey);
+  if (!saved || saved.uiPhase === 'idle' || saved.uiPhase === 'done') return null;
+  return saved;
+}
+
 /** True only on false→true — avoids re-shuffling when enabled stays true. */
 export function shouldInitPreGameDrawOnEnable(wasEnabled: boolean, enabled: boolean): boolean {
   return enabled && !wasEnabled;
@@ -150,6 +161,7 @@ export function usePreGameDraw({
   scriptedPlayerTileId,
   scriptedFritzTileId,
   scriptedWinner,
+  persistenceKey,
   onComplete,
 }: UsePreGameDrawOptions): UsePreGameDrawResult {
   const onCompleteRef = useRef(onComplete);
@@ -164,14 +176,20 @@ export function usePreGameDraw({
   const revealPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasEnabledRef = useRef(enabled);
+  const restoredSnapshot = enabled ? readRestorableDrawSnapshot(persistenceKey) : null;
+  const didRestoreSnapshotRef = useRef(Boolean(restoredSnapshot));
+  const persistenceKeyRef = useRef(persistenceKey);
+  persistenceKeyRef.current = persistenceKey;
 
   const [uiPhase, setUiPhase] = useState<UsePreGameDrawUiPhase>(() =>
-    enabled ? 'pick-player' : 'idle',
+    restoredSnapshot?.uiPhase ?? (enabled ? 'pick-player' : 'idle'),
   );
   const [drawState, setDrawState] = useState<PreGameDrawState | null>(() =>
-    enabled ? createFreshDrawState(rng) : null,
+    restoredSnapshot?.drawState ?? (enabled ? createFreshDrawState(rng) : null),
   );
-  const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [resultMessage, setResultMessage] = useState<string | null>(
+    () => restoredSnapshot?.resultMessage ?? null,
+  );
   const [initPending, setInitPending] = useState(false);
 
   const clearOpponentPickTimer = useCallback(() => {
@@ -203,6 +221,10 @@ export function usePreGameDraw({
 
   const reset = useCallback(() => {
     clearAllTimers();
+    didRestoreSnapshotRef.current = false;
+    if (persistenceKeyRef.current) {
+      clearPreGameDrawSnapshot(persistenceKeyRef.current);
+    }
     setResultMessage(null);
     if (!enabled) {
       wasEnabledRef.current = false;
@@ -236,9 +258,17 @@ export function usePreGameDraw({
     wasEnabledRef.current = true;
     setInitPending(true);
     setResultMessage(null);
+    const restored = readRestorableDrawSnapshot(persistenceKey);
+    if (restored) {
+      didRestoreSnapshotRef.current = true;
+      setDrawState(restored.drawState);
+      setUiPhase(restored.uiPhase);
+      setResultMessage(restored.resultMessage);
+      return;
+    }
     setDrawState(createFreshDrawState(rngRef.current));
     setUiPhase('pick-player');
-  }, [enabled, clearOpponentPickTimer, clearRevealPauseTimer, clearResultTimer]);
+  }, [enabled, persistenceKey, clearOpponentPickTimer, clearRevealPauseTimer, clearResultTimer]);
 
   useEffect(() => {
     if (!initPending) return;
@@ -311,6 +341,9 @@ export function usePreGameDraw({
           resultTimerRef.current = setTimeout(() => {
             resultTimerRef.current = null;
             setUiPhase('done');
+            if (persistenceKeyRef.current) {
+              clearPreGameDrawSnapshot(persistenceKeyRef.current);
+            }
             onCompleteRef.current({
               winner: afterOpponent.winner!,
               remainingDeck: afterOpponent.remainingDeck!,
@@ -342,7 +375,15 @@ export function usePreGameDraw({
       const effectiveTileId = scriptedMode && scriptedPlayerTileId != null ? scriptedPlayerTileId : tileId;
       let afterPlayer: PreGameDrawState;
       try {
-        afterPlayer = applyPlayerPick(drawState, effectiveTileId);
+        afterPlayer =
+          scriptedMode && scriptedPlayerTileId != null
+            ? applyScriptedPlayerPick(
+                drawState,
+                tileId,
+                scriptedPlayerTileId,
+                scriptedFritzTileId,
+              )
+            : applyPlayerPick(drawState, effectiveTileId);
       } catch (err) {
         console.error('[df-scripted-draw] player pick failed', {
           tappedTileId: tileId,
@@ -359,8 +400,20 @@ export function usePreGameDraw({
       setUiPhase('pick-opponent');
       scheduleOpponentPick(afterPlayer);
     },
-    [drawState, initPending, scheduleOpponentPick, uiPhase, scriptedMode, scriptedPlayerTileId],
+    [drawState, initPending, scheduleOpponentPick, uiPhase, scriptedMode, scriptedPlayerTileId, scriptedFritzTileId],
   );
+
+  useEffect(() => {
+    if (!enabled || !persistenceKey || !drawState) return;
+    writePreGameDrawSnapshot(persistenceKey, { drawState, uiPhase, resultMessage });
+  }, [drawState, enabled, persistenceKey, resultMessage, uiPhase]);
+
+  useEffect(() => {
+    if (!enabled || uiPhase !== 'pick-opponent' || !drawState || opponentPickTimerRef.current) return;
+    if (!didRestoreSnapshotRef.current) return;
+    didRestoreSnapshotRef.current = false;
+    scheduleOpponentPick(drawState);
+  }, [drawState, enabled, scheduleOpponentPick, uiPhase]);
 
   const active = enabled && uiPhase !== 'idle' && uiPhase !== 'done';
   const isPlayerPickEnabled = isPreGameDrawTapAllowed(uiPhase, initPending, drawState);

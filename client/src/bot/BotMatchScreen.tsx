@@ -1581,6 +1581,10 @@ export default function BotMatchScreen({
     scriptedPlayerTileId,
     scriptedFritzTileId,
     scriptedWinner: dailyFritzScriptedDraw ? dailyFritzScriptedDraw.draw_winner : null,
+    persistenceKey:
+      isDailyFritzMode && dailyFritzPackage?.attempt_id
+        ? `df-draw:${dailyFritzPackage.attempt_id}:${dailyFritzPackage.current_game_number ?? 1}`
+        : null,
     onComplete: handlePreGameDrawComplete,
   });
 
