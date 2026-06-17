@@ -262,6 +262,9 @@ export default function App() {
     signIn,
     signUp,
     resetPassword,
+    updatePassword,
+    passwordRecoveryPending,
+    clearPasswordRecoveryPending,
     signOut,
     updateUsername,
     refreshAuthProfile,
@@ -2062,7 +2065,13 @@ export default function App() {
       onSignIn={signIn}
       onSignUp={signUp}
       onResetPassword={resetPassword}
-      usernameModalOpen={(!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen}
+      passwordRecoveryPending={passwordRecoveryPending}
+      onUpdatePassword={updatePassword}
+      onPasswordRecoveryClose={clearPasswordRecoveryPending}
+      usernameModalOpen={
+        !passwordRecoveryPending &&
+        ((!onboardingDismissed && needsUsernameOnboarding) || usernameModalOpen)
+      }
       currentUsername={authProfile?.username ?? null}
       usernameIsProfileEdit={usernameModalOpen}
       onUsernameSave={async (username) => {

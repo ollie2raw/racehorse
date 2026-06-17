@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AuthChangeEvent, User } from '@supabase/supabase-js';
 import { getSupabaseConfigError, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { PASSWORD_RECOVERY_PENDING_KEY } from './recoveryHash';
 
 export interface UserProfile {
   id: string;
@@ -182,6 +183,24 @@ function markEmailVerificationPending(email: string): void {
   }
 }
 
+function clearPasswordRecoveryPendingMarker(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(PASSWORD_RECOVERY_PENDING_KEY);
+  } catch {
+    // no-op
+  }
+}
+
+function hasPasswordRecoveryPendingMarker(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(PASSWORD_RECOVERY_PENDING_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function consumeEmailVerificationPending(email: string | null | undefined): boolean {
   if (typeof window === 'undefined') return false;
   const normalizedEmail = email?.trim().toLowerCase();
@@ -209,6 +228,7 @@ export function useAuth() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [justVerified, setJustVerified] = useState(false);
+  const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
 
   const fallbackProfile = useCallback((sessionUser: User): UserProfile => {
     const derived = sessionUser.email?.split('@')[0]?.trim().toLowerCase();
@@ -357,6 +377,14 @@ export function useAuth() {
       }
 
       setUser(sessionUser);
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecoveryPending(true);
+        try {
+          window.sessionStorage.setItem(PASSWORD_RECOVERY_PENDING_KEY, '1');
+        } catch {
+          // no-op
+        }
+      }
       if (
         event === 'SIGNED_IN' &&
         sessionUser.email_confirmed_at &&
@@ -397,6 +425,9 @@ export function useAuth() {
         } = await withTimeout(supabase.auth.getSession(), SESSION_BOOTSTRAP_TIMEOUT_MS);
         setAccessToken(session?.access_token ?? null);
         await syncSession('INITIAL_BOOTSTRAP', session?.user ?? null);
+        if (session?.user && hasPasswordRecoveryPendingMarker()) {
+          setPasswordRecoveryPending(true);
+        }
       } catch {
         if (active) {
           setUser(null);
@@ -688,6 +719,28 @@ export function useAuth() {
     }
   }, []);
 
+  const updatePassword = useCallback(async (password: string): Promise<AuthResult> => {
+    if (!supabase) return { error: getSupabaseConfigError() };
+    if (!user) return { error: 'You must be signed in to update your password.' };
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.updateUser({ password }),
+        AUTH_REQUEST_TIMEOUT_MS,
+      );
+      if (error) return { error: error.message };
+      setPasswordRecoveryPending(false);
+      clearPasswordRecoveryPendingMarker();
+      return { error: null, message: 'Password updated.' };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Unable to update password.' };
+    }
+  }, [user]);
+
+  const clearPasswordRecoveryPending = useCallback(() => {
+    setPasswordRecoveryPending(false);
+    clearPasswordRecoveryPendingMarker();
+  }, []);
+
   const refreshAuthProfile = useCallback(async (): Promise<void> => {
     if (!user) return;
     await hydrateProfile(user);
@@ -710,6 +763,9 @@ export function useAuth() {
     signOut,
     updateUsername,
     resetPassword,
+    updatePassword,
+    passwordRecoveryPending,
+    clearPasswordRecoveryPending,
     refreshAuthProfile,
     applyProfilePatch,
   };
