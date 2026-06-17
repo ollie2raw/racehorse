@@ -476,6 +476,16 @@ function logDailyFritzScriptedDrawMount(payload: Record<string, unknown>): void 
   console.log('[df-scripted-draw] mount', payload);
 }
 
+/** Session storage may contain the pre-game draw shell — that is not a mid-match resume. */
+function isPersistedDailyFritzPlayableResume(match: BotMatchState): boolean {
+  return !(
+    match.handNumber === 0 &&
+    match.players.you.hand.length === 0 &&
+    match.players.bot.hand.length === 0 &&
+    match.handOver
+  );
+}
+
 function buildDoubleSixTiles(): Tile[] {
   const tiles: Tile[] = [];
   for (let high = 0; high <= 6; high += 1) {
@@ -956,18 +966,25 @@ export default function BotMatchScreen({
     }
   };
   const initialPersistedDailyFritzMatch = loadPersistedDailyFritzMatch();
+  const resumablePersistedDailyFritzMatch =
+    initialPersistedDailyFritzMatch?.match &&
+    isPersistedDailyFritzPlayableResume(initialPersistedDailyFritzMatch.match)
+      ? initialPersistedDailyFritzMatch
+      : null;
   const dailyFritzScriptedDrawReady = isDailyFritzScriptedDrawReady(dailyFritzPackage);
+  const preGameDrawEligibilityInput = {
+    mode,
+    dealSize,
+    isGuidedMode,
+    isAuthoringMode,
+    isAuthoringV2Mode,
+    isGuidedV2Mode,
+    isDailyFritzMode: mode === 'daily-fritz',
+    hasPersistedDailyFritzMatch: Boolean(resumablePersistedDailyFritzMatch),
+  };
+  const preGameDrawEligibleBase = isPreGameDrawEligible(preGameDrawEligibilityInput);
   const preGameDrawEligible =
-    isPreGameDrawEligible({
-      mode,
-      dealSize,
-      isGuidedMode,
-      isAuthoringMode,
-      isAuthoringV2Mode,
-      isGuidedV2Mode,
-      isDailyFritzMode: mode === 'daily-fritz',
-      hasPersistedDailyFritzMatch: Boolean(initialPersistedDailyFritzMatch),
-    }) &&
+    preGameDrawEligibleBase &&
     (mode !== 'daily-fritz' || dailyFritzScriptedDrawReady);
   const [preGameDrawActive, setPreGameDrawActive] = useState(preGameDrawEligible);
   const preGameDrawActiveRef = useRef(preGameDrawActive);
@@ -1119,7 +1136,7 @@ export default function BotMatchScreen({
     }
 
     return (
-      initialPersistedDailyFritzMatch?.match ??
+      resumablePersistedDailyFritzMatch?.match ??
       (preGameDrawEligible
         ? createPreGameDrawShellMatch(winningScore, dealSize)
         : mode === 'daily-fritz' && dailyFritzPackage
@@ -1163,13 +1180,13 @@ export default function BotMatchScreen({
     });
   }, [showLeaveConfirm]);
   const [movesUsed, setMovesUsed] = useState(
-    initialPersistedDailyFritzMatch?.movesUsed ?? 0,
+    resumablePersistedDailyFritzMatch?.movesUsed ?? 0,
   );
   const [dailyLeaderboard, setDailyLeaderboard] = useState<DailyPuzzleLeaderboardEntry[]>([]);
   const [dailyLeaderboardLoading, setDailyLeaderboardLoading] = useState(false);
   const [dailyLeaderboardError, setDailyLeaderboardError] = useState<string | null>(null);
   const [moveLog, setMoveLog] = useState<MoveEntry[]>(
-    initialPersistedDailyFritzMatch?.moveLog ?? [],
+    resumablePersistedDailyFritzMatch?.moveLog ?? [],
   );
   const [ghostMoveLog, setGhostMoveLog] = useState<GhostMoveLogEntry[]>([]);
   const [handTileSize, setHandTileSize] = useState(56);
@@ -1276,7 +1293,7 @@ export default function BotMatchScreen({
   const fritzSessionReplyRef = useRef<Required<AuthoredStep>['fritzReplyEvents']>([]);
   const isTransitioningRef = useRef(false);
   const [dailyFritzHandIndex, setDailyFritzHandIndex] = useState(() => {
-    const persisted = initialPersistedDailyFritzMatch?.currentHandIndex;
+    const persisted = resumablePersistedDailyFritzMatch?.currentHandIndex;
     if (typeof persisted === 'number' && Number.isFinite(persisted)) {
       return persisted;
     }
@@ -2386,6 +2403,20 @@ export default function BotMatchScreen({
       fritzTileIdInDeck: fritzTileId ? deckIds.has(fritzTileId) : false,
       rawPlayerIdMismatch: rawPlayerId != null && playerTileId != null && rawPlayerId !== playerTileId,
       rawFritzIdMismatch: rawFritzId != null && fritzTileId != null && rawFritzId !== fritzTileId,
+      mode,
+      dealSize,
+      isDailyFritzMode: mode === 'daily-fritz',
+      isDailyFritzModePassedToGate: preGameDrawEligibilityInput.isDailyFritzMode,
+      hasPersistedDailyFritzMatch: preGameDrawEligibilityInput.hasPersistedDailyFritzMatch,
+      hasRawPersistedSessionMatch: Boolean(initialPersistedDailyFritzMatch),
+      rawPersistedIsPlayableResume: Boolean(
+        initialPersistedDailyFritzMatch?.match &&
+          isPersistedDailyFritzPlayableResume(initialPersistedDailyFritzMatch.match),
+      ),
+      isGuidedMode,
+      isAuthoringMode,
+      preGameDrawEligibleBase,
+      scriptedDrawGatePass: mode !== 'daily-fritz' || dailyFritzScriptedDrawReady,
       scriptedDrawReady: dailyFritzScriptedDrawReady,
       preGameDrawEligible,
       preGameDrawActive,
@@ -2418,6 +2449,7 @@ export default function BotMatchScreen({
     dailyFritzScriptedDrawReady,
     preGameDrawEligible,
     preGameDrawActive,
+    preGameDrawEligibleBase,
     scriptedPlayerTileId,
     scriptedFritzTileId,
   ]);
