@@ -1,0 +1,64 @@
+.pgr-prompt-overlay.game-over-overlay {
+  z-index: 10055;
+}
+
+.pgr-prompt-card.game-over-card {
+  --df-result-accent: var(--tier-elite, #e7b64a);
+  max-width: 420px;
+  animation: none;
+}
+
+.pgr-prompt-card.game-over-card.pgr-prompt-card--blue {
+  --df-result-accent: #5eb8ff;
+}
+
+.pgr-prompt-accuracy {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pgr-prompt-accuracy-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(191, 213, 223, 0.72);
+}
+
+.pgr-prompt-accuracy-value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--df-result-accent);
+}
+
+.pgr-prompt-accuracy-grade {
+  font-size: 13px;
+  color: rgba(223, 236, 244, 0.82);
+}
+
+.pgr-prompt-skip {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(191, 213, 223, 0.62);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pgr-prompt-skip:hover {
+  color: rgba(223, 236, 244, 0.88);
+}
+
+.pgr-prompt-card--blue .df-result-primary {
+  border-color: rgba(94, 184, 255, 0.35);
+  background: rgba(94, 184, 255, 0.14);
+  color: #b8e0ff;
+}

@@ -1,0 +1,177 @@
+.pre-game-draw-board {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.pre-game-draw-board__scatter {
+  position: absolute;
+  inset: 0;
+}
+
+.pre-game-draw-board__tile-slot {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 220ms ease,
+    transform 280ms cubic-bezier(0.2, 0, 0, 1),
+    filter 160ms ease;
+}
+
+.pre-game-draw-board__tile-slot.is-pickable {
+  cursor: pointer;
+}
+
+.pre-game-draw-board__tile-slot.is-pickable:hover {
+  filter: brightness(1.06);
+}
+
+/* Disabled only blocks clicks on the draw board — never dims tile faces */
+.pre-game-draw-board .domino-tile.pre-game-draw-tile.disabled {
+  opacity: 1 !important;
+  cursor: default;
+}
+
+/* Revealed tiles: bright, lifted ivory */
+.pre-game-draw-board__tile-slot.is-revealed {
+  z-index: 80 !important;
+  opacity: 1 !important;
+  filter:
+    brightness(1.12)
+    saturate(1.1)
+    drop-shadow(0 12px 22px rgba(0, 0, 0, 0.42))
+    drop-shadow(0 0 16px rgba(255, 255, 255, 0.14));
+}
+
+/* Once any tile flips, mute the pile — same ivory backs, just dimmed */
+.pre-game-draw-board.has-revealed-tiles .pre-game-draw-board__tile-slot.is-face-down {
+  opacity: 0.4;
+  filter: brightness(0.72);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .pre-game-draw-board
+  .pre-game-draw-board__tile-slot.is-revealed
+  .domino-body {
+  background-color: #fffef9 !important;
+  background-image:
+    radial-gradient(ellipse 96% 74% at 18% 5%, rgba(255, 255, 255, 0.92), transparent 58%),
+    radial-gradient(ellipse 90% 70% at 84% 94%, rgba(58, 48, 34, 0.05), transparent 52%),
+    linear-gradient(168deg, #ffffff 0%, #fffdf7 46%, #f9f1de 100%) !important;
+  border-color: rgba(108, 92, 68, 0.5) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 1),
+    inset 0 -2px 5px rgba(72, 58, 38, 0.07),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.65),
+    0 10px 20px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen)
+  .pre-game-draw-board
+  .pre-game-draw-board__tile-slot.is-revealed
+  .domino-body
+  .pip {
+  filter: saturate(1.18) brightness(1.06) contrast(1.05) !important;
+}
+
+.pre-game-draw-board__instruction {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 14, 24, 0.82);
+  color: rgba(255, 255, 255, 0.88);
+  font-family: var(--font-body, 'Outfit', sans-serif);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.pre-game-draw-board__instruction--thinking {
+  color: rgba(196, 214, 255, 0.92);
+  border-color: rgba(100, 160, 255, 0.28);
+}
+
+.pre-game-draw-board__result {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 140;
+  padding: 14px 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(231, 182, 74, 0.35);
+  background: rgba(8, 14, 24, 0.9);
+  color: rgba(255, 244, 220, 0.98);
+  font-family: var(--font-display, 'Barlow Condensed', sans-serif);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* Face-down backs inherit ivory domino-body from match skin; deepen for draw pile. */
+.pre-game-draw-board .domino-tile.face-down .domino-body--face-down {
+  border-radius: 7px;
+}
+
+.pre-game-draw-board .domino-face-back-half {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 5px;
+  background-color: #ebe1cf;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 22% 12%, rgba(255, 255, 255, 0.55), transparent 58%),
+    linear-gradient(165deg, #fffdf8 0%, #efe4d2 55%, #e0d3bc 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 4px rgba(72, 58, 38, 0.12);
+}
+
+.pre-game-draw-board .domino-tile.face-down .domino-divider.vertical {
+  opacity: 0.35;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .pre-game-draw-hand-dock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--tray-height, 120px);
+  padding: 12px 20px 18px;
+}
+
+.pre-game-draw-hand-dock__line {
+  margin: 0;
+  max-width: 28rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--font-body, 'Outfit', sans-serif);
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+}
+
+.pre-game-draw-hand-dock__line strong {
+  color: rgba(255, 244, 220, 0.95);
+  font-weight: 700;
+}

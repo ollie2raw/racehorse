@@ -17,6 +17,12 @@ import type { UserProfile } from './auth/useAuth';
 
 export const LEARN_MODE_VISIBLE = true;
 
+/** Flagship campaign — hidden until ready to ship. */
+export const JOURNEY_MODE_VISIBLE = false;
+
+/** Pivotal-turn post-game review + full game analyzer — hidden until ready to ship. */
+export const POST_GAME_REVIEW_VISIBLE = false;
+
 export type AppMode =
   | 'home'
   | 'multiplayer'
@@ -34,6 +40,7 @@ export type AppMode =
   | 'stats'
   | 'ratingHistory'
   | 'singlePlayerHub'
+  | 'journey'
   | 'tournament'
   | 'leaderboard'
   | 'profile'

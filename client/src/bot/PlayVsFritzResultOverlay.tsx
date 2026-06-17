@@ -12,6 +12,12 @@ export type PlayVsFritzResultOverlayProps = {
   onChangeSetup: () => void;
   onHome?: () => void;
   showHome?: boolean;
+  /** When set, replaces default rematch/setup/home actions (e.g. Journey trial return). */
+  customActions?: Array<{
+    label: string;
+    onClick: () => void;
+    variant: 'primary' | 'secondary';
+  }>;
 };
 
 export function PlayVsFritzResultOverlay({
@@ -25,6 +31,7 @@ export function PlayVsFritzResultOverlay({
   onChangeSetup,
   onHome,
   showHome = false,
+  customActions,
 }: PlayVsFritzResultOverlayProps) {
   const margin = Math.abs(youScore - botScore);
 
@@ -85,17 +92,32 @@ export function PlayVsFritzResultOverlay({
             {ratingSlot ? <div className="df-result-meta-row">{ratingSlot}</div> : null}
 
             <div className="df-result-actions">
-              <button type="button" className="df-result-primary" onClick={onRematch}>
-                Rematch
-              </button>
-              <button type="button" className="df-result-secondary" onClick={onChangeSetup}>
-                Change Setup
-              </button>
-              {showHome && onHome ? (
-                <button type="button" className="df-result-secondary" onClick={onHome}>
-                  Home
-                </button>
-              ) : null}
+              {customActions ? (
+                customActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    className={action.variant === 'primary' ? 'df-result-primary' : 'df-result-secondary'}
+                    onClick={action.onClick}
+                  >
+                    {action.label}
+                  </button>
+                ))
+              ) : (
+                <>
+                  <button type="button" className="df-result-primary" onClick={onRematch}>
+                    Rematch
+                  </button>
+                  <button type="button" className="df-result-secondary" onClick={onChangeSetup}>
+                    Change Setup
+                  </button>
+                  {showHome && onHome ? (
+                    <button type="button" className="df-result-secondary" onClick={onHome}>
+                      Home
+                    </button>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </div>

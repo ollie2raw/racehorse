@@ -1,0 +1,120 @@
+.prs-overlay.game-over-overlay {
+  z-index: 10065;
+}
+
+.prs-card.game-over-card {
+  --df-result-accent: var(--tier-elite, #e7b64a);
+  width: min(480px, calc(100vw - 32px));
+  animation: none;
+}
+
+.prs-card.game-over-card.prs-card--blue {
+  --df-result-accent: #5eb8ff;
+}
+
+.prs-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.prs-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: rgba(236, 248, 252, 0.96);
+}
+
+.prs-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(191, 213, 223, 0.78);
+}
+
+.prs-lessons {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prs-lesson {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.prs-lesson-index {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--df-result-accent);
+}
+
+.prs-lesson-copy {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(223, 236, 244, 0.92);
+}
+
+.prs-pattern {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.prs-pattern-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(191, 213, 223, 0.72);
+}
+
+.prs-pattern-value {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(223, 236, 244, 0.9);
+}
+
+.prs-pattern-count {
+  color: var(--df-result-accent);
+  font-weight: 700;
+}
+
+.prs-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.prs-full-review-link {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(191, 213, 223, 0.72);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.prs-full-review-link:hover {
+  color: rgba(223, 236, 244, 0.92);
+}
+
+.prs-card--blue .df-result-primary {
+  border-color: rgba(94, 184, 255, 0.35);
+  background: rgba(94, 184, 255, 0.14);
+  color: #b8e0ff;
+}

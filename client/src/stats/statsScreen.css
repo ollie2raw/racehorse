@@ -197,6 +197,22 @@
   padding: clamp(20px, 3vh, 36px) clamp(24px, 4vw, 60px);
 }
 
+.stats-page-training-counter {
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.stats-page-training-counter strong {
+  color: rgba(236, 252, 245, 0.92);
+  font-weight: 700;
+}
+
 .stats-page-note {
   margin: 0 0 16px;
   font-family: var(--font-body);

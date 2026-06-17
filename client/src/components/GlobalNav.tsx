@@ -33,7 +33,7 @@ interface GlobalNavProps {
 
 const TABS: { label: string; mode: AppMode; activeModes: AppMode[] }[] = [
   { label: 'Multiplayer', mode: 'multiplayer', activeModes: ['multiplayer'] },
-  { label: 'Single Player', mode: 'singlePlayerHub', activeModes: ['singlePlayerHub', 'botSetup', 'ghostSetup', 'noBrainer', 'dailyFritz', 'daily'] },
+  { label: 'Single Player', mode: 'singlePlayerHub', activeModes: ['singlePlayerHub', 'journey', 'botSetup', 'ghostSetup', 'noBrainer', 'dailyFritz', 'daily'] },
   { label: 'Tournament', mode: 'tournament', activeModes: ['tournament'] },
   { label: 'Social', mode: 'feed', activeModes: ['feed', 'friends', 'leaderboard', 'profile', 'stats'] },
   { label: 'Learn', mode: 'learn', activeModes: ['learn'] },

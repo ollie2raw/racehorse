@@ -1,0 +1,197 @@
+.ptr-card-overlay.game-over-overlay {
+  z-index: 10060;
+}
+
+.ptr-card.game-over-card {
+  --df-result-accent: var(--tier-elite, #e7b64a);
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  animation: none;
+  overflow: hidden;
+}
+
+.ptr-card.game-over-card.ptr-card--blue {
+  --df-result-accent: #5eb8ff;
+}
+
+.ptr-card-panel {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+.ptr-card-header {
+  display: grid;
+  gap: 4px;
+}
+
+.ptr-card-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--df-result-accent);
+}
+
+.ptr-card-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: rgba(236, 248, 252, 0.96);
+}
+
+.ptr-card-context {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(191, 213, 223, 0.78);
+}
+
+.ptr-board-frame {
+  position: relative;
+  min-height: 160px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 14, 24, 0.72);
+  overflow: hidden;
+}
+
+.ptr-board-frame .board-wrap {
+  pointer-events: none;
+}
+
+.ptr-move-compare {
+  display: grid;
+  gap: 8px;
+}
+
+.ptr-move-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 13px;
+}
+
+.ptr-move-row.is-best {
+  border-color: rgba(94, 184, 255, 0.22);
+  background: rgba(94, 184, 255, 0.08);
+}
+
+.ptr-move-row-label {
+  color: rgba(191, 213, 223, 0.72);
+}
+
+.ptr-move-row-value {
+  font-weight: 700;
+  color: rgba(236, 248, 252, 0.94);
+  text-align: right;
+}
+
+.ptr-rating-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ptr-miss-section {
+  display: grid;
+  gap: 8px;
+}
+
+.ptr-miss-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(191, 213, 223, 0.72);
+}
+
+.ptr-miss-hint {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(191, 213, 223, 0.58);
+}
+
+.ptr-miss-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ptr-miss-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(223, 236, 244, 0.88);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ptr-miss-chip.is-selected {
+  border-color: rgba(231, 182, 74, 0.45);
+  background: rgba(231, 182, 74, 0.14);
+  color: #f5dfaa;
+}
+
+.ptr-card--blue .ptr-miss-chip.is-selected {
+  border-color: rgba(94, 184, 255, 0.45);
+  background: rgba(94, 184, 255, 0.14);
+  color: #b8e0ff;
+}
+
+.ptr-note-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(236, 248, 252, 0.94);
+  font-size: 13px;
+}
+
+.ptr-note-input::placeholder {
+  color: rgba(191, 213, 223, 0.48);
+}
+
+.ptr-nav {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.ptr-nav-step {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(191, 213, 223, 0.72);
+  text-align: center;
+}
+
+.ptr-nav-btn {
+  justify-self: start;
+}
+
+.ptr-nav-btn.is-next {
+  justify-self: end;
+}
+
+.ptr-nav-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}

@@ -99,6 +99,8 @@ export interface DominoTileProps {
   highlight?: boolean;
   /** Dimmed when the tile cannot be played on any open end (player's turn). */
   unplayable?: boolean;
+  /** Ivory back — no pips (pre-game draw, boneyard face-down). */
+  faceDown?: boolean;
   onClick?: () => void;
   disabled?: boolean;
   className?: string;
@@ -131,6 +133,7 @@ function DominoTileComponent({
   selected = false,
   highlight = false,
   unplayable = false,
+  faceDown = false,
   onClick,
   disabled = false,
   className = '',
@@ -143,6 +146,7 @@ function DominoTileComponent({
   const tileClass = [
     'domino-tile',
     isDouble ? 'double' : '',
+    faceDown ? 'face-down' : '',
     selected ? 'selected' : '',
     highlight ? 'highlight' : '',
     unplayable ? 'unplayable' : '',
@@ -151,6 +155,32 @@ function DominoTileComponent({
   ]
     .filter(Boolean)
     .join(' ');
+
+  if (faceDown) {
+    return (
+      <button
+        className={tileClass}
+        onClick={onClick}
+        disabled={disabled}
+        style={{
+          display: 'block',
+          padding: 0,
+          border: 'none',
+          background: 'none',
+          cursor: disabled ? 'default' : onClick ? 'pointer' : 'default',
+          transform: `rotate(${rotation}deg)`,
+          transition: 'filter 0.16s ease, opacity 0.16s ease',
+          ...style,
+        }}
+      >
+        <div className="domino-body domino-body--face-down" style={{ display: 'flex', flexDirection: 'row' }}>
+          <div className="domino-face-back-half" style={{ width: size, height: size }} aria-hidden="true" />
+          <div className="domino-divider vertical" />
+          <div className="domino-face-back-half" style={{ width: size, height: size }} aria-hidden="true" />
+        </div>
+      </button>
+    );
+  }
 
   // Determine which pip to show first based on flipped flag
   // When flipped=false: low on left/top, high on right/bottom
@@ -198,6 +228,7 @@ function areDominoTilePropsEqual(prev: DominoTileProps, next: DominoTileProps): 
     prev.selected === next.selected &&
     prev.highlight === next.highlight &&
     prev.unplayable === next.unplayable &&
+    prev.faceDown === next.faceDown &&
     prev.onClick === next.onClick &&
     prev.disabled === next.disabled &&
     prev.className === next.className &&

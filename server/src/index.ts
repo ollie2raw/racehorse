@@ -50,10 +50,16 @@ import {
   buildDailyFritzCompletionHash,
   generateDailyFritzRun,
   generateSingleDailyFritzGameHand,
+  getDailyFritzDrawTiles,
+  getDailyFritzDrawWinner,
   getDailyFritzGameSeed,
   getDailyFritzSeed,
+  resolveDailyFritzDrawTiles,
+  resolveDailyFritzDrawWinner,
   sortDailyFritzLeaderboard,
   type DailyFritzAttemptStatus,
+  type DailyFritzDrawTiles,
+  type DailyFritzDrawWinner,
   type DailyFritzHandDeal,
   type DailyFritzLeaderboardEntry,
   type DailyFritzRunStatus,
@@ -4066,7 +4072,30 @@ app.post('/api/daily-fritz/start', async (req, res) => {
     const currentSetResult = normalizeDailyFritzSetResult(attempt.result);
     const needsCompletion = Boolean(currentSetResult?.setWinner);
     const currentGameNumber = needsCompletion ? null : getCurrentDailyFritzGameNumber(attempt.result);
-    const handDeal = getDailyFritzHandForGame(run, currentGameNumber ?? 1, attempt.currentHandIndex);
+    const gameNumberForDraw: DailyFritzSetGameNumber = (currentGameNumber ?? 1) as DailyFritzSetGameNumber;
+    const handDeal = getDailyFritzHandForGame(run, gameNumberForDraw, attempt.currentHandIndex);
+    const drawWinner: DailyFritzDrawWinner = resolveDailyFritzDrawWinner({
+      runDate: run.runDate,
+      gameNumber: gameNumberForDraw,
+      metadata: run.metadata,
+    });
+    const drawTiles: DailyFritzDrawTiles = resolveDailyFritzDrawTiles({
+      runDate: run.runDate,
+      gameNumber: gameNumberForDraw,
+      metadata: run.metadata,
+    });
+    console.log('[daily-fritz:start] draw package', {
+      runDate: run.runDate,
+      gameNumber: gameNumberForDraw,
+      drawWinner,
+      drawPlayerTile: drawTiles.playerTile,
+      drawFritzTile: drawTiles.fritzTile,
+      metadataHasDrawTiles: Boolean(
+        run.metadata &&
+          typeof run.metadata === 'object' &&
+          (run.metadata as Record<string, unknown>).draw_tiles_by_game,
+      ),
+    });
     res.json({
       ok: true,
       attempt_id: attempt.id,
@@ -4080,6 +4109,9 @@ app.post('/api/daily-fritz/start', async (req, res) => {
       deal_size: run.dealSize,
       winning_score: run.winningScore,
       first_hand: handDeal,
+      draw_winner: drawWinner,
+      draw_player_tile: drawTiles.playerTile,
+      draw_fritz_tile: drawTiles.fritzTile,
     });
   } catch (error) {
     console.error('[daily-fritz:init] error', {
@@ -4165,6 +4197,25 @@ app.post('/api/daily-fritz/next-hand', async (req, res) => {
       options: { replayed?: boolean; ignored?: boolean } = {},
     ) => {
       const hand = getDailyFritzHandForGame(run, gameNumber, currentHandIndex);
+      const drawWinner: DailyFritzDrawWinner = resolveDailyFritzDrawWinner({
+        runDate: run.runDate,
+        gameNumber,
+        metadata: run.metadata,
+      });
+      const drawTiles: DailyFritzDrawTiles = resolveDailyFritzDrawTiles({
+        runDate: run.runDate,
+        gameNumber,
+        metadata: run.metadata,
+      });
+      console.log('[daily-fritz-next-hand] draw package', {
+        attemptId,
+        runDate: run.runDate,
+        gameNumber,
+        currentHandIndex,
+        drawWinner,
+        drawPlayerTile: drawTiles.playerTile,
+        drawFritzTile: drawTiles.fritzTile,
+      });
       console.log('[daily-fritz-next-hand] returning hand', {
         attemptId,
         gameNumber,
@@ -4180,6 +4231,9 @@ app.post('/api/daily-fritz/next-hand', async (req, res) => {
         set_result: attempt.result ?? null,
         current_hand_index: currentHandIndex,
         hand,
+        draw_winner: drawWinner,
+        draw_player_tile: drawTiles.playerTile,
+        draw_fritz_tile: drawTiles.fritzTile,
         replayed: Boolean(options.replayed),
         ignored: Boolean(options.ignored),
       });

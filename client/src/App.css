@@ -294,10 +294,12 @@ body {
   flex-direction: column;
 }
 
-/* Play vs Fritz / Ghost Mode: .pvf-root is direct flex child of .app — bounded height */
-.app > .pvf-root {
+/* Play vs Fritz / Journey: direct flex children of .app */
+.app > .pvf-root,
+.app > .rh-journey-root {
   flex: 1 1 0;
   min-height: 0;
+  max-height: 100%;
 }
 
 /* ─── Toast ─────────────────────────────────────────────────── */

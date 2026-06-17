@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
+import type { Tile } from '../types.ts';
 
 const DAILY_FRITZ_CLIENT_DEBUG_LOGS =
   import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
@@ -139,6 +140,9 @@ async function requestJson<T>(path: string, init?: RequestJsonOptions): Promise<
         hasSet: Boolean(initPayload?.set_result ?? initPayload?.result),
         gameNumber: initPayload?.current_game_number ?? null,
         phase: initPayload?.attempt_status ?? null,
+        drawWinner: initPayload?.draw_winner ?? null,
+        drawPlayerTile: initPayload?.draw_player_tile ?? null,
+        drawFritzTile: initPayload?.draw_fritz_tile ?? null,
       });
     }
     return parsed as T;
@@ -192,6 +196,8 @@ export interface DailyFritzLeaderboardRow {
 }
 
 export type DailyFritzSetGameNumber = 1 | 2 | 3;
+
+export type DailyFritzDrawWinner = 'you' | 'bot';
 
 export interface DailyFritzSetGameResult {
   gameNumber: DailyFritzSetGameNumber;
@@ -257,6 +263,9 @@ export interface DailyFritzStartResponse {
   deal_size: BotDealSize;
   winning_score: number;
   first_hand: BotHandDeal;
+  draw_winner: DailyFritzDrawWinner;
+  draw_player_tile: Tile;
+  draw_fritz_tile: Tile;
 }
 
 export interface DailyFritzNextHandResponse {
@@ -267,6 +276,9 @@ export interface DailyFritzNextHandResponse {
   set_result?: DailyFritzSetResult | null;
   current_hand_index: number;
   hand: BotHandDeal;
+  draw_winner: DailyFritzDrawWinner;
+  draw_player_tile: Tile;
+  draw_fritz_tile: Tile;
   replayed?: boolean;
   ignored?: boolean;
 }

@@ -31,6 +31,7 @@ type AppMode =
   | 'stats'
   | 'ratingHistory'
   | 'singlePlayerHub'
+  | 'journey'
   | 'tournament'
   | 'leaderboard'
   | 'profile'

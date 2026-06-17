@@ -7,6 +7,10 @@
   max-width: 55%;
 }
 
+.sp-solo-mode-card__text--journey {
+  max-width: 58%;
+}
+
 /* Common Slot for all cards */
 .sp-solo-mode-card__art-slot {
   position: absolute;
@@ -134,6 +138,10 @@
   contain: paint;
 }
 
+.sp-solo-grid .sp-solo-mode-card {
+  min-height: 332px;
+}
+
 /* ─── /solo hub only: two-layer editorial zone (not Learn, not Home) ─── */
 
 .home-main.sp-solo-main:not(.learn-hub-main) .home-card-scrim {
@@ -213,15 +221,26 @@
   transform: scale(1.56) translate(5%, -8%);
 }
 
+@media (max-width: 1280px) {
+  .sp-solo-grid .sp-solo-mode-card__text,
+  .sp-solo-grid .sp-solo-mode-card__text--journey {
+    max-width: 62%;
+  }
+}
+
 @media (max-width: 1100px) {
-  .sp-solo-main .grid.grid-cols-3 {
-    grid-template-columns: 1fr;
+  .sp-solo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sp-solo-grid .sp-solo-mode-card {
+    min-height: 308px;
   }
 }
 
 @media (max-width: 900px) {
-  .sp-solo-main .grid.grid-cols-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .sp-solo-grid {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -26,6 +26,7 @@ import {
   type DailyPuzzleLeaderboardEntry,
 } from '../dailyPuzzle/api';
 import GameOverModal from '../components/GameOverModal';
+import { POST_GAME_REVIEW_VISIBLE } from '../appRouteTypes';
 import GameReviewer from '../analyzer/GameReviewer';
 import { analyzeMoveLog, saveGameAnalysis, type GameAnalysis } from '../analyzer/moveAnalyzer';
 import {
@@ -40,7 +41,9 @@ import {
   assertDisplayedOpenCountMatchesCanonical,
   computeOpenEndsSum,
   createBotMatch,
+  createBotMatchWithStarter,
   createFixedBotMatch,
+  createFixedBotMatchWithStarter,
   drawOne,
   endpointMatchFromOrientation,
   getMatchableOpenEnds,
@@ -109,6 +112,17 @@ import { formatOrdinalPlace } from '../dailyFritz/format';
 import { buildShareText } from '../dailyFritz/shareCard';
 import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
 import { PlayVsFritzResultOverlay } from './PlayVsFritzResultOverlay';
+import { PostGameReviewPrompt } from '../training/pivotalReview/PostGameReviewPrompt';
+import { PivotalTurnReviewCard } from '../training/pivotalReview/PivotalTurnReviewCard';
+import { PivotalReviewSummary } from '../training/pivotalReview/PivotalReviewSummary';
+import { isBotPostGameReviewEligible } from '../training/pivotalReview/postGameReviewPolicy';
+import {
+  buildPivotalReviewSession,
+  savePivotalReviewSession,
+  type PivotalReviewSession,
+  type PivotalTurnReflection,
+} from '../training/pivotalReview/pivotalReviewStorage';
+import { selectPivotalTurnsFromAnalysis } from '../training/pivotalReview/pivotalTurnSelector';
 import type { DailyFritzSetOverlayViewModel } from '../dailyFritz/setOverlayViewModel';
 import {
   canApplyNextHand,
@@ -208,6 +222,13 @@ import { upsertGuidedMatchCandidate } from '../learn/guidedMatch/guidedMatchCand
 import { validateGuidedMatchCandidate } from '../learn/guidedMatch/guidedMatchCandidateValidation';
 import { GuidedMatchFinalDebriefPanel } from '../learn/guidedMatch/GuidedMatchFinalDebriefPanel';
 import { getPublicGuidedMatchFinalDebrief } from '../learn/guidedMatch/guidedMatchLessonLoader';
+import {
+  createPreGameDrawShellMatch,
+  isPreGameDrawEligible,
+} from '../match/preGameDraw/preGameDrawEligibility';
+import { PreGameTileDrawBoard } from '../match/preGameDraw/PreGameTileDrawBoard';
+import { usePreGameDraw, type PreGameDrawCompletePayload } from '../match/preGameDraw/usePreGameDraw';
+import '../match/preGameDraw/preGameDraw.css';
 
 interface BotMatchScreenProps {
   onBack: () => void;
@@ -247,6 +268,12 @@ interface BotMatchScreenProps {
   isGuidedV2Mode?: boolean;
   /** Admin-only passive capture for future Guided Match candidate authoring. */
   enableGuidedMatchCandidateCapture?: boolean;
+  /** Active Racehorse Journey bot trial — launches from Journey map and returns on exit. */
+  journeyTrial?: {
+    nodeId: string;
+    nodeTitle: string;
+  } | null;
+  onJourneyTrialComplete?: ((result: { won: boolean; nodeId: string }) => void) | null;
 }
 
 interface BotHandReveal {
@@ -423,6 +450,27 @@ function formatRatingDelta(value: number): string {
 
 function tileEquals(a: Tile, b: Tile): boolean {
   return a.high === b.high && a.low === b.low;
+}
+
+function isValidPreGameDrawTile(tile: Tile | null | undefined): tile is Tile {
+  return tile != null && Number.isFinite(tile.low) && Number.isFinite(tile.high);
+}
+
+function toPreGameDrawTileId(tile: Tile | null | undefined): string | null {
+  if (!isValidPreGameDrawTile(tile)) return null;
+  return `${tile.low}-${tile.high}`;
+}
+
+function isDailyFritzScriptedDrawReady(
+  pkg: DailyFritzStartResponse | null | undefined,
+): pkg is DailyFritzStartResponse & {
+  draw_winner: 'you' | 'bot';
+  draw_player_tile: Tile;
+  draw_fritz_tile: Tile;
+} {
+  if (!pkg) return false;
+  if (pkg.draw_winner !== 'you' && pkg.draw_winner !== 'bot') return false;
+  return isValidPreGameDrawTile(pkg.draw_player_tile) && isValidPreGameDrawTile(pkg.draw_fritz_tile);
 }
 
 function buildDoubleSixTiles(): Tile[] {
@@ -813,6 +861,8 @@ export default function BotMatchScreen({
   isAuthoringV2Mode: isAuthoringV2ModeProp = false,
   isGuidedV2Mode: isGuidedV2ModeProp = false,
   enableGuidedMatchCandidateCapture = false,
+  journeyTrial = null,
+  onJourneyTrialComplete = null,
 }: BotMatchScreenProps) {
   const dailyFritzStorageKey =
     mode === 'daily-fritz' && dailyFritzPackage
@@ -903,6 +953,22 @@ export default function BotMatchScreen({
     }
   };
   const initialPersistedDailyFritzMatch = loadPersistedDailyFritzMatch();
+  const dailyFritzScriptedDrawReady = isDailyFritzScriptedDrawReady(dailyFritzPackage);
+  const preGameDrawEligible =
+    isPreGameDrawEligible({
+      mode,
+      dealSize,
+      isGuidedMode,
+      isAuthoringMode,
+      isAuthoringV2Mode,
+      isGuidedV2Mode,
+      isDailyFritzMode: mode === 'daily-fritz',
+      hasPersistedDailyFritzMatch: Boolean(initialPersistedDailyFritzMatch),
+    }) &&
+    (mode !== 'daily-fritz' || dailyFritzScriptedDrawReady);
+  const [preGameDrawActive, setPreGameDrawActive] = useState(preGameDrawEligible);
+  const preGameDrawActiveRef = useRef(preGameDrawActive);
+  preGameDrawActiveRef.current = preGameDrawActive;
   const DRAW_STEP_MS = 700;
   const DAILY_FRITZ_REVEAL_DELAY_MS = DAILY_FRITZ_HAND_REVEAL_DELAY_MS;
   const DAILY_FRITZ_AUTO_ADVANCE_MS = DAILY_FRITZ_HAND_AUTO_ADVANCE_MS;
@@ -1051,9 +1117,16 @@ export default function BotMatchScreen({
 
     return (
       initialPersistedDailyFritzMatch?.match ??
-      (mode === 'daily-fritz' && dailyFritzPackage
-        ? createFixedBotMatch(dailyFritzPackage.first_hand, winningScore, dealSize)
-        : createBotMatch(winningScore, dealSize))
+      (preGameDrawEligible
+        ? createPreGameDrawShellMatch(winningScore, dealSize)
+        : mode === 'daily-fritz' && dailyFritzPackage
+          ? createFixedBotMatchWithStarter(
+              dailyFritzPackage.first_hand,
+              dailyFritzPackage.draw_winner === 'bot' ? 'bot' : 'you',
+              winningScore,
+              dealSize,
+            )
+          : createBotMatch(winningScore, dealSize))
     );
   });
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
@@ -1108,6 +1181,9 @@ export default function BotMatchScreen({
   const moveCounterRef = useRef(1);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
+  const [postGameReviewDismissed, setPostGameReviewDismissed] = useState(false);
+  const [pivotalReviewOpen, setPivotalReviewOpen] = useState(false);
+  const [pivotalReviewSummary, setPivotalReviewSummary] = useState<PivotalReviewSession | null>(null);
   const [ghostAgreementType, setGhostAgreementType] = useState<'agrees' | 'heuristic' | null>(null);
   const [ghostBoardPulse, setGhostBoardPulse] = useState(false);
   const [ghostPlayedTile, setGhostPlayedTile] = useState<Tile | null>(null);
@@ -1297,6 +1373,7 @@ export default function BotMatchScreen({
 
   const isGhostMode = mode === 'ghost';
   const isDailyFritzMode = mode === 'daily-fritz';
+  // Daily Fritz deferred for post-game review — see postGameReviewPolicy.ts
   const isDailyPuzzleRun = Boolean(dailyPuzzleDate);
   const isPlayVsFritzGameOver =
     mode === 'bot' &&
@@ -1307,11 +1384,68 @@ export default function BotMatchScreen({
     !isAuthoringMode &&
     !isAuthoringV2Mode &&
     !isGuidedV2Mode;
+  const isJourneyTrial = Boolean(journeyTrial);
   const isStandaloneFritzMatch = Boolean(
-    userId && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
+    userId && !isJourneyTrial && !isGhostMode && !isDailyPuzzleRun && !isDailyFritzMode
     && !isGuidedMode && !isAuthoringMode && !isAuthoringV2Mode && !isGuidedV2Mode
   );
   const showPostGameOverlays = match.gameOver;
+
+  useEffect(() => {
+    if (!match.gameOver) {
+      setPostGameReviewDismissed(false);
+      setPivotalReviewOpen(false);
+      setPivotalReviewSummary(null);
+    }
+  }, [match.gameOver]);
+
+  const postGameAnalysis = useMemo(() => {
+    if (
+      !showPostGameOverlays ||
+      !isBotPostGameReviewEligible({
+        mode,
+        isGhostMode,
+        isDailyFritzMode,
+        isDailyPuzzleRun,
+        isGuidedMode,
+        isAuthoringMode,
+        isAuthoringV2Mode,
+        isGuidedV2Mode,
+        isJourneyTrial,
+      })
+    ) {
+      return null;
+    }
+    if (!moveLog.some((entry) => entry.player === 'you')) return null;
+    return analyzeMoveLog(moveLog, true);
+  }, [
+    showPostGameOverlays,
+    mode,
+    isGhostMode,
+    isDailyFritzMode,
+    isDailyPuzzleRun,
+    isGuidedMode,
+    isAuthoringMode,
+    isAuthoringV2Mode,
+    isGuidedV2Mode,
+    isJourneyTrial,
+    moveLog,
+  ]);
+
+  const pivotalSelection = useMemo(() => {
+    if (!postGameAnalysis) return null;
+    return selectPivotalTurnsFromAnalysis(postGameAnalysis, moveLog, { winningScore });
+  }, [postGameAnalysis, moveLog, winningScore]);
+
+  const showPostGameReviewPrompt =
+    showPostGameOverlays && postGameAnalysis != null && !postGameReviewDismissed;
+
+  const showPlayVsFritzResultOverlay =
+    showPostGameOverlays &&
+    isPlayVsFritzGameOver &&
+    !showPostGameReviewPrompt &&
+    !pivotalReviewOpen &&
+    !pivotalReviewSummary;
 
   const showDebug = hasDebugLocalStorageFlag('BOT_DEBUG');
   const enableDailyFritzProfiling =
@@ -1381,6 +1515,41 @@ export default function BotMatchScreen({
   const ghostSubLabel = isGhostMode
     ? (opponentName && opponentName.toLowerCase() !== 'your ghost' ? opponentName : (username || 'Your Ghost'))
     : null;
+
+  const handlePreGameDrawComplete = useCallback(
+    (payload: PreGameDrawCompletePayload) => {
+      setPreGameDrawActive(false);
+      if (mode === 'daily-fritz' && dailyFritzPackage) {
+        // Daily Fritz deal is fixed from server; draw only determines who opens hand 1.
+        setMatch(
+          createFixedBotMatchWithStarter(
+            dailyFritzPackage.first_hand,
+            dailyFritzPackage.draw_winner,
+            winningScore,
+            dealSize,
+          ),
+        );
+        return;
+      }
+      setMatch(createBotMatchWithStarter(payload.remainingDeck, payload.winner, winningScore, dealSize));
+    },
+    [dealSize, winningScore, mode, dailyFritzPackage],
+  );
+
+  const dailyFritzScriptedDraw = dailyFritzScriptedDrawReady ? dailyFritzPackage : null;
+
+  const preGameDraw = usePreGameDraw({
+    enabled: preGameDrawActive,
+    opponentLabel,
+    scriptedPlayerTileId: dailyFritzScriptedDraw
+      ? toPreGameDrawTileId(dailyFritzScriptedDraw.draw_player_tile)
+      : null,
+    scriptedFritzTileId: dailyFritzScriptedDraw
+      ? toPreGameDrawTileId(dailyFritzScriptedDraw.draw_fritz_tile)
+      : null,
+    scriptedWinner: dailyFritzScriptedDraw ? dailyFritzScriptedDraw.draw_winner : null,
+    onComplete: handlePreGameDrawComplete,
+  });
 
   const formatGhostName = (rawName: string) => {
     const cleaned = rawName
@@ -2176,6 +2345,30 @@ export default function BotMatchScreen({
   // ── Daily Fritz lifecycle logging ──────────────────────────────────────────
   useEffect(() => {
     if (!isDailyFritzMode) return;
+    dailyFritzDebugLog('[daily-flow] package boot', {
+      attemptId: dailyFritzPackage?.attempt_id ?? null,
+      gameNumber: dailyFritzPackage?.current_game_number ?? null,
+      handIndex: dailyFritzPackage?.current_hand_index ?? null,
+      hasSetResult: Boolean(dailyFritzPackage?.set_result),
+      drawWinner: dailyFritzPackage?.draw_winner ?? null,
+      drawPlayerTile: dailyFritzPackage?.draw_player_tile ?? null,
+      drawFritzTile: dailyFritzPackage?.draw_fritz_tile ?? null,
+      scriptedDrawReady: dailyFritzScriptedDrawReady,
+    });
+  }, [
+    isDailyFritzMode,
+    dailyFritzPackage?.attempt_id,
+    dailyFritzPackage?.current_game_number,
+    dailyFritzPackage?.current_hand_index,
+    dailyFritzPackage?.set_result,
+    dailyFritzPackage?.draw_winner,
+    dailyFritzPackage?.draw_player_tile,
+    dailyFritzPackage?.draw_fritz_tile,
+    dailyFritzScriptedDrawReady,
+  ]);
+
+  useEffect(() => {
+    if (!isDailyFritzMode) return;
     lastDailyFlowLabelRef.current = 'match-init';
     dailyFritzDebugLog('[daily-flow] match init', {
       handNumber: match.handNumber,
@@ -2418,10 +2611,74 @@ export default function BotMatchScreen({
     setAnalyzerOpen(true);
   };
 
+  const skipPostGameReview = useCallback(() => {
+    setPostGameReviewDismissed(true);
+  }, []);
+
+  const openFullGameReviewFromPrompt = useCallback(() => {
+    setPostGameReviewDismissed(true);
+    const analysis = analyzeMoveLog(moveLog, true);
+    setCurrentAnalysis(analysis);
+    saveGameAnalysis('bot', analysis);
+    setAnalyzerOpen(true);
+  }, [moveLog]);
+
+  const openPivotalTurnReviewFromPrompt = useCallback(() => {
+    setPostGameReviewDismissed(true);
+    setPivotalReviewOpen(true);
+  }, []);
+
+  const completePivotalTurnReview = useCallback(
+    (reflections: PivotalTurnReflection[]) => {
+      if (!pivotalSelection) return;
+      setPivotalReviewSummary(
+        buildPivotalReviewSession({
+          mode: 'bot',
+          selection: pivotalSelection,
+          reflections,
+          youScore: match.players.you.score,
+          opponentScore: match.players.bot.score,
+        }),
+      );
+      setPivotalReviewOpen(false);
+    },
+    [match.players.bot.score, match.players.you.score, pivotalSelection],
+  );
+
+  const savePivotalReviewSummary = useCallback(() => {
+    if (pivotalReviewSummary) savePivotalReviewSession(pivotalReviewSummary);
+    setPivotalReviewSummary(null);
+  }, [pivotalReviewSummary]);
+
+  const openFullGameReviewFromSummary = useCallback(() => {
+    if (pivotalReviewSummary) savePivotalReviewSession(pivotalReviewSummary);
+    setPivotalReviewSummary(null);
+    const analysis = analyzeMoveLog(moveLog, true);
+    setCurrentAnalysis(analysis);
+    saveGameAnalysis('bot', analysis);
+    setAnalyzerOpen(true);
+  }, [moveLog, pivotalReviewSummary]);
+
   const exitMatch = useCallback(() => {
     invalidateLocalRuns();
     onBack();
   }, [invalidateLocalRuns, onBack]);
+
+  const exitJourneyTrial = useCallback(
+    (markCompleteOnWin: boolean) => {
+      if (!journeyTrial || !onJourneyTrialComplete) {
+        exitMatch();
+        return;
+      }
+      invalidateLocalRuns();
+      const won = match.winnerId === 'you';
+      onJourneyTrialComplete({
+        won: markCompleteOnWin && won,
+        nodeId: journeyTrial.nodeId,
+      });
+    },
+    [exitMatch, invalidateLocalRuns, journeyTrial, match.winnerId, onJourneyTrialComplete],
+  );
 
   const startFreshMatch = () => {
     if (isGuidedV2Mode) {
@@ -2455,6 +2712,9 @@ export default function BotMatchScreen({
     moveCounterRef.current = 1;
     setCurrentAnalysis(null);
     setAnalyzerOpen(false);
+    setPostGameReviewDismissed(false);
+    setPivotalReviewOpen(false);
+    setPivotalReviewSummary(null);
     dailyResultSyncKeyRef.current = '';
     gameWinConfettiKeyRef.current = '';
     ghostCompleteKeyRef.current = '';
@@ -2467,7 +2727,14 @@ export default function BotMatchScreen({
     );
     setVerifiedMatchId(null);
     setActiveLocalMatchId(createLocalMatchId());
-    setMatch(createBotMatch(winningScore, dealSize));
+    if (preGameDrawEligible) {
+      setPreGameDrawActive(true);
+      preGameDraw.reset();
+      setMatch(createPreGameDrawShellMatch(winningScore, dealSize));
+    } else {
+      setPreGameDrawActive(false);
+      setMatch(createBotMatch(winningScore, dealSize));
+    }
   };
 
   const goHome = useCallback(() => {
@@ -2585,6 +2852,7 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     if (!isStandaloneFritzMatch || !userId) return;
+    if (preGameDrawActive) return;
     let cancelled = false;
     void (async () => {
       if (supabase) {
@@ -2619,7 +2887,7 @@ export default function BotMatchScreen({
     return () => {
       cancelled = true;
     };
-  }, [activeLocalMatchId, fritzTier, isStandaloneFritzMatch, match.gameOver, postLocalBotMatch, userId]);
+  }, [activeLocalMatchId, fritzTier, isStandaloneFritzMatch, match.gameOver, postLocalBotMatch, preGameDrawActive, userId]);
 
   useEffect(() => {
     if (!userId || !isGhostMode || isDailyPuzzleRun) return;
@@ -4952,6 +5220,7 @@ export default function BotMatchScreen({
       cancelled: false,
     });
     if (!shouldAllowBotAction(matchRef.current) || drawSequenceActiveRef.current) return;
+    if (preGameDrawActiveRef.current) return;
     if (isDailyFritzMode && isDailyFritzSetTerminal(dailyFritzPackage?.set_result)) return;
     if (isOriginalGuidedScriptedFritzMode) return;
     if (wantsOriginalGuidedRecordMode) return;
@@ -6427,13 +6696,40 @@ export default function BotMatchScreen({
     return () => window.removeEventListener('resize', updateHandTileSize);
   }, [lessonLayoutMode, match.players.you.hand.length]);
 
-  const handActive = !match.handOver && !match.gameOver;
+  const handActive = !preGameDrawActive && !match.handOver && !match.gameOver;
   const dailyFritzBoardHasPlay = (match.board?.mainLine?.length ?? 0) > 0;
   const botTurn = match.currentPlayer === 'bot' && handActive;
   const showTurnStatusCluster =
     handActive &&
     !handReveal &&
     !isTransitioningRef.current;
+  const preGameDrawHudCenter = (() => {
+    if (!preGameDrawActive || !preGameDraw.drawState) return null;
+
+    let label: string | null = null;
+    let tone: 'your-turn' | 'opp-turn' = 'your-turn';
+
+    if (preGameDraw.resultMessage) {
+      label = preGameDraw.resultMessage;
+      tone = preGameDraw.drawState.winner === 'bot' ? 'opp-turn' : 'your-turn';
+    } else if (preGameDraw.isOpponentThinking) {
+      label = `${opponentLabel} thinking`;
+      tone = 'opp-turn';
+    } else if (preGameDraw.isPlayerPickEnabled) {
+      label = 'Tap a tile to draw';
+      tone = 'your-turn';
+    }
+
+    if (!label) return null;
+
+    return (
+      <div className="wl-center-status" data-ui="turn-status">
+        <span className={`wl-turn-label ${tone}`} role="status" aria-live="polite">
+          {label}
+        </span>
+      </div>
+    );
+  })();
   const turnLabel = match.handOver
     ? match.gameOver
       ? match.winnerId === 'you'
@@ -6853,7 +7149,9 @@ export default function BotMatchScreen({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [showFullCoachTip]);
 
-  const handTray = (
+  const handTray = preGameDrawActive && preGameDraw.drawState ? (
+    <div className="hand-area wl-hand-area pre-game-draw-hand-dock" data-ui="tray" aria-hidden="true" />
+  ) : (
     <div
       className="hand-area wl-hand-area"
       data-ui="tray"
@@ -6939,6 +7237,14 @@ export default function BotMatchScreen({
 
   const boardStageInner = (
     <>
+        {preGameDrawActive && preGameDraw.drawState ? (
+          <PreGameTileDrawBoard
+            drawState={preGameDraw.drawState}
+            isPlayerPickEnabled={preGameDraw.isPlayerPickEnabled}
+            onTileTap={preGameDraw.handlePlayerTileTap}
+          />
+        ) : (
+          <>
         {scoreToast && (
           <div
             style={{
@@ -7273,6 +7579,8 @@ export default function BotMatchScreen({
             </button>
           </div>
         )}
+          </>
+        )}
     </>
   );
 
@@ -7530,7 +7838,42 @@ export default function BotMatchScreen({
         </div>
         </GameOverlayPortal>
       ) : null}
-      {showPostGameOverlays && isPlayVsFritzGameOver && (
+      {pivotalReviewOpen && pivotalSelection ? (
+        <PivotalTurnReviewCard
+          open
+          accent="gold"
+          selection={pivotalSelection}
+          onComplete={completePivotalTurnReview}
+        />
+      ) : null}
+      {pivotalReviewSummary && pivotalSelection ? (
+        <PivotalReviewSummary
+          open
+          accent="gold"
+          session={pivotalReviewSummary}
+          candidates={pivotalSelection.candidates}
+          onSaveAndClose={savePivotalReviewSummary}
+          onFullGameReview={openFullGameReviewFromSummary}
+        />
+      ) : null}
+      {showPostGameReviewPrompt && postGameAnalysis ? (
+        <PostGameReviewPrompt
+          open
+          accent="gold"
+          modeLabel="Play vs Fritz"
+          resultLabel={match.winnerId === 'you' ? 'Victory' : 'Defeat'}
+          won={match.winnerId === 'you'}
+          youScore={match.players.you.score}
+          opponentScore={match.players.bot.score}
+          opponentLabel={opponentLabel}
+          accuracy={postGameAnalysis.accuracy}
+          accuracyGrade={postGameAnalysis.grade}
+          onReviewPivotalTurns={openPivotalTurnReviewFromPrompt}
+          onFullGameReview={openFullGameReviewFromPrompt}
+          onSkip={skipPostGameReview}
+        />
+      ) : null}
+      {showPlayVsFritzResultOverlay && (
         <PlayVsFritzResultOverlay
           won={match.winnerId === 'you'}
           opponentLabel={opponentLabel}
@@ -7538,7 +7881,7 @@ export default function BotMatchScreen({
           youScore={match.players.you.score}
           botScore={match.players.bot.score}
           ratingSlot={
-            ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null ? (
+            isJourneyTrial ? undefined : ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null ? (
               <div className="df-result-meta-pill">
                 <span className="df-result-meta-label">Rating</span>
                 <span className="df-result-meta-value">
@@ -7563,6 +7906,27 @@ export default function BotMatchScreen({
           onChangeSetup={returnToFritzSetup}
           onHome={onNavigate ? goHome : undefined}
           showHome={Boolean(onNavigate)}
+          customActions={
+            isJourneyTrial
+              ? match.winnerId === 'you'
+                ? [
+                    {
+                      label: 'Continue Trail',
+                      onClick: () => exitJourneyTrial(true),
+                      variant: 'primary',
+                    },
+                    { label: 'Try Again', onClick: startFreshMatch, variant: 'secondary' },
+                  ]
+                : [
+                    { label: 'Try Again', onClick: startFreshMatch, variant: 'primary' },
+                    {
+                      label: 'Return to Trail',
+                      onClick: () => exitJourneyTrial(false),
+                      variant: 'secondary',
+                    },
+                  ]
+              : undefined
+          }
         />
       )}
       {showPostGameOverlays && !isPlayVsFritzGameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
@@ -8127,7 +8491,7 @@ export default function BotMatchScreen({
             </div>
           }
           hudCenter={
-            showTurnStatusCluster ? (
+            preGameDrawHudCenter ?? (showTurnStatusCluster ? (
               <div className="wl-center-status" data-ui="turn-status">
                 {isDailyFritzMode && dailyFritzPackage && (
                   <div className="daily-fritz-progress-pill" data-has-turn-label={!!turnLabel}>
@@ -8143,7 +8507,7 @@ export default function BotMatchScreen({
                   </span>
                 )}
               </div>
-            ) : null
+            ) : null)
           }
           hudRight={
             <button
@@ -8218,12 +8582,14 @@ export default function BotMatchScreen({
         </GameOverlayPortal>
       ) : null}
 
-      <GameReviewer
-        open={analyzerOpen}
-        onClose={() => setAnalyzerOpen(false)}
-        analysis={currentAnalysis}
-        title="Game Review"
-      />
+      {POST_GAME_REVIEW_VISIBLE ? (
+        <GameReviewer
+          open={analyzerOpen}
+          onClose={() => setAnalyzerOpen(false)}
+          analysis={currentAnalysis}
+          title="Game Review"
+        />
+      ) : null}
 
       {showDebug && (
         <aside className="bot-debug-panel">
@@ -8250,6 +8616,11 @@ export default function BotMatchScreen({
         <LeaveGameModal
           onCancel={() => setShowLeaveConfirm(false)}
           onLeave={() => {
+            if (isJourneyTrial) {
+              setShowLeaveConfirm(false);
+              exitJourneyTrial(false);
+              return;
+            }
             if (isStandaloneFritzMatch && !match.gameOver) {
               void abandonStandaloneFritzMatch()
                 .catch((err) => {

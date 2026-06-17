@@ -58,6 +58,8 @@ export interface BotMatchState {
   lastHandWinner: BotPlayerId | null;
   lastHandReason: BotHandEndReason | null;
   dealSize: BotDealSize;
+  /** Hand-1 starter from pre-game draw; odd hands use this player, even hands alternate. */
+  matchStarter?: BotPlayerId;
   // Opponent hand inference
   opponentPassedOnEnds?: number[];
   opponentDrawCount?: number;
@@ -153,7 +155,7 @@ function sumPips(hand: Tile[]): number {
   return hand.reduce((sum, t) => sum + t.low + t.high, 0);
 }
 
-function generateDoubleSixSet(): Tile[] {
+export function generateDoubleSixSet(): Tile[] {
   const tiles: Tile[] = [];
   for (let high = 0; high <= 6; high++) {
     for (let low = 0; low <= high; low++) {
@@ -162,6 +164,16 @@ function generateDoubleSixSet(): Tile[] {
   }
   return tiles;
 }
+
+function otherBotPlayer(player: BotPlayerId): BotPlayerId {
+  return player === 'you' ? 'bot' : 'you';
+}
+
+export function resolveHandStarter(matchStarter: BotPlayerId, handNumber: number): BotPlayerId {
+  return handNumber % 2 === 1 ? matchStarter : otherBotPlayer(matchStarter);
+}
+
+const PRE_GAME_DRAW_REMAINING_TILE_COUNT = 26;
 
 function shuffle<T>(arr: readonly T[]): T[] {
   const out = [...arr];
@@ -177,15 +189,17 @@ function createDealtHand(
   handNumber: number,
   winningScore: number,
   dealSize: BotDealSize,
+  matchStarter: BotPlayerId = 'you',
+  deck?: readonly Tile[],
 ): BotMatchState {
-  const deck = shuffle(generateDoubleSixSet());
-  const youHand = deck.slice(0, dealSize);
-  const botHand = deck.slice(dealSize, dealSize * 2);
-  const remaining = deck.slice(dealSize * 2);
+  const shuffled = shuffle(deck ? [...deck] : generateDoubleSixSet());
+  const youHand = shuffled.slice(0, dealSize);
+  const botHand = shuffled.slice(dealSize, dealSize * 2);
+  const remaining = shuffled.slice(dealSize * 2);
   const deadTiles =
     dealSize === 14 ? [] : remaining.slice(remaining.length - BONEYARD_LOCKED_COUNT);
   const boneyard = dealSize === 14 ? [] : remaining;
-  const currentPlayer: BotPlayerId = handNumber % 2 === 1 ? 'you' : 'bot';
+  const currentPlayer = resolveHandStarter(matchStarter, handNumber);
 
   return {
     players: {
@@ -207,6 +221,7 @@ function createDealtHand(
     lastHandWinner: null,
     lastHandReason: null,
     dealSize,
+    matchStarter,
     opponentPassedOnEnds: [],
     opponentDrawCount: 0,
     opponentKnownMissing: [],
@@ -224,8 +239,9 @@ export function createFixedBotHand(
   winningScore: number,
   dealSize: BotDealSize,
   handDeal: BotHandDeal,
+  matchStarter: BotPlayerId = 'you',
 ): BotMatchState {
-  const currentPlayer: BotPlayerId = handNumber % 2 === 1 ? 'you' : 'bot';
+  const currentPlayer = resolveHandStarter(matchStarter, handNumber);
   return {
     players: {
       you: { hand: handDeal.player_tiles.map(cloneTile), score: scores.you },
@@ -246,6 +262,7 @@ export function createFixedBotHand(
     lastHandWinner: null,
     lastHandReason: null,
     dealSize,
+    matchStarter,
     opponentPassedOnEnds: [],
     opponentDrawCount: 0,
     opponentKnownMissing: [],
@@ -257,12 +274,38 @@ export function createBotMatch(winningScore = 60, dealSize: BotDealSize = 7): Bo
   return createDealtHand({ you: 0, bot: 0 }, 1, winningScore, dealSize);
 }
 
+export function createBotMatchWithStarter(
+  remainingDeck: readonly Tile[],
+  matchStarter: BotPlayerId,
+  winningScore = 60,
+  dealSize: BotDealSize = 7,
+): BotMatchState {
+  if (dealSize === 14) {
+    throw new Error('Pre-game draw is not supported for 14-tile deals');
+  }
+  if (remainingDeck.length !== PRE_GAME_DRAW_REMAINING_TILE_COUNT) {
+    throw new Error(
+      `Pre-game draw expects ${PRE_GAME_DRAW_REMAINING_TILE_COUNT} remaining tiles, got ${remainingDeck.length}`,
+    );
+  }
+  return createDealtHand({ you: 0, bot: 0 }, 1, winningScore, dealSize, matchStarter, remainingDeck);
+}
+
 export function createFixedBotMatch(
   handDeal: BotHandDeal,
   winningScore = 60,
   dealSize: BotDealSize = 7,
 ): BotMatchState {
-  return createFixedBotHand({ you: 0, bot: 0 }, 1, winningScore, dealSize, handDeal);
+  return createFixedBotMatchWithStarter(handDeal, 'you', winningScore, dealSize);
+}
+
+export function createFixedBotMatchWithStarter(
+  handDeal: BotHandDeal,
+  matchStarter: BotPlayerId,
+  winningScore = 60,
+  dealSize: BotDealSize = 7,
+): BotMatchState {
+  return createFixedBotHand({ you: 0, bot: 0 }, 1, winningScore, dealSize, handDeal, matchStarter);
 }
 
 export function startNextBotHand(state: BotMatchState): BotMatchState {
@@ -271,6 +314,7 @@ export function startNextBotHand(state: BotMatchState): BotMatchState {
     state.handNumber + 1,
     state.winningScore,
     state.dealSize,
+    state.matchStarter ?? 'you',
   );
 }
 
@@ -281,6 +325,7 @@ export function startNextFixedBotHand(state: BotMatchState, handDeal: BotHandDea
     state.winningScore,
     state.dealSize,
     handDeal,
+    state.matchStarter ?? 'you',
   );
 }
 

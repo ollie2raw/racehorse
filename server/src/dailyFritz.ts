@@ -49,6 +49,7 @@ export interface DailyFritzLeaderboardEntry {
 }
 
 export type DailyFritzSetGameNumber = 1 | 2 | 3;
+export type DailyFritzDrawWinner = 'you' | 'bot';
 
 export interface DailyFritzSetGameResult {
   gameNumber: DailyFritzSetGameNumber;
@@ -126,6 +127,92 @@ export function getDailyFritzGameSeed(runDate: string, gameNumber: DailyFritzSet
   return `${getDailyFritzSeed(runDate)}:game:${gameNumber}`;
 }
 
+export function getDailyFritzDrawWinnerFromGameSeed(gameSeed: string): DailyFritzDrawWinner {
+  const prng = createSeededPrng(`${gameSeed}:draw-winner`);
+  return prng() < 0.5 ? 'you' : 'bot';
+}
+
+export function getDailyFritzDrawWinner(
+  runDate: string,
+  gameNumber: DailyFritzSetGameNumber,
+): DailyFritzDrawWinner {
+  return getDailyFritzDrawWinnerFromGameSeed(getDailyFritzGameSeed(runDate, gameNumber));
+}
+
+export interface DailyFritzDrawTiles {
+  playerTile: Tile;
+  fritzTile: Tile;
+}
+
+export function getDailyFritzDrawTilesFromGameSeed(gameSeed: string): DailyFritzDrawTiles {
+  const prng = createSeededPrng(`${gameSeed}:draw-tiles`);
+  const shuffled = shuffleWithPrng(buildDoubleSixSet(), prng).map(cloneTile);
+  const playerTile = shuffled[0]!;
+  const fritzTile = shuffled[1]!;
+  return {
+    playerTile,
+    fritzTile,
+  };
+}
+
+export function getDailyFritzDrawTiles(
+  runDate: string,
+  gameNumber: DailyFritzSetGameNumber,
+): DailyFritzDrawTiles {
+  return getDailyFritzDrawTilesFromGameSeed(getDailyFritzGameSeed(runDate, gameNumber));
+}
+
+export function resolveDailyFritzDrawWinner(params: {
+  runDate: string;
+  gameNumber: DailyFritzSetGameNumber;
+  metadata?: Record<string, unknown> | null;
+}): DailyFritzDrawWinner {
+  const byGame = params.metadata?.draw_winners_by_game;
+  if (byGame && typeof byGame === 'object') {
+    const raw =
+      (byGame as Record<string, unknown>)[String(params.gameNumber)] ??
+      (byGame as Record<number, unknown>)[params.gameNumber];
+    if (raw === 'you' || raw === 'bot') return raw;
+  }
+  return getDailyFritzDrawWinner(params.runDate, params.gameNumber);
+}
+
+export function resolveDailyFritzDrawTiles(params: {
+  runDate: string;
+  gameNumber: DailyFritzSetGameNumber;
+  metadata?: Record<string, unknown> | null;
+}): DailyFritzDrawTiles {
+  const byGame = params.metadata?.draw_tiles_by_game;
+  if (byGame && typeof byGame === 'object') {
+    const raw =
+      (byGame as Record<string, unknown>)[String(params.gameNumber)] ??
+      (byGame as Record<number, unknown>)[params.gameNumber];
+    if (
+      raw &&
+      typeof raw === 'object' &&
+      'playerTile' in raw &&
+      'fritzTile' in raw &&
+      raw.playerTile &&
+      raw.fritzTile
+    ) {
+      const p = (raw as { playerTile: Tile }).playerTile;
+      const f = (raw as { fritzTile: Tile }).fritzTile;
+      if (
+        typeof p.low === 'number' &&
+        typeof p.high === 'number' &&
+        typeof f.low === 'number' &&
+        typeof f.high === 'number'
+      ) {
+        return {
+          playerTile: cloneTile(p),
+          fritzTile: cloneTile(f),
+        };
+      }
+    }
+  }
+  return getDailyFritzDrawTiles(params.runDate, params.gameNumber);
+}
+
 /**
  * Generate a single hand for a given seed + hand index.
  * Uses the same deterministic formula as generateDailyFritzRun so that any
@@ -182,6 +269,21 @@ export function generateDailyFritzRun(
     });
   }
 
+  const drawWinnersByGame: Record<DailyFritzSetGameNumber, DailyFritzDrawWinner> = {
+    1: getDailyFritzDrawWinner(runDate, 1),
+    2: getDailyFritzDrawWinner(runDate, 2),
+    3: getDailyFritzDrawWinner(runDate, 3),
+  };
+
+  const drawTilesByGame: Record<
+    DailyFritzSetGameNumber,
+    { playerTile: Tile; fritzTile: Tile }
+  > = {
+    1: getDailyFritzDrawTiles(runDate, 1),
+    2: getDailyFritzDrawTiles(runDate, 2),
+    3: getDailyFritzDrawTiles(runDate, 3),
+  };
+
   return {
     runDate,
     seed,
@@ -198,6 +300,8 @@ export function generateDailyFritzRun(
       game_seeds: [1, 2, 3].map((gameNumber) =>
         getDailyFritzGameSeed(runDate, gameNumber as DailyFritzSetGameNumber),
       ),
+      draw_winners_by_game: drawWinnersByGame,
+      draw_tiles_by_game: drawTilesByGame,
     },
   };
 }
