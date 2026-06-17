@@ -102,6 +102,22 @@ export type ActResult = {
 
 const rooms = new Map<RoomCode, Room>();
 const nextHandStartsByRoom = new Map<RoomCode, Promise<Room>>();
+
+let liveRoomPersistHook: ((room: Room) => void) | null = null;
+
+/** Registered from `initRoomSession` to avoid a static import cycle with live persistence. */
+export function registerLiveRoomPersistHook(hook: (room: Room) => void): void {
+  liveRoomPersistHook = hook;
+}
+
+/** Test-only reset. */
+export function resetLiveRoomPersistHookForTests(): void {
+  liveRoomPersistHook = null;
+}
+
+function notifyLiveRoomStateCommitted(room: Room): void {
+  liveRoomPersistHook?.(room);
+}
 const MIN_HAND_OVER_MS = 2500;
 const MP_DEBUG =
   process.env.NODE_ENV !== 'production' ||
@@ -211,6 +227,7 @@ export function createRoom(hostPlayerSeatId: string, config: Partial<Config> = {
   });
 
   rooms.set(code, room);
+  notifyLiveRoomStateCommitted(room);
   return room;
 }
 
@@ -250,6 +267,7 @@ export function createReservedRoom(code: string, config: Partial<Config> = {}): 
   });
 
   rooms.set(normalizedCode, room);
+  notifyLiveRoomStateCommitted(room);
   return room;
 }
 
@@ -504,6 +522,7 @@ export async function startGame(
   room.lastBroadcastScores = Object.fromEntries(
     room.state.playerIds.map((pid) => [pid, room.state!.players[pid]?.score ?? 0]),
   );
+  notifyLiveRoomStateCommitted(room);
   return room;
 }
 
@@ -646,6 +665,7 @@ function commitResolvedGameState(room: Room, assertLabel: string, nextState: Gam
   const extras = autoPassExtras?.filter(Boolean) ?? [];
   const merged = [...extras, ...finalized.autoPassedPlayerIds];
   room.pendingAutoPassNotice = merged.length > 0 ? merged : undefined;
+  notifyLiveRoomStateCommitted(room);
 }
 
 /**

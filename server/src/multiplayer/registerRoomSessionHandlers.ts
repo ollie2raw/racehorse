@@ -23,6 +23,7 @@ import {
 import { applyMatchResult } from '../scheduledTournament/engine';
 import { defaultEnginePersistence } from '../scheduledTournament/persistenceInterface';
 import { recordMatchEnd } from '../matchmaking/persistence';
+import { ensureRoomHydrated, schedulePersistLiveRoomSessionForRoom } from './roomLivePersistence';
 import {
   onActivePlayerSocketDisconnect,
   onPlayerSocketRejoined,
@@ -137,8 +138,28 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
       const { roomCode, username, userId, via, hydrateMatchmakingRoom } = params;
       clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
       leaveExistingSocketRooms();
+
+      const hydrated = await ensureRoomHydrated(roomCode);
+      if (hydrated?.source === 'database' && hydrated.restoredRoster.length > 0) {
+        setRoomRoster(
+          roomCode,
+          hydrated.restoredRoster.map((entry) => ({
+            id: entry.seatId,
+            socketId: '',
+            username: entry.username,
+            userId: entry.userId,
+          })),
+        );
+        console.log(`[${via}] live-session roster restored`, {
+          roomCode,
+          seats: hydrated.restoredRoster.length,
+        });
+      }
+
       const hydrateResult = hydrateMatchmakingRoom
-        ? await handlerDeps.tryHydrateMatchmakingRoomShell(roomCode)
+        ? !peekRoom(roomCode)
+          ? await handlerDeps.tryHydrateMatchmakingRoomShell(roomCode)
+          : ('skipped' as const)
         : 'skipped';
       let existingRoom = peekRoom(roomCode);
       if (!existingRoom) {
@@ -417,6 +438,7 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         ensureSocketDataSeat(socket, playerSeatId);
         const roomPlayers: RoomPlayer[] = [{ id: playerSeatId, socketId: socket.id, username, userId }];
         setRoomRoster(room.code, roomPlayers);
+        schedulePersistLiveRoomSessionForRoom(room);
         appendRoomEvent(room, {
           type: 'player_joined',
           actorSocketId: socket.id,

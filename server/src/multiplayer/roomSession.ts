@@ -10,12 +10,17 @@ import {
   getRoomLegalMoves,
   getRoomMatchEventMeta,
   readyForNextHand,
+  registerLiveRoomPersistHook,
   type ActionPayload,
   type DrawAnimationStep,
   type Room,
 } from '../rooms';
 import { chooseBotMoveServer, type ServerBotTier } from '../bot/serverBot';
 import { configureDisconnectGraceSeatResolver } from './disconnectGrace';
+import {
+  configureLiveRoomPersistence,
+  schedulePersistLiveRoomSessionForRoom,
+} from './roomLivePersistence';
 import type { MatchStartDeps } from './matchStartReady';
 import { drawAudit } from './drawAudit';
 
@@ -108,6 +113,17 @@ function requireDeps(): RoomSessionDeps {
 export function initRoomSession(io: Server, deps: RoomSessionDeps): void {
   ioRef = io;
   sessionDeps = deps;
+  configureLiveRoomPersistence({
+    resolveRoster: (roomCode) =>
+      getRoomRoster(roomCode).map((player) => ({
+        seatId: player.id,
+        userId: player.userId,
+        username: player.username,
+      })),
+  });
+  registerLiveRoomPersistHook((room) => {
+    schedulePersistLiveRoomSessionForRoom(room);
+  });
   configureDisconnectGraceSeatResolver((roomCode, playerSeatId) => {
     const roster = roomPlayersByCode.get(roomCode) ?? [];
     return roster.find((player) => player.id === playerSeatId)?.socketId ?? null;
