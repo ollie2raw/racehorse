@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
+import { consumeSupabaseRecoveryHash } from './auth/recoveryHash';
 import { installGlobalErrorHandlers } from "./debug/globalErrors";
 import './styles/tokens.css';
 import './index.css';
@@ -19,10 +20,17 @@ import './styles/board/index.css';
 
 {installGlobalErrorHandlers();}
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <HashRouter>
-      <App />
-    </HashRouter>
-  </StrictMode>,
-);
+async function bootstrap() {
+  // Exchange recovery tokens before HashRouter/App replace the hash with "#/".
+  await consumeSupabaseRecoveryHash();
+
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <HashRouter>
+        <App />
+      </HashRouter>
+    </StrictMode>,
+  );
+}
+
+void bootstrap();

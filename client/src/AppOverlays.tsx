@@ -4,6 +4,7 @@ import type { FriendInviteState } from './multiplayer/multiplayerRuntime';
 
 const AuthModal = React.lazy(() => import('./auth/AuthModal'));
 const UsernameModal = React.lazy(() => import('./auth/UsernameModal'));
+const ChangePasswordModal = React.lazy(() => import('./auth/ChangePasswordModal'));
 
 export type AuthModalsLayerProps = {
   authModalOpen: boolean;
@@ -20,6 +21,9 @@ export type AuthModalsLayerProps = {
     username?: string,
   ) => Promise<{ error: string | null; message?: string | null; pendingVerification?: boolean }>;
   onResetPassword: (email: string) => Promise<{ error: string | null }>;
+  passwordRecoveryPending: boolean;
+  onUpdatePassword: (password: string) => Promise<{ error: string | null; message?: string | null }>;
+  onPasswordRecoveryClose: () => void;
   usernameModalOpen: boolean;
   currentUsername: string | null;
   usernameIsProfileEdit: boolean;
@@ -37,6 +41,9 @@ export function AuthModalsLayer({
   onSignIn,
   onSignUp,
   onResetPassword,
+  passwordRecoveryPending,
+  onUpdatePassword,
+  onPasswordRecoveryClose,
   usernameModalOpen,
   currentUsername,
   usernameIsProfileEdit,
@@ -55,6 +62,11 @@ export function AuthModalsLayer({
         onSignIn={onSignIn}
         onSignUp={onSignUp}
         onResetPassword={onResetPassword}
+      />
+      <ChangePasswordModal
+        open={passwordRecoveryPending}
+        onUpdatePassword={onUpdatePassword}
+        onClose={onPasswordRecoveryClose}
       />
       <UsernameModal
         open={usernameModalOpen}
