@@ -989,7 +989,13 @@ export default function BotMatchScreen({
   const preGameDrawEligible =
     preGameDrawEligibleBase &&
     (mode !== 'daily-fritz' || dailyFritzScriptedDrawReady);
-  const [preGameDrawActive, setPreGameDrawActive] = useState(preGameDrawEligible);
+  // Derived from eligibility — do not one-shot init from first render only. Daily Fritz
+  // can mount before scripted draw fields are ready; eligibility may flip true one frame later.
+  const [preGameDrawCompleted, setPreGameDrawCompleted] = useState(() =>
+    Boolean(resumablePersistedDailyFritzMatch),
+  );
+  const [preGameDrawRematchNonce, setPreGameDrawRematchNonce] = useState(0);
+  const preGameDrawActive = preGameDrawEligible && !preGameDrawCompleted;
   const preGameDrawActiveRef = useRef(preGameDrawActive);
   preGameDrawActiveRef.current = preGameDrawActive;
   const DRAW_STEP_MS = 700;
@@ -1541,7 +1547,7 @@ export default function BotMatchScreen({
 
   const handlePreGameDrawComplete = useCallback(
     (payload: PreGameDrawCompletePayload) => {
-      setPreGameDrawActive(false);
+      setPreGameDrawCompleted(true);
       if (mode === 'daily-fritz' && dailyFritzPackage) {
         // Daily Fritz deal is fixed from server; draw only determines who opens hand 1.
         setMatch(
@@ -1577,6 +1583,39 @@ export default function BotMatchScreen({
     scriptedWinner: dailyFritzScriptedDraw ? dailyFritzScriptedDraw.draw_winner : null,
     onComplete: handlePreGameDrawComplete,
   });
+
+  useEffect(() => {
+    if (!preGameDrawActive) return;
+    setMatch((current) => {
+      const isDrawShell =
+        current.handNumber === 0 &&
+        current.players.you.hand.length === 0 &&
+        current.players.bot.hand.length === 0 &&
+        current.handOver &&
+        !current.gameOver;
+      return isDrawShell ? current : createPreGameDrawShellMatch(winningScore, dealSize);
+    });
+  }, [preGameDrawActive, winningScore, dealSize]);
+
+  useEffect(() => {
+    if (!preGameDrawActive || preGameDrawRematchNonce === 0) return;
+    preGameDraw.reset();
+  }, [preGameDrawActive, preGameDrawRematchNonce, preGameDraw.reset]);
+
+  useEffect(() => {
+    if (!isDailyFritzMode || !preGameDrawActive || !dailyFritzStorageKey) return;
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.sessionStorage.getItem(dailyFritzStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { match?: BotMatchState };
+      if (parsed.match && !isPersistedDailyFritzPlayableResume(parsed.match)) {
+        window.sessionStorage.removeItem(dailyFritzStorageKey);
+      }
+    } catch {
+      // ignore corrupt session snapshot
+    }
+  }, [dailyFritzStorageKey, isDailyFritzMode, preGameDrawActive]);
 
   const formatGhostName = (rawName: string) => {
     const cleaned = rawName
@@ -2439,6 +2478,7 @@ export default function BotMatchScreen({
       scriptedDrawGatePass: mode !== 'daily-fritz' || dailyFritzScriptedDrawReady,
       scriptedDrawReady: dailyFritzScriptedDrawReady,
       preGameDrawEligible,
+      preGameDrawCompleted,
       preGameDrawActive,
       scriptedMode:
         scriptedPlayerTileId != null &&
@@ -2469,6 +2509,7 @@ export default function BotMatchScreen({
     dailyFritzPackage?.draw_fritz_tile,
     dailyFritzScriptedDrawReady,
     preGameDrawEligible,
+    preGameDrawCompleted,
     preGameDrawActive,
     preGameDrawEligibleBase,
     scriptedPlayerTileId,
@@ -2836,11 +2877,11 @@ export default function BotMatchScreen({
     setVerifiedMatchId(null);
     setActiveLocalMatchId(createLocalMatchId());
     if (preGameDrawEligible) {
-      setPreGameDrawActive(true);
-      preGameDraw.reset();
+      setPreGameDrawCompleted(false);
+      setPreGameDrawRematchNonce((nonce) => nonce + 1);
       setMatch(createPreGameDrawShellMatch(winningScore, dealSize));
     } else {
-      setPreGameDrawActive(false);
+      setPreGameDrawCompleted(true);
       setMatch(createBotMatch(winningScore, dealSize));
     }
   };
@@ -2898,6 +2939,7 @@ export default function BotMatchScreen({
 
   useEffect(() => {
     if (!isDailyFritzMode || !dailyFritzStorageKey || typeof window === 'undefined') return;
+    if (preGameDrawActive) return;
     if (match.gameOver) {
       if (dailyFritzStorageTimerRef.current) {
         clearTimeout(dailyFritzStorageTimerRef.current);
@@ -2939,7 +2981,7 @@ export default function BotMatchScreen({
         dailyFritzStorageTimerRef.current = null;
       }
     };
-  }, [dailyFritzHandIndex, dailyFritzPackage?.attempt_id, dailyFritzStorageKey, isDailyFritzMode, match, moveLog, movesUsed]);
+  }, [dailyFritzHandIndex, dailyFritzPackage?.attempt_id, dailyFritzStorageKey, isDailyFritzMode, match, moveLog, movesUsed, preGameDrawActive]);
 
   // Flush any pending debounced Daily Fritz state write on page unload so the
   // player resumes from the latest move rather than up to 1 s behind.
