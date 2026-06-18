@@ -4880,6 +4880,12 @@ function createGameOverPersistScheduler(input: GameOverPersistInput): () => Prom
       const rankingProfiles = new Map<string, any>();
       const rankedInsertResults = new Map<string, Awaited<ReturnType<typeof insertRankedGameIdempotent>>>();
       const rankedPlayedAt = new Date().toISOString();
+      const rankedSourceColumnsEnabled = isRankedGameSourceColumnsEnabled();
+      console.log('[Ranking] game-over persist ranked insert', {
+        roomCode: room.code,
+        sourceMatchId,
+        rankedSourceColumnsEnabled,
+      });
 
       for (const p of rankingParticipants) {
         if (p.me.userId) {
