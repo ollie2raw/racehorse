@@ -115,7 +115,7 @@ async function requestJson<T>(path: string, init?: RequestJsonOptions): Promise<
       parseMs: Number((endedAt - fetchEndedAt).toFixed(1)),
       totalMs: Number((endedAt - startedAt).toFixed(1)),
     });
-    let parsed: any = null;
+    let parsed: unknown = null;
     if (text) {
       try {
         parsed = JSON.parse(text);
@@ -131,7 +131,11 @@ async function requestJson<T>(path: string, init?: RequestJsonOptions): Promise<
       }
     }
     if (!response.ok) {
-      throw new Error(parsed?.error ?? `${path} failed with ${response.status}`);
+      const errorMessage =
+        parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
+          ? String((parsed as { error?: unknown }).error ?? '')
+          : '';
+      throw new Error(errorMessage || `${path} failed with ${response.status}`);
     }
     if (isDailyFritzInitPath(path)) {
       const initPayload = parsed as Record<string, unknown> | null;
@@ -479,15 +483,19 @@ export async function nextDailyFritzHand(input: {
   });
 
   const text = await response.text().catch(() => '');
-  let parsed: any = null;
+  let parsed: unknown = null;
   if (text) {
     try { parsed = JSON.parse(text); } catch { /* fall through */ }
   }
+  const parsedError =
+    parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
+      ? String((parsed as { error?: unknown }).error ?? '')
+      : '';
 
   // Only the terminal no-hands-remain 409 means the game is complete. Other
   // conflicts are real hand-transition errors and must not auto-complete a set.
   if (response.status === 409) {
-    const message = parsed?.error ?? 'No hands remain in this Daily Fritz run.';
+    const message = parsedError || 'No hands remain in this Daily Fritz run.';
     if (!String(message).toLowerCase().includes('no hands remain')) {
       throw new Error(message);
     }
@@ -504,7 +512,7 @@ export async function nextDailyFritzHand(input: {
       data: {
         url,
         status: response.status,
-        error: parsed?.error ?? null,
+        error: parsedError || null,
         bodySnippet: text.slice(0, 240),
       },
     });
@@ -512,11 +520,11 @@ export async function nextDailyFritzHand(input: {
       console.warn('[daily-fritz:next-hand] non-OK response', {
         url,
         status: response.status,
-        error: parsed?.error,
+        error: parsedError || null,
       });
     }
     throw new Error(
-      parsed?.error ?? `/api/daily-fritz/next-hand failed with ${response.status}`,
+      parsedError || `/api/daily-fritz/next-hand failed with ${response.status}`,
     );
   }
 

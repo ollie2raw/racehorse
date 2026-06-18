@@ -100,7 +100,7 @@ function makeDevOpponentHandTrap(): Tile[] {
 }
 
 export function toBotVisibleState(state: BotMatchState): BotVisibleState {
-  const isDevRuntime = Boolean((import.meta as any)?.env?.DEV);
+  const isDevRuntime = Boolean(import.meta.env?.DEV);
   const opponentTileCount = state.players.you.hand.length;
   return {
     ...state,
@@ -1587,7 +1587,7 @@ export function chooseBotMove(
 ): BotChoice | null {
   const state = asVisibleState(inputState);
   const t0 = performance.now();
-  const isDevRuntime = Boolean((import.meta as any)?.env?.DEV);
+  const isDevRuntime = Boolean(import.meta.env?.DEV);
 
   const totalTilesForLog = state.players.bot.hand.length + getOpponentTileCount(state);
 

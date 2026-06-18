@@ -8,6 +8,7 @@ import {
 } from './learn/guidedAuthoring';
 import { resolveGuidedMatchStart } from './learn/lessonV2';
 import type { AppRoutesProps } from './appRouteTypes';
+import type { WeeklyRecap } from './stats/statsApi';
 import { LEARN_MODE_VISIBLE } from './appRouteTypes';
 
 const SinglePlayerHubScreen = React.lazy(() => import('./screens/SinglePlayerHubScreen'));
@@ -53,7 +54,7 @@ function WeeklyStatsScreen({
   onClose: () => void;
   user: User | null;
 }) {
-  const [recap, setRecap] = useState<any | null>(null);
+  const [recap, setRecap] = useState<WeeklyRecap | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -765,7 +766,7 @@ export default function AppRoutes(props: AppRoutesProps) {
           <SinglePlayerHubScreen
             userId={authUser?.id ?? null}
             onBack={() => setAppMode('home')}
-            onNavigate={(mode) => setAppMode(mode as any)}
+            onNavigate={setAppMode}
             onOpenAuth={handleOpenAuthModal}
             onOpenAccount={handleOpenAccountModal}
           />

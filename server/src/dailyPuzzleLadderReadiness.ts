@@ -49,20 +49,24 @@ export function assessDailyPuzzleLadderReadiness(
   };
 }
 
+/** Minutes since Pacific midnight for `now` (0–1439). Uses h23 hour cycle for stable CI/ICU parsing. */
+export function getPacificMinutesSinceMidnight(now: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PACIFIC_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const hourRaw = Number(parts.find((part) => part.type === 'hour')?.value ?? '0');
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? '0');
+  const hour = hourRaw === 24 ? 0 : hourRaw % 24;
+  return hour * 60 + minute;
+}
+
 export function isPastLadderReadinessGracePt(runDate: string, now: Date = new Date()): boolean {
   const todayPt = getPacificDateKey(now);
   if (runDate !== todayPt) return false;
-
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: PACIFIC_TZ,
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  }).formatToParts(now);
-  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? '0');
-  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? '0');
-  const minutesSinceMidnight = hour * 60 + minute;
-  return minutesSinceMidnight >= LADDER_READINESS_GRACE_MINUTES_PT;
+  return getPacificMinutesSinceMidnight(now) >= LADDER_READINESS_GRACE_MINUTES_PT;
 }
 
 export function normalizePublishedSlotRows<T extends Parameters<typeof normalizeDailyPuzzleSlot>[0]>(

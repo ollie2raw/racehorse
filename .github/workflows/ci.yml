@@ -26,6 +26,8 @@ jobs:
         run: npm ci --prefix client
 
       - name: Server tests
+        env:
+          TZ: America/Los_Angeles
         run: npm run test --prefix server
 
       - name: Server build

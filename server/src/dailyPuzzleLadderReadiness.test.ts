@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assessDailyPuzzleLadderReadiness,
+  getPacificMinutesSinceMidnight,
   LADDER_READINESS_GRACE_MINUTES_PT,
 } from './dailyPuzzleLadderReadiness';
 import type { DailyPuzzleSlot } from './dailyPuzzle';
@@ -54,7 +55,9 @@ describe('dailyPuzzleLadderReadiness', () => {
   });
 
   it('does not alert before Pacific grace window ends', () => {
-    const readiness = assessDailyPuzzleLadderReadiness('2026-06-11', [], new Date('2026-06-11T00:05:00-07:00'));
+    const now = new Date('2026-06-11T00:05:00-07:00');
+    expect(getPacificMinutesSinceMidnight(now)).toBe(5);
+    const readiness = assessDailyPuzzleLadderReadiness('2026-06-11', [], now);
     expect(readiness.ready).toBe(false);
     expect(readiness.shouldAlert).toBe(false);
   });

@@ -123,13 +123,15 @@ const TIER_COLORS: Record<FritzTier, string> = {
   master: "#A855F7",   // Master Purple
 };
 
+type TierIconProps = { size?: number; color?: string };
+
 const DIFFICULTIES: Array<{
   id: FritzTier;
   label: string;
   roleLabel: string;
   approxStrength: string;
   desc: string;
-  Icon: React.FC<any>;
+  Icon: React.FC<TierIconProps>;
 }> = [
   {
     id: "rookie",
@@ -165,7 +167,7 @@ const DIFFICULTIES: Array<{
   },
 ];
 
-const DEAL_SIZES: Array<{ id: BotDealSize; label: string; sublabel: string; Icon: React.FC<any> }> = [
+const DEAL_SIZES: Array<{ id: BotDealSize; label: string; sublabel: string; Icon: React.FC<TierIconProps> }> = [
   { id: 7, label: "7 Tiles", sublabel: "Classic 7-tile format", Icon: IconDomino7 },
   { id: 14, label: "14 Tiles", sublabel: "Extended 14-tile format", Icon: IconDomino14 },
 ];
