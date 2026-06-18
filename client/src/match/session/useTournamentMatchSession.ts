@@ -93,7 +93,7 @@ export type TournamentMatchSessionApi = {
   setTournamentResultError: Dispatch<SetStateAction<string | null>>;
   pendingTournamentAttachMatchIdRef: MutableRefObject<string | null>;
   attachedTournamentMatchIdRef: MutableRefObject<string | null>;
-  consumedTournamentGameOverMatchIdsRef: MutableRefObject<Set<string>>;
+  consumedTournamentGameOverMatchIds: ReadonlySet<string>;
   clearTournamentAttachRefs: () => void;
   applyTournamentMetadataFromJoin: (
     resp: {
@@ -154,9 +154,18 @@ export function useTournamentMatchSession(
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
   const [tournamentMatch, setTournamentMatch] = useState<TournamentMatchContext | null>(null);
   const [completedTournamentId, setCompletedTournamentId] = useState<string | null>(null);
-  const consumedTournamentGameOverMatchIdsRef = useRef<Set<string>>(
-    new Set(readTerminalTournamentMatchIds()),
-  );
+  const [consumedTournamentGameOverMatchIds, setConsumedTournamentGameOverMatchIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set(readTerminalTournamentMatchIds()));
+
+  const markTournamentGameOverConsumed = useCallback((matchId: string) => {
+    setConsumedTournamentGameOverMatchIds((prev) => {
+      if (prev.has(matchId)) return prev;
+      const next = new Set(prev);
+      next.add(matchId);
+      return next;
+    });
+  }, []);
   const dismissedTournamentIdsRef = useRef<Set<string>>(new Set());
   const [tournamentResult, setTournamentResult] = useState<TournamentResultView | null>(null);
   const [tournamentResultLoading, setTournamentResultLoading] = useState(false);
@@ -187,7 +196,7 @@ export function useTournamentMatchSession(
     }) => {
       const { matchId, tournamentId, roomCode, round, routeView, tournamentCompleted } = input;
       markTerminalTournamentMatch({ matchId, tournamentId, roomCode });
-      consumedTournamentGameOverMatchIdsRef.current.add(matchId);
+      markTournamentGameOverConsumed(matchId);
       attachedTournamentMatchIdRef.current = null;
       pendingTournamentAttachMatchIdRef.current = null;
       console.log('[tournament:complete] clearing live room state', {
@@ -220,7 +229,7 @@ export function useTournamentMatchSession(
       tournament.clearRecoveryMatch();
       void tournament.refresh();
     },
-    [clearRecoverableRoomStateRef, joinedRoomRef, resetMultiplayerRoomStateRef, setAppMode, socketRef, tournament],
+    [clearRecoverableRoomStateRef, joinedRoomRef, markTournamentGameOverConsumed, resetMultiplayerRoomStateRef, setAppMode, socketRef, tournament],
   );
 
   const enterTournamentLobby = useCallback(
@@ -291,7 +300,7 @@ export function useTournamentMatchSession(
           tournamentId: currentTournamentContext.tournamentId,
           roomCode: currentTournamentContext.roomCode ?? joinedRoom,
         });
-        consumedTournamentGameOverMatchIdsRef.current.add(currentTournamentContext.matchId);
+        markTournamentGameOverConsumed(currentTournamentContext.matchId);
         console.log('[tournament:postgame] cleared gameover state', {
           roomCode: currentTournamentContext.roomCode ?? joinedRoom,
           matchId: currentTournamentContext.matchId,
@@ -386,7 +395,7 @@ export function useTournamentMatchSession(
           typeof tournamentMeta?.tournamentId === 'string' ? tournamentMeta.tournamentId : '';
         if (
           isTerminalTournamentMatch(completedMatchId) ||
-          consumedTournamentGameOverMatchIdsRef.current.has(completedMatchId)
+          consumedTournamentGameOverMatchIds.has(completedMatchId)
         ) {
           if (tournamentId) {
             finalizeTournamentMatchSession({
@@ -414,6 +423,7 @@ export function useTournamentMatchSession(
     },
     [
       clearRecoverableRoomStateRef,
+      consumedTournamentGameOverMatchIds,
       finalizeTournamentMatchSession,
       preventAutoRejoinRef,
       resetMultiplayerRoomStateRef,
@@ -591,7 +601,7 @@ export function useTournamentMatchSession(
           const tournamentId = opts?.tournamentId ?? activeTournamentId ?? null;
           if (tournamentId) {
             markTerminalTournamentMatch({ matchId, tournamentId, roomCode: null });
-            consumedTournamentGameOverMatchIdsRef.current.add(matchId);
+            markTournamentGameOverConsumed(matchId);
             finalizeTournamentMatchSession({
               matchId,
               tournamentId,
@@ -1049,7 +1059,7 @@ export function useTournamentMatchSession(
     setTournamentResultError,
     pendingTournamentAttachMatchIdRef,
     attachedTournamentMatchIdRef,
-    consumedTournamentGameOverMatchIdsRef,
+    consumedTournamentGameOverMatchIds,
     clearTournamentAttachRefs,
     applyTournamentMetadataFromJoin,
     attemptTournamentAttach,

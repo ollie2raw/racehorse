@@ -203,7 +203,9 @@ export function clearAuthoringSession(): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(AUTHORING_STORAGE_KEY);
-  } catch {}
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 // ─── Frozen Lesson (player-facing) ──────────────────────────────────────────
@@ -432,14 +434,18 @@ export function saveOriginalGuidedTranscript(transcript: GuidedTranscript): void
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(ORIGINAL_COACHED_TRANSCRIPT_KEY, JSON.stringify(transcript));
-  } catch {}
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 export function clearOriginalGuidedTranscript(): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(ORIGINAL_COACHED_TRANSCRIPT_KEY);
-  } catch {}
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 export function loadOriginalGuidedTranscriptDraft(): GuidedTranscriptDraft | null {
@@ -467,14 +473,18 @@ export function saveOriginalGuidedTranscriptDraft(draft: GuidedTranscriptDraft):
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY, JSON.stringify(draft));
-  } catch {}
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 export function clearOriginalGuidedTranscriptDraft(): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY);
-  } catch {}
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 export function exportFrozenLessonAudit(lesson: FrozenLesson | null = loadFrozenLesson()): FrozenLessonAudit | null {
@@ -609,14 +619,18 @@ export function saveFrozenLesson(lesson: FrozenLesson): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(FROZEN_LESSON_KEY, JSON.stringify(lesson));
-  } catch {}
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 export function clearFrozenLesson(): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(FROZEN_LESSON_KEY);
-  } catch {}
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 // ─── Admin debug ─────────────────────────────────────────────────────────────

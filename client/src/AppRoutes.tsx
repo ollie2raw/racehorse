@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { ScreenLoader } from './ui/ScreenLoader';
-import { claudeRgb } from './ui/claudeMode';
+import { claudeRgb } from './ui/claudeModeUtils';
 import {
   loadAuthoringSession,
   saveFrozenLesson,

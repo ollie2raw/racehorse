@@ -170,10 +170,14 @@ export function usePreGameDraw({
   onComplete,
 }: UsePreGameDrawOptions): UsePreGameDrawResult {
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const rngRef = useRef(rng);
-  rngRef.current = rng;
+  useEffect(() => {
+    rngRef.current = rng;
+  }, [rng]);
 
   const scriptedMode = scriptedPlayerTileId != null && scriptedFritzTileId != null && scriptedWinner != null;
 
@@ -185,7 +189,9 @@ export function usePreGameDraw({
   const restoredSnapshot = enabled ? readRestorableDrawSnapshot(persistenceKey) : null;
   const didRestoreSnapshotRef = useRef(Boolean(restoredSnapshot));
   const persistenceKeyRef = useRef(persistenceKey);
-  persistenceKeyRef.current = persistenceKey;
+  useEffect(() => {
+    persistenceKeyRef.current = persistenceKey;
+  }, [persistenceKey]);
 
   const [uiPhase, setUiPhase] = useState<UsePreGameDrawUiPhase>(() =>
     restoredSnapshot?.uiPhase ?? (enabled ? 'pick-player' : 'idle'),
@@ -255,14 +261,17 @@ export function usePreGameDraw({
   useEffect(() => {
     if (!enabled) {
       wasEnabledRef.current = false;
-      setInitPending(false);
       clearOpponentPickTimer();
       clearRevealPauseTimer();
       clearResultTimer();
       clearTieHoldTimer();
-      setUiPhase('idle');
-      setDrawState(null);
-      setResultMessage(null);
+      void (async () => {
+        await Promise.resolve();
+        setInitPending(false);
+        setUiPhase('idle');
+        setDrawState(null);
+        setResultMessage(null);
+      })();
       return;
     }
 
@@ -271,25 +280,30 @@ export function usePreGameDraw({
     }
 
     wasEnabledRef.current = true;
-    setInitPending(true);
-    setResultMessage(null);
-    const restored = readRestorableDrawSnapshot(persistenceKey);
-    if (restored) {
-      didRestoreSnapshotRef.current = true;
-      setDrawState(restored.drawState);
-      setUiPhase(restored.uiPhase);
-      setResultMessage(restored.resultMessage);
-      return;
-    }
-    setDrawState(createFreshDrawState(rngRef.current));
-    setUiPhase('pick-player');
+    void (async () => {
+      await Promise.resolve();
+      setInitPending(true);
+      setResultMessage(null);
+      const restored = readRestorableDrawSnapshot(persistenceKey);
+      if (restored) {
+        didRestoreSnapshotRef.current = true;
+        setDrawState(restored.drawState);
+        setUiPhase(restored.uiPhase);
+        setResultMessage(restored.resultMessage);
+        return;
+      }
+      setDrawState(createFreshDrawState(rngRef.current));
+      setUiPhase('pick-player');
+    })();
   }, [enabled, persistenceKey, clearOpponentPickTimer, clearRevealPauseTimer, clearResultTimer, clearTieHoldTimer]);
 
   useEffect(() => {
     if (!initPending) return;
-    if (uiPhase === 'pick-player' && drawState !== null) {
+    if (uiPhase !== 'pick-player' || drawState === null) return;
+    void (async () => {
+      await Promise.resolve();
       setInitPending(false);
-    }
+    })();
   }, [initPending, uiPhase, drawState]);
 
   useEffect(() => () => clearAllTimers(), [clearAllTimers]);

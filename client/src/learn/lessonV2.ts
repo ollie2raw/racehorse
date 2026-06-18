@@ -351,12 +351,20 @@ function lsGet(key: string): string | null {
 
 function lsSet(key: string, value: string): void {
   if (typeof window === 'undefined') return;
-  try { window.localStorage.setItem(key, value); } catch {}
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 function lsRemove(key: string): void {
   if (typeof window === 'undefined') return;
-  try { window.localStorage.removeItem(key); } catch {}
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 // ─── Authoring session ───────────────────────────────────────────────────────

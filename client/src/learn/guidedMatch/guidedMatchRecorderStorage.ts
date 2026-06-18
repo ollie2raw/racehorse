@@ -59,7 +59,9 @@ export function clearGuidedMatchRecorderDraft(): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(GUIDED_MATCH_RECORDER_DRAFT_KEY);
-  } catch {}
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 export function probeGuidedMatchRecorderDraftStorage(): {

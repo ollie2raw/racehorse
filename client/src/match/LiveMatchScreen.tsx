@@ -118,7 +118,7 @@ export type LiveMatchScreenProps = {
   roomRecoveryMessage: string;
   onRetryRoomRecovery: () => void;
   tournamentMatch: TournamentMatchContext | null;
-  consumedTournamentGameOverMatchIdsRef: MutableRefObject<Set<string>>;
+  consumedTournamentGameOverMatchIds: ReadonlySet<string>;
   tournamentMyLabel: string;
   tournamentOpponentLabel: string | null;
   onTournamentViewBracket: () => void;
@@ -485,7 +485,7 @@ export function LiveMatchScreen({
   roomRecoveryMessage,
   onRetryRoomRecovery,
   tournamentMatch,
-  consumedTournamentGameOverMatchIdsRef,
+  consumedTournamentGameOverMatchIds,
   tournamentMyLabel,
   tournamentOpponentLabel,
   onTournamentViewBracket,
@@ -649,7 +649,7 @@ export function LiveMatchScreen({
               shouldShowTournamentGameOverOverlay({
                 gameOver: state.gameOver,
                 matchId: tournamentMatch.matchId,
-                consumedMatchIds: consumedTournamentGameOverMatchIdsRef.current,
+                consumedMatchIds: consumedTournamentGameOverMatchIds,
               }) ? (
                 <TournamentGameOverOverlay
                   state={state}

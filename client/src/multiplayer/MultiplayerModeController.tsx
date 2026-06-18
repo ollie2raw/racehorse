@@ -132,7 +132,7 @@ export type MultiplayerAbandonedMatchView = {
 
 export type MultiplayerTournamentPassthroughView = {
   tournamentMatch: TournamentMatchContext | null;
-  consumedTournamentGameOverMatchIdsRef: MutableRefObject<Set<string>>;
+  consumedTournamentGameOverMatchIds: ReadonlySet<string>;
   tournamentMyLabel: string;
   tournamentOpponentLabel: string | null;
   navigateAfterTournamentMatch: (nextView: 'hub' | 'bracket' | 'result') => void;
@@ -277,7 +277,7 @@ export default function MultiplayerModeController({
 
   const {
     tournamentMatch,
-    consumedTournamentGameOverMatchIdsRef,
+    consumedTournamentGameOverMatchIds,
     tournamentMyLabel,
     tournamentOpponentLabel,
     navigateAfterTournamentMatch,
@@ -459,7 +459,7 @@ export default function MultiplayerModeController({
             onRetryRoomRecovery={retryRoomRecovery}
             winTarget={state?.config?.winningScore ?? 60}
             tournamentMatch={tournamentMatch}
-            consumedTournamentGameOverMatchIdsRef={consumedTournamentGameOverMatchIdsRef}
+            consumedTournamentGameOverMatchIds={consumedTournamentGameOverMatchIds}
             tournamentMyLabel={tournamentMyLabel}
             tournamentOpponentLabel={tournamentOpponentLabel}
             onTournamentViewBracket={() => navigateAfterTournamentMatch('bracket')}

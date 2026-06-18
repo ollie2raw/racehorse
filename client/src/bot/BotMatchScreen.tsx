@@ -7661,7 +7661,6 @@ export default function BotMatchScreen({
           { label: 'You', score: match.players.you.score, tone: 'you' },
         ]}
       />
-      {false && toast && <div className="toast">{toast}</div>}
       {handReveal && !match.gameOver && (
         <GameOverlayPortal>
           <HandOverModal

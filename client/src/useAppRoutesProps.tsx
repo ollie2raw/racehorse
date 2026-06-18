@@ -187,7 +187,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       },
       tournamentPassthroughView: {
         tournamentMatch: source.tournamentMatch,
-        consumedTournamentGameOverMatchIdsRef: source.consumedTournamentGameOverMatchIdsRef,
+        consumedTournamentGameOverMatchIds: source.consumedTournamentGameOverMatchIds,
         tournamentMyLabel: source.tournamentMyLabel,
         tournamentOpponentLabel: source.tournamentOpponentLabel,
         navigateAfterTournamentMatch: source.navigateAfterTournamentMatch,
@@ -212,7 +212,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
       source.boardRef,
       source.boneyardRef,
       source.confettiCanvasRef,
-      source.consumedTournamentGameOverMatchIdsRef,
+      source.consumedTournamentGameOverMatchIds,
       source.handAreaRef,
       source.opponentPillRef,
       source.setAbandonedMatchNotice,

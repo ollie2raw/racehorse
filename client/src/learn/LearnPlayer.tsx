@@ -118,7 +118,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
 
   const stepKey = `${resolvedLessonId}:${stepIndex}`;
   const [prevStepKey, setPrevStepKey] = useState('');
-  if (stepKey !== prevStepKey) {
+  useEffect(() => {
     if (drillFrameRef.current !== null) {
       window.cancelAnimationFrame(drillFrameRef.current);
       drillFrameRef.current = null;
@@ -151,6 +151,9 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
       window.clearTimeout(predictionTimeoutRef.current);
       predictionTimeoutRef.current = null;
     }
+  }, [stepKey]);
+
+  if (stepKey !== prevStepKey) {
     setPrevStepKey(stepKey);
     setQuizSolved(false);
     setQuizWrongAttempts(0);
