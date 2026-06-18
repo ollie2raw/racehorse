@@ -994,10 +994,30 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         const room = getRoom(roomCode);
         const playerSeatId = resolveActorSeatId(roomCode, socket);
         if (!room.players.includes(playerSeatId)) {
+          console.log('[player:ready] rejected — seat not in room.players', {
+            roomCode,
+            playerSeatId,
+            socketId: socket.id,
+            roomPlayers: [...room.players],
+            matchStartReady: [...room.matchStartReady],
+          });
           cb?.({ ok: false, error: 'Only room players can ready up.' });
           return;
         }
+        console.log('[player:ready] marking seat ready', {
+          roomCode,
+          playerSeatId,
+          socketId: socket.id,
+          roomPlayers: [...room.players],
+          matchStartReadyBefore: [...room.matchStartReady],
+        });
         markMatchStartReady(roomCode, playerSeatId);
+        const roomAfterReady = getRoom(roomCode);
+        console.log('[player:ready] matchStartReady after mark', {
+          roomCode,
+          playerSeatId,
+          matchStartReady: [...roomAfterReady.matchStartReady],
+        });
         const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
         if (startResult.started) {
           const started = getRoom(roomCode);
@@ -1020,6 +1040,7 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'unknown error';
+        console.log('[player:ready] ERROR', { roomCode, socketId: socket.id, error: message });
         cb?.({ ok: false, error: message });
       }
     });
@@ -1049,6 +1070,20 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         }
         markMatchStartReady(roomCode, playerSeatId);
         const startResult = await tryStartMatchIfReady(roomCode, io, buildMatchStartDeps(io));
+        const roomForAudit = getRoom(roomCode);
+        const auditPlayers = [...roomForAudit.players];
+        const auditReady = [...roomForAudit.matchStartReady];
+        const auditMissing = auditPlayers.filter((id) => !roomForAudit.matchStartReady.has(id));
+        console.log('[game:start] matchStartReady audit', {
+          roomCode,
+          hostSeatId: playerSeatId,
+          socketId: socket.id,
+          roomPlayers: auditPlayers,
+          matchStartReady: auditReady,
+          missing: auditMissing,
+          waitingFor: startResult.waitingFor ?? [],
+          started: startResult.started,
+        });
         if (!startResult.started) {
           if (typeof cb === 'function') {
             cb({ ok: false, error: 'waiting_for_ready', waitingFor: startResult.waitingFor ?? [] });
