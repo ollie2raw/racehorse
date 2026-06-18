@@ -91,7 +91,7 @@ export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnS
         playerHand: state.players.you.hand,
         boardTiles: scenario.setup.boardTiles
       });
-      (window as any).MATCH = state;
+      (window as Window & { MATCH?: typeof state }).MATCH = state;
     }
     return state;
   });

@@ -35,8 +35,12 @@ function RatingSparkline({ matches }: { matches: PublicProfile['recent_matches']
   if (matches.length < 3) return null;
   // Reverse so oldest is left, newest is right
   const ordered = [...matches].reverse();
-  let cumulative = 0;
-  const points = ordered.map((m) => { cumulative += m.result === 'win' ? 1 : -1; return cumulative; });
+  const points: number[] = [];
+  let running = 0;
+  for (const m of ordered) {
+    running += m.result === 'win' ? 1 : -1;
+    points.push(running);
+  }
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = Math.max(max - min, 2);

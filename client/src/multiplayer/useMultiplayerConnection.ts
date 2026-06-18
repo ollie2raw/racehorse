@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
@@ -180,8 +180,10 @@ function flattenMultiplayerConnectionParams(
 }
 
 export function useMultiplayerConnection(params: UseMultiplayerConnectionParams) {
-  const latestRef = useRef(flattenMultiplayerConnectionParams(params));
-  latestRef.current = flattenMultiplayerConnectionParams(params);
+  const latestRef = useRef<ReturnType<typeof flattenMultiplayerConnectionParams>>(null!);
+  useLayoutEffect(() => {
+    latestRef.current = flattenMultiplayerConnectionParams(params);
+  });
   const { connectionState, config } = params;
 
   const recoveryMachineRef = useRef<RecoveryMachine | null>(null);
@@ -290,42 +292,47 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     [dispatchRecovery],
   );
 
-  handleRecoveryEffectRef.current = (effect: RecoveryEffect) => {
-    const p = latestRef.current;
-    switch (effect.type) {
-      case 'connect':
-        establishSocketRef.current();
-        break;
-      case 'room_join':
-        void executeRecoveryRoomJoin(effect.roomCode);
-        break;
-      case 'resync':
-        void executeRecoveryResync(effect.roomCode);
-        break;
-      case 'clear_terminal_room':
-        if (typeof window !== 'undefined') {
-          window.localStorage.removeItem(p.lastRoomStorageKey);
-        }
-        break;
-      case 'cancel_schedule':
-        p.reconnectAttemptTimerRef.current = null;
-        break;
-      default:
-        break;
-    }
-  };
-
-  if (!recoveryMachineRef.current) {
-    recoveryMachineRef.current = createRecoveryMachine({
-      onEffect: (effect) => handleRecoveryEffectRef.current(effect),
-    });
-  }
+  useEffect(() => {
+    handleRecoveryEffectRef.current = (effect: RecoveryEffect) => {
+      const p = latestRef.current;
+      switch (effect.type) {
+        case 'connect':
+          establishSocketRef.current();
+          break;
+        case 'room_join':
+          void executeRecoveryRoomJoin(effect.roomCode);
+          break;
+        case 'resync':
+          void executeRecoveryResync(effect.roomCode);
+          break;
+        case 'clear_terminal_room':
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(p.lastRoomStorageKey);
+          }
+          break;
+        case 'cancel_schedule':
+          p.reconnectAttemptTimerRef.current = null;
+          break;
+        default:
+          break;
+      }
+    };
+  }, [executeRecoveryResync, executeRecoveryRoomJoin]);
 
   useEffect(() => {
-    if (params.recoveryDispatchRef) {
-      params.recoveryDispatchRef.current = dispatchRecovery;
+    if (!recoveryMachineRef.current) {
+      recoveryMachineRef.current = createRecoveryMachine({
+        onEffect: (effect) => handleRecoveryEffectRef.current(effect),
+      });
     }
-  }, [dispatchRecovery, params.recoveryDispatchRef]);
+  }, []);
+
+  useEffect(() => {
+    const recoveryDispatchBridgeRef = params.recoveryDispatchRef;
+    if (recoveryDispatchBridgeRef) {
+      recoveryDispatchBridgeRef.current = dispatchRecovery;
+    }
+  }, [dispatchRecovery]);
 
   useEffect(() => {
     const machine = recoveryMachineRef.current;
@@ -681,7 +688,9 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     p.setSocket(s);
   }, [dispatchRecovery, syncMachineToLegacy, trySavedRoomAutoJoin]);
 
-  establishSocketRef.current = establishSocket;
+  useLayoutEffect(() => {
+    establishSocketRef.current = establishSocket;
+  }, [establishSocket]);
 
   const connect = useCallback(() => {
     establishSocketRef.current();

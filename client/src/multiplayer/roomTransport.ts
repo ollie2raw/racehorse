@@ -5,7 +5,7 @@ import type { GameState } from '../types';
 export const SOCKET_ACK_TIMEOUT_MS = 8000;
 
 export type SocketEmitter = {
-  emit: (...args: any[]) => void;
+  emit: (event: string, ...args: unknown[]) => void;
 };
 
 export type RoomAckResponse = {
@@ -76,7 +76,7 @@ function isMpDebugEnabled(): boolean {
 export function emitWithAck<TResp>(
   socket: SocketEmitter,
   event: string,
-  ...argsWithoutAck: any[]
+  ...argsWithoutAck: unknown[]
 ): Promise<TResp> {
   return new Promise((resolve, reject) => {
     const mpDebug = isMpDebugEnabled();

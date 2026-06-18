@@ -53,7 +53,7 @@ async function requestServerJson<T>(path: string, init?: RequestInit): Promise<T
     headers,
   });
   const text = await response.text().catch(() => '');
-  let parsed: any = null;
+  let parsed: unknown = null;
   if (text) {
     try {
       parsed = JSON.parse(text);
@@ -69,7 +69,14 @@ async function requestServerJson<T>(path: string, init?: RequestInit): Promise<T
     }
   }
   if (!response.ok) {
-    throw new Error(parsed?.error ?? `${path} failed with ${response.status}`);
+    const bodyError =
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      'error' in parsed &&
+      typeof (parsed as { error: unknown }).error === 'string'
+        ? (parsed as { error: string }).error
+        : undefined;
+    throw new Error(bodyError ?? `${path} failed with ${response.status}`);
   }
   return parsed as T;
 }

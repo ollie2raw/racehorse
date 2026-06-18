@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { GlobalNav } from '../components';
 import { useSyncNow } from '../ui/useSyncNow';
 import type { AppMode } from '../types';

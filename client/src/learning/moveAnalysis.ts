@@ -53,7 +53,7 @@ import {
   type MoveFeatures,
   type ReasonTaggingOutput,
 } from './reasonTagging.ts';
-import type { Move } from '../types.ts';
+import type { Move, PlacementPosition } from '../types.ts';
 import type { BotMatchState, BotMovePreview } from '../bot/botEngine.ts';
 import {
   getLegalMoves,
@@ -824,7 +824,7 @@ export function createMockEvaluationResult(
   ): LearningMoveAnalysis => ({
     moveId:            `${low}|${high}-${position}`,
     moveNotation:      `[${low}|${high}] → ${position}`,
-    move:              { type: 'play', tile: { low, high }, position: position as any },
+    move:              { type: 'play', tile: { low, high }, position: position as PlacementPosition },
     rank,
     engineScore:       score,
     scoreDeltaFromBest: delta,

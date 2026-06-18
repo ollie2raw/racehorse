@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 type RenderSample = {
   name: string;
@@ -69,9 +69,10 @@ export function useRenderProfiler(name: string) {
   const enabled = shouldProfileRenders();
   const startRef = useRef(0);
 
-  if (enabled) {
+  useLayoutEffect(() => {
+    if (!enabled) return;
     startRef.current = performance.now();
-  }
+  });
 
   useEffect(() => {
     if (!enabled) return;

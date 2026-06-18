@@ -196,8 +196,12 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
     setRoomReactions([]);
   }, []);
 
-  props.roomSocialRuntime.appendRoomReactionRef.current = appendRoomReaction;
-  props.roomSocialRuntime.clearRoomReactionsRef.current = clearRoomReactions;
+  useEffect(() => {
+    const appendRoomReactionRef = props.roomSocialRuntime.appendRoomReactionRef;
+    const clearRoomReactionsRef = props.roomSocialRuntime.clearRoomReactionsRef;
+    appendRoomReactionRef.current = appendRoomReaction;
+    clearRoomReactionsRef.current = clearRoomReactions;
+  }, [appendRoomReaction, clearRoomReactions, props.roomSocialRuntime]);
 
   const leavePrivateLobbyRoom = useCallback(() => {
     const code = props.normalizeRoomCode(props.roomRuntime.joinedRoomRef.current);
@@ -206,14 +210,21 @@ function useMultiplayerLobbyController(props: MultiplayerLobbyActionsHostProps) 
       emitRoomLeave(s, code);
     }
     clearLastRoomCode();
-    props.intentionalDisconnectRef.current = false;
-    props.reconnectRuntime.reconnectShouldJoinRef.current = false;
-    props.reconnectRuntime.reconnectRoomCodeRef.current = null;
+    const intentionalDisconnectRef = props.intentionalDisconnectRef;
+    const reconnectShouldJoinRef = props.reconnectRuntime.reconnectShouldJoinRef;
+    const reconnectRoomCodeRef = props.reconnectRuntime.reconnectRoomCodeRef;
+    const preventAutoRejoinRef = props.reconnectRuntime.preventAutoRejoinRef;
+    intentionalDisconnectRef.current = false;
+    reconnectShouldJoinRef.current = false;
+    reconnectRoomCodeRef.current = null;
     props.clearReconnectAttemptTimer();
-    props.reconnectAttemptCountRef.current = 0;
-    props.rejoinInFlightRef.current = false;
-    props.reconnectRuntime.preventAutoRejoinRef.current = false;
-    props.autoJoinAttemptedRef.current = false;
+    const reconnectAttemptCountRef = props.reconnectAttemptCountRef;
+    const rejoinInFlightRef = props.rejoinInFlightRef;
+    const autoJoinAttemptedRef = props.autoJoinAttemptedRef;
+    reconnectAttemptCountRef.current = 0;
+    rejoinInFlightRef.current = false;
+    preventAutoRejoinRef.current = false;
+    autoJoinAttemptedRef.current = false;
     props.setIsRecoveringConnection(false);
     props.setRoomRecoveryState('idle');
     props.setRoomRecoveryMessage('');

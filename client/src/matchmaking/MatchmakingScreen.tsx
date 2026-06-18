@@ -164,19 +164,12 @@ const RATING_SEGMENTS = [
 
 export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const {
-    socket,
-    identity,
     isConnected,
     isConnecting: isConnectingProp,
     serverUrl: serverUrlProp,
     onRetryConnect,
     myRating: myRatingProp,
     myWinStreak: myWinStreakProp,
-    onNavigate,
-    onOpenAuth,
-    onOpenAccount,
-    onBackHome,
-    onOpenPrivateMatch,
     onAutoJoinRoom,
   } = props;
   const isConnecting = isConnectingProp ?? false;
@@ -248,7 +241,7 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
 
   const myRating = myRatingProp ?? null;
   const myWinStreak = myWinStreakProp ?? null;
-  const myUsername = identity?.username ?? null;
+  const myUsername = props.identity?.username ?? null;
 
   const queueUiState = isSearching ? 'searching' : isTimeout ? 'timeout' : 'idle';
 

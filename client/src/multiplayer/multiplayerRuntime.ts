@@ -163,9 +163,9 @@ export type MultiplayerRoomActionsTransport = {
   normalizeRoomCode: (value: unknown) => string;
   normalizeRoomPlayers: (value: unknown) => RoomPlayer[];
   emitWithAck: <TResp>(
-    socket: { emit: (...args: any[]) => void },
+    socket: { emit: (event: string, ...args: unknown[]) => void },
     event: string,
-    ...argsWithoutAck: any[]
+    ...argsWithoutAck: unknown[]
   ) => Promise<TResp>;
   emitCreateRoom: (
     targetSocket: Socket,

@@ -109,11 +109,13 @@ const TournamentCardStatus = memo(function TournamentCardStatus({
     () => Date.parse(tournament.scheduled_start) - 30 * 60 * 1000,
     [tournament.scheduled_start],
   );
+  const tickWhileRegistrationOpen = tournament.status === 'registration_open';
+  const tickWhileStartSoon = Number.isFinite(startSoonAtMs);
+  const now = useSyncNow(1000, tickWhileRegistrationOpen || tickWhileStartSoon);
   const needsStatusTick =
-    tournament.status === 'registration_open' ||
-    (Number.isFinite(startSoonAtMs) && Date.now() < startSoonAtMs);
-  const now = useSyncNow(1000, needsStatusTick);
-  void now;
+    tickWhileRegistrationOpen ||
+    (tickWhileStartSoon && now < startSoonAtMs);
+  void needsStatusTick;
   const status = useMemo(() => statusFor(tournament), [tournament, now]);
 
   return <span className={`th-card__status ${status.cls}`}>{status.label}</span>;

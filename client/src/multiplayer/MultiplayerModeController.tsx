@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { ScreenLoader } from '../ui/ScreenLoader';
 import type { BoardHandle } from '../components';

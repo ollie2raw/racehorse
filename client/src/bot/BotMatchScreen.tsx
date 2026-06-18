@@ -1054,7 +1054,7 @@ export default function BotMatchScreen({
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [selectedController, setSelectedController] = useState<BotPlayerId | null>(null);
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
-  const [toast, setToast] = useState('');
+  const [_toast, setToast] = useState('');
   const [scoreToast, setScoreToast] = useState<{
     message: string;
     tone: 'you' | 'bot';
@@ -6796,7 +6796,8 @@ export default function BotMatchScreen({
     // getPlacementTargetsForTile for each tile in hand so we can see exactly
     // which tiles think they can be placed and on which end.
     if (match.board) {
-      const rawRenderedEnds = [
+      type RenderedOpenEnd = { side: string; val: number; isDouble: boolean };
+      const rawRenderedEnds: RenderedOpenEnd[] = [
         { side: 'left',  val: match.board.leftEnd,  isDouble: match.board.leftEndIsDouble },
         { side: 'right', val: match.board.rightEnd, isDouble: match.board.rightEndIsDouble },
         ...match.board.hubDoubles.flatMap((h, hi) =>
@@ -6805,7 +6806,7 @@ export default function BotMatchScreen({
                 b ? { side: `hub${hi}-arm${bi}`, val: b.openEnd, isDouble: b.openEndIsDouble } : null,
               )
             : [],
-        ).filter(Boolean),
+        ).filter((e): e is RenderedOpenEnd => e != null),
       ];
       botMatchDebugLog('[guided-legal] visible rendered open ends =', rawRenderedEnds);
 
@@ -6823,7 +6824,7 @@ export default function BotMatchScreen({
       botMatchDebugLog('[guided-legal] placement targets for each tile in hand =', perTileTargets);
 
       // Mismatch detection: any legality end that isn't present among visible ends
-      const visibleSet = new Set(rawRenderedEnds.map((e: any) => `${e.val}`));
+      const visibleSet = new Set(rawRenderedEnds.map((e) => `${e.val}`));
       const legalityExtras = legalityEnds.filter((e) => !visibleSet.has(`${e.val}`));
       const mismatchReason =
         legalityExtras.length > 0

@@ -1,4 +1,4 @@
-import React, { useMemo, type MutableRefObject, type RefObject } from 'react';
+import React, { useMemo, type RefObject } from 'react';
 import {
   AnimatedScore,
   Board,

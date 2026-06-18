@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AppMode } from '../types';
 import type { PrivateRoomCreateSettings } from './roomTransport';
 import type { Socket } from 'socket.io-client';
+import { useSyncNow } from '../ui/useSyncNow';
 import { GlobalNav } from '../components';
 import { MultiplayerTopBar } from '../matchmaking/MultiplayerTopBar';
 import { Button } from '../components/primitives';
@@ -298,8 +299,10 @@ export default function PrivateMatchLobbyScreen({
   const guestPresent = inRoom && !!roomGuest?.username;
   const guestDisplayName =
     guestPresent && roomGuest ? roomGuest.username.replace(/^@+/, '') : null;
+  const inviteExpiryTick = Boolean(pendingChallenge && !guestPresent);
+  const now = useSyncNow(1000, inviteExpiryTick);
   const pendingInviteActive = Boolean(
-    pendingChallenge && pendingChallenge.expiresAt > Date.now() && !guestPresent,
+    pendingChallenge && pendingChallenge.expiresAt > now && !guestPresent,
   );
   const pendingInviteName = pendingInviteActive
     ? pendingChallenge!.friendUsername.replace(/^@+/, '')
@@ -307,9 +310,12 @@ export default function PrivateMatchLobbyScreen({
 
   useEffect(() => {
     if (!guestPresent || !roomGuest) {
-      setGuestRankedLoading(false);
-      setGuestRating(null);
-      setGuestWinStreak(null);
+      void (async () => {
+        await Promise.resolve();
+        setGuestRankedLoading(false);
+        setGuestRating(null);
+        setGuestWinStreak(null);
+      })();
       return;
     }
 
@@ -317,11 +323,12 @@ export default function PrivateMatchLobbyScreen({
     const isPlaceholderGuest = !uname || uname.toLowerCase() === 'guest';
 
     let cancelled = false;
-    setGuestRankedLoading(true);
-    setGuestRating(null);
-    setGuestWinStreak(null);
-
     void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setGuestRankedLoading(true);
+      setGuestRating(null);
+      setGuestWinStreak(null);
       let userId: string | null = roomGuest.userId;
 
       if (!userId && supabase && !isPlaceholderGuest) {
