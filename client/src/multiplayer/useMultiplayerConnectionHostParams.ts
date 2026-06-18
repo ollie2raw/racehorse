@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
+import type { LegacyTournamentState } from './legacyTournamentTypes';
+import type { RoomAckResponse } from './roomTransport';
 import type { GameState, Move, Tile } from '../types';
 import type { UseMultiplayerConnectionParams } from './useMultiplayerConnection';
 import type { RecoveryEvent, RecoveryMachineSnapshot } from './recoveryMachine';
@@ -55,7 +57,7 @@ export type UseMultiplayerConnectionHostParamsSource = {
   recoveryDispatchRef?: MutableRefObject<
     (event: RecoveryEvent) => RecoveryMachineSnapshot | null
   >;
-  applyJoinedRoomResponse: (resp: unknown) => void;
+  applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
   fetchGameState: (reason: string) => Promise<boolean>;
   resetClientGameSession: () => void;
   clearReconnectAttemptTimer: () => void;
@@ -78,7 +80,7 @@ export type UseMultiplayerConnectionHostParamsSource = {
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
   setTournamentId: Dispatch<SetStateAction<string | null>>;
-  setTournamentState: Dispatch<SetStateAction<unknown>>;
+  setTournamentState: Dispatch<SetStateAction<LegacyTournamentState | null>>;
   setTournamentActiveRoom: Dispatch<SetStateAction<string | null>>;
   setRoomCode: Dispatch<SetStateAction<string>>;
   setHandReveal: Dispatch<

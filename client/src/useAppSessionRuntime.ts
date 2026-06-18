@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState } from './types';
 import type { AppMode } from './appRouteTypes';
+import type { RoomAckResponse } from './multiplayer/roomTransport';
 import type {
   MultiplayerAuthRuntime,
   MultiplayerJoinFlightRuntime,
@@ -37,7 +38,7 @@ export type UseAppSessionRuntimeSource = {
   appModeRef: MutableRefObject<AppMode>;
   setAppMode: Dispatch<SetStateAction<AppMode>>;
   joinedRoomRef: MutableRefObject<string | null>;
-  joinedRoomResponseRef: MutableRefObject<unknown>;
+  joinedRoomResponseRef: MutableRefObject<RoomAckResponse | null>;
   roomIdentityRef: MutableRefObject<{
     username: string;
     userId: string | null;
@@ -49,7 +50,7 @@ export type UseAppSessionRuntimeSource = {
   roomPlayersRef: MutableRefObject<
     Array<{ id: string; username: string; userId: string | null }>
   >;
-  applyJoinedRoomResponseRef: MutableRefObject<(resp: unknown) => void>;
+  applyJoinedRoomResponseRef: MutableRefObject<(resp: RoomAckResponse) => void>;
   clearRecoverableRoomStateRef: MutableRefObject<() => void>;
   resetMultiplayerRoomStateRef: MutableRefObject<
     (options?: { keepPlayers?: boolean; clearRoomCode?: boolean }) => void

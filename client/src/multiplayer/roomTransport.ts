@@ -1,5 +1,7 @@
 /** Socket.IO emit-with-ack transport for live multiplayer / tournament rooms. */
 
+import type { GameState } from '../types';
+
 export const SOCKET_ACK_TIMEOUT_MS = 8000;
 
 export type SocketEmitter = {
@@ -14,11 +16,11 @@ export type RoomAckResponse = {
   started?: boolean;
   roomCode?: string;
   you?: string;
-  state?: unknown;
+  state?: GameState | null;
   players?: unknown[];
   matchStatus?: string;
   tournamentId?: string;
-  tournamentMatch?: unknown;
+  tournamentMatch?: Record<string, unknown> | null;
   eventMeta?: unknown;
   matchStarted?: boolean;
 } & Record<string, unknown>;

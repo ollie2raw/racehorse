@@ -6,7 +6,13 @@ import { traceSocketEvent } from '../debug/socketTrace';
 import { playBlockedSound, playHandLoseSound, playHandWinSound } from '../utils/sound';
 import type { GameState, Move, Tile } from '../types';
 import { wrapSocketHandler } from './socketGuards';
-import { emitRoomAbandonMatch, emitRoomLeave } from './roomTransport';
+import { emitRoomAbandonMatch, emitRoomLeave, type RoomAckResponse } from './roomTransport';
+import type {
+  GameRematchStatusPayload,
+  LegacyTournamentState,
+  TournamentLobbyUpdatePayload,
+  TournamentMatchAssignedPayload,
+} from './legacyTournamentTypes';
 import { syncRecoveryLegacyRefs } from './recoveryConnectionBridge';
 import {
   createRecoveryMachine,
@@ -29,6 +35,7 @@ import type {
   MultiplayerRoomRuntime,
   MultiplayerRoomSocialRuntime,
   MultiplayerSocketRuntime,
+  RoomPlayer,
   RoomRecoveryState,
 } from './multiplayerRuntime';
 
@@ -134,18 +141,18 @@ type FlatMultiplayerConnectionParams = {
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
   setTournamentId: Dispatch<SetStateAction<string | null>>;
-  setTournamentState: Dispatch<SetStateAction<any>>;
+  setTournamentState: Dispatch<SetStateAction<LegacyTournamentState | null>>;
   setTournamentActiveRoom: Dispatch<SetStateAction<string | null>>;
   setRoomCode: Dispatch<SetStateAction<string>>;
   setAppMode: Dispatch<SetStateAction<MultiplayerConnectionState['appMode']>>;
   appendRoomReactionRef: MultiplayerRoomSocialRuntime['appendRoomReactionRef'];
   setHandReveal: Dispatch<SetStateAction<HandEndedPayload | null>>;
-  setPlayers: Dispatch<SetStateAction<any[]>>;
+  setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
   setSelectedTile: Dispatch<SetStateAction<Tile | null>>;
   setPendingUiAction: Dispatch<
     SetStateAction<null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'>
   >;
-  applyJoinedRoomResponse: (resp: any) => void;
+  applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
   clearReconnectAttemptTimer: () => void;
   clearTransientRoomUi: () => void;
   fetchGameState: (reason: string) => Promise<boolean>;
@@ -228,7 +235,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           code: roomCode,
           attempt: p.reconnectAttemptCountRef.current,
         });
-        const resp = await p.emitWithAck<any>(socket, 'room:join', roomCode, rejoinIdentity);
+        const resp = await p.emitWithAck<RoomAckResponse>(socket, 'room:join', roomCode, rejoinIdentity);
 
         if (resp?.ok) {
           console.warn('[rejoin] room:join success', {
@@ -338,7 +345,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       if (!savedCode || p.joinedRoomRef.current) return;
       p.autoJoinAttemptedRef.current = true;
       try {
-        const resp = await p.emitWithAck<any>(socket, 'room:join', savedCode, {
+        const resp = await p.emitWithAck<RoomAckResponse>(socket, 'room:join', savedCode, {
           username: p.authProfileUsername ?? 'Guest',
           userId: p.multiplayerIdentityUserIdRef.current,
           authToken: p.authAccessTokenRef.current,
@@ -429,7 +436,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
           current.authUserRef.current?.email?.split('@')[0] ??
           'player';
         if (userId) {
-          void current.emitWithAck<any>(s, 'presence:identify', {
+          void current.emitWithAck<RoomAckResponse>(s, 'presence:identify', {
             userId,
             username,
             authToken: current.authAccessTokenRef.current,
@@ -498,7 +505,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
     s.on(
       'tournament:lobby:update',
-      wrapSocketHandler('tournament:lobby:update', (data: any) => {
+      wrapSocketHandler('tournament:lobby:update', (data: TournamentLobbyUpdatePayload) => {
         const lobbyCode = typeof data?.lobbyCode === 'string' ? data.lobbyCode : null;
         const players = Array.isArray(data?.players) ? data.players : null;
         if (!players) return;
@@ -508,7 +515,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
             : typeof players?.[0]?.socketId === 'string'
               ? players[0].socketId
               : null;
-        latestRef.current.setTournamentState((prev: any) => ({
+        latestRef.current.setTournamentState((prev: LegacyTournamentState | null) => ({
           ...(prev ?? {}),
           status: 'lobby',
           lobbyCode: lobbyCode ?? (prev?.lobbyCode ?? null),
@@ -520,7 +527,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
     s.on(
       'tournament:state',
-      wrapSocketHandler('tournament:state', (data: any) => {
+      wrapSocketHandler('tournament:state', (data: LegacyTournamentState) => {
         const current = latestRef.current;
         current.setTournamentState(data);
         if (typeof data?.id === 'string') current.setTournamentId(data.id);
@@ -530,7 +537,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
     s.on(
       'tournament:match:assigned',
-      wrapSocketHandler('tournament:match:assigned', (data: any) => {
+      wrapSocketHandler('tournament:match:assigned', (data: TournamentMatchAssignedPayload) => {
         const current = latestRef.current;
         if (typeof data?.roomCode === 'string') current.setTournamentActiveRoom(data.roomCode);
         if (data?.roomCode && (data?.a === s.id || data?.b === s.id)) {
@@ -585,7 +592,7 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
     s.on(
       'game:rematch:status',
-      wrapSocketHandler('game:rematch:status', (payload: any) => {
+      wrapSocketHandler('game:rematch:status', (payload: GameRematchStatusPayload) => {
         const readyPlayerIds = Array.isArray(payload?.readyPlayerIds)
           ? payload.readyPlayerIds.filter((id: unknown): id is string => typeof id === 'string')
           : [];

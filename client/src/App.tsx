@@ -41,7 +41,15 @@ import {
   emitRoomCreate,
   emitRoomJoin,
   type PrivateRoomCreateSettings,
+  type RoomAckResponse,
 } from './multiplayer/roomTransport';
+import type { LegacyTournamentState } from './multiplayer/legacyTournamentTypes';
+import type {
+  PresenceOnlineSocketAck,
+  StatsWeeklySocketAck,
+  WeeklyAwardEntry,
+  WeeklyAwardsPayload,
+} from './stats/weeklyAwardsTypes';
 import {
   clearLastRoomCode,
   getOrCreateGuestIdentityId,
@@ -168,7 +176,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState('');
   const [tournamentCode, setTournamentCode] = useState('');
   const [tournamentId, setTournamentId] = useState<string | null>(null);
-  const [tournamentState, setTournamentState] = useState<any>(null);
+  const [tournamentState, setTournamentState] = useState<LegacyTournamentState | null>(null);
   const [tournamentActiveRoom, setTournamentActiveRoom] = useState<string | null>(null);
   const roomSocialRuntime = useMultiplayerRoomSocialRuntimeBridge();
   const [privateLobbyHostWinStreak, setPrivateLobbyHostWinStreak] = useState<number | null>(null);
@@ -252,7 +260,7 @@ export default function App() {
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [serverWaking, setServerWaking] = useState(false);
-  const [weeklyAwards, setWeeklyAwards] = useState<any | null>(null);
+  const [weeklyAwards, setWeeklyAwards] = useState<WeeklyAwardsPayload | null>(null);
   const [playersOnlineCount, setPlayersOnlineCount] = useState<number | null>(null);
   const [friendInvite, setFriendInvite] = useState<{
     inviteId: string;
@@ -285,7 +293,7 @@ export default function App() {
 
   const loadWeeklyAwards = useCallback(() => {
     if (!socket || !socket.connected) return;
-    socket.emit("stats:weekly", (resp: any) => {
+    socket.emit("stats:weekly", (resp: StatsWeeklySocketAck) => {
       if (!resp?.ok) return;
       setWeeklyAwards(resp.awards ?? null);
     });
@@ -296,7 +304,7 @@ export default function App() {
   const appModeRef = useRef(appMode);
   const mpSubViewRef = useRef(mpSubView);
   const roomPlayersRef = useRef<RoomPlayer[]>([]);
-  const joinedRoomResponseRef = useRef<any>(null);
+  const joinedRoomResponseRef = useRef<RoomAckResponse | null>(null);
   const roomIdentityRef = useRef<{
     username: string;
     userId: string | null;
@@ -354,7 +362,7 @@ export default function App() {
   const isSeatedPlayerRef = useRef(false);
   const matchStartedRef = useRef(false);
   const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
-  const applyJoinedRoomResponseRef = useRef<(resp: any) => void>(() => {});
+  const applyJoinedRoomResponseRef = useRef<(resp: RoomAckResponse) => void>(() => {});
   const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
 
   const dispatchRecovery = useCallback((event: RecoveryEvent) => {
@@ -756,9 +764,9 @@ export default function App() {
     [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate, dispatchRecovery],
   );
 
-  const applyJoinedRoomResponse = useCallback((resp: any) => {
+  const applyJoinedRoomResponse = useCallback((resp: RoomAckResponse) => {
     joinedRoomResponseRef.current = resp;
-    applyRoomEventMeta(resp.eventMeta);
+    applyRoomEventMeta(resp.eventMeta as RoomEventMeta | null | undefined);
 
     if (!roomIdentityRef.current) {
       roomIdentityRef.current = {
@@ -777,8 +785,8 @@ export default function App() {
     }
 
     flushSync(() => {
-      setJoinedRoom(resp.roomCode);
-      setRoomCode(resp.roomCode);
+      setJoinedRoom(resp.roomCode ?? null);
+      setRoomCode(resp.roomCode ?? '');
     });
 
     const { ok, nextState } = gameShellBridgeRef.current?.applyJoinResponseGameState(resp) ?? {
@@ -926,7 +934,7 @@ export default function App() {
 
     playerReadyEmittedRef.current = true;
     try {
-      const ack = await emitWithAck<any>(activeSocket, 'player:ready', roomCode);
+      const ack = await emitWithAck<RoomAckResponse>(activeSocket, 'player:ready', roomCode);
       if (ack?.ok === false) {
         playerReadyEmittedRef.current = false;
         return;
@@ -965,7 +973,7 @@ export default function App() {
         'room:join',
         roomCode,
         { username, userId: multiplayerIdentityUserId, authToken: multiplayerAuthToken },
-        (resp: any) => {
+        (resp: RoomAckResponse) => {
           if (!resp?.ok) {
             showToast(resp?.error ?? 'Could not join matched room.', 2500);
             return;
@@ -1163,7 +1171,7 @@ export default function App() {
 
     let active = true;
     const refreshPresence = () => {
-      socket.emit('presence:online', [], (resp: any) => {
+      socket.emit('presence:online', [], (resp: PresenceOnlineSocketAck) => {
         if (!active || !resp?.ok) return;
         if (Number.isFinite(resp.onlineCount)) {
           setPlayersOnlineCount(Number(resp.onlineCount));
@@ -1320,12 +1328,14 @@ export default function App() {
   const [activeHomeMode, setActiveHomeMode] = useState<
     'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn'
   >('multiplayer');
-  const weeklyAwardRows = Array.isArray(weeklyAwards?.awards) ? weeklyAwards.awards : [];
+  const weeklyAwardRows: WeeklyAwardEntry[] = Array.isArray(weeklyAwards?.awards)
+    ? weeklyAwards.awards
+    : [];
   const weeklyLeaderHandle = useMemo(() => {
-    const mostWins = weeklyAwardRows.find((entry: any) =>
+    const mostWins = weeklyAwardRows.find((entry) =>
       `${entry?.key ?? ''} ${entry?.title ?? ''}`.toLowerCase().includes('most wins'),
     );
-    const fallback = weeklyAwardRows.find((entry: any) => Boolean(entry?.leader?.username));
+    const fallback = weeklyAwardRows.find((entry) => Boolean(entry?.leader?.username));
     const username = mostWins?.leader?.username ?? fallback?.leader?.username ?? null;
     return username ? `@${username}` : null;
   }, [weeklyAwardRows]);

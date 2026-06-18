@@ -1,8 +1,9 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { PrivateRoomCreateSettings } from './roomTransport';
+import type { PrivateRoomCreateSettings, RoomAckResponse } from './roomTransport';
 import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
 import type { GameState, Move, Tile } from '../types';
+import type { LegacyTournamentState } from './legacyTournamentTypes';
 import type { AppMode } from '../types';
 
 type RoomEventMeta = {
@@ -91,7 +92,7 @@ export type MultiplayerNavigationRuntime = {
 
 /** Room recovery, resync, and join-response callback refs. */
 export type MultiplayerRecoveryRuntime = {
-  applyJoinedRoomResponseRef: MutableRefObject<(resp: unknown) => void>;
+  applyJoinedRoomResponseRef: MutableRefObject<(resp: RoomAckResponse) => void>;
   clearRecoverableRoomStateRef: MutableRefObject<() => void>;
   resetMultiplayerRoomStateRef: MutableRefObject<
     (options?: { keepPlayers?: boolean; clearRoomCode?: boolean }) => void
@@ -137,7 +138,7 @@ export type TournamentAttachRuntime = {
 };
 
 export type MultiplayerRecoveryCallbacks = {
-  applyJoinedRoomResponse: (resp: unknown) => void;
+  applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
   fetchGameState: (reason: string) => Promise<boolean>;
   resetClientGameSession: () => void;
   clearReconnectAttemptTimer: () => void;
@@ -169,7 +170,7 @@ export type MultiplayerRoomActionsTransport = {
   emitCreateRoom: (
     targetSocket: Socket,
     settings?: PrivateRoomCreateSettings,
-  ) => Promise<unknown>;
+  ) => Promise<RoomAckResponse>;
   getInviteLink: (code: string) => string;
   resolvePendingCreate: (code: string | null) => void;
   lastRoomStorageKey: string;
@@ -225,7 +226,7 @@ export type MultiplayerConnectionUiSetters = {
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
   setTournamentId: Dispatch<SetStateAction<string | null>>;
-  setTournamentState: Dispatch<SetStateAction<unknown>>;
+  setTournamentState: Dispatch<SetStateAction<LegacyTournamentState | null>>;
   setTournamentActiveRoom: Dispatch<SetStateAction<string | null>>;
   setRoomCode: Dispatch<SetStateAction<string>>;
   setHandReveal: Dispatch<
@@ -255,7 +256,7 @@ export type MultiplayerConnectionConfig = {
   emitCreateRoom: (
     targetSocket: Socket,
     settings?: PrivateRoomCreateSettings,
-  ) => Promise<unknown>;
+  ) => Promise<RoomAckResponse>;
 };
 
 export type MultiplayerConnectionState = {

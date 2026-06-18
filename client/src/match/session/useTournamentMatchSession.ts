@@ -98,7 +98,7 @@ export type TournamentMatchSessionApi = {
   applyTournamentMetadataFromJoin: (
     resp: {
       roomCode?: string;
-      tournamentMatch?: Record<string, unknown>;
+      tournamentMatch?: Record<string, unknown> | null;
       state?: GameState | null;
     },
     nextState: GameState | null,
@@ -350,7 +350,7 @@ export function useTournamentMatchSession(
     (
       resp: {
         roomCode?: string;
-        tournamentMatch?: Record<string, unknown>;
+        tournamentMatch?: Record<string, unknown> | null;
         state?: GameState | null;
       },
       nextState: GameState | null,

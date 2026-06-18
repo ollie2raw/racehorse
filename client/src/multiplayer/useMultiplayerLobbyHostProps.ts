@@ -11,6 +11,7 @@ import type {
   MultiplayerSocketRuntime,
   FriendInviteState,
 } from './multiplayerRuntime';
+import type { RoomAckResponse } from './roomTransport';
 import type { MultiplayerLobbyActionsHostProps } from './useMultiplayerLobbyController';
 
 type RoomPlayer = { id: string; username: string; userId: string | null };
@@ -27,8 +28,8 @@ export type UseMultiplayerLobbyHostPropsSource = {
   joinedRoom: string | null;
   friendInvite: FriendInviteState;
   outboundChallenge: OutboundChallenge | null;
-  applyJoinedRoomResponse: (resp: unknown) => void;
-  emitCreateRoom: (targetSocket: Socket) => Promise<unknown>;
+  applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
+  emitCreateRoom: (targetSocket: Socket) => Promise<RoomAckResponse>;
   showToast: (message: string, duration?: number) => void;
   normalizeRoomCode: (value: unknown) => string;
   normalizeRoomPlayers: (value: unknown) => RoomPlayer[];

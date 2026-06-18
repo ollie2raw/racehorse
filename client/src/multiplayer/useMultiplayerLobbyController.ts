@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
 import { clearLastRoomCode, LAST_ROOM_STORAGE_KEY } from '../match/recovery/matchRecovery';
-import { emitRoomLeave, emitWithAck } from './roomTransport';
+import { emitRoomLeave, emitWithAck, type RoomAckResponse } from './roomTransport';
 import { useMultiplayerRoomActions } from './useMultiplayerRoomActions';
 import type { OutboundChallenge } from './friendChallenge';
 import type {
@@ -70,8 +70,8 @@ export type MultiplayerLobbyActionsHostProps = {
   joinedRoom: string | null;
   friendInvite: FriendInviteState;
   outboundChallenge: OutboundChallenge | null;
-  applyJoinedRoomResponse: (resp: unknown) => void;
-  emitCreateRoom: (targetSocket: Socket) => Promise<unknown>;
+  applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
+  emitCreateRoom: (targetSocket: Socket) => Promise<RoomAckResponse>;
   showToast: (message: string, duration?: number) => void;
   normalizeRoomCode: (value: unknown) => string;
   normalizeRoomPlayers: (value: unknown) => RoomPlayer[];

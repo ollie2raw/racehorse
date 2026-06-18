@@ -9,7 +9,7 @@ import {
   type OutboundChallenge,
   type SendFriendChallengeResult,
 } from './friendChallenge';
-import type { PrivateRoomCreateSettings } from './roomTransport';
+import type { PrivateRoomCreateSettings, RoomAckResponse } from './roomTransport';
 import type {
   FriendInviteState,
   MultiplayerJoinFlightRuntime,
@@ -20,6 +20,7 @@ import type {
   MultiplayerRoomActionsUi,
   MultiplayerRoomRuntime,
   MultiplayerSocketRuntime,
+  RoomPlayer,
 } from './multiplayerRuntime';
 
 type PendingUiAction = null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play';
@@ -46,7 +47,7 @@ export type UseMultiplayerRoomActionsParams = {
   roomCode: string;
   friendInvite: FriendInviteState;
   outboundChallenge: OutboundChallenge | null;
-  applyJoinedRoomResponse: (resp: unknown) => void;
+  applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
 };
 
 type FlatMultiplayerRoomActionsParams = {
@@ -72,19 +73,19 @@ type FlatMultiplayerRoomActionsParams = {
   authUserIdRef: MutableRefObject<string | null>;
   authTokenRef: MutableRefObject<string | null>;
   normalizeRoomCode: (value: unknown) => string;
-  normalizeRoomPlayers: (value: unknown) => any[];
+  normalizeRoomPlayers: (value: unknown) => RoomPlayer[];
   emitWithAck: MultiplayerRoomActionsTransport['emitWithAck'];
   emitCreateRoom: (
     targetSocket: Socket,
     settings?: PrivateRoomCreateSettings,
-  ) => Promise<any>;
+  ) => Promise<RoomAckResponse>;
   getInviteLink: (code: string) => string;
   resolvePendingCreate: (code: string | null) => void;
-  applyJoinedRoomResponse: (resp: any) => void;
+  applyJoinedRoomResponse: (resp: RoomAckResponse) => void;
   showToast: (message: string, duration?: number) => void;
   setAppMode: MultiplayerNavigationRuntime['setAppMode'];
   setRoomCode: Dispatch<SetStateAction<string>>;
-  setPlayers: Dispatch<SetStateAction<any[]>>;
+  setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
   setError: Dispatch<SetStateAction<string>>;
   setActionError: Dispatch<SetStateAction<string>>;
   setPendingUiAction: Dispatch<SetStateAction<PendingUiAction>>;
@@ -256,7 +257,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
     params.joinInFlightRef.current = true;
     params.setPendingUiAction('join');
     try {
-      const resp = await params.emitWithAck<any>(
+      const resp = await params.emitWithAck<RoomAckResponse>(
         params.socket,
         'room:join',
         params.roomCode.trim().toUpperCase(),
@@ -454,7 +455,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
     params.setActionError('');
 
     try {
-      const resp = await params.emitWithAck<any>(
+      const resp = await params.emitWithAck<RoomAckResponse>(
         params.socket,
         'room:join',
         params.normalizeRoomCode(params.friendInvite.roomCode),
@@ -492,7 +493,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
     params.setRoomCode(linkedCode);
     void (async () => {
       try {
-        const resp = await params.emitWithAck<any>(
+        const resp = await params.emitWithAck<RoomAckResponse>(
           params.socket!,
           'room:join',
           linkedCode,

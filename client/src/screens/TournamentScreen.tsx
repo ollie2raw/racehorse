@@ -6,19 +6,22 @@ import {
   ClaudeSectionLabel,
   ClaudeStatLine,
 } from '../ui/claudeMode';
-
-type TournamentPlayer = {
-  socketId: string;
-  username: string;
-  userId?: string | null;
-  isBot?: boolean;
-};
+import type {
+  LegacyTournamentCreateAck,
+  LegacyTournamentJoinAck,
+  LegacyTournamentMatch,
+  LegacyTournamentPlayer,
+  LegacyTournamentStanding,
+  LegacyTournamentStartAck,
+  LegacyTournamentState,
+  SocketAck,
+} from '../multiplayer/legacyTournamentTypes';
 
 interface TournamentScreenProps {
   socket: Socket | null;
   connect: () => void;
   disconnect: (reason: string) => void;
-  tournamentState: any;
+  tournamentState: LegacyTournamentState | null;
   tournamentId: string | null;
   tournamentCode: string;
   tournamentActiveRoom: string | null;
@@ -55,20 +58,20 @@ export function TournamentScreen({
   setError,
   onSpectateAck,
 }: TournamentScreenProps) {
-  const players: TournamentPlayer[] = Array.isArray(tournamentState?.players)
+  const players: LegacyTournamentPlayer[] = Array.isArray(tournamentState?.players)
     ? tournamentState.players.filter(
-        (p: TournamentPlayer) =>
+        (p: LegacyTournamentPlayer) =>
           !(p.isBot || p.socketId?.startsWith('bot:fritz:') || p.username?.startsWith('Fritz')),
       )
     : [];
-  const standingsRaw = (tournamentState as any)?.standings;
-  const standings = Array.isArray(standingsRaw)
+  const standingsRaw = tournamentState?.standings;
+  const standings: LegacyTournamentStanding[] = Array.isArray(standingsRaw)
     ? standingsRaw
     : standingsRaw && typeof standingsRaw === 'object'
       ? Object.values(standingsRaw)
       : [];
-  const matchesRaw = (tournamentState as any)?.matches;
-  const matches = Array.isArray(matchesRaw) ? matchesRaw : [];
+  const matchesRaw = tournamentState?.matches;
+  const matches: LegacyTournamentMatch[] = Array.isArray(matchesRaw) ? matchesRaw : [];
   const activeRoom = tournamentActiveRoom ?? tournamentState?.activeRoomCode ?? null;
   const activeMatchId = tournamentState?.activeMatchId ?? null;
   const isHost = Boolean(
@@ -79,14 +82,14 @@ export function TournamentScreen({
 
   const mySocketId = socket?.id ?? null;
   const nameFor = (sid: string) =>
-    (players.find((p: any) => p.socketId === sid)?.username as string | undefined) ?? 'Player';
+    players.find((p) => p.socketId === sid)?.username ?? 'Player';
 
   const activeMatch =
-    (activeMatchId ? matches.find((m: any) => m.id === activeMatchId) : null) ??
-    matches.find((m: any) => m.status === 'active') ??
+    (activeMatchId ? matches.find((m) => m.id === activeMatchId) : null) ??
+    matches.find((m) => m.status === 'active') ??
     null;
 
-  const doneCount = matches.filter((m: any) => m.status === 'done').length;
+  const doneCount = matches.filter((m) => m.status === 'done').length;
   const totalMatches = matches.length;
 
   const youArePlaying = Boolean(
@@ -96,7 +99,7 @@ export function TournamentScreen({
   const nextForYou =
     mySocketId
       ? matches.find(
-          (m: any) =>
+          (m) =>
             m.status !== 'done' &&
             (m.a === mySocketId || m.b === mySocketId) &&
             (!activeMatch || m.id !== activeMatch.id),
@@ -128,10 +131,10 @@ export function TournamentScreen({
         socket.emit(
           'tournament:create',
           { username: authProfile?.username ?? 'Guest', userId: multiplayerIdentityUserId },
-          (resp: any) => {
+          (resp: LegacyTournamentCreateAck) => {
             if (!resp?.ok) return setError(resp?.error ? `Create failed: ${resp.error}` : 'Failed to create lobby.');
-            setTournamentId(resp.id);
-            setTournamentCode(resp.lobbyCode);
+            setTournamentId(resp.id ?? null);
+            setTournamentCode(resp.lobbyCode ?? '');
             setError('');
           },
         );
@@ -142,10 +145,10 @@ export function TournamentScreen({
     socket.emit(
       'tournament:create',
       { username: authProfile?.username ?? 'Guest', userId: multiplayerIdentityUserId },
-      (resp: any) => {
+      (resp: LegacyTournamentCreateAck) => {
         if (!resp?.ok) return setError(resp?.error ? `Create failed: ${resp.error}` : 'Failed to create lobby.');
-        setTournamentId(resp.id);
-        setTournamentCode(resp.lobbyCode);
+        setTournamentId(resp.id ?? null);
+        setTournamentCode(resp.lobbyCode ?? '');
         setError('');
       },
     );
@@ -162,12 +165,12 @@ export function TournamentScreen({
       'tournament:join',
       code,
       { username: authProfile?.username ?? 'Guest', userId: multiplayerIdentityUserId },
-      (resp: any) => {
+      (resp: LegacyTournamentCreateAck) => {
         if (!resp?.ok) {
           return setError(resp?.error === 'already_started' ? 'Tournament already started.' : 'Join failed.');
         }
-        setTournamentId(resp.id);
-        setTournamentCode(resp.lobbyCode);
+        setTournamentId(resp.id ?? null);
+        setTournamentCode(resp.lobbyCode ?? '');
         setError('');
       },
     );
@@ -178,7 +181,7 @@ export function TournamentScreen({
       connect();
       return setError('Connecting to server…');
     }
-    socket.emit('tournament:start', (resp: any) => {
+    socket.emit('tournament:start', (resp: LegacyTournamentStartAck) => {
       if (!resp?.ok) {
         if (resp?.error === 'need_2') return setError('Need at least 2 players.');
         if (resp?.error === 'need_4') return setError('Need 4+ players.');
@@ -203,7 +206,7 @@ export function TournamentScreen({
         userId: multiplayerIdentityUserId,
         authToken: multiplayerAuthToken,
       },
-      (resp: any) => {
+      (resp: SocketAck) => {
         if (!resp?.ok) return setError('Spectate failed.');
         onSpectateAck?.();
         setJoinedRoom(code);
@@ -381,7 +384,7 @@ export function TournamentScreen({
                       </span>
                     </div>
                     <div style={{ display: 'grid', gap: 8, maxHeight: 280, overflowY: 'auto' }}>
-                      {standings.map((st: any, idx: number) => {
+                      {standings.map((st, idx: number) => {
                         const diff = (st.pointsFor ?? 0) - (st.pointsAgainst ?? 0);
                         const me = Boolean(mySocketId && st.socketId === mySocketId);
                         return (
@@ -404,7 +407,7 @@ export function TournamentScreen({
                   <div className="claude-mode-card" style={{ display: 'grid', gap: 10 }}>
                     <ClaudeSectionLabel color="#fb923c">Bracket</ClaudeSectionLabel>
                     <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
-                      {matches.map((m: any, i: number) => {
+                      {matches.map((m, i: number) => {
                         const isActive = Boolean(activeMatch && m.id === activeMatch.id);
                         const label = m.status === 'active' ? 'Playing' : m.status === 'done' ? 'Done' : 'Queued';
                         return (
