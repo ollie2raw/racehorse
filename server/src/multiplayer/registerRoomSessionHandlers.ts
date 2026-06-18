@@ -1085,8 +1085,13 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
           started: startResult.started,
         });
         if (!startResult.started) {
+          const waitingFor = startResult.waitingFor ?? auditMissing;
+          io.to(roomCode).emit('room:request_ready', {
+            roomCode,
+            waitingFor,
+          });
           if (typeof cb === 'function') {
-            cb({ ok: false, error: 'waiting_for_ready', waitingFor: startResult.waitingFor ?? [] });
+            cb({ ok: false, error: 'waiting_for_ready', waitingFor });
           }
           return;
         }

@@ -395,6 +395,18 @@ function parseLiveSessionRow(raw: Record<string, unknown>): RoomLiveSessionRow |
   };
 }
 
+function assertJsonSerializable(value: unknown, label: string): void {
+  try {
+    JSON.stringify(value);
+  } catch (error) {
+    throw new Error(
+      `live_persist: ${label} is not JSON-serializable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
 export async function persistLiveRoomSessionNow(
   room: Room,
   roster: LiveRosterEntry[],
@@ -402,6 +414,11 @@ export async function persistLiveRoomSessionNow(
   if (liveSessionsTableAvailable === false) return false;
 
   const row = buildLiveSessionRow(room, roster);
+  const payload = toUpsertPayload(row);
+  assertJsonSerializable(payload.game_state, 'game_state');
+  assertJsonSerializable(payload.room_shell, 'room_shell');
+  assertJsonSerializable(payload.events, 'events');
+  assertJsonSerializable(payload.roster, 'roster');
   try {
     await supabaseFetch<RoomLiveSessionRow[]>(
       '/rest/v1/room_live_sessions?on_conflict=room_code',
@@ -410,7 +427,7 @@ export async function persistLiveRoomSessionNow(
         headers: {
           Prefer: 'return=minimal,resolution=merge-duplicates',
         },
-        body: JSON.stringify([toUpsertPayload(row)]),
+        body: JSON.stringify([payload]),
       },
     );
     liveSessionsTableAvailable = true;

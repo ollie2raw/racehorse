@@ -56,5 +56,16 @@ export async function supabaseFetch<T>(path: string, init?: SupabaseFetchOptions
     throw new Error(`Supabase request failed: ${response.status} ${await response.text()}`);
   }
 
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  if (!text.trim()) {
+    return undefined as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch (error) {
+    throw new Error(
+      `Supabase response JSON parse failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }

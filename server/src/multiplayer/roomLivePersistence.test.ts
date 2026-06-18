@@ -104,6 +104,19 @@ describe('roomLivePersistence', () => {
     expect(() => assertUnmaskedGameStateForPersistence(state)).toThrow(/hand must be an array/);
   });
 
+  it('buildLiveSessionRow payload is JSON-serializable for lobby rooms', () => {
+    const room = mkRoom({
+      state: null,
+      matchmakingMatchId: undefined,
+      scheduledTournamentMatchId: undefined,
+    });
+    const row = buildLiveSessionRow(room, [
+      { seatId: 'seat-a', userId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', username: 'Host' },
+      { seatId: 'seat-b', userId: null, username: 'Guest' },
+    ]);
+    expect(() => JSON.stringify(row)).not.toThrow();
+  });
+
   it('infers source_type for all three room kinds', () => {
     expect(inferLiveSessionSourceType(mkRoom())).toBe('matchmaking');
     expect(

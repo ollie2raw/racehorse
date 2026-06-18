@@ -87,6 +87,7 @@ type FlatRoomSocketSyncParams = {
   roomPlayersRef: MutableRefObject<RoomPlayer[]>;
   matchStartedRef: MutableRefObject<boolean>;
   playerReadyEmittedRef: MutableRefObject<boolean>;
+  schedulePlayerReadyRef: MutableRefObject<() => Promise<void>>;
   trySchedulePlayerReadyRef: MutableRefObject<() => void>;
   onAuthoritativeGameplayStateApplied?: (nextState: GameState | null) => void;
 };
@@ -206,6 +207,19 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         if (parsedPlayers.length >= 2) {
           params.trySchedulePlayerReadyRef.current();
         }
+      },
+    );
+
+    const onRoomRequestReady = wrapSocketHandler(
+      'room:request_ready',
+      (payload: { roomCode?: string }) => {
+        const activeRoom = params.joinedRoomRef.current;
+        if (!activeRoom || params.matchStartedRef.current) return;
+        const requestedCode =
+          typeof payload?.roomCode === 'string' ? payload.roomCode.trim().toUpperCase() : '';
+        if (requestedCode && requestedCode !== activeRoom.trim().toUpperCase()) return;
+        params.playerReadyEmittedRef.current = false;
+        void params.schedulePlayerReadyRef.current();
       },
     );
 
@@ -561,6 +575,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
     socket.on('friend:invited', onFriendInvited);
     socket.on('friend:invite:error', onFriendInviteError);
     socket.on('room:update', onRoomUpdate);
+    socket.on('room:request_ready', onRoomRequestReady);
     socket.on('state:update', onStateUpdate);
     socket.on('state:spectate', onStateSpectate);
     socket.on('game:draw_animation', onDrawAnimation);
@@ -573,6 +588,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
       socket.off('friend:invited', onFriendInvited);
       socket.off('friend:invite:error', onFriendInviteError);
       socket.off('room:update', onRoomUpdate);
+      socket.off('room:request_ready', onRoomRequestReady);
       socket.off('state:update', onStateUpdate);
       socket.off('state:spectate', onStateSpectate);
       socket.off('game:draw_animation', onDrawAnimation);
