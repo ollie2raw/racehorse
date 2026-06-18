@@ -62,6 +62,8 @@ let ioRef: Server | null = null;
 
 export type GameOverPersistInput = {
   room: Room;
+  /** Frozen at persist schedule time — do not read `room.matchId` again in the IIFE. */
+  sourceMatchId: string;
   cfg: Record<string, unknown>;
   aId: string;
   bId: string;
@@ -93,7 +95,7 @@ export type RoomSessionHandlerDeps = {
 };
 
 export type RoomSessionDeps = RoomSessionHandlerDeps & {
-  onGameOver: (input: GameOverPersistInput) => (() => void) | null;
+  onGameOver: (input: GameOverPersistInput) => (() => Promise<void>) | null;
   finalizeTournamentMatch?: (room: Room) => void;
 };
 
@@ -642,10 +644,23 @@ export function getHandCounts(state: GameState): Record<string, number> {
   );
 }
 
+export function waitForActiveGameOverPersist(roomCode: string): Promise<void> {
+  try {
+    const room = getRoom(roomCode);
+    const pending = room.activeGameOverPersist;
+    if (pending) {
+      return pending;
+    }
+  } catch {
+    // room gone — nothing to wait for
+  }
+  return Promise.resolve();
+}
+
 export function broadcastStateUpdate(roomCode: string): void {
   const io = requireIo();
   const deps = requireDeps();
-  let scheduleDeferredMatchPersist: null | (() => void) = null;
+  let scheduleDeferredMatchPersist: null | (() => Promise<void>) = null;
 
   const room = getRoom(roomCode);
   if (!room.state) return;
@@ -686,6 +701,7 @@ export function broadcastStateUpdate(roomCode: string): void {
 
       scheduleDeferredMatchPersist = deps.onGameOver({
         room,
+        sourceMatchId: room.matchId,
         cfg,
         aId,
         bId,
@@ -819,7 +835,17 @@ export function broadcastStateUpdate(roomCode: string): void {
 
   drawAuditUpdateEmitted(roomCode, pendingForcedDraw ? 'forced_draw_chain' : 'state_sync');
 
-  setImmediate(() => scheduleDeferredMatchPersist?.());
+  if (scheduleDeferredMatchPersist) {
+    const persistPromise = scheduleDeferredMatchPersist();
+    room.activeGameOverPersist = persistPromise;
+    setImmediate(() => {
+      void persistPromise.finally(() => {
+        if (room.activeGameOverPersist === persistPromise) {
+          room.activeGameOverPersist = undefined;
+        }
+      });
+    });
+  }
 
   const roomAfter = (() => {
     try {

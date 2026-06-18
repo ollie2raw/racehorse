@@ -59,6 +59,7 @@ import {
   resolveActorSeatId,
   requireRoomSessionHandlerDeps,
   setRoomRoster,
+  waitForActiveGameOverPersist,
   type AckFn,
   type RoomJoinConfig,
   type RoomPlayer,
@@ -1244,6 +1245,7 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         }
 
         room.rematchReady.clear();
+        await waitForActiveGameOverPersist(room.code);
         room.matchLogged = false;
         room.leadTracker = {
           aId: room.players[0],

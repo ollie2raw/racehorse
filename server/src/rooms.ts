@@ -53,6 +53,8 @@ export type Room = {
   ghostTurnIndex: number;
   matchId: string;
   matchLogged: boolean;
+  /** In-flight game-over persist for the current match; await before rematch reset. */
+  activeGameOverPersist?: Promise<void>;
   leadTracker: LeadTracker | null;
   eventLogVersion: 1;
   eventSequence: number;
