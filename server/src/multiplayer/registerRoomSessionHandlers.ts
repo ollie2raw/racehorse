@@ -29,6 +29,7 @@ import {
   onPlayerSocketRejoined,
 } from './disconnectGrace';
 import { markMatchStartReady, tryStartMatchIfReady } from './matchStartReady';
+import { withRoomGameplayLock } from './roomGameplayLock';
 import {
   allocatePlayerSeatId,
   broadcastStateUpdate,
@@ -1246,36 +1247,45 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
 
         room.rematchReady.clear();
         await waitForActiveGameOverPersist(room.code);
-        room.matchLogged = false;
-        room.leadTracker = {
-          aId: room.players[0],
-          bId: room.players[1],
-          maxLeadA: 0,
-          maxLeadB: 0,
-        };
-        try {
-          await handlerDeps.persistRoomMatchLog(room, room.state?.gameOver ? 'completed' : 'abandoned');
-        } catch (error) {
-          console.error('[room-match-logs] failed to archive room before rematch reset:', error);
-        }
-        resetRoomEventLog(room);
-        appendRoomEvent(room, {
-          type: 'rematch_started',
-          actorSocketId: socket.id,
-          actorUserId: handlerDeps.normalizeUserId(socket.data?.userId),
-          payload: {
-            players: [...room.players],
-          },
+
+        await withRoomGameplayLock(roomCode, async () => {
+          const lockedRoom = getRoom(roomCode);
+          lockedRoom.matchLogged = false;
+          lockedRoom.leadTracker = {
+            aId: lockedRoom.players[0],
+            bId: lockedRoom.players[1],
+            maxLeadA: 0,
+            maxLeadB: 0,
+          };
+          try {
+            await handlerDeps.persistRoomMatchLog(
+              lockedRoom,
+              lockedRoom.state?.gameOver ? 'completed' : 'abandoned',
+            );
+          } catch (error) {
+            console.error('[room-match-logs] failed to archive room before rematch reset:', error);
+          }
+          resetRoomEventLog(lockedRoom);
+          appendRoomEvent(lockedRoom, {
+            type: 'rematch_started',
+            actorSocketId: socket.id,
+            actorUserId: handlerDeps.normalizeUserId(socket.data?.userId),
+            payload: {
+              players: [...lockedRoom.players],
+            },
+          });
+          await startGame(lockedRoom.code, io, { allowRestart: true });
         });
-        await startGame(room.code, io, { allowRestart: true });
+
+        const roomAfterRematch = getRoom(roomCode);
         // game:rematch:started MUST be emitted before broadcastStateUpdate so the
         // client resets its sequence watermark before the first state:update of
         // the new game arrives. If the order is reversed, a client whose watermark
         // is still at the old game's final sequence number will silently discard
         // the new game state as stale, leaving the board frozen.
-        io.to(room.code).emit('game:rematch:started', { roomCode: room.code });
-        broadcastStateUpdate(room.code);
-        emitRematchStatus(room.code);
+        io.to(roomAfterRematch.code).emit('game:rematch:started', { roomCode: roomAfterRematch.code });
+        broadcastStateUpdate(roomAfterRematch.code);
+        emitRematchStatus(roomAfterRematch.code);
         cb?.({ ok: true, started: true });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'unknown error';

@@ -573,42 +573,51 @@ export async function readyForNextHand(
   handNumber?: number,
   onStateReady?: (roomCode: string) => void,
 ): Promise<{ started: boolean; room: Room; ignored?: boolean; waitMs?: number }> {
-  const room = getRoom(code);
-  if (!room.state) throw new Error('Game not started.');
-  if (room.state.gameOver) return { started: false, room };
-  if (!room.players.includes(playerSeatId)) throw new Error('Player not in room.');
-  if (typeof handNumber === 'number' && handNumber !== room.state.handNumber) {
-    return { started: false, room, ignored: true };
-  }
-  if (!room.state.handOver) return { started: false, room };
-  const readyHandNumber = room.state.handNumber;
+  type MarkPhaseResult =
+    | { kind: 'return'; value: { started: boolean; room: Room; ignored?: boolean; waitMs?: number } }
+    | { kind: 'coalesce'; room: Room; existingStart: Promise<Room>; readyHandNumber: number }
+    | { kind: 'scheduled'; room: Room; waitMs: number };
 
-  room.nextHandReady.add(playerSeatId);
-  appendRoomEvent(room, {
-    type: 'hand_ready',
-    payload: {
-      playerSeatId,
-      readyCount: room.nextHandReady.size,
-      requiredCount: room.players.length,
-      handNumber: room.state.handNumber,
-    },
-  });
-  if (room.nextHandReady.size >= room.players.length) {
+  const markPhase = await withRoomGameplayLock(code, async (): Promise<MarkPhaseResult> => {
+    const room = getRoom(code);
+    if (!room.state) throw new Error('Game not started.');
+    if (room.state.gameOver) {
+      return { kind: 'return', value: { started: false, room } };
+    }
+    if (!room.players.includes(playerSeatId)) throw new Error('Player not in room.');
+    if (typeof handNumber === 'number' && handNumber !== room.state.handNumber) {
+      return { kind: 'return', value: { started: false, room, ignored: true } };
+    }
+    if (!room.state.handOver) {
+      return { kind: 'return', value: { started: false, room } };
+    }
+
+    const readyHandNumber = room.state.handNumber;
     const existingStart = nextHandStartsByRoom.get(code);
     if (existingStart) {
-      const currentRoom = await existingStart;
-      const currentState = currentRoom.state;
-      return {
-        started: Boolean(currentState && currentState.handNumber !== readyHandNumber && !currentState.handOver),
-        room: currentRoom,
-        ignored: true,
-      };
+      return { kind: 'coalesce', room, existingStart, readyHandNumber };
+    }
+
+    room.nextHandReady.add(playerSeatId);
+    appendRoomEvent(room, {
+      type: 'hand_ready',
+      payload: {
+        playerSeatId,
+        readyCount: room.nextHandReady.size,
+        requiredCount: room.players.length,
+        handNumber: room.state.handNumber,
+      },
+    });
+
+    if (room.nextHandReady.size < room.players.length) {
+      return { kind: 'return', value: { started: false, room } };
     }
 
     const waitMs = Math.max(
       0,
       MIN_HAND_OVER_MS - (Date.now() - (room.lastHandEndedAtMs ?? Date.now())),
     );
+
     const advance = (async () => {
       const latest = getRoom(code);
       const endedAt = latest.lastHandEndedAtMs ?? Date.now();
@@ -617,20 +626,22 @@ export async function readyForNextHand(
         await sleep(delayMs);
       }
 
-      const fresh = getRoom(code);
-      if (
-        !fresh.state ||
-        fresh.state.gameOver ||
-        !fresh.state.handOver ||
-        fresh.nextHandReady.size < fresh.players.length
-      ) {
-        return fresh;
-      }
+      return withRoomGameplayLock(code, async () => {
+        const fresh = getRoom(code);
+        if (
+          !fresh.state ||
+          fresh.state.gameOver ||
+          !fresh.state.handOver ||
+          fresh.nextHandReady.size < fresh.players.length
+        ) {
+          return fresh;
+        }
 
-      fresh.nextHandReady.clear();
-      const startedRoom = await nextHand(code, io);
-      onStateReady?.(startedRoom.code);
-      return startedRoom;
+        fresh.nextHandReady.clear();
+        const startedRoom = await nextHand(code, io);
+        onStateReady?.(startedRoom.code);
+        return startedRoom;
+      });
     })();
 
     nextHandStartsByRoom.set(code, advance);
@@ -643,10 +654,29 @@ export async function readyForNextHand(
           nextHandStartsByRoom.delete(code);
         }
       });
-    return { started: false, room, waitMs };
+
+    return { kind: 'scheduled', room, waitMs };
+  });
+
+  if (markPhase.kind === 'return') {
+    return markPhase.value;
   }
 
-  return { started: false, room };
+  if (markPhase.kind === 'coalesce') {
+    const currentRoom = await markPhase.existingStart;
+    const currentState = currentRoom.state;
+    return {
+      started: Boolean(
+        currentState &&
+          currentState.handNumber !== markPhase.readyHandNumber &&
+          !currentState.handOver,
+      ),
+      room: currentRoom,
+      ignored: true,
+    };
+  }
+
+  return { started: false, room: markPhase.room, waitMs: markPhase.waitMs };
 }
 
 export interface ActionPayload {
