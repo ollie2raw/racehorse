@@ -407,13 +407,9 @@ function assertJsonSerializable(value: unknown, label: string): void {
   }
 }
 
-export async function persistLiveRoomSessionNow(
-  room: Room,
-  roster: LiveRosterEntry[],
-): Promise<boolean> {
+async function persistLiveSessionRowNow(row: RoomLiveSessionRow): Promise<boolean> {
   if (liveSessionsTableAvailable === false) return false;
 
-  const row = buildLiveSessionRow(room, roster);
   const payload = toUpsertPayload(row);
   assertJsonSerializable(payload.game_state, 'game_state');
   assertJsonSerializable(payload.room_shell, 'room_shell');
@@ -439,11 +435,52 @@ export async function persistLiveRoomSessionNow(
       return false;
     }
     console.warn('[room-live-sessions] persist failed', {
-      roomCode: room.code,
+      roomCode: row.room_code,
       error: error instanceof Error ? error.message : String(error),
     });
     return false;
   }
+}
+
+export async function persistLiveRoomSessionNow(
+  room: Room,
+  roster: LiveRosterEntry[],
+): Promise<boolean> {
+  if (liveSessionsTableAvailable === false) return false;
+  return persistLiveSessionRowNow(buildLiveSessionRow(room, roster));
+}
+
+export function cancelScheduledLiveRoomPersistence(roomCode: string): void {
+  const code = roomCode.trim().toUpperCase();
+  const timer = flushTimersByRoomCode.get(code);
+  if (timer) {
+    clearTimeout(timer);
+    flushTimersByRoomCode.delete(code);
+  }
+  pendingPersistByRoomCode.delete(code);
+}
+
+/**
+ * After a terminal archive: write game_over/abandoned to room_live_sessions, then delete.
+ * Cancels any debounced playing-state persist first so it cannot race after delete.
+ */
+export async function finalizeAndDeleteLiveRoomSession(
+  room: Room,
+  archiveStatus: 'completed' | 'abandoned',
+): Promise<void> {
+  if (liveSessionsTableAvailable === false) return;
+
+  cancelScheduledLiveRoomPersistence(room.code);
+
+  const terminalStatus: RoomLiveSessionStatus =
+    archiveStatus === 'completed' ? 'game_over' : 'abandoned';
+  const row = buildLiveSessionRow(room, resolveRosterForPersist(room));
+  row.status = terminalStatus;
+
+  const persisted = await persistLiveSessionRowNow(row);
+  if (!persisted) return;
+
+  await deleteLiveRoomSession(room.code);
 }
 
 /** Debounced upsert — coalesces rapid state commits per room. */
