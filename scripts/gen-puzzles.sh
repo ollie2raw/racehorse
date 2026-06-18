@@ -76,8 +76,23 @@ if [[ "$OVERWRITE_EXISTING" == true ]]; then
   echo "Existing slots will be upserted by date/slot/set_version."
 fi
 
+FAILED_DATES=()
 for (( offset = 0; offset < DAYS; offset += 1 )); do
   DATE_KEY="$(date_add_days "$FROM" "$offset")"
   echo "==> $DATE_KEY"
-  run_ladder_seed "$DATE_KEY"
+  if run_ladder_seed "$DATE_KEY"; then
+    :
+  else
+    echo "WARNING: Daily Puzzle Ladder seed failed for $DATE_KEY; continuing." >&2
+    FAILED_DATES+=("$DATE_KEY")
+  fi
 done
+
+if [[ "${#FAILED_DATES[@]}" -gt 0 ]]; then
+  echo ""
+  echo "Seeding finished with ${#FAILED_DATES[@]} failed date(s):" >&2
+  for failed_date in "${FAILED_DATES[@]}"; do
+    echo "  - $failed_date" >&2
+  done
+  echo "Successful dates were still processed; re-run or inspect logs for failed dates." >&2
+fi
