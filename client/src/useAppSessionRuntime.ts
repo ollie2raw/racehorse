@@ -73,7 +73,7 @@ export function useAppSessionRuntime(source: UseAppSessionRuntimeSource): UseApp
       socketRef: source.socketRef,
       connectRef: source.connectRef,
     }),
-    [],
+    [source.connectRef, source.socketRef],
   );
 
   const joinFlightRuntime = useMemo(
@@ -86,7 +86,15 @@ export function useAppSessionRuntime(source: UseAppSessionRuntimeSource): UseApp
       inviteJoinInFlightRef: source.inviteJoinInFlightRef,
       autoConnectAttemptedRef: source.autoConnectAttemptedRef,
     }),
-    [],
+    [
+      source.autoConnectAttemptedRef,
+      source.autoJoinAttemptedRef,
+      source.createInFlightRef,
+      source.inviteJoinInFlightRef,
+      source.joinInFlightRef,
+      source.pendingCreateOnConnectRef,
+      source.pendingCreateResolversRef,
+    ],
   );
 
   const reconnectRuntime = useMemo(
@@ -99,7 +107,15 @@ export function useAppSessionRuntime(source: UseAppSessionRuntimeSource): UseApp
       intentionalDisconnectRef: source.intentionalDisconnectRef,
       rejoinInFlightRef: source.rejoinInFlightRef,
     }),
-    [],
+    [
+      source.intentionalDisconnectRef,
+      source.preventAutoRejoinRef,
+      source.reconnectAttemptCountRef,
+      source.reconnectAttemptTimerRef,
+      source.reconnectRoomCodeRef,
+      source.reconnectShouldJoinRef,
+      source.rejoinInFlightRef,
+    ],
   );
 
   const authRuntime = useMemo(
@@ -109,7 +125,12 @@ export function useAppSessionRuntime(source: UseAppSessionRuntimeSource): UseApp
       authAccessTokenRef: source.authAccessTokenRef,
       multiplayerIdentityUserIdRef: source.multiplayerIdentityUserIdRef,
     }),
-    [],
+    [
+      source.authAccessTokenRef,
+      source.authProfileRef,
+      source.authUserRef,
+      source.multiplayerIdentityUserIdRef,
+    ],
   );
 
   const navigationRuntime = useMemo(
@@ -117,7 +138,7 @@ export function useAppSessionRuntime(source: UseAppSessionRuntimeSource): UseApp
       appModeRef: source.appModeRef,
       setAppMode: source.setAppMode,
     }),
-    [],
+    [source.appModeRef, source.setAppMode],
   );
 
   const roomRuntime = useMemo(
@@ -130,7 +151,15 @@ export function useAppSessionRuntime(source: UseAppSessionRuntimeSource): UseApp
       maxSequenceRef: source.maxSequenceRef,
       roomPlayersRef: source.roomPlayersRef,
     }),
-    [source.stateRef, source.youRef],
+    [
+      source.joinedRoomRef,
+      source.joinedRoomResponseRef,
+      source.maxSequenceRef,
+      source.roomIdentityRef,
+      source.roomPlayersRef,
+      source.stateRef,
+      source.youRef,
+    ],
   );
 
   const tournamentAttachRuntime = useMemo(
@@ -152,7 +181,18 @@ export function useAppSessionRuntime(source: UseAppSessionRuntimeSource): UseApp
       },
       navigationRuntime,
     }),
-    [navigationRuntime, socketRuntime],
+    [
+      navigationRuntime,
+      socketRuntime,
+      source.applyJoinedRoomResponseRef,
+      source.clearRecoverableRoomStateRef,
+      source.joinedRoomRef,
+      source.joinedRoomResponseRef,
+      source.preventAutoRejoinRef,
+      source.reconnectRoomCodeRef,
+      source.reconnectShouldJoinRef,
+      source.resetMultiplayerRoomStateRef,
+    ],
   );
 
   return {

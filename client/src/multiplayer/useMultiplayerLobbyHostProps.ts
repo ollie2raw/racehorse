@@ -113,6 +113,7 @@ export function useMultiplayerLobbyHostProps(
       autoJoinAttemptedRef: source.autoJoinAttemptedRef,
     }),
     [
+      source,
       source.socket,
       source.socketRuntime,
       source.roomRuntime.joinedRoomRef,

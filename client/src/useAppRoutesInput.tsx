@@ -162,6 +162,7 @@ export function useAppRoutesInput(source: UseAppRoutesInputSource): UseAppRoutes
       attachAssignedTournamentMatch: source.attachAssignedTournamentMatch,
     }),
     [
+      source.host,
       source.host.multiplayerConnectionHostParams,
       source.host.connectionActions,
       source.host.multiplayerLobbyHostProps,

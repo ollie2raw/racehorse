@@ -169,7 +169,13 @@ export function useMultiplayerConnectionHostParams(
       isMutedRef: source.isMutedRef,
       rematchAwaitingStateRef: source.rematchAwaitingStateRef,
     }),
-    [],
+    [
+      source.draggingStateRef,
+      source.handRevealShownRef,
+      source.handRevealTimerRef,
+      source.isMutedRef,
+      source.rematchAwaitingStateRef,
+    ],
   );
 
   const connectionRecoveryRuntime = useMemo(
@@ -219,7 +225,33 @@ export function useMultiplayerConnectionHostParams(
       setSelectedTile: source.setSelectedTile,
       setPendingUiAction: source.setPendingUiAction,
     }),
-    [],
+    [
+      source.setActionError,
+      source.setCanDraw,
+      source.setError,
+      source.setHandReveal,
+      source.setIsConnected,
+      source.setIsConnecting,
+      source.setIsRecoveringConnection,
+      source.setJoinedRoom,
+      source.setLegalMoves,
+      source.setOpponentDragging,
+      source.setPendingUiAction,
+      source.setPlayers,
+      source.setRematchReadyIds,
+      source.setRematchRequested,
+      source.setRoomCode,
+      source.setRoomRecoveryMessage,
+      source.setRoomRecoveryState,
+      source.setSelectedTile,
+      source.setServerWaking,
+      source.setSocket,
+      source.setState,
+      source.setTournamentActiveRoom,
+      source.setTournamentId,
+      source.setTournamentState,
+      source.setYou,
+    ],
   );
 
   const multiplayerConnectionHostParams = useMemo(

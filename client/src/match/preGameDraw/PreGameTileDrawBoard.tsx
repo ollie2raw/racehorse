@@ -20,7 +20,9 @@ export function PreGameTileDrawBoard({
   onTileTap,
 }: PreGameTileDrawBoardProps) {
   const tileOrderKey = drawState.tiles.map((slot) => slot.id).join('|');
-  const scatterById = useMemo(() => {
+  const scatterById = useMemo(
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- tileOrderKey intentionally narrows drawState.tiles
+    () => {
     // Lock scatter to the full shuffled deck order — filtering outOfPlay tiles used to
     // recompute positions mid-draw and made the board jump back to a "fresh" scatter.
     const positions = computePreGameDrawScatterPositions(drawState.tiles.map((slot) => slot.id));

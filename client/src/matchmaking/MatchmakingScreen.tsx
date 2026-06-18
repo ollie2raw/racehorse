@@ -163,12 +163,28 @@ const RATING_SEGMENTS = [
 ] as const;
 
 export default function MatchmakingScreen(props: MatchmakingScreenProps) {
-  const isConnecting = props.isConnecting ?? false;
-  const serverUrl = props.serverUrl ?? '';
+  const {
+    socket,
+    identity,
+    isConnected,
+    isConnecting: isConnectingProp,
+    serverUrl: serverUrlProp,
+    onRetryConnect,
+    myRating: myRatingProp,
+    myWinStreak: myWinStreakProp,
+    onNavigate,
+    onOpenAuth,
+    onOpenAccount,
+    onBackHome,
+    onOpenPrivateMatch,
+    onAutoJoinRoom,
+  } = props;
+  const isConnecting = isConnectingProp ?? false;
+  const serverUrl = serverUrlProp ?? '';
   const [latchedDisconnectedHint, setLatchedDisconnectedHint] = useState(false);
   const [friendToast, setFriendToast] = useState('');
   const pendingAutoJoinRef = useRef<MatchFoundPayload | null>(null);
-  const disconnectedForHint = !props.isConnected && !isConnecting;
+  const disconnectedForHint = !isConnected && !isConnecting;
   if (!disconnectedForHint && latchedDisconnectedHint) {
     setLatchedDisconnectedHint(false);
   }
@@ -198,22 +214,22 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
     (payload: MatchFoundPayload) => {
       // Join the match room immediately so both players are seated before the
       // countdown ends — server can deal as soon as the room is full.
-      if (props.isConnected) {
-        props.onAutoJoinRoom(payload);
+      if (isConnected) {
+        onAutoJoinRoom(payload);
       } else {
         pendingAutoJoinRef.current = payload;
-        props.onRetryConnect?.();
+        onRetryConnect?.();
       }
     },
-    [props.isConnected, props.onAutoJoinRoom, props.onRetryConnect],
+    [isConnected, onAutoJoinRoom, onRetryConnect],
   );
 
   useEffect(() => {
-    if (!props.isConnected || !pendingAutoJoinRef.current) return;
+    if (!isConnected || !pendingAutoJoinRef.current) return;
     const payload = pendingAutoJoinRef.current;
     pendingAutoJoinRef.current = null;
-    props.onAutoJoinRoom(payload);
-  }, [props.isConnected, props.onAutoJoinRoom]);
+    onAutoJoinRoom(payload);
+  }, [isConnected, onAutoJoinRoom]);
 
   const mm = useMatchmaking({
     socket: props.socket,
@@ -230,9 +246,9 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const isSearching = mm.state === 'searching';
   const isTimeout = mm.state === 'timeout';
 
-  const myRating = props.myRating ?? null;
-  const myWinStreak = props.myWinStreak ?? null;
-  const myUsername = props.identity?.username ?? null;
+  const myRating = myRatingProp ?? null;
+  const myWinStreak = myWinStreakProp ?? null;
+  const myUsername = identity?.username ?? null;
 
   const queueUiState = isSearching ? 'searching' : isTimeout ? 'timeout' : 'idle';
 

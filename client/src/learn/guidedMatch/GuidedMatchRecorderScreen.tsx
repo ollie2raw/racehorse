@@ -132,6 +132,42 @@ function buildFreshRecorderState() {
   };
 }
 
+function loadGuidedMatchRecorderInitialState() {
+  const draft = loadGuidedMatchRecorderDraft();
+  if (!draft) return buildFreshRecorderState();
+  const restored = restoreGuidedMatchRecorderState(draft.currentMatchSnapshot);
+  if (!restored) return buildFreshRecorderState();
+  return {
+    lesson: draft.lesson,
+    match: restored,
+    cursor: draft.cursor,
+    pending: draft.pendingPlayerEvent
+      ? {
+          event: draft.pendingPlayerEvent,
+          handEnded: draft.pendingPlayerHandEnded,
+        }
+      : null,
+    activeEventId: draft.activeEventId,
+    draftCoachingTitle: draft.draftCoachingTitle ?? draft.pendingPlayerEvent?.coaching.title ?? '',
+    draftCoachingBody: draft.draftCoachingBody ?? draft.pendingPlayerEvent?.coaching.body ?? '',
+    draftCoachingTags:
+      draft.draftCoachingTags ??
+      draft.pendingPlayerEvent?.coaching.tags?.join(', ') ??
+      '',
+    draftRecovered: true,
+  };
+}
+
+let guidedMatchRecorderInitialStateCache: ReturnType<typeof loadGuidedMatchRecorderInitialState> | null =
+  null;
+
+function getGuidedMatchRecorderInitialState() {
+  if (!guidedMatchRecorderInitialStateCache) {
+    guidedMatchRecorderInitialStateCache = loadGuidedMatchRecorderInitialState();
+  }
+  return guidedMatchRecorderInitialStateCache;
+}
+
 function summarizeImportedSource(source: GuidedMatchCandidate): string {
   return `Imported source: ${source.finalScore.player}-${source.finalScore.fritz} · ${source.eventCount} events · ${source.playerTileEventCount} player moves · ${source.handCount} hands`;
 }
@@ -140,45 +176,23 @@ export default function GuidedMatchRecorderScreen({
   onBack,
   onNavigate,
 }: GuidedMatchRecorderScreenProps) {
-  const initial = useMemo(() => {
-    const draft = loadGuidedMatchRecorderDraft();
-    if (!draft) return buildFreshRecorderState();
-    const restored = restoreGuidedMatchRecorderState(draft.currentMatchSnapshot);
-    if (!restored) return buildFreshRecorderState();
-    return {
-      lesson: draft.lesson,
-      match: restored,
-      cursor: draft.cursor,
-      pending: draft.pendingPlayerEvent
-        ? {
-            event: draft.pendingPlayerEvent,
-            handEnded: draft.pendingPlayerHandEnded,
-          }
-        : null,
-      activeEventId: draft.activeEventId,
-      draftCoachingTitle: draft.draftCoachingTitle ?? draft.pendingPlayerEvent?.coaching.title ?? '',
-      draftCoachingBody: draft.draftCoachingBody ?? draft.pendingPlayerEvent?.coaching.body ?? '',
-      draftCoachingTags:
-        draft.draftCoachingTags ??
-        draft.pendingPlayerEvent?.coaching.tags?.join(', ') ??
-        '',
-      draftRecovered: true,
-    };
-  }, []);
-
-  const [lesson, setLesson] = useState<GuidedMatchLesson>(initial.lesson);
-  const [match, setMatch] = useState<BotMatchState>(initial.match);
-  const [cursor, setCursor] = useState<GuidedMatchRecorderCursor>(initial.cursor);
-  const [pending, setPending] = useState<PendingPlayerCoaching | null>(initial.pending);
-  const [activeEventId, setActiveEventId] = useState<string | null>(initial.activeEventId);
+  const [lesson, setLesson] = useState<GuidedMatchLesson>(() => getGuidedMatchRecorderInitialState().lesson);
+  const [match, setMatch] = useState<BotMatchState>(() => getGuidedMatchRecorderInitialState().match);
+  const [cursor, setCursor] = useState<GuidedMatchRecorderCursor>(() => getGuidedMatchRecorderInitialState().cursor);
+  const [pending, setPending] = useState<PendingPlayerCoaching | null>(
+    () => getGuidedMatchRecorderInitialState().pending,
+  );
+  const [activeEventId, setActiveEventId] = useState<string | null>(
+    () => getGuidedMatchRecorderInitialState().activeEventId,
+  );
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
-  const [coachingTitle, setCoachingTitle] = useState(initial.draftCoachingTitle);
-  const [coachingBody, setCoachingBody] = useState(initial.draftCoachingBody);
-  const [coachingTags, setCoachingTags] = useState(initial.draftCoachingTags);
+  const [coachingTitle, setCoachingTitle] = useState(() => getGuidedMatchRecorderInitialState().draftCoachingTitle);
+  const [coachingBody, setCoachingBody] = useState(() => getGuidedMatchRecorderInitialState().draftCoachingBody);
+  const [coachingTags, setCoachingTags] = useState(() => getGuidedMatchRecorderInitialState().draftCoachingTags);
   const [validation, setValidation] = useState<GuidedMatchValidationResult | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
-  const [draftRecovered] = useState(initial.draftRecovered);
+  const [draftRecovered] = useState(() => getGuidedMatchRecorderInitialState().draftRecovered);
   const [debugOpen, setDebugOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
