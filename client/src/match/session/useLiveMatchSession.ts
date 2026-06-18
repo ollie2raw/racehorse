@@ -495,6 +495,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
         playDrawSound,
         tileEquals,
         onAuthoritativeGameplayStateApplied: clearPendingGameplayUiOnAuthoritativeState,
+        setError,
       },
       syncDom: {
         drawSequenceActiveRef,
@@ -530,10 +531,12 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
       matchStartedRef,
       playerReadyEmittedRef,
       trySchedulePlayerReadyRef,
+      schedulePlayerReadyRef,
       clearPendingGameplayUiOnAuthoritativeState,
       setDrawSequenceActiveBoth,
       isMutedRef,
       playDrawSound,
+      setError,
     ],
   );
 
@@ -871,7 +874,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
 
   const currentTurnId = state?.playerIds[state.currentPlayerIndex] ?? null;
   const isMyTurn = currentTurnId === you;
-  const myHand = state?.players[you]?.hand ?? [];
+  const myHand = drawStepMyHand ?? state?.players[you]?.hand ?? [];
   const opponentId = state?.playerIds.find((pid) => pid !== you) ?? null;
   const authoritativeOpponentTileCount =
     state && opponentId ? (state.handCounts?.[opponentId] ?? 0) : 0;

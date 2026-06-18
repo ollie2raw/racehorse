@@ -319,6 +319,7 @@ export type MultiplayerRoomSyncUiRuntime = {
   setDrawPulseIndex: Dispatch<SetStateAction<number | null>>;
   playDrawSound: (muted: boolean) => void;
   tileEquals: (a: Tile, b: Tile) => boolean;
+  setError: Dispatch<SetStateAction<string>>;
   onAuthoritativeGameplayStateApplied?: (nextState: GameState | null) => void;
 };
 
