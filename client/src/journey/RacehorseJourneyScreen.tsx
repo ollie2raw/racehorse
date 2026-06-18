@@ -162,8 +162,13 @@ export default function RacehorseJourneyScreen({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [briefingModalOpen, setBriefingModalOpen] = useState(false);
   const [puzzleModalOpen, setPuzzleModalOpen] = useState(false);
-  const [chapterCompleteModalOpen, setChapterCompleteModalOpen] = useState(false);
+  const [chapterCompleteDismissed, setChapterCompleteDismissed] = useState(false);
   const chapterRailRef = useRef<HTMLDivElement>(null);
+
+  if (!shouldShowChapterCompleteCelebration && chapterCompleteDismissed) {
+    setChapterCompleteDismissed(false);
+  }
+  const chapterCompleteModalOpen = shouldShowChapterCompleteCelebration && !chapterCompleteDismissed;
 
   const activeChapterProgress = useMemo(
     () => getChapterProgressRecord(progress, activeChapter.chapterId),
@@ -181,15 +186,7 @@ export default function RacehorseJourneyScreen({
     return nodesWithStatus[0]?.id ?? null;
   }, [nodesWithStatus, activeChapterProgress.lastVisitedNodeId]);
 
-  useEffect(() => {
-    setSelectedNodeId((current) => current ?? initialSelection);
-  }, [initialSelection]);
-
-  useEffect(() => {
-    if (shouldShowChapterCompleteCelebration) {
-      setChapterCompleteModalOpen(true);
-    }
-  }, [shouldShowChapterCompleteCelebration]);
+  const activeNodeId = selectedNodeId ?? initialSelection;
 
   useEffect(() => {
     const rail = chapterRailRef.current;
@@ -199,8 +196,8 @@ export default function RacehorseJourneyScreen({
   }, [activeChapter.chapterId]);
 
   const selectedNode = useMemo(
-    () => nodesWithStatus.find((node) => node.id === selectedNodeId) ?? null,
-    [nodesWithStatus, selectedNodeId],
+    () => nodesWithStatus.find((node) => node.id === activeNodeId) ?? null,
+    [nodesWithStatus, activeNodeId],
   );
 
   const progressPct = summary.total > 0 ? Math.round((summary.completed / summary.total) * 100) : 0;
@@ -309,7 +306,7 @@ export default function RacehorseJourneyScreen({
   };
 
   const handleDismissChapterComplete = () => {
-    setChapterCompleteModalOpen(false);
+    setChapterCompleteDismissed(true);
     celebrateChapterCompletion(activeChapter.chapterId);
   };
 
@@ -560,7 +557,7 @@ export default function RacehorseJourneyScreen({
                     </div>
                     <JourneyNodeButton
                       node={node}
-                      selected={selectedNodeId === node.id}
+                      selected={activeNodeId === node.id}
                       onSelect={handleSelectNode}
                     />
                   </div>

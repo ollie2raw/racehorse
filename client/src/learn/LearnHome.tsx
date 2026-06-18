@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react';
+import { useState, type CSSProperties, type MouseEvent } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
 import { GlobalNav } from '../components';
 import type { AppMode } from '../types';
@@ -145,8 +145,12 @@ export default function LearnHome({
   canOpenHowToPlay = false,
   onOpenHowToPlay,
 }: LearnHomeProps) {
-  const [v2AuthoringSession, setV2AuthoringSession] = useState<LessonV2AuthoringSession | null>(null);
-  const [_v2FrozenLesson, setV2FrozenLesson] = useState<ReturnType<typeof loadV2FrozenLesson>>(null);
+  const [v2AuthoringSession, setV2AuthoringSession] = useState<LessonV2AuthoringSession | null>(() =>
+    isAdmin && showAdminView ? loadV2AuthoringSession() : null,
+  );
+  const [_v2FrozenLesson, setV2FrozenLesson] = useState<ReturnType<typeof loadV2FrozenLesson>>(() =>
+    loadV2FrozenLesson(),
+  );
   const [v2FreezeFlash, setV2FreezeFlash] = useState(false);
   const [guidedV2StartError, setGuidedV2StartError] = useState<string | null>(null);
   const [candidateImportText, setCandidateImportText] = useState('');
@@ -158,11 +162,13 @@ export default function LearnHome({
   );
   const [lastImportedCandidate, setLastImportedCandidate] = useState<GuidedMatchCandidate | null>(null);
 
-  useEffect(() => {
+  const adminContextKey = `${isAdmin}:${showAdminView}`;
+  const [trackedAdminContextKey, setTrackedAdminContextKey] = useState(adminContextKey);
+  if (adminContextKey !== trackedAdminContextKey) {
+    setTrackedAdminContextKey(adminContextKey);
     setV2FrozenLesson(loadV2FrozenLesson());
-    if (!isAdmin || !showAdminView) return;
-    setV2AuthoringSession(loadV2AuthoringSession());
-  }, [isAdmin, showAdminView]);
+    setV2AuthoringSession(isAdmin && showAdminView ? loadV2AuthoringSession() : null);
+  }
 
   const handleFreezeV2 = () => {
     const session = loadV2AuthoringSession();

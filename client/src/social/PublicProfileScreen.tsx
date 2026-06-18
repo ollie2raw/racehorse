@@ -75,6 +75,7 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
   const [addingFriend, setAddingFriend] = useState(false);
 
   const load = useCallback(async () => {
+    await Promise.resolve();
     setLoading(true);
     setError(null);
     const result = await fetchPublicProfile(username);
@@ -83,7 +84,12 @@ export default function PublicProfileScreen({ username, user, onClose, showToast
     setProfile(result.profile);
   }, [username]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void (async () => {
+      await Promise.resolve();
+      await load();
+    })();
+  }, [load]);
 
   const handleAddFriend = async () => {
     if (!user || !profile) return;

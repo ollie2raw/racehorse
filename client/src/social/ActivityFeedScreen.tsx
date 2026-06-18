@@ -141,32 +141,28 @@ export default function ActivityFeedScreen({
   onOpenAccount,
 }: ActivityFeedScreenProps) {
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
-  const [friends, setFriends] = useState<FriendWithPresence[]>([]);
-  const [friendRatings, setFriendRatings] = useState<Record<string, string>>({});
+  const [loadedFriends, setLoadedFriends] = useState<FriendWithPresence[]>([]);
+  const [fetchedFriendRatings, setFetchedFriendRatings] = useState<Record<string, string>>({});
   const [feedFilter, setFeedFilter] = useState<ActivityFeedFilterTab>('all');
   const [trendingPlayers, setTrendingPlayers] = useState<
     { rank: number; username: string; rating: number; delta: string }[]
   >([]);
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
-
-    if (!user) {
-      setFriends([]);
-      return () => {
-        cancelled = true;
-      };
-    }
 
     void fetchFriendsWithPresence().then((result) => {
       if (cancelled || result.error) return;
-      setFriends((current) => (friendsEqual(current, result.friends) ? current : result.friends));
+      setLoadedFriends((current) => (friendsEqual(current, result.friends) ? current : result.friends));
     });
 
     return () => {
       cancelled = true;
     };
   }, [user]);
+
+  const friends = user ? loadedFriends : [];
 
   const friendUsernames = useMemo(
     () => new Set(friends.map((friend) => friend.username.toLowerCase())),
@@ -187,14 +183,8 @@ export default function ActivityFeedScreen({
   );
 
   useEffect(() => {
+    if (onlineFriends.length === 0) return;
     let cancelled = false;
-
-    if (onlineFriends.length === 0) {
-      setFriendRatings((current) => (Object.keys(current).length === 0 ? current : {}));
-      return () => {
-        cancelled = true;
-      };
-    }
 
     void Promise.all(
       onlineFriends.map(async (friend) => {
@@ -209,13 +199,15 @@ export default function ActivityFeedScreen({
     ).then((entries) => {
       if (cancelled) return;
       const nextRatings = Object.fromEntries(entries);
-      setFriendRatings((current) => (ratingsEqual(current, nextRatings) ? current : nextRatings));
+      setFetchedFriendRatings((current) => (ratingsEqual(current, nextRatings) ? current : nextRatings));
     });
 
     return () => {
       cancelled = true;
     };
   }, [onlineFriends]);
+
+  const friendRatings = onlineFriends.length === 0 ? {} : fetchedFriendRatings;
 
   const recentTournaments = useMemo(
     () => feedItems.filter((item) => item.type === 'tournament').slice(0, 3),

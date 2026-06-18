@@ -61,11 +61,12 @@ export default function GameReviewer({
 
   const moves = analysis?.analyzedMoves ?? [];
   const current = moves[cursor] ?? null;
-
-  useEffect(() => {
-    if (!open) return;
+  const reviewSessionKey = open ? String(analysis?.analyzedAt ?? '') : 'closed';
+  const [trackedReviewSessionKey, setTrackedReviewSessionKey] = useState(reviewSessionKey);
+  if (reviewSessionKey !== trackedReviewSessionKey) {
+    setTrackedReviewSessionKey(reviewSessionKey);
     setCursor(0);
-  }, [open, analysis?.analyzedAt]);
+  }
 
   const summaryTier = useMemo(() => accuracyTier(analysis?.accuracy ?? 0), [analysis?.accuracy]);
   const brilliantGlow = (analysis?.accuracy ?? 0) > 95;

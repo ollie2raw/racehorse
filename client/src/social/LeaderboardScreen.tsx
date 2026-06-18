@@ -124,6 +124,7 @@ export default function LeaderboardScreen({ user, onViewProfile, onClose }: Lead
     if (tab === 'weekly' && weeklyData) return;
     if (tab === 'mode' && modeData[gameMode]) return;
 
+    await Promise.resolve();
     setLoading(true);
     setError(null);
 
@@ -150,7 +151,12 @@ export default function LeaderboardScreen({ user, onViewProfile, onClose }: Lead
     }
   }, [user, tab, gameMode, globalData, friendsData, weeklyData, modeData]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void (async () => {
+      await Promise.resolve();
+      await load();
+    })();
+  }, [load]);
 
   const rows: GenericRow[] = (() => {
     if (tab === 'global') {

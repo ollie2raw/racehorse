@@ -92,11 +92,13 @@ function LastFivePills({ results }: { results: Array<'W' | 'L' | 'D'> }) {
  */
 export function MatchFoundOverlay({ payload, onComplete, yourUsername, queueElapsedMs = 0 }: Props) {
   const totalSeconds = useMemo(() => Math.max(1, Math.ceil(payload.countdownMs / 1000)), [payload.countdownMs]);
+  const countdownKey = `${payload.roomCode}:${totalSeconds}`;
+  const [trackedCountdownKey, setTrackedCountdownKey] = useState(countdownKey);
   const [secondsLeft, setSecondsLeft] = useState(totalSeconds);
-
-  useEffect(() => {
+  if (countdownKey !== trackedCountdownKey) {
+    setTrackedCountdownKey(countdownKey);
     setSecondsLeft(totalSeconds);
-  }, [totalSeconds, payload.roomCode]);
+  }
 
   useEffect(() => {
     if (secondsLeft <= 0) {

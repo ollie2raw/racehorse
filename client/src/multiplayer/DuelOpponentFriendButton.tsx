@@ -36,15 +36,16 @@ export function DuelOpponentFriendButton({
 }: DuelOpponentFriendButtonProps) {
   const [state, setState] = useState<FriendRequestState>('hidden');
 
+  const eligible =
+    !hidden && Boolean(currentUserId) && opponentUserId !== currentUserId;
+  const displayState = eligible ? state : 'hidden';
+
   useEffect(() => {
-    if (hidden || !currentUserId || opponentUserId === currentUserId) {
-      setState('hidden');
-      return;
-    }
+    if (!eligible) return;
 
     let cancelled = false;
     (async () => {
-      const result = await fetchFriends(currentUserId);
+      const result = await fetchFriends(currentUserId!);
       if (cancelled) return;
       if (result.friends.some((f) => f.userId === opponentUserId)) {
         setState('friends');
@@ -59,7 +60,7 @@ export function DuelOpponentFriendButton({
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, opponentUserId, hidden]);
+  }, [currentUserId, opponentUserId, eligible]);
 
   const handleClick = useCallback(
     async (e: MouseEvent) => {
@@ -84,18 +85,18 @@ export function DuelOpponentFriendButton({
     [currentUserId, opponentUsername, onToast, state],
   );
 
-  if (state === 'hidden') return null;
+  if (displayState === 'hidden') return null;
 
   const label =
-    state === 'sending'
+    displayState === 'sending'
       ? 'Sending...'
-      : state === 'pending'
+      : displayState === 'pending'
         ? 'Request sent'
-        : state === 'friends'
+        : displayState === 'friends'
           ? 'Friends'
           : `Send friend request to ${opponentUsername}`;
 
-  if (state === 'friends') {
+  if (displayState === 'friends') {
     return (
       <span
         className="pml-match-add-friend-button pml-match-add-friend-button--friends"
@@ -107,7 +108,7 @@ export function DuelOpponentFriendButton({
     );
   }
 
-  if (state === 'pending') {
+  if (displayState === 'pending') {
     return (
       <span
         className="pml-match-add-friend-button pml-match-add-friend-button--pending"
@@ -124,11 +125,11 @@ export function DuelOpponentFriendButton({
       type="button"
       className="pml-match-add-friend-button"
       onClick={handleClick}
-      disabled={state === 'sending'}
+      disabled={displayState === 'sending'}
       aria-label={label}
-      title={state === 'sending' ? 'Sending...' : 'Add friend'}
+      title={displayState === 'sending' ? 'Sending...' : 'Add friend'}
     >
-      {state === 'sending' ? (
+      {displayState === 'sending' ? (
         <span className="pml-match-add-friend-button__dots" aria-hidden>
           ···
         </span>

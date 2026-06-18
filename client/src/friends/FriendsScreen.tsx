@@ -87,6 +87,8 @@ function friendRequestsEqual(a: FriendRequestRecord[], b: FriendRequestRecord[])
   return true;
 }
 
+const EMPTY_PRESENCE_MAP = new Map<string, PresenceStatus>();
+
 function presenceMapsEqual(a: Map<string, PresenceStatus>, b: Map<string, PresenceStatus>): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;
@@ -195,6 +197,7 @@ export default function FriendsScreen({
 
   const loadFriends = useCallback(async () => {
     if (!open || !user) return;
+    await Promise.resolve();
     setLoading(true);
     const resp = await fetchFriends(user.id);
     setLoading(false);
@@ -234,13 +237,28 @@ export default function FriendsScreen({
     };
   }, []);
 
-  useEffect(() => { void loadFriends(); }, [loadFriends]);
+  useEffect(() => {
+    void (async () => {
+      await Promise.resolve();
+      await loadFriends();
+    })();
+  }, [loadFriends]);
 
   useEffect(() => {
     if (!open || !user || !isVisible || friends.length === 0) return;
-    void refreshPresence();
-    const interval = setInterval(() => { void refreshPresence(); }, 30000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) void refreshPresence();
+    };
+    void (async () => {
+      await Promise.resolve();
+      run();
+    })();
+    const interval = setInterval(run, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [friends.length, isVisible, open, refreshPresence, user]);
 
   useEffect(() => {
@@ -291,17 +309,15 @@ export default function FriendsScreen({
     }
   }, [profileLoading, selectedActivity.length, selectedFriend?.id, selectedProfile]);
 
-  useEffect(() => {
-    if (open && user) return;
-    setPresenceMap((current) => (current.size === 0 ? current : new Map()));
-  }, [open, user]);
+  const presenceTrackingActive = open && Boolean(user);
+  const displayPresenceMap = presenceTrackingActive ? presenceMap : EMPTY_PRESENCE_MAP;
 
   const onlineCount = useMemo(
     () => friends.filter((f) => {
-      const s = presenceMap.get(f.userId);
+      const s = displayPresenceMap.get(f.userId);
       return s === 'online' || s === 'in_game';
     }).length,
-    [friends, presenceMap],
+    [friends, displayPresenceMap],
   );
   const hasPendingRequests = incoming.length > 0 || outgoing.length > 0;
 
@@ -402,7 +418,7 @@ export default function FriendsScreen({
               )}
               <div className="friends-page-list">
                 {friends.map((friend) => {
-                  const presenceStatus = presenceMap.get(friend.userId) ?? 'offline';
+                  const presenceStatus = displayPresenceMap.get(friend.userId) ?? 'offline';
                   const isSelected = selectedFriend?.id === friend.id;
                   return (
                     <button
@@ -502,7 +518,7 @@ export default function FriendsScreen({
                 <div className="friends-page-preview-identity">
                   <span className="friends-page-preview-username">{selectedProfile.username}</span>
                   {(() => {
-                    const s = presenceMap.get(selectedFriend.userId) ?? 'offline';
+                    const s = displayPresenceMap.get(selectedFriend.userId) ?? 'offline';
                     const color = s === 'online' ? 'var(--tier-rookie)' : s === 'in_game' ? 'var(--tier-elite)' : 'var(--text-dim)';
                     const label = s === 'online' ? 'Online' : s === 'in_game' ? 'In Game' : 'Offline';
                     return (

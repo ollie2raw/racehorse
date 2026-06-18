@@ -231,37 +231,44 @@ export default function GuidedMatchRecorderScreen({
               ? 'Draw from boneyard'
               : 'Pass turn';
   const lastCommittedEvent = lesson.events.at(-1)?.id ?? '-';
+  const activeSelectedTile = useMemo(() => {
+    if (!selectedTile || !canSelectPlayerMove) return null;
+    if (playableMoves.every((move) => !move.tile || !tileEquals(move.tile, selectedTile))) return null;
+    return selectedTile;
+  }, [canSelectPlayerMove, playableMoves, selectedTile]);
   const selectedTileLegalMoves = useMemo(
     () =>
-      canSelectPlayerMove && selectedTile
-        ? playableMoves.filter((move) => move.tile && tileEquals(move.tile, selectedTile))
+      canSelectPlayerMove && activeSelectedTile
+        ? playableMoves.filter((move) => move.tile && tileEquals(move.tile, activeSelectedTile))
         : [],
-    [canSelectPlayerMove, playableMoves, selectedTile],
+    [canSelectPlayerMove, playableMoves, activeSelectedTile],
   );
 
   useEffect(() => {
-    if ((!canSelectPlayerMove || playableMoves.every((move) => !move.tile || !tileEquals(move.tile, selectedTile))) && selectedTile) {
-      setSelectedTile(null);
-    }
-  }, [canSelectPlayerMove, playableMoves, selectedTile]);
-
-  useEffect(() => {
     if (source) return;
-    const saved = saveGuidedMatchRecorderDraft({
-      version: GUIDED_MATCH_RECORDER_DRAFT_VERSION,
-      savedAt: new Date().toISOString(),
-      lesson,
-      currentMatchSnapshot: serializeGuidedMatchRecorderState(match),
-      cursor,
-      draftCoachingTitle: coachingTitle,
-      draftCoachingBody: coachingBody,
-      draftCoachingTags: coachingTags,
-      pendingPlayerEvent: pending?.event ?? null,
-      pendingPlayerHandEnded: pending?.handEnded ?? null,
-      activeEventId,
-      source: 'recorder',
-    });
-    setDraftSaved(saved);
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      const saved = saveGuidedMatchRecorderDraft({
+        version: GUIDED_MATCH_RECORDER_DRAFT_VERSION,
+        savedAt: new Date().toISOString(),
+        lesson,
+        currentMatchSnapshot: serializeGuidedMatchRecorderState(match),
+        cursor,
+        draftCoachingTitle: coachingTitle,
+        draftCoachingBody: coachingBody,
+        draftCoachingTags: coachingTags,
+        pendingPlayerEvent: pending?.event ?? null,
+        pendingPlayerHandEnded: pending?.handEnded ?? null,
+        activeEventId,
+        source: 'recorder',
+      });
+      setDraftSaved(saved);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [activeEventId, coachingBody, coachingTags, coachingTitle, cursor, lesson, match, pending, source]);
 
   const finalizeHandTransition = (
@@ -377,7 +384,7 @@ export default function GuidedMatchRecorderScreen({
   };
 
   const handleTilePositionClick = (position: PlacementPosition) => {
-    if (!selectedTile || pending || !canSelectPlayerMove || match.currentPlayer !== 'you') return;
+    if (!activeSelectedTile || pending || !canSelectPlayerMove || match.currentPlayer !== 'you') return;
     const move = selectedTileLegalMoves.find((candidate) => candidate.position === position);
     if (!move) return;
     const beforeState = match;
@@ -732,7 +739,7 @@ export default function GuidedMatchRecorderScreen({
                     <Board
                       board={match.board}
                       legalMoves={pending ? [] : selectedTileLegalMoves}
-                      selectedTile={pending ? null : selectedTile}
+                      selectedTile={pending ? null : activeSelectedTile}
                       onPositionClick={handleTilePositionClick}
                       handNumber={match.handNumber}
                       handOver={match.handOver}
@@ -757,7 +764,7 @@ export default function GuidedMatchRecorderScreen({
                             key={`${tile.low}|${tile.high}-${index}`}
                             tile={tile}
                             size={46}
-                            selected={selectedTile != null && tileEquals(selectedTile, tile)}
+                            selected={activeSelectedTile != null && tileEquals(activeSelectedTile, tile)}
                             highlight={playable}
                             disabled={pending != null || match.currentPlayer !== 'you' || !playable}
                             unplayable={!playable}

@@ -57,18 +57,23 @@ export function GlobalNav({
   solidDarkChrome,
 }: GlobalNavProps) {
   const { user: authUser, profile: authProfile } = useAuth();
+  const authUserId = authUser?.id ?? null;
+  const [friendCountOwnerId, setFriendCountOwnerId] = useState<string | null>(null);
   const [friendCountFetched, setFriendCountFetched] = useState<number | null>(null);
+  if (authUserId !== friendCountOwnerId) {
+    setFriendCountOwnerId(authUserId);
+    setFriendCountFetched(null);
+  }
 
   useEffect(() => {
     if (!authUser) {
       globalNavHudCache.userId = null;
       globalNavHudCache.ratingDisplay = null;
       globalNavHudCache.friendCount = null;
-      setFriendCountFetched(null);
       return;
     }
     if (authUser.id !== globalNavHudCache.userId) {
-      setFriendCountFetched(null);
+      globalNavHudCache.friendCount = null;
     }
   }, [authUser]);
 

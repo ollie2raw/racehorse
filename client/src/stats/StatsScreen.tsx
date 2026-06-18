@@ -62,9 +62,10 @@ export default function StatsScreen({
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
 
-  const loadStats = useCallback(() => {
+  const loadStats = useCallback(async () => {
     const statsUserId = targetUserId ?? user?.id ?? null;
     if (!statsUserId) return;
+    await Promise.resolve();
     const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
@@ -91,7 +92,10 @@ export default function StatsScreen({
 
   useEffect(() => {
     if (!open || (!user && !targetUserId)) return;
-    loadStats();
+    void (async () => {
+      await Promise.resolve();
+      await loadStats();
+    })();
     return () => { requestIdRef.current += 1; };
   }, [loadStats, open, targetUserId, user]);
 

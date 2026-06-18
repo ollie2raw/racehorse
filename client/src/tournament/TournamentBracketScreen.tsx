@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { GlobalNav } from '../components';
+import { useSyncNow } from '../ui/useSyncNow';
 import type { AppMode } from '../types';
 import {
   registrationNameFor,
@@ -97,21 +98,10 @@ const CountdownText = memo(function CountdownText({
   targetMs: number | null;
   fallback?: string;
 }) {
-  const [label, setLabel] = useState(() =>
-    targetMs != null && Number.isFinite(targetMs) ? buildCountdownLabel(targetMs) : fallback,
-  );
-
-  useEffect(() => {
-    if (targetMs == null || !Number.isFinite(targetMs)) {
-      setLabel(fallback);
-      return;
-    }
-    setLabel(buildCountdownLabel(targetMs));
-    const timer = window.setInterval(() => {
-      setLabel(buildCountdownLabel(targetMs));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [fallback, targetMs]);
+  const validTarget = targetMs != null && Number.isFinite(targetMs);
+  const now = useSyncNow(1000, validTarget);
+  void now;
+  const label = validTarget ? buildCountdownLabel(targetMs) : fallback;
 
   return <>{label}</>;
 });

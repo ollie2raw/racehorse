@@ -36,19 +36,23 @@ export default function DailyFritzLeaderboardRoute({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    void getTodayDailyFritz()
-      .then((today) => {
-        if (cancelled) return;
-        setRunDate(today.run_date || pacificRunDateFallback());
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setRunDate(pacificRunDateFallback());
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setLoading(true);
+      void getTodayDailyFritz()
+        .then((today) => {
+          if (cancelled) return;
+          setRunDate(today.run_date || pacificRunDateFallback());
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setRunDate(pacificRunDateFallback());
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    })();
     return () => {
       cancelled = true;
     };

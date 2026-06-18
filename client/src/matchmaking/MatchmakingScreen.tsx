@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io-client';
 import type { AppMode } from '../types';
 import { isGameServerSameOriginAsPage } from '../lib/gameServerUrl';
 import { GlobalNav } from '../components';
+import { useSyncNow } from '../ui/useSyncNow';
 import { useMatchmaking } from './useMatchmaking';
 import type { MatchFoundPayload } from './types';
 import { MultiplayerTopBar } from './MultiplayerTopBar';
@@ -57,20 +58,9 @@ const MatchmakingRatingTrack = memo(function MatchmakingRatingTrack({
   queueState: 'idle' | 'searching' | 'timeout';
   searchStartedAtMs: number | null;
 }) {
-  const [elapsedMs, setElapsedMs] = useState(0);
-
-  useEffect(() => {
-    if (queueState !== 'searching' || searchStartedAtMs == null) {
-      setElapsedMs(0);
-      return;
-    }
-    setElapsedMs(Math.max(0, Date.now() - searchStartedAtMs));
-    const timer = window.setInterval(() => {
-      setElapsedMs(Math.max(0, Date.now() - searchStartedAtMs));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [queueState, searchStartedAtMs]);
-
+  const ticking = queueState === 'searching' && searchStartedAtMs != null;
+  const now = useSyncNow(1000, ticking);
+  const elapsedMs = ticking ? Math.max(0, now - searchStartedAtMs) : 0;
   const ratingSegActive = ratingSegmentIndex(queueState, elapsedMs);
 
   return (
@@ -94,19 +84,9 @@ const SearchElapsedClock = memo(function SearchElapsedClock({
 }: {
   searchStartedAtMs: number | null;
 }) {
-  const [elapsedMs, setElapsedMs] = useState(0);
-
-  useEffect(() => {
-    if (searchStartedAtMs == null) {
-      setElapsedMs(0);
-      return;
-    }
-    setElapsedMs(Math.max(0, Date.now() - searchStartedAtMs));
-    const timer = window.setInterval(() => {
-      setElapsedMs(Math.max(0, Date.now() - searchStartedAtMs));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [searchStartedAtMs]);
+  const ticking = searchStartedAtMs != null;
+  const now = useSyncNow(1000, ticking);
+  const elapsedMs = ticking ? Math.max(0, now - searchStartedAtMs) : 0;
 
   return <>{formatElapsed(elapsedMs)}</>;
 });
@@ -185,9 +165,14 @@ const RATING_SEGMENTS = [
 export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   const isConnecting = props.isConnecting ?? false;
   const serverUrl = props.serverUrl ?? '';
-  const [showDisconnectedHint, setShowDisconnectedHint] = useState(false);
+  const [latchedDisconnectedHint, setLatchedDisconnectedHint] = useState(false);
   const [friendToast, setFriendToast] = useState('');
   const pendingAutoJoinRef = useRef<MatchFoundPayload | null>(null);
+  const disconnectedForHint = !props.isConnected && !isConnecting;
+  if (!disconnectedForHint && latchedDisconnectedHint) {
+    setLatchedDisconnectedHint(false);
+  }
+  const showDisconnectedHint = disconnectedForHint && latchedDisconnectedHint;
 
   useEffect(() => {
     if (!friendToast) return;
@@ -196,13 +181,10 @@ export default function MatchmakingScreen(props: MatchmakingScreenProps) {
   }, [friendToast]);
 
   useEffect(() => {
-    if (props.isConnected || isConnecting) {
-      setShowDisconnectedHint(false);
-      return;
-    }
-    const t = window.setTimeout(() => setShowDisconnectedHint(true), 2800);
+    if (!disconnectedForHint) return;
+    const t = window.setTimeout(() => setLatchedDisconnectedHint(true), 2800);
     return () => window.clearTimeout(t);
-  }, [props.isConnected, isConnecting]);
+  }, [disconnectedForHint]);
 
   useEffect(() => {
     if (!showDisconnectedHint || import.meta.env.PROD) return;

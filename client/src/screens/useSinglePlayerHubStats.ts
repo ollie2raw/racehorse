@@ -60,10 +60,7 @@ export function useSinglePlayerHubStats(userId: string | null | undefined): Sing
   });
 
   useEffect(() => {
-    if (!userId) {
-      setRemoteStats({ fritz: EMPTY.fritz, ghost: EMPTY.ghost });
-      return;
-    }
+    if (!userId) return;
 
     let active = true;
 
@@ -117,8 +114,8 @@ export function useSinglePlayerHubStats(userId: string | null | undefined): Sing
   }, [userId]);
 
   return {
-    fritz: remoteStats.fritz,
-    ghost: remoteStats.ghost,
+    fritz: userId ? remoteStats.fritz : EMPTY.fritz,
+    ghost: userId ? remoteStats.ghost : EMPTY.ghost,
     lab: buildLabStats(userId),
   };
 }

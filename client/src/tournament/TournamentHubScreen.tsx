@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
+import { useSyncNow } from '../ui/useSyncNow';
 import type { Registration, ScheduledTournament } from './types';
 import { deriveTournamentHubViewModel, type TournamentRecoveryMatch } from './hubState';
 import { isTerminalTournamentMatch } from './terminalMatches';
@@ -91,24 +92,10 @@ const TournamentCountdownText = memo(function TournamentCountdownText({
   targetMs: number | null;
   fallback?: string;
 }) {
-  const [label, setLabel] = useState(() =>
-    targetMs != null && Number.isFinite(targetMs)
-      ? buildTournamentCountdownLabel(targetMs)
-      : fallback,
-  );
-
-  useEffect(() => {
-    if (targetMs == null || !Number.isFinite(targetMs)) {
-      setLabel(fallback);
-      return;
-    }
-
-    setLabel(buildTournamentCountdownLabel(targetMs));
-    const timer = window.setInterval(() => {
-      setLabel(buildTournamentCountdownLabel(targetMs));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [fallback, targetMs]);
+  const validTarget = targetMs != null && Number.isFinite(targetMs);
+  const now = useSyncNow(1000, validTarget);
+  void now;
+  const label = validTarget ? buildTournamentCountdownLabel(targetMs) : fallback;
 
   return <>{label}</>;
 });
@@ -122,18 +109,12 @@ const TournamentCardStatus = memo(function TournamentCardStatus({
     () => Date.parse(tournament.scheduled_start) - 30 * 60 * 1000,
     [tournament.scheduled_start],
   );
-  const [status, setStatus] = useState(() => statusFor(tournament));
-
-  useEffect(() => {
-    setStatus(statusFor(tournament));
-    if (tournament.status === 'registration_open') return;
-    if (!Number.isFinite(startSoonAtMs) || Date.now() >= startSoonAtMs) return;
-    const timer = window.setTimeout(
-      () => setStatus(statusFor(tournament)),
-      Math.max(0, startSoonAtMs - Date.now() + 50),
-    );
-    return () => window.clearTimeout(timer);
-  }, [startSoonAtMs, tournament]);
+  const needsStatusTick =
+    tournament.status === 'registration_open' ||
+    (Number.isFinite(startSoonAtMs) && Date.now() < startSoonAtMs);
+  const now = useSyncNow(1000, needsStatusTick);
+  void now;
+  const status = useMemo(() => statusFor(tournament), [tournament, now]);
 
   return <span className={`th-card__status ${status.cls}`}>{status.label}</span>;
 });

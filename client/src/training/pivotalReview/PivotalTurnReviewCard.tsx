@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Board, DominoTile } from '../../components';
 import type { AnalyzedMove, MoveRating } from '../../analyzer/moveAnalyzer';
 import { sameTileTuple } from '../../analyzer/moveLogger';
@@ -102,11 +102,13 @@ export function PivotalTurnReviewCard({
     buildInitialReflections(candidates),
   );
 
-  useEffect(() => {
-    if (!open) return;
+  const reviewSessionKey = open ? `${selection.analysis.analyzedAt}:${candidates.length}` : '';
+  const [trackedReviewSessionKey, setTrackedReviewSessionKey] = useState(reviewSessionKey);
+  if (open && reviewSessionKey !== trackedReviewSessionKey) {
+    setTrackedReviewSessionKey(reviewSessionKey);
     setStepIndex(0);
     setReflections(buildInitialReflections(candidates));
-  }, [open, selection.analysis.analyzedAt, candidates]);
+  }
 
   const candidate = candidates[stepIndex] ?? null;
   const analyzedMove = candidate?.move ?? null;

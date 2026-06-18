@@ -203,12 +203,7 @@ export default function RacehorseHomeScreen({
   }, [authUser?.id, fritzStatus, puzzleStatus]);
 
   useEffect(() => {
-    if (!authUser?.id) {
-      setFritzStreak(0);
-      setFritzStatus('none');
-      setFritzOutcome(null);
-      return;
-    }
+    if (!authUser?.id) return;
 
     getTodayDailyFritz()
       .then((data) => {
@@ -225,6 +220,9 @@ export default function RacehorseHomeScreen({
         setFritzOutcome(null);
       });
   }, [authUser?.id]);
+
+  const displayFritzStatus = authUser?.id ? fritzStatus : 'none';
+  const displayFritzOutcome = authUser?.id ? fritzOutcome : null;
 
   useEffect(() => {
     getTodayDailyPuzzleLadder()
@@ -305,11 +303,11 @@ export default function RacehorseHomeScreen({
                   <p className="mt-3 text-[18px] text-[#C4C1CC] leading-relaxed">Best of 3 series. Same deal for everyone.</p>
                   <div className="mt-2">
                     <StatusRow
-                      status={fritzStatus}
-                      text={fritzStatus === 'completed' ? (fritzOutcome === 'win' ? 'Win' : fritzOutcome === 'loss' ? 'Loss' : undefined) : undefined}
+                      status={displayFritzStatus}
+                      text={displayFritzStatus === 'completed' ? (displayFritzOutcome === 'win' ? 'Win' : displayFritzOutcome === 'loss' ? 'Loss' : undefined) : undefined}
                       color="#E7B64A"
                       accentColor="#FFD76A"
-                      textColor={fritzOutcome === 'win' ? '#7EE24E' : fritzOutcome === 'loss' ? '#F87171' : undefined}
+                      textColor={displayFritzOutcome === 'win' ? '#7EE24E' : displayFritzOutcome === 'loss' ? '#F87171' : undefined}
                     />
                   </div>
                   <Button
@@ -318,7 +316,7 @@ export default function RacehorseHomeScreen({
                     className="mt-7"
                     style={{ width: 188, height: 50, justifyContent: 'space-between' }}
                   >
-                    <span>{fritzStatus === 'completed' ? 'View Result' : fritzStatus === 'started' ? 'Continue' : 'Play'}</span>
+                    <span>{displayFritzStatus === 'completed' ? 'View Result' : displayFritzStatus === 'started' ? 'Continue' : 'Play'}</span>
                     <span style={{ fontSize: 22, lineHeight: 1, color: '#FFD76A', opacity: 0.9 }}>›</span>
                   </Button>
                 </div>

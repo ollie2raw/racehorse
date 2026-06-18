@@ -9,13 +9,14 @@ export function useDeferredAsset(
   loadAsset: () => Promise<AssetModule>,
 ): string | null {
   const [assetSrc, setAssetSrc] = useState<string | null>(() => assetCache.get(assetKey) ?? null);
+  const [trackedAssetKey, setTrackedAssetKey] = useState(assetKey);
+  if (assetKey !== trackedAssetKey) {
+    setTrackedAssetKey(assetKey);
+    setAssetSrc(assetCache.get(assetKey) ?? null);
+  }
 
   useEffect(() => {
-    const cached = assetCache.get(assetKey);
-    if (cached) {
-      setAssetSrc(cached);
-      return;
-    }
+    if (assetCache.has(assetKey)) return;
 
     if (typeof window === 'undefined') return;
 
@@ -41,5 +42,5 @@ export function useDeferredAsset(
     };
   }, [assetKey, loadAsset]);
 
-  return assetSrc;
+  return assetCache.get(assetKey) ?? assetSrc;
 }

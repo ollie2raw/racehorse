@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { Socket } from 'socket.io-client';
 
 type UseFriendSocketReachabilityParams = {
@@ -8,6 +8,8 @@ type UseFriendSocketReachabilityParams = {
   pollMs?: number;
 };
 
+const EMPTY_REACHABLE_SET = new Set<string>();
+
 function setsEqual(a: Set<string>, b: Set<string>): boolean {
   if (a === b) return true;
   if (a.size !== b.size) return false;
@@ -15,6 +17,22 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
     if (!b.has(value)) return false;
   }
   return true;
+}
+
+function subscribeSocketConnection(socket: Socket | null, onStoreChange: () => void): () => void {
+  if (!socket) return () => {};
+  const handleConnect = () => onStoreChange();
+  const handleDisconnect = () => onStoreChange();
+  socket.on('connect', handleConnect);
+  socket.on('disconnect', handleDisconnect);
+  return () => {
+    socket.off('connect', handleConnect);
+    socket.off('disconnect', handleDisconnect);
+  };
+}
+
+function getSocketConnectedSnapshot(socket: Socket | null): boolean {
+  return Boolean(socket?.connected);
 }
 
 /**
@@ -32,12 +50,18 @@ export function useFriendSocketReachability({
   const [isVisible, setIsVisible] = useState(
     typeof document === 'undefined' ? true : document.visibilityState === 'visible',
   );
-  const [isConnected, setIsConnected] = useState(Boolean(socket?.connected));
+  const isConnected = useSyncExternalStore(
+    (onStoreChange) => subscribeSocketConnection(socket, onStoreChange),
+    () => getSocketConnectedSnapshot(socket),
+    () => false,
+  );
 
   const stableUserIds = useMemo(
     () => [...new Set(userIds.filter((id) => id && !id.startsWith('demo-')))].sort(),
     [userIds],
   );
+
+  const pollEnabled = enabled && Boolean(socket) && stableUserIds.length > 0;
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -51,30 +75,7 @@ export function useFriendSocketReachability({
   }, []);
 
   useEffect(() => {
-    if (!socket) {
-      setIsConnected(false);
-      return;
-    }
-
-    const handleConnect = () => setIsConnected(true);
-    const handleDisconnect = () => setIsConnected(false);
-
-    setIsConnected(socket.connected);
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
-
-    return () => {
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
-    };
-  }, [socket]);
-
-  useEffect(() => {
-    if (!enabled || !socket || stableUserIds.length === 0) {
-      setReachableIds((prev) => (prev.size === 0 ? prev : new Set()));
-      setHasSnapshot((prev) => (prev ? false : prev));
-      return;
-    }
+    if (!pollEnabled) return;
 
     let active = true;
 
@@ -85,7 +86,7 @@ export function useFriendSocketReachability({
         setHasSnapshot((prev) => (prev ? false : prev));
         return;
       }
-      socket.emit(
+      socket!.emit(
         'presence:online',
         stableUserIds,
         (resp: { ok?: boolean; onlineUserIds?: string[] }) => {
@@ -97,10 +98,17 @@ export function useFriendSocketReachability({
       );
     };
 
-    refresh();
-    if (!isConnected || !isVisible) return () => {
-      active = false;
-    };
+    void (async () => {
+      await Promise.resolve();
+      if (!active) return;
+      refresh();
+    })();
+
+    if (!isConnected || !isVisible) {
+      return () => {
+        active = false;
+      };
+    }
 
     const interval = window.setInterval(refresh, pollMs);
 
@@ -108,20 +116,23 @@ export function useFriendSocketReachability({
       active = false;
       window.clearInterval(interval);
     };
-  }, [enabled, isConnected, isVisible, pollMs, socket, stableUserIds]);
+  }, [isConnected, isVisible, pollEnabled, pollMs, socket, stableUserIds]);
+
+  const displayReachableIds = pollEnabled ? reachableIds : EMPTY_REACHABLE_SET;
+  const displayHasSnapshot = pollEnabled ? hasSnapshot : false;
 
   const isSocketReachable = useMemo(
     () => (userId: string) => {
       if (!userId || userId.startsWith('demo-')) return false;
-      if (!hasSnapshot) return false;
-      return reachableIds.has(userId);
+      if (!displayHasSnapshot) return false;
+      return displayReachableIds.has(userId);
     },
-    [hasSnapshot, reachableIds],
+    [displayHasSnapshot, displayReachableIds],
   );
 
   return {
     isSocketReachable,
-    hasReachabilitySnapshot: hasSnapshot,
-    reachableIds,
+    hasReachabilitySnapshot: displayHasSnapshot,
+    reachableIds: displayReachableIds,
   };
 }

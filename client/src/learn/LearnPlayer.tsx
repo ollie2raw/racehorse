@@ -101,38 +101,24 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
         : [],
     [isQuizTileStep, isQuizPlaceStep, isQuizScoreStep, isDrillStep, isGuidedPlayStep, isPredictionStep, quizBoard],
   );
-  useEffect(() => {
-    if (!lesson) return;
+
+  const resolvedLessonId = lesson?.id ?? '';
+  const [restoredLessonId, setRestoredLessonId] = useState<string | null>(null);
+  if (lesson && resolvedLessonId !== restoredLessonId) {
     const progress = loadProgress();
     const restored =
-      progress.lastLessonId === lesson.id ? Math.min(Math.max(progress.lastStepIndex, 0), lesson.steps.length - 1) : 0;
+      progress.lastLessonId === lesson.id
+        ? Math.min(Math.max(progress.lastStepIndex, 0), lesson.steps.length - 1)
+        : 0;
+    setRestoredLessonId(resolvedLessonId);
     setStepIndex(restored);
     setShowIntroCard(true);
     setShowCompletedState(false);
-  }, [lesson]);
+  }
 
-  useEffect(() => {
-    setQuizSolved(false);
-    setQuizWrongAttempts(0);
-    setQuizFeedback(null);
-    setLastClickedTileResult(null);
-    setLastClickedScoreChoice(null);
-    setLastAnswerCorrect(null);
-    setGuidedHasPlaced(false);
-    setGuidedPlacedBoard(null);
-    setGuidedSlidingTile(false);
-    setShowScoreFlash(null);
-    setChainCount((prev) => (currentStep?.type === 'guided_play' ? prev : 0));
-    setPredictionSelected(null);
-    setPredictionRevealBoard(null);
-    setPredictionRevealVisible(false);
-    setDrillRoundIndex(0);
-    setDrillTimeLeftMs(0);
-    setDrillResults([]);
-    setDrillFeedback(null);
-    setDrillRoundResolved(false);
-    setDrillCompleted(false);
-    setDrillStarted(false);
+  const stepKey = `${resolvedLessonId}:${stepIndex}`;
+  const [prevStepKey, setPrevStepKey] = useState('');
+  if (stepKey !== prevStepKey) {
     if (drillFrameRef.current !== null) {
       window.cancelAnimationFrame(drillFrameRef.current);
       drillFrameRef.current = null;
@@ -165,7 +151,29 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
       window.clearTimeout(predictionTimeoutRef.current);
       predictionTimeoutRef.current = null;
     }
-  }, [lesson?.id, stepIndex]);
+    setPrevStepKey(stepKey);
+    setQuizSolved(false);
+    setQuizWrongAttempts(0);
+    setQuizFeedback(null);
+    setLastClickedTileResult(null);
+    setLastClickedScoreChoice(null);
+    setLastAnswerCorrect(null);
+    setGuidedHasPlaced(false);
+    setGuidedPlacedBoard(null);
+    setGuidedSlidingTile(false);
+    setShowScoreFlash(null);
+    setChainCount((prev) => (currentStep?.type === 'guided_play' ? prev : 0));
+    setPredictionSelected(null);
+    setPredictionRevealBoard(null);
+    setPredictionRevealVisible(false);
+    setDrillRoundIndex(0);
+    setDrillTimeLeftMs(0);
+    setDrillResults([]);
+    setDrillFeedback(null);
+    setDrillRoundResolved(false);
+    setDrillCompleted(false);
+    setDrillStarted(false);
+  }
 
   useEffect(() => {
     if (!lesson || showCompletedState) return;
@@ -243,7 +251,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     const roundMs = Math.max(250, step.secondsPerRound * 1000);
     drillRoundStartRef.current = start;
     drillRoundDeadlineRef.current = start + roundMs;
-    setDrillTimeLeftMs(roundMs);
 
     const tick = () => {
       const now = performance.now();

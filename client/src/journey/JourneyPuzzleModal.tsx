@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button, Modal } from '../components/primitives';
 import type { JourneyPuzzle } from './journeyPuzzles';
 
@@ -20,25 +20,29 @@ export function JourneyPuzzleModal({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [solved, setSolved] = useState(false);
 
-  useEffect(() => {
-    if (!open) {
-      setSelectedId(null);
-      setSolved(false);
-    }
-  }, [open, puzzle?.nodeId]);
+  const puzzleKey = open ? (puzzle?.nodeId ?? '') : '';
+  const [trackedPuzzleKey, setTrackedPuzzleKey] = useState(puzzleKey);
+  if (puzzleKey !== trackedPuzzleKey) {
+    setTrackedPuzzleKey(puzzleKey);
+    setSelectedId(null);
+    setSolved(false);
+  }
+
+  const displaySelectedId = open ? selectedId : null;
+  const displaySolved = open ? solved : false;
 
   if (!puzzle) return null;
 
   const handleSelect = (choiceId: string) => {
-    if (reviewMode || solved) return;
+    if (reviewMode || displaySolved) return;
     setSelectedId(choiceId);
     if (choiceId === puzzle.correctChoiceId) {
       setSolved(true);
     }
   };
 
-  const isCorrect = selectedId === puzzle.correctChoiceId;
-  const showFeedback = reviewMode || selectedId != null;
+  const isCorrect = displaySelectedId === puzzle.correctChoiceId;
+  const showFeedback = reviewMode || displaySelectedId != null;
 
   return (
     <Modal open={open} onClose={onClose} title={puzzle.title} maxWidth={580}>
@@ -49,7 +53,7 @@ export function JourneyPuzzleModal({
 
         <div className="rh-journey-puzzle__choices" role="listbox" aria-label="Answer choices">
           {puzzle.choices.map((choice) => {
-            const isSelected = selectedId === choice.id;
+            const isSelected = displaySelectedId === choice.id;
             const isAnswer = choice.id === puzzle.correctChoiceId;
             const showCorrect = reviewMode ? isAnswer : isSelected && isCorrect;
             const showWrong = !reviewMode && isSelected && !isCorrect;
@@ -60,7 +64,7 @@ export function JourneyPuzzleModal({
                 type="button"
                 role="option"
                 aria-selected={isSelected}
-                disabled={reviewMode || solved}
+                disabled={reviewMode || displaySolved}
                 className={`rh-journey-puzzle__choice${
                   showCorrect ? ' rh-journey-puzzle__choice--correct' : ''
                 }${showWrong ? ' rh-journey-puzzle__choice--wrong' : ''}${
@@ -95,7 +99,7 @@ export function JourneyPuzzleModal({
         </div>
 
         <div className="rh-journey-puzzle__actions">
-          {!reviewMode && solved && onComplete ? (
+          {!reviewMode && displaySolved && onComplete ? (
             <Button variant="tier-standard" type="button" onClick={onComplete}>
               Complete Puzzle
             </Button>

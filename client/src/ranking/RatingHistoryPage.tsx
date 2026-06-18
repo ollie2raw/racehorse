@@ -77,19 +77,17 @@ export default function RatingHistoryPage({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId) {
-      setHistory(null);
-      setLoading(false);
-      setError('Sign in to view your rating history.');
-      return;
-    }
+    if (!userId) return;
 
     let active = true;
-    setLoading(true);
-    setError(null);
+    void (async () => {
+      await Promise.resolve();
+      if (!active) return;
+      setLoading(true);
+      setError(null);
 
-    void fetchRatingHistory(userId)
-      .then((result) => {
+      try {
+        const result = await fetchRatingHistory(userId);
         if (!active) return;
         setLoading(false);
         if (result.error) {
@@ -98,22 +96,26 @@ export default function RatingHistoryPage({
           return;
         }
         setHistory(result.data);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!active) return;
         setLoading(false);
         setError(err instanceof Error ? err.message : 'Unable to load rating history.');
-      });
+      }
+    })();
 
     return () => {
       active = false;
     };
   }, [userId]);
 
-  const chartData = useMemo(() => buildChartData(history), [history]);
+  const displayHistory = userId ? history : null;
+  const displayLoading = userId ? loading : false;
+  const displayError = userId ? error : 'Sign in to view your rating history.';
+
+  const chartData = useMemo(() => buildChartData(displayHistory), [displayHistory]);
 
   const stats = useMemo(() => {
-    const games = history?.games ?? [];
+    const games = displayHistory?.games ?? [];
     let fritzWins = 0;
     let fritzLosses = 0;
     let multiplayerWins = 0;
@@ -137,7 +139,7 @@ export default function RatingHistoryPage({
       multiplayerWins,
       multiplayerLosses,
     };
-  }, [history]);
+  }, [displayHistory]);
 
   const heading = username ? `@${username}` : 'Your rating';
 
@@ -171,18 +173,18 @@ export default function RatingHistoryPage({
             <div>
               <h3 style={{ margin: 0, color: 'rgba(241,248,245,0.96)' }}>Rating progression</h3>
               <p style={{ margin: '6px 0 0', color: 'rgba(191,213,223,0.72)', fontSize: '0.95rem' }}>
-                Confidence band uses current RD of {history ? Math.round(history.rd) : '—'}.
+                Confidence band uses current RD of {displayHistory ? Math.round(displayHistory.rd) : '—'}.
               </p>
             </div>
           </div>
 
-          {loading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading rating history...</p>}
-          {error && <p style={{ margin: 0, color: '#fca5a5' }}>{error}</p>}
-          {!loading && !error && chartData.length === 0 && (
+          {displayLoading && <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>Loading rating history...</p>}
+          {displayError && <p style={{ margin: 0, color: '#fca5a5' }}>{displayError}</p>}
+          {!displayLoading && !displayError && chartData.length === 0 && (
             <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>No rated games yet.</p>
           )}
 
-          {!loading && !error && chartData.length > 0 && (
+          {!displayLoading && !displayError && chartData.length > 0 && (
             <div style={{ width: '100%', height: 290 }}>
               <ResponsiveContainer>
                 <ComposedChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 4 }}>
@@ -276,13 +278,13 @@ export default function RatingHistoryPage({
           {[
             {
               label: 'Current Rating',
-              value: history ? Math.round(history.currentRating).toLocaleString() : '—',
+              value: displayHistory ? Math.round(displayHistory.currentRating).toLocaleString() : '—',
               accent: '#34d399',
-              note: history?.provisional ? 'Provisional' : 'Established',
+              note: displayHistory?.provisional ? 'Provisional' : 'Established',
             },
             {
               label: 'Peak Rating',
-              value: history ? Math.round(history.peakRating).toLocaleString() : '—',
+              value: displayHistory ? Math.round(displayHistory.peakRating).toLocaleString() : '—',
               accent: '#fbbf24',
               note: 'Career high',
             },

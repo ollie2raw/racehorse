@@ -759,7 +759,7 @@ export default function App() {
         throw e;
       }
     },
-    [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate, dispatchRecovery],
+    [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate, dispatchRecovery, shellSetActionError],
   );
 
   const applyJoinedRoomResponse = useCallback((resp: RoomAckResponse) => {
@@ -836,7 +836,6 @@ export default function App() {
     authProfile?.username,
     multiplayerIdentityUserId,
     multiplayerAuthToken,
-    normalizeRoomPlayers,
     dispatchRecovery,
   ]);
 
