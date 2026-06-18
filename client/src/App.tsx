@@ -41,6 +41,7 @@ import {
 } from './match/session/useLiveMatchSession';
 import { useTournamentMatchSession } from './match/session/useTournamentMatchSession';
 import { useMultiplayerConnectionHostParams } from './multiplayer/useMultiplayerConnectionHostParams';
+import type { RecoveryEvent, RecoveryMachineSnapshot } from './multiplayer/recoveryMachine';
 import { useMultiplayerConnectionActionsBridge } from './multiplayer/useMultiplayerConnectionContext';
 import { useMultiplayerRoomSocialRuntimeBridge } from './multiplayer/useMultiplayerLobbyController';
 import { useMultiplayerLobbyHostProps } from './multiplayer/useMultiplayerLobbyHostProps';
@@ -353,6 +354,9 @@ export default function App() {
   const reconnectRoomCodeRef = useRef<string | null>(null);
   const reconnectShouldJoinRef = useRef(false);
   const preventAutoRejoinRef = useRef(false);
+  const recoveryDispatchRef = useRef<
+    (event: RecoveryEvent) => RecoveryMachineSnapshot | null
+  >(() => null);
   const autoJoinAttemptedRef = useRef(false);
   const joinInFlightRef = useRef(false);
   const clearRecoverableRoomStateRef = useRef<() => void>(() => {});
@@ -393,6 +397,10 @@ export default function App() {
   const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
   const applyJoinedRoomResponseRef = useRef<(resp: any) => void>(() => {});
   const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
+
+  const dispatchRecovery = useCallback((event: RecoveryEvent) => {
+    recoveryDispatchRef.current?.(event);
+  }, []);
 
   const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber'>) => {
     const moveNumber =
@@ -917,18 +925,13 @@ export default function App() {
   resetMultiplayerRoomStateRef.current = resetMultiplayerRoomState;
 
   const resetRoomRecoveryState = useCallback(() => {
-    reconnectShouldJoinRef.current = false;
-    reconnectRoomCodeRef.current = null;
-    preventAutoRejoinRef.current = true;
-    setRoomRecoveryState('idle');
-    setRoomRecoveryMessage('');
-  }, []);
+    dispatchRecovery({ type: 'SET_POLICY', policy: 'disabled' });
+    dispatchRecovery({ type: 'SET_TARGET_ROOM', roomCode: null });
+  }, [dispatchRecovery]);
 
   const clearRecoverableRoomState = useCallback(() => {
     resetRoomRecoveryState();
     clearLastRoomCode();
-    rejoinInFlightRef.current = false;
-    reconnectAttemptCountRef.current = 0;
     tournament.clearPendingMatch();
     tournament.clearRecoveryMatch();
   }, [resetRoomRecoveryState, tournament]);
@@ -972,7 +975,7 @@ export default function App() {
 
         applyJoinedRoomResponseRef.current(resp);
         autoJoinAttemptedRef.current = false;
-        preventAutoRejoinRef.current = false;
+        dispatchRecovery({ type: 'SET_POLICY', policy: 'auto' });
         resolvePendingCreate(resp.roomCode ?? null);
         return resp;
       } catch (e) {
@@ -980,7 +983,7 @@ export default function App() {
         throw e;
       }
     },
-    [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate],
+    [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate, dispatchRecovery],
   );
 
   const applyJoinedRoomResponse = useCallback((resp: any) => {
@@ -1006,7 +1009,10 @@ export default function App() {
     const { ok, nextState } = applyJoinResponseGameState(resp);
     if (!ok && resp.state != null) {
       console.warn('[mp] room:join handshake state failed projection validation — resync scheduled');
-      void fetchGameStateRef.current('join_ack_projection_invalid');
+      const roomCode = normalizeRoomCode(resp.roomCode ?? joinedRoomRef.current);
+      if (roomCode) {
+        dispatchRecovery({ type: 'RESYNC_NEEDED', roomCode });
+      }
     }
 
     setJoinedRoom(resp.roomCode);
@@ -1014,8 +1020,7 @@ export default function App() {
     const normalized = normalizeRoomPlayers(resp.players);
     roomPlayersRef.current = normalized;
     setPlayers(normalized);
-    setRoomRecoveryState('idle');
-    setRoomRecoveryMessage('');
+    dispatchRecovery({ type: 'ROOM_JOIN_OK' });
     if (
       applyTournamentMetadataFromJoin(resp, nextState) === 'terminal_handled'
     ) {
@@ -1036,7 +1041,10 @@ export default function App() {
     }
 
     if (hasHandIdentityMismatch(nextState, resolvedYou)) {
-      void fetchGameStateRef.current('hand_identity_mismatch_after_join');
+      const roomCode = normalizeRoomCode(resp.roomCode ?? joinedRoomRef.current);
+      if (roomCode) {
+        dispatchRecovery({ type: 'RESYNC_NEEDED', roomCode });
+      }
     } else if (seated && !matchStartedRef.current) {
       trySchedulePlayerReadyRef.current();
     }
@@ -1049,22 +1057,28 @@ export default function App() {
     multiplayerIdentityUserId,
     multiplayerAuthToken,
     normalizeRoomPlayers,
+    dispatchRecovery,
   ]);
 
   /** Fetch full authoritative game state from the server (room:join ack). */
   const fetchGameState = useCallback(
     async (reason: string) => {
-      const activeSocket = socketRef.current;
       const roomCode = normalizeRoomCode(joinedRoomRef.current);
-      if (!activeSocket?.connected || !roomCode) return false;
+      if (!roomCode) return false;
+
+      if (reason !== 'recovery_machine') {
+        dispatchRecovery({ type: 'RESYNC_NEEDED', roomCode });
+        return true;
+      }
+
+      const activeSocket = socketRef.current;
+      if (!activeSocket?.connected) return false;
       if (resyncInFlightRef.current || rejoinInFlightRef.current) return false;
       const now = Date.now();
       if (now < resyncCooldownUntilRef.current) return false;
 
       resyncInFlightRef.current = true;
       resyncCooldownUntilRef.current = now + 1200;
-      setRoomRecoveryState('resyncing');
-      setRoomRecoveryMessage('Syncing game state…');
 
       const identity =
         roomIdentityRef.current ?? {
@@ -1090,19 +1104,15 @@ export default function App() {
       } finally {
         resyncInFlightRef.current = false;
         resyncFlushRef.current?.();
-        if (joinedRoomRef.current) {
-          setRoomRecoveryState('idle');
-          setRoomRecoveryMessage('');
-        }
       }
     },
     [
       normalizeRoomCode,
-      emitWithAck,
       applyJoinedRoomResponse,
       authProfile?.username,
       multiplayerIdentityUserId,
       multiplayerAuthToken,
+      dispatchRecovery,
     ],
   );
 
@@ -1332,6 +1342,7 @@ export default function App() {
     handRevealTimerRef,
     isMutedRef,
     rematchAwaitingStateRef,
+    recoveryDispatchRef,
     applyJoinedRoomResponse,
     fetchGameState,
     resetClientGameSession,

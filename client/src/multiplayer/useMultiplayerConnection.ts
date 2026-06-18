@@ -7,6 +7,15 @@ import { playBlockedSound, playHandLoseSound, playHandWinSound } from '../utils/
 import type { GameState, Move, Tile } from '../types';
 import { wrapSocketHandler } from './socketGuards';
 import { emitRoomAbandonMatch, emitRoomLeave } from './roomTransport';
+import { syncRecoveryLegacyRefs } from './recoveryConnectionBridge';
+import {
+  createRecoveryMachine,
+  isTerminalJoinError,
+  type RecoveryEffect,
+  type RecoveryEvent,
+  type RecoveryMachine,
+  type RecoveryMachineSnapshot,
+} from './recoveryMachine';
 import type {
   MultiplayerAuthRuntime,
   MultiplayerConnectionConfig,
@@ -54,6 +63,7 @@ export type UseMultiplayerConnectionParams = {
   recoveryRuntime: MultiplayerRecoveryCallbacksRuntime;
   roomSocialRuntime: MultiplayerRoomSocialRuntime;
   uiSetters: MultiplayerConnectionUiSetters;
+  recoveryDispatchRef?: MutableRefObject<(event: RecoveryEvent) => RecoveryMachineSnapshot | null>;
 };
 
 type FlatMultiplayerConnectionParams = {
@@ -167,41 +177,193 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
   latestRef.current = flattenMultiplayerConnectionParams(params);
   const { connectionState, config } = params;
 
-  const scheduleReconnectAttempt = useCallback(
-    (
-      current: FlatMultiplayerConnectionParams,
-      message: string,
-      details: Record<string, unknown> = {},
-    ) => {
-      if (
-        current.intentionalDisconnectRef.current ||
-        current.preventAutoRejoinRef.current ||
-        !current.reconnectShouldJoinRef.current
-      ) {
-        return false;
-      }
-      const nextAttempt = current.reconnectAttemptCountRef.current + 1;
-      current.reconnectAttemptCountRef.current = nextAttempt;
-      current.setIsRecoveringConnection(true);
-      current.setRoomRecoveryState('reconnecting');
-      current.setRoomRecoveryMessage(message);
-      current.clearReconnectAttemptTimer();
-      const delayMs = Math.min(10_000, 1500 + Math.min(nextAttempt, 8) * 750);
-      console.warn('[socket] room reconnect retry scheduled', {
-        attempt: nextAttempt,
-        delayMs,
-        roomCode: current.reconnectRoomCodeRef.current,
-        ...details,
-      });
-      current.reconnectAttemptTimerRef.current = setTimeout(() => {
-        current.connectRef.current?.();
-      }, delayMs);
-      return true;
+  const recoveryMachineRef = useRef<RecoveryMachine | null>(null);
+  const establishSocketRef = useRef<() => void>(() => {});
+  const handleRecoveryEffectRef = useRef<(effect: RecoveryEffect) => void>(() => {});
+
+  const syncMachineToLegacy = useCallback(() => {
+    const machine = recoveryMachineRef.current;
+    if (!machine) return;
+    const p = latestRef.current;
+    syncRecoveryLegacyRefs(machine.getSnapshot(), {
+      reconnectShouldJoinRef: p.reconnectShouldJoinRef,
+      preventAutoRejoinRef: p.preventAutoRejoinRef,
+      reconnectRoomCodeRef: p.reconnectRoomCodeRef,
+      reconnectAttemptCountRef: p.reconnectAttemptCountRef,
+      rejoinInFlightRef: p.rejoinInFlightRef,
+      setRoomRecoveryState: p.setRoomRecoveryState,
+      setRoomRecoveryMessage: p.setRoomRecoveryMessage,
+      setIsRecoveringConnection: p.setIsRecoveringConnection,
+    });
+  }, []);
+
+  const dispatchRecovery = useCallback(
+    (event: RecoveryEvent): RecoveryMachineSnapshot | null => {
+      const machine = recoveryMachineRef.current;
+      if (!machine) return null;
+      const snapshot = machine.dispatch(event);
+      syncMachineToLegacy();
+      return snapshot;
     },
-    [],
+    [syncMachineToLegacy],
   );
 
-  const connect = useCallback(() => {
+  const executeRecoveryRoomJoin = useCallback(
+    async (roomCode: string) => {
+      const p = latestRef.current;
+      const socket = p.socketRef.current;
+      if (!socket?.connected) {
+        dispatchRecovery({ type: 'TRANSPORT_FAIL', reason: 'socket_not_connected' });
+        return;
+      }
+
+      const rejoinIdentity = p.roomIdentityRef.current ?? {
+        username: p.authProfileRef.current?.username ?? 'Guest',
+        userId: p.multiplayerIdentityUserIdRef.current,
+        authToken: p.authAccessTokenRef.current,
+      };
+
+      try {
+        console.warn('[rejoin] attempting room:join after recovery', {
+          code: roomCode,
+          attempt: p.reconnectAttemptCountRef.current,
+        });
+        const resp = await p.emitWithAck<any>(socket, 'room:join', roomCode, rejoinIdentity);
+
+        if (resp?.ok) {
+          console.warn('[rejoin] room:join success', {
+            roomCode: resp.roomCode,
+            you: resp.you,
+          });
+          const wasRecovery = recoveryMachineRef.current?.getSnapshot().state === 'joining';
+          p.applyJoinedRoomResponse(resp);
+          const terminalTournamentJoin =
+            Boolean(resp?.tournamentMatch?.matchId) &&
+            Boolean((resp?.state as { gameOver?: boolean } | null | undefined)?.gameOver);
+          if (terminalTournamentJoin) {
+            dispatchRecovery({ type: 'SET_POLICY', policy: 'disabled' });
+            dispatchRecovery({ type: 'SET_TARGET_ROOM', roomCode: null });
+            dispatchRecovery({ type: 'ROOM_JOIN_OK' });
+            return;
+          }
+          dispatchRecovery({ type: 'ROOM_JOIN_OK' });
+          if (wasRecovery) {
+            p.showToast('Reconnected to room.', 1200);
+          } else {
+            p.setAppMode('multiplayer');
+          }
+          return;
+        }
+
+        const errorText = String(resp?.error ?? 'not_ok');
+        if (isTerminalJoinError(errorText)) {
+          dispatchRecovery({ type: 'ROOM_JOIN_TERMINAL', error: errorText });
+          return;
+        }
+        dispatchRecovery({ type: 'ROOM_JOIN_TRANSIENT', error: errorText });
+      } catch (error) {
+        dispatchRecovery({
+          type: 'TRANSPORT_FAIL',
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [dispatchRecovery],
+  );
+
+  const executeRecoveryResync = useCallback(
+    async (_roomCode: string) => {
+      const success = await latestRef.current.fetchGameState('recovery_machine');
+      if (success) {
+        dispatchRecovery({ type: 'RESYNC_OK' });
+      } else {
+        dispatchRecovery({ type: 'RESYNC_FAIL' });
+      }
+    },
+    [dispatchRecovery],
+  );
+
+  handleRecoveryEffectRef.current = (effect: RecoveryEffect) => {
+    const p = latestRef.current;
+    switch (effect.type) {
+      case 'connect':
+        establishSocketRef.current();
+        break;
+      case 'room_join':
+        void executeRecoveryRoomJoin(effect.roomCode);
+        break;
+      case 'resync':
+        void executeRecoveryResync(effect.roomCode);
+        break;
+      case 'clear_terminal_room':
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(p.lastRoomStorageKey);
+        }
+        break;
+      case 'cancel_schedule':
+        p.reconnectAttemptTimerRef.current = null;
+        break;
+      default:
+        break;
+    }
+  };
+
+  if (!recoveryMachineRef.current) {
+    recoveryMachineRef.current = createRecoveryMachine({
+      onEffect: (effect) => handleRecoveryEffectRef.current(effect),
+    });
+  }
+
+  useEffect(() => {
+    if (params.recoveryDispatchRef) {
+      params.recoveryDispatchRef.current = dispatchRecovery;
+    }
+  }, [dispatchRecovery, params.recoveryDispatchRef]);
+
+  useEffect(() => {
+    const machine = recoveryMachineRef.current;
+    return () => {
+      machine?.dispose();
+      latestRef.current.clearReconnectAttemptTimer();
+    };
+  }, []);
+
+  const trySavedRoomAutoJoin = useCallback(
+    async (socket: Socket) => {
+      const p = latestRef.current;
+      if (p.preventAutoRejoinRef.current || p.autoJoinAttemptedRef.current) return;
+      const savedCode = p.normalizeRoomCode(
+        (typeof window !== 'undefined' && window.localStorage.getItem(p.lastRoomStorageKey)) || '',
+      );
+      if (!savedCode || p.joinedRoomRef.current) return;
+      p.autoJoinAttemptedRef.current = true;
+      try {
+        const resp = await p.emitWithAck<any>(socket, 'room:join', savedCode, {
+          username: p.authProfileUsername ?? 'Guest',
+          userId: p.multiplayerIdentityUserIdRef.current,
+          authToken: p.authAccessTokenRef.current,
+        });
+        if (!resp?.ok) {
+          const errorText = String(resp?.error ?? '').toLowerCase();
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(p.lastRoomStorageKey);
+          }
+          if (errorText.includes('completed')) {
+            dispatchRecovery({ type: 'SET_POLICY', policy: 'disabled' });
+          }
+          p.showToast('Saved room is no longer available.', 2000);
+          return;
+        }
+        p.applyJoinedRoomResponse(resp);
+        p.showToast('Rejoined room.', 1200);
+      } catch (error) {
+        p.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
+      }
+    },
+    [dispatchRecovery],
+  );
+
+  const establishSocket = useCallback(() => {
     const p = latestRef.current;
     if (p.socket?.connected) return;
     if (p.socket && !p.socket.connected && p.socket.active) return;
@@ -230,7 +392,11 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     s.onAny((event, ...args) => traceSocketEvent(String(event), args.length <= 1 ? args[0] : args));
 
     const recoverState = () => {
-      void latestRef.current.fetchGameState('handler_error');
+      const roomCode = latestRef.current.joinedRoomRef.current;
+      if (!roomCode) return;
+      if (recoveryMachineRef.current?.getSnapshot().state === 'idle') {
+        dispatchRecovery({ type: 'RESYNC_NEEDED', roomCode });
+      }
     };
 
     const pingSocket = s as SocketWithPing;
@@ -251,449 +417,274 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     s.on(
       'connect',
       wrapSocketHandler('connect', async () => {
-      const current = latestRef.current;
-      if (current.intentionalDisconnectRef.current) return;
-      current.clearReconnectAttemptTimer();
-      // Note: reconnectAttemptCountRef is NOT reset here. 
-      // It is only reset upon successful room:join to preserve backoff across reconnect cycles.
-      current.setIsRecoveringConnection(false);
-      current.setRoomRecoveryState(current.joinedRoomRef.current ? 'resyncing' : 'idle');
-      current.setRoomRecoveryMessage(current.joinedRoomRef.current ? 'Syncing room state…' : '');
-      current.setIsConnected(true);
-      current.setIsConnecting(false);
-      current.setServerWaking(false);
+        const current = latestRef.current;
+        if (current.intentionalDisconnectRef.current) return;
+        current.setIsConnected(true);
+        current.setIsConnecting(false);
+        current.setServerWaking(false);
 
-      const userId = current.authUserRef.current?.id;
-      const username =
-        current.authProfileRef.current?.username ??
-        current.authUserRef.current?.email?.split('@')[0] ??
-        'player';
-      if (userId) {
-        void current.emitWithAck<any>(s, 'presence:identify', {
+        const userId = current.authUserRef.current?.id;
+        const username =
+          current.authProfileRef.current?.username ??
+          current.authUserRef.current?.email?.split('@')[0] ??
+          'player';
+        if (userId) {
+          void current.emitWithAck<any>(s, 'presence:identify', {
             userId,
             username,
             authToken: current.authAccessTokenRef.current,
           }).catch((error) => {
-          if (import.meta.env.DEV) {
-            console.log('[presence] identify failed', error instanceof Error ? error.message : error);
-          }
-        });
-      }
-
-      if (current.pendingCreateOnConnectRef.current) {
-        current.pendingCreateOnConnectRef.current = false;
-        void current.emitCreateRoom(s).catch((error) => {
-          const message = error instanceof Error ? error.message : 'Action failed';
-          current.setError(message);
-          current.showToast(message, 2000);
-        });
-        return;
-      }
-
-      // Consolidated Join/Recovery Path
-      // Prioritize recovery if we have an explicit signal or a previously joined room.
-      const isRecoveryAttempt = current.reconnectShouldJoinRef.current || !!current.joinedRoomRef.current;
-      const roomToJoin = current.normalizeRoomCode(
-        current.reconnectRoomCodeRef.current ?? current.joinedRoomRef.current ?? current.roomCode
-      );
-
-      if (roomToJoin && !current.preventAutoRejoinRef.current && !current.rejoinInFlightRef.current) {
-        current.rejoinInFlightRef.current = true;
-        try {
-          console.warn('[rejoin] attempting room:join after connect', { 
-            code: roomToJoin, 
-            isRecovery: isRecoveryAttempt,
-            attempt: current.reconnectAttemptCountRef.current
+            if (import.meta.env.DEV) {
+              console.log('[presence] identify failed', error instanceof Error ? error.message : error);
+            }
           });
-          
-          const rejoinIdentity = current.roomIdentityRef.current ?? {
-            username: current.authProfileRef.current?.username ?? 'Guest',
-            userId: current.multiplayerIdentityUserIdRef.current,
-            authToken: current.authAccessTokenRef.current,
-          };
-          
-          const resp = await current.emitWithAck<any>(s, 'room:join', roomToJoin, rejoinIdentity);
-
-          if (resp?.ok) {
-            console.warn('[rejoin] room:join success', {
-              roomCode: resp.roomCode,
-              you: resp.you,
-            });
-            current.reconnectAttemptCountRef.current = 0; // Success! Reset backoff.
-            current.applyJoinedRoomResponse(resp);
-            const terminalTournamentJoin =
-              Boolean(resp?.tournamentMatch?.matchId) &&
-              Boolean((resp?.state as { gameOver?: boolean } | null | undefined)?.gameOver);
-            current.reconnectShouldJoinRef.current = false;
-            current.reconnectRoomCodeRef.current = terminalTournamentJoin ? null : resp.roomCode;
-            current.setIsRecoveringConnection(false);
-            current.setRoomRecoveryState('idle');
-            current.setRoomRecoveryMessage('');
-            if (terminalTournamentJoin) {
-              current.preventAutoRejoinRef.current = true;
-              if (typeof window !== 'undefined') {
-                window.localStorage.removeItem(current.lastRoomStorageKey);
-              }
-              return;
-            }
-            if (isRecoveryAttempt) {
-              current.showToast('Reconnected to room.', 1200);
-            } else {
-              current.setAppMode('multiplayer');
-            }
-            return;
-          }
-          
-          // Failed with response
-          const errorText = String(resp?.error ?? '').toLowerCase();
-          if (errorText.includes('abandoned') || errorText.includes('completed')) {
-            if (typeof window !== 'undefined') {
-              window.localStorage.removeItem(current.lastRoomStorageKey);
-            }
-            current.preventAutoRejoinRef.current = true;
-            current.reconnectShouldJoinRef.current = false;
-            current.reconnectRoomCodeRef.current = null;
-            current.setIsRecoveringConnection(false);
-            current.setRoomRecoveryState('failed');
-            current.setRoomRecoveryMessage('Match is no longer available.');
-          } else if (errorText.includes('not found')) {
-            if (isRecoveryAttempt && typeof window !== 'undefined') {
-              window.localStorage.removeItem(current.lastRoomStorageKey);
-            }
-            current.setIsRecoveringConnection(false);
-            current.setRoomRecoveryState('failed');
-            current.setRoomRecoveryMessage('Room no longer exists. Return to home.');
-          } else if (isRecoveryAttempt) {
-            scheduleReconnectAttempt(current, 'Room reconnect rejected. Retrying…', {
-              code: roomToJoin,
-              error: resp?.error ?? 'not_ok',
-            });
-          }
-        } catch (error) {
-          if (isRecoveryAttempt) {
-            scheduleReconnectAttempt(current, 'Room reconnect timed out. Retrying…', {
-              code: roomToJoin,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        } finally {
-          current.rejoinInFlightRef.current = false;
         }
-        
-        // If this was an explicit recovery attempt, we stop here (either failed-permanently or scheduled retry).
-        // If it was just an auto-join from URL that failed, we fall through to try saved room.
-        if (isRecoveryAttempt) return;
-      }
 
-      if (current.preventAutoRejoinRef.current || current.autoJoinAttemptedRef.current) return;
-      const savedCode = current.normalizeRoomCode(
-        (typeof window !== 'undefined' && window.localStorage.getItem(current.lastRoomStorageKey)) || '',
-      );
-      if (!savedCode || current.joinedRoomRef.current) return;
-      current.autoJoinAttemptedRef.current = true;
-      void (async () => {
-        try {
-          const resp = await current.emitWithAck<any>(s, 'room:join', savedCode, {
-            username: current.authProfileUsername ?? 'Guest',
-            userId: current.multiplayerIdentityUserIdRef.current,
-            authToken: current.authAccessTokenRef.current,
+        if (current.pendingCreateOnConnectRef.current) {
+          current.pendingCreateOnConnectRef.current = false;
+          void current.emitCreateRoom(s).catch((error) => {
+            const message = error instanceof Error ? error.message : 'Action failed';
+            current.setError(message);
+            current.showToast(message, 2000);
           });
-          if (!resp?.ok) {
-            const errorText = String(resp?.error ?? '').toLowerCase();
-            if (typeof window !== 'undefined') {
-              window.localStorage.removeItem(current.lastRoomStorageKey);
-            }
-            if (errorText.includes('completed')) {
-              current.preventAutoRejoinRef.current = true;
-            }
-            current.showToast('Saved room is no longer available.', 2000);
-            return;
-          }
-          current.reconnectAttemptCountRef.current = 0; // Success!
-          current.applyJoinedRoomResponse(resp);
-          current.showToast('Rejoined room.', 1200);
-        } catch (error) {
-          current.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
+          return;
         }
-      })();
+
+        dispatchRecovery({ type: 'SOCKET_CONNECTED' });
+
+        if (recoveryMachineRef.current?.getSnapshot().state === 'idle') {
+          await trySavedRoomAutoJoin(s);
+        }
       }, { recoverOnError: recoverState }),
     );
 
     s.on(
       'disconnect',
       wrapSocketHandler('disconnect', (reason) => {
-      const current = latestRef.current;
-      const roomBeforeDisconnect = current.joinedRoomRef.current;
-      // Recover any time we have a room to return to — including the game-over /
-      // rematch screen — so players can reconnect and still initiate a rematch.
-      // Intentional disconnects and explicit leave actions are still protected by
-      // the intentionalDisconnectRef and preventAutoRejoinRef guards below.
-      const isRecoverableSession = Boolean(roomBeforeDisconnect);
-      const shouldAttemptReconnect =
-        isRecoverableSession &&
-        !current.preventAutoRejoinRef.current &&
-        !current.intentionalDisconnectRef.current;
+        const current = latestRef.current;
+        const roomBeforeDisconnect = current.joinedRoomRef.current;
+        const isRecoverableSession =
+          Boolean(roomBeforeDisconnect) && !current.intentionalDisconnectRef.current;
 
-      if (isRecoverableSession && !current.preventAutoRejoinRef.current && !current.intentionalDisconnectRef.current) {
-        current.reconnectRoomCodeRef.current = roomBeforeDisconnect;
-        current.reconnectShouldJoinRef.current = true;
-      }
+        current.setIsConnected(false);
+        current.setIsConnecting(false);
+        current.setError('');
+        current.setActionError('');
+        current.setRematchRequested(false);
+        current.setRematchReadyIds([]);
+        current.setOpponentDragging(false);
+        current.draggingStateRef.current = false;
 
-      current.setIsConnected(false);
-      current.setIsConnecting(false);
-      current.setError('');
-      current.setActionError('');
-      current.setRematchRequested(false);
-      current.setRematchReadyIds([]);
-      current.setOpponentDragging(false);
-      current.draggingStateRef.current = false;
+        if (isRecoverableSession && roomBeforeDisconnect) {
+          current.clearTransientRoomUi();
+          console.warn('[socket] disconnected mid-game, recovery dispatched', {
+            reason,
+            roomCode: roomBeforeDisconnect,
+          });
+          dispatchRecovery({ type: 'SOCKET_LOST', roomCode: roomBeforeDisconnect });
+          return;
+        }
 
-      if (shouldAttemptReconnect) {
-        current.setIsRecoveringConnection(true);
-        current.setRoomRecoveryState('reconnecting');
-        current.setRoomRecoveryMessage('Connection lost. Reconnecting to room…');
-        current.clearTransientRoomUi();
-        console.warn('[socket] disconnected mid-game, reconnect scheduled', {
-          reason,
-          roomCode: roomBeforeDisconnect,
-        });
-        scheduleReconnectAttempt(current, 'Connection lost. Reconnecting to room…', { reason });
-        return;
-      }
-
-      current.setIsRecoveringConnection(false);
-      current.setRoomRecoveryState('idle');
-      current.setRoomRecoveryMessage('');
-      current.setJoinedRoom(null);
-      current.setState(null);
-      current.setLegalMoves([]);
-      current.setCanDraw(false);
-      current.setTournamentId(null);
-      current.setTournamentState(null);
-      current.setTournamentActiveRoom(null);
+        current.setJoinedRoom(null);
+        current.setState(null);
+        current.setLegalMoves([]);
+        current.setCanDraw(false);
+        current.setTournamentId(null);
+        current.setTournamentState(null);
+        current.setTournamentActiveRoom(null);
+        syncMachineToLegacy();
       }),
     );
 
     s.on(
       'tournament:lobby:update',
       wrapSocketHandler('tournament:lobby:update', (data: any) => {
-      const lobbyCode = typeof data?.lobbyCode === 'string' ? data.lobbyCode : null;
-      const players = Array.isArray(data?.players) ? data.players : null;
-      if (!players) return;
-      const inferredHostSocketId =
-        typeof data?.hostSocketId === 'string'
-          ? data.hostSocketId
-          : typeof players?.[0]?.socketId === 'string'
-          ? players[0].socketId
-          : null;
-      latestRef.current.setTournamentState((prev: any) => ({
-        ...(prev ?? {}),
-        status: 'lobby',
-        lobbyCode: lobbyCode ?? (prev?.lobbyCode ?? null),
-        players,
-        hostSocketId: inferredHostSocketId ?? prev?.hostSocketId ?? null,
-      }));
+        const lobbyCode = typeof data?.lobbyCode === 'string' ? data.lobbyCode : null;
+        const players = Array.isArray(data?.players) ? data.players : null;
+        if (!players) return;
+        const inferredHostSocketId =
+          typeof data?.hostSocketId === 'string'
+            ? data.hostSocketId
+            : typeof players?.[0]?.socketId === 'string'
+              ? players[0].socketId
+              : null;
+        latestRef.current.setTournamentState((prev: any) => ({
+          ...(prev ?? {}),
+          status: 'lobby',
+          lobbyCode: lobbyCode ?? (prev?.lobbyCode ?? null),
+          players,
+          hostSocketId: inferredHostSocketId ?? prev?.hostSocketId ?? null,
+        }));
       }),
     );
 
     s.on(
       'tournament:state',
       wrapSocketHandler('tournament:state', (data: any) => {
-      const current = latestRef.current;
-      current.setTournamentState(data);
-      if (typeof data?.id === 'string') current.setTournamentId(data.id);
-      current.setTournamentActiveRoom(typeof data?.activeRoomCode === 'string' ? data.activeRoomCode : null);
+        const current = latestRef.current;
+        current.setTournamentState(data);
+        if (typeof data?.id === 'string') current.setTournamentId(data.id);
+        current.setTournamentActiveRoom(typeof data?.activeRoomCode === 'string' ? data.activeRoomCode : null);
       }),
     );
 
     s.on(
       'tournament:match:assigned',
       wrapSocketHandler('tournament:match:assigned', (data: any) => {
-      const current = latestRef.current;
-      if (typeof data?.roomCode === 'string') current.setTournamentActiveRoom(data.roomCode);
-      if (data?.roomCode && (data?.a === s.id || data?.b === s.id)) {
-        const code = String(data.roomCode).trim().toUpperCase();
-        current.setJoinedRoom(code);
-        current.setRoomCode(code);
-        current.setAppMode('multiplayer');
-      }
+        const current = latestRef.current;
+        if (typeof data?.roomCode === 'string') current.setTournamentActiveRoom(data.roomCode);
+        if (data?.roomCode && (data?.a === s.id || data?.b === s.id)) {
+          const code = String(data.roomCode).trim().toUpperCase();
+          current.setJoinedRoom(code);
+          current.setRoomCode(code);
+          current.setAppMode('multiplayer');
+        }
       }),
     );
 
-    s.on(
-      'room:chat',
-      wrapSocketHandler('room:chat', (msg: RoomChatEvent) => {
+    s.on('room:chat', wrapSocketHandler('room:chat', (msg: RoomChatEvent) => {
       latestRef.current.appendRoomReactionRef.current(msg);
-      }),
-    );
+    }));
 
-    s.on(
-      'room:emote',
-      wrapSocketHandler('room:emote', (evt: RoomEmoteEvent) => {
+    s.on('room:emote', wrapSocketHandler('room:emote', (evt: RoomEmoteEvent) => {
       latestRef.current.appendRoomReactionRef.current(evt);
-      }),
-    );
+    }));
 
     s.on(
       'hand:ended',
       wrapSocketHandler('hand:ended', (payload: HandEndedPayload) => {
-      const current = latestRef.current;
-      const currentState = current.stateRef.current;
-      const myId = current.youRef.current;
-      const myRemaining = currentState?.players[myId]?.hand ?? [];
-      const yourRemainingTiles = payload.yourRemainingTiles ?? myRemaining;
-      const opponentRemainingTiles = payload.opponentRemainingTiles ?? [];
-      const blocked = yourRemainingTiles.length > 0 && opponentRemainingTiles.length > 0;
-      if (blocked) {
-        playBlockedSound(current.isMutedRef.current);
-      }
-      const stateNow = current.stateRef.current;
-      const target = stateNow?.config?.winningScore ?? 60;
-      const oppId = stateNow?.playerIds.find((pid) => pid !== myId) ?? null;
-      const myAward = payload.pointsAwarded?.you ?? 0;
-      const oppAward = payload.pointsAwarded?.opponent ?? 0;
-      const myPostScore = (stateNow?.players?.[myId]?.score ?? 0) + myAward;
-      const oppPostScore = oppId ? (stateNow?.players?.[oppId]?.score ?? 0) + oppAward : oppAward;
-      const matchWillBeOver = myPostScore >= target || oppPostScore >= target;
-      if (!matchWillBeOver) {
-        const handWinnerId = payload.handWinnerId ?? payload.winnerId ?? null;
-        const iWonHand = Boolean(handWinnerId && handWinnerId === myId);
-        if (iWonHand) {
-          playHandWinSound(current.isMutedRef.current);
-        } else {
-          playHandLoseSound(current.isMutedRef.current);
+        const current = latestRef.current;
+        const currentState = current.stateRef.current;
+        const myId = current.youRef.current;
+        const myRemaining = currentState?.players[myId]?.hand ?? [];
+        const yourRemainingTiles = payload.yourRemainingTiles ?? myRemaining;
+        const opponentRemainingTiles = payload.opponentRemainingTiles ?? [];
+        const blocked = yourRemainingTiles.length > 0 && opponentRemainingTiles.length > 0;
+        if (blocked) playBlockedSound(current.isMutedRef.current);
+        const stateNow = current.stateRef.current;
+        const target = stateNow?.config?.winningScore ?? 60;
+        const oppId = stateNow?.playerIds.find((pid) => pid !== myId) ?? null;
+        const myAward = payload.pointsAwarded?.you ?? 0;
+        const oppAward = payload.pointsAwarded?.opponent ?? 0;
+        const myPostScore = (stateNow?.players?.[myId]?.score ?? 0) + myAward;
+        const oppPostScore = oppId ? (stateNow?.players?.[oppId]?.score ?? 0) + oppAward : oppAward;
+        const matchWillBeOver = myPostScore >= target || oppPostScore >= target;
+        if (!matchWillBeOver) {
+          const handWinnerId = payload.handWinnerId ?? payload.winnerId ?? null;
+          const iWonHand = Boolean(handWinnerId && handWinnerId === myId);
+          if (iWonHand) playHandWinSound(current.isMutedRef.current);
+          else playHandLoseSound(current.isMutedRef.current);
         }
-      }
-      current.handRevealShownRef.current = payload.handNumber;
-      current.handRevealTimerRef.current = window.setTimeout(() => {
-        current.handRevealTimerRef.current = null;
-        latestRef.current.setHandReveal({
-          ...payload,
-          yourRemainingTiles,
-        });
-      }, 1400);
+        current.handRevealShownRef.current = payload.handNumber;
+        current.handRevealTimerRef.current = window.setTimeout(() => {
+          current.handRevealTimerRef.current = null;
+          latestRef.current.setHandReveal({ ...payload, yourRemainingTiles });
+        }, 1400);
       }),
     );
 
     s.on(
       'game:rematch:status',
       wrapSocketHandler('game:rematch:status', (payload: any) => {
-      const readyPlayerIds = Array.isArray(payload?.readyPlayerIds)
-        ? payload.readyPlayerIds.filter((id: unknown): id is string => typeof id === 'string')
-        : [];
-      latestRef.current.setRematchReadyIds(readyPlayerIds);
-      latestRef.current.setRematchRequested(readyPlayerIds.includes(latestRef.current.youRef.current));
+        const readyPlayerIds = Array.isArray(payload?.readyPlayerIds)
+          ? payload.readyPlayerIds.filter((id: unknown): id is string => typeof id === 'string')
+          : [];
+        latestRef.current.setRematchReadyIds(readyPlayerIds);
+        latestRef.current.setRematchRequested(readyPlayerIds.includes(latestRef.current.youRef.current));
       }),
     );
 
     s.on(
       'game:rematch:started',
       wrapSocketHandler('game:rematch:started', () => {
-      const current = latestRef.current;
-      if (current.handRevealTimerRef.current !== null) {
-        clearTimeout(current.handRevealTimerRef.current);
-        current.handRevealTimerRef.current = null;
-      }
-      current.setHandReveal(null);
-      current.handRevealShownRef.current = null;
-      current.rematchAwaitingStateRef.current = true;
-      current.setRematchRequested(false);
-      current.setRematchReadyIds([]);
-      current.showToast('Rematch started.', 1200);
+        const current = latestRef.current;
+        if (current.handRevealTimerRef.current !== null) {
+          clearTimeout(current.handRevealTimerRef.current);
+          current.handRevealTimerRef.current = null;
+        }
+        current.setHandReveal(null);
+        current.handRevealShownRef.current = null;
+        current.rematchAwaitingStateRef.current = true;
+        current.setRematchRequested(false);
+        current.setRematchReadyIds([]);
+        current.showToast('Rematch started.', 1200);
       }, { recoverOnError: recoverState }),
     );
 
     s.on(
       'player:dragging',
       wrapSocketHandler('player:dragging', (payload: { playerId?: string; dragging?: boolean }) => {
-      if (!payload?.playerId || payload.playerId === latestRef.current.youRef.current) return;
-      latestRef.current.setOpponentDragging(Boolean(payload.dragging));
+        if (!payload?.playerId || payload.playerId === latestRef.current.youRef.current) return;
+        latestRef.current.setOpponentDragging(Boolean(payload.dragging));
       }),
     );
 
     s.on(
       'room:session:superseded',
       wrapSocketHandler('room:session:superseded', () => {
-      const current = latestRef.current;
-      if (current.intentionalDisconnectRef.current || current.preventAutoRejoinRef.current) return;
-      const roomCode = current.joinedRoomRef.current;
-      if (!roomCode) return;
-      current.reconnectRoomCodeRef.current = roomCode;
-      current.reconnectShouldJoinRef.current = true;
-      current.showToast('Session moved to this device. Syncing…', 1600);
-      current.connectRef.current?.();
+        const current = latestRef.current;
+        if (current.intentionalDisconnectRef.current) return;
+        const roomCode = current.joinedRoomRef.current;
+        if (!roomCode) return;
+        current.showToast('Session moved to this device. Syncing…', 1600);
+        dispatchRecovery({ type: 'SESSION_SUPERSEDED', roomCode });
       }),
     );
-
-    const onIoReconnect = wrapSocketHandler('io:reconnect', () => {
-      const current = latestRef.current;
-      if (
-        current.intentionalDisconnectRef.current ||
-        current.preventAutoRejoinRef.current ||
-        !current.joinedRoomRef.current
-      ) {
-        return;
-      }
-      current.reconnectRoomCodeRef.current = current.joinedRoomRef.current;
-      current.reconnectShouldJoinRef.current = true;
-    });
-    s.io.on('reconnect', onIoReconnect);
 
     s.on(
       'connect_error',
       wrapSocketHandler('connect_error', () => {
-      const current = latestRef.current;
-      current.setIsConnecting(false);
-      const shouldRetryReconnect =
-        current.reconnectShouldJoinRef.current &&
-        !current.intentionalDisconnectRef.current &&
-        !current.preventAutoRejoinRef.current;
-      if (shouldRetryReconnect) {
-        scheduleReconnectAttempt(current, 'Connection unstable. Retrying…');
-        return;
-      }
-      current.setServerWaking(true);
-      current.setError('');
+        const current = latestRef.current;
+        current.setIsConnecting(false);
+        const machineState = recoveryMachineRef.current?.getSnapshot().state;
+        if (machineState === 'connecting' || machineState === 'joining') {
+          dispatchRecovery({ type: 'TRANSPORT_FAIL', reason: 'connect_error' });
+          return;
+        }
+        current.setServerWaking(true);
+        current.setError('');
       }),
     );
 
     s.on(
       'reconnect_failed',
       wrapSocketHandler('reconnect_failed', () => {
-      const current = latestRef.current;
-      current.setIsConnecting(false);
-      if (
-        current.reconnectShouldJoinRef.current &&
-        !current.intentionalDisconnectRef.current &&
-        !current.preventAutoRejoinRef.current
-      ) {
-        scheduleReconnectAttempt(current, 'Reconnect exhausted. Trying fresh connection…', {
-          source: 'reconnect_failed',
-        });
-      }
+        const current = latestRef.current;
+        current.setIsConnecting(false);
+        const machineState = recoveryMachineRef.current?.getSnapshot().state;
+        if (machineState === 'connecting' || machineState === 'joining') {
+          dispatchRecovery({ type: 'TRANSPORT_FAIL', reason: 'reconnect_failed' });
+        }
       }),
     );
 
     s.on(
       'server:shutdown',
       wrapSocketHandler('server:shutdown', (payload: { reason?: string } | undefined) => {
-      latestRef.current.showToast(
-        'Server is updating. You may need to rejoin your match from the lobby.',
-        4000,
-      );
-      if (import.meta.env.DEV) {
-        console.warn('[socket] server:shutdown', payload);
-      }
+        latestRef.current.showToast(
+          'Server is updating. You may need to rejoin your match from the lobby.',
+          4000,
+        );
+        if (import.meta.env.DEV) {
+          console.warn('[socket] server:shutdown', payload);
+        }
       }),
     );
 
     p.setSocket(s);
-  }, [scheduleReconnectAttempt]);
+  }, [dispatchRecovery, syncMachineToLegacy, trySavedRoomAutoJoin]);
+
+  establishSocketRef.current = establishSocket;
+
+  const connect = useCallback(() => {
+    establishSocketRef.current();
+  }, []);
 
   useEffect(() => {
     return () => {
       const p = latestRef.current;
       p.intentionalDisconnectRef.current = true;
+      recoveryMachineRef.current?.dispose();
       p.clearReconnectAttemptTimer();
       const sock = p.socketRef.current as SocketWithPing | null;
       if (sock) {
@@ -710,17 +701,11 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     const p = latestRef.current;
     if (!p.joinedRoomRef.current) return;
     p.intentionalDisconnectRef.current = false;
-    p.reconnectRoomCodeRef.current = p.joinedRoomRef.current;
-    p.reconnectShouldJoinRef.current = true;
-    p.reconnectAttemptCountRef.current = 0;
-    p.clearReconnectAttemptTimer();
+    dispatchRecovery({ type: 'SET_TARGET_ROOM', roomCode: p.joinedRoomRef.current });
+    dispatchRecovery({ type: 'USER_RETRY' });
     p.setError('');
     p.setActionError('');
-    p.setIsRecoveringConnection(true);
-    p.setRoomRecoveryState('reconnecting');
-    p.setRoomRecoveryMessage('Retrying room connection…');
-    p.connectRef.current?.();
-  }, []);
+  }, [dispatchRecovery]);
 
   const disconnect = useCallback((reason: string = 'user requested') => {
     const p = latestRef.current;
@@ -732,24 +717,12 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       handOver: p.stateRef.current?.handOver ?? null,
     });
     p.intentionalDisconnectRef.current = true;
-    p.reconnectRoomCodeRef.current = null;
-    p.reconnectShouldJoinRef.current = false;
-    p.clearReconnectAttemptTimer();
-    p.reconnectAttemptCountRef.current = 0;
-    p.setIsRecoveringConnection(false);
-    p.setRoomRecoveryState('idle');
-    p.setRoomRecoveryMessage('');
-    p.preventAutoRejoinRef.current = true;
+    dispatchRecovery({ type: 'USER_LEAVE' });
     p.autoJoinAttemptedRef.current = false;
     p.setAppMode('home');
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(p.lastRoomStorageKey);
-    }
     const socket = p.socketRef.current;
     const activeRoomCode = p.normalizeRoomCode(p.joinedRoomRef.current);
-    const midActiveMatch = Boolean(
-      p.stateRef.current && !p.stateRef.current.gameOver,
-    );
+    const midActiveMatch = Boolean(p.stateRef.current && !p.stateRef.current.gameOver);
 
     void (async () => {
       if (socket?.connected && activeRoomCode) {
@@ -770,15 +743,11 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       if (socket) {
         socket.removeAllListeners();
         socket.disconnect();
-        if (p.socketRef.current === socket) {
-          p.socketRef.current = null;
-        }
+        if (p.socketRef.current === socket) p.socketRef.current = null;
       }
     })();
 
-    if (socket && p.socketRef.current === socket) {
-      p.socketRef.current = null;
-    }
+    if (socket && p.socketRef.current === socket) p.socketRef.current = null;
     p.setSocket(null);
     p.setJoinedRoom(null);
     p.setState(null);
@@ -800,28 +769,11 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     p.handRevealShownRef.current = null;
     p.setAppMode('home');
     p.autoConnectAttemptedRef.current = false;
-  }, []);
+  }, [dispatchRecovery]);
 
   useEffect(() => {
     latestRef.current.connectRef.current = connect;
   }, [connect]);
-
-  useEffect(() => {
-    const p = latestRef.current;
-    if (p.isConnected) return;
-    if (p.intentionalDisconnectRef.current) return;
-    if (!p.joinedRoomRef.current) return;
-    if (p.stateRef.current?.gameOver) return;
-    if (p.roomRecoveryState === 'failed') return;
-
-    const timer = setTimeout(() => {
-      const current = latestRef.current;
-      if (!current.intentionalDisconnectRef.current && current.joinedRoomRef.current) {
-        current.connectRef.current?.();
-      }
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [connectionState.isConnected, connectionState.roomRecoveryState]);
 
   useEffect(() => {
     const p = latestRef.current;
@@ -859,5 +811,6 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     connect,
     retryRoomRecovery,
     disconnect,
+    recoveryDispatch: dispatchRecovery,
   };
 }

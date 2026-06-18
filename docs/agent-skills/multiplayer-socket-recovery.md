@@ -117,6 +117,67 @@ On terminal state:
 - clear pending attach/rejoin
 - route to appropriate hub/result screen
 
+## Client recovery state machine (item 6)
+
+The client uses a single explicit recovery state machine in `client/src/multiplayer/recoveryMachine.ts`.
+`useMultiplayerConnection.ts` dispatches events into the machine; legacy refs (`reconnectShouldJoinRef`,
+`preventAutoRejoinRef`, `reconnectRoomCodeRef`, `roomRecoveryState`) are **shims** derived from machine state.
+
+### States
+
+| State | Meaning |
+|-------|---------|
+| `idle` | Transport up, room joined and synced (or no recovery target) |
+| `connecting` | (Re)establishing socket transport for recovery |
+| `joining` | `room:join` recovery handshake in flight |
+| `resyncing` | In-room authoritative sync (`fetchGameState`) |
+| `failed` | Episode exhausted or terminal join error; user may retry |
+
+Legacy UI maps `connecting` + `joining` → banner `reconnecting`; `resyncing` → `resyncing`; `failed` → `failed`.
+
+### Policy (replaces `preventAutoRejoinRef`)
+
+| Policy | When set | Behavior |
+|--------|----------|----------|
+| `auto` | Normal seated match / lobby | Unintentional disconnect starts auto recovery |
+| `manual_only` | After retry exhaustion, friend-invite window | Only `USER_RETRY` / `MANUAL_JOIN` starts `joining` |
+| `disabled` | Leave Game, terminal join, sign-out | No auto `connecting` / `joining` / `resyncing` |
+
+### Invariant (fixes resyncing trap)
+
+Never enter `joining` or `resyncing` unless:
+
+- `policy !== 'disabled'`
+- `targetRoom !== null`
+- `policy === 'auto'` **or** `manualRetry === true`
+
+`RESYNC_NEEDED` is accepted **only from `idle`** (ignored during `connecting`, `joining`, `resyncing`, or `failed`).
+
+On `SOCKET_CONNECTED` when invariant fails → `idle` (transport only), **not** `resyncing`.
+
+### Scheduler
+
+- One timer owned by the machine (`schedule` / `cancel_schedule` effects).
+- Max **5** attempts per episode (`MAX_RECOVERY_ATTEMPTS`); then `failed` + `manual_only`.
+- Backoff: `min(10_000, 1500 + min(attempt, 8) * 750)`.
+- All reconnect triggers (`disconnect`, `connect_error`, `reconnect_failed`, watchdog, supersede) must
+  `dispatch` events — never call `connect()` directly outside effect handlers.
+
+### Expected logs
+
+Every state transition logs:
+
+```
+[room:recovery] state=<from>-><to> event=<EVENT> attempt=<n> episode=<id> policy=<policy> room=<code?>
+```
+
+### Tests
+
+Run: `npm run test:recovery-machine --prefix client`
+
+Cover: auto disconnect, policy disabled/manual traps, join ok/resync, transient vs terminal join,
+max attempts, user retry/leave, session supersede, shim derivations, scheduler retry.
+
 ## Leave Game rules
 
 Leave Game is not local navigation.

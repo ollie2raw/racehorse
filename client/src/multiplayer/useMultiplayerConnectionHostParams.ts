@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, Tile } from '../types';
 import type { UseMultiplayerConnectionParams } from './useMultiplayerConnection';
+import type { RecoveryEvent, RecoveryMachineSnapshot } from './recoveryMachine';
 import type {
   MultiplayerAuthRuntime,
   MultiplayerConnectionConfig,
@@ -51,6 +52,9 @@ export type UseMultiplayerConnectionHostParamsSource = {
   handRevealTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   isMutedRef: MutableRefObject<boolean>;
   rematchAwaitingStateRef: MutableRefObject<boolean>;
+  recoveryDispatchRef?: MutableRefObject<
+    (event: RecoveryEvent) => RecoveryMachineSnapshot | null
+  >;
   applyJoinedRoomResponse: (resp: unknown) => void;
   fetchGameState: (reason: string) => Promise<boolean>;
   resetClientGameSession: () => void;
@@ -230,6 +234,7 @@ export function useMultiplayerConnectionHostParams(
       recoveryRuntime: connectionRecoveryRuntime,
       roomSocialRuntime: source.roomSocialRuntime,
       uiSetters: connectionUiSetters,
+      recoveryDispatchRef: source.recoveryDispatchRef,
     }),
     [
       multiplayerConnectionConfig,
@@ -238,6 +243,7 @@ export function useMultiplayerConnectionHostParams(
       source.joinFlightRuntime,
       source.navigationRuntime,
       source.reconnectRuntime,
+      source.recoveryDispatchRef,
       source.roomRuntime,
       source.roomSocialRuntime,
       source.socketRuntime,
