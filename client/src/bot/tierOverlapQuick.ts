@@ -30,7 +30,6 @@ function key(m: { type: string; tile?: Tile | null; position?: string }) {
 }
 
 // Use fixtures from tierDifficulty + random midgame states
-const fixtures: BotMatchState[] = [];
 
 declare const process: { argv: string[] };
 const n = parseInt(process.argv[2] ?? '200', 10);

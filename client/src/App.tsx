@@ -47,7 +47,6 @@ import type { LegacyTournamentState } from './multiplayer/legacyTournamentTypes'
 import type {
   PresenceOnlineSocketAck,
   StatsWeeklySocketAck,
-  WeeklyAwardEntry,
   WeeklyAwardsPayload,
 } from './stats/weeklyAwardsTypes';
 import {
@@ -174,10 +173,9 @@ export default function App() {
   const [profileTarget, setProfileTarget] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState('');
-  const [tournamentCode, setTournamentCode] = useState('');
   const [tournamentId, setTournamentId] = useState<string | null>(null);
   const [tournamentState, setTournamentState] = useState<LegacyTournamentState | null>(null);
-  const [tournamentActiveRoom, setTournamentActiveRoom] = useState<string | null>(null);
+  const [, setTournamentActiveRoom] = useState<string | null>(null);
   const roomSocialRuntime = useMultiplayerRoomSocialRuntimeBridge();
   const [privateLobbyHostWinStreak, setPrivateLobbyHostWinStreak] = useState<number | null>(null);
 
@@ -260,8 +258,8 @@ export default function App() {
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [serverWaking, setServerWaking] = useState(false);
-  const [weeklyAwards, setWeeklyAwards] = useState<WeeklyAwardsPayload | null>(null);
-  const [playersOnlineCount, setPlayersOnlineCount] = useState<number | null>(null);
+  const [_weeklyAwards, setWeeklyAwards] = useState<WeeklyAwardsPayload | null>(null);
+  const [, setPlayersOnlineCount] = useState<number | null>(null);
   const [friendInvite, setFriendInvite] = useState<{
     inviteId: string;
     fromUsername: string;
@@ -898,10 +896,6 @@ export default function App() {
     ],
   );
 
-  const markClientSpectator = useCallback(() => {
-    isSeatedPlayerRef.current = false;
-  }, []);
-
   const trySchedulePlayerReady = useCallback(() => {
     if (!isSeatedPlayerRef.current || matchStartedRef.current || playerReadyEmittedRef.current) {
       return;
@@ -996,7 +990,6 @@ export default function App() {
 
   useEffect(() => {
     if (mpSubView !== 'quick' || !joinedRoom || hasLiveGameState) return;
-    const roomCode = joinedRoom;
     const timer = window.setTimeout(() => {
       if (!matchStartedRef.current && isSeatedPlayerRef.current) {
         playerReadyEmittedRef.current = false;
@@ -1311,38 +1304,10 @@ export default function App() {
     : authUser?.email
       ? `@${authUser.email.split('@')[0]}`
       : '@player';
-  const homeInitials = useMemo(() => {
-    const source = authProfile?.username ?? authUser?.email?.split('@')[0] ?? 'racehorse';
-    const parts = source
-      .replace(/[^a-zA-Z0-9 ]/g, ' ')
-      .split(/\s+/)
-      .filter(Boolean);
-    const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('');
-    return initials || source.slice(0, 2).toUpperCase();
-  }, [authProfile?.username, authUser?.email]);
   const homeRatingLabel = (authProfile?.glicko_rating != null ? Math.round(Number(authProfile.glicko_rating)) : 800).toLocaleString();
-  const homeFriendsOnline = 3;
-  const homePlayersOnline = playersOnlineCount ?? 142;
-  const homeActiveRooms = Math.max(12, Math.round(homePlayersOnline / 12));
-  const homeLeaderRating = '1,820';
   const [activeHomeMode, setActiveHomeMode] = useState<
     'multiplayer' | 'dailyFritz' | 'daily' | 'singlePlayerHub' | 'tournament' | 'learn'
   >('multiplayer');
-  const weeklyAwardRows: WeeklyAwardEntry[] = Array.isArray(weeklyAwards?.awards)
-    ? weeklyAwards.awards
-    : [];
-  const weeklyLeaderHandle = useMemo(() => {
-    const mostWins = weeklyAwardRows.find((entry) =>
-      `${entry?.key ?? ''} ${entry?.title ?? ''}`.toLowerCase().includes('most wins'),
-    );
-    const fallback = weeklyAwardRows.find((entry) => Boolean(entry?.leader?.username));
-    const username = mostWins?.leader?.username ?? fallback?.leader?.username ?? null;
-    return username ? `@${username}` : null;
-  }, [weeklyAwardRows]);
-  const homeLeaderHandle = weeklyLeaderHandle ?? '@kai';
-  const weeklyRank: number | null = null;
-  const hasSocialProofData =
-    playersOnlineCount !== null && weeklyLeaderHandle !== null && weeklyRank !== null;
   useRenderProfiler('AppNonGame');
   const isRoomHost = players[0]?.id === you;
 

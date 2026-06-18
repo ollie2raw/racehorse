@@ -53,7 +53,7 @@ import {
   type MoveFeatures,
   type ReasonTaggingOutput,
 } from './reasonTagging.ts';
-import type { Move, Tile } from '../types.ts';
+import type { Move } from '../types.ts';
 import type { BotMatchState, BotMovePreview } from '../bot/botEngine.ts';
 import {
   getLegalMoves,

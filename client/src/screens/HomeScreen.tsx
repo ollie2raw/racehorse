@@ -1,10 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
-import { DominoTile, BrandLogo, GlobalNav } from '../components';
+import { GlobalNav } from '../components';
 import { Button } from '../components/primitives';
-import type { Tile } from '../types';
 import { useAuth } from '../auth/useAuth';
-import { fetchFriends } from '../friends/friendsApi';
 import { getTodayDailyFritz } from '../dailyFritz/api';
 import { getTodayDailyPuzzleLadder } from '../dailyPuzzle/api';
 import {
@@ -181,9 +179,9 @@ export default function RacehorseHomeScreen({
 }) {
   const navigate = (mode: AppMode) => setAppMode?.(mode);
 
-  const { user: authUser, profile: authProfile } = useAuth();
+  const { user: authUser } = useAuth();
 
-  const [fritzStreak, setFritzStreak] = useState<number | null>(null);
+  const [, setFritzStreak] = useState<number | null>(null);
   const [fritzStatus, setFritzStatus] = useState<'completed' | 'started' | 'none'>('none');
   const [fritzOutcome, setFritzOutcome] = useState<'win' | 'loss' | null>(null);
   const [puzzleStatus, setPuzzleStatus] = useState<'completed' | 'started' | 'none'>('none');

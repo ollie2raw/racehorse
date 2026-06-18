@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Socket } from 'socket.io-client';
 import type { GhostProfileSummary } from './ghost/api';

@@ -1,11 +1,9 @@
 import {
-  assertDisplayedOpenCountMatchesCanonical,
   assertOpenEndsSumConsistent,
   branchHasPlayableTiles,
   branchTipPipFromGeometry,
   computeOpenEndsSum,
   endpointPipFromOrientation,
-  getScoringOpenEndPips,
   isHubCrossedGeometrically,
   reconcileBoardOpenEndsMetadata,
   warnOpenEndsBoardIssues,

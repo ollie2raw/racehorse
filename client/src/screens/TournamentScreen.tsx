@@ -8,7 +8,6 @@ import {
 } from '../ui/claudeMode';
 import type {
   LegacyTournamentCreateAck,
-  LegacyTournamentJoinAck,
   LegacyTournamentMatch,
   LegacyTournamentPlayer,
   LegacyTournamentStanding,

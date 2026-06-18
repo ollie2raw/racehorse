@@ -7,7 +7,6 @@ import {
   drawUntilPlayableOrEmpty,
   getLegalMoves,
   type BotDealSize,
-  type BotHandEndReason,
   type BotMatchState,
   type BotPlayerId,
 } from './botEngine.ts';

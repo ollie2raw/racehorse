@@ -90,7 +90,6 @@ function sanitizeProgress(value: unknown): JourneyProgress {
     return migrateV1Progress(parsed as JourneyProgressV1);
   }
 
-  const validIds = new Set(getAllJourneyNodeIds());
   const chaptersRaw =
     parsed.chapters && typeof parsed.chapters === 'object'
       ? (parsed.chapters as Record<string, unknown>)

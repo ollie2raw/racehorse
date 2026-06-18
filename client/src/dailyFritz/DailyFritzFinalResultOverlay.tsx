@@ -83,7 +83,7 @@ export function DailyFritzFinalResultOverlay({
                   <span className="df-result-meta-value">{overlay.shareRating}</span>
                 </div>
               ) : null}
-              {!!overlay.shareStreak ? (
+              {overlay.shareStreak ? (
                 <div className="df-result-meta-pill">
                   <span className="df-result-meta-label">Streak</span>
                   <span className="df-result-meta-value">🔥 {overlay.shareStreak}</span>

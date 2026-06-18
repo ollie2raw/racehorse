@@ -19,10 +19,6 @@ function formatMargin(value: number): string {
   return `${value >= 0 ? '+' : ''}${value}`;
 }
 
-function formatSetResult(row: Pick<DailyFritzLeaderboardRow, 'won' | 'finalScore' | 'opponentScore'>): string {
-  return `${row.won ? 'Won set' : 'Lost set'} ${row.finalScore}–${row.opponentScore}`;
-}
-
 function isBestOfThreeRow(row: DailyFritzLeaderboardRow): boolean {
   return Boolean(row.games?.length);
 }

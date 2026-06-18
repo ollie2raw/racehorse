@@ -226,7 +226,7 @@ function MultiplayerGameShellComponent({
     selectedTile,
     setSelectedTile,
     optimisticPlayedTile,
-    setOptimisticPlayedTile,
+    setOptimisticPlayedTile: _setOptimisticPlayedTile,
     pendingUiAction,
     setPendingUiAction,
     actionError,
@@ -268,7 +268,7 @@ function MultiplayerGameShellComponent({
     mpAutoDrawSuppressUntilSequenceRef,
     autoTurnActionKeyRef,
     frozenHandOverBoardRef,
-    pendingForcedHandRevealRef,
+    pendingForcedHandRevealRef: _pendingForcedHandRevealRef,
     boneyardRef,
     handAreaRef,
     opponentPillRef,
@@ -989,6 +989,8 @@ function MultiplayerGameShellComponent({
   void canDraw;
   void opponentDragging;
   void optimisticPlayedTile;
+  void _setOptimisticPlayedTile;
+  void _pendingForcedHandRevealRef;
   void selectedTile;
   void youRef;
 

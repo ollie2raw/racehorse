@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { fetchRatingHistory } from '../ranking/api';
 import {
-  FRITZ_ELITE_ID,
   FRITZ_MASTER_ID,
   FRITZ_ROOKIE_ID,
   FRITZ_STANDARD_ID,

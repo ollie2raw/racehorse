@@ -26,7 +26,6 @@ import {
   FROZEN_LESSON_KEY,
   ORIGINAL_COACHED_TRANSCRIPT_DRAFT_KEY,
   ORIGINAL_COACHED_TRANSCRIPT_KEY,
-  hasPlayableV1GuidedContent,
 } from './guidedAuthoring';
 import { applyGuidedLessonCoachingText } from './guidedLessonNotes';
 import { getPublicGuidedMatchLessonSanityIssues, getPublicGuidedMatchPlaybackLesson } from './guidedMatch/guidedMatchLessonLoader';

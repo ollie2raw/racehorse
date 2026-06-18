@@ -280,13 +280,6 @@ export default function PrivateMatchLobbyScreen({
   const roomHost = players[0];
   const roomGuest = players[1];
 
-  const leftDisplayName =
-    inRoom && roomHost?.username
-      ? `@${roomHost.username}`
-      : myUsername
-        ? `@${myUsername}`
-        : 'You';
-
   const leftPlainName = (() => {
     const u = inRoom ? roomHost?.username : myUsername;
     return (u ?? 'You').replace(/^@+/, '').trim();
@@ -374,8 +367,6 @@ export default function PrivateMatchLobbyScreen({
         : phase === 'room' && players.length === 2 && !isRoomHost
           ? 'Waiting for host to start the match…'
           : null;
-
-  const formatLabel = dealFormat === 7 ? '7 Tiles' : '14 Tiles';
 
   const matchSettingsStrip = (
     <div className="pml-settings-strip" role="group" aria-label="Match settings">

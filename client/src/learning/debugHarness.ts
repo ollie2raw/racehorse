@@ -28,8 +28,6 @@ import {
 } from './moveAnalysis.ts';
 import {
   buildCoachingFeedback,
-  buildPreMoveRecommendation,
-  resolveInterventionDecision,
   type CoachingFeedbackPacket,
 } from './coachMessaging.ts';
 import { DEFAULT_THRESHOLD_CONFIG } from './types.ts';
@@ -258,17 +256,6 @@ function printResult(
       );
     }
   }
-}
-
-// ─── Helper: pick a player move by matching moveId prefix ────────────────────
-
-function findMoveByNotationHint(
-  result: MoveEvaluationResult,
-  hint: string,
-): LearningMoveAnalysis | undefined {
-  return result.rankedMoves.find(m =>
-    m.moveNotation.includes(hint) || m.moveId.includes(hint),
-  );
 }
 
 // ─── Scenarios ────────────────────────────────────────────────────────────────

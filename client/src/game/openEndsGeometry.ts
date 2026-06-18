@@ -118,12 +118,6 @@ function mainlineEndContribution(board: BoardState, side: 'left' | 'right'): num
   return pipContribution(pip, isDouble(placed.tile));
 }
 
-function branchArmTipContribution(hubValue: number, branch: BranchArm): number {
-  const pip = branchTipPipFromGeometry(hubValue, branch);
-  const last = branch.tiles[branch.tiles.length - 1];
-  return pipContribution(pip, isDouble(last.tile));
-}
-
 function describeContribution(args: {
   position: PlacementPosition;
   tile?: { low: number; high: number };

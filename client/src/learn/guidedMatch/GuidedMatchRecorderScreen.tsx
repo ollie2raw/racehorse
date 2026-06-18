@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Board, DominoTile, GlobalNav } from '../../components';
-import type { AppMode, Move, PlacementPosition, Tile } from '../../types';
+import type { AppMode, PlacementPosition, Tile } from '../../types';
 import {
   applyPlayMove,
   computeOpenEndsSum,
@@ -338,7 +338,7 @@ export default function GuidedMatchRecorderScreen({
 
   const commitNonPlayerAction = (kind: 'draw' | 'pass', result: BotActionResult) => {
     const beforeState = match;
-    let nextLesson =
+    const nextLesson =
       kind === 'draw'
         ? appendGuidedMatchEvent(lesson, createDrawEvent('player', beforeState, result, cursor))
         : appendGuidedMatchEvent(lesson, createPassEvent('player', beforeState, result, cursor));
@@ -418,7 +418,7 @@ export default function GuidedMatchRecorderScreen({
       },
     };
 
-    let nextLesson = appendGuidedMatchEvent(lesson, event);
+    const nextLesson = appendGuidedMatchEvent(lesson, event);
     const eventCursor = withNextEventCounter(cursor);
     setLesson(nextLesson);
     setActiveEventId(event.id);

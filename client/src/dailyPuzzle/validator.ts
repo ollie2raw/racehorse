@@ -93,7 +93,7 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
     const validation = validateSetupAndStrikePuzzle(puzzle);
     const solvable = validation.solvable;
     if (!solvable) {
-      // eslint-disable-next-line no-console
+       
       console.error('[DailyPuzzleValidator] invalid setup_and_strike puzzle', {
         puzzleId: puzzle.id,
         date: puzzle.puzzleDate,
@@ -159,7 +159,7 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
   }
 
   if (!solvable) {
-    // eslint-disable-next-line no-console
+     
     console.error('[DailyPuzzleValidator] invalid puzzle', {
       puzzleId: puzzle.id,
       date: puzzle.puzzleDate,

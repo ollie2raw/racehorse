@@ -45,7 +45,6 @@ import {
   createFixedBotMatch,
   createFixedBotMatchWithStarter,
   drawOne,
-  endpointMatchFromOrientation,
   getMatchableOpenEnds,
   getDisplayOpenEnds,
   getLegalMoves,
@@ -58,7 +57,6 @@ import {
   startNextFixedBotHand,
   type BotActionResult,
   type BotDealSize,
-  type BotHandDeal,
   type BotHandEndReason,
   type BotMatchState,
   type BotPlayerId,
@@ -67,7 +65,6 @@ import { chooseBotMove, toBotVisibleState, type BotChoice } from './botHeuristic
 import { fairnessLog } from './fairnessLog';
 import { FRITZ_TIERS, type FritzTier } from './fritzConfig';
 import { FRITZ_POSTGAME_TRUST_LINE } from './fritzTrustCopy';
-import { getLocalDateKey } from '../dailyPuzzle/date';
 import {
   completeGhostGame,
   startGhostMatchSession,
@@ -83,7 +80,6 @@ import {
   serializeGhostBoardState,
   toTileKey,
 } from '../ghost/logic';
-import { shareGhostResultCard } from '../ghost/share';
 import {
   playBlockedSound,
   playDrawSound,
@@ -205,7 +201,6 @@ import {
   canStartGuidedV2Lesson,
   validateGuidedV2Lesson,
   validateGuidedV2LessonPlayback,
-  type LessonV2,
   type LessonV2AuthoringSession,
   type LessonV2Event,
   type LessonV2HandStart,
@@ -514,15 +509,6 @@ function asPlayMoves(moves: Move[]): Move[] {
   return moves.filter((m) => m.type === 'play');
 }
 
-function formatPlacementTarget(position: string | undefined): string {
-  if (!position) return 'the board';
-  if (position === 'left') return 'the left end';
-  if (position === 'right') return 'the right end';
-  const branchMatch = position.match(/^branch-(\d+)-/);
-  if (branchMatch) return `the double-${branchMatch[1]} branch`;
-  return 'the board';
-}
-
 function syncGuidedBoneyardCount(current: Tile[], targetCount: number): Tile[] {
   if (current.length === targetCount) return current;
   if (current.length > targetCount) return current.slice(0, targetCount);
@@ -547,61 +533,6 @@ function sameTileKeyMultiset(a: string[], b: string[]): boolean {
 
 function guidedWinnerIdFromScores(playerScore: number, fritzScore: number): BotPlayerId {
   return playerScore >= fritzScore ? 'you' : 'bot';
-}
-
-function normalizedBoardTileMultiset(board: BoardState | null): string[] {
-  if (!board) return [];
-  const keys: string[] = [];
-  for (const placed of board.mainLine ?? []) {
-    keys.push(toTileKey(placed.tile));
-  }
-  for (const hub of board.hubDoubles ?? []) {
-    for (const branch of hub.branches ?? []) {
-      if (!branch) continue;
-      for (const placed of branch.tiles ?? []) {
-        keys.push(toTileKey(placed.tile));
-      }
-    }
-  }
-  return keys.sort();
-}
-
-function normalizedOpenEndValues(board: BoardState | null): number[] {
-  return getMatchableOpenEnds(board)
-    .map((end) => end.matchValue)
-    .sort((a, b) => a - b);
-}
-
-function guidedV2EquivalentOutcome(
-  result: BotActionResult,
-  expected: LessonV2Event,
-): boolean {
-  const expectedBoard = parseLessonV2BoardState(expected.boardAfter);
-  const actualBoard = result.state.board;
-  if (!sameTileKeyMultiset(
-    normalizedBoardTileMultiset(actualBoard),
-    normalizedBoardTileMultiset(expectedBoard),
-  )) return false;
-  const actualOpenEnds = normalizedOpenEndValues(actualBoard);
-  const expectedOpenEnds = normalizedOpenEndValues(expectedBoard);
-  if (actualOpenEnds.length !== expectedOpenEnds.length) return false;
-  for (let i = 0; i < actualOpenEnds.length; i += 1) {
-    if (actualOpenEnds[i] !== expectedOpenEnds[i]) return false;
-  }
-
-  const actualPlayerHand = result.state.players.you.hand.map(toTileKey);
-  const actualFritzHand = result.state.players.bot.hand.map(toTileKey);
-  if (!sameTileKeyMultiset(actualPlayerHand, expected.playerHandAfter)) return false;
-  if (!sameTileKeyMultiset(actualFritzHand, expected.fritzHandAfter)) return false;
-
-  const actualScored = result.scored?.points ?? 0;
-  if (actualScored !== expected.pointsScored) return false;
-  if (result.state.players.you.score !== expected.playerScoreAfter) return false;
-  if (result.state.players.bot.score !== expected.fritzScoreAfter) return false;
-  if (result.state.handOver !== expected.handOver) return false;
-  if (result.state.gameOver !== expected.gameOver) return false;
-  if (result.state.currentPlayer !== (expected.turnContinues ? 'you' : 'bot') && !expected.handOver && !expected.gameOver) return false;
-  return true;
 }
 
 interface GuidedCoachTip {
@@ -774,43 +705,6 @@ function getGuidedV1OrderedAuthoredSteps(lesson: FrozenLesson): AuthoredStep[] {
 function getNextGuidedV1StepIndex(lesson: FrozenLesson, currentStepIndex: number): number | null {
   const next = getGuidedV1OrderedAuthoredSteps(lesson).find((step) => step.stepIndex > currentStepIndex);
   return next?.stepIndex ?? null;
-}
-
-function restoreGuidedV1NextPlayerState(
-  lesson: FrozenLesson,
-  currentStepIndex: number,
-  currentMatch: BotMatchState,
-): { nextStepIndex: number | null; nextState: BotMatchState | null } {
-  const nextStepIndex = getNextGuidedV1StepIndex(lesson, currentStepIndex);
-  if (nextStepIndex == null) return { nextStepIndex: null, nextState: null };
-  const nextStep = getGuidedV1AuthoredStepByIndex(lesson, nextStepIndex);
-  const restored = restoreGuidedV1StepMatchState(nextStep);
-  if (restored) {
-    return { nextStepIndex, nextState: restored };
-  }
-  if (nextStep?.boardState && nextStep.playerHand.length > 0) {
-    const board = parseGuidedBoardState(nextStep.boardState);
-    const playerTiles = nextStep.playerHand
-      .map((k) => parseTileKey(k))
-      .filter((t): t is Tile => t !== null);
-    return {
-      nextStepIndex,
-      nextState: {
-        ...currentMatch,
-        board,
-        handOpen: Boolean(board && board.mainLine && board.mainLine.length > 0),
-        players: {
-          ...currentMatch.players,
-          you: { ...currentMatch.players.you, hand: playerTiles },
-        },
-        handNumber: nextStep.handNumber ?? currentMatch.handNumber,
-        currentPlayer: 'you',
-        handOver: false,
-        gameOver: false,
-      },
-    };
-  }
-  return { nextStepIndex, nextState: null };
 }
 
 function restoreGuidedV1NextFullMatchState(
@@ -1260,7 +1154,6 @@ export default function BotMatchScreen({
   const ghostCompleteKeyRef = useRef('');
   const dailyFritzCompleteKeyRef = useRef('');
   const dailyFritzGameCompleteKeyRef = useRef('');
-  const matchCompleteKeyRef = useRef('');
   const dailyFritzSubmitSucceededRef = useRef(false);
   const dailyFritzAutoSubmitBlockedRef = useRef(false);
   // One-way guard: set to true when advanceHand starts, reset on success or fatal error.
@@ -1491,8 +1384,6 @@ export default function BotMatchScreen({
     const profile = (win.__dailyFritzProfile ??= {});
     profile.botMatchScreenRenderCount = (profile.botMatchScreenRenderCount ?? 0) + 1;
   }
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
-
   /**
    * V1 guided on-line playback is active when:
    *   • we are in guided mode with a frozen lesson, AND
@@ -1975,7 +1866,7 @@ export default function BotMatchScreen({
       });
       return next;
     });
-  }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthoringMode, match.currentPlayer, match.handNumber, match.handOver, match.gameOver]);  
 
   // ── Authoring V1: persist session to localStorage on every steps change ─────
   useEffect(() => {
@@ -1988,7 +1879,7 @@ export default function BotMatchScreen({
       matchSnapshot: JSON.stringify(matchRef.current),
     };
     saveAuthoringSession(session);
-  }, [isAuthoringMode, authoringSteps]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthoringMode, authoringSteps]);  
 
   // ── Authoring V2: keep events ref in sync ────────────────────────────────
   useEffect(() => {
@@ -2010,7 +1901,7 @@ export default function BotMatchScreen({
       lastEventIndex: authoringV2Events.length - 1,
     };
     saveV2AuthoringSession(session);
-  }, [isAuthoringV2Mode, authoringV2Events, authoringV2HandStarts, match]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthoringV2Mode, authoringV2Events, authoringV2HandStarts, match]);  
 
   // ── Authoring V2: capture LessonV2HandStart when a new hand begins ───────
   // Fires when match.handNumber changes and the hand is live (not over).
@@ -2750,13 +2641,6 @@ export default function BotMatchScreen({
       breakdown: choice.breakdown,
     };
   }, []);
-
-  const openAnalyzer = () => {
-    const analysis = analyzeMoveLog(moveLog, true);
-    setCurrentAnalysis(analysis);
-    saveGameAnalysis('bot', analysis);
-    setAnalyzerOpen(true);
-  };
 
   const skipPostGameReview = useCallback(() => {
     setPostGameReviewDismissed(true);
@@ -3659,7 +3543,7 @@ export default function BotMatchScreen({
     if (!botChoice?.move.tile) return null;
 
     const recommendedTile = botChoice.move.tile as Tile;
-    let tileEvals = allEvaluated.filter((e) => tileEquals(e.tile, recommendedTile));
+    const tileEvals = allEvaluated.filter((e) => tileEquals(e.tile, recommendedTile));
     if (tileEvals.length === 0) return null;
 
     tileEvals.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : a.openSum - b.openSum);
@@ -3772,8 +3656,6 @@ export default function BotMatchScreen({
     const uiStepNumber = frozenV2Lesson.events
       .slice(0, guidedV2EventIndex)
       .filter((e) => e.actor === 'player' && e.action === 'play').length;
-      
-    const board = parseLessonV2BoardState(currentEvent.boardAfter);
 
     console.log('[guided-note-align]', JSON.stringify({
       uiStepNumber,
@@ -4244,7 +4126,7 @@ export default function BotMatchScreen({
         return [...base, newStep];
       });
     },
-    [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand], // eslint-disable-line react-hooks/exhaustive-deps
+    [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand],  
   );
 
   /**
@@ -4273,7 +4155,7 @@ export default function BotMatchScreen({
       }
       return [...prev, draftStep];
     });
-  }, [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuthoringMode, authoringSteps.length, authoringNoteText, match.handNumber, match.board, match.players.you.hand]);  
 
   useEffect(() => {
     if (!enableGuidedMatchCandidateCapture) {
@@ -6971,13 +6853,7 @@ export default function BotMatchScreen({
     () => (handReveal ? buildBotHandOverReveals(handReveal, opponentLabel) : []),
     [handReveal, opponentLabel],
   );
-  const ghostAverageLabel =
-    ghostProfile?.avgScore == null ? '—' : `${ghostProfile.avgScore} pts`;
   const ghostResultMessage = getGhostResultMessage(match.players.you.score, match.players.bot.score);
-  const previousGhostRating =
-    ghostResult == null
-      ? ghostProfile?.ghostRating ?? 800
-      : ghostResult.newRating - ghostResult.ratingDelta;
   const fritzGlickoDelta =
     !isGhostMode && ghostResult?.glickoDelta != null
       ? roundedRatingDelta(ghostResult.glickoDelta)
@@ -6993,20 +6869,7 @@ export default function BotMatchScreen({
   const ghostRatingDeltaLabel = ghostResult
     ? `${ghostResult.ratingDelta >= 0 ? '+' : ''}${ghostResult.ratingDelta}`
     : null;
-  const onShareGhostCard = async () => {
-    const result = ghostResult;
-    if (!result) return;
-    await shareGhostResultCard({
-      playerScore: result.playerScore,
-      ghostScore: result.ghostScore,
-      previousRating: previousGhostRating,
-      newRating: result.newRating,
-      ratingDelta: result.ratingDelta,
-      message: ghostResultMessage,
-    });
-  };
 
-  const isFullscreenReady = true;
   const isLessonLayoutMode = lessonLayoutMode;
 
   const isGuidedV2FritzResolving =

@@ -1,7 +1,7 @@
 import type { EngineBestMove, MoveEntry, TileTuple } from './moveLogger';
 import { sameTileTuple } from './moveLogger';
 import { chooseBotMove, evaluateMove, toBotVisibleState } from '../bot/botHeuristics';
-import { createBotMatch, previewPlayMove, getLegalMoves } from '../bot/botEngine';
+import { createBotMatch, getLegalMoves } from '../bot/botEngine';
 import type { BotMatchState } from '../bot/botEngine';
 
 export type MoveRating = 'Brilliant' | 'Great' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder';
@@ -427,88 +427,6 @@ export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
     } catch {
       return entry;
     }
-  });
-}
-
-function sequenceAdjustRatings(
-  analyzedMoves: AnalyzedMove[],
-  allEntries: MoveEntry[],
-): AnalyzedMove[] {
-  // Build actual game points scored per move number (real points, not engine scores)
-  const pointsByMove = new Map<number, number>();
-  for (const entry of allEntries) {
-    if (entry.player === 'you') {
-      pointsByMove.set(entry.moveNumber, entry.pointsScored ?? 0);
-    }
-  }
-
-  const moveNumbers = analyzedMoves.map((m) => m.moveNumber);
-
-  return analyzedMoves.map((move, idx) => {
-    if (move.rating === 'Brilliant') return move;
-
-    // Actual points scored over next 3 moves (real game points, not engine scale)
-    const windowPts =
-      (pointsByMove.get(moveNumbers[idx]) ?? 0) +
-      (pointsByMove.get(moveNumbers[idx + 1]) ?? 0) +
-      (pointsByMove.get(moveNumbers[idx + 2]) ?? 0);
-
-    // Engine's best immediate in REAL game points (from breakdown.immediate)
-    const fritzImmediateRealPts = move.engineBestMove?.breakdown?.immediate ?? 0;
-
-    // ── Soften: bad rating but sequence scored well ───────────────────────────
-    // E.g. played a double to chain into scoring moves
-    if (
-      (move.rating === 'Blunder' || move.rating === 'Mistake') &&
-      windowPts >= Math.max(fritzImmediateRealPts, 1)
-    ) {
-      const softenedRating: MoveRating = move.rating === 'Blunder' ? 'Inaccuracy' : 'Good';
-      const softenedScore = move.rating === 'Blunder' ? 62 : 76;
-      return {
-        ...move,
-        rating: softenedRating,
-        score: softenedScore,
-        explanation:
-          move.explanation +
-          ` (Sequence context: you scored ${windowPts} pts over the next ${Math.min(3, moveNumbers.length - idx)} moves, suggesting a deliberate setup.)`,
-      };
-    }
-
-    // ── Harden: good rating but sequence scored 0 when engine expected points ─
-    if (
-      (move.rating === 'Good' || move.rating === 'Great') &&
-      windowPts === 0 &&
-      fritzImmediateRealPts >= 1 &&
-      idx < analyzedMoves.length - 2
-    ) {
-      const hardenedRating: MoveRating = move.rating === 'Great' ? 'Good' : 'Inaccuracy';
-      const hardenedScore = move.rating === 'Great' ? 74 : 58;
-      return {
-        ...move,
-        rating: hardenedRating,
-        score: hardenedScore,
-        explanation:
-          move.explanation +
-          ` (Sequence context: the next ${Math.min(3, moveNumbers.length - idx)} moves scored 0 pts, suggesting this setup didn't pay off.)`,
-      };
-    }
-
-    // ── Soften inaccuracy: next move scored at least as much as engine expected ─
-    if (
-      move.rating === 'Inaccuracy' &&
-      (pointsByMove.get(moveNumbers[idx + 1]) ?? 0) >= fritzImmediateRealPts
-    ) {
-      return {
-        ...move,
-        rating: 'Good',
-        score: 76,
-        explanation:
-          move.explanation +
-          ` (Sequence context: your next move scored ${pointsByMove.get(moveNumbers[idx + 1])} pts, indicating a successful setup.)`,
-      };
-    }
-
-    return move;
   });
 }
 

@@ -612,7 +612,7 @@ export function determinePrimaryReason(
 ): CoachingReason {
   const {
     immediateScore, opponentReturnScore, opensEndDangerLevel,
-    scorePosition, remainingPlayableCount, causesHandBlock,
+    scorePosition, remainingPlayableCount: _remainingPlayableCount, causesHandBlock,
     reducesScoringFlexibility, turnContinues,
     opponentScoringResponseCount, opponentConstraintLevel,
     playerConstraintLevel,
@@ -1128,7 +1128,7 @@ export function generateLongExplanation(
   neitherScores = false,
 ): string | undefined {
   const {
-    remainingPlayableCount, playerNextTurnScoringCount, playerEndCoverage,
+    remainingPlayableCount: _remainingPlayableCount, playerNextTurnScoringCount, playerEndCoverage,
     playerConstraintLevel, opponentConstraintLevel, opponentForcedDefensiveCount,
     opponentResponseCount, opponentScoringResponseCount,
     turnContinues, opensEndDangerLevel, resultingOpenEnds,

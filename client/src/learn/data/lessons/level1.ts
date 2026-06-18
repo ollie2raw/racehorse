@@ -121,18 +121,6 @@ const boardTurnContinuation: LearnBoardState = {
   hubDoubles: [],
 };
 
-const boardDoubleHub: LearnBoardState = {
-  mainLine: [
-    { tile: [6, 6], orientation: 'vertical-normal' },
-    { tile: [6, 2], orientation: 'horizontal-normal' },
-  ],
-  leftEnd: 6,
-  rightEnd: 2,
-  leftEndIsDouble: true,
-  rightEndIsDouble: false,
-  hubDoubles: [],
-};
-
 const boardDoubleUncrossed: LearnBoardState = {
   mainLine: [
     { tile: [3, 3], orientation: 'vertical-normal' },

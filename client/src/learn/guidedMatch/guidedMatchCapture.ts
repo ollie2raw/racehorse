@@ -3,7 +3,6 @@ import {
   getLegalMoves,
   type BotActionResult,
   type BotMatchState,
-  type BotPlayerId,
 } from '../../bot/botEngine';
 import {
   type GuidedMatchCandidate,

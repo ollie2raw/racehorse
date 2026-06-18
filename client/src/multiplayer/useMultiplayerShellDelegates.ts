@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import type { MutableRefObject, SetStateAction } from 'react';
 import type { GameState, Move, Tile } from '../types';
 import type { MultiplayerGameShellBridge } from './multiplayerGameShellTypes';
 

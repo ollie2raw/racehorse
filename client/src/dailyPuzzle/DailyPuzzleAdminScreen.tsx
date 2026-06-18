@@ -47,7 +47,6 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
   const [error, setError] = useState<string | null>(null);
   const [validation, setValidation] = useState<PuzzleValidationResult | null>(null);
   const [pasteJson, setPasteJson] = useState('');
-  const [builderMode, setBuilderMode] = useState(true);
   const [builderBoard, setBuilderBoard] = useState<BoardState | null>(null);
   const [builderHand, setBuilderHand] = useState<Tile[]>([]);
   const [selectedBuilderTile, setSelectedBuilderTile] = useState<Tile | null>(null);
@@ -65,8 +64,6 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     setBoardJson(JSON.stringify(builderBoard ?? fallbackBoard, null, 2));
     setHandJson(JSON.stringify(builderHand, null, 2));
   }, [builderBoard, builderHand]);
-
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
 
   const canSave = useMemo(
     () => dateValue.trim().length === 10,
@@ -269,7 +266,7 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     try {
       const canonicalDate = normalizeDateInputToLocalKey(dateValue);
       setDateValue(canonicalDate);
-      // eslint-disable-next-line no-console
+       
       console.log('[DailyPuzzleAdmin] load', { canonicalDate });
       const existing = await getDailyPuzzleByDateSeed(canonicalDate);
       if (!existing) {
@@ -332,7 +329,7 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
         startingHand: parsed.hand,
       });
 
-      // eslint-disable-next-line no-console
+       
       console.log('[DailyPuzzleAdmin] save', { canonicalDate });
       const saved = await getDailyPuzzleByDateSeed(canonicalDate);
       if (!saved) throw new Error('Saved puzzle but failed to reload.');
@@ -343,36 +340,6 @@ export default function DailyPuzzleAdminScreen({ onBack }: DailyPuzzleAdminScree
     } finally {
       setSaving(false);
     }
-  };
-
-  const syncBuilderFromJson = () => {
-    setError(null);
-    setMessage(null);
-    try {
-      const parsed = parseDraft(false);
-      setBuilderBoard(parsed.board);
-      setBuilderHand(parsed.hand);
-      setSelectedBuilderTile(null);
-      setMessage('Visual builder loaded from JSON.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to parse JSON.');
-    }
-  };
-
-  const syncJsonFromBuilder = () => {
-    setError(null);
-    setMessage(null);
-    const fallbackBoard = {
-      mainLine: [],
-      leftEnd: 0,
-      rightEnd: 0,
-      leftEndIsDouble: false,
-      rightEndIsDouble: false,
-      hubDoubles: [],
-    };
-    setBoardJson(JSON.stringify(builderBoard ?? fallbackBoard, null, 2));
-    setHandJson(JSON.stringify(builderHand, null, 2));
-    setMessage('JSON updated from visual builder.');
   };
 
   const copyPuzzleJsonFromBuilder = async () => {

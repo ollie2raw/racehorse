@@ -7,7 +7,6 @@ import {
   drawUntilPlayableOrEmpty,
   getLegalMoves,
   type BotDealSize,
-  type BotHandEndReason,
   type BotMatchState,
   type BotPlayerId,
 } from './botEngine.ts';
@@ -67,19 +66,6 @@ function swapPlayers(state: BotMatchState): BotMatchState {
     opponentKnownMissing: [],
     opponentMissingEvidence: [],
   };
-}
-
-interface DrawEvent {
-  player: BotPlayerId;
-  tile: Tile;
-  playable: boolean;
-  pipSum: number;
-}
-
-interface HandEndEvent {
-  winner: BotPlayerId;
-  reason: BotHandEndReason;
-  pipBonus: number;
 }
 
 interface MatchStats {
@@ -184,8 +170,6 @@ function runInstrumentedMatch(
     illegalMoveAttempts: 0,
   };
 
-  let prevScores = { you: 0, bot: 0 };
-
   while (!state.gameOver) {
     const humanScore = state.players[humanId].score;
     const fritzScore = state.players[fritzId].score;
@@ -228,7 +212,6 @@ function runInstrumentedMatch(
         opponentKnownMissing: [],
         opponentMissingEvidence: [],
       };
-      prevScores = nextScores;
       continue;
     }
 

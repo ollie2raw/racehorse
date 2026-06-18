@@ -187,8 +187,6 @@ export function InGameBoardShell({
   integratedPvfPanel = false,
 }: InGameBoardShellProps) {
   const studioStageLayout: InGameBoardLayout = 'studio';
-  const cinematicPvfPanel =
-    integratedPvfPanel && layout === 'walnut-wrap' && !boardColumnOnly;
   const stage = (
     <InGameBoardStage
       layout={layout === 'walnut-hud' ? 'walnut-hud' : studioStageLayout}

@@ -891,7 +891,7 @@ export default function DailyPuzzleScreen({
         movesUsed: solvedMoves ?? movesUsed,
         seconds: elapsedSeconds,
       }).catch((err) => {
-        // eslint-disable-next-line no-console
+         
         console.warn('[DailyPuzzle] best score upsert failed', err);
       });
 
@@ -912,7 +912,7 @@ export default function DailyPuzzleScreen({
                 currentStreak: resolvedStreak,
               });
             })().catch((err) => {
-              // eslint-disable-next-line no-console
+               
               console.warn('[DailyPuzzle] completion upsert failed', err);
             })
           : Promise.resolve();

@@ -2,7 +2,7 @@ import React, { useCallback, useState } from "react";
 import type { FritzTier } from "./fritzConfig";
 import type { BotDealSize } from "./botEngine";
 import type { AppMode } from "../types";
-import { DominoTile, GlobalNav } from "../components";
+import { GlobalNav } from "../components";
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from "./pvfTierPreference";
 import { useDeferredAsset } from "../ui/useDeferredAsset";
 import "./PlayVsFritz.css";
@@ -55,24 +55,6 @@ const IconGoat = ({ size = 26 }: { size?: number }) => (
   />
 );
 
-const IconShield = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <path d="M12 8v8" />
-    <path d="M8 12h8" />
-  </svg>
-);
-
-const IconDominoSummary = ({ color = "currentColor" }: { color?: string }) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="5" y="2" width="14" height="20" rx="2" stroke={color} strokeWidth="2" />
-    <line x1="5" y1="12" x2="19" y2="12" stroke={color} strokeWidth="2" />
-    <circle cx="9" cy="7" r="1.2" fill={color} />
-    <circle cx="15" cy="7" r="1.2" fill={color} />
-    <circle cx="12" cy="17" r="1.2" fill={color} />
-  </svg>
-);
-
 const IconSummaryBars = ({ color = "currentColor" }: { color?: string }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round">
     <line x1="6"  y1="20" x2="6"  y2="14"/>
@@ -81,7 +63,7 @@ const IconSummaryBars = ({ color = "currentColor" }: { color?: string }) => (
   </svg>
 );
 
-const IconDomino7 = ({ color: _color = "rgba(255,255,255,0.85)", size = 32 }: { color?: string; size?: number }) => (
+const IconDomino7 = ({ size = 32 }: { size?: number }) => (
   <svg width={size * 0.75} height={size} viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect x="4" y="2" width="16" height="28" rx="2" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />
     <line x1="4" y1="16" x2="20" y2="16" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />

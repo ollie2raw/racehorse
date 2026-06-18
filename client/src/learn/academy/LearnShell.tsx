@@ -5,7 +5,6 @@ import '../../screens/RacehorseHomeArt.css';
 import './learnAcademy.css';
 import { LearnProgressTrack } from './LearnProgressTrack';
 import type { HowToPlayModule } from '../howToPlay/howToPlayModules';
-import { LearnActionButton } from './LearnActionButton';
 
 type LearnShellProps = {
   page: number;

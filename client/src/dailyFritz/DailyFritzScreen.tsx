@@ -254,16 +254,6 @@ function formatDateLabel(dateText: string): string {
   });
 }
 
-function formatLeaderboardDateLabel(dateText: string): string {
-  const parsed = new Date(`${dateText}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return dateText;
-  return parsed.toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
 function titleCaseTier(tier: string): string {
   return tier.charAt(0).toUpperCase() + tier.slice(1);
 }
@@ -1155,7 +1145,6 @@ export default function DailyFritzScreen({
     await submitCompletedGame(game);
   }, [submitCompletedGame]);
 
-  const currentUsername = profile?.username?.trim() ?? null;
   const todaySetResult = useMemo(
     () => normalizeSetResult(today?.set_result ?? today?.result),
     [today],

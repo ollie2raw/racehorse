@@ -24,7 +24,7 @@ function runPairedH2H(
   label: string,
 ) {
   let aWins = 0;
-  let margins: number[] = [];
+  const margins: number[] = [];
   let skunks = 0;
   let hands = 0;
   let blowouts = 0;
@@ -253,8 +253,6 @@ function collectStatesFromMatch(seed: number): SampledState[] {
     const playMoves = getLegalMoves(state, 'bot').filter((m) => m.type === 'play');
     if (playMoves.length > 0) {
       const totalTiles = state.players.bot.hand.length + state.players.you.hand.length;
-      const left = state.board?.leftEnd;
-      const right = state.board?.rightEnd;
       samples.push({
         state: structuredClone(state) as BotMatchState,
         label: `seed${seed}-h${state.handNumber}-t${state.turnIndex}`,

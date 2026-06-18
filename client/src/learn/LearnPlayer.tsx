@@ -17,7 +17,6 @@ import type {
   QuizTileStep,
 } from './engine/types';
 import {
-  isLearnLessonCompleted,
   loadProgress,
   markLessonCompleted,
   setLastLocation,
@@ -47,24 +46,24 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
   const [showCompletedState, setShowCompletedState] = useState(false);
   const [quizSolved, setQuizSolved] = useState(false);
   const [quizWrongAttempts, setQuizWrongAttempts] = useState(0);
-  const [quizFeedback, setQuizFeedback] = useState<string | null>(null);
+  const [_quizFeedback, setQuizFeedback] = useState<string | null>(null);
   const [lastClickedTileResult, setLastClickedTileResult] = useState<{ idx: number; correct: boolean } | null>(null);
-  const [lastClickedScoreChoice, setLastClickedScoreChoice] = useState<number | null>(null);
-  const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
+  const [_lastClickedScoreChoice, setLastClickedScoreChoice] = useState<number | null>(null);
+  const [_lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
   const [guidedHasPlaced, setGuidedHasPlaced] = useState(false);
   const [guidedPlacedBoard, setGuidedPlacedBoard] = useState<LearnBoardState | null>(null);
   const [guidedSlidingTile, setGuidedSlidingTile] = useState(false);
   const [showScoreFlash, setShowScoreFlash] = useState<number | null>(null);
-  const [chainCount, setChainCount] = useState(0);
+  const [_chainCount, setChainCount] = useState(0);
   const [predictionSelected, setPredictionSelected] = useState<'yes' | 'no' | null>(null);
   const [predictionRevealBoard, setPredictionRevealBoard] = useState<LearnBoardState | null>(null);
-  const [predictionRevealVisible, setPredictionRevealVisible] = useState(false);
+  const [_predictionRevealVisible, setPredictionRevealVisible] = useState(false);
   const [drillRoundIndex, setDrillRoundIndex] = useState(0);
-  const [drillTimeLeftMs, setDrillTimeLeftMs] = useState(0);
-  const [drillResults, setDrillResults] = useState<Array<{ roundIndex: number; correct: boolean; ms: number | null }>>(
+  const [_drillTimeLeftMs, setDrillTimeLeftMs] = useState(0);
+  const [_drillResults, setDrillResults] = useState<Array<{ roundIndex: number; correct: boolean; ms: number | null }>>(
     [],
   );
-  const [drillFeedback, setDrillFeedback] = useState<string | null>(null);
+  const [_drillFeedback, setDrillFeedback] = useState<string | null>(null);
   const [drillRoundResolved, setDrillRoundResolved] = useState(false);
   const [drillCompleted, setDrillCompleted] = useState(false);
   const [drillStarted, setDrillStarted] = useState(false);
@@ -446,7 +445,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     }
   };
 
-  const handleQuizPlaceClick = (step: QuizPlaceStep, placement: 'left' | 'right') => {
+  const _handleQuizPlaceClick = (step: QuizPlaceStep, placement: 'left' | 'right') => {
     if (quizSolved) return;
     if (placement === step.correctPlacement) {
       setQuizSolved(true);
@@ -480,7 +479,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     return quizBoard ? computeOpenEndsSum(quizBoard) : 0;
   };
 
-  const handleQuizScoreChoice = (step: QuizScoreSumStep, choice: number) => {
+  const _handleQuizScoreChoice = (step: QuizScoreSumStep, choice: number) => {
     if (quizSolved) return;
     const correct = getScoreSumCorrect(step);
     if (choice === correct) {
@@ -563,7 +562,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     }, 300);
   };
 
-  const handlePredictionChoice = (step: PredictionStep, answer: 'yes' | 'no') => {
+  const _handlePredictionChoice = (step: PredictionStep, answer: 'yes' | 'no') => {
     if (predictionSelected) return;
     const isCorrect = answer === step.correctAnswer;
     setPredictionSelected(answer);
@@ -583,7 +582,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     predictionTimeoutRef.current = window.setTimeout(() => setQuizSolved(true), isCorrect ? 1000 : 1500);
   };
 
-  const handleDrillTileClick = (step: DrillTileSpeedStep, clicked: LearnTile) => {
+  const _handleDrillTileClick = (step: DrillTileSpeedStep, clicked: LearnTile) => {
     if (drillCompleted || drillRoundResolved) return;
     const playable = isTilePlayable(toTile(clicked), quizBoard);
     if (playable) {
@@ -598,7 +597,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     setDrillFeedback(`Doesn't match ends (${openEnds.join(', ')}).`);
   };
 
-  const handleRetryDrill = () => {
+  const _handleRetryDrill = () => {
     if (drillAdvanceTimeoutRef.current !== null) {
       window.clearTimeout(drillAdvanceTimeoutRef.current);
       drillAdvanceTimeoutRef.current = null;
@@ -612,7 +611,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     setDrillStarted(false);
   };
 
-  const completionLabel = isLearnLessonCompleted(lesson.id) ? 'Completed' : 'In progress';
   const nextDisabled = !showCompletedState
     ? isQuizTileStep || isQuizPlaceStep || isQuizScoreStep || isGuidedPlayStep || isPredictionStep
       ? !quizSolved
@@ -620,25 +618,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
         ? !drillCompleted
         : false
     : false;
-  const drillStep = isDrillStep ? (currentStep as DrillTileSpeedStep) : null;
   const currentQuizHand = isQuizTileStep ? sanitizeHand(currentStep.hand, quizBoard) : [];
-  const currentDrillHand = drillStep
-    ? sanitizeHand(drillStep.hands[drillRoundIndex] ?? [], quizBoard)
-    : [];
-  const drillCorrectCount = drillResults.filter((result) => result.correct).length;
-  const drillSuccessfulTimes = drillResults
-    .filter((result) => result.correct && typeof result.ms === 'number')
-    .map((result) => result.ms as number);
-  const drillAverageMs =
-    drillSuccessfulTimes.length > 0
-      ? drillSuccessfulTimes.reduce((sum, ms) => sum + ms, 0) / drillSuccessfulTimes.length
-      : null;
-  const drillBestMs = drillSuccessfulTimes.length > 0 ? Math.min(...drillSuccessfulTimes) : null;
-  const drillProgressPct =
-    drillStep && drillStep.secondsPerRound > 0
-      ? Math.max(0, Math.min(100, (drillTimeLeftMs / (drillStep.secondsPerRound * 1000)) * 100))
-      : 0;
-  const stepTitle = currentStep?.title ?? lesson.title;
   const lessonIndex = Math.max(0, learnLessons.findIndex((item) => item.id === lesson.id));
   const introHook = LESSON_HOOKS[lesson.id] ?? lesson.description;
   const currentBoardData = isGuidedPlayStep

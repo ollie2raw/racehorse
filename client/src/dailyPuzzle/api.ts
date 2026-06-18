@@ -363,7 +363,7 @@ export async function getDailyPuzzleForDate(
   );
   const ms = Math.round(performance.now() - t0);
   if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-    // eslint-disable-next-line no-console
+     
     console.debug('[DailyPuzzle] select finished', { ms, seed, error, hasData: Boolean(data) });
   }
 
@@ -427,7 +427,7 @@ export async function getDailyPuzzleByDateSeed(
     8000,
   );
   const ms = Math.round(performance.now() - t0);
-  // eslint-disable-next-line no-console
+   
   console.log('[DailyPuzzleAdmin] select finished', {
     ms,
     canonicalDate,
@@ -479,7 +479,7 @@ export async function upsertDailyPuzzle(input: UpsertPuzzleInput): Promise<void>
     20000,
   );
   const ms = Math.round(performance.now() - t0);
-  // eslint-disable-next-line no-console
+   
   console.log('[DailyPuzzleAdmin] upsert finished', { ms, canonicalDate, error });
 
   if (error) {
@@ -632,7 +632,7 @@ export async function fetchDailyPuzzleLeaderboard(
 
   if (error) {
     if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-      // eslint-disable-next-line no-console
+       
       console.error('[DailyPuzzleLeaderboard] fetch error', error);
     }
     throw new Error(error.message);

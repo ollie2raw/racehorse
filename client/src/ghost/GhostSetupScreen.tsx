@@ -9,19 +9,11 @@ import '../bot/PlayVsFritz.css';
 import './ghostMode.css';
 
 const UNLOCK_THRESHOLD = 5;
-const TRAINED_THRESHOLD = 30;
-const FULL_LABEL_THRESHOLD = 15;
 const FEATURED_GHOST_USERNAME = 'oliver';
 
 /** Matches Single Player hub Ghost Mode card (`SinglePlayerHubScreen`). */
 const GHOST_ACCENT = '#4FC3F7';
 const ELITE_GOLD = '#E7B64A';
-
-function ghostTier(gamesPlayed: number): 'early' | 'learning' | 'trained' {
-  if (gamesPlayed < FULL_LABEL_THRESHOLD) return 'early';
-  if (gamesPlayed < TRAINED_THRESHOLD) return 'learning';
-  return 'trained';
-}
 
 function formatDiagnosticDate(value: string | null | undefined): string {
   if (!value) return 'Not built yet';
@@ -105,7 +97,6 @@ export default function GhostSetupScreen({
   const isLocked = Boolean(userId) && isViewingOwnGhost && fritzGamesPlayed < UNLOCK_THRESHOLD;
   const canPlay = Boolean(summary) && !loading && !isLocked;
   const trainingGamesPlayed = summary?.gamesPlayed ?? fritzGamesPlayed;
-  const tier = ghostTier(trainingGamesPlayed);
 
   useEffect(() => {
     let active = true;

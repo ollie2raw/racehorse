@@ -1,6 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { BoardHandle } from '../components';
-import type { GameAnalysis } from '../analyzer/moveAnalyzer';
 import type { GameState, Move, Tile } from '../types';
 import type { PlacementPosition } from '../types';
 

@@ -604,7 +604,7 @@ export function useAuth() {
 
     const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
     if (isDev) {
-      // eslint-disable-next-line no-console
+       
       console.log('[Auth] signOut start');
     }
 
@@ -628,7 +628,7 @@ export function useAuth() {
       if (result.kind === 'timeout') {
         usedTimeoutFallback = true;
         if (isDev) {
-          // eslint-disable-next-line no-console
+           
           console.warn('[Auth] signOut timed out; forcing local token clear');
         }
 
@@ -650,7 +650,7 @@ export function useAuth() {
       setProfile(null);
       setUser(null);
       if (isDev) {
-        // eslint-disable-next-line no-console
+         
         console.log('[Auth] signOut end', { usedTimeoutFallback, error: errorMessage });
       }
     }

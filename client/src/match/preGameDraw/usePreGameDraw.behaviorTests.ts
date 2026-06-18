@@ -39,7 +39,7 @@ function testShouldInitOnlyOnFalseToTrue(): void {
  * the player's revealed pick. Simulate that stale re-run here.
  */
 function testPlayerPickSurvivesEnabledStaysTrue(): void {
-  let wasEnabled = true;
+  const wasEnabled = true;
   const enabled = true;
 
   assertFalse(

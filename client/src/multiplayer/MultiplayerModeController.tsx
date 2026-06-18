@@ -403,7 +403,7 @@ export default function MultiplayerModeController({
         )
       ) : null}
 
-      {Boolean((isConnected || isRecoveringConnection) && joinedRoom && state) ? (
+      {(isConnected || isRecoveringConnection) && joinedRoom && state ? (
         <Suspense fallback={<ScreenLoader label="Loading Match…" />}>
           <LiveMatchScreen
             visible={Boolean((isConnected || isRecoveringConnection) && joinedRoom && state)}
