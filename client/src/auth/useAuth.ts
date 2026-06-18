@@ -668,6 +668,9 @@ export function useAuth() {
       if (!/^[a-z0-9_]+$/.test(normalized)) {
         return { error: 'Use lowercase letters, numbers, and underscores only.' };
       }
+      if (isTemporaryUsername(normalized)) {
+        return { error: 'Pick a permanent handle — auto-generated names cannot be saved.' };
+      }
 
       try {
         const request = supabase

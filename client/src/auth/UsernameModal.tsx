@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { isTemporaryUsername } from './useAuth';
 import './authModal.css';
 
 interface UsernameModalProps {
@@ -36,8 +37,15 @@ export default function UsernameModal({
 
   if (!open) return null;
 
+  const normalizedUsername = username.trim().toLowerCase();
+  const needsPermanentHandle = !isProfileEdit && isTemporaryUsername(normalizedUsername);
+
   const submit = async () => {
     setError(null);
+    if (needsPermanentHandle) {
+      setError('Pick a permanent handle — replace the auto-generated name above.');
+      return;
+    }
     setSaving(true);
     try {
       const result = await onSave(username);
@@ -51,7 +59,11 @@ export default function UsernameModal({
     }
   };
 
-  const canSave = username.trim().length > 0 && !saving && !signingOut;
+  const canSave =
+    normalizedUsername.length > 0 &&
+    !needsPermanentHandle &&
+    !saving &&
+    !signingOut;
 
   const handleOverlayPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     overlayPointerDownOnBackdrop.current = e.target === e.currentTarget;
@@ -125,6 +137,12 @@ export default function UsernameModal({
             className="auth-modal-input"
           />
         </label>
+
+        {!isProfileEdit && isTemporaryUsername(normalizedUsername) && (
+          <p className="auth-modal-subtitle">
+            Replace the auto-generated name with a permanent handle to continue.
+          </p>
+        )}
 
         {error && <p className="auth-inline-error">{error}</p>}
 

@@ -91,7 +91,6 @@ export default function ChangePasswordModal({
       <div className="auth-modal-card">
         <div className="auth-modal-head">
           <div>
-            <p className="auth-modal-eyebrow">Account security</p>
             <h2 className="auth-modal-title">Set a new password</h2>
           </div>
         </div>
