@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createReservedRoom, getRoom, joinRoom } from '../rooms';
+import { createReservedRoom, getRoom, joinRoom, resetRoomRuntimeForTests } from '../rooms';
 import { initRoomSession, setRoomRoster } from './roomSession';
 import { registerRoomSessionHandlers } from './registerRoomSessionHandlers';
 
 const fetchMatchByIdMock = vi.fn();
 const applyMatchResultMock = vi.fn();
 const recordMatchEndMock = vi.fn();
+const persistRoomMatchLogMock = vi.fn(async () => undefined);
 
 vi.mock('../supabaseUtils', () => ({
   supabaseFetch: vi.fn(async () => []),
@@ -85,25 +86,51 @@ function seedCasualRoom(roomCode: string) {
   return room;
 }
 
+function seedActiveMidGameRoom(roomCode: string) {
+  const room = seedCasualRoom(roomCode);
+  room.state = {
+    playerIds: ['p1', 'p2'],
+    players: {
+      p1: { hand: [{ high: 6, low: 6 }], score: 0 },
+      p2: { hand: [{ high: 5, low: 5 }], score: 0 },
+    },
+    board: { tiles: [], leftEnd: null, rightEnd: null },
+    boneyard: [],
+    currentPlayerIndex: 0,
+    handOver: false,
+    gameOver: false,
+    handNumber: 1,
+    sequence: 1,
+    winnerId: null,
+    config: room.config,
+  } as any;
+  return room;
+}
+
+function initAbandonTestSession() {
+  initRoomSession(
+    { sockets: { sockets: new Map() } } as any,
+    {
+      resolveSocketIdentity: async () => ({ username: 'Guest', userId: null }),
+      normalizeUsername: (value: unknown) => (typeof value === 'string' ? value : 'Guest'),
+      normalizeUserId: (value: unknown) => (typeof value === 'string' ? value : null),
+      tryHydrateMatchmakingRoomShell: async () => 'skipped',
+      waitUntilMatchmakingRoomSocketsReady: async () => undefined,
+      onAfterMatchStarted: async () => undefined,
+      notifyRoomPlayersInGame: () => undefined,
+      maybeFinalizeTournamentMatch: () => undefined,
+      persistRoomMatchLog: persistRoomMatchLogMock,
+      onGameOver: () => null,
+      finalizeTournamentMatch: () => undefined,
+    },
+  );
+}
+
 describe('room:abandon_match', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    initRoomSession(
-      { sockets: { sockets: new Map() } } as any,
-      {
-        resolveSocketIdentity: async () => ({ username: 'Guest', userId: null }),
-        normalizeUsername: (value: unknown) => (typeof value === 'string' ? value : 'Guest'),
-        normalizeUserId: (value: unknown) => (typeof value === 'string' ? value : null),
-        tryHydrateMatchmakingRoomShell: async () => 'skipped',
-        waitUntilMatchmakingRoomSocketsReady: async () => undefined,
-        onAfterMatchStarted: async () => undefined,
-        notifyRoomPlayersInGame: () => undefined,
-        maybeFinalizeTournamentMatch: () => undefined,
-        persistRoomMatchLog: async () => undefined,
-        onGameOver: () => null,
-        finalizeTournamentMatch: () => undefined,
-      },
-    );
+    resetRoomRuntimeForTests();
+    initAbandonTestSession();
   });
 
   it('rejects an unauthenticated user', async () => {
@@ -215,5 +242,85 @@ describe('room:abandon_match', () => {
     expect(ack).toHaveBeenCalledWith(
       expect.objectContaining({ ok: true, isTournament: true, tournamentId: 'tour-1' }),
     );
+  });
+});
+
+describe('room:leave mid-match auto-forfeit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetRoomRuntimeForTests();
+    initAbandonTestSession();
+  });
+
+  it('sets abandonedAt and emits room:match_abandoned when leaving during active game', async () => {
+    const roomCode = 'LEAVE1';
+    seedActiveMidGameRoom(roomCode);
+    const { socket, handlers } = makeSocket('u1', 'ollie');
+    socket.join(roomCode);
+    socket.data.roomId = roomCode;
+    const io = makeIo(socket);
+    registerRoomSessionHandlers(io, socket);
+
+    const ack = vi.fn();
+    await handlers.get('room:leave')?.(roomCode, ack);
+
+    expect(ack).toHaveBeenCalledWith({ ok: true, roomCode });
+    expect(getRoom(roomCode).abandonedAt).toEqual(expect.any(String));
+    expect(persistRoomMatchLogMock).toHaveBeenCalledWith(expect.anything(), 'abandoned');
+    expect(io.__emit).toHaveBeenCalledWith(
+      'room:match_abandoned',
+      expect.objectContaining({
+        roomCode,
+        abandonedUserId: 'u1',
+        winnerId: 'u2',
+      }),
+    );
+    expect(recordMatchEndMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matchId: 'mm-1',
+        status: 'forfeit',
+        winnerId: 'u2',
+      }),
+    );
+  });
+
+  it('does not forfeit when leaveTrackedRoom is called with preserveSeat during active game', async () => {
+    const roomCode = 'LEAVE2';
+    seedActiveMidGameRoom(roomCode);
+    const { socket } = makeSocket('u1', 'ollie');
+    socket.join(roomCode);
+    socket.data.roomId = roomCode;
+    const io = makeIo(socket);
+    registerRoomSessionHandlers(io, socket);
+
+    const leaveTrackedRoom = (socket as any).__leaveTrackedRoom as (
+      roomCode: string,
+      options?: { preserveSeat?: boolean },
+    ) => Promise<void>;
+    await leaveTrackedRoom(roomCode, { preserveSeat: true });
+
+    expect(getRoom(roomCode).abandonedAt).toBeUndefined();
+    expect(persistRoomMatchLogMock).not.toHaveBeenCalled();
+    expect(io.__emit).not.toHaveBeenCalledWith('room:match_abandoned', expect.anything());
+    expect(getRoom(roomCode).players).toContain('p1');
+  });
+
+  it('does not forfeit lobby room:leave when room.state is null', async () => {
+    const roomCode = 'LEAVE3';
+    seedCasualRoom(roomCode);
+    const { socket, handlers } = makeSocket('u1', 'ollie');
+    socket.join(roomCode);
+    socket.data.roomId = roomCode;
+    const io = makeIo(socket);
+    registerRoomSessionHandlers(io, socket);
+
+    const ack = vi.fn();
+    await handlers.get('room:leave')?.(roomCode, ack);
+
+    expect(ack).toHaveBeenCalledWith({ ok: true, roomCode });
+    expect(getRoom(roomCode).abandonedAt).toBeUndefined();
+    expect(persistRoomMatchLogMock).not.toHaveBeenCalled();
+    expect(io.__emit).not.toHaveBeenCalledWith('room:match_abandoned', expect.anything());
+    expect(getRoom(roomCode).players).not.toContain('p1');
   });
 });

@@ -6,6 +6,7 @@ import { traceSocketEvent } from '../debug/socketTrace';
 import { playBlockedSound, playHandLoseSound, playHandWinSound } from '../utils/sound';
 import type { GameState, Move, Tile } from '../types';
 import { wrapSocketHandler } from './socketGuards';
+import { emitRoomAbandonMatch, emitRoomLeave } from './roomTransport';
 import type {
   MultiplayerAuthRuntime,
   MultiplayerConnectionConfig,
@@ -745,13 +746,37 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
       window.localStorage.removeItem(p.lastRoomStorageKey);
     }
     const socket = p.socketRef.current;
-    if (socket) {
-      const activeRoomCode = p.normalizeRoomCode(p.joinedRoomRef.current);
-      if (socket.connected && activeRoomCode) {
-        socket.emit('room:leave', activeRoomCode);
+    const activeRoomCode = p.normalizeRoomCode(p.joinedRoomRef.current);
+    const midActiveMatch = Boolean(
+      p.stateRef.current && !p.stateRef.current.gameOver,
+    );
+
+    void (async () => {
+      if (socket?.connected && activeRoomCode) {
+        if (midActiveMatch) {
+          try {
+            await emitRoomAbandonMatch(socket, {
+              roomCode: activeRoomCode,
+              tournamentMatchId: null,
+            });
+          } catch (abandonErr) {
+            console.warn('[nav] abandon failed, falling back to room:leave', abandonErr);
+            emitRoomLeave(socket, activeRoomCode);
+          }
+        } else {
+          emitRoomLeave(socket, activeRoomCode);
+        }
       }
-      socket.removeAllListeners();
-      socket.disconnect();
+      if (socket) {
+        socket.removeAllListeners();
+        socket.disconnect();
+        if (p.socketRef.current === socket) {
+          p.socketRef.current = null;
+        }
+      }
+    })();
+
+    if (socket && p.socketRef.current === socket) {
       p.socketRef.current = null;
     }
     p.setSocket(null);

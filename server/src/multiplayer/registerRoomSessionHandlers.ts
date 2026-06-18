@@ -66,22 +66,128 @@ import {
   type RoomPlayer,
 } from './roomSession';
 
+type ForfeitLeavingPlayer = {
+  id: string;
+  username: string;
+  userId: string | null;
+};
+
+/**
+ * Marks a match as forfeited. No-op when already abandoned or game over.
+ * Does not remove the seat — leaveTrackedRoom does that after forfeit.
+ */
+async function applyActiveMatchForfeit(
+  io: Server,
+  socket: Socket,
+  roomCode: string,
+  abandoningPlayer: ForfeitLeavingPlayer,
+): Promise<{ winnerUserId: string | null } | null> {
+  const handlerDeps = requireRoomSessionHandlerDeps();
+  const room = getRoom(roomCode);
+
+  if (room.abandonedAt || room.state?.gameOver) {
+    return null;
+  }
+
+  const authenticatedUserId =
+    handlerDeps.normalizeUserId(abandoningPlayer.userId ?? socket.data?.userId);
+  const rosterCached = getRoomRoster(roomCode);
+  const roster =
+    rosterCached.length > 0 ? rosterCached : getRoomPlayersWithFallback(roomCode, room.players);
+
+  const opponentSeatId = room.players.find((seatId) => seatId !== abandoningPlayer.id) ?? null;
+  const opponentPlayer =
+    opponentSeatId
+      ? roster.find((player) => player.id === opponentSeatId)
+        ?? { id: opponentSeatId, socketId: '', username: 'Opponent', userId: null }
+      : null;
+
+  const nowIso = new Date().toISOString();
+  room.abandonedAt = nowIso;
+  room.abandonedByUserId = authenticatedUserId;
+  room.abandonedReason = 'forfeit';
+
+  let winnerUserId = opponentPlayer?.userId ?? null;
+  if (room.scheduledTournamentMatchId) {
+    const match = await fetchMatchById(room.scheduledTournamentMatchId);
+    if (!match || !match.player1_id || !match.player2_id) {
+      throw new Error('match_not_found');
+    }
+    winnerUserId =
+      match.player1_id === authenticatedUserId ? match.player2_id : match.player1_id;
+    const winTarget =
+      typeof room.config.winningScore === 'number' && Number.isFinite(room.config.winningScore)
+        ? room.config.winningScore
+        : 30;
+    const statusReason =
+      match.player1_id === authenticatedUserId ? 'player1_forfeit' : 'player2_forfeit';
+    await applyMatchResult(io, {
+      matchId: match.id,
+      winnerId: winnerUserId,
+      player1Score: match.player1_id === winnerUserId ? winTarget : 0,
+      player2Score: match.player2_id === winnerUserId ? winTarget : 0,
+      winnerSource: 'forfeit',
+      statusReason,
+      forfeitUserId: authenticatedUserId,
+    });
+    console.log('[tournament:forfeit] applied', {
+      matchId: match.id,
+      tournamentId: match.tournament_id,
+      loserId: authenticatedUserId,
+      winnerId: winnerUserId,
+    });
+  }
+
+  if (room.matchmakingMatchId) {
+    await recordMatchEnd({
+      matchId: room.matchmakingMatchId,
+      status: 'forfeit',
+      winnerId: winnerUserId,
+      playerARatingChange: null,
+      playerBRatingChange: null,
+      isSim: false,
+    });
+  }
+
+  room.abandonedWinnerUserId = winnerUserId;
+  clearReconnectSeatsForRoom(roomCode);
+  appendRoomEvent(room, {
+    type: 'player_left',
+    actorSocketId: socket.id,
+    actorUserId: authenticatedUserId,
+    payload: {
+      preserveSeat: false,
+      playerSeatId: abandoningPlayer.id,
+      abandoned: true,
+    },
+  });
+  await handlerDeps.persistRoomMatchLog(room, 'abandoned');
+  io.to(roomCode).emit('room:match_abandoned', {
+    roomCode,
+    abandonedUserId: authenticatedUserId,
+    abandonedUsername: abandoningPlayer.username,
+    winnerId: winnerUserId,
+    message: `${abandoningPlayer.username} left the game`,
+    tournamentId: room.scheduledTournamentId ?? null,
+    scheduledTournamentMatchId: room.scheduledTournamentMatchId ?? null,
+    isTournament: Boolean(room.scheduledTournamentMatchId),
+  });
+
+  return { winnerUserId };
+}
+
 export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
   const handlerDeps = requireRoomSessionHandlerDeps();
 
-    const leaveTrackedRoom = (
+    const leaveTrackedRoom = async (
       roomCode: string | undefined,
       options: { preserveSeat?: boolean } = {},
-    ) => {
+    ): Promise<void> => {
       if (!roomCode) return;
       const code = roomCode.trim().toUpperCase();
       if (!code) return;
 
       const preserveSeat = Boolean(options.preserveSeat);
-      socket.leave(code);
-      if (socket.data.roomId === code) {
-        socket.data.roomId = undefined;
-      }
 
       let room: Room | null = null;
       try {
@@ -89,6 +195,10 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
       } catch {
         clearRoomMetadata(code);
         cancelRoomCleanup(code);
+        socket.leave(code);
+        if (socket.data.roomId === code) {
+          socket.data.roomId = undefined;
+        }
         return;
       }
 
@@ -96,16 +206,56 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
       const wasPlayer = playerSeatId ? room.players.includes(playerSeatId) : false;
       clearSocketRematchReady(code, socket.id);
 
-      if (!preserveSeat && wasPlayer && playerSeatId) {
-        appendRoomEvent(room, {
-          type: 'player_left',
-          actorSocketId: socket.id,
-          actorUserId: handlerDeps.normalizeUserId(socket.data?.userId),
-          payload: {
-            preserveSeat,
+      const shouldForfeit =
+        !preserveSeat &&
+        wasPlayer &&
+        playerSeatId &&
+        room.state != null &&
+        !room.state.gameOver &&
+        !room.abandonedAt;
+
+      if (shouldForfeit) {
+        const rosterCached = getRoomRoster(code);
+        const roster =
+          rosterCached.length > 0 ? rosterCached : getRoomPlayersWithFallback(code, room.players);
+        const abandoningPlayer =
+          roster.find((player) => player.id === playerSeatId)
+          ?? {
+            id: playerSeatId,
+            socketId: socket.id,
+            username: handlerDeps.normalizeUsername(socket.data?.username),
+            userId: handlerDeps.normalizeUserId(socket.data?.userId),
+          };
+
+        try {
+          await applyActiveMatchForfeit(io, socket, code, abandoningPlayer);
+        } catch (err) {
+          console.error('[room:leave] forfeit failed', {
+            roomCode: code,
             playerSeatId,
-          },
-        });
+            error: err instanceof Error ? err.message : err,
+          });
+        }
+        room = getRoom(code);
+      }
+
+      socket.leave(code);
+      if (socket.data.roomId === code) {
+        socket.data.roomId = undefined;
+      }
+
+      if (!preserveSeat && wasPlayer && playerSeatId) {
+        if (!room.abandonedAt) {
+          appendRoomEvent(room, {
+            type: 'player_left',
+            actorSocketId: socket.id,
+            actorUserId: handlerDeps.normalizeUserId(socket.data?.userId),
+            payload: {
+              preserveSeat,
+              playerSeatId,
+            },
+          });
+        }
         room.players = room.players.filter((pid) => pid !== playerSeatId);
         const nextRoster = getRoomRoster(code).filter((player) => player.id !== playerSeatId);
         if (nextRoster.length > 0) {
@@ -126,7 +276,9 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
 
     const leaveExistingSocketRooms = () => {
       const previousRooms = [...socket.rooms].filter((roomId) => roomId !== socket.id);
-      previousRooms.forEach((roomId) => leaveTrackedRoom(roomId));
+      previousRooms.forEach((roomId) => {
+        void leaveTrackedRoom(roomId);
+      });
       socket.data.roomId = undefined;
     };
 
@@ -818,15 +970,20 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
       }
     });
 
-    socket.on('room:leave', (roomCode: unknown, cb?: AckFn) => {
+    socket.on('room:leave', async (roomCode: unknown, cb?: AckFn) => {
       const code = typeof roomCode === 'string' ? roomCode.trim().toUpperCase() : '';
       if (!code) {
         cb?.({ ok: false, error: 'missing_code' });
         return;
       }
 
-      leaveTrackedRoom(code);
-      cb?.({ ok: true, roomCode: code });
+      try {
+        await leaveTrackedRoom(code);
+        cb?.({ ok: true, roomCode: code });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'leave_failed';
+        cb?.({ ok: false, error: message });
+      }
     });
 
     socket.on('room:abandon_match', async (payload: unknown, cb?: AckFn) => {
@@ -889,93 +1046,28 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
           return;
         }
 
-        const opponentSeatId = room.players.find((seatId) => seatId !== abandoningPlayer.id) ?? null;
-        const opponentPlayer =
-          opponentSeatId
-            ? roster.find((player) => player.id === opponentSeatId)
-              ?? { id: opponentSeatId, socketId: '', username: 'Opponent', userId: null }
-            : null;
-        const nowIso = new Date().toISOString();
-        room.abandonedAt = nowIso;
-        room.abandonedByUserId = authenticatedUserId;
-        room.abandonedReason = 'forfeit';
-
-        let winnerUserId = opponentPlayer?.userId ?? null;
-        if (room.scheduledTournamentMatchId) {
-          const match = await fetchMatchById(room.scheduledTournamentMatchId);
-          if (!match || !match.player1_id || !match.player2_id) {
-            cb?.({ ok: false, error: 'match_not_found' });
-            return;
-          }
-          winnerUserId =
-            match.player1_id === authenticatedUserId ? match.player2_id : match.player1_id;
-          const winTarget =
-            typeof room.config.winningScore === 'number' && Number.isFinite(room.config.winningScore)
-              ? room.config.winningScore
-              : 30;
-          const statusReason =
-            match.player1_id === authenticatedUserId ? 'player1_forfeit' : 'player2_forfeit';
-          await applyMatchResult(io, {
-            matchId: match.id,
-            winnerId: winnerUserId,
-            player1Score: match.player1_id === winnerUserId ? winTarget : 0,
-            player2Score: match.player2_id === winnerUserId ? winTarget : 0,
-            winnerSource: 'forfeit',
-            statusReason,
-            forfeitUserId: authenticatedUserId,
+        const result = await applyActiveMatchForfeit(io, socket, roomCode, abandoningPlayer);
+        if (!result) {
+          const error = room.abandonedAt ? 'match_abandoned' : 'match_completed';
+          console.log('[room:abandon] rejected', {
+            roomCode,
+            userId: authenticatedUserId,
+            reason: error,
           });
-          console.log('[tournament:forfeit] applied', {
-            matchId: match.id,
-            tournamentId: match.tournament_id,
-            loserId: authenticatedUserId,
-            winnerId: winnerUserId,
-          });
+          cb?.({ ok: false, error });
+          return;
         }
 
-        if (room.matchmakingMatchId) {
-          await recordMatchEnd({
-            matchId: room.matchmakingMatchId,
-            status: 'forfeit',
-            winnerId: winnerUserId,
-            playerARatingChange: null,
-            playerBRatingChange: null,
-            isSim: false,
-          });
-        }
-
-        room.abandonedWinnerUserId = winnerUserId;
-        clearReconnectSeatsForRoom(roomCode);
-        appendRoomEvent(room, {
-          type: 'player_left',
-          actorSocketId: socket.id,
-          actorUserId: authenticatedUserId,
-          payload: {
-            preserveSeat: false,
-            playerSeatId: abandoningPlayer.id,
-            abandoned: true,
-          },
-        });
-        await handlerDeps.persistRoomMatchLog(room, 'abandoned');
-        io.to(roomCode).emit('room:match_abandoned', {
-          roomCode,
-          abandonedUserId: authenticatedUserId,
-          abandonedUsername: abandoningPlayer.username,
-          winnerId: winnerUserId,
-          message: `${abandoningPlayer.username} left the game`,
-          tournamentId: room.scheduledTournamentId ?? null,
-          scheduledTournamentMatchId: room.scheduledTournamentMatchId ?? null,
-          isTournament: Boolean(room.scheduledTournamentMatchId),
-        });
-        leaveTrackedRoom(roomCode);
+        await leaveTrackedRoom(roomCode);
         console.log('[room:abandon] completed', {
           roomCode,
           abandonedUserId: authenticatedUserId,
-          winnerId: winnerUserId,
+          winnerId: result.winnerUserId,
         });
         cb?.({
           ok: true,
           roomCode,
-          winnerId: winnerUserId,
+          winnerId: result.winnerUserId,
           isTournament: Boolean(room.scheduledTournamentMatchId),
           tournamentId: room.scheduledTournamentId ?? null,
         });
@@ -1344,9 +1436,9 @@ export function handleRoomPlayerDisconnect(
   }
 
   const leaveTrackedRoom = (socket as any).__leaveTrackedRoom as
-    | ((roomCode: string | undefined, options?: { preserveSeat?: boolean }) => void)
+    | ((roomCode: string | undefined, options?: { preserveSeat?: boolean }) => void | Promise<void>)
     | undefined;
-  leaveTrackedRoom?.(roomCode, { preserveSeat: wasActiveRoomPlayer });
+  void leaveTrackedRoom?.(roomCode, { preserveSeat: wasActiveRoomPlayer });
 
   return { wasActiveRoomPlayer, roomCode };
 }
