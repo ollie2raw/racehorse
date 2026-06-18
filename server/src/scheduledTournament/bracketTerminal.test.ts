@@ -135,8 +135,9 @@ describe('deriveBracketTerminalState', () => {
   });
 
   it('schedules auto-kick after the bracket grace window', () => {
-    const completedAt = Date.now() - 60_000;
-    const wait = msUntilBracketAutoKick(completedAt, Date.now());
+    const now = Date.now();
+    const completedAt = now - 60_000;
+    const wait = msUntilBracketAutoKick(completedAt, now);
     expect(wait).toBe(TOURNAMENT_BRACKET_AUTO_KICK_MS - 60_000);
   });
 });
