@@ -7006,19 +7006,6 @@ export default function BotMatchScreen({
     });
   };
 
-  if (!match || !match.players || !match.players.you || !match.players.bot) {
-    return (
-      <div className="screen game-screen walnut-live theme-green bot-match-screen" style={{ display: 'grid', placeItems: 'center' }}>
-        <div style={{ textAlign: 'center', color: 'white', padding: 40 }}>
-          <h3>Game State Error</h3>
-          <p>The match state is incomplete or malformed.</p>
-          <button className="btn rh-back-button" onClick={exitMatch}>← Back to Home</button>
-        </div>
-      </div>
-    );
-  }
-
-
   const isFullscreenReady = true;
   const isLessonLayoutMode = lessonLayoutMode;
 
@@ -7295,6 +7282,18 @@ export default function BotMatchScreen({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [showFullCoachTip]);
+
+  if (!match || !match.players || !match.players.you || !match.players.bot) {
+    return (
+      <div className="screen game-screen walnut-live theme-green bot-match-screen" style={{ display: 'grid', placeItems: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'white', padding: 40 }}>
+          <h3>Game State Error</h3>
+          <p>The match state is incomplete or malformed.</p>
+          <button className="btn rh-back-button" onClick={exitMatch}>← Back to Home</button>
+        </div>
+      </div>
+    );
+  }
 
   const handTray = preGameDrawActive && preGameDraw.drawState ? (
     <div className="hand-area wl-hand-area pre-game-draw-hand-dock" data-ui="tray" aria-hidden="true" />

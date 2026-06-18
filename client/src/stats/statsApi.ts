@@ -24,47 +24,41 @@ export interface RecordMatchInput {
   metadata?: Record<string, unknown>;
 }
 
+async function recordMatchAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (!supabase) return headers;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token ?? null;
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } catch {
+    // fall through without auth header
+  }
+  return headers;
+}
+
 export async function recordMatchResult(
   input: RecordMatchInput,
 ): Promise<{ error: string | null }> {
-  if (!supabase) return { error: null };
+  const serverUrl = resolveGameServerUrl();
+  if (!serverUrl || !supabase) return { error: null };
 
-  const basePayload: Record<string, unknown> = {
-    mode: input.mode,
-    room_code: input.roomCode ?? null,
-    winner_user_id: input.winnerUserId,
-    loser_user_id: input.loserUserId,
-    winner_score: input.winnerScore,
-    loser_score: input.loserScore,
-    move_count: input.moveCount,
-    metadata: {
-      opponentType: input.opponentType,
-      ...(input.metadata ?? {}),
-    },
-  };
-  const includeMoveQuality =
-    typeof input.avgMoveQuality === 'number' &&
-    Number.isFinite(input.avgMoveQuality) &&
-    input.avgMoveQuality > 0;
-  const payload: Record<string, unknown> = includeMoveQuality
-    ? { ...basePayload, avg_move_quality: input.avgMoveQuality }
-    : basePayload;
-
-  let { error } = await supabase.from('matches').insert(payload);
-
-  // Backward-compatible retry for deployments where avg_move_quality column is not added yet.
-  if (
-    error &&
-    includeMoveQuality &&
-    (error.message.toLowerCase().includes('avg_move_quality') ||
-      error.message.toLowerCase().includes('column') ||
-      String((error as { code?: string }).code ?? '') === '42703')
-  ) {
-    const retry = await supabase.from('matches').insert(basePayload);
-    error = retry.error;
+  try {
+    const headers = await recordMatchAuthHeaders();
+    const response = await fetch(`${serverUrl}/api/stats/record-match`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+      const message = typeof body?.error === 'string' ? body.error : `Request failed (${response.status})`;
+      return { error: message };
+    }
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Failed to record match.' };
   }
-
-  return { error: error?.message ?? null };
 }
 
 export interface StatsSummary {

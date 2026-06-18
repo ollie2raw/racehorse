@@ -35,6 +35,7 @@ import {
 import { computeWeeklyAwards, appendMatch } from "./stats/matchLog";
 import { computeOnlineCurrentWinStreak } from './stats/onlineWinStreak';
 import { recordPublicOnlineMatch } from './stats/recordPublicMatch';
+import { recordUserMatch } from './stats/recordUserMatch';
 import { socialRouter } from './social/routes';
 import { registerFriendInviteHandlers } from './social/registerFriendInviteHandlers';
 import { upsertPresence } from './social/presence';
@@ -584,6 +585,41 @@ app.get('/api/home/daily-summary', async (req, res) => {
       return;
     }
     res.status(500).json({ error: message });
+  }
+});
+
+app.post('/api/stats/record-match', async (req, res) => {
+  try {
+    const authenticatedUserId = await getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const result = await recordUserMatch({
+      authenticatedUserId,
+      mode: req.body?.mode,
+      opponentType: req.body?.opponentType,
+      winnerUserId: req.body?.winnerUserId ?? null,
+      loserUserId: req.body?.loserUserId ?? null,
+      winnerScore: req.body?.winnerScore ?? null,
+      loserScore: req.body?.loserScore ?? null,
+      moveCount: req.body?.moveCount ?? null,
+      avgMoveQuality: req.body?.avgMoveQuality ?? null,
+      roomCode: req.body?.roomCode ?? null,
+      metadata: req.body?.metadata ?? null,
+    });
+
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+
+    res.json({ ok: true, replayed: result.replayed ?? false });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to record match.',
+    });
   }
 });
 
@@ -1343,7 +1379,12 @@ app.post('/league/fixture/:fixtureId/live-room', async (req, res) => {
   }
 });
 
-app.post('/bot-matches/cleanup-stale', async (_req, res) => {
+app.post('/bot-matches/cleanup-stale', async (req, res) => {
+  if (!isAdminSecret(req.body?.adminKey)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
   try {
     const threshold = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const staleRows = await supabaseFetch<any[]>(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
 import DominoTile from '../components/DominoTile';
 import { computeOpenEndsSum } from '../bot/botEngine';
@@ -201,6 +201,79 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
       }
     };
   }, []);
+
+  const advanceDrillRound = useCallback((step: DrillTileSpeedStep) => {
+    setDrillFeedback(null);
+    setDrillRoundResolved(false);
+    setDrillRoundIndex((prev) => {
+      const next = prev + 1;
+      if (next >= step.rounds) {
+        setDrillCompleted(true);
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
+  const completeDrillRound = useCallback(
+    (step: DrillTileSpeedStep, correct: boolean, elapsedMs: number | null) => {
+      setDrillResults((prev) => {
+        if (prev.some((result) => result.roundIndex === drillRoundIndex)) return prev;
+        return [...prev, { roundIndex: drillRoundIndex, correct, ms: elapsedMs }];
+      });
+      setDrillRoundResolved(true);
+      setDrillFeedback(
+        correct
+          ? 'Nice.'
+          : `Time. Open ends were ${openEnds.length > 0 ? openEnds.join(' and ') : 'unavailable'}.`,
+      );
+      if (drillAdvanceTimeoutRef.current !== null) {
+        window.clearTimeout(drillAdvanceTimeoutRef.current);
+      }
+      drillAdvanceTimeoutRef.current = window.setTimeout(() => advanceDrillRound(step), 250);
+    },
+    [advanceDrillRound, drillRoundIndex, openEnds],
+  );
+
+  useEffect(() => {
+    if (!isDrillStep || drillCompleted || !drillStarted) return;
+    const step = currentStep as DrillTileSpeedStep;
+    if (drillRoundIndex >= step.rounds || drillRoundResolved) return;
+
+    const start = performance.now();
+    const roundMs = Math.max(250, step.secondsPerRound * 1000);
+    drillRoundStartRef.current = start;
+    drillRoundDeadlineRef.current = start + roundMs;
+    setDrillTimeLeftMs(roundMs);
+
+    const tick = () => {
+      const now = performance.now();
+      const remaining = Math.max(0, drillRoundDeadlineRef.current - now);
+      setDrillTimeLeftMs(remaining);
+      if (remaining <= 0) {
+        completeDrillRound(step, false, null);
+        return;
+      }
+      drillFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    drillFrameRef.current = window.requestAnimationFrame(tick);
+
+    return () => {
+      if (drillFrameRef.current !== null) {
+        window.cancelAnimationFrame(drillFrameRef.current);
+        drillFrameRef.current = null;
+      }
+    };
+  }, [
+    completeDrillRound,
+    currentStep,
+    drillCompleted,
+    drillRoundIndex,
+    drillRoundResolved,
+    drillStarted,
+    isDrillStep,
+  ]);
 
   if (!lesson) {
     return (
@@ -510,36 +583,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     predictionTimeoutRef.current = window.setTimeout(() => setQuizSolved(true), isCorrect ? 1000 : 1500);
   };
 
-  const advanceDrillRound = (step: DrillTileSpeedStep) => {
-    setDrillFeedback(null);
-    setDrillRoundResolved(false);
-    setDrillRoundIndex((prev) => {
-      const next = prev + 1;
-      if (next >= step.rounds) {
-        setDrillCompleted(true);
-        return prev;
-      }
-      return next;
-    });
-  };
-
-  const completeDrillRound = (step: DrillTileSpeedStep, correct: boolean, elapsedMs: number | null) => {
-    setDrillResults((prev) => {
-      if (prev.some((result) => result.roundIndex === drillRoundIndex)) return prev;
-      return [...prev, { roundIndex: drillRoundIndex, correct, ms: elapsedMs }];
-    });
-    setDrillRoundResolved(true);
-    setDrillFeedback(
-      correct
-        ? 'Nice.'
-        : `Time. Open ends were ${openEnds.length > 0 ? openEnds.join(' and ') : 'unavailable'}.`,
-    );
-    if (drillAdvanceTimeoutRef.current !== null) {
-      window.clearTimeout(drillAdvanceTimeoutRef.current);
-    }
-    drillAdvanceTimeoutRef.current = window.setTimeout(() => advanceDrillRound(step), 250);
-  };
-
   const handleDrillTileClick = (step: DrillTileSpeedStep, clicked: LearnTile) => {
     if (drillCompleted || drillRoundResolved) return;
     const playable = isTilePlayable(toTile(clicked), quizBoard);
@@ -568,38 +611,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     setDrillCompleted(false);
     setDrillStarted(false);
   };
-
-  useEffect(() => {
-    if (!isDrillStep || drillCompleted || !drillStarted) return;
-    const step = currentStep as DrillTileSpeedStep;
-    if (drillRoundIndex >= step.rounds || drillRoundResolved) return;
-
-    const start = performance.now();
-    const roundMs = Math.max(250, step.secondsPerRound * 1000);
-    drillRoundStartRef.current = start;
-    drillRoundDeadlineRef.current = start + roundMs;
-    setDrillTimeLeftMs(roundMs);
-
-    const tick = () => {
-      const now = performance.now();
-      const remaining = Math.max(0, drillRoundDeadlineRef.current - now);
-      setDrillTimeLeftMs(remaining);
-      if (remaining <= 0) {
-        completeDrillRound(step, false, null);
-        return;
-      }
-      drillFrameRef.current = window.requestAnimationFrame(tick);
-    };
-
-    drillFrameRef.current = window.requestAnimationFrame(tick);
-
-    return () => {
-      if (drillFrameRef.current !== null) {
-        window.cancelAnimationFrame(drillFrameRef.current);
-        drillFrameRef.current = null;
-      }
-    };
-  }, [isDrillStep, currentStep, drillCompleted, drillRoundIndex, drillRoundResolved, drillStarted]);
 
   const completionLabel = isLearnLessonCompleted(lesson.id) ? 'Completed' : 'In progress';
   const nextDisabled = !showCompletedState

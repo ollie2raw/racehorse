@@ -808,6 +808,26 @@ export default function DailyPuzzleScreen({
     return () => window.removeEventListener('resize', updateHandTileSize);
   }, [runtimeState?.players.you.hand.length]);
 
+  const completedScoreForSummary = useMemo(() => {
+    const isOneTurnHighScore = puzzle?.puzzleType === 'one_turn_high_score';
+    const currentScore = runtimeState?.players.you.score ?? 0;
+    return isOneTurnHighScore ? (finalScore ?? currentScore) : currentScore;
+  }, [puzzle?.puzzleType, finalScore, runtimeState?.players.you.score]);
+
+  const completionSummary = useMemo(() => {
+    const completionRatio = bestPossibleScore > 0 ? completedScoreForSummary / bestPossibleScore : 1;
+    const completionMessage =
+      completedScoreForSummary >= bestPossibleScore
+        ? { text: '🏆 Perfect!', color: '#d8b56f' }
+        : completionRatio >= 0.8
+          ? { text: '⭐ Great solve!', color: 'rgba(125, 241, 197, 0.95)' }
+          : { text: 'Keep practicing!', color: 'rgba(232,245,240,0.85)' };
+    return {
+      completionMessage,
+      modalLeaderboard: leaderboard.slice(0, 20),
+    };
+  }, [bestPossibleScore, completedScoreForSummary, leaderboard]);
+
   const resetAttempt = () => {
     if (!puzzle) return;
     const start = createPuzzleMatchState(puzzle);
@@ -1481,23 +1501,8 @@ export default function DailyPuzzleScreen({
   if (!puzzle) return null;
 
   const solvableWarning = Boolean(validation && !validation.solvable);
-  const isOneTurnHighScore = puzzle.puzzleType === 'one_turn_high_score';
   const formattedPuzzleDate = formatPuzzleDateLabel(puzzle.puzzleDate);
-  const currentScore = runtimeState?.players.you.score ?? 0;
-  const completedScore = isOneTurnHighScore ? (finalScore ?? currentScore) : currentScore;
-  const completionSummary = useMemo(() => {
-    const completionRatio = bestPossibleScore > 0 ? completedScore / bestPossibleScore : 1;
-    const completionMessage =
-      completedScore >= bestPossibleScore
-        ? { text: '🏆 Perfect!', color: '#d8b56f' }
-        : completionRatio >= 0.8
-          ? { text: '⭐ Great solve!', color: 'rgba(125, 241, 197, 0.95)' }
-          : { text: 'Keep practicing!', color: 'rgba(232,245,240,0.85)' };
-    return {
-      completionMessage,
-      modalLeaderboard: leaderboard.slice(0, 20),
-    };
-  }, [bestPossibleScore, completedScore, leaderboard]);
+  const completedScore = completedScoreForSummary;
 
   if (!runtimeState) {
     return (
