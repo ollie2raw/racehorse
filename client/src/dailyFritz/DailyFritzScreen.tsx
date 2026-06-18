@@ -1584,11 +1584,7 @@ export default function DailyFritzScreen({
                 <div className="df-pvf-card-header">
                   <div className="df-pvf-card-eyebrow">TODAY&apos;S OPPONENT</div>
                   <h2 className="df-pvf-card-name">Fritz</h2>
-                  <p className="df-pvf-card-description">
-                    &ldquo;same set for everyone.&rdquo; Elite Fritz — honest rules, no resets.
-                    <br />
-                    Strong competitive play; losing sometimes is expected.
-                  </p>
+                  <p className="df-pvf-card-description">Same set for everyone.</p>
                 </div>
 
                 <div className="df-pvf-card-badges">
