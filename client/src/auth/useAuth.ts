@@ -10,6 +10,8 @@ export interface UserProfile {
   username: string;
   created_at?: string;
   glicko_rating?: number | null;
+  glicko_rd?: number | null;
+  glicko_vol?: number | null;
   ghost_rating?: number | null;
   ranked_games_played?: number | null;
 }

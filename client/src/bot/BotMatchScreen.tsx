@@ -64,6 +64,7 @@ import {
 import { chooseBotMove, toBotVisibleState, type BotChoice } from './botHeuristics';
 import { fairnessLog } from './fairnessLog';
 import { FRITZ_TIERS, type FritzTier } from './fritzConfig';
+import { predictFritzGlickoUpdate } from '../ranking/predictFritzGlickoUpdate.ts';
 import { FRITZ_POSTGAME_TRUST_LINE } from './fritzTrustCopy';
 import {
   completeGhostGame,
@@ -243,6 +244,9 @@ interface BotMatchScreenProps {
   opponentName?: string;
   opponentUserId?: string | null;
   currentGlickoRating?: number | null;
+  currentGlickoRd?: number | null;
+  currentGlickoVol?: number | null;
+  rankedGamesPlayed?: number | null;
   ghostProfile?: GhostProfileSummary | null;
   onGhostProfileChange?: ((summary: GhostProfileSummary | null) => void) | null;
   onProfileRefresh?: (() => Promise<void> | void) | null;
@@ -757,6 +761,9 @@ export default function BotMatchScreen({
   opponentName = 'Fritz',
   opponentUserId = null,
   currentGlickoRating = null,
+  currentGlickoRd = null,
+  currentGlickoVol = null,
+  rankedGamesPlayed = null,
   ghostProfile = null,
   onGhostProfileChange = null,
   onProfileRefresh = null,
@@ -6855,18 +6862,56 @@ export default function BotMatchScreen({
     [handReveal, opponentLabel],
   );
   const ghostResultMessage = getGhostResultMessage(match.players.you.score, match.players.bot.score);
+  const predictedFritzGlicko = useMemo(() => {
+    if (!isStandaloneFritzMatch || isGhostMode || isDailyFritzMode || !match.gameOver) return null;
+    return predictFritzGlickoUpdate({
+      fritzId: fritzConfig.id,
+      playerScore: match.players.you.score,
+      opponentScore: match.players.bot.score,
+      glickoRating: matchStartGlickoRating ?? currentGlickoRating,
+      glickoRd: currentGlickoRd,
+      glickoVol: currentGlickoVol,
+      rankedGamesPlayed,
+    });
+  }, [
+    currentGlickoRating,
+    currentGlickoRd,
+    currentGlickoVol,
+    fritzConfig.id,
+    isDailyFritzMode,
+    isGhostMode,
+    isStandaloneFritzMatch,
+    match.gameOver,
+    match.players.bot.score,
+    match.players.you.score,
+    matchStartGlickoRating,
+    rankedGamesPlayed,
+  ]);
+
+  useEffect(() => {
+    if (!predictedFritzGlicko || !onProfilePatch) return;
+    if (ghostResult?.glickoRating != null) return;
+    onProfilePatch({ glicko_rating: predictedFritzGlicko.glickoRating });
+  }, [ghostResult?.glickoRating, onProfilePatch, predictedFritzGlicko]);
+
   const fritzGlickoDelta =
     !isGhostMode && ghostResult?.glickoDelta != null
       ? roundedRatingDelta(ghostResult.glickoDelta)
+      : !isGhostMode && predictedFritzGlicko != null
+        ? roundedRatingDelta(predictedFritzGlicko.glickoDelta)
       : !isGhostMode && ghostResult?.glickoRating != null && matchStartGlickoRating != null
         ? roundedRatingDelta(ghostResult.glickoRating - matchStartGlickoRating)
       : null;
   const fritzNewGlickoRating =
     !isGhostMode && ghostResult?.glickoRating != null
       ? Math.round(ghostResult.glickoRating)
+      : !isGhostMode && predictedFritzGlicko != null
+        ? predictedFritzGlicko.glickoRating
       : null;
   const hasConfirmedFritzRatingUpdate =
-    fritzGlickoDelta != null || (!isGhostMode && ghostResult != null);
+    fritzGlickoDelta != null || (!isGhostMode && (ghostResult != null || predictedFritzGlicko != null));
+  const showFritzRatingSyncing =
+    ghostResultLoading && predictedFritzGlicko == null && ghostResult?.glickoRating == null;
   const ghostRatingDeltaLabel = ghostResult
     ? `${ghostResult.ratingDelta >= 0 ? '+' : ''}${ghostResult.ratingDelta}`
     : null;
@@ -7894,7 +7939,7 @@ export default function BotMatchScreen({
               <div className="df-result-meta-pill">
                 <span className="df-result-meta-label">Rating</span>
                 <span className="df-result-meta-value">
-                  {ghostResultLoading
+                  {showFritzRatingSyncing
                     ? (currentGlickoRating ?? matchStartGlickoRating) != null
                       ? `${Math.round(Number(currentGlickoRating ?? matchStartGlickoRating))}  •  syncing...`
                       : 'Syncing...'

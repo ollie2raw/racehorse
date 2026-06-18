@@ -558,6 +558,9 @@ export default function AppRoutes(props: AppRoutesProps) {
             userId={authUser?.id ?? null}
             username={authProfile?.username ?? null}
             currentGlickoRating={authProfile?.glicko_rating ?? null}
+            currentGlickoRd={authProfile?.glicko_rd ?? null}
+            currentGlickoVol={authProfile?.glicko_vol ?? null}
+            rankedGamesPlayed={authProfile?.ranked_games_played ?? null}
             onProfileRefresh={refreshAuthProfile}
             onProfilePatch={applyProfilePatch}
           />

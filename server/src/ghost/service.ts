@@ -1,4 +1,4 @@
-import { FRITZ_ELITE_ID, getFritzConfig, isFritzId } from '../ranking/glicko2';
+import { FRITZ_ELITE_ID, isFritzId } from '../ranking/glicko2';
 import { processRatingPeriod } from '../ranking/periodService';
 import { buildRankedGameInsertPayload } from '../ranking/rankedGamePayload';
 import { getLegalMoves } from '../game/engine';
@@ -804,6 +804,49 @@ export async function getGhostProfileSummaryByUsername(
   };
 }
 
+async function persistFritzGhostTrainingProfile(params: {
+  userId: string;
+  profile: GhostProfileRow;
+  finalScore: number;
+  opponentScore: number;
+  trainingMoveLog: GhostMoveLogEntry[];
+  matchId?: string | null;
+}): Promise<void> {
+  const { isNewGame } = await insertGhostGameRow({
+    userId: params.userId,
+    finalScore: params.finalScore,
+    opponentScore: params.opponentScore,
+    trainingMoveLog: params.trainingMoveLog,
+    matchId: params.matchId,
+  });
+
+  const styleGames = await fetchRecentGhostGames(params.userId, 30);
+  const recentGames = styleGames.slice(0, 20);
+  const compositeLog = buildCompositeLog(recentGames, styleGames, params.profile.composite_log);
+  const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
+  const isRatingEligible = isGhostRatingEligible(params.finalScore, params.opponentScore);
+  const rating = isRatingEligible
+    ? computeFritzRatingChange(
+        Number(params.profile.ghost_rating ?? 800),
+        params.finalScore,
+        params.opponentScore,
+        Number(params.profile.games_played ?? 0),
+      )
+    : { newRating: Number(params.profile.ghost_rating ?? 800), delta: 0 };
+
+  await upsertGhostProfile({
+    user_id: params.userId,
+    ghost_rating: rating.newRating,
+    last_updated: new Date().toISOString(),
+    composite_log: compositeLog,
+    style_profile: styleProfile,
+    games_played:
+      isNewGame && isRatingEligible
+        ? Number(params.profile.games_played ?? 0) + 1
+        : Number(params.profile.games_played ?? 0),
+  });
+}
+
 export async function completeGhostGame(params: {
   userId: string;
   finalScore: number;
@@ -834,51 +877,13 @@ export async function completeGhostGame(params: {
       ? params.playerMoveLog
       : params.moveLog,
   );
-
-  const profile = await ensureGhostProfile(params.userId);
-  const opponentProfile =
-    params.opponentUserId && params.opponentUserId !== params.userId
-      ? await fetchGhostProfile(params.opponentUserId)
-      : null;
-
-  const { isNewGame } = await insertGhostGameRow({
-    userId: params.userId,
-    finalScore: params.finalScore,
-    opponentScore: params.opponentScore,
-    trainingMoveLog,
-    matchId: params.matchId,
-  });
-
-  const styleGames = await fetchRecentGhostGames(params.userId, 30);
-  const recentGames = styleGames.slice(0, 20);
-  const compositeLog = buildCompositeLog(recentGames, styleGames, profile.composite_log);
-  const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
   const isRatingEligible = isGhostRatingEligible(params.finalScore, params.opponentScore);
 
-  const rating = isRatingEligible
-    ? isFritz
-      ? computeFritzRatingChange(
-          Number(profile.ghost_rating ?? 800),
-          params.finalScore,
-          params.opponentScore,
-          Number(profile.games_played ?? 0),
-        )
-      : params.opponentUserId
-        ? computeRatingChange(
-            Number(profile.ghost_rating ?? 800),
-            Number(opponentProfile?.ghost_rating ?? 1000),
-            params.finalScore,
-            params.opponentScore,
-            Number(profile.games_played ?? 0),
-          )
-        : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 }
-    : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 };
-
-  let glickoRating: number | null = null;
-  let glickoDelta: number | null = null;
   if (isFritz) {
-    const fritzId = params.opponentUserId ?? FRITZ_ELITE_ID;
-    const fritzConfig = getFritzConfig(fritzId);
+    const profile = await ensureGhostProfile(params.userId);
+    let glickoRating: number | null = null;
+    let glickoDelta: number | null = null;
+
     const rankingProfiles = await supabaseFetch<RankingProfileRow[]>(
       `/rest/v1/profiles?select=id,glicko_rating,glicko_rd&id=eq.${encodeURIComponent(params.userId)}&limit=1`,
       { method: 'GET' },
@@ -890,6 +895,7 @@ export async function completeGhostGame(params: {
 
     if (isRatingEligible) {
       const now = new Date().toISOString();
+      const fritzId = params.opponentUserId ?? FRITZ_ELITE_ID;
       await supabaseFetch(`/rest/v1/ranked_games`, {
         method: 'POST',
         body: JSON.stringify([
@@ -917,7 +923,69 @@ export async function completeGhostGame(params: {
       glickoRating = rankingProfile.glicko_rating;
       glickoDelta = 0;
     }
+
+    void persistFritzGhostTrainingProfile({
+      userId: params.userId,
+      profile,
+      finalScore: params.finalScore,
+      opponentScore: params.opponentScore,
+      trainingMoveLog,
+      matchId: params.matchId,
+    }).catch((error) => {
+      console.warn('[Ghost Service] deferred Fritz training persistence failed', {
+        userId: params.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    return {
+      newRating: Number(profile.ghost_rating ?? 800),
+      ratingDelta: 0,
+      glickoRating,
+      glickoDelta,
+      playerScore: Math.round(params.finalScore),
+      ghostScore: Math.round(params.opponentScore),
+      playerWon: params.finalScore > params.opponentScore,
+      compositeLog: profile.composite_log ?? {
+        generatedAt: new Date().toISOString(),
+        sourceGameIds: [],
+        states: [],
+        recentGameStyles: [],
+      },
+      styleProfile: profile.style_profile,
+    };
   }
+
+  const profile = await ensureGhostProfile(params.userId);
+  const opponentProfile =
+    params.opponentUserId && params.opponentUserId !== params.userId
+      ? await fetchGhostProfile(params.opponentUserId)
+      : null;
+
+  const { isNewGame } = await insertGhostGameRow({
+    userId: params.userId,
+    finalScore: params.finalScore,
+    opponentScore: params.opponentScore,
+    trainingMoveLog,
+    matchId: params.matchId,
+  });
+
+  const styleGames = await fetchRecentGhostGames(params.userId, 30);
+  const recentGames = styleGames.slice(0, 20);
+  const compositeLog = buildCompositeLog(recentGames, styleGames, profile.composite_log);
+  const styleProfile = buildStyleProfileFromSnapshots(compositeLog.recentGameStyles);
+
+  const rating = isRatingEligible
+    ? params.opponentUserId
+      ? computeRatingChange(
+          Number(profile.ghost_rating ?? 800),
+          Number(opponentProfile?.ghost_rating ?? 1000),
+          params.finalScore,
+          params.opponentScore,
+          Number(profile.games_played ?? 0),
+        )
+      : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 }
+    : { newRating: Number(profile.ghost_rating ?? 800), delta: 0 };
 
   await upsertGhostProfile({
     user_id: params.userId,
@@ -932,8 +1000,8 @@ export async function completeGhostGame(params: {
   return {
     newRating: rating.newRating,
     ratingDelta: rating.delta,
-    glickoRating,
-    glickoDelta,
+    glickoRating: null,
+    glickoDelta: null,
     playerScore: Math.round(params.finalScore),
     ghostScore: Math.round(params.opponentScore),
     playerWon: params.finalScore > params.opponentScore,
