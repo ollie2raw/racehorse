@@ -30,6 +30,7 @@ import {
 } from './disconnectGrace';
 import { markMatchStartReady, tryStartMatchIfReady } from './matchStartReady';
 import { withRoomGameplayLock } from './roomGameplayLock';
+import { sanitizePrivateRoomConfig } from './privateRoomConfig';
 import {
   allocatePlayerSeatId,
   broadcastStateUpdate,
@@ -584,7 +585,7 @@ export function registerRoomSessionHandlers(io: Server, socket: Socket): void {
         clearSocketRematchReady((socket.data?.roomId as string | undefined) ?? undefined, socket.id);
         leaveExistingSocketRooms();
         const playerSeatId = allocatePlayerSeatId();
-        const room = createRoom(playerSeatId, roomConfig as Record<string, unknown>);
+        const room = createRoom(playerSeatId, sanitizePrivateRoomConfig(roomConfig));
         socket.join(room.code);
         socket.data.roomId = room.code;
         socket.data.username = username;

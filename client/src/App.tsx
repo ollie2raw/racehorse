@@ -61,6 +61,7 @@ import {
   emitRoomAbandonMatch,
   emitRoomCreate,
   emitRoomJoin,
+  type PrivateRoomCreateSettings,
 } from './multiplayer/roomTransport';
 import {
   clearLastRoomCode,
@@ -950,7 +951,7 @@ export default function App() {
   }, []);
 
   const emitCreateRoom = useCallback(
-    async (targetSocket: Socket) => {
+    async (targetSocket: Socket, settings?: PrivateRoomCreateSettings) => {
       setError('');
       setActionError('');
       try {
@@ -962,6 +963,8 @@ export default function App() {
           username,
           userId,
           authToken,
+          tilesPerPlayer: settings?.dealFormat ?? 7,
+          winningScore: settings?.winTarget ?? 60,
         });
         if (!resp?.ok) {
           throw new Error(resp?.error ?? 'Unable to create room.');

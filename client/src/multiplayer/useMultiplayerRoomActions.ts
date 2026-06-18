@@ -9,6 +9,7 @@ import {
   type OutboundChallenge,
   type SendFriendChallengeResult,
 } from './friendChallenge';
+import type { PrivateRoomCreateSettings } from './roomTransport';
 import type {
   FriendInviteState,
   MultiplayerJoinFlightRuntime,
@@ -73,7 +74,10 @@ type FlatMultiplayerRoomActionsParams = {
   normalizeRoomCode: (value: unknown) => string;
   normalizeRoomPlayers: (value: unknown) => any[];
   emitWithAck: MultiplayerRoomActionsTransport['emitWithAck'];
-  emitCreateRoom: (targetSocket: Socket) => Promise<any>;
+  emitCreateRoom: (
+    targetSocket: Socket,
+    settings?: PrivateRoomCreateSettings,
+  ) => Promise<any>;
   getInviteLink: (code: string) => string;
   resolvePendingCreate: (code: string | null) => void;
   applyJoinedRoomResponse: (resp: any) => void;
@@ -221,7 +225,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
     }
   }, [onCreatePrivateRoom, params]);
 
-  const createRoom = useCallback(async () => {
+  const createRoom = useCallback(async (settings?: PrivateRoomCreateSettings) => {
     params.setError('');
     params.setActionError('');
     if (!params.socket) {
@@ -232,7 +236,7 @@ export function useMultiplayerRoomActions(inputParams: UseMultiplayerRoomActions
     params.createInFlightRef.current = true;
     params.setPendingUiAction('create');
     try {
-      await params.emitCreateRoom(params.socket);
+      await params.emitCreateRoom(params.socket, settings);
     } catch (error) {
       params.showToast(error instanceof Error ? error.message : 'Action failed', 2000);
     } finally {

@@ -1,5 +1,6 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
+import type { PrivateRoomCreateSettings } from './roomTransport';
 import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
 import type { GameState, Move, Tile } from '../types';
 import type { AppMode } from '../types';
@@ -165,7 +166,10 @@ export type MultiplayerRoomActionsTransport = {
     event: string,
     ...argsWithoutAck: any[]
   ) => Promise<TResp>;
-  emitCreateRoom: (targetSocket: Socket) => Promise<unknown>;
+  emitCreateRoom: (
+    targetSocket: Socket,
+    settings?: PrivateRoomCreateSettings,
+  ) => Promise<unknown>;
   getInviteLink: (code: string) => string;
   resolvePendingCreate: (code: string | null) => void;
   lastRoomStorageKey: string;
@@ -248,7 +252,10 @@ export type MultiplayerConnectionConfig = {
   lastRoomStorageKey: string;
   serverUrl: string;
   showToast: (message: string, duration?: number) => void;
-  emitCreateRoom: (targetSocket: Socket) => Promise<unknown>;
+  emitCreateRoom: (
+    targetSocket: Socket,
+    settings?: PrivateRoomCreateSettings,
+  ) => Promise<unknown>;
 };
 
 export type MultiplayerConnectionState = {
@@ -349,7 +356,7 @@ export type MultiplayerControllerConnectionBundle = {
 
 /** Lobby callbacks from useMultiplayerRoomActions (not the full hook transport/auth bundles). */
 export type MultiplayerControllerLobbyActions = {
-  createRoom: () => void;
+  createRoom: (settings?: PrivateRoomCreateSettings) => void;
   joinRoom: () => void;
   leavePrivateLobbyRoom: () => void;
   startGame: () => void;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AppMode } from '../types';
+import type { PrivateRoomCreateSettings } from './roomTransport';
 import type { Socket } from 'socket.io-client';
 import { GlobalNav } from '../components';
 import { MultiplayerTopBar } from '../matchmaking/MultiplayerTopBar';
@@ -43,7 +44,7 @@ export interface PrivateMatchLobbyScreenProps {
 
   roomCode: string;
   onRoomCodeChange: (code: string) => void;
-  onCreateRoom: () => void;
+  onCreateRoom: (settings: PrivateRoomCreateSettings) => void;
   onJoinRoom: () => void;
   pendingLobbyAction: null | 'create' | 'join';
 
@@ -68,6 +69,8 @@ export interface PrivateMatchLobbyScreenProps {
   roomChatFeed?: Array<RoomChatEvent | RoomEmoteEvent>;
   onSendRoomChat?: (text: string) => void;
   winTarget?: number;
+  /** Signed-in users are rated; guests are not. */
+  isRatedEligible?: boolean;
   /** When set, the Quick Match sub-tab in the unified toolbar becomes clickable. */
   onOpenQuickMatch?: () => void;
   /** When connected, used for multiplayer top bar live counts. */
@@ -256,6 +259,7 @@ export default function PrivateMatchLobbyScreen({
   roomChatFeed: _roomChatFeed,
   onSendRoomChat: _onSendRoomChat,
   winTarget = 60,
+  isRatedEligible = false,
   onOpenQuickMatch,
   socket = null,
   pendingChallenge = null,
@@ -265,8 +269,6 @@ export default function PrivateMatchLobbyScreen({
   const [dealFormat, setDealFormat] = useState<7 | 14>(7);
   const [privacy, setPrivacy] = useState<'invite' | 'code'>('code');
   const [timedTurnsUi, setTimedTurnsUi] = useState<'untimed' | '30s'>('untimed');
-  const ratedPreview = true;
-  const spectatorsPreview = false;
 
   const [guestRankedLoading, setGuestRankedLoading] = useState(false);
   const [guestRating, setGuestRating] = useState<number | null>(null);
@@ -393,6 +395,8 @@ export default function PrivateMatchLobbyScreen({
         type="button"
         className="pml-mini-tile"
         onClick={() => setTimedTurnsUi((v) => (v === 'untimed' ? '30s' : 'untimed'))}
+        title="Coming soon"
+        aria-label="Timed turns — coming soon"
       >
         <span className="pml-mini-tile-icon" aria-hidden>
           <IconClock />
@@ -411,9 +415,14 @@ export default function PrivateMatchLobbyScreen({
         </span>
         <span className="pml-mini-tile-body">
           <span className="pml-mini-tile-label">Rated match</span>
-          <span className="pml-mini-tile-value">{ratedPreview ? 'On' : 'Off'}</span>
+          <span className="pml-mini-tile-value">{isRatedEligible ? 'Rated' : 'Unrated'}</span>
         </span>
-        <div className={`pml-toggle pml-toggle--sm${ratedPreview ? ' is-on' : ''}`} aria-hidden />
+        <span
+          className={`pml-rated-badge${isRatedEligible ? ' is-rated' : ' is-unrated'}`}
+          aria-hidden
+        >
+          {isRatedEligible ? 'Rated' : 'Unrated'}
+        </span>
       </div>
       <div className="pml-mini-tile pml-mini-tile--static">
         <span className="pml-mini-tile-icon" aria-hidden>
@@ -421,9 +430,8 @@ export default function PrivateMatchLobbyScreen({
         </span>
         <span className="pml-mini-tile-body">
           <span className="pml-mini-tile-label">Spectators</span>
-          <span className="pml-mini-tile-value">{spectatorsPreview ? 'Allowed' : 'Off'}</span>
+          <span className="pml-mini-tile-value pml-mini-tile-value--muted">Coming soon</span>
         </span>
-        <div className={`pml-toggle pml-toggle--sm${spectatorsPreview ? ' is-on' : ''}`} aria-hidden />
       </div>
     </div>
   );
@@ -999,7 +1007,7 @@ export default function PrivateMatchLobbyScreen({
                     size="lg"
                     type="button"
                     className="pml-start-btn"
-                    onClick={onCreateRoom}
+                    onClick={() => onCreateRoom({ dealFormat, winTarget })}
                     disabled={pendingLobbyAction === 'create' || pendingLobbyAction === 'join'}
                   >
                     {pendingLobbyAction === 'create' ? 'Creating lobby…' : 'Create lobby'}

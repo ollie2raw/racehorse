@@ -33,6 +33,15 @@ export type RoomCreatePayload = {
   username: string;
   userId: string | null;
   authToken: string | null;
+  /** Host-chosen deal size. Server derives deadTileCount. */
+  tilesPerPlayer?: 7 | 14;
+  /** Race target (e.g. 60). Server clamps to allowed values. */
+  winningScore?: number;
+};
+
+export type PrivateRoomCreateSettings = {
+  dealFormat: 7 | 14;
+  winTarget: number;
 };
 
 export type RoomAbandonPayload = {

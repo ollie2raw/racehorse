@@ -381,6 +381,7 @@ export default function MultiplayerModeController({
               roomChatFeed={roomReactions}
               onSendRoomChat={sendRoomChat}
               winTarget={60}
+              isRatedEligible={Boolean(authUser?.id)}
               roomRecoveryState={roomRecoveryState}
               roomRecoveryMessage={roomRecoveryMessage}
               onRetryRoomRecovery={retryRoomRecovery}

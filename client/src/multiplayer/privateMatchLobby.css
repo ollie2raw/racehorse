@@ -1193,6 +1193,29 @@
   color: var(--text-primary);
 }
 
+.pml-mini-tile-value--muted {
+  color: rgba(148, 163, 184, 0.72);
+}
+
+.pml-rated-badge {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: rgba(148, 163, 184, 0.88);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.pml-rated-badge.is-rated {
+  border-color: color-mix(in srgb, var(--pml-brass) 45%, transparent);
+  color: color-mix(in srgb, var(--pml-brass) 92%, white);
+  background: color-mix(in srgb, var(--pml-brass) 12%, transparent);
+}
+
 .pml-toggle-row {
   display: flex;
   align-items: center;
