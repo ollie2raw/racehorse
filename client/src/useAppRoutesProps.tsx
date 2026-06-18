@@ -119,6 +119,7 @@ export function useAppRoutesProps(source: UseAppRoutesPropsSource): AppRoutesPro
         pendingUiAction: source.pendingUiAction,
         privateLobbyHostWinStreak: source.privateLobbyHostWinStreak,
         outboundChallenge: source.outboundChallenge,
+        lobbyError: source.error,
       },
       liveMatchView: {
         state: source.state,

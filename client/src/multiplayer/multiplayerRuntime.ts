@@ -106,6 +106,7 @@ export type MultiplayerSessionRefsRuntime = {
   isSeatedPlayerRef: MutableRefObject<boolean>;
   matchStartedRef: MutableRefObject<boolean>;
   playerReadyEmittedRef: MutableRefObject<boolean>;
+  schedulePlayerReadyRef: MutableRefObject<() => Promise<void>>;
   trySchedulePlayerReadyRef: MutableRefObject<() => void>;
   isMutedRef: MutableRefObject<boolean>;
 };
@@ -364,4 +365,5 @@ export type MultiplayerControllerLobbySnapshot = {
   pendingUiAction: null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play';
   privateLobbyHostWinStreak: number | null;
   outboundChallenge: import('./friendChallenge').OutboundChallenge | null;
+  lobbyError?: string;
 };

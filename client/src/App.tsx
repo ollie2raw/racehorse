@@ -423,6 +423,7 @@ export default function App() {
       isSeatedPlayerRef,
       matchStartedRef,
       playerReadyEmittedRef,
+      schedulePlayerReadyRef,
       trySchedulePlayerReadyRef,
       isMutedRef,
     }),
@@ -1148,6 +1149,10 @@ export default function App() {
     playerReadyEmittedRef.current = true;
     try {
       const ack = await emitWithAck<any>(activeSocket, 'player:ready', roomCode);
+      if (ack?.ok === false) {
+        playerReadyEmittedRef.current = false;
+        return;
+      }
       if (ack?.started === true) {
         matchStartedRef.current = true;
       }

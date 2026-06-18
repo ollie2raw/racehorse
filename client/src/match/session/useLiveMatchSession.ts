@@ -220,6 +220,7 @@ type FlatLiveMatchSessionParams = {
   isSeatedPlayerRef: MutableRefObject<boolean>;
   matchStartedRef: MutableRefObject<boolean>;
   playerReadyEmittedRef: MutableRefObject<boolean>;
+  schedulePlayerReadyRef: MutableRefObject<() => Promise<void>>;
   trySchedulePlayerReadyRef: MutableRefObject<() => void>;
   isMutedRef: MutableRefObject<boolean>;
   playDrawSound: (muted: boolean) => void;
@@ -285,6 +286,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     isSeatedPlayerRef,
     matchStartedRef,
     playerReadyEmittedRef,
+    schedulePlayerReadyRef,
     trySchedulePlayerReadyRef,
     isMutedRef,
     playDrawSound,
@@ -466,6 +468,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
           isSeatedPlayerRef,
           matchStartedRef,
           playerReadyEmittedRef,
+          schedulePlayerReadyRef,
           trySchedulePlayerReadyRef,
           isMutedRef,
         },
@@ -583,13 +586,22 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     onGameStart();
     try {
       const resp = await emitGameStart(socket, joinedRoom);
-      if (!resp?.ok) return setError(resp?.error ?? 'Unable to start game.');
+      if (!resp?.ok) {
+        if (resp?.error === 'waiting_for_ready') {
+          playerReadyEmittedRef.current = false;
+          void schedulePlayerReadyRef.current();
+          playerReadyEmittedRef.current = false;
+          trySchedulePlayerReadyRef.current();
+          return setError('waiting_for_ready');
+        }
+        return setError(resp?.error ?? 'Unable to start game.');
+      }
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Action failed', 2000);
     } finally {
       setPendingUiAction((prev) => (prev === 'start' ? null : prev));
     }
-  }, [socket, joinedRoom, setError, showToast, onGameStart]);
+  }, [socket, joinedRoom, setError, showToast, onGameStart, playerReadyEmittedRef, schedulePlayerReadyRef, trySchedulePlayerReadyRef]);
 
   const requestRematch = useCallback(() => {
     if (!socket || !joinedRoom || !state?.gameOver || rematchRequested) return;

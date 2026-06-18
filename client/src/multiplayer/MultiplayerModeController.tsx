@@ -205,6 +205,7 @@ export default function MultiplayerModeController({
     pendingUiAction,
     privateLobbyHostWinStreak,
     outboundChallenge,
+    lobbyError,
   } = lobbyView;
 
   const {
@@ -395,6 +396,7 @@ export default function MultiplayerModeController({
                     }
                   : null
               }
+              lobbyError={lobbyError}
             />
           </Suspense>
         )

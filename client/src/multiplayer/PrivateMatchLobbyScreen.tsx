@@ -78,6 +78,8 @@ export interface PrivateMatchLobbyScreenProps {
     matchSummary: string;
     expiresAt: number;
   } | null;
+  /** Lobby-level error from start/join (e.g. waiting_for_ready). */
+  lobbyError?: string;
 }
 
 function LockIcon() {
@@ -257,6 +259,7 @@ export default function PrivateMatchLobbyScreen({
   onOpenQuickMatch,
   socket = null,
   pendingChallenge = null,
+  lobbyError = '',
 }: PrivateMatchLobbyScreenProps) {
   const [lobbyTab, setLobbyTab] = useState<'create' | 'join'>('create');
   const [dealFormat, setDealFormat] = useState<7 | 14>(7);
@@ -360,7 +363,9 @@ export default function PrivateMatchLobbyScreen({
   }, [guestPresent, roomGuest?.userId, roomGuest?.username]);
 
   const footerHint =
-    phase === 'room' && players.length < 2 && pendingInviteActive && pendingInviteName
+    phase === 'room' && lobbyError === 'waiting_for_ready' && isRoomHost
+      ? 'Waiting for opponent to ready up...'
+      : phase === 'room' && players.length < 2 && pendingInviteActive && pendingInviteName
       ? `Waiting for @${pendingInviteName} to accept your challenge…`
       : phase === 'room' && players.length < 2
         ? 'Waiting for opponent to join…'
