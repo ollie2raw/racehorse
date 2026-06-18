@@ -158,7 +158,7 @@ const GENERATION_BUDGETS: Record<DailyPuzzleGenerationPurpose, GenerationBudgetC
   manual: {
     purpose: 'manual',
     maxAttemptsPerSlot: 2_100,
-    maxMsPerSlot: 60_000,
+    maxMsPerSlot: 180_000,
     setupAndStrikeAttempts: 100,
     highScoreAttempts: 2_000,
     structuralFailureThreshold: 25,
