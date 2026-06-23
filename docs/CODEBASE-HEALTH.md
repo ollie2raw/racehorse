@@ -12,16 +12,32 @@ See also: [docs/architecture/ARCHITECTURE_OVERVIEW.md](./architecture/ARCHITECTU
 
 | Category | Score | Notes |
 |----------|-------|-------|
-| Error handling | 8 | ErrorBoundary at root/route/component; Sentry + `logger.error` in production |
-| Code organization | 7 | Key extractions done; `BotMatchScreen` still monolithic |
+| Error handling | 8 | ErrorBoundary at root/route/component; `Sentry.init()` in `main.tsx`; `logger.error` in production |
+| Code organization | **7** | `AppRoutes` slimmed (~956 LOC); `WeeklyStatsScreen` extracted; `BotMatchScreen` still monolithic |
 | Type safety | 8 | `strict: true`, `noUnusedLocals: true`, 0 typecheck errors |
-| API consistency | 6 | Shared `api/client.ts` exists; not all fetch paths migrated |
+| API consistency | **6.5** | Shared `api/client.ts`; `dailyFritz/api.ts` migrated; `botMatchApi` still raw fetch by design |
 | CSS consistency | 5 | `rh-*` + frozen `wl-*`; 23 grandfathered legacy CSS files |
 | Dead code | 8 | `walnut-live.css` deletion deferred (cascade risk) |
-| Test coverage | 7 | Vitest: 73 tests; coverage floors locked; branch coverage low |
+| Test coverage | **7.5** | Vitest: 73 tests + 21 behavior suites in CI via `test:all`; branch coverage still low |
 | Duplication | 7 | Helpers extracted; mode logic still duplicated in bot shell |
-| File size/complexity | 5 | `BotMatchScreen.tsx` ~7,171 lines; largest complexity risk |
-| **Overall** | **7** | Solid foundation; complexity + CSS/API debt block 9/10 |
+| File size/complexity | **6** | `AppRoutes` chunk **73 kB** (was 1,402 kB); `BotMatchScreen.tsx` ~7,171 lines remains |
+| **Overall** | **7.5** | Tooling + bundle split done; E2E + CSS/API debt block 9/10 |
+
+---
+
+## Post-Sprint quick wins (June 2026)
+
+### Quick wins — observability, CI, API
+- **`Sentry.init()`** in `main.tsx` (prod-only when `VITE_SENTRY_DSN` set); `VITE_APP_VERSION` in `.env.example`
+- **Behavior tests in CI:** `run-behavior-tests.mjs` runs 21 `*.behaviorTests.ts` files; `test:all` = Vitest + behavior; CI **Behavior tests** step
+- **`dailyFritz/api.ts`:** raw `fetch` paths replaced with `apiGet`/`apiPost`; optional `signal` on shared client
+
+### AppRoutes bundle split (1,402 kB → 73 kB)
+- Removed static imports of `lessonV2` and `guidedAuthoring` from `AppRoutes.tsx`
+- `resolveGuidedMatchStart`, `loadAuthoringSession`, `saveFrozenLesson` → dynamic `import()` at call sites
+- **`WeeklyStatsScreen`** extracted to `stats/WeeklyStatsScreen.tsx` and lazy-loaded
+- New async chunks: `lessonV2` (~1.3 MB, loads on guided match start), `guidedAuthoring` (~6.5 kB), `WeeklyStatsScreen` (~5 kB)
+- **Next highest leverage:** Playwright E2E smoke suite (5–15 critical flows) gating every PR
 
 ---
 
@@ -72,7 +88,13 @@ See also: [docs/architecture/ARCHITECTURE_OVERVIEW.md](./architecture/ARCHITECTU
 
 ## What remains for 9/10
 
-Target overall score **9** requires closing gaps in the lowest-scoring categories: **file size/complexity (5)**, **CSS consistency (5)**, **API consistency (6)**, and **branch coverage**.
+Target overall score **9** requires closing gaps in the lowest-scoring categories: **CSS consistency (5)**, **API consistency (6.5)**, **branch coverage**, and **E2E confidence**.
+
+### Sprint E2E — Playwright smoke suite (highest remaining leverage)
+- Install/run Playwright in CI on every PR touching `client/**`
+- Cover 5 initial flows: home load, Play vs Fritz hand, Daily Puzzle, Daily Fritz, multiplayer lobby
+- Expand to 15 flows; target &lt;2% flake rate before treating as merge gate
+- Complements existing Vitest + behavior tests; required before `BotMatchScreen` decomposition
 
 ### Sprint 3B — `wl-*` → `rh-*` migration (CSS consistency → 8+)
 - Component-by-component migration with visual QA per screen
@@ -81,8 +103,8 @@ Target overall score **9** requires closing gaps in the lowest-scoring categorie
 - End state: delete `walnut-live.css` global import from `main.tsx`
 
 ### Sprint 5 (remaining) — Behavior test consolidation
-- Existing `*.behaviorTests.ts` runners (ts-node/tsx) are **outside** Vitest and **outside** coverage
-- Migrate high-value behavior tests into Vitest (`src/**/*.test.ts`) or wire a unified `test:all` that runs both suites in CI
+- ~~Wire unified `test:all` in CI~~ **Done** — `run-behavior-tests.mjs` + CI step
+- Optional: migrate high-value behavior tests into Vitest for coverage credit
 - Priority targets: bot heuristics, analyzer, pre-game draw, recovery machine
 
 ### Branch coverage (test coverage → 8+)
@@ -97,7 +119,7 @@ Target overall score **9** requires closing gaps in the lowest-scoring categorie
 - Extend `client.test.ts` for auth-header + 401 refresh paths
 
 ### BotMatchScreen decomposition (file size/complexity → 7+)
-See dedicated section below — **not** a quick refactor; needs its own sprint with visual QA on all three render sites.
+See dedicated section below — **not** a quick refactor; needs its own sprint with visual QA on all three render sites. **Do after E2E smoke suite is green.**
 
 ---
 
@@ -280,4 +302,4 @@ Note: stylelintrc lists **24 globs** (walnut-live + 23 legacy files). ADR-003 ro
 
 ## Summary
 
-The codebase moved from **ad hoc tooling** to **enforced gates** in one session: lint, types, tests, coverage floors, dependency boundaries, structured logging, and architecture ADRs. Overall health is **7/10**. The path to **9/10** is blocked primarily by **BotMatchScreen complexity**, **CSS dual-system debt (`wl-*`)**, **low branch coverage**, and **incomplete API client adoption** — each needs a dedicated sprint with explicit QA, not drive-by refactors.
+The codebase moved from **ad hoc tooling** to **enforced gates**: lint, types, tests, coverage floors, dependency boundaries, structured logging, architecture ADRs, behavior tests in CI, and **AppRoutes bundle split (1,402 kB → 73 kB)**. Overall health is **7.5/10**. The path to **9/10** is blocked primarily by **missing Playwright E2E**, **BotMatchScreen complexity**, **CSS dual-system debt (`wl-*`)**, **low branch coverage**, and **incomplete API client adoption** — each needs a dedicated sprint with explicit QA, not drive-by refactors.
