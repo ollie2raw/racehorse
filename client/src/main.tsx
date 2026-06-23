@@ -1,3 +1,14 @@
+import * as Sentry from '@sentry/react';
+
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN ?? '',
+  environment: import.meta.env.MODE,
+  enabled: import.meta.env.PROD && Boolean(import.meta.env.VITE_SENTRY_DSN),
+  integrations: [Sentry.browserTracingIntegration()],
+  tracesSampleRate: 0.1,
+  release: import.meta.env.VITE_APP_VERSION ?? 'unknown',
+});
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';

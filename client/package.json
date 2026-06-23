@@ -32,7 +32,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:all": "vitest run",
+    "test:all": "vitest run && node run-behavior-tests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

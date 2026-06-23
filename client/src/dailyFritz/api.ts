@@ -1,7 +1,6 @@
-import { apiGet, apiPost, getAuthHeaders, type ApiResult } from '../api/client';
+import { apiGet, apiPost, type ApiResult } from '../api/client';
 import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
-import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import type { Tile } from '../types.ts';
 import { normalizePreGameDrawTile } from '../match/preGameDraw/preGameDrawLogic.ts';
 
@@ -50,8 +49,110 @@ export function clearDailyFritzClientStorage(userId: string): void {
   }
 }
 
-function resolveServerBaseUrl(): string {
-  return resolveGameServerUrl();
+function resolveDailyFritzApiError(path: string, error: string, status?: number): Error {
+  if (error.startsWith('<!DOCTYPE') || error.startsWith('<html')) {
+    return new Error(
+      `Daily Fritz backend returned HTML for ${path}. Check production API routing / VITE_SERVER_URL.`,
+    );
+  }
+  return new Error(error || `${path} failed with ${status ?? 'unknown'}`);
+}
+
+type RequestJsonOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
+async function dfRequestJsonWithTimeout<T>(path: string, init?: RequestJsonOptions): Promise<T> {
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const timeoutMs =
+    init?.timeoutMs ??
+    (isDailyFritzInitPath(path) ? DAILY_FRITZ_INIT_TIMEOUT_MS : undefined);
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+  let timedOut = false;
+
+  if (isDailyFritzInitPath(path)) {
+    dfInitLog('request-start', { endpoint: path });
+  }
+
+  const run = async (): Promise<T> => {
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const fetchStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const requestOptions = {
+      signal: controller?.signal ?? init?.signal ?? undefined,
+    };
+    const result: ApiResult<T> =
+      method === 'POST'
+        ? await apiPost<T>(
+            path,
+            init?.body ? JSON.parse(String(init.body)) : {},
+            requestOptions,
+          )
+        : await apiGet<T>(path, requestOptions);
+    const fetchEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    dfClientDebug('[daily-fritz-client] requestJson', {
+      path,
+      status: result.status,
+      authMs: Number((fetchStartedAt - startedAt).toFixed(1)),
+      fetchMs: Number((fetchEndedAt - fetchStartedAt).toFixed(1)),
+      parseMs: Number((endedAt - fetchEndedAt).toFixed(1)),
+      totalMs: Number((endedAt - startedAt).toFixed(1)),
+    });
+
+    if (result.error) {
+      if (controller?.signal.aborted && timedOut) {
+        throw new Error('The game server is taking longer than expected. Please try again.');
+      }
+      throw resolveDailyFritzApiError(path, result.error, result.status);
+    }
+
+    if (isDailyFritzInitPath(path)) {
+      const initPayload = result.data as Record<string, unknown> | null;
+      dfInitLog('request-success', {
+        ms: Number((endedAt - startedAt).toFixed(1)),
+        status: result.status,
+        hasSet: Boolean(initPayload?.set_result ?? initPayload?.result),
+        gameNumber: initPayload?.current_game_number ?? null,
+        phase: initPayload?.attempt_status ?? null,
+        drawWinner: initPayload?.draw_winner ?? null,
+        drawPlayerTile: initPayload?.draw_player_tile ?? null,
+        drawFritzTile: initPayload?.draw_fritz_tile ?? null,
+      });
+    }
+    return result.data as T;
+  };
+
+  try {
+    if (timeoutMs && controller) {
+      timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+    }
+    return await run();
+  } catch (error) {
+    const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const ms = Number((endedAt - startedAt).toFixed(1));
+    if (
+      (error instanceof DOMException && error.name === 'AbortError') ||
+      (controller?.signal.aborted && timedOut)
+    ) {
+      if (isDailyFritzInitPath(path)) {
+        dfInitLog('timeout', { ms: timeoutMs ?? ms, endpoint: path });
+      }
+      throw new Error('The game server is taking longer than expected. Please try again.');
+    }
+    if (isDailyFritzInitPath(path)) {
+      dfInitLog('request-error', {
+        ms,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId);
+  }
 }
 
 async function timedApiGet<T>(path: string): Promise<ApiResult<T>> {
@@ -81,116 +182,6 @@ async function timedApiPost<T>(path: string, body: unknown): Promise<ApiResult<T
 function throwApiResult<T>(result: ApiResult<T>): T {
   if (result.error) throw new Error(result.error);
   return result.data as T;
-}
-
-type RequestJsonOptions = RequestInit & {
-  timeoutMs?: number;
-};
-
-async function dfRequestJsonWithTimeout<T>(path: string, init?: RequestJsonOptions): Promise<T> {
-  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const timeoutMs =
-    init?.timeoutMs ??
-    (isDailyFritzInitPath(path) ? DAILY_FRITZ_INIT_TIMEOUT_MS : undefined);
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
-
-  if (isDailyFritzInitPath(path)) {
-    dfInitLog('request-start', { endpoint: path });
-  }
-
-  const run = async (): Promise<T> => {
-    const authStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const { headers: authHeaderMap, hasToken } = await getAuthHeaders();
-    const authEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    dfClientDebug('[daily-fritz-client] authHeaders', {
-      ms: Number((authEndedAt - authStartedAt).toFixed(1)),
-      hasAuthorization: hasToken,
-    });
-    const headers = {
-      ...authHeaderMap,
-      ...(init?.headers ?? {}),
-    };
-    const fetchStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const response = await fetch(`${resolveServerBaseUrl()}${path}`, {
-      credentials: 'include',
-      ...init,
-      headers,
-      signal: controller?.signal ?? init?.signal,
-    });
-    const fetchEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const text = await response.text().catch(() => '');
-    const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    dfClientDebug('[daily-fritz-client] requestJson', {
-      path,
-      status: response.status,
-      authMs: Number((fetchStartedAt - startedAt).toFixed(1)),
-      fetchMs: Number((fetchEndedAt - fetchStartedAt).toFixed(1)),
-      parseMs: Number((endedAt - fetchEndedAt).toFixed(1)),
-      totalMs: Number((endedAt - startedAt).toFixed(1)),
-    });
-    let parsed: unknown = null;
-    if (text) {
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        if (!response.ok) {
-          throw new Error(
-            text.startsWith('<!DOCTYPE') || text.startsWith('<html')
-              ? `Daily Fritz backend returned HTML for ${path}. Check production API routing / VITE_SERVER_URL.`
-              : `${path} failed with ${response.status}`,
-          );
-        }
-        throw new Error(`Invalid JSON response from ${path}`);
-      }
-    }
-    if (!response.ok) {
-      const errorMessage =
-        parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
-          ? String((parsed as { error?: unknown }).error ?? '')
-          : '';
-      throw new Error(errorMessage || `${path} failed with ${response.status}`);
-    }
-    if (isDailyFritzInitPath(path)) {
-      const initPayload = parsed as Record<string, unknown> | null;
-      dfInitLog('request-success', {
-        ms: Number((endedAt - startedAt).toFixed(1)),
-        status: response.status,
-        hasSet: Boolean(initPayload?.set_result ?? initPayload?.result),
-        gameNumber: initPayload?.current_game_number ?? null,
-        phase: initPayload?.attempt_status ?? null,
-        drawWinner: initPayload?.draw_winner ?? null,
-        drawPlayerTile: initPayload?.draw_player_tile ?? null,
-        drawFritzTile: initPayload?.draw_fritz_tile ?? null,
-      });
-    }
-    return parsed as T;
-  };
-
-  try {
-    if (timeoutMs && controller) {
-      timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
-    }
-    return await run();
-  } catch (error) {
-    const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const ms = Number((endedAt - startedAt).toFixed(1));
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      if (isDailyFritzInitPath(path)) {
-        dfInitLog('timeout', { ms: timeoutMs ?? ms, endpoint: path });
-      }
-      throw new Error('The game server is taking longer than expected. Please try again.');
-    }
-    if (isDailyFritzInitPath(path)) {
-      dfInitLog('request-error', {
-        ms,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-    throw error;
-  } finally {
-    if (timeoutId != null) window.clearTimeout(timeoutId);
-  }
 }
 
 export interface DailyFritzLeaderboardRow {
@@ -426,112 +417,106 @@ export async function nextDailyFritzHand(input: {
   completedHandScores: { you: number; fritz: number };
   timeoutMs?: number;
 }): Promise<DailyFritzNextHandResponse> {
-  // Use a manual fetch so we can inspect the status code before throwing.
-  // requestJson treats all non-2xx responses identically; we need to
-  // distinguish the terminal 409 "no hands remain" from retryable errors.
-  const { headers } = await getAuthHeaders();
+  const path = '/api/daily-fritz/next-hand';
   const timeoutMs = Math.max(1000, input.timeoutMs ?? DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS);
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
-  const url = `${resolveServerBaseUrl()}/api/daily-fritz/next-hand`;
+  let timedOut = false;
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   dfNextHandIngest({
     location: 'dailyFritz/api.ts:nextDailyFritzHand',
     message: 'request-start',
     hypothesisId: 'B',
     data: {
-      url,
+      url: path,
       timeoutMs,
       completedHandIndex: input.completedHandIndex,
       gameNumber: input.gameNumber ?? 1,
     },
   });
-  const response = await fetch(url, {
-    method: 'POST',
-    credentials: 'include',
-    headers,
-    signal: controller.signal,
-    body: JSON.stringify({
-      attempt_id: input.attemptId,
-      verified_match_id: input.verifiedMatchId,
-      run_date: input.runDate,
-      game_number: input.gameNumber ?? 1,
-      completed_hand_index: input.completedHandIndex,
-      completed_hand_scores: input.completedHandScores,
-    }),
-  }).catch((error) => {
+
+  let result: ApiResult<DailyFritzNextHandResponse>;
+  try {
+    result = await apiPost<DailyFritzNextHandResponse>(
+      path,
+      {
+        attempt_id: input.attemptId,
+        verified_match_id: input.verifiedMatchId,
+        run_date: input.runDate,
+        game_number: input.gameNumber ?? 1,
+        completed_hand_index: input.completedHandIndex,
+        completed_hand_scores: input.completedHandScores,
+      },
+      { signal: controller.signal },
+    );
+  } catch (error) {
     const name = error instanceof Error ? error.name : 'unknown';
     const message = error instanceof Error ? error.message : String(error);
     dfNextHandIngest({
       location: 'dailyFritz/api.ts:nextDailyFritzHand',
       message: 'fetch-rejected',
       hypothesisId: 'B',
-      data: { url, errorName: name, errorMessage: message, isAbort: name === 'AbortError' },
+      data: { url: path, errorName: name, errorMessage: message, isAbort: name === 'AbortError' },
     });
     if (import.meta.env.DEV) {
-      console.warn('[daily-fritz:next-hand] fetch failed', { url, name, message });
+      console.warn('[daily-fritz:next-hand] request failed', { url: path, name, message });
     }
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if ((error instanceof DOMException && error.name === 'AbortError') || timedOut) {
       throw new Error(`Timed out loading the next Daily Fritz hand after ${timeoutMs}ms.`);
     }
     throw error;
-  }).finally(() => {
+  } finally {
     window.clearTimeout(timeoutId);
-  });
+  }
 
   dfNextHandIngest({
     location: 'dailyFritz/api.ts:nextDailyFritzHand',
     message: 'response',
     hypothesisId: 'B',
-    data: { url, status: response.status, ok: response.ok },
+    data: { url: path, status: result.status, ok: result.error === null },
   });
 
-  const text = await response.text().catch(() => '');
-  let parsed: unknown = null;
-  if (text) {
-    try { parsed = JSON.parse(text); } catch { /* fall through */ }
+  if (controller.signal.aborted && timedOut) {
+    throw new Error(`Timed out loading the next Daily Fritz hand after ${timeoutMs}ms.`);
   }
-  const parsedError =
-    parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
-      ? String((parsed as { error?: unknown }).error ?? '')
-      : '';
+
+  const parsedError = result.error ?? '';
 
   // Only the terminal no-hands-remain 409 means the game is complete. Other
   // conflicts are real hand-transition errors and must not auto-complete a set.
-  if (response.status === 409) {
+  if (result.status === 409) {
     const message = parsedError || 'No hands remain in this Daily Fritz run.';
     if (!String(message).toLowerCase().includes('no hands remain')) {
       throw new Error(message);
     }
-    throw new DailyFritzEndOfRunError(
-      message,
-    );
+    throw new DailyFritzEndOfRunError(message);
   }
 
-  if (!response.ok) {
+  if (result.error) {
     dfNextHandIngest({
       location: 'dailyFritz/api.ts:nextDailyFritzHand',
       message: 'http-non-ok',
       hypothesisId: 'B',
       data: {
-        url,
-        status: response.status,
+        url: path,
+        status: result.status,
         error: parsedError || null,
-        bodySnippet: text.slice(0, 240),
+        bodySnippet: parsedError.slice(0, 240),
       },
     });
     if (import.meta.env.DEV) {
       console.warn('[daily-fritz:next-hand] non-OK response', {
-        url,
-        status: response.status,
+        url: path,
+        status: result.status,
         error: parsedError || null,
       });
     }
-    throw new Error(
-      parsedError || `/api/daily-fritz/next-hand failed with ${response.status}`,
-    );
+    throw new Error(parsedError || `${path} failed with ${result.status ?? 'unknown'}`);
   }
 
-  return parsed as DailyFritzNextHandResponse;
+  return result.data as DailyFritzNextHandResponse;
 }
 
 async function sha256Hex(input: string): Promise<string> {

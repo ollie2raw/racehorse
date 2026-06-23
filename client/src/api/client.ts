@@ -141,19 +141,23 @@ function serverUrl(): string {
 
 export async function apiGet<T>(
   path: string,
-  options?: { auth?: boolean },
+  options?: { auth?: boolean; signal?: AbortSignal },
 ): Promise<ApiResult<T>> {
   const { headers } =
     options?.auth !== false
       ? await getAuthHeaders({ skipContentType: true })
       : { headers: {} as Record<string, string> };
-  return apiFetch<T>(`${serverUrl()}${path}`, { method: 'GET', headers });
+  return apiFetch<T>(`${serverUrl()}${path}`, {
+    method: 'GET',
+    headers,
+    signal: options?.signal,
+  });
 }
 
 export async function apiPost<T>(
   path: string,
   body: unknown,
-  options?: { auth?: boolean; keepalive?: boolean },
+  options?: { auth?: boolean; keepalive?: boolean; signal?: AbortSignal },
 ): Promise<ApiResult<T>> {
   const { headers } =
     options?.auth !== false
@@ -164,6 +168,7 @@ export async function apiPost<T>(
     headers,
     body: JSON.stringify(body),
     keepalive: options?.keepalive ?? false,
+    signal: options?.signal,
   });
 }
 
