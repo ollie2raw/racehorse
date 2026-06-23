@@ -18,6 +18,7 @@ import {
   type PreGameDrawState,
   type Rng,
 } from './preGameDrawLogic.ts';
+import { logger } from '../../utils/logger';
 
 export const PRE_GAME_DRAW_OPPONENT_PICK_DELAY_MS = 1000;
 /** Both flipped tiles stay face-up with result pill visible before deal. */
@@ -327,7 +328,8 @@ export function usePreGameDraw({
             afterOpponent = applyOpponentPick(stateAfterPlayerPick, tileId);
           }
         } catch (err) {
-          console.error('[df-scripted-draw] opponent resolve failed', {
+          logger.error('usePreGameDraw.ts', err, {
+            message: '[df-scripted-draw] opponent resolve failed',
             scriptedFritzTileId,
             scriptedWinner,
             error: err instanceof Error ? err.message : String(err),
@@ -429,7 +431,8 @@ export function usePreGameDraw({
               )
             : applyPlayerPick(drawState, effectiveTileId);
       } catch (err) {
-        console.error('[df-scripted-draw] player pick failed', {
+        logger.error('usePreGameDraw.ts', err, {
+          message: '[df-scripted-draw] player pick failed',
           tappedTileId: tileId,
           effectiveTileId,
           scriptedMode,

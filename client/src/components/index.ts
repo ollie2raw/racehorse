@@ -10,8 +10,6 @@ export { ScoreBoard } from './ScoreBoard';
 export { ScoreTrackOverlay } from './ScoreTrackOverlay';
 export { MatchScoreHeader } from './MatchScoreHeader';
 export type { MatchScoreHeaderPlayer, MatchScoreHeaderProps } from './MatchScoreHeader';
-export { MatchLayout } from './MatchLayout';
-export type { MatchLayoutProps } from './MatchLayout';
 export { MatchNblBoardFrame } from './MatchNblBoardFrame';
 export { MatchBoardTurnBar } from './MatchBoardTurnBar';
 export { BoneyardStackIcon } from './BoneyardStackIcon';

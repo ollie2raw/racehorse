@@ -1,4 +1,5 @@
 import type { BoardState, PlacementPosition, Tile } from '../types';
+import { projectRenderableBoard } from '../multiplayer/boardSnapshotGuards';
 
 export type TileTuple = [number, number];
 
@@ -24,6 +25,8 @@ export type BoardSnapshotEntry = {
 
 export type MoveEntry = {
   moveNumber: number;
+  /** Hand index when logged (1-based). Used for per-hand analysis segmentation. */
+  handNumber?: number;
   player: 'you' | 'opponent';
   action: 'place' | 'draw' | 'pass';
   tile?: TileTuple;
@@ -53,8 +56,15 @@ export function sameTileTuple(a?: TileTuple, b?: TileTuple): boolean {
   return keyOf(a) === keyOf(b);
 }
 
+/** Project logged boards to the render contract (hub arms, open ends). */
+export function normalizeBoardRenderState(board: BoardState | null): BoardState | null {
+  if (!board) return null;
+  return projectRenderableBoard(board) ?? board;
+}
+
 export function cloneBoardState(board: BoardState | null): BoardState | null {
-  return board ? (JSON.parse(JSON.stringify(board)) as BoardState) : null;
+  if (!board) return null;
+  return normalizeBoardRenderState(JSON.parse(JSON.stringify(board)) as BoardState);
 }
 
 export function snapshotBoardState(board: BoardState | null): BoardSnapshotEntry[] {

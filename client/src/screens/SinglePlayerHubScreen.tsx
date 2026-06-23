@@ -210,7 +210,8 @@ export default function SinglePlayerHubScreen({
             </p>
           </div>
 
-          <div className="relative z-10 mt-[42px] grid grid-cols-3 items-stretch gap-5 px-14">
+          <div className="relative z-10 mt-[42px] flex flex-col gap-5 px-14">
+            <div className="grid grid-cols-3 items-stretch gap-5">
             {MODES.map((mode) => (
               <section
                 key={mode.key}
@@ -273,6 +274,7 @@ export default function SinglePlayerHubScreen({
                 </div>
               </section>
             ))}
+            </div>
           </div>
 
           <div className="relative z-10 mt-[112px] mb-[70px] flex items-center justify-center gap-2.5 opacity-40">

@@ -118,7 +118,7 @@
     var(--pvf-dynamic-color) 0%,
     color-mix(in srgb, var(--pvf-dynamic-color) 80%, #040b17) 100%
   ) !important;
-  color: #1a1200 !important;
+  color: var(--text-on-elite) !important;
   border: none !important;
   box-shadow:
     0 0 32px color-mix(in srgb, var(--pvf-dynamic-color) 22%, transparent),

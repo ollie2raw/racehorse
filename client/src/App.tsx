@@ -1,15 +1,19 @@
-import React, { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
 import './App.css';
 import './match/match-live.css';
-import { isTemporaryUsername, useAuth } from './auth/useAuth';
+import { isTemporaryUsername } from './auth/useAuth';
+import { useAuthSession } from './auth/useAuthSession';
 import { fetchGhostProfileSummary, type GhostProfileSummary } from './ghost/api';
 import type { GameState } from './types';
 import type { BotDealSize } from './bot/botEngine';
 import type { FritzTier } from './bot/fritzConfig';
 import { resolveDefaultPvfFritzTier, writeStoredPvfFritzTier } from './bot/pvfTierPreference';
+import { mutePreference } from './utils/mutePreference';
+import { logger } from './utils/logger';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { resolveGameServerUrl } from './lib/gameServerUrl';
 import { type StateUpdatePayload } from './multiplayer/useRoomSocketSync';
 import { hasHandIdentityMismatch } from './multiplayer/handIdentity';
@@ -43,23 +47,16 @@ import {
   type PrivateRoomCreateSettings,
   type RoomAckResponse,
 } from './multiplayer/roomTransport';
-import type { LegacyTournamentState } from './multiplayer/legacyTournamentTypes';
-import type {
-  PresenceOnlineSocketAck,
-  StatsWeeklySocketAck,
-  WeeklyAwardsPayload,
-} from './stats/weeklyAwardsTypes';
 import {
   clearLastRoomCode,
-  getOrCreateGuestIdentityId,
   LAST_ROOM_STORAGE_KEY,
   readRoomInviteCodeFromLocation,
   saveLastRoomCode,
   shouldPersistLastRoomCode,
 } from './match/recovery/matchRecovery';
+import { normalizeRoomPlayers, type RoomPlayer } from './multiplayer/multiplayerRuntime';
 
 // ─── Utilities ───────────────────────────────────────────────
-type RoomPlayer = { id: string; username: string; userId: string | null };
 type RoomEventMeta = {
   matchId?: string;
   lastEventSequence?: number;
@@ -68,40 +65,12 @@ type RoomEventMeta = {
 type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 
 import type { AppMode } from './appRouteTypes';
-import { LEARN_MODE_VISIBLE } from './appRouteTypes';
+import { LEARN_MODE_VISIBLE, JOURNEY_MODE_VISIBLE } from './appRouteTypes';
 import { useAppSessionRuntime } from './useAppSessionRuntime';
-
-
-
-
-function normalizeUsername(value: unknown): string {
-  const raw = typeof value === 'string' ? value.trim() : '';
-  return raw || 'Guest';
-}
 
 function normalizeRoomCode(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
 }
-
-function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => {
-      if (typeof entry === 'string') {
-        return { id: entry, username: 'Guest', userId: null };
-      }
-      if (entry && typeof entry === 'object') {
-        const rec = entry as { id?: unknown; username?: unknown; userId?: unknown };
-        const id = typeof rec.id === 'string' ? rec.id : '';
-        const userId = typeof rec.userId === 'string' ? rec.userId.trim() || null : null;
-        return { id, username: normalizeUsername(rec.username), userId };
-      }
-      return { id: '', username: 'Guest', userId: null };
-    })
-    .filter((p) => Boolean(p.id));
-}
-
-
 
 // ─── Main App ────────────────────────────────────────────────
 
@@ -115,6 +84,7 @@ const MODE_TO_PATH: Partial<Record<AppMode, string>> = {
   dailyFritz: '/daily-fritz',
   ratingHistory: '/rating-history',
   singlePlayerHub: '/solo',
+  journey: '/journey',
   tournament: '/tournament',
   noBrainer: '/practice',
   learn: '/learn',
@@ -152,10 +122,7 @@ export default function App() {
   const [learnHowToPlayOpen, setLearnHowToPlayOpen] = useState(false);
   const [mpSubView, setMpSubView] = useState<'quick' | 'private'>('quick');
   const [overlayPayload, setOverlayPayload] = useState<MatchFoundPayload | null>(null);
-  const [isMuted, setIsMuted] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem('racehorse_muted') === '1';
-  });
+  const [isMuted, setIsMuted] = useState<boolean>(() => mutePreference.get());
   const [botDealSize, setBotDealSize] = useState<BotDealSize>(() => {
     if (typeof window === 'undefined') return 7;
     const stored = window.localStorage.getItem('racehorse_bot_deal_size');
@@ -173,8 +140,6 @@ export default function App() {
   const [profileTarget, setProfileTarget] = useState<string | null>(null);
 
   const [roomCode, setRoomCode] = useState('');
-  const [tournamentId, setTournamentId] = useState<string | null>(null);
-  const [tournamentState, setTournamentState] = useState<LegacyTournamentState | null>(null);
   const [, setTournamentActiveRoom] = useState<string | null>(null);
   const roomSocialRuntime = useMultiplayerRoomSocialRuntimeBridge();
   const [privateLobbyHostWinStreak, setPrivateLobbyHostWinStreak] = useState<number | null>(null);
@@ -189,6 +154,12 @@ export default function App() {
     if (!LEARN_MODE_VISIBLE && appMode === 'learn') {
       setSelectedLearnLessonId(null);
       setLearnHowToPlayOpen(false);
+      setAppMode('singlePlayerHub');
+    }
+  }, [appMode]);
+
+  useEffect(() => {
+    if (!JOURNEY_MODE_VISIBLE && appMode === 'journey') {
       setAppMode('singlePlayerHub');
     }
   }, [appMode]);
@@ -220,10 +191,9 @@ export default function App() {
     tournamentId?: string | null;
   } | null>(null);
   const {
-    user: authUser,
-    profile: authProfile,
-    accessToken: authAccessToken,
-    loading: authLoading,
+    authUser,
+    authProfile,
+    authLoading,
     justVerified,
     supabaseEnabled,
     supabaseConfigError,
@@ -237,10 +207,14 @@ export default function App() {
     updateUsername,
     refreshAuthProfile,
     applyProfilePatch,
-  } = useAuth();
-  const [guestIdentityId] = useState(getOrCreateGuestIdentityId);
-  const multiplayerIdentityUserId = authUser?.id ?? guestIdentityId;
-  const multiplayerAuthToken = authUser?.id ? authAccessToken : null;
+    multiplayerIdentityUserId,
+    multiplayerAuthToken,
+    authUserRef,
+    authProfileRef,
+    authAccessTokenRef,
+    multiplayerIdentityUserIdRef,
+    isAdmin,
+  } = useAuthSession();
   // Single tournament hook instance, shared by Hub/Bracket/Result screens.
   // Hoisted from the screens so that registration changes / bracket updates /
   // pending match-ready events are observed in App.tsx and can trigger top-level
@@ -250,16 +224,10 @@ export default function App() {
     userId: authUser?.id ?? null,
   });
 
-  const authUserRef = useRef(authUser);
-  const authProfileRef = useRef(authProfile);
-  const authAccessTokenRef = useRef<string | null>(authAccessToken);
-  const multiplayerIdentityUserIdRef = useRef(multiplayerIdentityUserId);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [weeklyStatsOpen, setWeeklyStatsOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [serverWaking, setServerWaking] = useState(false);
-  const [_weeklyAwards, setWeeklyAwards] = useState<WeeklyAwardsPayload | null>(null);
-  const [, setPlayersOnlineCount] = useState<number | null>(null);
   const [friendInvite, setFriendInvite] = useState<{
     inviteId: string;
     fromUsername: string;
@@ -288,14 +256,6 @@ export default function App() {
       active = false;
     };
   }, [authUser]);
-
-  const loadWeeklyAwards = useCallback(() => {
-    if (!socket || !socket.connected) return;
-    socket.emit("stats:weekly", (resp: StatsWeeklySocketAck) => {
-      if (!resp?.ok) return;
-      setWeeklyAwards(resp.awards ?? null);
-    });
-  }, [socket]);
 
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -424,6 +384,10 @@ export default function App() {
     [],
   );
 
+  // ENTANGLEMENT E11 [auth + socket + room]
+  // useAppSessionRuntime bundles auth, socket, and room refs into one runtime object for useMultiplayerConnection.
+  // Splitting refs across hooks without updating multiplayerRuntime types breaks the connection host wiring.
+  // Resolution path: narrow runtime slices per concern once socket and room layers are fully decoupled. Phase 3 candidate.
   const {
     socketRuntime,
     joinFlightRuntime,
@@ -508,10 +472,6 @@ export default function App() {
     navigateAfterTournamentMatch,
   } = tournamentSession;
 
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
-  const isAdmin = Boolean(
-    authUser?.email && adminEmail && authUser.email.toLowerCase() === adminEmail.toLowerCase(),
-  );
   const canOpenHowToPlayPreview = true;
   const needsUsernameOnboarding = Boolean(
     authUser && !authLoading && authProfile !== null && isTemporaryUsername(authProfile.username),
@@ -558,30 +518,13 @@ export default function App() {
   }, [botFritzTier]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('racehorse_muted', isMuted ? '1' : '0');
+    mutePreference.set(isMuted);
   }, [isMuted]);
 
 
   useEffect(() => {
     isMutedRef.current = isMuted;
   }, [isMuted]);
-
-  useEffect(() => {
-    authUserRef.current = authUser;
-  }, [authUser]);
-
-  useEffect(() => {
-    authProfileRef.current = authProfile;
-  }, [authProfile]);
-
-  useEffect(() => {
-    authAccessTokenRef.current = authAccessToken;
-  }, [authAccessToken]);
-
-  useEffect(() => {
-    multiplayerIdentityUserIdRef.current = multiplayerIdentityUserId;
-  }, [multiplayerIdentityUserId]);
 
   useEffect(() => {
     if (justVerified) {
@@ -593,31 +536,10 @@ export default function App() {
     socketRef.current = socket;
   }, [socket]);
 
-  useEffect(() => {
-    if (!socket || !authUser?.id) return;
-
-    const username = authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player';
-
-    const emitIdentify = () => {
-      console.log('[presence] emitting presence:identify', { userId: authUser.id, connected: socket.connected });
-      socket.emit('presence:identify', { userId: authUser.id, username, authToken: authAccessToken }, () => {
-        console.log('[presence] identify ack received');
-      });
-    };
-
-    // Always register reconnect handler
-    socket.on('connect', emitIdentify);
-
-    // Also fire immediately if already connected
-    if (socket.connected) {
-      emitIdentify();
-    }
-
-    return () => {
-      socket.off('connect', emitIdentify);
-    };
-  }, [socket, authUser?.id, authProfile?.username, authUser?.email, authAccessToken]);
-
+  // ENTANGLEMENT E3 [room + game + tournament]
+  // joinedRoom persistence gates saveLastRoomCode on liveGameOver and terminal tournament match state.
+  // Room-only persistence would save codes after finished games or block recovery for active tournament exits.
+  // Resolution path: pass explicit persist policy from game/tournament layers into a room recovery helper. Phase 3 candidate.
   useEffect(() => {
     joinedRoomRef.current = joinedRoom;
     if (
@@ -667,6 +589,10 @@ export default function App() {
 
   resetClientGameSessionRef.current = resetClientGameSession;
 
+  // ENTANGLEMENT E4 [room + game shell + tournament]
+  // resetMultiplayerRoomState clears joined room, tournament match, and game shell state in one callback.
+  // Moving room reset without shell/tournament setters leaves stale match UI or orphaned tournament attach state.
+  // Resolution path: split into room-only reset plus explicit shell/tournament teardown orchestrated in App. Phase 3 candidate.
   const resetMultiplayerRoomState = useCallback(
     (options: { keepPlayers?: boolean; clearRoomCode?: boolean } = {}) => {
       const { keepPlayers = false, clearRoomCode = true } = options;
@@ -762,6 +688,10 @@ export default function App() {
     [authProfile?.username, multiplayerIdentityUserId, multiplayerAuthToken, resolvePendingCreate, dispatchRecovery, shellSetActionError],
   );
 
+  // ENTANGLEMENT E5 [room + game shell + tournament]
+  // applyJoinedRoomResponse projects join ack into room roster, game shell bridge, and tournament metadata attach.
+  // Extracting room-only join handling without the shell bridge drops authoritative state on join and breaks seated-player ready.
+  // Resolution path: room hook owns roster; App keeps a thin bridge callback for shell/tournament projection. Phase 3 candidate.
   const applyJoinedRoomResponse = useCallback((resp: RoomAckResponse) => {
     joinedRoomResponseRef.current = resp;
     applyRoomEventMeta(resp.eventMeta as RoomEventMeta | null | undefined);
@@ -840,6 +770,10 @@ export default function App() {
   ]);
 
   /** Fetch full authoritative game state from the server (room:join ack). */
+  // ENTANGLEMENT E6 [room + socket refs + auth identity]
+  // fetchGameState re-joins via socketRef using roomIdentity or live auth profile/token fallbacks.
+  // A room-only resync without auth refs sends guest identity on reconnect and fails authenticated room joins.
+  // Resolution path: inject stable identity from useAuthSession into a room transport helper. Phase 3 candidate.
   const fetchGameState = useCallback(
     async (reason: string) => {
       const roomCode = normalizeRoomCode(joinedRoomRef.current);
@@ -869,13 +803,13 @@ export default function App() {
       try {
         const resp = await emitRoomJoin(activeSocket, roomCode, identity);
         if (!resp?.ok) {
-          console.error('[mp] fetchGameState failed', { reason, error: resp?.error });
+          logger.error('App.tsx', new Error('[mp] fetchGameState failed'), { reason, error: resp?.error });
           return false;
         }
         applyJoinedRoomResponse(resp);
         return true;
       } catch (error) {
-        console.error('[mp] fetchGameState error', {
+        logger.error('App.tsx', error, {
           reason,
           message: error instanceof Error ? error.message : String(error),
         });
@@ -937,7 +871,9 @@ export default function App() {
       }
     } catch (error) {
       playerReadyEmittedRef.current = false;
-      console.error('[mp] player:ready failed', error instanceof Error ? error.message : error);
+      logger.error('App.tsx', new Error('[mp] player:ready failed'), {
+        detail: error instanceof Error ? error.message : error,
+      });
     }
   }, [normalizeRoomCode, emitWithAck]);
 
@@ -947,6 +883,10 @@ export default function App() {
   applyJoinedRoomResponseRef.current = applyJoinedRoomResponse;
   trySchedulePlayerReadyRef.current = trySchedulePlayerReady;
 
+  // ENTANGLEMENT E7 [room + auth + navigation]
+  // handleMatchmakingAutoJoin emits room:join with auth identity and switches appMode to multiplayer on match found.
+  // Separating room join from navigation stranding the overlay open or joining without switching to the MP shell.
+  // Resolution path: matchmaking service callback returns join result; App owns navigation side effect. Phase 3 candidate.
   const handleMatchmakingAutoJoin = useCallback(
     (payload: MatchFoundPayload) => {
       const roomCode = payload.roomCode.trim().toUpperCase();
@@ -1042,6 +982,10 @@ export default function App() {
     }
   }, [players.length, outboundChallenge, clearOutboundChallenge]);
 
+  // ENTANGLEMENT E2 [socket + auth + navigation]
+  // Feed mode triggers connectRef when authUser is present but socket is not yet connected.
+  // Moving connect trigger to socket-only hook ignores feed's auth-gated lazy connect and leaves feed stale offline.
+  // Resolution path: explicit connect policy table keyed by appMode + auth readiness. Phase 3 candidate.
   useEffect(() => {
     if (appMode !== 'feed' || !authUser) return;
     if (!socket?.connected) connectRef.current();
@@ -1092,8 +1036,7 @@ export default function App() {
     authUserId: authUser?.id ?? null,
     authEmail: authUser?.email ?? null,
     authProfileUsername: authProfile?.username ?? null,
-    tournamentId,
-    tournamentStateStatus: tournamentState?.status ?? null,
+    authAccessToken: multiplayerAuthToken,
     roomCode,
     socketRuntime,
     roomRuntime,
@@ -1130,8 +1073,6 @@ export default function App() {
     setState: shellSetState,
     setLegalMoves: shellSetLegalMoves,
     setCanDraw: shellSetCanDraw,
-    setTournamentId,
-    setTournamentState,
     setTournamentActiveRoom,
     setRoomCode,
     setHandReveal: shellSetHandReveal,
@@ -1143,62 +1084,6 @@ export default function App() {
   const { connect, disconnect, retryRoomRecovery } = connectionActions;
 
   useEffect(() => {
-    if (!weeklyStatsOpen) return;
-
-    if (!socket || !socket.connected) {
-      connect();
-      window.setTimeout(() => loadWeeklyAwards(), 250);
-      return;
-    }
-
-    loadWeeklyAwards();
-  }, [weeklyStatsOpen, socket, connect, loadWeeklyAwards]);
-
-  useEffect(() => {
-    if (appMode !== 'home') return;
-    if (!socket || !socket.connected) {
-      setPlayersOnlineCount(null);
-      return;
-    }
-
-    let active = true;
-    const refreshPresence = () => {
-      socket.emit('presence:online', [], (resp: PresenceOnlineSocketAck) => {
-        if (!active || !resp?.ok) return;
-        if (Number.isFinite(resp.onlineCount)) {
-          setPlayersOnlineCount(Number(resp.onlineCount));
-          return;
-        }
-        if (Array.isArray(resp.onlineUserIds)) {
-          setPlayersOnlineCount(resp.onlineUserIds.length);
-          return;
-        }
-        setPlayersOnlineCount(null);
-      });
-    };
-
-    refreshPresence();
-    const interval = window.setInterval(refreshPresence, 30000);
-    const onConnect = () => refreshPresence();
-    socket.on('connect', onConnect);
-
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      socket.off('connect', onConnect);
-    };
-  }, [appMode, socket]);
-
-  useEffect(() => {
-    if (appMode !== 'home') return;
-    if (!socket || !socket.connected) return;
-
-    loadWeeklyAwards();
-    const interval = window.setInterval(loadWeeklyAwards, 60000);
-    return () => window.clearInterval(interval);
-  }, [appMode, socket, loadWeeklyAwards]);
-
-  useEffect(() => {
     if (appMode !== 'botSetup') return;
     setBotDealSize(7);
   }, [appMode]);
@@ -1206,31 +1091,40 @@ export default function App() {
 
 
 
+  // ENTANGLEMENT E8 [room + tournament + socket]
+  // handlePostGame and abandonCurrentMatch branch on tournament context while calling disconnect or room abandon over socketRef.
+  // Splitting post-game navigation from socket/room teardown causes double-leave or tournament bracket desync after match end.
+  // Resolution path: tournament session owns exit routing; room layer owns leave/abandon transport. Phase 3 candidate.
   const handlePostGame = useCallback(() => {
     resetRoomRecoveryState();
     // Tournament matches should return to tournament lobby, not disconnect to Home.
-    const inTournament = Boolean(currentTournamentContext) || Boolean(tournamentId) || tournamentState?.status === 'running';
     if (currentTournamentContext) {
       navigateAfterTournamentMatch('bracket');
       return;
     }
-    if (!inTournament) return disconnect('post-game to home');
-    resetMultiplayerRoomState({ keepPlayers: true });
-    shellSetActionError('');
-    setAppMode('tournament');
+    // LEGACY TOURNAMENT — TournamentScreen.tsx is unmounted and unreachable.
+    // This branch is dead code. Do not remove yet — remove in Phase 2 cleanup.
+    // const inTournament =
+    //   Boolean(currentTournamentContext) ||
+    //   Boolean(tournamentId) ||
+    //   tournamentState?.status === 'running';
+    // if (!inTournament) return disconnect('post-game to home');
+    // resetMultiplayerRoomState({ keepPlayers: true });
+    // shellSetActionError('');
+    // setAppMode('tournament');
+    // Orchestrate post-game cleanup:
+    // 1. Reset room + shell state (tournament match, room code, identity ref, shell bridge, sequence refs)
+    // 2. Transport teardown (socket close, leave/abandon emit, recovery flags, navigate home)
+    // Order matters: reset room state before transport so shell unmounts cleanly.
+    resetMultiplayerRoomState({ keepPlayers: false, clearRoomCode: true });
+    disconnect('post-game to home');
   }, [
     currentTournamentContext,
     disconnect,
     navigateAfterTournamentMatch,
-    tournamentId,
-    tournamentState?.status,
     resetMultiplayerRoomState,
     resetRoomRecoveryState,
   ]);
-
-  const _backToTournamentHub = useCallback(() => {
-    navigateAfterTournamentMatch('hub');
-  }, [navigateAfterTournamentMatch]);
 
   const abandonCurrentMatch = useCallback(async () => {
     const activeSocket = socketRef.current;
@@ -1340,6 +1234,10 @@ export default function App() {
     tournamentMatch,
   ]);
 
+  // ENTANGLEMENT E9 [auth + socket + room + game]
+  // Private lobby win streak fetch requires authUser, connection/recovery flags, joinedRoom, and hasLiveGameState together.
+  // Extracting to auth-only or room-only hook fetches stats during live matches or skips them in the lobby idle state.
+  // Resolution path: derive lobby visibility predicate in one selector; stats effect depends on that only. Phase 3 candidate.
   useEffect(() => {
     if (appMode !== 'multiplayer' || !authUser?.id) {
       setPrivateLobbyHostWinStreak(null);
@@ -1579,47 +1477,88 @@ export default function App() {
   return (
     <>
       {joinedRoom ? (
-        <MultiplayerGameShell
-          socket={socket}
-          joinedRoom={joinedRoom}
-          you={you}
-          players={players}
-          isConnected={isConnected}
-          showToast={showToast}
-          connectionRecovery={{
-            roomRecoveryState,
-            isRecoveringConnection,
-            roomRecoveryMessage,
-            setRoomRecoveryState,
-            setRoomRecoveryMessage,
-          }}
-          setError={setError}
-          setPlayers={setPlayers}
-          setFriendInvite={setFriendInvite}
-          isMuted={isMuted}
-          isMutedRef={isMutedRef}
-          trayCenterRef={trayCenterRef}
-          authUser={authUser}
-          authProfile={authProfile}
-          refreshAuthProfile={refreshAuthProfile}
-          authProfileRef={authProfileRef}
-          supabaseEnabled={supabaseEnabled}
-          tournamentMatch={tournamentMatch}
-          tournamentId={tournamentId}
-          tournamentState={tournamentState}
-          tournamentOpponentLabel={tournamentOpponentLabel}
-          rejoinInFlightRef={rejoinInFlightRef}
-          joinedRoomRef={joinedRoomRef}
-          maxSequenceRef={maxSequenceRef}
-          roomPlayersRef={roomPlayersRef}
-          resyncInFlightRef={resyncInFlightRef}
-          resyncBufferedUpdateRef={resyncBufferedUpdateRef}
-          resyncFlushRef={resyncFlushRef}
-          fetchGameState={fetchGameState}
-          applyRoomEventMeta={applyRoomEventMeta}
-          shellBridgeRef={gameShellBridgeRef}
-          sharedGameplayRefs={sharedGameplayRefs}
-        />
+        <ErrorBoundary
+          context="multiplayer-shell"
+          fallback={
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100vh',
+                background: '#040b17',
+                color: '#f0e6cc',
+                fontFamily: 'var(--font-display, sans-serif)',
+                gap: '16px',
+              }}
+            >
+              <div style={{ fontSize: '32px' }}>⚠</div>
+              <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Match unavailable</h2>
+              <p style={{ color: '#6b7a94', fontSize: '14px', margin: 0 }}>
+                Something went wrong during your match.
+              </p>
+              <button
+                onClick={() => {
+                  window.location.href = '/';
+                }}
+                style={{
+                  background: '#C9A84C',
+                  color: '#040b17',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '10px 24px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  marginTop: '8px',
+                }}
+              >
+                Return to home
+              </button>
+            </div>
+          }
+        >
+          <MultiplayerGameShell
+            socket={socket}
+            joinedRoom={joinedRoom}
+            you={you}
+            players={players}
+            isConnected={isConnected}
+            showToast={showToast}
+            connectionRecovery={{
+              roomRecoveryState,
+              isRecoveringConnection,
+              roomRecoveryMessage,
+              setRoomRecoveryState,
+              setRoomRecoveryMessage,
+            }}
+            setError={setError}
+            setPlayers={setPlayers}
+            setFriendInvite={setFriendInvite}
+            isMuted={isMuted}
+            isMutedRef={isMutedRef}
+            trayCenterRef={trayCenterRef}
+            authUser={authUser}
+            authProfile={authProfile}
+            refreshAuthProfile={refreshAuthProfile}
+            authProfileRef={authProfileRef}
+            supabaseEnabled={supabaseEnabled}
+            tournamentMatch={tournamentMatch}
+            tournamentOpponentLabel={tournamentOpponentLabel}
+            rejoinInFlightRef={rejoinInFlightRef}
+            joinedRoomRef={joinedRoomRef}
+            maxSequenceRef={maxSequenceRef}
+            roomPlayersRef={roomPlayersRef}
+            resyncInFlightRef={resyncInFlightRef}
+            resyncBufferedUpdateRef={resyncBufferedUpdateRef}
+            resyncFlushRef={resyncFlushRef}
+            fetchGameState={fetchGameState}
+            applyRoomEventMeta={applyRoomEventMeta}
+            shellBridgeRef={gameShellBridgeRef}
+            sharedGameplayRefs={sharedGameplayRefs}
+          />
+        </ErrorBoundary>
       ) : null}
       <AppRoutesGamePropsHost source={appRoutesHostSource} />
     </>

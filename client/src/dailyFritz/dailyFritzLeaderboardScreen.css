@@ -8,9 +8,9 @@
   --hub-text: rgba(248, 250, 252, 0.96);
   --hub-muted: rgba(148, 163, 184, 0.82);
   --hub-panel-border: rgba(148, 163, 184, 0.14);
-  --hub-green: #4ade80;
+  --hub-green: var(--tier-rookie);
   --hub-red: #f87171;
-  --hub-gold: var(--tier-elite, #e7b64a);
+  --hub-gold: var(--tier-elite, var(--tier-elite));
   --hub-cyan: var(--accent-blue, #4cc9f0);
 
   background: var(--hub-bg);

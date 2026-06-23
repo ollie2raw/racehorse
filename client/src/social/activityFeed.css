@@ -312,7 +312,7 @@
 .rh-af-rich-delta {
   font-size: 12px;
   font-weight: 700;
-  color: #34d399;
+  color: var(--accent-green);
 }
 
 .rh-af-rich-streaks {
@@ -328,7 +328,7 @@
   border-radius: 999px;
   background: rgba(52, 211, 153, 0.14);
   border: 1px solid rgba(52, 211, 153, 0.35);
-  color: #34d399;
+  color: var(--accent-green);
   font-size: 9px;
   font-weight: 800;
 }

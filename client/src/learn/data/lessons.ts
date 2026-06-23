@@ -1,9 +1,6 @@
 import type { LessonScenario } from '../types';
-import type { Tile, Move } from '../../types';
-
-function tileEquals(a: Tile, b: Tile): boolean {
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
-}
+import type { Move } from '../../types';
+import { tileEquals } from '../../game/tileUtils';
 
 export const LESSONS: LessonScenario[] = [
   {

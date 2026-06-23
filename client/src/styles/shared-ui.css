@@ -1,6 +1,6 @@
 /* ─── Guided Learn Match Redesign ─── */
 .learn-lesson-screen {
-  --learn-guided-accent: #e7b64a;
+  --learn-guided-accent: var(--tier-elite);
   --learn-guided-accent-strong: #f0c76a;
   --learn-guided-border: rgba(231, 182, 74, 0.18);
   --learn-guided-border-strong: rgba(231, 182, 74, 0.34);

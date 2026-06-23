@@ -1,10 +1,6 @@
-import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRef } from 'react';
-import type { User } from '@supabase/supabase-js';
-import type { UserProfile } from '../auth/useAuth';
-import type { GhostProfileSummary } from '../ghost/api';
-import type { AppMode } from '../types';
-import { BrandLogo, BoneyardStackIcon, GlobalNav } from '../components';
+import { BoneyardStackIcon, GlobalNav } from '../components';
 import { Button } from '../components/primitives';
 import { useDeferredAsset } from '../ui/useDeferredAsset';
 import '../screens/RacehorseHomeArt.css';
@@ -26,622 +22,53 @@ import {
 } from './api';
 import { formatOrdinalPlace } from './format';
 import { DAILY_FRITZ_CLASSIC_PRACTICE_HINT, playerLostDailyFritzGame } from './practiceHint';
-import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy, isDailyFritzSkunk } from './skunk';
+import { getGameSkunkChipLabel, getSetSkunkBadge, getSkunkOverlayCopy } from './skunk';
 import type { DailyFritzSetOverlayViewModel } from './setOverlayViewModel';
+import {
+  DAILY_FRITZ_INIT_SLOW_MS,
+  dfInitLog,
+  formatCountdownHms,
+  formatDateLabel,
+  formatMargin,
+  friendlyDailyFritzInitError,
+  getDailyFritzGameSeed,
+  getNextGameNumberFromSetResult,
+  getSetTrackerStatus,
+  normalizeGameNumber,
+  normalizeSetResult,
+  normalizeStartResponse,
+  readTodayCache,
+  resolveDailyFritzCurrentGameNumber,
+  secondsUntilNextPacificMidnight,
+  setResultForOverlay,
+  shouldClearStaleClientState,
+  tierDisplayLabel,
+  titleCaseTier,
+} from './dailyFritzScreenHelpers';
+import type {
+  DailyFritzGameCardState,
+  DailyFritzGameCompletionPayload,
+  DailyFritzInitPhase,
+  DailyFritzOverlayState,
+  DailyFritzScreenProps,
+  OverlayGameItem,
+  OverlayTrackerItem,
+} from './dailyFritzScreenTypes';
+import {
+  DfIconCalendar,
+  DfIconFlame,
+  DfIconGlobe,
+  DfIconLock,
+  DfIconStar,
+  DfIconSwords,
+  DfIconTrophy,
+  DfPvfIconCrown,
+  DfPvfIconRobotNav,
+} from './DailyFritzIcons';
+import { DailyFritzLoadingScreen } from './DailyFritzLoadingScreen';
 import './dailyFritz.css';
 
 const LazyBotMatchScreen = lazy(() => import('../bot/BotMatchScreen'));
-
-/* Same marks as Play vs Fritz left-panel badges (compact header icons). */
-const DfPvfIconRobotNav = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
-  <svg width={20} height={20} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <rect x="4" y="7.5" width="16" height="11.5" rx="2.5" stroke={color} strokeWidth="1.7" />
-    <circle cx="9" cy="12.5" r="1.6" fill={color} />
-    <circle cx="15" cy="12.5" r="1.6" fill={color} />
-    <path d="M9.5 16h5" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M12 7.5V5" stroke={color} strokeWidth="1.7" strokeLinecap="round" />
-    <circle cx="12" cy="4.2" r="1.2" fill={color} />
-  </svg>
-);
-
-const DfPvfIconCrown = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
-  <svg width={20} height={20} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <path
-      d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"
-      fill={color}
-    />
-  </svg>
-);
-
-const DfIconCalendar = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-    <rect x="4" y="5" width="16" height="16" rx="2" />
-    <path d="M8 3v4M16 3v4M4 11h16" strokeLinecap="round" />
-  </svg>
-);
-
-const DfIconSwords = () => (
-  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-    <path d="M4 20L9 15M15 9L20 4" strokeLinecap="round" />
-    <path d="M14 4l6 6M4 14l6 6" strokeLinecap="round" />
-  </svg>
-);
-
-const DfIconFlame = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
-  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <path
-      d="M12 22c4-2.5 6-6 6-10 0-3-1.5-5-3-6.5C13 4.5 12 2 12 2s-1 2.5-3 3.5C7.5 7 6 9 6 12c0 4 2 7.5 6 10z"
-      stroke={color}
-      strokeWidth="1.6"
-      fill={color}
-      fillOpacity="0.2"
-    />
-  </svg>
-);
-
-const DfIconGlobe = ({ color = 'var(--tier-elite)' }: { color?: string }) => (
-  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-    <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.6" />
-    <path d="M3 12h18M12 3c2.5 2.8 4 6.2 4 9s-1.5 6.2-4 9M12 3c-2.5 2.8-4 6.2-4 9s1.5 6.2 4 9" stroke={color} strokeWidth="1.4" />
-  </svg>
-);
-
-const DfIconTrophy = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-    <path d="M8 21h8M12 17v4M8 4h8v4a4 4 0 0 1-8 0V4z" strokeLinejoin="round" />
-    <path d="M16 6h2a2 2 0 0 1 0 4h-2M8 6H6a2 2 0 0 0 0 4h2" strokeLinecap="round" />
-  </svg>
-);
-
-const DfIconStar = () => (
-  <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-    <path d="M12 2.8l2.8 5.66 6.25.91-4.53 4.42 1.07 6.21L12 17.1l-5.59 2.9 1.07-6.21L2.95 9.37l6.25-.91L12 2.8z" />
-  </svg>
-);
-
-const DfIconLock = () => (
-  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-    <path d="M7 11V8a5 5 0 0 1 10 0v3" strokeLinecap="round" />
-    <rect x="5" y="11" width="14" height="10" rx="2" />
-    <circle cx="12" cy="16" r="1.2" fill="currentColor" stroke="none" />
-  </svg>
-);
-
-interface OverlayTrackerItem {
-  gameNumber: DailyFritzSetGameNumber;
-  label: string;
-  tone: BetweenGameTrackerTone;
-}
-
-interface OverlayGameItem {
-  gameNumber: DailyFritzSetGameNumber;
-  value: string;
-  tone: 'win' | 'loss';
-  playerScore: number;
-  fritzScore: number;
-  skunk?: boolean;
-  skunkLabel?: string | null;
-}
-
-const DAILY_FRITZ_SET_VERSION = 2;
-const DAILY_FRITZ_INIT_SLOW_MS = 10_000;
-
-const DAILY_FRITZ_INIT_DEBUG =
-  import.meta.env.DEV === true || import.meta.env.VITE_DEBUG_DAILY_FRITZ === 'true';
-
-type DailyFritzInitPhase = 'preparing' | 'still-preparing' | 'failed' | 'retrying' | 'ready';
-
-function dfInitLog(event: string, payload?: Record<string, unknown>): void {
-  if (DAILY_FRITZ_INIT_DEBUG) {
-    console.log(`[daily-fritz:init] ${event}`, payload ?? {});
-  }
-}
-
-function readTodayCache(cacheKey: string | null): DailyFritzTodayResponse | null {
-  if (!cacheKey || typeof window === 'undefined') return null;
-  try {
-    const raw = window.sessionStorage.getItem(cacheKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as DailyFritzTodayResponse;
-    if (!parsed || parsed.ok !== true || typeof parsed.run_date !== 'string') return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function shouldClearStaleClientState(
-  cached: DailyFritzTodayResponse,
-  server: DailyFritzTodayResponse,
-): boolean {
-  if (cached.run_date !== server.run_date) return true;
-  if (cached.attempt_status === 'started' && server.attempt_status !== 'started') return true;
-  if (cached.attempt_status === 'completed' && server.attempt_status === 'none') return true;
-  return false;
-}
-
-function friendlyDailyFritzInitError(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    const message = error.message.trim().toLowerCase();
-    if (message.includes('unauthorized') || message.includes('sign in')) {
-      return 'Please sign in again to play Daily Fritz.';
-    }
-    if (message.includes('timed out') || message.includes('longer than expected') || message.includes('waking')) {
-      return 'The game server may be waking up.';
-    }
-    if (message.includes('failed to fetch') || message.includes('network')) {
-      return 'Please try again.';
-    }
-  }
-  return 'Please try again.';
-}
-
-interface DailyFritzScreenProps {
-  user: User | null;
-  profile: UserProfile | null;
-  ghostProfile: GhostProfileSummary | null;
-  onGhostProfileChange: (profile: GhostProfileSummary | null) => void;
-  onProfileRefresh?: () => Promise<void> | void;
-  onProfilePatch?: (patch: Partial<UserProfile>) => void;
-  onOpenAuth: () => void;
-  onOpenAccount?: () => void;
-  onBack: () => void;
-  onNavigate?: (mode: AppMode) => void;
-}
-
-type DailyFritzOverlayState =
-  | {
-      kind: 'saving';
-      completedGame: DailyFritzSetGameResult;
-      message: string;
-    }
-  | {
-      kind: 'record-error';
-      completedGame: DailyFritzSetGameResult;
-      message: string;
-      error: string;
-      game: DailyFritzGameCompletionPayload;
-    }
-  | {
-      kind: 'between';
-      completedGame: DailyFritzSetGameResult;
-      setResult: DailyFritzSetResult;
-      nextGameNumber: DailyFritzSetGameNumber;
-    }
-  | {
-      kind: 'finalizing';
-      completedGame: DailyFritzSetGameResult;
-      setResult: DailyFritzSetResult;
-      message: string;
-      currentHandIndex: number;
-    }
-  | {
-      kind: 'final-error';
-      completedGame: DailyFritzSetGameResult;
-      setResult: DailyFritzSetResult;
-      error: string;
-      currentHandIndex: number;
-    }
-  | {
-      kind: 'final';
-      completedGame: DailyFritzSetGameResult;
-      setResult: DailyFritzSetResult;
-      rank: number | null;
-      canViewLeaderboard: boolean;
-    };
-
-interface DailyFritzGameCompletionPayload {
-  winner: 'you' | 'bot' | null;
-  yourScore: number;
-  botScore: number;
-  movesUsed: number;
-  handsPlayed: number;
-  currentHandIndex: number;
-  moveLog: unknown;
-}
-
-type BetweenGameTrackerTone = 'win' | 'loss' | 'next' | 'idle';
-type DailyFritzGameCardState = 'active' | 'won' | 'lost' | 'locked' | 'not-needed' | 'pending';
-
-function formatDateLabel(dateText: string): string {
-  const parsed = new Date(`${dateText}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return dateText;
-  return parsed.toLocaleDateString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function titleCaseTier(tier: string): string {
-  return tier.charAt(0).toUpperCase() + tier.slice(1);
-}
-
-function tierDisplayLabel(tier: string): string {
-  if (tier === 'elite') return 'Elite · Competitive';
-  if (tier === 'standard') return 'Standard · Balanced';
-  if (tier === 'rookie') return 'Rookie · Beginner';
-  if (tier === 'master') return 'Master · Expert';
-  return titleCaseTier(tier);
-}
-
-function getDailyFritzGameSeed(runDate: string, gameNumber: DailyFritzSetGameNumber): string {
-  return `daily-fritz-${runDate}:game:${gameNumber}`;
-}
-
-function normalizeGameNumber(value: unknown, fallback: DailyFritzSetGameNumber = 1): DailyFritzSetGameNumber {
-  const parsed = Number(value);
-  return parsed === 1 || parsed === 2 || parsed === 3 ? parsed : fallback;
-}
-
-function normalizeSetResult(value: unknown): DailyFritzSetResult | null {
-  if (!value || typeof value !== 'object') return null;
-  const rec = value as Record<string, unknown>;
-  if (rec.version !== DAILY_FRITZ_SET_VERSION && rec.version !== 1) {
-    // allow version 1 for legacy sets if they exist, but normally we want 2
-  }
-  if (!Array.isArray(rec.games)) {
-    return null;
-  }
-  const formatNorm =
-    rec.format == null || rec.format === ''
-      ? 'best_of_3'
-      : String(rec.format).toLowerCase().replace(/-/g, '_');
-  if (formatNorm !== 'best_of_3') {
-    return null;
-  }
-  const games = rec.games
-    .map((game): DailyFritzSetGameResult | null => {
-      if (!game || typeof game !== 'object') return null;
-      const g = game as Record<string, unknown>;
-      const rawGameNumber = g.gameNumber ?? g.game_number;
-      const gameNumber = Number(rawGameNumber) as DailyFritzSetGameNumber;
-      if (gameNumber !== 1 && gameNumber !== 2 && gameNumber !== 3) return null;
-      const seed = typeof g.seed === 'string' ? g.seed : '';
-      const playerScore = Number(g.playerScore ?? g.player_score);
-      const fritzScore = Number(g.fritzScore ?? g.fritz_score);
-      const pointDiff = Number(g.pointDiff ?? g.point_diff);
-      const completedAt =
-        typeof g.completedAt === 'string' ? g.completedAt : typeof g.completed_at === 'string' ? g.completed_at : '';
-      const rawWon = g.playerWon ?? g.player_won;
-      const playerWonFromScores =
-        Number.isFinite(playerScore) && Number.isFinite(fritzScore) && playerScore !== fritzScore
-          ? playerScore > fritzScore
-          : null;
-      const playerWonFromFlag =
-        typeof rawWon === 'boolean' ? rawWon : rawWon === 'true' || rawWon === 1 || rawWon === '1' ? true : rawWon === 'false' || rawWon === 0 || rawWon === '0' ? false : null;
-      const playerWon = playerWonFromScores ?? playerWonFromFlag;
-      if (!seed || playerWon === null || !Number.isFinite(playerScore) || !Number.isFinite(fritzScore) || !completedAt) {
-        return null;
-      }
-      const movesUsed = g.movesUsed == null && g.moves_used == null ? undefined : Number(g.movesUsed ?? g.moves_used);
-      const handsPlayed =
-        g.handsPlayed == null && g.hands_played == null ? undefined : Number(g.handsPlayed ?? g.hands_played);
-      const losingScore = playerWon ? fritzScore : playerScore;
-      const skunk = g.skunk === true || isDailyFritzSkunk(losingScore);
-      const skunkByRaw = g.skunkBy ?? g.skunk_by;
-      const skunkBy =
-        skunkByRaw === 'player' || skunkByRaw === 'fritz'
-          ? skunkByRaw
-          : skunk
-            ? playerWon
-              ? 'player'
-              : 'fritz'
-            : undefined;
-      return {
-        gameNumber,
-        seed,
-        playerWon,
-        playerScore,
-        fritzScore,
-        pointDiff: Number.isFinite(pointDiff) ? pointDiff : playerScore - fritzScore,
-        ...(Number.isFinite(movesUsed) ? { movesUsed } : {}),
-        ...(Number.isFinite(handsPlayed) ? { handsPlayed } : {}),
-        completedAt,
-        ...(skunk ? { skunk: true } : {}),
-        ...(skunkBy ? { skunkBy } : {}),
-      };
-    })
-    .filter((game): game is DailyFritzSetGameResult => Boolean(game))
-    .sort((a, b) => a.gameNumber - b.gameNumber);
-  const totalPointDiff = games.reduce((sum, game) => sum + game.pointDiff, 0);
-  const totalPointDiffSafe = Number.isFinite(totalPointDiff) ? totalPointDiff : 0;
-  const instantSkunk = rec.instantSkunk === true || rec.instant_skunk === true;
-  const hasSkunk =
-    rec.hasSkunk === true || rec.has_skunk === true || games.some((game) => game.skunk);
-  const skunkGameNumberRaw = rec.skunkGameNumber ?? rec.skunk_game_number;
-  const skunkGameNumber =
-    skunkGameNumberRaw === 1 || skunkGameNumberRaw === 2 || skunkGameNumberRaw === 3
-      ? (skunkGameNumberRaw as DailyFritzSetGameNumber)
-      : games.find((game) => game.skunk)?.gameNumber ?? null;
-  const skunkByRaw = rec.skunkBy ?? rec.skunk_by;
-  const skunkBy =
-    skunkByRaw === 'player' || skunkByRaw === 'fritz'
-      ? skunkByRaw
-      : games.find((game) => game.skunkBy)?.skunkBy ?? null;
-  const playedWins = games.filter((game) => game.playerWon).length;
-  const playedLosses = games.length - playedWins;
-  let setWinner: 'player' | 'fritz' | undefined =
-    playedWins >= 2 ? 'player' : playedLosses >= 2 ? 'fritz' : undefined;
-  if (rec.setWinner === 'player' || rec.setWinner === 'fritz') {
-    setWinner = rec.setWinner;
-  } else if (rec.set_winner === 'player' || rec.set_winner === 'fritz') {
-    setWinner = rec.set_winner;
-  }
-  if (!setWinner && skunkGameNumber === 2 && games.length === 2 && playedWins === 1 && playedLosses === 1) {
-    const skunkGame = games.find((game) => game.gameNumber === 2 && game.skunk);
-    if (skunkGame) setWinner = skunkGame.playerWon ? 'player' : 'fritz';
-  }
-  const storedPlayerGamesWon = Number(rec.playerGamesWon ?? rec.player_games_won);
-  const storedFritzGamesWon = Number(rec.fritzGamesWon ?? rec.fritz_games_won);
-  const playerGamesWon =
-    instantSkunk && setWinner === 'player'
-      ? 2
-      : instantSkunk && setWinner === 'fritz'
-        ? 0
-        : Number.isFinite(storedPlayerGamesWon)
-          ? Math.round(storedPlayerGamesWon)
-          : playedWins;
-  const fritzGamesWon =
-    instantSkunk && setWinner === 'fritz'
-      ? 2
-      : instantSkunk && setWinner === 'player'
-        ? 0
-        : Number.isFinite(storedFritzGamesWon)
-          ? Math.round(storedFritzGamesWon)
-          : playedLosses;
-  return {
-    version: 2,
-    format: 'best_of_3',
-    playerGamesWon,
-    fritzGamesWon,
-    totalPointDiff: totalPointDiffSafe,
-    games,
-    ...(setWinner ? { setWinner } : {}),
-    ...(hasSkunk ? { hasSkunk: true } : {}),
-    ...(instantSkunk ? { instantSkunk: true } : {}),
-    ...(skunkGameNumber ? { skunkGameNumber } : {}),
-    ...(skunkBy ? { skunkBy } : {}),
-    ...(typeof rec.run_date === 'string' ? { run_date: rec.run_date } : {}),
-    ...(typeof rec.won === 'boolean' ? { won: rec.won } : {}),
-    ...(Number.isFinite(Number(rec.final_score)) ? { final_score: Number(rec.final_score) } : {}),
-    ...(Number.isFinite(Number(rec.opponent_score)) ? { opponent_score: Number(rec.opponent_score) } : {}),
-    ...(Number.isFinite(Number(rec.point_diff)) ? { point_diff: Number(rec.point_diff) } : {}),
-    ...(Number.isFinite(Number(rec.moves_used)) ? { moves_used: Number(rec.moves_used) } : {}),
-    ...(Number.isFinite(Number(rec.hands_played)) ? { hands_played: Number(rec.hands_played) } : {}),
-  };
-}
-
-/** Normalize set payloads for interstitials; tolerates slightly invalid roots if `games` parses. */
-function setResultForOverlay(raw: unknown): DailyFritzSetResult | null {
-  const primary = normalizeSetResult(raw);
-  if (primary) return primary;
-  if (!raw || typeof raw !== 'object') return null;
-  const rec = raw as Record<string, unknown>;
-  if (!Array.isArray(rec.games)) return null;
-  return normalizeSetResult({
-    version: 2,
-    format: 'best_of_3',
-    games: rec.games,
-  });
-}
-
-function getNextGameNumberFromSetResult(setResult: DailyFritzSetResult | null): DailyFritzSetGameNumber {
-  if (!setResult || setResult.setWinner) return 1;
-  return normalizeGameNumber(setResult.games.length + 1, 3);
-}
-
-/**
- * Current game slot (1–3) from recorded games + server hint.
- * `current_game_number` can stay stale after we merge only `set_result` into `activeRun`; prefer the next
- * game implied by `games.length + 1` while the set is still live.
- */
-function resolveDailyFritzCurrentGameNumber(
-  setResult: DailyFritzSetResult | null | undefined,
-  reportedCurrent: unknown,
-): DailyFritzSetGameNumber {
-  if (!setResult || setResult.setWinner) {
-    return normalizeGameNumber(reportedCurrent, 1);
-  }
-  const inferred = getNextGameNumberFromSetResult(setResult);
-  const reported = normalizeGameNumber(reportedCurrent, inferred);
-  return reported < inferred ? inferred : reported;
-}
-
-function normalizeStartResponse(
-  response: DailyFritzStartResponse,
-  fallbackSetResult: DailyFritzSetResult | null,
-): DailyFritzStartResponse {
-  const setResult = normalizeSetResult(response.set_result) ?? fallbackSetResult;
-  const currentGameNumber =
-    response.needs_completion && setResult?.setWinner
-      ? null
-      : resolveDailyFritzCurrentGameNumber(setResult, response.current_game_number);
-  const normalized = {
-    ...response,
-    current_game_number: currentGameNumber,
-    set_result: setResult,
-  };
-  return normalized;
-}
-
-function formatMargin(value: number): string {
-  if (!Number.isFinite(value)) return '—';
-  return `${value >= 0 ? '+' : ''}${value}`;
-}
-
-function getSetTrackerStatus(
-  setResult: DailyFritzSetResult,
-  gameNumber: DailyFritzSetGameNumber,
-  nextGameNumber?: DailyFritzSetGameNumber | null,
-): { label: string; tone: BetweenGameTrackerTone } {
-  const completedGame = setResult.games.find((game) => game.gameNumber === gameNumber);
-  if (completedGame) {
-    const youWonGame = Number(completedGame.playerScore) > Number(completedGame.fritzScore);
-    if (completedGame.skunk) {
-      return {
-        label: youWonGame ? 'Skunk' : 'Skunked',
-        tone: youWonGame ? 'win' : 'loss',
-      };
-    }
-    return {
-      label: youWonGame ? 'You won' : 'Fritz won',
-      tone: youWonGame ? 'win' : 'loss',
-    };
-  }
-  if (nextGameNumber === gameNumber) {
-    return {
-      label: gameNumber === 3 ? 'Decider' : 'Up next',
-      tone: 'next',
-    };
-  }
-  return {
-    label: gameNumber === 3 && !setResult.setWinner ? 'If needed' : 'Not played',
-    tone: 'idle',
-  };
-}
-
-function getLosAngelesHms(now: Date): { h: number; m: number; s: number } {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(now);
-  const num = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? '0');
-  return { h: num('hour'), m: num('minute'), s: num('second') };
-}
-
-function secondsUntilNextPacificMidnight(now: Date): number {
-  const { h, m, s } = getLosAngelesHms(now);
-  const elapsed = h * 3600 + m * 60 + s;
-  return Math.max(0, 86400 - elapsed);
-}
-
-function formatCountdownHms(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const sec = totalSeconds % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-}
-
-const DF_LOADING_STEPS = [
-  { label: '1 Game one' },
-  { label: '2 Game two' },
-  { label: '3 Decider' },
-] as const;
-
-function DailyFritzLoadingScreen({
-  phase,
-  loadError,
-  onBack,
-  onRetry,
-  retryPending,
-}: {
-  phase: Exclude<DailyFritzInitPhase, 'ready'>;
-  loadError: string | null;
-  onBack: () => void;
-  onRetry: () => void;
-  retryPending: boolean;
-}) {
-  const [activeStep, setActiveStep] = useState(0);
-  const isFailed = phase === 'failed';
-  const isSlow = phase === 'still-preparing';
-  const isRetrying = phase === 'retrying';
-
-  useEffect(() => {
-    if (isFailed) return undefined;
-    const timer = window.setInterval(() => {
-      setActiveStep((prev) => (prev + 1) % DF_LOADING_STEPS.length);
-    }, 1400);
-    return () => window.clearInterval(timer);
-  }, [isFailed]);
-  const title = isFailed
-    ? 'Couldn’t load Daily Fritz'
-    : isSlow || isRetrying
-      ? 'Still preparing…'
-      : 'Preparing today’s set';
-  const subtitle = isFailed
-    ? loadError ?? 'Please try again.'
-    : isSlow || isRetrying
-      ? 'The game server may be waking up.'
-      : 'Best of 3 vs Elite Fritz — competitive daily challenge. Strong play; losing sometimes is expected.';
-  const showRetry = isFailed || isSlow;
-  const busy = !isFailed && phase !== 'still-preparing';
-
-  return (
-    <div className="df-fritz-loading-root">
-      <div className="home-bg" aria-hidden="true">
-        <div className="home-bg__halo" />
-        <div className="home-bg__texture" />
-      </div>
-
-      <div className="df-fritz-loading-shell">
-        <nav className="df-fritz-loading-nav">
-          <div className="df-fritz-loading-brand">
-            <BrandLogo iconSize={32} showWordmark={true} />
-          </div>
-          <button type="button" className="df-fritz-loading-back rh-back-button" onClick={onBack}>
-            <span className="df-fritz-loading-back-icon">←</span>
-            <span>Back to Single Player</span>
-          </button>
-        </nav>
-
-        <main className="df-fritz-loading-main">
-          <div
-            className="df-fritz-loading-lockup"
-            role="status"
-            aria-live="polite"
-            aria-busy={busy || retryPending}
-          >
-            <div className="df-fritz-loading-eyebrow">
-              <span className="df-fritz-loading-dot" aria-hidden />
-              DAILY FRITZ
-            </div>
-            <h1 className="df-fritz-loading-title">{title}</h1>
-            <p className="df-fritz-loading-subtitle">{subtitle}</p>
-
-            {!isFailed ? (
-              <div className="df-fritz-loading-steps">
-                {DF_LOADING_STEPS.map((step, index) => (
-                  <Fragment key={step.label}>
-                    {index > 0 ? <div className="df-fritz-loading-step-connector" aria-hidden /> : null}
-                    <div className="df-fritz-loading-step">
-                      <div
-                        className={`df-fritz-loading-chip${activeStep === index ? ' is-active' : ''}`}
-                      />
-                      <span
-                        className={`df-fritz-loading-step-label${activeStep === index ? ' is-active' : ''}`}
-                      >
-                        {step.label}
-                      </span>
-                    </div>
-                  </Fragment>
-                ))}
-              </div>
-            ) : null}
-
-            {showRetry ? (
-              <div className="df-fritz-loading-actions">
-                <Button
-                  type="button"
-                  variant="tier-elite"
-                  size="md"
-                  className="df-fritz-loading-retry"
-                  disabled={retryPending}
-                  onClick={onRetry}
-                >
-                  {retryPending ? 'Retrying…' : 'Retry'}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-}
 
 export default function DailyFritzScreen({
   user,
@@ -665,7 +92,6 @@ export default function DailyFritzScreen({
   /** Stable React key for embedded BotMatchScreen — set once per open, not re-derived from set_result. */
   const [embeddedMatchKey, setEmbeddedMatchKey] = useState<string | null>(null);
   const [setOverlay, setSetOverlay] = useState<DailyFritzOverlayState | null>(null);
-  const [, setSetSubmitError] = useState<string | null>(null);
   const [startActionPending, setStartActionPending] = useState(false);
   const [countdownTick, setCountdownTick] = useState(0);
   const loadHeroAsset = useCallback(
@@ -940,7 +366,6 @@ export default function DailyFritzScreen({
       });
       completedAttemptIdRef.current = run.attempt_id;
 
-      setSetSubmitError(null);
       if (boardContext) {
         setSetOverlay({
           kind: 'final',
@@ -965,7 +390,6 @@ export default function DailyFritzScreen({
       return completion;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to finalize Daily Fritz set.';
-      setSetSubmitError(message);
       if (boardContext) {
         setSetOverlay({
           kind: 'final-error',
@@ -1021,7 +445,6 @@ export default function DailyFritzScreen({
     if (startActionPending) return;
     setStartActionPending(true);
     setHubError(null);
-    setSetSubmitError(null);
     setSetOverlay(null);
     try {
       const started = await startDailyFritz({ timeoutMs: DAILY_FRITZ_INIT_TIMEOUT_MS });
@@ -1037,7 +460,6 @@ export default function DailyFritzScreen({
     if (startActionPending) return;
     setStartActionPending(true);
     setHubError(null);
-    setSetSubmitError(null);
     const fallbackSetResult =
       setOverlay != null && 'setResult' in setOverlay
         ? setOverlay.setResult
@@ -1062,7 +484,6 @@ export default function DailyFritzScreen({
     recordGameInFlightRef.current = true;
     const gameNumber = getNextGameNumberFromSetResult(priorSet);
     const fallbackCompletedGame = buildCompletedGame(run, game, gameNumber);
-    setSetSubmitError(null);
     setHubError(null);
     setSetOverlay({
       kind: 'saving',
@@ -1127,7 +548,6 @@ export default function DailyFritzScreen({
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save Daily Fritz set progress.';
-      setSetSubmitError(message);
       setSetOverlay({
         kind: 'record-error',
         completedGame: fallbackCompletedGame,

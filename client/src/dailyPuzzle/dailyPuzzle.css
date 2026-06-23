@@ -580,7 +580,6 @@
 
 .daily-leaderboard-stat {
   text-align: right;
-  font-variant-numeric: tabular-nums;
   justify-self: end;
   font-variant-numeric: tabular-nums;
   color: rgba(208, 224, 233, 0.94);

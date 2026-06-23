@@ -1,19 +1,34 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
-// https://vite.dev/config/
-/** Dev proxy → Express. Use 127.0.0.1 (not "localhost") to avoid IPv6/::1 mismatches on macOS. */
 const LOCAL_API = 'http://127.0.0.1:3001';
 const devApiProxy = {
   target: LOCAL_API,
   changeOrigin: true,
-  /** Ladder seeding can run 30–120s+ of CPU; short defaults cause read ECONNRESET in the proxy. */
   timeout: 300_000,
   proxyTimeout: 300_000,
 } as const;
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    exclude: ['node_modules', 'dist'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      exclude: ['src/devtools/**', 'src/test/**', '**/*.behaviorTests.ts'],
+      thresholds: {
+        statements: 35,
+        branches: 17,
+        functions: 50,
+        lines: 38,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       output: {

@@ -1,31 +1,26 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Board, DominoTile } from '../components';
-import type { GameAnalysis, MoveRating } from './moveAnalyzer';
+import { GameOverlayPortal } from '../components/GameOverlayPortal';
+import type { AnalyzedMove, GameAnalysis, MoveRating } from './moveAnalyzer';
 import { sameTileTuple } from './moveLogger';
+import { buildReviewSidebarCopy } from './reviewSidebarCopy';
+import './GameReviewer.css';
 
 interface GameReviewerProps {
   open: boolean;
   onClose: () => void;
   analysis: GameAnalysis | null;
   title?: string;
+  scopeHandNumber?: number | null;
+  /** 1-based move index within the starting hand (default 1). */
+  initialMoveIndex?: number;
+  opponentLabel?: string;
 }
 
-function colorForRating(rating: MoveRating): string {
-  if (rating === 'Brilliant') return '#00ff88';
-  if (rating === 'Great') return '#67e8f9';
-  if (rating === 'Good') return '#7dd3fc';
-  if (rating === 'Inaccuracy') return '#ffcc00';
-  if (rating === 'Mistake') return '#ffcc00';
-  return '#ff3333';
-}
+const COACHING_RATINGS: MoveRating[] = ['Blunder', 'Mistake', 'Inaccuracy'];
 
-function accuracyTier(accuracy: number): MoveRating {
-  if (accuracy >= 96) return 'Brilliant';
-  if (accuracy >= 88) return 'Great';
-  if (accuracy >= 76) return 'Good';
-  if (accuracy >= 64) return 'Inaccuracy';
-  if (accuracy >= 46) return 'Mistake';
-  return 'Blunder';
+function ratingClass(rating: MoveRating): string {
+  return rating.toLowerCase();
 }
 
 function tileText(tile?: [number, number]): string {
@@ -33,22 +28,23 @@ function tileText(tile?: [number, number]): string {
   return `${tile[0]}-${tile[1]}`;
 }
 
-function nextEndsForTile(tile: [number, number], boardEnds: [number, number]): Array<[number, number]> {
-  const [left, right] = boardEnds;
-  if (left < 0 || right < 0) return [[tile[0], tile[1]]];
-  const out: Array<[number, number]> = [];
-  if (tile[0] === left) out.push([tile[1], right]);
-  if (tile[1] === left) out.push([tile[0], right]);
-  if (tile[0] === right) out.push([left, tile[1]]);
-  if (tile[1] === right) out.push([left, tile[0]]);
-  return out;
+function formatPlayedLabel(move: AnalyzedMove): string {
+  if (move.action === 'pass') return 'Pass';
+  if (move.action === 'draw') return 'Draw';
+  return tileText(move.playedTile);
 }
 
-function bestImmediatePoints(tile: [number, number] | undefined, boardEnds: [number, number]): number {
-  if (!tile) return 0;
-  const possibilities = nextEndsForTile(tile, boardEnds);
-  if (!possibilities.length) return 0;
-  return Math.max(...possibilities.map((ends) => ends[0] + ends[1]));
+function positiveNote(move: AnalyzedMove): string | null {
+  if (move.rating === 'Brilliant') {
+    return 'Brilliant find — you spotted the scoring line Fritz would have played.';
+  }
+  if (move.rating === 'Great') {
+    return 'Strong choice — this matched the engine\'s top line.';
+  }
+  if (move.rating === 'Good') {
+    return 'Solid play — you stayed close to the engine on this turn.';
+  }
+  return null;
 }
 
 export default function GameReviewer({
@@ -56,32 +52,64 @@ export default function GameReviewer({
   onClose,
   analysis,
   title = 'Game Review',
+  scopeHandNumber = null,
+  initialMoveIndex = 1,
+  opponentLabel = 'Fritz',
 }: GameReviewerProps) {
+  const hands = analysis?.hands ?? [];
+  const [selectedHandNumber, setSelectedHandNumber] = useState<number | null>(null);
   const [cursor, setCursor] = useState(0);
 
-  const moves = analysis?.analyzedMoves ?? [];
-  const current = moves[cursor] ?? null;
-  const reviewSessionKey = open ? String(analysis?.analyzedAt ?? '') : 'closed';
+  const reviewSessionKey = open
+    ? `${analysis?.analyzedAt ?? ''}:${scopeHandNumber ?? 'all'}:${initialMoveIndex}`
+    : 'closed';
+
   const [trackedReviewSessionKey, setTrackedReviewSessionKey] = useState(reviewSessionKey);
   if (reviewSessionKey !== trackedReviewSessionKey) {
     setTrackedReviewSessionKey(reviewSessionKey);
-    setCursor(0);
   }
 
-  const summaryTier = useMemo(() => accuracyTier(analysis?.accuracy ?? 0), [analysis?.accuracy]);
-  const brilliantGlow = (analysis?.accuracy ?? 0) > 95;
+  useEffect(() => {
+    if (!open || !analysis) return;
+    const defaultHand = scopeHandNumber ?? hands[0]?.handNumber ?? null;
+    setSelectedHandNumber(defaultHand);
+    const hand = hands.find((entry) => entry.handNumber === defaultHand);
+    const moveCount = hand?.analyzedMoves.length ?? analysis.analyzedMoves.length;
+    const startIdx =
+      moveCount > 0
+        ? Math.max(0, Math.min(moveCount - 1, initialMoveIndex - 1))
+        : 0;
+    setCursor(startIdx);
+  }, [analysis, hands, initialMoveIndex, open, reviewSessionKey, scopeHandNumber]);
 
-  const blunderPipDiff = useMemo(() => {
-    if (!current || current.rating !== 'Blunder') return 0;
-    const played = bestImmediatePoints(current.playedTile, current.boardEnds);
-    const best = bestImmediatePoints(current.bestTile, current.boardEnds);
-    return Math.max(0, best - played);
-  }, [current]);
+  const selectedHand = useMemo(
+    () => hands.find((hand) => hand.handNumber === selectedHandNumber) ?? null,
+    [hands, selectedHandNumber],
+  );
+
+  const moves = selectedHand?.analyzedMoves ?? analysis?.analyzedMoves ?? [];
+  const current = moves[cursor] ?? null;
+
+  const currentConsequence = current
+    ? analysis?.consequenceByMoveNumber?.[current.moveNumber] ?? null
+    : null;
+
+  const sidebarCopy = useMemo(() => {
+    if (!current || !COACHING_RATINGS.includes(current.rating)) return null;
+    return buildReviewSidebarCopy({
+      move: current,
+      consequence: currentConsequence,
+      opponentLabel,
+    });
+  }, [current, currentConsequence, opponentLabel]);
+
+  const praiseCopy = current ? positiveNote(current) : null;
 
   const showGhostTile = Boolean(
     current &&
       current.action === 'place' &&
       current.engineBestMove?.tile &&
+      COACHING_RATINGS.includes(current.rating) &&
       (!sameTileTuple(current.playedTile, current.engineBestMove.tile) ||
         current.bestPosition !== current.engineBestMove.position),
   );
@@ -89,233 +117,156 @@ export default function GameReviewer({
   if (!open) return null;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Game reviewer"
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 2100,
-        background: 'rgba(6,10,18,0.8)',
-        backdropFilter: 'blur(5px)',
-        display: 'grid',
-        padding: 12,
-      }}
-    >
+    <GameOverlayPortal>
       <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(1400px, calc(100vw - 24px))',
-          height: 'calc(100dvh - 24px)',
-          margin: '0 auto',
-          borderRadius: 18,
-          border: '1px solid rgba(236,252,245,0.2)',
-          background: 'linear-gradient(170deg, rgba(10,16,27,0.97), rgba(8,12,22,0.99))',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
-          overflow: 'hidden',
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) 380px',
-        }}
+        className="game-over-overlay df-result-overlay gr-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Game reviewer"
+        onClick={onClose}
       >
-        <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', gap: 12, padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <h3 style={{ margin: 0 }}>{title}</h3>
-            <button className="mode-inline-btn" onClick={onClose}>
-              Close
-            </button>
-          </div>
-
-          <div
-            style={{
-              position: 'relative',
-              minHeight: 0,
-              borderRadius: 14,
-              border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(9,16,29,0.8)',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                opacity: 0.72,
-                filter: 'saturate(0.9) brightness(0.9)',
-                pointerEvents: 'none',
-              }}
-            >
-              <Board
-                board={current?.boardRenderState ?? null}
-                legalMoves={[]}
-                selectedTile={null}
-                onPositionClick={() => {}}
-              />
-            </div>
-            {showGhostTile && current?.engineBestMove?.tile && (
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 16,
-                  bottom: 16,
-                  display: 'grid',
-                  justifyItems: 'center',
-                  gap: 6,
-                  opacity: 0.55,
-                }}
-              >
-                <DominoTile
-                  tile={{ low: current.engineBestMove.tile[0], high: current.engineBestMove.tile[1] }}
-                  size={48}
-                  disabled
-                />
-                <span style={{ fontSize: '0.75rem', color: 'rgba(236,248,245,0.9)' }}>Ghost (Engine)</span>
-              </div>
-            )}
-            {current && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: 74,
-                  display: 'grid',
-                  justifyItems: 'center',
-                  gap: 6,
-                  pointerEvents: 'none',
-                }}
-              >
-                <span style={{ fontSize: '0.7rem', opacity: 0.6, letterSpacing: '0.08em' }}>
-                  YOUR HAND AT THIS TURN
-                </span>
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
-                  {current.handSnapshot.map((tile, idx) => (
-                    <div
-                      key={`review-hand-${idx}-${tile[0]}-${tile[1]}`}
-                      style={{ margin: 4, flex: '0 0 auto' }}
-                    >
-                      <DominoTile
-                        tile={{ low: tile[0], high: tile[1] }}
-                        size={36}
-                        disabled
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-            <button
-              className="mode-inline-btn"
-              onClick={() => setCursor((prev) => Math.max(0, prev - 1))}
-              disabled={cursor <= 0}
-            >
-              {'<'}
-            </button>
-            <span style={{ color: 'rgba(223,236,244,0.9)' }}>
-              {moves.length ? `Move ${cursor + 1} / ${moves.length}` : 'No moves'}
-            </span>
-            <button
-              className="mode-inline-btn"
-              onClick={() => setCursor((prev) => Math.min(moves.length - 1, prev + 1))}
-              disabled={!moves.length || cursor >= moves.length - 1}
-            >
-              {'>'}
-            </button>
-          </div>
-        </div>
-
-        <aside
-          style={{
-            borderLeft: '1px solid rgba(255,255,255,0.12)',
-            display: 'grid',
-            gridTemplateRows: 'auto minmax(0, 1fr) auto',
-            minHeight: 0,
-            background: 'rgba(6, 12, 22, 0.8)',
-          }}
-        >
-          <div style={{ padding: 14, borderBottom: '1px solid rgba(255,255,255,0.12)', display: 'grid', gap: 8 }}>
-            <strong>Accuracy Meter</strong>
-            <div
-              style={{
-                height: 8,
-                borderRadius: 999,
-                background: 'rgba(255,255,255,0.12)',
-                overflow: 'hidden',
-                boxShadow: brilliantGlow ? '0 0 0 1px rgba(0,255,136,0.35), 0 0 16px rgba(0,255,136,0.45)' : 'none',
-              }}
-            >
-              <div
-                style={{
-                  width: `${Math.max(0, Math.min(100, analysis?.accuracy ?? 0))}%`,
-                  height: '100%',
-                  background: colorForRating(summaryTier),
-                  transition: 'width 180ms ease',
-                }}
-              />
-            </div>
-            <div style={{ color: colorForRating(summaryTier), fontWeight: 700 }}>
-              {(analysis?.accuracy ?? 0).toFixed(1)}% · {summaryTier}
-            </div>
-          </div>
-
-          <div style={{ overflow: 'auto', padding: 10, display: 'grid', gap: 8 }}>
-            {moves.length === 0 && (
-              <p style={{ margin: 0, color: 'rgba(223,236,244,0.86)' }}>No moves available to review.</p>
-            )}
-            {moves.map((move, idx) => (
-              <button
-                key={`${move.moveNumber}-${idx}`}
-                onClick={() => setCursor(idx)}
-                style={{
-                  borderRadius: 10,
-                  border: idx === cursor ? `1px solid ${colorForRating(move.rating)}88` : '1px solid rgba(255,255,255,0.12)',
-                  background: idx === cursor ? 'rgba(18,34,52,0.78)' : 'rgba(10,20,34,0.62)',
-                  color: 'inherit',
-                  textAlign: 'left',
-                  padding: '9px 10px',
-                  cursor: 'pointer',
-                  display: 'grid',
-                  gap: 4,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                  <strong>#{move.moveNumber}</strong>
-                  <span style={{ color: colorForRating(move.rating), fontSize: '0.82rem', fontWeight: 700 }}>
-                    {move.rating}
-                  </span>
-                </div>
-                <span style={{ color: 'rgba(222,236,244,0.9)', fontSize: '0.9rem' }}>
-                  {move.action === 'place' ? `Played ${tileText(move.playedTile)}` : move.action}
-                </span>
+        <div className="gr-shell" onClick={(event) => event.stopPropagation()}>
+          <div className="gr-main">
+            <div className="gr-header">
+              <h3 className="gr-title">{title}</h3>
+              <button type="button" className="mode-inline-btn" onClick={onClose}>
+                Close
               </button>
-            ))}
+            </div>
+
+            <div className="gr-board-cell">
+            <div className="gr-board-frame">
+              <div className="gr-board-layer">
+                <Board
+                  board={current?.boardRenderState ?? null}
+                  legalMoves={[]}
+                  selectedTile={null}
+                  onPositionClick={() => {}}
+                  staticView
+                  staticFitMainline
+                  staticSpineAnchor={0.62}
+                  tileSize={46}
+                />
+              </div>
+              {showGhostTile && current?.engineBestMove?.tile ? (
+                <div className="gr-ghost-tile">
+                  <DominoTile
+                    tile={{ low: current.engineBestMove.tile[0], high: current.engineBestMove.tile[1] }}
+                    size={48}
+                    disabled
+                  />
+                  <span className="gr-ghost-label">Best move</span>
+                </div>
+              ) : null}
+            </div>
+            </div>
+
+            <div className="gr-move-nav">
+              <button
+                type="button"
+                className="mode-inline-btn"
+                onClick={() => setCursor((prev) => Math.max(0, prev - 1))}
+                disabled={cursor <= 0}
+                aria-label="Previous move"
+              >
+                {'<'}
+              </button>
+              <span className="gr-move-nav-label">
+                {moves.length
+                  ? `Move ${cursor + 1} / ${moves.length}${selectedHand ? ` · Hand ${selectedHand.handNumber}` : ''}`
+                  : 'No moves'}
+              </span>
+              <button
+                type="button"
+                className="mode-inline-btn"
+                onClick={() => setCursor((prev) => Math.min(moves.length - 1, prev + 1))}
+                disabled={!moves.length || cursor >= moves.length - 1}
+                aria-label="Next move"
+              >
+                {'>'}
+              </button>
+            </div>
           </div>
 
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.12)', padding: 12, display: 'grid', gap: 6 }}>
-            <strong>Engine Advice</strong>
-            <p style={{ margin: 0, color: 'rgba(223,236,244,0.9)', minHeight: 54 }}>
-              {current
-                ? current.explanation
-                : 'Select a move to see engine guidance.'}
-            </p>
-            {current?.rating === 'Blunder' && blunderPipDiff > 0 && (
-              <p style={{ margin: 0, color: '#ff9f9f', fontSize: '0.88rem' }}>
-                You missed a +{blunderPipDiff} point play.
-              </p>
-            )}
-            {current?.bestTile && (
-              <p style={{ margin: 0, color: 'rgba(199,219,231,0.86)', fontSize: '0.88rem' }}>
-                Best move: {tileText(current.bestTile)}
-                {current.bestPosition ? ` at ${current.bestPosition}` : ''}
-              </p>
-            )}
-          </div>
-        </aside>
+          <aside className="gr-sidebar">
+            {hands.length > 0 ? (
+              <div className="gr-hand-strip" role="tablist" aria-label="Hands">
+                {hands.map((hand) => {
+                  const isActive = hand.handNumber === selectedHandNumber;
+                  return (
+                    <button
+                      key={hand.handNumber}
+                      type="button"
+                      className={`gr-hand-pill${isActive ? ' is-active' : ''}`}
+                      onClick={() => {
+                        setSelectedHandNumber(hand.handNumber);
+                        setCursor(0);
+                      }}
+                    >
+                      Hand {hand.handNumber} · {hand.handAccuracy.toFixed(0)}%
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="gr-move-list" role="listbox" aria-label="Moves in selected hand">
+              {moves.length === 0 ? (
+                <p className="gr-empty">No moves available to review in this hand.</p>
+              ) : null}
+              {moves.map((move, idx) => (
+                <button
+                  key={`${move.moveNumber}-${idx}`}
+                  type="button"
+                  role="option"
+                  aria-selected={idx === cursor}
+                  className={`gr-move-row is-${ratingClass(move.rating)}${idx === cursor ? ' is-active' : ''}`}
+                  onClick={() => setCursor(idx)}
+                >
+                  <span className="gr-move-row-num">#{move.moveNumber}</span>
+                  <span className="gr-move-row-played">{formatPlayedLabel(move)}</span>
+                  <span className={`gr-move-row-rating is-${ratingClass(move.rating)}`}>{move.rating}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className={`gr-coaching${sidebarCopy ? ' is-prominent' : ''}`}>
+              <div className="gr-coaching-body">
+              {sidebarCopy ? (
+                <>
+                  <div className="gr-advice-section">
+                    <span className="gr-advice-kicker">What you should have played</span>
+                    <p className="gr-advice-copy">{sidebarCopy.shouldHavePlayed}</p>
+                  </div>
+                  {sidebarCopy.whyBetter ? (
+                    <div className="gr-advice-section">
+                      <span className="gr-advice-kicker">Why it was better</span>
+                      <p className="gr-advice-copy">{sidebarCopy.whyBetter}</p>
+                    </div>
+                  ) : null}
+                  {sidebarCopy.whatHappenedInstead ? (
+                    <div className="gr-advice-section">
+                      <span className="gr-advice-kicker">What {opponentLabel} did instead</span>
+                      <p className="gr-advice-copy gr-advice-consequence">{sidebarCopy.whatHappenedInstead}</p>
+                    </div>
+                  ) : null}
+                  <div className="gr-advice-section">
+                    <span className="gr-advice-kicker">What to remember</span>
+                    <p className="gr-advice-copy gr-advice-takeaway">{sidebarCopy.takeaway}</p>
+                  </div>
+                </>
+              ) : praiseCopy ? (
+                <p className="gr-coaching-praise">{praiseCopy}</p>
+              ) : current ? (
+                <p className="gr-coaching-muted">Select a blunder or mistake to see coaching.</p>
+              ) : (
+                <p className="gr-coaching-muted">Select a move to review.</p>
+              )}
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
-    </div>
+    </GameOverlayPortal>
   );
 }

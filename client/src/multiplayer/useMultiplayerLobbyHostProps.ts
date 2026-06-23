@@ -10,11 +10,10 @@ import type {
   MultiplayerRoomSocialRuntime,
   MultiplayerSocketRuntime,
   FriendInviteState,
+  RoomPlayer,
 } from './multiplayerRuntime';
 import type { RoomAckResponse } from './roomTransport';
 import type { MultiplayerLobbyActionsHostProps } from './useMultiplayerLobbyController';
-
-type RoomPlayer = { id: string; username: string; userId: string | null };
 
 export type UseMultiplayerLobbyHostPropsSource = {
   socket: Socket | null;

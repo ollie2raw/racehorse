@@ -106,7 +106,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--tier-rookie, #4ADE80);
+  background: var(--tier-rookie, var(--tier-rookie));
   box-shadow: 0 0 6px rgba(74, 222, 128, 0.55);
   flex-shrink: 0;
 }
@@ -486,7 +486,7 @@
 
 .friends-page-match-result--win {
   background: rgba(74, 222, 128, 0.12);
-  color: var(--tier-rookie, #4ADE80);
+  color: var(--tier-rookie, var(--tier-rookie));
   border: 1px solid rgba(74, 222, 128, 0.24);
 }
 

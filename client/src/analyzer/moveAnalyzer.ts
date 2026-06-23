@@ -1,8 +1,21 @@
 import type { EngineBestMove, MoveEntry, TileTuple } from './moveLogger';
-import { sameTileTuple } from './moveLogger';
-import { chooseBotMove, evaluateMove, toBotVisibleState } from '../bot/botHeuristics';
+import { normalizeBoardRenderState, sameTileTuple } from './moveLogger';
+import { chooseBotMove, evaluateMove, toBotVisibleState, type BotDifficulty } from '../bot/botHeuristics';
 import { createBotMatch, getLegalMoves } from '../bot/botEngine';
 import type { BotMatchState } from '../bot/botEngine';
+import type { FritzTier } from '../bot/fritzConfig';
+import { FRITZ_TIERS } from '../bot/fritzConfig';
+import type { PlacementPosition } from '../types';
+import type {
+  AnalyzeMoveLogOptions,
+  ConsequenceChain,
+  HandAnalysis,
+  OracleMode,
+} from './analysisTypes';
+import { buildConsequenceChainsForHand } from './consequenceChain';
+import { buildHandVerdict, segmentMoveLogByHand } from './handSegmentation';
+
+export type { AnalyzeMoveLogOptions, ConsequenceChain, HandAnalysis, OracleMode } from './analysisTypes';
 
 export type MoveRating = 'Brilliant' | 'Great' | 'Good' | 'Inaccuracy' | 'Mistake' | 'Blunder';
 
@@ -23,6 +36,7 @@ export type AnalyzedMove = {
   handSnapshot: MoveEntry['handSnapshot'];
   engineBestMove: MoveEntry['engineBestMove'];
   bestBreakdown?: EngineBestMove['breakdown'];
+  playedBreakdown?: EngineBestMove['breakdown'];
 };
 
 export type GameAnalysis = {
@@ -31,6 +45,12 @@ export type GameAnalysis = {
   analyzedAt: number;
   analyzedMoves: AnalyzedMove[];
   timeline: Array<{ moveIndex: number; moveNumber: number; player: MoveEntry['player']; score: number }>;
+  hands: HandAnalysis[];
+  oracleMode: OracleMode;
+  tierPlayed: FritzTier;
+  oracleLabel: string;
+  worstHandNumber: number | null;
+  consequenceByMoveNumber: Record<number, ConsequenceChain>;
 };
 
 type StoredAnalysisItem = {
@@ -41,6 +61,37 @@ type StoredAnalysisItem = {
 };
 
 const ANALYSIS_HISTORY_KEY = 'racehorse_move_analysis_history_v1';
+const MAX_STORED_ANALYSES = 40;
+
+function botDifficultyForTier(tier: FritzTier): BotDifficulty {
+  if (tier === 'rookie') return 'casual';
+  if (tier === 'standard') return 'standard';
+  if (tier === 'elite') return 'hard';
+  return 'master';
+}
+
+function resolveAnalyzeOptions(options?: AnalyzeMoveLogOptions): Required<AnalyzeMoveLogOptions> {
+  return {
+    oracleMode: options?.oracleMode ?? 'tier',
+    tierPlayed: options?.tierPlayed ?? 'standard',
+    winningScore: options?.winningScore ?? 60,
+  };
+}
+
+function oracleLabelFor(mode: OracleMode, tier: FritzTier): string {
+  if (mode === 'master') return 'Master Fritz';
+  return `${FRITZ_TIERS[tier].label} Fritz`;
+}
+
+function choiceToEngineMove(choice: ReturnType<typeof chooseBotMove>): EngineBestMove | null {
+  if (!choice?.move?.tile) return null;
+  return {
+    tile: [choice.move.tile.low, choice.move.tile.high] as TileTuple,
+    position: choice.move.position,
+    score: choice.score,
+    breakdown: choice.breakdown,
+  };
+}
 
 function tileKey(tile: TileTuple): string {
   const a = Math.min(tile[0], tile[1]);
@@ -74,6 +125,8 @@ function buildEvalState(entry: MoveEntry): BotMatchState | null {
   if (!entry.boardRenderState) return null;
   try {
     const template = createBotMatch(60, 7);
+    // Invariant: boardRenderState and handBefore must both describe the same pre-move
+    // decision point. BotMatchScreen logs match.board (pre-move) with handBefore.
     const hand = entry.handBefore.map((t) => ({ low: t[0], high: t[1] }));
     return {
       ...template,
@@ -129,7 +182,33 @@ function compareRecordedMoves(
   return String(a.position ?? '').localeCompare(String(b.position ?? ''));
 }
 
-function getMasterMoveScores(entry: MoveEntry): {
+function scoredItemToEngineMove(
+  item:
+    | {
+        move: { tile?: { low: number; high: number }; position?: string };
+        scored: { score: number; breakdown?: EngineBestMove['breakdown'] } | null;
+      }
+    | undefined,
+): EngineBestMove | null {
+  if (!item?.move.tile || !item.scored) return null;
+  return {
+    tile: [item.move.tile.low, item.move.tile.high] as TileTuple,
+    position: item.move.position as PlacementPosition | undefined,
+    score: item.scored.score,
+    breakdown: item.scored.breakdown,
+  };
+}
+
+function isTileInLoggedValidMoves(tile: TileTuple | undefined, entry: MoveEntry): boolean {
+  if (!tile) return false;
+  const legalTileKeys = new Set(uniqueTiles(entry.validMoves).map(tileKey));
+  return legalTileKeys.has(tileKey(tile));
+}
+
+function getMoveScores(
+  entry: MoveEntry,
+  gradeTier: FritzTier,
+): {
   bestMove: EngineBestMove | null;
   bestScore: number | null;
   bestBreakdown: EngineBestMove['breakdown'] | null;
@@ -149,21 +228,15 @@ function getMasterMoveScores(entry: MoveEntry): {
     };
   }
 
-  const masterBest = chooseBotMove(toBotVisibleState(evalState), 'master');
-  const bestMove = masterBest?.move?.tile
-    ? {
-        tile: [masterBest.move.tile.low, masterBest.move.tile.high] as TileTuple,
-        position: masterBest.move.position,
-        score: masterBest.score,
-        breakdown: masterBest.breakdown,
-      }
-    : null;
+  const gradeDifficulty = botDifficultyForTier(gradeTier);
+  let masterBest = choiceToEngineMove(chooseBotMove(toBotVisibleState(evalState), 'master'));
+  let gradeBest = choiceToEngineMove(chooseBotMove(toBotVisibleState(evalState), gradeDifficulty));
 
   const legalMoves = getLegalMoves(evalState, 'bot')
     .filter((move) => move.type === 'play' && move.tile)
     .map((move) => ({
       move,
-      scored: evaluateMove(toBotVisibleState(evalState), move, 'master'),
+      scored: evaluateMove(toBotVisibleState(evalState), move, gradeDifficulty),
     }))
     .filter((item) => item.scored && item.move.tile)
     .sort((a, b) => {
@@ -175,6 +248,15 @@ function getMasterMoveScores(entry: MoveEntry): {
       );
     });
 
+  if (!isTileInLoggedValidMoves(masterBest?.tile, entry)) {
+    masterBest = scoredItemToEngineMove(legalMoves[0]);
+  }
+  if (!isTileInLoggedValidMoves(gradeBest?.tile, entry)) {
+    gradeBest = scoredItemToEngineMove(legalMoves[0]);
+  }
+
+  const bestMove = masterBest;
+
   const playedCandidate = entry.tile
     ? legalMoves.find(({ move }) =>
         sameMoveByTileAndPosition(
@@ -185,29 +267,30 @@ function getMasterMoveScores(entry: MoveEntry): {
       legalMoves.find(({ move }) => sameTileTuple([move.tile!.low, move.tile!.high], entry.tile))
     : null;
 
-  const bestCandidate = bestMove
+  const gradeReference = gradeBest ?? masterBest;
+  const bestCandidate = gradeReference
     ? legalMoves.find(({ move }) =>
         sameMoveByTileAndPosition(
           { tile: [move.tile!.low, move.tile!.high], position: move.position },
-          { tile: bestMove.tile, position: bestMove.position },
+          { tile: gradeReference.tile, position: gradeReference.position },
         ),
       ) ?? legalMoves[0]
     : legalMoves[0];
 
   return {
     bestMove,
-    bestScore: bestCandidate?.scored?.score ?? bestMove?.score ?? null,
-    bestBreakdown: bestCandidate?.scored?.breakdown ?? bestMove?.breakdown ?? null,
+    bestScore: bestCandidate?.scored?.score ?? gradeReference?.score ?? null,
+    bestBreakdown: bestCandidate?.scored?.breakdown ?? gradeReference?.breakdown ?? null,
     playedScore: playedCandidate?.scored?.score ?? null,
     playedBreakdown: playedCandidate?.scored?.breakdown ?? null,
     exactMatch: Boolean(
       entry.tile &&
-      bestMove &&
+      gradeReference &&
       sameMoveByTileAndPosition(
         { tile: entry.tile, position: undefined },
-        { tile: bestMove.tile, position: bestMove.position },
+        { tile: gradeReference.tile, position: gradeReference.position },
       ),
-    ) || Boolean(entry.tile && bestMove && sameTileTuple(entry.tile, bestMove.tile)),
+    ) || Boolean(entry.tile && gradeReference && sameTileTuple(entry.tile, gradeReference.tile)),
   };
 }
 
@@ -275,17 +358,18 @@ function buildExplanation(
   return `Blunder. ${best} was far stronger than ${played}${reasonText}${warningText}.${suffix}`;
 }
 
-function classifyMove(entry: MoveEntry): {
+function classifyMove(entry: MoveEntry, gradeTier: FritzTier): {
   score: number;
   rating: MoveRating;
   bestTile?: TileTuple;
   bestPosition?: string;
   explanation: string;
+  bestBreakdown: EngineBestMove['breakdown'] | null;
   playedBreakdown: EngineBestMove['breakdown'] | null;
 } {
   const validTiles = uniqueTiles(entry.validMoves);
-  const masterEval = getMasterMoveScores(entry);
-  const bestMove = masterEval.bestMove;
+  const moveEval = getMoveScores(entry, gradeTier);
+  const bestMove = moveEval.bestMove;
   const bestTile = bestMove?.tile;
 
   if (entry.action === 'pass' && validTiles.length > 0) {
@@ -295,30 +379,50 @@ function classifyMove(entry: MoveEntry): {
       bestTile,
       bestPosition: bestMove?.position,
       explanation: buildExplanation(entry.tile, bestTile, 'Blunder', null, bestMove?.breakdown ?? null),
+      bestBreakdown: bestMove?.breakdown ?? null,
       playedBreakdown: null,
     };
   }
 
   if (entry.action !== 'place' || !entry.tile) {
     if (validTiles.length === 0) {
-      return { score: 84, rating: 'Good', explanation: 'No legal plays — forced draw or pass.', playedBreakdown: null };
+      return { score: 84, rating: 'Good', explanation: 'No legal plays — forced draw or pass.', bestBreakdown: null, playedBreakdown: null };
     }
-    return { score: 46, rating: 'Inaccuracy', explanation: 'Non-play action when plays were available.', playedBreakdown: null };
+    return { score: 46, rating: 'Inaccuracy', explanation: 'Non-play action when plays were available.', bestBreakdown: null, playedBreakdown: null };
   }
 
   if (validTiles.length === 0) {
-    return { score: 72, rating: 'Good', explanation: 'Only one legal move available.', playedBreakdown: null };
+    return {
+      score: 72,
+      rating: 'Good',
+      explanation: 'No legal plays recorded for this move.',
+      bestBreakdown: null,
+      playedBreakdown: null,
+    };
+  }
+
+  if (validTiles.length === 1) {
+    const onlyLegal = validTiles[0];
+    return {
+      score: 80,
+      rating: 'Good',
+      bestTile: onlyLegal,
+      bestPosition: bestMove?.position,
+      explanation: 'Only legal move available.',
+      bestBreakdown: moveEval.bestBreakdown,
+      playedBreakdown: moveEval.playedBreakdown,
+    };
   }
 
   if (!bestTile || !entry.engineBestMove) {
-    return { score: 72, rating: 'Good', explanation: 'No engine evaluation available for this move.', playedBreakdown: null };
+    return { score: 72, rating: 'Good', explanation: 'No engine evaluation available for this move.', bestBreakdown: null, playedBreakdown: null };
   }
 
   // ── Score both moves on the SAME scale using the engine ──────────────────────
-  const bestScore = masterEval.bestScore;
-  const bestBreakdown = masterEval.bestBreakdown;
-  const playedScore = masterEval.playedScore;
-  const playedBreakdown = masterEval.playedBreakdown;
+  const bestScore = moveEval.bestScore;
+  const bestBreakdown = moveEval.bestBreakdown;
+  const playedScore = moveEval.playedScore;
+  const playedBreakdown = moveEval.playedBreakdown;
 
   if (bestScore == null || playedScore == null) {
     return {
@@ -327,17 +431,19 @@ function classifyMove(entry: MoveEntry): {
       bestTile,
       bestPosition: bestMove?.position,
       explanation: 'Analyzer could not reconstruct a full Master Fritz comparison for this move.',
+      bestBreakdown,
       playedBreakdown,
     };
   }
 
-  if (masterEval.exactMatch) {
+  if (moveEval.exactMatch) {
     return {
       score: 99,
       rating: 'Brilliant',
       bestTile,
       bestPosition: bestMove?.position,
       explanation: buildExplanation(entry.tile, bestTile, 'Brilliant', playedBreakdown, bestBreakdown),
+      bestBreakdown,
       playedBreakdown,
     };
   }
@@ -353,6 +459,7 @@ function classifyMove(entry: MoveEntry): {
       bestTile,
       bestPosition: bestMove?.position,
       explanation: buildExplanation(entry.tile, bestTile, 'Great', playedBreakdown, bestBreakdown),
+      bestBreakdown,
       playedBreakdown,
     };
   }
@@ -363,6 +470,7 @@ function classifyMove(entry: MoveEntry): {
       bestTile,
       bestPosition: bestMove?.position,
       explanation: buildExplanation(entry.tile, bestTile, 'Good', playedBreakdown, bestBreakdown),
+      bestBreakdown,
       playedBreakdown,
     };
   }
@@ -373,6 +481,7 @@ function classifyMove(entry: MoveEntry): {
       bestTile,
       bestPosition: bestMove?.position,
       explanation: buildExplanation(entry.tile, bestTile, 'Inaccuracy', playedBreakdown, bestBreakdown),
+      bestBreakdown,
       playedBreakdown,
     };
   }
@@ -383,6 +492,7 @@ function classifyMove(entry: MoveEntry): {
       bestTile,
       bestPosition: bestMove?.position,
       explanation: buildExplanation(entry.tile, bestTile, 'Mistake', playedBreakdown, bestBreakdown),
+      bestBreakdown,
       playedBreakdown,
     };
   }
@@ -392,6 +502,7 @@ function classifyMove(entry: MoveEntry): {
     bestTile,
     bestPosition: bestMove?.position,
     explanation: buildExplanation(entry.tile, bestTile, 'Blunder', playedBreakdown, bestBreakdown),
+    bestBreakdown,
     playedBreakdown,
   };
 }
@@ -404,16 +515,18 @@ function gradeFromAccuracy(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
   return 'D';
 }
 
-export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
+export function enrichMovesWithFritz(entries: MoveEntry[], referenceTier: FritzTier = 'master'): MoveEntry[] {
+  const referenceDifficulty = botDifficultyForTier(referenceTier);
   return entries.map((entry) => {
     if (entry.player !== 'you') return entry;
     if (!entry.boardRenderState) return entry;
+    if (entry.engineBestMove) return entry;
 
     try {
       const evalState = buildEvalState(entry);
       if (!evalState) return entry;
 
-      const choice = chooseBotMove(toBotVisibleState(evalState), 'master');
+      const choice = chooseBotMove(toBotVisibleState(evalState), referenceDifficulty);
       if (!choice || !choice.move.tile) return entry;
       return {
         ...entry,
@@ -430,14 +543,17 @@ export function enrichMovesWithFritz(entries: MoveEntry[]): MoveEntry[] {
   });
 }
 
-export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): GameAnalysis {
-  const processedEntries = enrichWithFritz ? enrichMovesWithFritz(entries) : entries;
-  const verdictByMoveNumber = new Map<number, ReturnType<typeof classifyMove>>();
-  const myMoves = processedEntries.filter((entry) => entry.player === 'you');
-
-  const rawAnalyzedMoves: AnalyzedMove[] = myMoves.map((entry) => {
-    const verdict = classifyMove(entry);
-    verdictByMoveNumber.set(entry.moveNumber, verdict);
+function analyzeHandMoves(
+  handEntries: MoveEntry[],
+  gradeTier: FritzTier,
+  opponentLabel: string,
+  handNumber: number,
+  startingScores: { you: number; opponent: number },
+  endingScores: { you: number; opponent: number },
+): HandAnalysis {
+  const myMoves = handEntries.filter((entry) => entry.player === 'you');
+  const analyzedMoves: AnalyzedMove[] = myMoves.map((entry) => {
+    const verdict = classifyMove(entry, gradeTier);
     return {
       moveNumber: entry.moveNumber,
       action: entry.action,
@@ -451,19 +567,62 @@ export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): G
       validMoves: entry.validMoves,
       boardEnds: entry.boardEnds,
       boardState: entry.boardState,
-      boardRenderState: entry.boardRenderState,
+      boardRenderState: normalizeBoardRenderState(entry.boardRenderState),
       handSnapshot: entry.handSnapshot,
       engineBestMove: entry.engineBestMove,
-      bestBreakdown: entry.engineBestMove?.breakdown,
+      bestBreakdown: verdict.bestBreakdown ?? undefined,
+      playedBreakdown: verdict.playedBreakdown ?? undefined,
     };
   });
 
-  const analyzedMoves = rawAnalyzedMoves;
+  const handAccuracyRaw =
+    analyzedMoves.length > 0
+      ? analyzedMoves.reduce((sum, move) => sum + move.score, 0) / analyzedMoves.length
+      : 0;
+  const handAccuracy = Math.round(handAccuracyRaw * 10) / 10;
+
+  const consequenceChains = buildConsequenceChainsForHand(handEntries, analyzedMoves, opponentLabel);
+  const pivotalMoments = [...analyzedMoves]
+    .filter((move) => move.rating === 'Blunder' || move.rating === 'Mistake' || move.rating === 'Inaccuracy')
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 3);
+
+  const segment = {
+    handNumber,
+    entries: handEntries,
+    startingScores,
+    endingScores,
+  };
+
+  return {
+    handNumber,
+    startingScores,
+    endingScores,
+    analyzedMoves,
+    handAccuracy,
+    pivotalMoments,
+    verdict: buildHandVerdict(segment),
+    consequenceChains,
+  };
+}
+
+function buildGameSummary(
+  hands: HandAnalysis[],
+  processedEntries: MoveEntry[],
+  options: Required<AnalyzeMoveLogOptions>,
+): GameAnalysis {
+  const allMoves = hands.flatMap((hand) => hand.analyzedMoves);
+  const verdictByMoveNumber = new Map(allMoves.map((move) => [move.moveNumber, move]));
 
   const timeline = processedEntries.map((entry, moveIndex) => {
     if (entry.player === 'you') {
-      const verdict = verdictByMoveNumber.get(entry.moveNumber) ?? classifyMove(entry);
-      return { moveIndex, moveNumber: entry.moveNumber, player: entry.player, score: verdict.score };
+      const verdict = verdictByMoveNumber.get(entry.moveNumber);
+      return {
+        moveIndex,
+        moveNumber: entry.moveNumber,
+        player: entry.player,
+        score: verdict?.score ?? 72,
+      };
     }
     const opponentScore = entry.engineBestMove
       ? Math.min(99, Math.round(entry.engineBestMove.score * 2))
@@ -472,18 +631,83 @@ export function analyzeMoveLog(entries: MoveEntry[], enrichWithFritz = false): G
   });
 
   const accuracyRaw =
-    analyzedMoves.length > 0
-      ? analyzedMoves.reduce((sum, move) => sum + move.score, 0) / analyzedMoves.length
-      : 0;
+    allMoves.length > 0 ? allMoves.reduce((sum, move) => sum + move.score, 0) / allMoves.length : 0;
   const accuracy = Math.round(accuracyRaw * 10) / 10;
+
+  const worstHand =
+    hands.length > 0
+      ? hands.reduce((worst, hand) => (hand.handAccuracy < worst.handAccuracy ? hand : worst))
+      : null;
+
+  const consequenceByMoveNumber: Record<number, ConsequenceChain> = {};
+  for (const hand of hands) {
+    for (const chain of hand.consequenceChains) {
+      consequenceByMoveNumber[chain.moveNumber] = chain;
+    }
+  }
 
   return {
     accuracy,
     grade: gradeFromAccuracy(accuracy),
     analyzedAt: Date.now(),
-    analyzedMoves,
+    analyzedMoves: allMoves,
     timeline,
+    hands,
+    oracleMode: options.oracleMode,
+    tierPlayed: options.tierPlayed,
+    oracleLabel: oracleLabelFor(options.oracleMode, options.tierPlayed),
+    worstHandNumber: worstHand?.handNumber ?? null,
+    consequenceByMoveNumber,
   };
+}
+
+export function analyzeMoveLog(
+  entries: MoveEntry[],
+  enrichWithFritz = false,
+  options?: AnalyzeMoveLogOptions,
+): GameAnalysis {
+  const resolved = resolveAnalyzeOptions(options);
+  const gradeTier = resolved.oracleMode === 'master' ? 'master' : resolved.tierPlayed;
+  const referenceTier: FritzTier = 'master';
+  const processedEntries = enrichWithFritz
+    ? enrichMovesWithFritz(entries, referenceTier)
+    : entries;
+
+  const segments = segmentMoveLogByHand(processedEntries);
+  const hands = segments.map((segment) =>
+    analyzeHandMoves(
+      segment.entries,
+      gradeTier,
+      'Fritz',
+      segment.handNumber,
+      segment.startingScores,
+      segment.endingScores,
+    ),
+  );
+
+  return buildGameSummary(hands, processedEntries, resolved);
+}
+
+export function analyzeMoveLogDeferred(
+  entries: MoveEntry[],
+  enrichWithFritz = false,
+  options?: AnalyzeMoveLogOptions,
+): Promise<GameAnalysis> {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      try {
+        resolve(analyzeMoveLog(entries, enrichWithFritz, options));
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      window.requestIdleCallback(() => run(), { timeout: 4000 });
+      return;
+    }
+    setTimeout(run, 0);
+  });
 }
 
 export function loadGameAnalysisHistory(): StoredAnalysisItem[] {
@@ -518,5 +742,13 @@ export function saveGameAnalysis(
     createdAt: Date.now(),
     analysis,
   };
-  return [next];
+  if (typeof window === 'undefined') return [next];
+  try {
+    const existing = loadGameAnalysisHistory();
+    const merged = [next, ...existing].slice(0, MAX_STORED_ANALYSES);
+    window.localStorage.setItem(ANALYSIS_HISTORY_KEY, JSON.stringify(merged));
+    return merged;
+  } catch {
+    return [next];
+  }
 }

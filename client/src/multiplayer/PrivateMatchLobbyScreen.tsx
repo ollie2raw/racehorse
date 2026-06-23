@@ -17,13 +17,7 @@ import { ArenaRings } from './ArenaRings';
 import { IconFlame, IconPlus, IconUserBust } from './MultiplayerDuelIcons';
 import { MultiplayerHubFeatureStrip } from './MultiplayerHubFeatureStrip';
 import { MultiplayerTwoColumnPvLayout } from './MultiplayerTwoColumnPvLayout';
-
-/** Matches `App.tsx` `RoomPlayer` shape. */
-export type PrivateMatchLobbyPlayer = {
-  id: string;
-  username: string;
-  userId: string | null;
-};
+import type { RoomPlayer } from './multiplayerRuntime';
 
 type RoomRecoveryState = 'idle' | 'reconnecting' | 'resyncing' | 'failed';
 
@@ -50,7 +44,7 @@ export interface PrivateMatchLobbyScreenProps {
   pendingLobbyAction: null | 'create' | 'join';
 
   joinedRoom: string;
-  players: PrivateMatchLobbyPlayer[];
+  players: RoomPlayer[];
   you: string | null;
   isRoomHost: boolean;
   onLeaveRoom: () => void;

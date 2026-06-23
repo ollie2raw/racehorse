@@ -95,16 +95,16 @@
 
 /* Stay in game — brass primary (matte, no blue glow) */
 .rh-leave-modal__btn--cancel.rh-btn {
-  background: #e7b64a !important;
+  background: var(--tier-elite) !important;
   border: 1px solid rgba(231, 182, 74, 0.92) !important;
-  color: #1a1200 !important;
+  color: var(--text-on-elite) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34) !important;
 }
 
 .rh-leave-modal__btn--cancel.rh-btn:hover {
   background: #efc05a !important;
   border-color: #efc05a !important;
-  color: #1a1200 !important;
+  color: var(--text-on-elite) !important;
   filter: brightness(1.04);
   transform: none;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;

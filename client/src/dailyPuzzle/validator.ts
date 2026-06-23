@@ -6,6 +6,7 @@ import {
 } from '../bot/botEngine';
 import type { CuratedDailyPuzzle, PuzzleValidationResult } from './types';
 import type { Move } from '../types';
+import { logger } from '../utils/logger';
 
 function isPlayMove(move: Move): move is Move & { type: 'play'; tile: NonNullable<Move['tile']> } {
   return move.type === 'play' && Boolean(move.tile);
@@ -94,7 +95,7 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
     const solvable = validation.solvable;
     if (!solvable) {
        
-      console.error('[DailyPuzzleValidator] invalid setup_and_strike puzzle', {
+      logger.error('validator.ts', new Error('[DailyPuzzleValidator] invalid setup_and_strike puzzle'), {
         puzzleId: puzzle.id,
         date: puzzle.puzzleDate,
         bestScore: validation.bestScore,
@@ -160,7 +161,7 @@ export function validatePuzzle(puzzle: CuratedDailyPuzzle): PuzzleValidationResu
 
   if (!solvable) {
      
-    console.error('[DailyPuzzleValidator] invalid puzzle', {
+    logger.error('validator.ts', new Error('[DailyPuzzleValidator] invalid puzzle'), {
       puzzleId: puzzle.id,
       date: puzzle.puzzleDate,
       bestScore,

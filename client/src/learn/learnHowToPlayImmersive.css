@@ -722,7 +722,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #34d399;
+  background: var(--accent-green);
   box-shadow:
     0 0 0 2px #040b17,
     0 0 12px rgba(52, 211, 153, 0.65);
@@ -823,13 +823,13 @@
 
 .learn-howto-welcome-card--green .learn-howto-welcome-card__icon-ring {
   border: 1.5px solid rgba(52, 211, 153, 0.65);
-  color: #34d399;
+  color: var(--accent-green);
   background: rgba(52, 211, 153, 0.1);
 }
 
 .learn-howto-welcome-card--gold .learn-howto-welcome-card__icon-ring {
   border: 1.5px solid rgba(231, 182, 74, 0.65);
-  color: #e7b64a;
+  color: var(--tier-elite);
   background: rgba(231, 182, 74, 0.1);
 }
 
@@ -863,11 +863,11 @@
 }
 
 .learn-howto-welcome-card--green .learn-howto-welcome-card__text strong {
-  color: #34d399;
+  color: var(--accent-green);
 }
 
 .learn-howto-welcome-card--gold .learn-howto-welcome-card__text strong {
-  color: #e7b64a;
+  color: var(--tier-elite);
 }
 
 .learn-howto-welcome-card__icon-ring .domino-tile {
@@ -892,7 +892,7 @@
   width: clamp(7px, 0.9vh, 9px);
   height: clamp(7px, 0.9vh, 9px);
   flex-shrink: 0;
-  background: #34d399;
+  background: var(--accent-green);
   transform: rotate(45deg);
   box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
 }
@@ -1041,7 +1041,7 @@
   font-size: clamp(1.1rem, 2vh, 1.45rem);
   font-weight: 700;
   line-height: 1;
-  color: #34d399;
+  color: var(--accent-green);
   text-shadow: 0 0 12px rgba(52, 211, 153, 0.45);
 }
 
@@ -1087,7 +1087,7 @@
   font-size: clamp(1.35rem, 2.4vh, 1.85rem);
   font-weight: 800;
   line-height: 1;
-  color: #34d399;
+  color: var(--accent-green);
   text-shadow: 0 0 16px rgba(52, 211, 153, 0.35);
 }
 
@@ -1104,14 +1104,14 @@
 
 .learn-howto-turn-loop-card--green .learn-howto-turn-loop-card__icon-ring {
   border: 1.5px solid rgba(52, 211, 153, 0.65);
-  color: #34d399;
+  color: var(--accent-green);
   background: rgba(52, 211, 153, 0.1);
   box-shadow: 0 0 28px rgba(52, 211, 153, 0.18);
 }
 
 .learn-howto-turn-loop-card--gold .learn-howto-turn-loop-card__icon-ring {
   border: 1.5px solid rgba(231, 182, 74, 0.65);
-  color: #e7b64a;
+  color: var(--tier-elite);
   background: rgba(231, 182, 74, 0.1);
   box-shadow: 0 0 28px rgba(231, 182, 74, 0.14);
 }
@@ -1140,12 +1140,12 @@
 }
 
 .learn-howto-turn-loop-card--green .learn-howto-turn-loop-card__text strong {
-  color: #34d399;
+  color: var(--accent-green);
   font-weight: 700;
 }
 
 .learn-howto-turn-loop-card--gold .learn-howto-turn-loop-card__text strong {
-  color: #e7b64a;
+  color: var(--tier-elite);
   font-weight: 700;
 }
 
@@ -1164,7 +1164,7 @@
 }
 
 .learn-howto-turn-loop__tip strong {
-  color: #34d399;
+  color: var(--accent-green);
   font-weight: 700;
 }
 
@@ -1177,7 +1177,7 @@
   justify-content: center;
   border-radius: 50%;
   border: 1px solid rgba(52, 211, 153, 0.45);
-  color: #34d399;
+  color: var(--accent-green);
   background: rgba(52, 211, 153, 0.1);
   box-shadow: 0 0 16px rgba(52, 211, 153, 0.2);
 }

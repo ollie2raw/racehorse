@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
+import { BookOpen, Check, Crown, Grid3x3, Lock, Puzzle } from 'lucide-react';
+import type { FritzTier } from '../bot/fritzConfig';
 import type { AppMode } from '../types';
 import { GlobalNav } from '../components';
 import { Button } from '../components/primitives';
 import '../screens/RacehorseHomeArt.css';
 import { useJourneyProgress } from './useJourneyProgress';
-import { getChapterProgressRecord } from './journeyChapters';
+import { getChapterProgressRecord, isPlayableChapterId } from './journeyChapters';
 import {
   buildJourneyBotTrial,
   isJourneyBotTrialNode,
@@ -15,11 +17,10 @@ import { getJourneyBriefing } from './journeyBriefings';
 import { JourneyBriefingModal } from './JourneyBriefingModal';
 import { getJourneyPuzzle } from './journeyPuzzles';
 import { JourneyPuzzleModal } from './JourneyPuzzleModal';
-import { getChapterRuntimeStatusLabel, isPlayableChapterId } from './journeyChapters';
+import { InteractivePuzzleModal } from './InteractivePuzzleModal';
 import { JourneyChapterCompleteModal } from './JourneyChapterCompleteModal';
 import type { JourneyActiveChallenge } from './journeyRuntime';
 import type {
-  JourneyChapterRuntimeStatus,
   JourneyChapterWithStatus,
   JourneyNodeAction,
   JourneyNodeType,
@@ -44,8 +45,8 @@ interface RacehorseJourneyScreenProps {
 const themeVars = {
   '--rh-bg': '#050911',
   '--rh-panel': '#09101A',
-  '--rh-brass': '#D7A64A',
-  '--rh-text': '#F2EEE8',
+  '--rh-brass': '#C9A84C',
+  '--rh-text': '#f0e6cc',
 } as CSSProperties;
 
 function nodeTypeLabel(type: JourneyNodeType): string {
@@ -54,11 +55,16 @@ function nodeTypeLabel(type: JourneyNodeType): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-function nodeTypeGlyph(type: JourneyNodeType): string {
-  if (type === 'checkpoint') return '◆';
-  if (type === 'puzzle') return '?';
-  if (type === 'boss') return '★';
-  return '×';
+function formatFritzTierLabel(tier: FritzTier): string {
+  return tier.charAt(0).toUpperCase() + tier.slice(1);
+}
+
+function getJourneyWinConditionLabel(node: JourneyNodeWithStatus): string {
+  const trialAction = getJourneyTrialAction(node);
+  if (trialAction) {
+    return `Win vs ${formatFritzTierLabel(trialAction.fritzTier)} Fritz · Race to ${trialAction.winningScore ?? 60}`;
+  }
+  return node.completionCriteria;
 }
 
 function statusLabel(status: JourneyNodeWithStatus['status']): string {
@@ -75,21 +81,6 @@ function getJourneyTrialAction(node: JourneyNodeWithStatus | null): Extract<Jour
   return node.action;
 }
 
-function getJourneyTrialFormatLabel(node: JourneyNodeWithStatus, action: Extract<JourneyNodeAction, { kind: 'botMatch' }>): string {
-  const winningScore = action.winningScore ?? 60;
-  if (node.nodeType === 'boss') return `Boss trial · Race to ${winningScore}`;
-  const trialFormat = action.trialFormat ?? (winningScore < 60 ? 'shortRace' : 'fullMatch');
-  return trialFormat === 'shortRace' ? `Race to ${winningScore}` : `Full match to ${winningScore}`;
-}
-
-function getJourneyTrialCtaLabel(node: JourneyNodeWithStatus, action: Extract<JourneyNodeAction, { kind: 'botMatch' }>): string {
-  return `Begin Trial · ${getJourneyTrialFormatLabel(node, action)}`;
-}
-
-function chapterStatusClass(status: JourneyChapterRuntimeStatus): string {
-  return `rh-journey-chapter-card--${status.replace('_', '-')}`;
-}
-
 function canSelectJourneyChapter(chapter: JourneyChapterWithStatus): boolean {
   if (!isPlayableChapterId(chapter.chapterId)) return false;
   return (
@@ -97,6 +88,10 @@ function canSelectJourneyChapter(chapter: JourneyChapterWithStatus): boolean {
     chapter.runtimeStatus === 'available' ||
     chapter.runtimeStatus === 'completed'
   );
+}
+
+function chapterModuleShortTitle(title: string): string {
+  return title.replace(/^The /, '');
 }
 
 function JourneyNodeButton({
@@ -108,33 +103,52 @@ function JourneyNodeButton({
   selected: boolean;
   onSelect: (nodeId: string) => void;
 }) {
-  const isBoss = node.nodeType === 'boss';
-  const statusClass = `rh-journey-node--${node.status}${isBoss ? ' rh-journey-node--boss' : ''}`;
   const disabled = node.status === 'locked';
+  const Icon =
+    node.nodeType === 'checkpoint'
+      ? BookOpen
+      : node.nodeType === 'puzzle'
+        ? Puzzle
+        : node.nodeType === 'boss'
+          ? Crown
+          : Grid3x3;
 
   return (
     <div className="rh-journey-node-wrap">
       <button
         type="button"
-        className={`rh-journey-node ${statusClass}${selected ? ' rh-journey-node--selected' : ''}`}
+        className={`rh-journey-node rh-journey-node--${node.nodeType} rh-journey-node--${node.status}${
+          selected ? ' rh-journey-node--selected' : ''
+        }`}
         disabled={disabled}
         aria-current={node.status === 'current' ? 'step' : undefined}
         aria-label={`${node.title}, ${statusLabel(node.status)}`}
         onClick={() => onSelect(node.id)}
       >
-        <span className="rh-journey-node__face" aria-hidden="true">
-          <span className="rh-journey-node__glyph">{nodeTypeGlyph(node.nodeType)}</span>
-          <span className="rh-journey-node__divider" />
-          <span className="rh-journey-node__num">{node.order}</span>
+        <span className="rh-journey-node__icon" aria-hidden="true">
+          <Icon size={node.nodeType === 'boss' ? 26 : 20} strokeWidth={2.2} />
         </span>
-        {node.status === 'completed' ? (
-          <span className="rh-journey-node__seal" aria-hidden="true">
-            ✓
+        {node.status === 'locked' && (
+          <span className="rh-journey-node__lock" aria-hidden="true">
+            <Lock size={10} strokeWidth={2.5} />
           </span>
-        ) : node.badgeText ? (
-          <span className="rh-journey-node__badge">{node.badgeText}</span>
+        )}
+        {node.status === 'completed' ? (
+          <span className="rh-journey-node__check" aria-hidden="true">
+            <Check size={12} strokeWidth={3} />
+          </span>
         ) : null}
       </button>
+      <span
+        className={`rh-journey-node__label${
+          node.status === 'locked' ? ' rh-journey-node__label--dim' : ''
+        }`}
+      >
+        {node.title}
+      </span>
+      {node.status === 'completed' && node.badgeText ? (
+        <span className="rh-journey-node__reward">{node.badgeText}</span>
+      ) : null}
     </div>
   );
 }
@@ -162,8 +176,8 @@ export default function RacehorseJourneyScreen({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [briefingModalOpen, setBriefingModalOpen] = useState(false);
   const [puzzleModalOpen, setPuzzleModalOpen] = useState(false);
+  const [interactivePuzzleOpen, setInteractivePuzzleOpen] = useState(false);
   const [chapterCompleteDismissed, setChapterCompleteDismissed] = useState(false);
-  const chapterRailRef = useRef<HTMLDivElement>(null);
 
   if (!shouldShowChapterCompleteCelebration && chapterCompleteDismissed) {
     setChapterCompleteDismissed(false);
@@ -188,13 +202,6 @@ export default function RacehorseJourneyScreen({
 
   const activeNodeId = selectedNodeId ?? initialSelection;
 
-  useEffect(() => {
-    const rail = chapterRailRef.current;
-    if (!rail) return;
-    const activeCard = rail.querySelector<HTMLElement>('[data-chapter-id][aria-current="true"]');
-    activeCard?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-  }, [activeChapter.chapterId]);
-
   const selectedNode = useMemo(
     () => nodesWithStatus.find((node) => node.id === activeNodeId) ?? null,
     [nodesWithStatus, activeNodeId],
@@ -210,8 +217,6 @@ export default function RacehorseJourneyScreen({
     [nodesWithStatus],
   );
   const isChapter1Ladder = activeChapter.chapterId === JOURNEY_CHAPTER_1_ID;
-  const activeChapterWithStatus =
-    chaptersWithStatus.find((chapter) => chapter.chapterId === activeChapter.chapterId) ?? null;
   const canBegin =
     selectedNode != null && (selectedNode.status === 'current' || selectedNode.status === 'unlocked');
   const isBotTrialNode = selectedNode != null && isJourneyBotTrialNode(selectedNode);
@@ -225,20 +230,6 @@ export default function RacehorseJourneyScreen({
   const activePuzzle = selectedNode && isPuzzleNode ? getJourneyPuzzle(selectedNode.id) : null;
   const selectedTrialAction = getJourneyTrialAction(selectedNode);
 
-  const beginButtonLabel = (() => {
-    if (!selectedNode) return 'Begin';
-    if (isBotTrialNode && selectedTrialAction) {
-      return getJourneyTrialCtaLabel(selectedNode, selectedTrialAction);
-    }
-    if (isCheckpointBriefingNode) {
-      return briefingReviewMode ? 'Review Briefing' : 'Open Briefing';
-    }
-    if (isPuzzleNode) {
-      return puzzleReviewMode ? 'Review Challenge' : 'Open Challenge';
-    }
-    return 'Begin';
-  })();
-
   const canOpenBriefing =
     isCheckpointBriefingNode &&
     (selectedNode?.status === 'current' ||
@@ -250,6 +241,19 @@ export default function RacehorseJourneyScreen({
     (selectedNode?.status === 'current' ||
       selectedNode?.status === 'unlocked' ||
       selectedNode?.status === 'completed');
+
+  const detailCtaLabel = (() => {
+    if (!selectedNode) return 'Play';
+    if (selectedNode.status === 'locked') return 'Locked';
+    if (selectedNode.status === 'completed') return 'Completed ✓';
+    return 'Play';
+  })();
+
+  const detailCtaDisabled =
+    !selectedNode ||
+    selectedNode.status === 'locked' ||
+    selectedNode.status === 'completed' ||
+    !(canBegin || canOpenBriefing || canOpenPuzzle);
 
   const handleSelectNode = (nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -263,6 +267,7 @@ export default function RacehorseJourneyScreen({
     setSelectedNodeId(null);
     setBriefingModalOpen(false);
     setPuzzleModalOpen(false);
+    setInteractivePuzzleOpen(false);
   };
 
   const handleBegin = () => {
@@ -272,7 +277,11 @@ export default function RacehorseJourneyScreen({
       return;
     }
     if (isPuzzleNode && canOpenPuzzle) {
-      setPuzzleModalOpen(true);
+      if (activePuzzle?.boardState) {
+        setInteractivePuzzleOpen(true);
+      } else {
+        setPuzzleModalOpen(true);
+      }
       return;
     }
     if (!canBegin) return;
@@ -298,11 +307,13 @@ export default function RacehorseJourneyScreen({
   const handleCompletePuzzle = () => {
     if (!selectedNode || puzzleReviewMode) {
       setPuzzleModalOpen(false);
+      setInteractivePuzzleOpen(false);
       return;
     }
     if (selectedNode.status === 'locked' || selectedNode.status === 'completed') return;
     completeNode(selectedNode.id);
     setPuzzleModalOpen(false);
+    setInteractivePuzzleOpen(false);
   };
 
   const handleDismissChapterComplete = () => {
@@ -328,7 +339,7 @@ export default function RacehorseJourneyScreen({
       <div className="home-shell relative mx-auto flex min-h-0 w-full max-w-[1580px] flex-1 flex-col">
         <GlobalNav
           currentMode="journey"
-          activeColor="#E7B64A"
+          activeColor="#C9A84C"
           onNavigate={onNavigate}
           onOpenAuth={onOpenAuth}
           onOpenAccount={onOpenAccount}
@@ -345,23 +356,46 @@ export default function RacehorseJourneyScreen({
               ← Single Player
             </Button>
             <div className="rh-journey-command-strip__chapter">
-              <div className="rh-journey-hero__crest" aria-hidden="true">
-                <span className="rh-journey-hero__crest-label">Ch</span>
-                <span className="rh-journey-hero__crest-number">{activeChapter.chapterNumber}</span>
-              </div>
-              <div className="rh-journey-hero__headlines">
-                <h1 className="rh-journey-title">{activeChapter.title}</h1>
-                <p className="rh-journey-subtitle">{activeChapter.subtitle}</p>
+              <div className="rh-journey-module-strip" role="tablist" aria-label="Journey chapters">
+                {chaptersWithStatus.map((chapter) => {
+                  const isActive = chapter.chapterId === activeChapter.chapterId;
+                  const selectable = canSelectJourneyChapter(chapter);
+                  return (
+                    <button
+                      key={chapter.chapterId}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-disabled={!selectable}
+                      disabled={!selectable}
+                      title={
+                        selectable
+                          ? chapter.title
+                          : `${chapter.title} — complete the previous chapter to unlock`
+                      }
+                      className={`rh-journey-module-pill rh-journey-module-pill--${chapter.runtimeStatus}${
+                        isActive ? ' rh-journey-module-pill--active' : ''
+                      }${selectable ? ' rh-journey-module-pill--selectable' : ''}`}
+                      onClick={() => handleSelectChapter(chapter)}
+                    >
+                      <span className="rh-journey-module-pill__num" aria-hidden="true">
+                        {chapter.chapterNumber}
+                      </span>
+                      <span className="rh-journey-module-pill__title">
+                        {chapterModuleShortTitle(chapter.title)}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="rh-journey-command-strip__progress" aria-label="Chapter progress">
-              <span className="rh-journey-command-strip__progress-value">{progressPct}%</span>
+              <span className="rh-journey-command-strip__progress-value">
+                {summary.completed} / {summary.total} nodes
+              </span>
               <div className="rh-journey-progress-rail" aria-hidden="true">
                 <div className="rh-journey-progress-fill" style={{ width: `${progressPct}%` }} />
               </div>
-              <span className="rh-journey-command-strip__progress-meta">
-                {summary.completed}/{summary.total}
-              </span>
             </div>
           </div>
 
@@ -379,81 +413,6 @@ export default function RacehorseJourneyScreen({
               </p>
             </div>
           ) : null}
-
-          <section className="rh-journey-chapters" aria-label="Journey chapters">
-            <div className="rh-journey-chapters__head">
-              <div>
-                <p className="rh-journey-chapters__label">Campaign Ledger</p>
-                <p className="rh-journey-chapters__active">
-                  Chapter {activeChapter.chapterNumber} ·{' '}
-                  {getChapterRuntimeStatusLabel(activeChapterWithStatus?.runtimeStatus ?? 'in_progress')}
-                </p>
-              </div>
-              <p className="rh-journey-chapters__scroll-hint">Scroll chapters</p>
-            </div>
-            <div className="rh-journey-chapters__rail">
-              <div
-                ref={chapterRailRef}
-                className="rh-journey-chapters__row"
-                role="list"
-                aria-label="Journey chapter list"
-              >
-              {chaptersWithStatus.map((chapter) => {
-                const isActive = chapter.chapterId === activeChapter.chapterId;
-                const statusLabel = getChapterRuntimeStatusLabel(chapter.runtimeStatus);
-                const selectable = canSelectJourneyChapter(chapter);
-                return (
-                  <div
-                    key={chapter.chapterId}
-                    data-chapter-id={chapter.chapterId}
-                    className={`rh-journey-chapter-card ${chapterStatusClass(chapter.runtimeStatus)}${
-                      isActive ? ' rh-journey-chapter-card--active' : ''
-                    }${selectable ? ' rh-journey-chapter-card--selectable' : ''}`}
-                    aria-current={isActive ? 'true' : undefined}
-                    role="listitem"
-                    aria-disabled={selectable ? undefined : true}
-                    tabIndex={selectable ? 0 : -1}
-                    onClick={() => handleSelectChapter(chapter)}
-                    onKeyDown={(event) => {
-                      if (!selectable) return;
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        handleSelectChapter(chapter);
-                      }
-                    }}
-                  >
-                    <span className="rh-journey-chapter-card__plaque">{chapter.chapterNumber}</span>
-                    <p className="rh-journey-chapter-card__eyebrow">Chapter {chapter.chapterNumber}</p>
-                    <p className="rh-journey-chapter-card__title">{chapter.title}</p>
-                    <p className="rh-journey-chapter-card__subtitle">{chapter.subtitle}</p>
-                    <p className="rh-journey-chapter-card__status">{statusLabel}</p>
-                    {chapter.releaseStatus === 'playable' && chapter.totalNodes > 0 ? (
-                      <>
-                        <p className="rh-journey-chapter-card__progress">
-                          {chapter.completedNodes} / {chapter.totalNodes} nodes
-                        </p>
-                        <div className="rh-journey-chapter-card__rail" aria-hidden="true">
-                          <div
-                            className="rh-journey-chapter-card__fill"
-                            style={{
-                              width: `${
-                                chapter.totalNodes > 0
-                                  ? Math.round((chapter.completedNodes / chapter.totalNodes) * 100)
-                                  : 0
-                              }%`,
-                            }}
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <p className="rh-journey-chapter-card__teaser">{chapter.nextChapterCopy}</p>
-                    )}
-                  </div>
-                );
-              })}
-              </div>
-            </div>
-          </section>
         </header>
 
         <main className="rh-journey-main relative z-10">
@@ -525,11 +484,11 @@ export default function RacehorseJourneyScreen({
                   const position = trailLayout.positions[index] ?? { x: 50, y: 50 };
                   const gridPlacement = isChapter1Ladder ? getChapter1GridPlacement(index) : null;
                   return (
-                  <div
-                    key={node.id}
-                    className={`rh-journey-trail-step rh-journey-trail-step--${node.status}${
-                      node.nodeType === 'boss' ? ' rh-journey-trail-step--boss' : ''
-                    }`}
+                    <div
+                      key={node.id}
+                      className={`rh-journey-trail-step rh-journey-trail-step--${node.status}${
+                        node.nodeType === 'boss' ? ' rh-journey-trail-step--boss' : ''
+                      }`}
                     style={
                       (gridPlacement
                         ? {
@@ -543,18 +502,6 @@ export default function RacehorseJourneyScreen({
                           }) as CSSProperties
                     }
                   >
-                    <div className="rh-journey-node-caption">
-                      <p
-                        className={`rh-journey-node-caption__title${
-                          node.status === 'locked' ? ' rh-journey-node-caption__title--dim' : ''
-                        }`}
-                      >
-                        {node.title}
-                      </p>
-                      {node.status !== 'locked' ? (
-                        <p className="rh-journey-node-caption__type">{nodeTypeLabel(node.nodeType)}</p>
-                      ) : null}
-                    </div>
                     <JourneyNodeButton
                       node={node}
                       selected={activeNodeId === node.id}
@@ -575,36 +522,54 @@ export default function RacehorseJourneyScreen({
           >
             {selectedNode ? (
               <>
-                <div className="rh-journey-detail__main">
-                  <p className="rh-journey-detail__kicker">
-                    Chapter {activeChapter.chapterNumber} · Node {selectedNode.order} ·{' '}
-                    {nodeTypeLabel(selectedNode.nodeType)}
-                  </p>
+                <div
+                  className={`rh-journey-detail__main${
+                    selectedNode.nodeType === 'boss' ? ' rh-journey-detail__main--boss' : ''
+                  }`}
+                >
+                  {selectedNode.nodeType === 'boss' ? (
+                    <p className="rh-journey-detail__boss-label">Chapter Boss</p>
+                  ) : null}
 
-                  <h2 className="rh-journey-detail__title">{selectedNode.title}</h2>
-                  <p className="rh-journey-detail__subtitle">{selectedNode.subtitle}</p>
-
-                  <div className="rh-journey-detail__reward-card">
-                    <span className="rh-journey-detail__reward-label">Reward</span>
-                    <strong className="rh-journey-detail__reward-value">{selectedNode.rewardText}</strong>
+                  <div className="rh-journey-detail__meta">
+                    <span className={`rh-journey-chip rh-journey-chip--type-${selectedNode.nodeType}`}>
+                      {nodeTypeLabel(selectedNode.nodeType)}
+                    </span>
                     {selectedTrialAction ? (
-                      <span className="rh-journey-detail__reward-format">
-                        {getJourneyTrialFormatLabel(selectedNode, selectedTrialAction)}
+                      <span
+                        className={`rh-journey-chip rh-journey-tier--${selectedTrialAction.fritzTier}`}
+                      >
+                        {selectedTrialAction.fritzTier.toUpperCase()}
                       </span>
                     ) : null}
                   </div>
 
-                  <p className="rh-journey-detail__mission-body">{selectedNode.completionCriteria}</p>
+                  <h2 className="rh-journey-detail__title">{selectedNode.title}</h2>
+                  <p className="rh-journey-detail__subtitle">{selectedNode.subtitle}</p>
+
+                  <p className="rh-journey-detail__win-condition">
+                    {getJourneyWinConditionLabel(selectedNode)}
+                  </p>
+
+                  <div
+                    className={`rh-journey-detail__reward-card${
+                      selectedNode.status !== 'completed' ? ' rh-journey-detail__reward-card--locked' : ''
+                    }`}
+                  >
+                    <span className="rh-journey-detail__reward-label">Reward</span>
+                    <strong className="rh-journey-detail__reward-value">{selectedNode.rewardText}</strong>
+                  </div>
                 </div>
 
                 <div className="rh-journey-detail__actions">
                   <Button
                     variant="tier-elite"
+                    className={selectedNode.nodeType === 'boss' ? 'rh-journey-detail__cta--boss' : undefined}
                     type="button"
-                    disabled={!(canBegin || canOpenBriefing || canOpenPuzzle)}
+                    disabled={detailCtaDisabled}
                     onClick={handleBegin}
                   >
-                    {beginButtonLabel}
+                    {detailCtaLabel}
                   </Button>
                 </div>
               </>
@@ -630,6 +595,23 @@ export default function RacehorseJourneyScreen({
         onClose={() => setPuzzleModalOpen(false)}
         onComplete={puzzleReviewMode ? undefined : handleCompletePuzzle}
       />
+
+      {activePuzzle?.boardState ? (
+        <InteractivePuzzleModal
+          open={interactivePuzzleOpen}
+          puzzle={activePuzzle}
+          reviewMode={puzzleReviewMode}
+          onClose={() => setInteractivePuzzleOpen(false)}
+          onComplete={
+            puzzleReviewMode
+              ? undefined
+              : () => {
+                  setInteractivePuzzleOpen(false);
+                  handleCompletePuzzle();
+                }
+          }
+        />
+      ) : null}
 
       <JourneyChapterCompleteModal
         open={chapterCompleteModalOpen}

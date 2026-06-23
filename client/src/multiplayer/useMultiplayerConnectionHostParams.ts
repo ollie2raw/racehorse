@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { LegacyTournamentState } from './legacyTournamentTypes';
 import type { RoomAckResponse } from './roomTransport';
 import type { GameState, Move, Tile } from '../types';
 import type { UseMultiplayerConnectionParams } from './useMultiplayerConnection';
@@ -20,9 +19,8 @@ import type {
   MultiplayerRoomSocialRuntime,
   MultiplayerSocketRuntime,
   RoomRecoveryState,
+  RoomPlayer,
 } from './multiplayerRuntime';
-
-type RoomPlayer = { id: string; username: string; userId: string | null };
 
 export type UseMultiplayerConnectionHostParamsSource = {
   emitWithAck: MultiplayerConnectionConfig['emitWithAck'];
@@ -39,8 +37,7 @@ export type UseMultiplayerConnectionHostParamsSource = {
   authUserId: string | null;
   authEmail: string | null;
   authProfileUsername: string | null;
-  tournamentId: string | null;
-  tournamentStateStatus: string | null;
+  authAccessToken: string | null;
   roomCode: string;
   socketRuntime: MultiplayerSocketRuntime;
   roomRuntime: MultiplayerRoomRuntime;
@@ -79,8 +76,6 @@ export type UseMultiplayerConnectionHostParamsSource = {
   setState: Dispatch<SetStateAction<GameState | null>>;
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
-  setTournamentId: Dispatch<SetStateAction<string | null>>;
-  setTournamentState: Dispatch<SetStateAction<LegacyTournamentState | null>>;
   setTournamentActiveRoom: Dispatch<SetStateAction<string | null>>;
   setRoomCode: Dispatch<SetStateAction<string>>;
   setHandReveal: Dispatch<
@@ -139,12 +134,12 @@ export function useMultiplayerConnectionHostParams(
       authUserId: source.authUserId,
       authEmail: source.authEmail,
       authProfileUsername: source.authProfileUsername,
-      tournamentId: source.tournamentId,
-      tournamentStateStatus: source.tournamentStateStatus,
+      authAccessToken: source.authAccessToken,
       roomCode: source.roomCode,
     }),
     [
       source.appMode,
+      source.authAccessToken,
       source.authEmail,
       source.authProfileUsername,
       source.authUserId,
@@ -153,8 +148,6 @@ export function useMultiplayerConnectionHostParams(
       source.roomCode,
       source.roomRecoveryState,
       source.socket,
-      source.tournamentId,
-      source.tournamentStateStatus,
     ],
   );
 
@@ -216,8 +209,6 @@ export function useMultiplayerConnectionHostParams(
       setState: source.setState,
       setLegalMoves: source.setLegalMoves,
       setCanDraw: source.setCanDraw,
-      setTournamentId: source.setTournamentId,
-      setTournamentState: source.setTournamentState,
       setTournamentActiveRoom: source.setTournamentActiveRoom,
       setRoomCode: source.setRoomCode,
       setHandReveal: source.setHandReveal,
@@ -248,8 +239,6 @@ export function useMultiplayerConnectionHostParams(
       source.setSocket,
       source.setState,
       source.setTournamentActiveRoom,
-      source.setTournamentId,
-      source.setTournamentState,
       source.setYou,
     ],
   );

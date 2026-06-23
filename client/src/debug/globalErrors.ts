@@ -1,4 +1,5 @@
 import { getSocketTrace } from './socketTrace';
+import { logger } from '../utils/logger';
 
 const MODULE_IMPORT_RECOVERY_KEY = 'rh:module-import-recovery';
 
@@ -29,14 +30,12 @@ function recoverFromModuleImportFailure(reason: unknown): void {
 
 export function installGlobalErrorHandlers() {
   window.addEventListener('error', (e) => {
-    console.error('Global error:', e.error ?? e.message);
-    console.error('Last socket events:', getSocketTrace());
+    logger.error('globalErrors.ts', e.error ?? e.message, { socketTrace: getSocketTrace() });
     recoverFromModuleImportFailure(e.error ?? e.message);
   });
 
   window.addEventListener('unhandledrejection', (e) => {
-    console.error('Unhandled rejection:', e.reason);
-    console.error('Last socket events:', getSocketTrace());
+    logger.error('globalErrors.ts', e.reason, { socketTrace: getSocketTrace() });
     recoverFromModuleImportFailure(e.reason);
   });
 }

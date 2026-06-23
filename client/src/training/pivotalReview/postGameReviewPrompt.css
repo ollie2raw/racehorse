@@ -3,52 +3,208 @@
 }
 
 .pgr-prompt-card.game-over-card {
-  --df-result-accent: var(--tier-elite, #e7b64a);
-  max-width: 420px;
+  --df-result-accent: var(--tier-elite, var(--tier-elite));
+  width: min(100%, 420px);
+  max-height: min(92dvh, 680px);
+  overflow: hidden;
   animation: none;
+  display: flex;
+  flex-direction: column;
 }
 
 .pgr-prompt-card.game-over-card.pgr-prompt-card--blue {
   --df-result-accent: #5eb8ff;
 }
 
+.pgr-prompt-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.pgr-prompt-hero {
+  flex-shrink: 0;
+}
+
+.pgr-prompt-hero .df-result-title {
+  font-size: clamp(1.35rem, 4vw, 1.65rem);
+}
+
+.pgr-prompt-hero .df-result-subtitle {
+  font-size: 12px;
+}
+
+.pgr-prompt-stats {
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.pgr-prompt-stats .df-result-stat {
+  padding: 8px 10px;
+}
+
 .pgr-prompt-accuracy {
   display: grid;
-  gap: 4px;
-  padding: 14px 16px;
-  border-radius: 12px;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.pgr-prompt-accuracy-label {
+.pgr-prompt-match-header {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pgr-prompt-match-eyebrow {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--df-result-accent, var(--tier-elite));
+}
+
+.pgr-prompt-match-result {
+  margin: 0;
+  font-size: clamp(1.1rem, 3.2vw, 1.35rem);
+  font-weight: 800;
+  line-height: 1.15;
+  color: rgba(242, 238, 232, 0.96);
+}
+
+.pgr-prompt-match-result.is-victory {
+  color: rgba(236, 248, 252, 0.96);
+}
+
+.pgr-prompt-match-result.is-defeat {
+  color: rgba(223, 236, 244, 0.88);
+}
+
+.pgr-prompt-accuracy-summary {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(223, 236, 244, 0.82);
+}
+
+.pgr-hand-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: min(42dvh, 320px);
+  -webkit-overflow-scrolling: touch;
+}
+
+.pgr-hand-row {
+  display: grid;
+  gap: 2px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(4, 11, 23, 0.35);
+}
+
+.pgr-hand-row.is-worst {
+  border-left: 3px solid var(--df-result-accent);
+  padding-left: 6px;
+  background: rgba(231, 182, 74, 0.06);
+}
+
+.pgr-hand-row__main {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.pgr-hand-row__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(191, 213, 223, 0.78);
+  min-width: 28px;
+}
+
+.pgr-hand-bar {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+}
+
+.pgr-hand-bar__seg {
+  height: 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pgr-hand-bar__seg.is-filled {
+  background: var(--df-result-accent);
+  opacity: 0.85;
+}
+
+.pgr-hand-row__accuracy {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(191, 213, 223, 0.72);
+  color: rgba(236, 248, 252, 0.92);
+  min-width: 32px;
+  text-align: right;
 }
 
-.pgr-prompt-accuracy-value {
-  font-size: 28px;
-  font-weight: 800;
-  line-height: 1.1;
-  color: var(--df-result-accent);
+.pgr-hand-row__outcome {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.25;
+  color: rgba(191, 213, 223, 0.78);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
-.pgr-prompt-accuracy-grade {
+.pgr-hand-row__worst-tag {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(231, 182, 74, 0.55);
+  white-space: nowrap;
+}
+
+.pgr-prompt-actions {
+  flex-shrink: 0;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.pgr-prompt-actions .df-result-primary,
+.pgr-prompt-actions .df-result-secondary {
+  padding: 10px 12px;
   font-size: 13px;
-  color: rgba(223, 236, 244, 0.82);
 }
 
 .pgr-prompt-skip {
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border: none;
   border-radius: 10px;
   background: transparent;
   color: rgba(191, 213, 223, 0.62);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }

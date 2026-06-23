@@ -187,8 +187,6 @@ export function isDailyFritzAdvanceLocked(
 }
 
 export function emitHandLifecycleDebugLog(
-  sessionId: string,
-  endpoint: string,
   payload: {
     location: string;
     message: string;
@@ -197,20 +195,8 @@ export function emitHandLifecycleDebugLog(
     runId?: string;
   },
 ): void {
-  const env = (import.meta as ImportMeta & {
-    env?: { VITE_DEBUG_HAND_LIFECYCLE?: string; VITE_DEBUG_DAILY_FRITZ?: string };
-  }).env;
-  if (!DEV && env?.VITE_DEBUG_HAND_LIFECYCLE !== 'true' && env?.VITE_DEBUG_DAILY_FRITZ !== 'true') return;
-  fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Debug-Session-Id': sessionId,
-    },
-    body: JSON.stringify({
-      sessionId,
-      timestamp: Date.now(),
-      ...payload,
-    }),
-  }).catch(() => {});
+  if (!import.meta.env.DEV) return;
+  void import('../devtools/handLifecycleDebug').then((module) => {
+    module.emitHandLifecycleDebugLog(payload);
+  });
 }

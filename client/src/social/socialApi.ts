@@ -1,16 +1,5 @@
+import { apiGet } from '../api/client';
 import { supabase } from '../lib/supabase';
-import { resolveGameServerUrl } from '../lib/gameServerUrl';
-
-function resolveBaseUrl(): string {
-  return resolveGameServerUrl();
-}
-
-async function authHeaders(): Promise<Record<string, string>> {
-  if (!supabase) return {};
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 async function authCacheScope(): Promise<string> {
   if (!supabase) return 'anon';
@@ -18,12 +7,11 @@ async function authCacheScope(): Promise<string> {
   return data.session?.user?.id ?? 'anon';
 }
 
+/** Throws on HTTP/auth failure — caught by exported loaders that return `{ error }`. */
 async function apiFetch<T>(path: string): Promise<T> {
-  const headers = await authHeaders();
-  const res = await fetch(`${resolveBaseUrl()}${path}`, { headers, credentials: 'include' });
-  const body = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error((body as { error?: string }).error ?? `Request failed: ${res.status}`);
-  return body;
+  const result = await apiGet<T>(path);
+  if (result.error) throw new Error(result.error);
+  return result.data as T;
 }
 
 type CacheEntry<T> = {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Board, DominoTile, GlobalNav } from '../../components';
 import type { AppMode, PlacementPosition, Tile } from '../../types';
+import { tileEquals } from '../../game/tileUtils';
 import {
   applyPlayMove,
   computeOpenEndsSum,
@@ -69,11 +70,6 @@ type PendingPlayerCoaching = {
   event: GuidedMatchPlayerTilePlayEvent;
   handEnded: GuidedMatchRecordedHandEnd | null;
 };
-
-function tileEquals(a: Tile | null | undefined, b: Tile | null | undefined): boolean {
-  if (!a || !b) return false;
-  return (a.low === b.low && a.high === b.high) || (a.low === b.high && a.high === b.low);
-}
 
 function currentActor(match: BotMatchState): 'player' | 'fritz' {
   return match.currentPlayer === 'you' ? 'player' : 'fritz';

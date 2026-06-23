@@ -1,4 +1,5 @@
 import type { MutableRefObject } from 'react';
+import { logger } from '../utils/logger';
 
 /** Reject stale updates; large backward jumps trigger full resync. */
 export const SEQUENCE_REGRESSION_THRESHOLD = 10;
@@ -37,10 +38,10 @@ export function wrapSocketHandler<TArgs extends unknown[]>(
     try {
       handler(...args);
     } catch (error) {
-      console.error(`[socket:${eventName}] handler error`, error);
+      logger.error('socketGuards.ts', error, { eventName, message: `[socket:${eventName}] handler error` });
       if (options?.recoverOnError) {
         void Promise.resolve(options.recoverOnError()).catch((recoveryError) => {
-          console.error(`[socket:${eventName}] recovery failed`, recoveryError);
+          logger.error('socketGuards.ts', recoveryError, { eventName, message: `[socket:${eventName}] recovery failed` });
         });
       }
     }

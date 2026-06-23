@@ -1,7 +1,8 @@
 import { hydrateBoardForOpenEnds } from '../game/openEndsGeometry';
+import { apiGet, apiPost } from '../api/client';
+import { logger } from '../utils/logger';
 import type { BoardState, Tile, TileOrientation } from '../types';
 import { supabase } from '../lib/supabase';
-import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import type {
   CuratedDailyPuzzle,
   CuratedDailyPuzzleRow,
@@ -23,62 +24,25 @@ const DAILY_PUZZLE_TYPE_ORDER: DailyPuzzleType[] = [
   'reach_target',
 ];
 
-function resolveServerBaseUrl(): string {
-  return resolveGameServerUrl();
-}
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (!supabase) return headers;
-  try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? null;
-    if (token) headers.Authorization = `Bearer ${token}`;
-  } catch {
-    // no-op
-  }
-  return headers;
-}
-
-async function requestServerJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = {
-    ...(await authHeaders()),
-    ...(init?.headers ?? {}),
-  };
-  const response = await fetch(`${resolveServerBaseUrl()}${path}`, {
-    credentials: 'include',
-    ...init,
-    headers,
-  });
-  const text = await response.text().catch(() => '');
-  let parsed: unknown = null;
-  if (text) {
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      if (!response.ok) {
-        throw new Error(
-          text.startsWith('<!DOCTYPE') || text.startsWith('<html')
-            ? `Daily Puzzle backend returned HTML for ${path}. Check production API routing / VITE_SERVER_URL.`
-            : `${path} failed with ${response.status}`,
-        );
-      }
-      throw new Error(`Invalid JSON response from ${path}`);
+async function requestServerJson<T>(
+  path: string,
+  init?: { method?: 'GET' | 'POST'; body?: unknown },
+): Promise<T> {
+  const method = init?.method ?? 'GET';
+  const result =
+    method === 'POST'
+      ? await apiPost<T>(path, init?.body ?? {})
+      : await apiGet<T>(path);
+  if (result.error) {
+    const message = result.error;
+    if (message.startsWith('<!DOCTYPE') || message.startsWith('<html')) {
+      throw new Error(
+        `Daily Puzzle backend returned HTML for ${path}. Check production API routing / VITE_SERVER_URL.`,
+      );
     }
+    throw new Error(message);
   }
-  if (!response.ok) {
-    const bodyError =
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      'error' in parsed &&
-      typeof (parsed as { error: unknown }).error === 'string'
-        ? (parsed as { error: string }).error
-        : undefined;
-    throw new Error(bodyError ?? `${path} failed with ${response.status}`);
-  }
-  return parsed as T;
+  return result.data as T;
 }
 
 function isTile(value: unknown): value is Tile {
@@ -640,7 +604,7 @@ export async function fetchDailyPuzzleLeaderboard(
   if (error) {
     if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
        
-      console.error('[DailyPuzzleLeaderboard] fetch error', error);
+      logger.error('api.ts', error, { message: '[DailyPuzzleLeaderboard] fetch error' });
     }
     throw new Error(error.message);
   }
@@ -689,15 +653,13 @@ export async function upsertDailyPuzzleCompletion(
 }
 
 export async function getTodayDailyPuzzleLadder(): Promise<DailyPuzzleTodayResponse> {
-  return requestServerJson<DailyPuzzleTodayResponse>('/api/daily-puzzle/today', {
-    method: 'GET',
-  });
+  return requestServerJson<DailyPuzzleTodayResponse>('/api/daily-puzzle/today');
 }
 
 export async function startDailyPuzzleLadder(runDate?: string): Promise<DailyPuzzleStartResponse> {
   return requestServerJson<DailyPuzzleStartResponse>('/api/daily-puzzle/start', {
     method: 'POST',
-    body: JSON.stringify(runDate ? { runDate } : {}),
+    body: runDate ? { runDate } : {},
   });
 }
 
@@ -706,7 +668,7 @@ export async function submitDailyPuzzleSlot(
 ): Promise<DailyPuzzleSubmitSlotResponse> {
   return requestServerJson<DailyPuzzleSubmitSlotResponse>('/api/daily-puzzle/submit-slot', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: input,
   });
 }
 
@@ -716,7 +678,7 @@ export async function completeDailyPuzzleLadder(input: {
 }): Promise<DailyPuzzleCompleteResponse> {
   return requestServerJson<DailyPuzzleCompleteResponse>('/api/daily-puzzle/complete', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: input,
   });
 }
 
@@ -725,7 +687,6 @@ export async function fetchDailyPuzzleLadderLeaderboard(
 ): Promise<DailyPuzzleLeaderboardRow[]> {
   const response = await requestServerJson<DailyPuzzleLeaderboardResponse>(
     `/api/daily-puzzle/leaderboard?date=${encodeURIComponent(normalizeDateInputToLocalKey(date))}`,
-    { method: 'GET' },
   );
   return response.rows;
 }

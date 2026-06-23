@@ -1,0 +1,49 @@
+{
+  "rules": {
+    "color-no-invalid-hex": true,
+    "declaration-block-no-duplicate-properties": true
+  },
+  "overrides": [
+    {
+      "files": ["**/*.css"],
+      "rules": {
+        "selector-class-pattern": [
+          "^(?!wl-).+",
+          { "message": "wl-* classes are frozen — add new classes to the rh-* token system instead" }
+        ]
+      }
+    },
+    {
+      "files": [
+        "**/walnut-live.css",
+        "**/App.css",
+        "**/botMatch.css",
+        "**/match-score-header.css",
+        "**/dailyFritzMatchBoard.css",
+        "**/dailyPuzzle.css",
+        "**/learn.css",
+        "**/learnGuidedMatch.css",
+        "**/learnPlayer.css",
+        "**/coach.css",
+        "**/match-live-solo.css",
+        "**/match-live-surface.css",
+        "**/match-live-theme.css",
+        "**/noBrainerLab.css",
+        "**/board-hand-dock.css",
+        "**/board-hud.css",
+        "**/board-shell.css",
+        "**/racehorse-matte.css",
+        "**/game-interactions.css",
+        "**/match-board-architecture.css",
+        "**/match-hud-polish.css",
+        "**/match-standard-live-board.css",
+        "**/shared-ui.css",
+        "**/tournamentMatchHud.css"
+      ],
+      "rules": {
+        "selector-class-pattern": null
+      }
+    }
+  ],
+  "ignoreFiles": ["node_modules/**"]
+}

@@ -11,8 +11,8 @@
 
 /* Outer shell ≈ .pvf-control-panel */
 .hand-over-modal.game-over-card {
-  --pvf-dynamic-color: var(--color-elite, #e7b64a);
-  --pvf-active-color: var(--color-elite, #e7b64a);
+  --pvf-dynamic-color: var(--color-elite, var(--tier-elite));
+  --pvf-active-color: var(--color-elite, var(--tier-elite));
   --pvf-text: #f2eee8;
   --pvf-muted: #8891a0;
   --pvf-radius-lg: 20px;
@@ -340,7 +340,7 @@
   height: 48px;
   border: none;
   border-radius: var(--pvf-radius-sm);
-  color: #1a1200;
+  color: var(--text-on-elite);
   font-family: 'Outfit', sans-serif;
   font-size: 18px;
   font-weight: 800;
@@ -380,7 +380,7 @@
   right: 24px;
   font-size: 21px;
   line-height: 1;
-  color: #1a1200;
+  color: var(--text-on-elite);
   opacity: 0.9;
 }
 

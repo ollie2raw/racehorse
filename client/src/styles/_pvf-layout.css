@@ -15,16 +15,16 @@
   --pvf-radius-md: 14px;
   --pvf-radius-sm: 12px;
   --color-obsidian: #04070c;
-  --color-rookie: #4ADE80;
+  --color-rookie: var(--tier-rookie);
   --color-standard: #3B82F6;
-  --color-elite: #E7B64A;
+  --color-elite: var(--tier-elite);
   --color-master: #A855F7;
 }
 
 
 /* ── root ── */
 .pvf-root {
-  --pvf-gold: var(--pvf-dynamic-color, #E7B64A);
+  --pvf-gold: var(--pvf-dynamic-color, var(--tier-elite));
   --dynamic-glow: color-mix(in srgb, var(--pvf-dynamic-color) 40%, transparent);
   --dynamic-glow-strong: color-mix(in srgb, var(--pvf-dynamic-color) 70%, transparent);
   
@@ -671,7 +671,7 @@
   width:100%; height:48px; /* Reduced from 54px */
   border: none;
   border-radius:var(--pvf-radius-sm);
-  color:#1a1200;
+  color:var(--text-on-elite);
   font-family:'Outfit',sans-serif; font-size:18px; font-weight:800;
   cursor:pointer;
   display:flex; align-items:center; justify-content:center; gap:10px;
@@ -692,7 +692,7 @@
   right: 24px;
   font-size:21px; 
   line-height:1; 
-  color:#1a1200; 
+  color:var(--text-on-elite); 
   opacity:0.9; 
 }
 

@@ -97,7 +97,7 @@
 }
 
 .learn-howto-diagram__end--gold .learn-howto-diagram__end-value {
-  color: #e7b64a;
+  color: var(--tier-elite);
 }
 
 .learn-howto-diagram__end-note {
@@ -301,7 +301,7 @@
 }
 
 .learn-howto-calc--score .learn-howto-calc__total {
-  color: #e7b64a;
+  color: var(--tier-elite);
 }
 
 .learn-howto-calc__score-line {
@@ -384,7 +384,7 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #e7b64a;
+  color: var(--tier-elite);
 }
 
 .learn-howto-doubles-compare__hint {

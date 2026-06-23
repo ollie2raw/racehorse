@@ -14,7 +14,7 @@
  *   - Never crashes the game; all rendering is defensive
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { PreMoveRecommendation, CoachingFeedbackPacket } from './coachMessaging.ts';
 import type { MoveEvaluationResult } from './moveAnalysis.ts';
 import type { MoveCategory, InterventionLevel } from './types.ts';

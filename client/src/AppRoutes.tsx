@@ -9,9 +9,17 @@ import {
 import { resolveGuidedMatchStart } from './learn/lessonV2';
 import type { AppRoutesProps } from './appRouteTypes';
 import type { WeeklyRecap } from './stats/statsApi';
-import { LEARN_MODE_VISIBLE } from './appRouteTypes';
+import { JOURNEY_MODE_VISIBLE, LEARN_MODE_VISIBLE } from './appRouteTypes';
+import {
+  clearJourneyActiveChallenge,
+  getJourneyActiveChallenge,
+  setJourneyActiveChallenge,
+} from './journey/journeyRuntime';
+import { markJourneyNodeCompleted } from './journey/journeyStorage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const SinglePlayerHubScreen = React.lazy(() => import('./screens/SinglePlayerHubScreen'));
+const RacehorseJourneyScreen = React.lazy(() => import('./journey/RacehorseJourneyScreen'));
 const NoBrainerLabScreen = React.lazy(() => import('./practice/NoBrainerLabScreen'));
 const BotMatchScreen = React.lazy(() => import('./bot/BotMatchScreen'));
 const PlayVsFritz = React.lazy(() => import('./bot/PlayVsFritz'));
@@ -520,11 +528,18 @@ export default function AppRoutes(props: AppRoutesProps) {
   }
 
   if (appMode === 'bot') {
+    const journeyChallenge = getJourneyActiveChallenge();
     return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Fritz Match…" />}>
+          <ErrorBoundary context="bot-match">
           <BotMatchScreen
             onBack={() => {
+              if (journeyChallenge) {
+                clearJourneyActiveChallenge();
+                setAppMode('journey');
+                return;
+              }
               setIsGuidedMode(false);
               setIsAuthoringMode(false);
               setIsAuthoringV2Mode(false);
@@ -532,6 +547,9 @@ export default function AppRoutes(props: AppRoutesProps) {
               setAppMode('home');
             }}
             onNavigate={(mode) => {
+              if (journeyChallenge) {
+                clearJourneyActiveChallenge();
+              }
               if (mode === 'learn') {
                 setIsGuidedMode(false);
                 setIsAuthoringMode(false);
@@ -540,14 +558,28 @@ export default function AppRoutes(props: AppRoutesProps) {
               }
               setAppMode(mode);
             }}
-            dealSize={botDealSize}
-            fritzTier={botFritzTier}
+            dealSize={journeyChallenge?.dealSize ?? botDealSize}
+            fritzTier={journeyChallenge?.fritzTier ?? botFritzTier}
+            winningScore={journeyChallenge?.winningScore ?? 60}
+            journeyTrial={
+              journeyChallenge
+                ? { nodeId: journeyChallenge.nodeId, nodeTitle: journeyChallenge.nodeTitle }
+                : null
+            }
+            onJourneyTrialComplete={(result) => {
+              if (result.won) {
+                markJourneyNodeCompleted(result.nodeId);
+              }
+              clearJourneyActiveChallenge();
+              setAppMode('journey');
+            }}
             isGuidedMode={isGuidedMode}
             isAuthoringMode={isAuthoringMode}
             isAuthoringV2Mode={isAuthoringV2Mode}
             isGuidedV2Mode={isGuidedV2Mode}
             enableGuidedMatchCandidateCapture={
               Boolean(isAdmin) &&
+              !journeyChallenge &&
               !isGuidedMode &&
               !isAuthoringMode &&
               !isAuthoringV2Mode &&
@@ -564,6 +596,7 @@ export default function AppRoutes(props: AppRoutesProps) {
             onProfileRefresh={refreshAuthProfile}
             onProfilePatch={applyProfilePatch}
           />
+          </ErrorBoundary>
         </Suspense>
       </div>
     );
@@ -596,6 +629,7 @@ export default function AppRoutes(props: AppRoutesProps) {
     return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Ghost Match…" />}>
+          <ErrorBoundary context="bot-match">
           <BotMatchScreen
             onBack={() => setAppMode('home')}
             onNavigate={setAppMode}
@@ -611,6 +645,7 @@ export default function AppRoutes(props: AppRoutesProps) {
             onProfileRefresh={refreshAuthProfile}
             onProfilePatch={applyProfilePatch}
           />
+          </ErrorBoundary>
         </Suspense>
       </div>
     );
@@ -620,6 +655,7 @@ export default function AppRoutes(props: AppRoutesProps) {
     return withAuthModals(
       <div className={appRootClassName}>
         <Suspense fallback={<ScreenLoader label="Loading Daily Puzzle…" />}>
+          <ErrorBoundary context="daily-puzzle">
           <DailyPuzzleScreen
             user={authUser}
             profile={authProfile}
@@ -628,6 +664,7 @@ export default function AppRoutes(props: AppRoutesProps) {
             onOpenAuth={() => setAuthModalOpen(true)}
             onOpenAccount={() => setUsernameModalOpen(true)}
           />
+          </ErrorBoundary>
         </Suspense>
       </div>
     );
@@ -777,6 +814,30 @@ export default function AppRoutes(props: AppRoutesProps) {
       </div>
     );
   }
+
+  if (appMode === 'journey' && JOURNEY_MODE_VISIBLE) {
+    return withAuthModals(
+      <div className={appRootClassName}>
+        <Suspense fallback={<ScreenLoader label="Loading Journey…" />}>
+          <ErrorBoundary context="journey">
+          <RacehorseJourneyScreen
+            onBack={() => setAppMode('singlePlayerHub')}
+            onNavigate={setAppMode}
+            onOpenAuth={handleOpenAuthModal}
+            onOpenAccount={handleOpenAccountModal}
+            onStartBotTrial={(challenge) => {
+              setJourneyActiveChallenge(challenge);
+              setBotFritzTier(challenge.fritzTier);
+              setBotDealSize(challenge.dealSize);
+              setAppMode('bot');
+            }}
+          />
+          </ErrorBoundary>
+        </Suspense>
+      </div>
+    );
+  }
+
   if (appMode === 'tournament') {
     const tIdentity = authUser?.id
       ? { userId: authUser.id, username: authProfile?.username ?? authUser.email?.split('@')[0] ?? 'player' }
@@ -785,6 +846,7 @@ export default function AppRoutes(props: AppRoutesProps) {
     if (tournamentSubView === 'bracket' && activeTournamentId) {
       return withAuthModals(
         <Suspense fallback={<ScreenLoader label="Loading Tournament Bracket…" />}>
+          <ErrorBoundary context="tournament">
           <TournamentBracketScreen
             identity={tIdentity}
             tournamentId={activeTournamentId}
@@ -815,6 +877,7 @@ export default function AppRoutes(props: AppRoutesProps) {
             attachJoinPhase={tournamentAttachPhase}
             attachJoinError={tournamentAttachError}
           />
+          </ErrorBoundary>
         </Suspense>,
       );
     }
@@ -841,6 +904,7 @@ export default function AppRoutes(props: AppRoutesProps) {
 
       return withAuthModals(
         <Suspense fallback={<ScreenLoader label="Loading Tournament Result…" />}>
+          <ErrorBoundary context="tournament">
           <TournamentResultScreen
             isLoading={tournamentResultLoading}
             error={tournamentResultError}
@@ -868,12 +932,14 @@ export default function AppRoutes(props: AppRoutesProps) {
               setTournamentResult(null);
             }}
           />
+          </ErrorBoundary>
         </Suspense>,
       );
     }
 
     return withAuthModals(
       <Suspense fallback={<ScreenLoader label="Loading Tournament Hub…" />}>
+        <ErrorBoundary context="tournament">
         <TournamentHubScreen
           identity={tIdentity}
           upcoming={tournament.upcoming}
@@ -905,6 +971,7 @@ export default function AppRoutes(props: AppRoutesProps) {
           attachJoinPhase={tournamentAttachPhase}
           attachJoinError={tournamentAttachError}
         />
+        </ErrorBoundary>
       </Suspense>,
     );
   }
@@ -930,12 +997,14 @@ export default function AppRoutes(props: AppRoutesProps) {
         )}
 
         <Suspense fallback={<ScreenLoader label="Loading Multiplayer…" />}>
+          <ErrorBoundary context="multiplayer">
           <MultiplayerModeController
             connection={multiplayerConnectionBundle}
             mpSubView={mpSubView}
             startGame={startGame}
             view={multiplayerModeViewProps}
           />
+          </ErrorBoundary>
         </Suspense>
       </div>,
     );

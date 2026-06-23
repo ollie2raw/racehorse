@@ -1,7 +1,8 @@
-import type { Move, Tile } from '../types';
+import type { Tile, Move } from '../types';
+import { tileEquals } from '../game/tileUtils';
 
 export function tileMatchesHandTile(a: Tile, b: Tile): boolean {
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
+  return tileEquals(a, b);
 }
 
 export function tileKey(tile: Tile): string {

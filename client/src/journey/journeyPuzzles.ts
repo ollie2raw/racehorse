@@ -3,6 +3,16 @@ export interface JourneyPuzzleChoice {
   label: string;
 }
 
+export interface JourneyPuzzleTile {
+  high: number;
+  low: number;
+}
+
+export interface JourneyPuzzleBoardState {
+  ends: [number, number];
+  placedTiles: JourneyPuzzleTile[];
+}
+
 export interface JourneyPuzzle {
   nodeId: string;
   eyebrow: string;
@@ -13,6 +23,9 @@ export interface JourneyPuzzle {
   correctChoiceId: string;
   explanation: string;
   rewardLabel: string;
+  boardState?: JourneyPuzzleBoardState;
+  playerHand?: JourneyPuzzleTile[];
+  correctTile?: JourneyPuzzleTile;
 }
 
 export const JOURNEY_PUZZLES: Record<string, JourneyPuzzle> = {
@@ -33,6 +46,20 @@ export const JOURNEY_PUZZLES: Record<string, JourneyPuzzle> = {
     explanation:
       "Two live ends mean two ways to score and two ways to be punished. Count both before you commit. The right tile keeps pressure on Fritz without handing him the reply he wants.",
     rewardLabel: "Open Eye",
+    boardState: {
+      ends: [3, 5],
+      placedTiles: [
+        { high: 6, low: 6 },
+        { high: 6, low: 3 },
+        { high: 5, low: 3 },
+        { high: 5, low: 5 },
+      ],
+    },
+    playerHand: [
+      { high: 5, low: 6 },
+      { high: 3, low: 4 },
+    ],
+    correctTile: { high: 3, low: 4 },
   },
   "ch1-n08": {
     nodeId: "ch1-n08",
@@ -51,6 +78,21 @@ export const JOURNEY_PUZZLES: Record<string, JourneyPuzzle> = {
     explanation:
       "A gate puzzle is about permission, not flash. The best play preserves your reply while limiting what Fritz can snap back. Do not unlock the end he has been waiting for.",
     rewardLabel: "Gate Cleared",
+    boardState: {
+      ends: [4, 6],
+      placedTiles: [
+        { high: 4, low: 4 },
+        { high: 4, low: 2 },
+        { high: 2, low: 2 },
+        { high: 2, low: 6 },
+        { high: 6, low: 6 },
+      ],
+    },
+    playerHand: [
+      { high: 4, low: 6 },
+      { high: 2, low: 6 },
+    ],
+    correctTile: { high: 2, low: 6 },
   },
   "ch1-n09": {
     nodeId: "ch1-n09",
@@ -69,6 +111,20 @@ export const JOURNEY_PUZZLES: Record<string, JourneyPuzzle> = {
     explanation:
       "Late-race tempo favors the player who needs fewer points. With 52 on the board, variance is the enemy. Secure the line that reaches 60 without handing Fritz a comeback end.",
     rewardLabel: "Ice Veins",
+    boardState: {
+      ends: [2, 5],
+      placedTiles: [
+        { high: 5, low: 5 },
+        { high: 5, low: 6 },
+        { high: 6, low: 4 },
+        { high: 4, low: 2 },
+      ],
+    },
+    playerHand: [
+      { high: 5, low: 2 },
+      { high: 5, low: 3 },
+    ],
+    correctTile: { high: 5, low: 2 },
   },
   "ch2-n02": {
     nodeId: "ch2-n02",

@@ -20,8 +20,8 @@
 
 .learn-howto-pvf.pvf-root {
   --pvf-dynamic-color: var(--color-elite);
-  --pvf-active-color: #34d399;
-  --learn-green: #34d399;
+  --pvf-active-color: var(--accent-green);
+  --learn-green: var(--accent-green);
   --learn-gold: var(--color-elite);
   --howto-pvf-stage-max: min(1580px, calc(100vw - 24px));
   flex: 1 1 0 !important;
@@ -706,7 +706,7 @@
 }
 
 .learn-howto-pvf__actions .pvf-start-btn--learn-next {
-  background: color-mix(in srgb, var(--learn-green) 88%, #1a1200);
+  background: color-mix(in srgb, var(--learn-green) 88%, var(--text-on-elite));
   color: #0a1018;
   border: 1px solid color-mix(in srgb, var(--learn-green) 55%, transparent);
   box-shadow:

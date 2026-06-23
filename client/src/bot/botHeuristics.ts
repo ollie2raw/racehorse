@@ -51,8 +51,6 @@ const WIN_TARGET = 60;
 const MASTER_ENDGAME_BUDGET_MS = 90;
 const EXACT_CHAIN_BUDGET_MS = 45;
 
-// Endgame minimax kicks in when total tiles (bot + you) is at or below this.
-const _ENDGAME_TILE_THRESHOLD = 8;
 const ENABLE_TWO_PLY_WORST_CASE = false;
 const FAIR_BOT_MODE = true;
 let fairOpponentAccessWarned = false;

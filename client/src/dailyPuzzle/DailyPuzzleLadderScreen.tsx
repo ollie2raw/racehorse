@@ -11,6 +11,7 @@ import {
   type BotMatchState,
 } from '../bot/botEngine';
 import type { AppMode, Move, Tile } from '../types';
+import { tileEquals } from '../game/tileUtils';
 import {
   completeDailyPuzzleLadder,
   startDailyPuzzleLadder,
@@ -49,10 +50,6 @@ interface DailyPuzzleLadderScreenProps {
 
 type PlayStatus = 'IN_PROGRESS' | 'SOLVED' | 'FAILED';
 type LadderPlayMode = 'scored' | 'practice';
-
-function tileEquals(a: Tile, b: Tile): boolean {
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
-}
 
 function formatDateLabel(dateText: string): string {
   const parsed = new Date(`${dateText}T00:00:00`);

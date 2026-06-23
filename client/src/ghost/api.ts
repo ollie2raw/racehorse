@@ -1,20 +1,29 @@
+import { apiGet, apiPost } from '../api/client';
 import type { PlacementPosition, Tile } from '../types';
-import { supabase } from '../lib/supabase';
-import { resolveGameServerUrl } from '../lib/gameServerUrl';
 
 const DEFAULT_SERVER_ORIGIN = 'http://localhost:3001';
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {};
-  if (!supabase) return headers;
-  try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? null;
-    if (token) headers.Authorization = `Bearer ${token}`;
-  } catch {
-    // no-op — fall through without auth header
+function throwGhostError(error: string): never {
+  if (
+    error === 'Network error' ||
+    error.toLowerCase().includes('failed to fetch') ||
+    error === 'Invalid response format'
+  ) {
+    throw new Error(`Ghost backend is unavailable. Start the server on ${DEFAULT_SERVER_ORIGIN}.`);
   }
-  return headers;
+  throw new Error(error);
+}
+
+async function throwingGet<T>(path: string): Promise<T> {
+  const result = await apiGet<T>(path);
+  if (result.error) throwGhostError(result.error);
+  return result.data as T;
+}
+
+async function throwingPost<T>(path: string, body: unknown): Promise<T> {
+  const result = await apiPost<T>(path, body);
+  if (result.error) throwGhostError(result.error);
+  return result.data as T;
 }
 
 export type GhostMoveLogEntry = {
@@ -114,46 +123,9 @@ export type GhostProfileSummaryByUsername = {
   summary: GhostProfileSummary;
 };
 
-function resolveBaseUrl(): string {
-  return resolveGameServerUrl();
-}
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${resolveBaseUrl()}${path}`;
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...init,
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(await authHeaders()),
-        ...(init?.headers ?? {}),
-      },
-    });
-  } catch {
-    throw new Error(`Ghost backend is unavailable. Start the server on ${DEFAULT_SERVER_ORIGIN}.`);
-  }
-  const text = await response.text();
-  const contentType = response.headers.get('content-type') ?? '';
-  if (!contentType.includes('application/json')) {
-    throw new Error(
-      response.ok
-        ? `Ghost backend returned a non-JSON response from ${url}. Check that the dev proxy for /api/ghost points at the backend.`
-        : `Ghost backend is unavailable. Start the server on ${DEFAULT_SERVER_ORIGIN}.`,
-    );
-  }
-  const body = JSON.parse(text) as T & { error?: string };
-  if (!response.ok) {
-    throw new Error(body.error ?? `Request failed: ${response.status}`);
-  }
-  return body;
-}
-
 export async function fetchGhostProfileSummary(userId: string): Promise<GhostProfileSummary> {
-  const response = await requestJson<{ ok: true; summary: GhostProfileSummary }>(
+  const response = await throwingGet<{ ok: true; summary: GhostProfileSummary }>(
     `/api/ghost/profile/${encodeURIComponent(userId)}`,
-    { method: 'GET' },
   );
   return response.summary;
 }
@@ -161,9 +133,8 @@ export async function fetchGhostProfileSummary(userId: string): Promise<GhostPro
 export async function fetchGhostProfileSummaryByUsername(
   username: string,
 ): Promise<GhostProfileSummaryByUsername> {
-  const response = await requestJson<{ ok: true } & GhostProfileSummaryByUsername>(
+  const response = await throwingGet<{ ok: true } & GhostProfileSummaryByUsername>(
     `/api/ghost/profile-by-username/${encodeURIComponent(username.replace(/^@/, '').trim())}`,
-    { method: 'GET' },
   );
   return {
     userId: response.userId,
@@ -177,10 +148,7 @@ export async function startGhostMatchSession(params: {
   localMatchId: string;
   opponentUserId?: string | null;
 }): Promise<{ matchId: string }> {
-  const response = await requestJson<{ ok: true; matchId: string }>('/api/ghost/start', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
+  const response = await throwingPost<{ ok: true; matchId: string }>('/api/ghost/start', params);
   return { matchId: response.matchId };
 }
 
@@ -196,12 +164,9 @@ export async function completeGhostGame(params: {
   accessToken?: string | null;
 }): Promise<GhostCompletionResult> {
   const { accessToken: _accessToken, ...bodyParams } = params;
-  const response = await requestJson<{ ok: true; result: GhostCompletionResult }>(
+  const response = await throwingPost<{ ok: true; result: GhostCompletionResult }>(
     '/api/ghost/complete',
-    {
-      method: 'POST',
-      body: JSON.stringify(bodyParams),
-    },
+    bodyParams,
   );
   return response.result;
 }

@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { apiGet, apiPost, getAuthHeaders, type ApiResult } from '../api/client';
 import type { BotDealSize, BotHandDeal } from '../bot/botEngine';
 import type { FritzTier } from '../bot/fritzConfig';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
@@ -54,33 +54,40 @@ function resolveServerBaseUrl(): string {
   return resolveGameServerUrl();
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (!supabase) return headers;
-  try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? null;
-    if (token) headers.Authorization = `Bearer ${token}`;
-  } catch {
-    // no-op
-  }
-  const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  dfClientDebug('[daily-fritz-client] authHeaders', {
-    ms: Number((endedAt - startedAt).toFixed(1)),
-    hasSupabase: Boolean(supabase),
-    hasAuthorization: Boolean(headers.Authorization),
+async function timedApiGet<T>(path: string): Promise<ApiResult<T>> {
+  const start = performance.now();
+  const result = await apiGet<T>(path);
+  dfClientDebug('[daily-fritz-client] request', {
+    path,
+    ms: Number((performance.now() - start).toFixed(1)),
+    ok: result.error === null,
+    status: result.status,
   });
-  return headers;
+  return result;
+}
+
+async function timedApiPost<T>(path: string, body: unknown): Promise<ApiResult<T>> {
+  const start = performance.now();
+  const result = await apiPost<T>(path, body);
+  dfClientDebug('[daily-fritz-client] request', {
+    path,
+    ms: Number((performance.now() - start).toFixed(1)),
+    ok: result.error === null,
+    status: result.status,
+  });
+  return result;
+}
+
+function throwApiResult<T>(result: ApiResult<T>): T {
+  if (result.error) throw new Error(result.error);
+  return result.data as T;
 }
 
 type RequestJsonOptions = RequestInit & {
   timeoutMs?: number;
 };
 
-async function requestJson<T>(path: string, init?: RequestJsonOptions): Promise<T> {
+async function dfRequestJsonWithTimeout<T>(path: string, init?: RequestJsonOptions): Promise<T> {
   const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const timeoutMs =
     init?.timeoutMs ??
@@ -93,8 +100,15 @@ async function requestJson<T>(path: string, init?: RequestJsonOptions): Promise<
   }
 
   const run = async (): Promise<T> => {
+    const authStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const { headers: authHeaderMap, hasToken } = await getAuthHeaders();
+    const authEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    dfClientDebug('[daily-fritz-client] authHeaders', {
+      ms: Number((authEndedAt - authStartedAt).toFixed(1)),
+      hasAuthorization: hasToken,
+    });
     const headers = {
-      ...(await authHeaders()),
+      ...authHeaderMap,
       ...(init?.headers ?? {}),
     };
     const fetchStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -329,7 +343,7 @@ function normalizeDailyFritzStartDrawFields(
 export async function getTodayDailyFritz(options?: {
   timeoutMs?: number;
 }): Promise<DailyFritzTodayResponse> {
-  return requestJson<DailyFritzTodayResponse>('/api/daily-fritz/today', {
+  return dfRequestJsonWithTimeout<DailyFritzTodayResponse>('/api/daily-fritz/today', {
     method: 'GET',
     timeoutMs: options?.timeoutMs,
   });
@@ -338,7 +352,7 @@ export async function getTodayDailyFritz(options?: {
 export async function startDailyFritz(options?: {
   timeoutMs?: number;
 }): Promise<DailyFritzStartResponse> {
-  const response = await requestJson<DailyFritzStartResponse>('/api/daily-fritz/start', {
+  const response = await dfRequestJsonWithTimeout<DailyFritzStartResponse>('/api/daily-fritz/start', {
     method: 'POST',
     body: JSON.stringify({}),
     timeoutMs: options?.timeoutMs,
@@ -355,9 +369,9 @@ export async function startDailyFritz(options?: {
 }
 
 export async function fetchDailyFritzLeaderboard(date: string): Promise<DailyFritzLeaderboardRow[]> {
-  const response = await requestJson<DailyFritzLeaderboardResponse>(`/api/daily-fritz/leaderboard/${date}`, {
-    method: 'GET',
-  });
+  const response = throwApiResult(
+    await timedApiGet<DailyFritzLeaderboardResponse>(`/api/daily-fritz/leaderboard/${date}`),
+  );
   return response.leaderboard;
 }
 
@@ -385,20 +399,9 @@ function dfNextHandIngest(payload: {
   runId?: string;
 }): void {
   if (!DAILY_FRITZ_NEXT_HAND_DEBUG_INGEST) return;
-  // #region agent log
-  fetch('http://127.0.0.1:7933/ingest/9cab376f-7897-4cfa-8543-b458c17de979', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Debug-Session-Id': '65d5db',
-    },
-    body: JSON.stringify({
-      sessionId: '65d5db',
-      timestamp: Date.now(),
-      ...payload,
-    }),
-  }).catch(() => {});
-  // #endregion
+  void import('../devtools/dailyFritzDebugIngest').then((module) => {
+    module.ingestDailyFritzNextHandDebug(payload);
+  });
 }
 
 /** Production copy for modal; dev keeps the raw message for debugging. */
@@ -426,7 +429,7 @@ export async function nextDailyFritzHand(input: {
   // Use a manual fetch so we can inspect the status code before throwing.
   // requestJson treats all non-2xx responses identically; we need to
   // distinguish the terminal 409 "no hands remain" from retryable errors.
-  const headers = await authHeaders();
+  const { headers } = await getAuthHeaders();
   const timeoutMs = Math.max(1000, input.timeoutMs ?? DAILY_FRITZ_NEXT_HAND_TIMEOUT_MS);
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -580,9 +583,8 @@ export async function completeDailyFritz(input: {
   moveLog: unknown;
   setResult?: DailyFritzSetResult | null;
 }): Promise<DailyFritzCompleteResponse> {
-  return requestJson<DailyFritzCompleteResponse>('/api/daily-fritz/complete', {
-    method: 'POST',
-    body: JSON.stringify({
+  return throwApiResult(
+    await timedApiPost<DailyFritzCompleteResponse>('/api/daily-fritz/complete', {
       attempt_id: input.attemptId,
       verified_match_id: input.verifiedMatchId,
       run_date: input.runDate,
@@ -595,7 +597,7 @@ export async function completeDailyFritz(input: {
       move_log: input.moveLog,
       set_result: input.setResult ?? null,
     }),
-  });
+  );
 }
 
 export async function recordDailyFritzGame(input: {
@@ -608,9 +610,8 @@ export async function recordDailyFritzGame(input: {
   movesUsed: number;
   handsPlayed: number;
 }): Promise<DailyFritzRecordGameResponse> {
-  return requestJson<DailyFritzRecordGameResponse>('/api/daily-fritz/record-game', {
-    method: 'POST',
-    body: JSON.stringify({
+  return throwApiResult(
+    await timedApiPost<DailyFritzRecordGameResponse>('/api/daily-fritz/record-game', {
       attempt_id: input.attemptId,
       verified_match_id: input.verifiedMatchId,
       run_date: input.runDate,
@@ -620,12 +621,9 @@ export async function recordDailyFritzGame(input: {
       moves_used: input.movesUsed,
       hands_played: input.handsPlayed,
     }),
-  });
+  );
 }
 
 export async function abandonDailyFritz(attemptId: string): Promise<void> {
-  await requestJson<{ ok: true }>('/api/daily-fritz/abandon', {
-    method: 'POST',
-    body: JSON.stringify({ attempt_id: attemptId }),
-  });
+  throwApiResult(await timedApiPost<{ ok: true }>('/api/daily-fritz/abandon', { attempt_id: attemptId }));
 }

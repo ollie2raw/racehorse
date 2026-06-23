@@ -23,6 +23,7 @@ import {
 } from '../../tournament/terminalMatches';
 import { shouldDeferTournamentMatchFinalize } from '../../tournament/tournamentPostgamePolicy';
 import { emitTournamentAttachAssignedMatch } from '../../multiplayer/roomTransport';
+import { logger } from '../../utils/logger';
 import { clearLastRoomCode } from '../recovery/matchRecovery';
 import { useTournament } from '../../tournament/useTournament';
 import type { TournamentAttachRuntime } from '../../multiplayer/multiplayerRuntime';
@@ -44,6 +45,20 @@ export function getTournamentStageLabel(round: 1 | 2 | 3): TournamentMatchContex
   if (round === 3) return 'Final';
   if (round === 2) return 'Semifinal';
   return 'Quarterfinal';
+}
+
+type TournamentJoinMatchPayload = Pick<TournamentMatchContext, 'matchId' | 'tournamentId' | 'round'>;
+
+function isTournamentJoinMatchPayload(v: unknown): v is TournamentJoinMatchPayload {
+  if (!v || typeof v !== 'object') return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj.matchId === 'string' &&
+    typeof obj.tournamentId === 'string' &&
+    typeof obj.round === 'number' &&
+    obj.round >= 1 &&
+    obj.round <= 3
+  );
 }
 
 type TournamentSubView = 'hub' | 'bracket' | 'result';
@@ -173,6 +188,8 @@ export function useTournamentMatchSession(
   const pendingTournamentAttachMatchIdRef = useRef<string | null>(null);
   const attachedTournamentMatchIdRef = useRef<string | null>(null);
   const failedTournamentAttachByMatchIdRef = useRef<Record<string, number>>({});
+  const attachInFlightRef = useRef<string | null>(null);
+  const matchFinalizedRef = useRef<Set<string>>(new Set());
   const [tournamentAttachPhase, setTournamentAttachPhase] = useState<'idle' | 'pending' | 'failed'>(
     'idle',
   );
@@ -195,6 +212,11 @@ export function useTournamentMatchSession(
       tournamentCompleted?: boolean;
     }) => {
       const { matchId, tournamentId, roomCode, round, routeView, tournamentCompleted } = input;
+      if (matchFinalizedRef.current.has(matchId)) {
+        console.warn('[tournament] already finalized', matchId);
+        return;
+      }
+      matchFinalizedRef.current.add(matchId);
       markTerminalTournamentMatch({ matchId, tournamentId, roomCode });
       markTournamentGameOverConsumed(matchId);
       attachedTournamentMatchIdRef.current = null;
@@ -364,17 +386,23 @@ export function useTournamentMatchSession(
       },
       nextState: GameState | null,
     ): 'continue' | 'terminal_handled' => {
-      if (resp.tournamentMatch && typeof resp.tournamentMatch.round === 'number') {
-        const round = resp.tournamentMatch.round as 1 | 2 | 3;
+      const raw = resp.tournamentMatch;
+      if (raw) {
+        if (!isTournamentJoinMatchPayload(raw)) {
+          logger.error('useTournamentMatchSession.ts', new Error('[tournament] invalid match payload'), { raw });
+          setTournamentMatch(null);
+          return 'continue';
+        }
+        const round = raw.round;
         setTournamentMatch({
-          ...(resp.tournamentMatch as Omit<TournamentMatchContext, 'stageLabel' | 'isTournament'>),
+          ...(raw as Omit<TournamentMatchContext, 'stageLabel' | 'isTournament'>),
           matchNumber:
-            typeof resp.tournamentMatch.matchNumber === 'number'
-              ? resp.tournamentMatch.matchNumber
+            typeof (raw as Record<string, unknown>).matchNumber === 'number'
+              ? ((raw as Record<string, unknown>).matchNumber as number)
               : 1,
           roomCode:
-            typeof resp.tournamentMatch.roomCode === 'string'
-              ? resp.tournamentMatch.roomCode
+            typeof (raw as Record<string, unknown>).roomCode === 'string'
+              ? ((raw as Record<string, unknown>).roomCode as string)
               : typeof resp.roomCode === 'string'
                 ? resp.roomCode
                 : null,
@@ -385,14 +413,11 @@ export function useTournamentMatchSession(
         setTournamentMatch(null);
       }
 
-      const tournamentMeta = resp.tournamentMatch;
-      const completedMatchId =
-        tournamentMeta && typeof tournamentMeta.matchId === 'string'
-          ? tournamentMeta.matchId
-          : null;
-      if (nextState?.gameOver && completedMatchId) {
-        const tournamentId =
-          typeof tournamentMeta?.tournamentId === 'string' ? tournamentMeta.tournamentId : '';
+      const tournamentMeta = raw && isTournamentJoinMatchPayload(raw) ? raw : null;
+      const completedMatchId = tournamentMeta?.matchId ?? null;
+      if (nextState?.gameOver && completedMatchId && tournamentMeta) {
+        const tournamentId = tournamentMeta.tournamentId;
+        const rawRecord = raw as Record<string, unknown> | null;
         if (
           isTerminalTournamentMatch(completedMatchId) ||
           consumedTournamentGameOverMatchIds.has(completedMatchId)
@@ -404,10 +429,10 @@ export function useTournamentMatchSession(
               roomCode:
                 typeof resp.roomCode === 'string'
                   ? resp.roomCode
-                  : typeof tournamentMeta?.roomCode === 'string'
-                    ? tournamentMeta.roomCode
+                  : typeof rawRecord?.roomCode === 'string'
+                    ? rawRecord.roomCode
                     : null,
-              round: typeof tournamentMeta?.round === 'number' ? tournamentMeta.round : undefined,
+              round: tournamentMeta.round,
             });
           } else {
             clearRecoverableRoomStateRef.current();
@@ -436,6 +461,16 @@ export function useTournamentMatchSession(
       matchId: string,
       opts?: { manual?: boolean; tournamentId?: string; matchStatus?: string },
     ): Promise<boolean> => {
+      if (attachInFlightRef.current === matchId) {
+        console.warn('[tournament] attach already in flight for', matchId);
+        return false;
+      }
+      if (attachInFlightRef.current !== null) {
+        console.warn('[tournament] attach in flight for different match, skipping', matchId);
+        return false;
+      }
+      attachInFlightRef.current = matchId;
+      try {
       const socketConnected = Boolean(socketRef.current?.connected);
       const guard = evaluateTournamentAttachGuard({
         matchId,
@@ -644,6 +679,9 @@ export function useTournamentMatchSession(
         }
         showToast(isTimeout ? 'Join timed out. Try again.' : message, 2500);
         return false;
+      }
+      } finally {
+        attachInFlightRef.current = null;
       }
     },
     [

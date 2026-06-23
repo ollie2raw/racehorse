@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LayoutScreen from '../ui/LayoutScreen';
 import DominoTile from '../components/DominoTile';
-import { computeOpenEndsSum } from '../bot/botEngine';
-import { getScoringOpenEndPips } from '../game/openEndsGeometry';
+import { tileEquals } from '../game/tileUtils';
 import { learnLessons } from './data';
 import LearnBoard from './components/LearnBoard';
 import { getMatchableOpenEnds, isTilePlayable, toBoardState, toTile } from './engine/rulesAdapter';
@@ -11,9 +10,6 @@ import type {
   GuidedPlayStep,
   LearnBoardState,
   LearnTile,
-  PredictionStep,
-  QuizPlaceStep,
-  QuizScoreSumStep,
   QuizTileStep,
 } from './engine/types';
 import {
@@ -55,7 +51,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
   const [guidedSlidingTile, setGuidedSlidingTile] = useState(false);
   const [showScoreFlash, setShowScoreFlash] = useState<number | null>(null);
   const [_chainCount, setChainCount] = useState(0);
-  const [predictionSelected, setPredictionSelected] = useState<'yes' | 'no' | null>(null);
+  const [, setPredictionSelected] = useState<'yes' | 'no' | null>(null);
   const [predictionRevealBoard, setPredictionRevealBoard] = useState<LearnBoardState | null>(null);
   const [_predictionRevealVisible, setPredictionRevealVisible] = useState(false);
   const [drillRoundIndex, setDrillRoundIndex] = useState(0);
@@ -321,9 +317,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     setStepIndex(nextIndex);
   };
 
-  const tileEquals = (a: LearnTile, b: LearnTile) =>
-    toTile(a).low === toTile(b).low &&
-    toTile(a).high === toTile(b).high;
   const tupleToLearnTile = (tile: [number, number]): LearnTile => ({ low: tile[0], high: tile[1] });
   const tupleEquals = (a: [number, number], b: [number, number]) => {
     const first = toTile(tupleToLearnTile(a));
@@ -392,11 +385,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     return fallback ? [fallback] : hand;
   };
 
-  const getScoringContributors = (board: typeof quizBoard): number[] => {
-    if (!board) return [];
-    return getScoringOpenEndPips(board);
-  };
-
   const getCorrectTiles = (step: QuizTileStep): LearnTile[] => {
     const sanitizedHand = sanitizeHand(step.hand, quizBoard);
     if (step.correctMode === 'anyPlayable') {
@@ -412,7 +400,7 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
       return isTilePlayable(toTile(clicked), quizBoard);
     }
     const correctTiles = getCorrectTiles(step);
-    return correctTiles.some((tile) => tileEquals(tile, clicked));
+    return correctTiles.some((tile) => tileEquals(toTile(tile), toTile(clicked)));
   };
 
   const buildWrongText = (step: QuizTileStep): string => {
@@ -455,89 +443,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
     }
   };
 
-  const _handleQuizPlaceClick = (step: QuizPlaceStep, placement: 'left' | 'right') => {
-    if (quizSolved) return;
-    if (placement === step.correctPlacement) {
-      setQuizSolved(true);
-      setLastAnswerCorrect(true);
-      setQuizFeedback(
-        step.correctFeedback ??
-        step.explainCorrect ??
-          `Correct. [${step.tile.low}|${step.tile.high}] connects to the ${placement} open end.`,
-      );
-      return;
-    }
-
-    const nextWrong = quizWrongAttempts + 1;
-    setQuizWrongAttempts(nextWrong);
-    setLastAnswerCorrect(false);
-    if (nextWrong >= 1 && step.hints?.level1) {
-      setQuizFeedback(step.hints.level1);
-    } else if (nextWrong >= 1 && step.hint) {
-      setQuizFeedback(step.hint);
-    } else if (step.wrongFeedback) {
-      setQuizFeedback(step.wrongFeedback);
-    } else if (step.explainWrong) {
-      setQuizFeedback(step.explainWrong);
-    } else {
-      setQuizFeedback('That side does not match the tile right now.');
-    }
-  };
-
-  const getScoreSumCorrect = (step: QuizScoreSumStep): number => {
-    if (typeof step.correct === 'number') return step.correct;
-    return quizBoard ? computeOpenEndsSum(quizBoard) : 0;
-  };
-
-  const _handleQuizScoreChoice = (step: QuizScoreSumStep, choice: number) => {
-    if (quizSolved) return;
-    const correct = getScoreSumCorrect(step);
-    if (choice === correct) {
-      setQuizSolved(true);
-      setLastAnswerCorrect(true);
-      setLastClickedScoreChoice(null);
-      if (step.correctFeedback || step.explainCorrect) {
-        setQuizFeedback(step.correctFeedback ?? step.explainCorrect ?? null);
-      } else {
-        const contributors = getScoringContributors(quizBoard);
-        setQuizFeedback(
-          contributors.length > 0
-            ? `Correct. The scoring ends are ${contributors.join(' + ')}, so the total is ${correct}.`
-            : `Correct. The board's scoring total is ${correct}.`,
-        );
-      }
-      return;
-    }
-
-    const nextWrong = quizWrongAttempts + 1;
-    setQuizWrongAttempts(nextWrong);
-    setLastAnswerCorrect(false);
-    setLastClickedScoreChoice(choice);
-    if (scoreResultTimeoutRef.current !== null) {
-      window.clearTimeout(scoreResultTimeoutRef.current);
-    }
-    scoreResultTimeoutRef.current = window.setTimeout(() => setLastClickedScoreChoice(null), 500);
-    if (nextWrong >= 1 && step.hints?.level1) {
-      setQuizFeedback(step.hints.level1);
-    } else if (step.wrongFeedback) {
-      setQuizFeedback(step.wrongFeedback);
-    } else if (step.explainWrong) {
-      setQuizFeedback(step.explainWrong);
-    } else {
-      setQuizFeedback('Not quite — add the open ends.');
-    }
-
-    const revealEnabled = step.hints?.level3 === 'revealAnswer';
-    if (nextWrong >= 3 && revealEnabled && !step.explainWrong) {
-      const contributors = getScoringContributors(quizBoard);
-      setQuizFeedback(
-        contributors.length > 0
-          ? `The scoring ends are ${contributors.join(' + ')}, so the correct total is ${correct}.`
-          : `The correct scoring total is ${correct}.`,
-      );
-    }
-  };
-
   const handleGuidedPlayClick = (step: GuidedPlayStep, tile: [number, number]) => {
     if (guidedHasPlaced || guidedSlidingTile || !tupleEquals(tile, step.targetTile)) return;
     setGuidedSlidingTile(true);
@@ -570,55 +475,6 @@ export default function LearnPlayer({ lessonId, onExit }: LearnPlayerProps) {
         }, 400);
       }
     }, 300);
-  };
-
-  const _handlePredictionChoice = (step: PredictionStep, answer: 'yes' | 'no') => {
-    if (predictionSelected) return;
-    const isCorrect = answer === step.correctAnswer;
-    setPredictionSelected(answer);
-    setLastAnswerCorrect(isCorrect);
-    setQuizFeedback(isCorrect ? step.correctFeedback : step.wrongFeedback);
-    if (predictionTimeoutRef.current !== null) {
-      window.clearTimeout(predictionTimeoutRef.current);
-    }
-    window.setTimeout(() => {
-      if (step.revealBoard) {
-        setPredictionRevealBoard(step.revealBoard);
-      }
-      if (step.revealText) {
-        setPredictionRevealVisible(true);
-      }
-    }, 400);
-    predictionTimeoutRef.current = window.setTimeout(() => setQuizSolved(true), isCorrect ? 1000 : 1500);
-  };
-
-  const _handleDrillTileClick = (step: DrillTileSpeedStep, clicked: LearnTile) => {
-    if (drillCompleted || drillRoundResolved) return;
-    const playable = isTilePlayable(toTile(clicked), quizBoard);
-    if (playable) {
-      const elapsed = Math.max(0, performance.now() - drillRoundStartRef.current);
-      completeDrillRound(step, true, elapsed);
-      return;
-    }
-    if (step.hints?.level1) {
-      setDrillFeedback(step.hints.level1);
-      return;
-    }
-    setDrillFeedback(`Doesn't match ends (${openEnds.join(', ')}).`);
-  };
-
-  const _handleRetryDrill = () => {
-    if (drillAdvanceTimeoutRef.current !== null) {
-      window.clearTimeout(drillAdvanceTimeoutRef.current);
-      drillAdvanceTimeoutRef.current = null;
-    }
-    setDrillRoundIndex(0);
-    setDrillTimeLeftMs(0);
-    setDrillResults([]);
-    setDrillFeedback(null);
-    setDrillRoundResolved(false);
-    setDrillCompleted(false);
-    setDrillStarted(false);
   };
 
   const nextDisabled = !showCompletedState

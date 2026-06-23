@@ -3,9 +3,17 @@
 }
 
 .prs-card.game-over-card {
-  --df-result-accent: var(--tier-elite, #e7b64a);
+  --df-result-accent: var(--tier-elite, var(--tier-elite));
   width: min(480px, calc(100vw - 32px));
+  max-height: min(92dvh, 720px);
+  height: min(92dvh, 720px);
+  padding: 0;
+  gap: 0;
+  align-content: stretch;
   animation: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .prs-card.game-over-card.prs-card--blue {
@@ -13,27 +21,57 @@
 }
 
 .prs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px 14px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  height: 100%;
+}
+
+.prs-header {
+  flex: 0 0 auto;
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 4px;
+}
+
+.prs-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  padding-right: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.prs-footer {
+  flex: 0 0 auto;
+  padding-top: 8px;
+  margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(4, 11, 23, 0.98);
 }
 
 .prs-title {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
   color: rgba(236, 248, 252, 0.96);
 }
 
 .prs-subtitle {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(191, 213, 223, 0.78);
 }
 
 .prs-lessons {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -42,14 +80,14 @@
 .prs-lesson {
   display: grid;
   gap: 2px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
 }
 
 .prs-lesson-index {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -58,22 +96,22 @@
 
 .prs-lesson-copy {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.45;
   color: rgba(223, 236, 244, 0.92);
 }
 
 .prs-pattern {
-  padding: 14px 16px;
-  border-radius: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
 }
 
 .prs-pattern-label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 11px;
+  margin-bottom: 4px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -82,7 +120,7 @@
 
 .prs-pattern-value {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: rgba(223, 236, 244, 0.9);
 }
 
@@ -93,7 +131,12 @@
 
 .prs-actions {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+}
+
+.prs-actions .df-result-primary {
+  padding: 10px 12px;
+  font-size: 13px;
 }
 
 .prs-full-review-link {

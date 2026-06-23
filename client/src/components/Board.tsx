@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { DominoTile } from './DominoTile';
 import type { Tile, BoardState, PlacementPosition, Move, PlacedTile } from '../types';
+import { tileEquals } from '../game/tileUtils';
 import { isDouble } from '../bot/botEngine';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import { isRenderableNonNullBoard } from '../multiplayer/boardSnapshotGuards';
@@ -127,11 +128,6 @@ interface BoardLayout {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
-
-function tileEquals(a: Tile | null | undefined, b: Tile | null | undefined): boolean {
-  if (!a || !b) return false;
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
-}
 
 interface HubLookup {
   byMainIndex: Map<number, BoardState['hubDoubles'][number]>;
@@ -631,7 +627,7 @@ function BoardComponent(
   const validPositions = useMemo((): PlacementPosition[] => {
     if (!selectedTile) return [];
     return legalMoves
-      .filter((m) => m.type === 'play' && m.tile && tileEquals(m.tile, selectedTile))
+      .filter((m) => m.type === 'play' && m.tile && selectedTile && tileEquals(m.tile, selectedTile))
       .map((m) => m.position!)
       .filter(Boolean);
   }, [selectedTile, legalMoves]);
@@ -1229,8 +1225,8 @@ function areBoardPropsEqual(prev: BoardProps, next: BoardProps): boolean {
   return (
     prev.board === next.board &&
     prev.legalMoves === next.legalMoves &&
-    tileEquals(prev.selectedTile, next.selectedTile) &&
-    tileEquals(prev.lastPlayedTile, next.lastPlayedTile) &&
+    Boolean(prev.selectedTile && next.selectedTile && tileEquals(prev.selectedTile, next.selectedTile)) &&
+    Boolean(prev.lastPlayedTile && next.lastPlayedTile && tileEquals(prev.lastPlayedTile, next.lastPlayedTile)) &&
     prev.highlightedPosition === next.highlightedPosition &&
     highlightedEndsEqual(prev.highlightedEnds, next.highlightedEnds) &&
     prev.onPositionClick === next.onPositionClick &&

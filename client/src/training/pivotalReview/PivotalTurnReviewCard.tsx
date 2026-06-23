@@ -11,6 +11,7 @@ import {
 } from './pivotalReviewMissReasons';
 import type { PivotalTurnReflection } from './pivotalReviewStorage';
 import type { PivotalTurnCandidate, PivotalTurnSelection } from './pivotalTurnSelector';
+import { buildMissReasonCoachingCopy } from './missReasonCoaching';
 import './pivotalTurnReviewCard.css';
 
 export type PivotalTurnReviewCardProps = {
@@ -98,6 +99,7 @@ export function PivotalTurnReviewCard({
 }: PivotalTurnReviewCardProps) {
   const candidates = selection.candidates;
   const [stepIndex, setStepIndex] = useState(0);
+  const [expandedReasonId, setExpandedReasonId] = useState<PivotalReviewMissReasonId | null>(null);
   const [reflections, setReflections] = useState<PivotalTurnReflection[]>(() =>
     buildInitialReflections(candidates),
   );
@@ -107,6 +109,7 @@ export function PivotalTurnReviewCard({
   if (open && reviewSessionKey !== trackedReviewSessionKey) {
     setTrackedReviewSessionKey(reviewSessionKey);
     setStepIndex(0);
+    setExpandedReasonId(null);
     setReflections(buildInitialReflections(candidates));
   }
 
@@ -126,6 +129,11 @@ export function PivotalTurnReviewCard({
     return Math.max(0, best - played);
   }, [analyzedMove]);
 
+  const consequence = candidate.consequence;
+  const handVerdict = selection.analysis.hands.find(
+    (hand) => hand.analyzedMoves.some((move) => move.moveNumber === candidate.moveNumber),
+  )?.verdict;
+
   const toggleMissReason = useCallback(
     (reasonId: PivotalReviewMissReasonId) => {
       setReflections((prev) => {
@@ -135,8 +143,10 @@ export function PivotalTurnReviewCard({
         const selected = current.missReasons.includes(reasonId);
         if (selected) {
           current.missReasons = current.missReasons.filter((id) => id !== reasonId);
+          setExpandedReasonId((prevId) => (prevId === reasonId ? null : prevId));
         } else if (current.missReasons.length < MAX_MISS_REASONS_PER_TURN) {
           current.missReasons.push(reasonId);
+          setExpandedReasonId(reasonId);
         }
         return next;
       });
@@ -194,58 +204,77 @@ export function PivotalTurnReviewCard({
               </p>
             </header>
 
-            <div className="ptr-board-frame" aria-hidden="true">
-              <Board
-                board={analyzedMove.boardRenderState ?? null}
-                legalMoves={[]}
-                selectedTile={null}
-                onPositionClick={() => {}}
-              />
-            </div>
+            <div className="ptr-card-scroll">
+              <div className="ptr-board-frame" aria-hidden="true">
+                <Board
+                  board={analyzedMove.boardRenderState ?? null}
+                  legalMoves={[]}
+                  selectedTile={null}
+                  onPositionClick={() => {}}
+                  staticView
+                  staticFitMainline
+                  tileSize={36}
+                />
+              </div>
 
-            <div className="ptr-move-compare" aria-label="Move comparison">
-              <div className="ptr-move-row">
-                <span className="ptr-move-row-label">You played</span>
-                <span className="ptr-move-row-value">{formatPlayedMove(analyzedMove)}</span>
-              </div>
-              <div className="ptr-move-row is-best">
-                <span className="ptr-move-row-label">Best move</span>
-                <span className="ptr-move-row-value">
-                  {formatBestMove(analyzedMove)}
-                  {pointsDelta > 0 ? ` (+${pointsDelta} pts)` : ''}
-                </span>
-              </div>
-              <div className="ptr-move-row">
-                <span className="ptr-move-row-label">Rating</span>
-                <span className="ptr-move-row-value">
-                  <span
-                    className="ptr-rating-pill"
-                    style={{
-                      color: colorForRating(analyzedMove.rating),
-                      border: `1px solid ${colorForRating(analyzedMove.rating)}44`,
-                      background: `${colorForRating(analyzedMove.rating)}18`,
-                    }}
-                  >
-                    {analyzedMove.rating}
+              <div className="ptr-move-compare" aria-label="Move comparison">
+                <div className="ptr-move-row">
+                  <span className="ptr-move-row-label">You played</span>
+                  <span className="ptr-move-row-value">{formatPlayedMove(analyzedMove)}</span>
+                </div>
+                <div className="ptr-move-row is-best">
+                  <span className="ptr-move-row-label">Best move</span>
+                  <span className="ptr-move-row-value">
+                    {formatBestMove(analyzedMove)}
+                    {pointsDelta > 0 ? ` (+${pointsDelta} pts)` : ''}
                   </span>
-                </span>
+                </div>
+                <div className="ptr-move-row">
+                  <span className="ptr-move-row-label">Rating</span>
+                  <span className="ptr-move-row-value">
+                    <span
+                      className="ptr-rating-pill"
+                      style={{
+                        color: colorForRating(analyzedMove.rating),
+                        border: `1px solid ${colorForRating(analyzedMove.rating)}44`,
+                        background: `${colorForRating(analyzedMove.rating)}18`,
+                      }}
+                    >
+                      {analyzedMove.rating}
+                    </span>
+                  </span>
+                </div>
               </div>
+
+              {consequence ? (
+                <div className="ptr-consequence-block" aria-label="What happened next">
+                  <span className="ptr-miss-label">What happened next</span>
+                  <p className="ptr-consequence-copy">{consequence.rippleSummary}</p>
+                  {handVerdict ? (
+                    <p className="ptr-consequence-hand">
+                      This hand: {handVerdict.winner === 'you' ? 'you won' : handVerdict.winner === 'opponent' ? 'Fritz won' : 'tied'}{' '}
+                      ({handVerdict.pointsYou}–{handVerdict.pointsOpponent} hand points)
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {analyzedMove.handSnapshot.length > 0 ? (
+                <div className="ptr-hand-snapshot">
+                  {analyzedMove.handSnapshot.map((tile, index) => (
+                    <DominoTile
+                      key={`ptr-hand-${index}-${tile[0]}-${tile[1]}`}
+                      tile={{ low: tile[0], high: tile[1] }}
+                      size={32}
+                      disabled
+                    />
+                  ))}
+                </div>
+              ) : null}
             </div>
 
-            {analyzedMove.handSnapshot.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
-                {analyzedMove.handSnapshot.map((tile, index) => (
-                  <DominoTile
-                    key={`ptr-hand-${index}-${tile[0]}-${tile[1]}`}
-                    tile={{ low: tile[0], high: tile[1] }}
-                    size={32}
-                    disabled
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            <div className="ptr-miss-section">
+            <div className="ptr-card-footer">
+              <div className="ptr-miss-section">
               <span className="ptr-miss-label">Why did you miss this?</span>
               <p className="ptr-miss-hint">Pick up to {MAX_MISS_REASONS_PER_TURN} reasons</p>
               <div className="ptr-miss-chips" role="group" aria-label="Miss reasons">
@@ -267,6 +296,11 @@ export function PivotalTurnReviewCard({
                   );
                 })}
               </div>
+              {expandedReasonId ? (
+                <p className="ptr-miss-coaching">
+                  {buildMissReasonCoachingCopy(expandedReasonId, analyzedMove)}
+                </p>
+              ) : null}
             </div>
 
             <label className="ptr-miss-section">
@@ -296,6 +330,7 @@ export function PivotalTurnReviewCard({
               <button type="button" className="df-result-primary ptr-nav-btn is-next" onClick={goNext}>
                 {isLastStep ? 'Finish Review' : 'Next →'}
               </button>
+            </div>
             </div>
           </div>
         </div>

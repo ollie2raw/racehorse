@@ -265,8 +265,8 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #1a1200;
-  background: #e7b64a;
+  color: var(--text-on-elite);
+  background: var(--tier-elite);
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
   transition:
@@ -278,7 +278,7 @@
 .auth-modal-submit:hover:not(:disabled) {
   background: #efc05a;
   border-color: #efc05a;
-  color: #1a1200;
+  color: var(--text-on-elite);
   filter: brightness(1.04);
   transform: none;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);

@@ -5,6 +5,7 @@ import type { GameState, Move, Tile } from '../types';
 import { projectMultiplayerGameState } from './boardSnapshotGuards';
 import { hasHandIdentityMismatch } from './handIdentity';
 import { evaluateSequenceUpdate, wrapSocketHandler } from './socketGuards';
+import { logger } from '../utils/logger';
 import { drawAudit } from './drawAudit';
 import { isMpDebugEnabled, mpPerfMarkStateApplied } from './mpPerf';
 import type {
@@ -13,6 +14,7 @@ import type {
   MultiplayerRoomSyncUiRuntime,
   RoomRecoveryState,
   StateUpdatePayload,
+  RoomPlayer,
 } from './multiplayerRuntime';
 
 export type { StateUpdatePayload } from './multiplayerRuntime';
@@ -31,7 +33,6 @@ function isActiveGameplayState(state: GameState | null): boolean {
   );
 }
 
-type RoomPlayer = { id: string; username: string; userId: string | null };
 type RoomEventMeta = {
   matchId?: string;
   lastEventSequence?: number;
@@ -145,7 +146,7 @@ function applySequenceToWatermark(
 ): boolean {
   const decision = evaluateSequenceUpdate(maxSequenceRef, incoming);
   if (decision.action === 'reject_regression') {
-    console.error('[mp-state] sequence regression — full resync', {
+    logger.error('useRoomSocketSync.ts', new Error('[mp-state] sequence regression — full resync'), {
       incoming: decision.incoming,
       watermark: decision.watermark,
     });
@@ -607,7 +608,7 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
                 });
               }
             } catch (error) {
-              console.error('[socket:game:draw_animation] step error', error);
+              logger.error('useRoomSocketSync.ts', error, { message: '[socket:game:draw_animation] step error' });
               clearPendingDrawAnimationTimers();
             }
           }, index * FORCED_DRAW_STAGGER_MS);

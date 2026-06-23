@@ -324,7 +324,7 @@
   font-family: var(--font-body);
   font-size: 16px;
   font-weight: 800;
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: var(--tier-elite);
   box-shadow:
     0 0 32px color-mix(in srgb, var(--tier-elite) 16%, transparent),
@@ -334,7 +334,7 @@
 .df-fritz-loading-retry.rh-btn:hover:not(:disabled) {
   background: var(--tier-elite);
   border-color: transparent;
-  color: #1a1200;
+  color: var(--text-on-elite);
   filter: brightness(1.1);
   transform: translateY(-1px);
 }
@@ -1641,7 +1641,7 @@
 }
 
 .df-progress-card__badge--active {
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: var(--df-progress-accent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
@@ -1787,7 +1787,7 @@
 }
 
 .df-progress-deck--gold .df-progress-card__play.rh-btn {
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: var(--tier-elite);
   border: none;
   box-shadow:
@@ -2160,7 +2160,7 @@
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: var(--tier-elite);
   border: none;
   box-shadow:
@@ -2291,7 +2291,7 @@
   text-transform: none;
   border-radius: var(--pvf-radius-sm);
   border: none;
-  color: #1a1200;
+  color: var(--text-on-elite);
   position: relative;
   background: var(--tier-elite);
   box-shadow:
@@ -2368,7 +2368,7 @@
 .df-bof3-play-btn.rh-btn.rh-btn--tier-elite:hover:not(:disabled) {
   background: var(--tier-elite);
   border-color: transparent;
-  color: #1a1200;
+  color: var(--text-on-elite);
   filter: brightness(1.1);
   transform: translateY(-1px);
   box-shadow:
@@ -2380,7 +2380,7 @@
 .df-bof3-play-btn.rh-btn.rh-btn--tier-elite:active:not(:disabled) {
   background: var(--tier-elite);
   border-color: transparent;
-  color: #1a1200;
+  color: var(--text-on-elite);
   filter: brightness(1.02);
   transform: scale(0.98);
   box-shadow:
@@ -2391,7 +2391,7 @@
 .df-start-match-btn.rh-btn.rh-btn--tier-elite:hover:not(:disabled) {
   background: var(--tier-elite);
   border-color: transparent;
-  color: #1a1200;
+  color: var(--text-on-elite);
   filter: brightness(1.1);
   transform: translateY(-1px);
   box-shadow:
@@ -2402,7 +2402,7 @@
 .df-start-match-btn.rh-btn.rh-btn--tier-elite:active:not(:disabled) {
   background: var(--tier-elite);
   border-color: transparent;
-  color: #1a1200;
+  color: var(--text-on-elite);
   filter: brightness(1.02);
   transform: scale(0.98);
   box-shadow:
@@ -2416,7 +2416,7 @@
   font-size: 21px;
   line-height: 1;
   font-weight: 800;
-  color: #1a1200;
+  color: var(--text-on-elite);
   opacity: 0.9;
 }
 
@@ -3054,7 +3054,7 @@
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: var(--tier-elite);
   box-shadow: 0 0 18px color-mix(in srgb, var(--tier-elite) 28%, transparent);
 }
@@ -3541,7 +3541,7 @@
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: none;
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: var(--tier-elite);
   border: none;
   box-shadow:
@@ -3837,7 +3837,7 @@
 }
 
 .df-arena-node__live {
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: var(--tier-elite);
 }
 
@@ -4075,7 +4075,7 @@
   font-weight: 800;
   letter-spacing: 0.01em;
   border-radius: var(--pvf-radius-md);
-  background: linear-gradient(180deg, #e7b64a 0%, #d5a439 100%);
+  background: linear-gradient(180deg, var(--tier-elite) 0%, #d5a439 100%);
   box-shadow:
     0 0 48px color-mix(in srgb, var(--tier-elite) 30%, transparent),
     0 8px 24px rgba(0, 0, 0, 0.35),
@@ -4553,7 +4553,7 @@
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: #d7a741;
   border: none;
   box-shadow:
@@ -5454,7 +5454,7 @@
   height: 48px;
   min-height: 48px;
   border-radius: var(--pvf-radius-sm);
-  color: #1a1200;
+  color: var(--text-on-elite);
   font-family: 'Outfit', sans-serif;
   font-size: 18px;
   font-weight: 800;

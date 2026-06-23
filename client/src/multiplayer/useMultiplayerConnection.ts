@@ -9,8 +9,6 @@ import { wrapSocketHandler } from './socketGuards';
 import { emitRoomAbandonMatch, emitRoomLeave, type RoomAckResponse } from './roomTransport';
 import type {
   GameRematchStatusPayload,
-  LegacyTournamentState,
-  TournamentLobbyUpdatePayload,
   TournamentMatchAssignedPayload,
 } from './legacyTournamentTypes';
 import { syncRecoveryLegacyRefs } from './recoveryConnectionBridge';
@@ -88,8 +86,6 @@ type FlatMultiplayerConnectionParams = {
   authUserId?: string | null;
   authEmail?: string | null;
   authProfileUsername?: string | null;
-  tournamentId: string | null;
-  tournamentStateStatus?: string | null;
   roomCode: string;
   connectRef: MutableRefObject<() => void>;
   socketRef: MutableRefObject<Socket | null>;
@@ -140,8 +136,6 @@ type FlatMultiplayerConnectionParams = {
   setState: Dispatch<SetStateAction<GameState | null>>;
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
-  setTournamentId: Dispatch<SetStateAction<string | null>>;
-  setTournamentState: Dispatch<SetStateAction<LegacyTournamentState | null>>;
   setTournamentActiveRoom: Dispatch<SetStateAction<string | null>>;
   setRoomCode: Dispatch<SetStateAction<string>>;
   setAppMode: Dispatch<SetStateAction<MultiplayerConnectionState['appMode']>>;
@@ -503,42 +497,8 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
         current.setState(null);
         current.setLegalMoves([]);
         current.setCanDraw(false);
-        current.setTournamentId(null);
-        current.setTournamentState(null);
         current.setTournamentActiveRoom(null);
         syncMachineToLegacy();
-      }),
-    );
-
-    s.on(
-      'tournament:lobby:update',
-      wrapSocketHandler('tournament:lobby:update', (data: TournamentLobbyUpdatePayload) => {
-        const lobbyCode = typeof data?.lobbyCode === 'string' ? data.lobbyCode : null;
-        const players = Array.isArray(data?.players) ? data.players : null;
-        if (!players) return;
-        const inferredHostSocketId =
-          typeof data?.hostSocketId === 'string'
-            ? data.hostSocketId
-            : typeof players?.[0]?.socketId === 'string'
-              ? players[0].socketId
-              : null;
-        latestRef.current.setTournamentState((prev: LegacyTournamentState | null) => ({
-          ...(prev ?? {}),
-          status: 'lobby',
-          lobbyCode: lobbyCode ?? (prev?.lobbyCode ?? null),
-          players,
-          hostSocketId: inferredHostSocketId ?? prev?.hostSocketId ?? null,
-        }));
-      }),
-    );
-
-    s.on(
-      'tournament:state',
-      wrapSocketHandler('tournament:state', (data: LegacyTournamentState) => {
-        const current = latestRef.current;
-        current.setTournamentState(data);
-        if (typeof data?.id === 'string') current.setTournamentId(data.id);
-        current.setTournamentActiveRoom(typeof data?.activeRoomCode === 'string' ? data.activeRoomCode : null);
       }),
     );
 
@@ -723,6 +683,16 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     p.setActionError('');
   }, [dispatchRecovery]);
 
+  /**
+   * Transport-level disconnect. Closes the socket, emits leave/abandon if in a room,
+   * and resets navigation + recovery flags.
+   *
+   * Does NOT clear room roster, game shell state, or tournament context.
+   * Callers are responsible for calling resetMultiplayerRoomState() after disconnect
+   * to clear room and shell state.
+   *
+   * @see resetMultiplayerRoomState in App.tsx
+   */
   const disconnect = useCallback((reason: string = 'user requested') => {
     const p = latestRef.current;
     console.warn('[nav] redirect home', {
@@ -765,24 +735,12 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
 
     if (socket && p.socketRef.current === socket) p.socketRef.current = null;
     p.setSocket(null);
-    p.setJoinedRoom(null);
-    p.setState(null);
-    p.setLegalMoves([]);
-    p.setCanDraw(false);
     p.setError('');
     p.setActionError('');
     p.setYou('');
-    p.setSelectedTile(null);
     p.setIsConnected(false);
     p.setIsConnecting(false);
-    p.setPlayers([]);
-    p.setHandReveal(null);
-    p.setRematchRequested(false);
-    p.setRematchReadyIds([]);
-    p.setOpponentDragging(false);
     p.draggingStateRef.current = false;
-    p.setPendingUiAction(null);
-    p.handRevealShownRef.current = null;
     p.setAppMode('home');
     p.autoConnectAttemptedRef.current = false;
   }, [dispatchRecovery]);
@@ -821,6 +779,56 @@ export function useMultiplayerConnection(params: UseMultiplayerConnectionParams)
     connectionState.socket,
     connectionState.isConnecting,
     connect,
+  ]);
+
+  const prevPresenceAuthFingerprintRef = useRef<string | null>(null);
+
+  // Re-emit presence:identify when auth identity changes while socket is connected.
+  // Handles: token refresh, username change, late auth (auth completes after connect).
+  // Connect/reconnect identify stays in the connect handler; skip first fingerprint to avoid duplicate on connect.
+  useEffect(() => {
+    const fingerprint = [
+      connectionState.authUserId ?? '',
+      connectionState.authEmail ?? '',
+      connectionState.authProfileUsername ?? '',
+      connectionState.authAccessToken ?? '',
+    ].join('|');
+
+    const prev = prevPresenceAuthFingerprintRef.current;
+    prevPresenceAuthFingerprintRef.current = fingerprint;
+
+    if (prev === null) return;
+    if (prev === fingerprint) return;
+
+    const current = latestRef.current;
+    const socket = current.socketRef?.current;
+    if (!socket?.connected) return;
+
+    const userId = current.authUserRef.current?.id;
+    if (!userId) return;
+
+    const username =
+      current.authProfileRef.current?.username ??
+      current.authUserRef.current?.email?.split('@')[0] ??
+      'player';
+
+    void current.emitWithAck<RoomAckResponse>(socket, 'presence:identify', {
+      userId,
+      username,
+      authToken: current.authAccessTokenRef.current,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.log(
+          '[presence] re-identify on auth change failed',
+          error instanceof Error ? error.message : error,
+        );
+      }
+    });
+  }, [
+    connectionState.authUserId,
+    connectionState.authEmail,
+    connectionState.authProfileUsername,
+    connectionState.authAccessToken,
   ]);
 
   return {

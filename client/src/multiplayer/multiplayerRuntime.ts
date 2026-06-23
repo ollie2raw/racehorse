@@ -3,7 +3,6 @@ import type { Socket } from 'socket.io-client';
 import type { PrivateRoomCreateSettings, RoomAckResponse } from './roomTransport';
 import type { RoomChatEvent, RoomEmoteEvent } from '../components/RoomReactions';
 import type { GameState, Move, Tile } from '../types';
-import type { LegacyTournamentState } from './legacyTournamentTypes';
 import type { AppMode } from '../types';
 
 type RoomEventMeta = {
@@ -36,6 +35,34 @@ export type RoomIdentity = {
 };
 
 export type RoomPlayer = { id: string; username: string; userId: string | null };
+
+function normalizeRoomUsername(value: unknown): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  return raw || 'Guest';
+}
+
+/**
+ * Normalize raw socket room player payloads to the client RoomPlayer shape.
+ * Drops server-only fields (socketId, etc.) intentionally — client only needs
+ * id, username, userId for roster display and match identity.
+ */
+export function normalizeRoomPlayers(value: unknown): RoomPlayer[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return { id: entry, username: 'Guest', userId: null };
+      }
+      if (entry && typeof entry === 'object') {
+        const rec = entry as { id?: unknown; username?: unknown; userId?: unknown };
+        const id = typeof rec.id === 'string' ? rec.id : '';
+        const userId = typeof rec.userId === 'string' ? rec.userId.trim() || null : null;
+        return { id, username: normalizeRoomUsername(rec.username), userId };
+      }
+      return { id: '', username: 'Guest', userId: null };
+    })
+    .filter((p) => Boolean(p.id));
+}
 
 /** Socket instance refs shared across multiplayer/tournament hooks. */
 export type MultiplayerSocketRuntime = {
@@ -225,8 +252,6 @@ export type MultiplayerConnectionUiSetters = {
   setState: Dispatch<SetStateAction<GameState | null>>;
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
-  setTournamentId: Dispatch<SetStateAction<string | null>>;
-  setTournamentState: Dispatch<SetStateAction<LegacyTournamentState | null>>;
   setTournamentActiveRoom: Dispatch<SetStateAction<string | null>>;
   setRoomCode: Dispatch<SetStateAction<string>>;
   setHandReveal: Dispatch<
@@ -268,8 +293,7 @@ export type MultiplayerConnectionState = {
   authUserId?: string | null;
   authEmail?: string | null;
   authProfileUsername?: string | null;
-  tournamentId: string | null;
-  tournamentStateStatus?: string | null;
+  authAccessToken?: string | null;
   roomCode: string;
 };
 

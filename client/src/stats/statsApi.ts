@@ -1,4 +1,5 @@
 import type { User } from '@supabase/supabase-js';
+import { apiGet, apiPost } from '../api/client';
 import { supabase } from '../lib/supabase';
 import { resolveGameServerUrl } from '../lib/gameServerUrl';
 import { fetchRatingHistory } from '../ranking/api';
@@ -23,41 +24,14 @@ export interface RecordMatchInput {
   metadata?: Record<string, unknown>;
 }
 
-async function recordMatchAuthHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (!supabase) return headers;
-  try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? null;
-    if (token) headers.Authorization = `Bearer ${token}`;
-  } catch {
-    // fall through without auth header
-  }
-  return headers;
-}
-
 export async function recordMatchResult(
   input: RecordMatchInput,
 ): Promise<{ error: string | null }> {
   const serverUrl = resolveGameServerUrl();
   if (!serverUrl || !supabase) return { error: null };
 
-  try {
-    const headers = await recordMatchAuthHeaders();
-    const response = await fetch(`${serverUrl}/api/stats/record-match`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(input),
-    });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
-      const message = typeof body?.error === 'string' ? body.error : `Request failed (${response.status})`;
-      return { error: message };
-    }
-    return { error: null };
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Failed to record match.' };
-  }
+  const result = await apiPost<{ ok?: boolean }>('/api/stats/record-match', input);
+  return { error: result.error };
 }
 
 export interface StatsSummary {
@@ -469,46 +443,39 @@ export interface RankingProfile {
   currentWinStreak: number;
 }
 
-function resolveBaseUrl(): string {
-  return resolveGameServerUrl();
-}
-
 export async function fetchRankingProfile(
   userId: string,
 ): Promise<{ data: RankingProfile | null; error: string | null }> {
-  try {
-    const response = await fetch(
-      `${resolveBaseUrl()}/api/ranking/profile/${encodeURIComponent(userId)}`,
-      {
-        credentials: 'include',
-      },
-    );
-    const raw = (await response.json()) as Record<string, unknown>;
-    if (!response.ok) {
-      return { data: null, error: String(raw.error ?? 'Failed to fetch ranking profile') };
-    }
-    if (raw.ok !== true) {
-      return { data: null, error: 'Failed to fetch ranking profile' };
-    }
-    return {
-      data: {
-        glicko_rating: Number(raw.glicko_rating ?? 0),
-        glicko_rd: Number(raw.glicko_rd ?? 350),
-        provisional: Boolean(raw.provisional),
-        ranked_games_played: Number(raw.ranked_games_played ?? 0),
-        peak_rating: Number(raw.peak_rating ?? raw.glicko_rating ?? 0),
-        rank: (() => {
-          if (raw.rank == null || raw.rank === '') return null;
-          const n = Number(raw.rank);
-          return Number.isFinite(n) ? n : null;
-        })(),
-        currentWinStreak: Number(raw.currentWinStreak ?? 0),
-      },
-      error: null,
-    };
-  } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : 'Unknown error' };
+  const result = await apiGet<Record<string, unknown>>(
+    `/api/ranking/profile/${encodeURIComponent(userId)}`,
+    { auth: false },
+  );
+  if (result.error) {
+    return { data: null, error: result.error };
   }
+  const raw = result.data;
+  if (!raw) {
+    return { data: null, error: 'Failed to fetch ranking profile' };
+  }
+  if (raw.ok !== true) {
+    return { data: null, error: 'Failed to fetch ranking profile' };
+  }
+  return {
+    data: {
+      glicko_rating: Number(raw.glicko_rating ?? 0),
+      glicko_rd: Number(raw.glicko_rd ?? 350),
+      provisional: Boolean(raw.provisional),
+      ranked_games_played: Number(raw.ranked_games_played ?? 0),
+      peak_rating: Number(raw.peak_rating ?? raw.glicko_rating ?? 0),
+      rank: (() => {
+        if (raw.rank == null || raw.rank === '') return null;
+        const n = Number(raw.rank);
+        return Number.isFinite(n) ? n : null;
+      })(),
+      currentWinStreak: Number(raw.currentWinStreak ?? 0),
+    },
+    error: null,
+  };
 }
 
 export async function fetchUserStats(

@@ -8,6 +8,7 @@ import {
   reconcileBoardOpenEndsMetadata,
   warnOpenEndsBoardIssues,
 } from '../game/openEndsGeometry.ts';
+import { tileEquals } from '../game/tileUtils.ts';
 import type {
   BoardState,
   BranchArm,
@@ -121,10 +122,6 @@ function recordDailyFritzMetric(name: 'getLegalMoves', durationMs: number): void
 }
 
 const BONEYARD_LOCKED_COUNT = 2;
-
-function tileEquals(a: Tile, b: Tile): boolean {
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
-}
 
 export function isDouble(tile: Tile): boolean {
   return tile.high === tile.low;

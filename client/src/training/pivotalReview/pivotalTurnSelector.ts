@@ -1,4 +1,5 @@
 import { analyzeMoveLog, type AnalyzedMove, type GameAnalysis, type MoveRating } from '../../analyzer/moveAnalyzer';
+import type { ConsequenceChain } from '../../analyzer/analysisTypes';
 import type { MoveEntry } from '../../analyzer/moveLogger';
 
 export type PivotalTurnSignal =
@@ -38,6 +39,7 @@ export type PivotalTurnCandidate = {
   scoreOpp: number;
   phase: PivotalTurnPhase;
   move: AnalyzedMove;
+  consequence?: ConsequenceChain;
 };
 
 export type PivotalTurnSelection = {
@@ -301,6 +303,7 @@ export function selectPivotalTurns(
   const candidates = pickDiverseCandidates(scored, count).map((candidate, index) => ({
     ...candidate,
     rank: index + 1,
+    consequence: analysis.consequenceByMoveNumber[candidate.moveNumber],
   }));
 
   return {

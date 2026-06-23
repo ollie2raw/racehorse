@@ -15,7 +15,7 @@
   --hub-gold-border: rgba(231, 182, 74, 0.42);
   --hub-blue: var(--tier-standard);
   --hub-cyan: var(--accent-blue);
-  --hub-win: #34d399;
+  --hub-win: var(--accent-green);
   --hub-loss: #ff4d6d;
   --hub-bronze: #c97b3f;
   --hub-text: #f8fafc;

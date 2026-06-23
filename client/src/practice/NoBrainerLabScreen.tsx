@@ -7,6 +7,7 @@ import type { BoardHandle } from '../components';
 import { Button } from '../components/primitives';
 import '../components/primitives/Button.css';
 import type { PlacementPosition, Tile } from '../types';
+import { tileEquals } from '../game/tileUtils';
 import {
   loadNoBrainerDataset,
   NO_BRAINER_COMBO_COUNT,
@@ -25,10 +26,6 @@ import './noBrainerLab.css';
 interface NoBrainerLabScreenProps {
   userId?: string | null;
   onBack: () => void;
-}
-
-function tileEquals(a: Tile, b: Tile): boolean {
-  return a.high === b.high && a.low === b.low;
 }
 
 function FullscreenIcon({ isFullscreen }: { isFullscreen: boolean }) {

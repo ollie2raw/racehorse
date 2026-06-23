@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import type { LessonScenario } from './types';
 import { applyPlayMove, getLegalMoves, simulatePlacement, isDouble } from '../bot/botEngine';
 import type { BotMatchState } from '../bot/botEngine';
 import { Board, DominoTile, RotateOverlay } from '../components';
 import type { Tile, Move, PlacementPosition, PlacedTile } from '../types';
+import { tileEquals } from '../game/tileUtils';
 import { compareMovesFeedback } from './feedback';
 import type { MoveRating } from './feedback';
 import { chooseBotMove, evaluateMove, toBotVisibleState } from '../bot/botHeuristics';
@@ -13,11 +14,6 @@ interface LearnScenarioScreenProps {
   scenario: LessonScenario;
   onBack: () => void;
   onNext?: () => void;
-}
-
-function tileEquals(a: Tile | null | undefined, b: Tile | null | undefined): boolean {
-  if (!a || !b) return false;
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
 export default function LearnScenarioScreen({ scenario, onBack, onNext }: LearnScenarioScreenProps) {

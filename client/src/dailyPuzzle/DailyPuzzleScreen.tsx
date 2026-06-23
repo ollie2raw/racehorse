@@ -1,8 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import type { User } from '@supabase/supabase-js';
-import type { UserProfile } from '../auth/useAuth';
-import { Board, BoneyardCountPill, BrandLogo, DominoTile, RotateOverlay } from '../components';
+import { Board, BoneyardCountPill, DominoTile, RotateOverlay } from '../components';
 import { MatchLiveLayout } from '../match/board';
 import '../match/match-live.css';
 import {
@@ -10,7 +8,8 @@ import {
   getLegalMoves,
   type BotMatchState,
 } from '../bot/botEngine';
-import type { AppMode, Move, Tile } from '../types';
+import type { Move, Tile } from '../types';
+import { tileEquals } from '../game/tileUtils';
 import {
   fetchDailyPuzzleLeaderboard,
   getDailyPuzzleByDateSeed,
@@ -24,6 +23,26 @@ import {
 } from './api';
 import type { CuratedDailyPuzzle, DailyPuzzleTodayResponse, PuzzleValidationResult } from './types';
 import { getDisplayStreak, recordSolvedStreak } from './streakStorage';
+import {
+  formatPuzzleDateLabel,
+  formatPuzzleElapsed,
+  formatPuzzleLeaderboardDate,
+  getDisplayName,
+  readCachedPuzzle,
+  readProgress,
+  tileKey,
+  writeCachedPuzzle,
+  writeProgress,
+} from './dailyPuzzleScreenHelpers';
+import type {
+  DailyPuzzleScreenProps,
+  PendingWorkerJob,
+  PlayStatus,
+  ValidatorWorkerRequest,
+  ValidatorWorkerResponse,
+} from './dailyPuzzleScreenTypes';
+import { DailyPuzzleLoadingScreen } from './DailyPuzzleLoadingScreen';
+import { createPuzzleMatchState } from './validator';
 import LayoutScreen from '../ui/LayoutScreen';
 import LeaderboardPageShell, { type LeaderboardSummaryCard } from '../ui/LeaderboardPageShell';
 import {
@@ -32,234 +51,9 @@ import {
   ClaudeSectionLabel,
   ClaudeStatLine,
 } from '../ui/claudeMode';
-import { getDailyPuzzleStepPresentation } from './presentation';
 import './dailyPuzzle.css';
 
 const LazyDailyPuzzleLadderScreen = lazy(() => import('./DailyPuzzleLadderScreen'));
-
-function DailyPuzzleLoadingScreen({ onBack }: { onBack: () => void }) {
-  const loadingSteps = [1, 2, 3].map((slotIndex) => getDailyPuzzleStepPresentation(slotIndex));
-  return (
-    <div className="daily-puzzle-loading-root">
-      <div className="home-bg" aria-hidden="true">
-        <div className="home-bg__halo" />
-        <div className="home-bg__texture" />
-      </div>
-
-      <div className="daily-puzzle-loading-shell">
-        <nav className="daily-puzzle-loading-nav">
-          <div className="daily-puzzle-loading-brand">
-            <BrandLogo iconSize={32} showWordmark={true} />
-          </div>
-          <button type="button" className="loading-back-btn rh-back-button" onClick={onBack}>
-            <span className="loading-back-icon">←</span>
-            <span>Back to Home</span>
-          </button>
-        </nav>
-
-        <main className="daily-puzzle-loading-main">
-          <div className="loading-lockup">
-            <div className="loading-eyebrow">
-              <span className="blue-dot" />
-              DAILY PUZZLE
-            </div>
-            <h1 className="loading-title">Preparing today’s ladder</h1>
-            <p className="loading-subtitle">Three fixed puzzles. Same board for everyone.</p>
-
-            <div className="loading-steps">
-              {loadingSteps.map((step, index) => (
-                <div key={step.shortLabel} style={{ display: 'contents' }}>
-                  <div className="loading-step">
-                    <div className={`loading-step-chip ${index === 0 ? 'is-active' : ''}`} />
-                    <span className="loading-step-label">{`${step.title} · ${step.subtitle}`}</span>
-                  </div>
-                  {index < loadingSteps.length - 1 ? <div className="loading-step-connector" /> : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-}
-
-interface DailyPuzzleScreenProps {
-  user: User | null;
-  profile: UserProfile | null;
-  onBack: () => void;
-  onNavigate?: (mode: AppMode) => void;
-  onOpenAuth?: () => void;
-  onOpenAccount?: () => void;
-}
-
-type PlayStatus = 'IN_PROGRESS' | 'SOLVED' | 'FAILED';
-
-interface DailyProgress {
-  attempts: number;
-  bestMoves: number | null;
-  lastResult: PlayStatus | null;
-}
-
-type ValidatorWorkerRequest =
-  | { requestId: number; type: 'validate'; puzzleDate: string; puzzle: CuratedDailyPuzzle }
-  | { requestId: number; type: 'bestScore'; puzzleDate: string; puzzle: CuratedDailyPuzzle };
-
-type ValidatorWorkerResponse =
-  | { requestId: number; type: 'validateResult'; puzzleDate: string; result: PuzzleValidationResult }
-  | { requestId: number; type: 'bestScoreResult'; puzzleDate: string; score: number }
-  | { requestId: number; type: 'error'; puzzleDate: string; error: string };
-
-interface PendingWorkerJob<T> {
-  expected: 'validateResult' | 'bestScoreResult';
-  puzzleDate: string;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-}
-
-function puzzleInstanceKey(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): string {
-  return `${dateSeed}:${puzzleType}`;
-}
-
-function puzzleCacheKey(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): string {
-  return `dailyPuzzle:cached:v3:${puzzleInstanceKey(dateSeed, puzzleType)}`;
-}
-
-function tileEquals(a: Tile, b: Tile): boolean {
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
-}
-
-function tileKey(tile: Tile): string {
-  return `${tile.low}-${tile.high}`;
-}
-
-function progressKey(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): string {
-  return `dailyPuzzle:${puzzleInstanceKey(dateSeed, puzzleType)}`;
-}
-
-function readProgress(dateSeed: string, puzzleType: CuratedDailyPuzzle['puzzleType']): DailyProgress {
-  if (typeof window === 'undefined') {
-    return { attempts: 0, bestMoves: null, lastResult: null };
-  }
-  try {
-    const raw = window.localStorage.getItem(progressKey(dateSeed, puzzleType));
-    if (!raw) return { attempts: 0, bestMoves: null, lastResult: null };
-    const parsed = JSON.parse(raw) as DailyProgress;
-    return {
-      attempts: Number.isFinite(parsed.attempts) ? parsed.attempts : 0,
-      bestMoves: typeof parsed.bestMoves === 'number' ? parsed.bestMoves : null,
-      lastResult: parsed.lastResult ?? null,
-    };
-  } catch {
-    return { attempts: 0, bestMoves: null, lastResult: null };
-  }
-}
-
-function writeProgress(
-  dateSeed: string,
-  puzzleType: CuratedDailyPuzzle['puzzleType'],
-  progress: DailyProgress,
-): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(progressKey(dateSeed, puzzleType), JSON.stringify(progress));
-}
-
-function readCachedPuzzle(
-  dateSeed: string,
-  puzzleType: CuratedDailyPuzzle['puzzleType'],
-): CuratedDailyPuzzle | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(puzzleCacheKey(dateSeed, puzzleType));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CuratedDailyPuzzle;
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      typeof parsed.puzzleDate !== 'string' ||
-      !Array.isArray(parsed.startingHand)
-    ) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedPuzzle(puzzle: CuratedDailyPuzzle): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      puzzleCacheKey(puzzle.puzzleDate, puzzle.puzzleType),
-      JSON.stringify(puzzle),
-    );
-  } catch {
-    // no-op
-  }
-}
-
-function getDisplayName(username: string | null | undefined): string {
-  const value = (username ?? '').trim();
-  if (!value) return 'Player';
-  if (/^user_[a-f0-9]{8}$/i.test(value)) return 'Player';
-  return value;
-}
-
-function formatPuzzleDateLabel(dateText: string): string {
-  const parsed = new Date(`${dateText}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return dateText;
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function formatPuzzleLeaderboardDate(dateText: string): string {
-  const parsed = new Date(`${dateText}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return dateText;
-  return parsed.toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
-function formatPuzzleElapsed(seconds: number): string {
-  const safe = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-  const mins = Math.floor(safe / 60);
-  const secs = safe % 60;
-  return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
-}
-
-function createPuzzleMatchState(puzzle: CuratedDailyPuzzle): BotMatchState {
-  const normalizedDealSize = puzzle.dealSize === 14 ? 14 : 7;
-  return {
-    players: {
-      you: { hand: [...puzzle.startingHand], score: 0 },
-      bot: { hand: [], score: 0 },
-    },
-    board: {
-      ...puzzle.startingBoard,
-      mainLine: [...puzzle.startingBoard.mainLine],
-      hubDoubles: [...puzzle.startingBoard.hubDoubles],
-    },
-    boneyard: [],
-    deadTiles: [],
-    handOpen: true,
-    currentPlayer: 'you',
-    consecutivePasses: 0,
-    handNumber: 1,
-    handOver: false,
-    gameOver: false,
-    winnerId: null,
-    winningScore: 999,
-    lastHandWinner: null,
-    lastHandReason: null,
-    dealSize: normalizedDealSize,
-  };
-}
 
 export default function DailyPuzzleScreen({
   user,
@@ -290,12 +84,8 @@ export default function DailyPuzzleScreen({
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [lastPlayedTile, setLastPlayedTile] = useState<Tile | null>(null);
   const [movesUsed, setMovesUsed] = useState(0);
-  const [_lastMovePoints, setLastMovePoints] = useState(0);
   const [finalScore, setFinalScore] = useState<number | null>(null);
   const runningScoreRef = useRef(0);
-  const [_statusMessage, setStatusMessage] = useState('');
-  const [_attempts, setAttempts] = useState(0);
-  const [_bestMoves, setBestMoves] = useState<number | null>(null);
   const [showLobby, setShowLobby] = useState(true);
   const [dailyLeaderboardOpen, setDailyLeaderboardOpen] = useState(false);
   const [archivePickerOpen, setArchivePickerOpen] = useState(false);
@@ -596,17 +386,8 @@ export default function DailyPuzzleScreen({
         setStatus('IN_PROGRESS');
         setSelectedTile(null);
         setMovesUsed(0);
-        setLastMovePoints(0);
         setFinalScore(null);
         runningScoreRef.current = 0;
-        setStatusMessage(
-          cached.puzzleType === 'one_turn_high_score'
-            ? 'Running score: 0 — keep playing'
-            : `Score Attack — Reach ${cached.targetScore} in ${cached.maxMoves} moves.`,
-        );
-        const cachedProgress = readProgress(cached.puzzleDate, cached.puzzleType);
-        setAttempts(cachedProgress.attempts);
-        setBestMoves(cachedProgress.bestMoves);
         setStreakDays(getDisplayStreak(cached.puzzleDate));
         setLoading(false); // cached fast path keeps UI interactive immediately
         if (!isArchiveMode) {
@@ -637,14 +418,8 @@ export default function DailyPuzzleScreen({
         setStatus('IN_PROGRESS');
         setSelectedTile(null);
         setMovesUsed(0);
-        setLastMovePoints(0);
         setFinalScore(null);
         runningScoreRef.current = 0;
-        setStatusMessage(
-          nextPuzzle.puzzleType === 'one_turn_high_score'
-            ? 'Running score: 0 — keep playing'
-            : 'Play a setup move first, then strike for maximum points.',
-        );
 
         const progress = readProgress(nextPuzzle.puzzleDate, nextPuzzle.puzzleType);
         if (loadKey === localDateKey) {
@@ -653,13 +428,9 @@ export default function DailyPuzzleScreen({
             ...progress,
             attempts: nextAttempts,
           });
-          setAttempts(nextAttempts);
-          setBestMoves(progress.bestMoves);
           void refreshLeaderboard(nextPuzzle.puzzleDate);
           setStreakDays(getDisplayStreak(nextPuzzle.puzzleDate));
         } else {
-          setAttempts(progress.attempts);
-          setBestMoves(progress.bestMoves);
           setLeaderboard([]);
           setStreakDays(0);
         }
@@ -835,23 +606,16 @@ export default function DailyPuzzleScreen({
     setStatus('IN_PROGRESS');
     setSelectedTile(null);
     setMovesUsed(0);
-    setLastMovePoints(0);
     setFinalScore(null);
     runningScoreRef.current = 0;
     submittedRef.current = false;
     solvedConfettiFiredRef.current = false;
     startTimeRef.current = Date.now();
-    setStatusMessage(
-      puzzle.puzzleType === 'one_turn_high_score'
-        ? 'Running score: 0 — keep playing'
-        : `Score Attack — Reach ${puzzle.targetScore} in ${puzzle.maxMoves} moves.`,
-    );
 
     if (!isArchiveMode) {
       const progress = readProgress(puzzle.puzzleDate, puzzle.puzzleType);
       const nextAttempts = progress.attempts + 1;
       writeProgress(puzzle.puzzleDate, puzzle.puzzleType, { ...progress, attempts: nextAttempts });
-      setAttempts(nextAttempts);
     }
   };
 
@@ -875,7 +639,6 @@ export default function DailyPuzzleScreen({
         bestMoves: nextBest,
         lastResult: nextStatus,
       });
-      setBestMoves(nextBest);
     } else if (!isArchiveMode) {
       writeProgress(puzzle.puzzleDate, puzzle.puzzleType, { ...progress, lastResult: nextStatus });
     }
@@ -950,7 +713,6 @@ export default function DailyPuzzleScreen({
     setRuntimeState(nextState);
     setSelectedTile(null);
     setMovesUsed(nextMoves);
-    setLastMovePoints(pointsAwarded);
     flashLastPlayed(move.tile ?? null);
 
     if (puzzle.puzzleType === 'one_turn_high_score') {
@@ -961,44 +723,36 @@ export default function DailyPuzzleScreen({
         runningScoreRef.current = newRunningScore;
         setFinalScore(newRunningScore);
         setStatus('SOLVED');
-        setStatusMessage(`Final score: ${newRunningScore}`);
         finalizeResult('SOLVED', nextMoves, newRunningScore);
       } else {
         runningScoreRef.current = newRunningScore;
-        setStatusMessage(`Running score: ${newRunningScore} — keep playing`);
       }
       return;
     }
 
     if (totalScore >= puzzle.targetScore && nextMoves <= puzzle.maxMoves) {
       setStatus('SOLVED');
-      setStatusMessage(`Solved: ${totalScore}/${puzzle.targetScore} in ${nextMoves} moves.`);
       finalizeResult('SOLVED', nextMoves, totalScore);
       return;
     }
 
     if (nextMoves >= puzzle.maxMoves && totalScore < puzzle.targetScore) {
       setStatus('FAILED');
-      setStatusMessage(`Failed: ${totalScore}/${puzzle.targetScore} after ${nextMoves} moves.`);
       finalizeResult('FAILED', null, totalScore);
       return;
     }
 
     if (nextState.currentPlayer !== 'you') {
       setStatus('FAILED');
-      setStatusMessage('Failed: Turn ended before reaching target score.');
       finalizeResult('FAILED', null, totalScore);
       return;
     }
 
     if (upcomingPlayMoves.length === 0) {
       setStatus('FAILED');
-      setStatusMessage('Failed: No legal moves remaining.');
       finalizeResult('FAILED', null, totalScore);
       return;
     }
-
-    setStatusMessage(`+${pointsAwarded} this move · total ${totalScore}/${puzzle.targetScore}`);
   };
 
   useEffect(() => {
@@ -1007,7 +761,6 @@ export default function DailyPuzzleScreen({
     if (legalMoves.length > 0) return;
     setFinalScore(0);
     setStatus('FAILED');
-    setStatusMessage('Final score: 0');
     finalizeResult('FAILED', null, 0);
   }, [puzzle, status, legalMoves.length]);
 

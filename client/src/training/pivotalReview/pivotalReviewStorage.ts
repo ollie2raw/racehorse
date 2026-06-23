@@ -111,16 +111,15 @@ export function formatPivotalLessonLine(
   rating?: string,
   action?: string,
 ): string {
-  const reasonCopy =
-    reflection.missReasons.length > 0
-      ? reflection.missReasons.map((id) => getMissReasonLabel(id)).join(', ')
-      : reflection.note.trim() || 'no reason tagged';
-
   let hook = 'pivotal moment';
   if (action === 'pass') hook = 'pass with a legal play available';
   else if (rating === 'Blunder') hook = 'blunder on a key line';
   else if (rating === 'Mistake') hook = 'mistake on a key line';
   else if (rating === 'Inaccuracy') hook = 'inaccuracy on a key line';
 
-  return `Turn ${reflection.moveNumber} — ${hook} (${reasonCopy})`;
+  const base = `Turn ${reflection.moveNumber} — ${hook}`;
+  if (reflection.missReasons.length === 0) return base;
+
+  const reasonCopy = reflection.missReasons.map((id) => getMissReasonLabel(id)).join(', ');
+  return `${base} (${reasonCopy})`;
 }

@@ -8,7 +8,6 @@
  * Optionally shows move breakdown pills when there were any non-best moves.
  */
 
-import React from 'react';
 import type { HandLearningSummary } from './handSummary.ts';
 import './coach.css';
 

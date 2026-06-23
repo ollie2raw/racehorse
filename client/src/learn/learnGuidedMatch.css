@@ -1,7 +1,7 @@
 /* Guided Match — Play vs Fritz layout standard with gold coaching accent */
 
 .learn-lesson-screen {
-  --learn-gold: #e7b64a;
+  --learn-gold: var(--tier-elite);
   --learn-gold-soft: rgba(231, 182, 74, 0.12);
   --learn-gold-border: rgba(231, 182, 74, 0.32);
   --learn-gold-text: rgba(244, 221, 162, 0.96);
@@ -311,8 +311,8 @@
   min-width: 118px;
   padding: 0 14px;
   border: 0;
-  background: #e7b64a;
-  color: #1a1200;
+  background: var(--tier-elite);
+  color: var(--text-on-elite);
   box-shadow: 0 0 24px rgba(231, 182, 74, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
@@ -1022,7 +1022,7 @@
 .learn-guided-cta-primary.pvf-start-btn {
   margin-top: 0;
   flex: 1 1 auto;
-  background: #e7b64a;
+  background: var(--tier-elite);
   min-height: 48px;
   border-radius: 12px;
   font-size: 18px;

@@ -1,0 +1,436 @@
+/**
+ * match-live-hud.css — RH HUD token definitions
+ *
+ * Canonical rh-* equivalents for wl-* HUD classes.
+ * Added one token at a time as components migrate from wl-* to rh-*.
+ * When all wl-* tokens are migrated, walnut-live.css can be deleted.
+ *
+ * Token migration status:
+ * [x] wl-turn-label    → rh-turn-label (TournamentMatchHud migrated)
+ * [x] wl-top-rail      → rh-top-rail (InGameBoardHud migrated)
+ * [x] wl-stage-shell   → rh-stage-shell (InGameBoardFrame migrated)
+ * [ ] wl-hand-area     → rh-hand-area
+ * [ ] wl-center-status → rh-center-status
+ * [ ] wl-player-pill   → rh-player-pill
+ */
+
+/* ── Shared stacking context (walnut-live.css base group) ── */
+
+.walnut-match-layout,
+.rh-top-rail,
+.rh-stage-shell,
+.rh-hand-area {
+  position: relative;
+  z-index: 2;
+}
+
+/* ── rh-top-rail ── */
+
+.rh-top-rail {
+  display: grid;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--match-hud-min-height, 92px);
+  padding: 12px 16px 9px;
+  box-sizing: border-box;
+}
+
+.rh-top-rail > .rh-player-pill:first-child {
+  justify-self: start;
+}
+
+.rh-top-rail > .rh-player-pill:last-child {
+  justify-self: end;
+}
+
+.screen.game-screen.walnut-live:not(.rh-match-live) .rh-top-rail,
+.screen.game-screen.walnut-live:not(.rh-match-live) .bot-top-rail {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+  min-height: var(--match-hud-min-height, 92px);
+  padding: 12px 16px 9px !important;
+  background: rgba(7, 12, 22, 0.96) !important;
+  border-bottom: 1px solid rgba(110, 132, 170, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .bot-top-rail,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-top-rail {
+  padding: 10px 16px 8px !important;
+  min-height: var(--match-hud-min-height, 82px) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.rh-match-solo-hud .bot-top-rail,
+.screen.game-screen.walnut-live.rh-match-live.rh-match-solo-hud .rh-top-rail {
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+  position: relative !important;
+  padding: 10px 16px 8px !important;
+  min-height: var(--match-hud-min-height, 82px) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+@media (max-height: 860px) {
+  .screen.game-screen.walnut-live .rh-top-rail,
+  .screen.game-screen.walnut-live .bot-top-rail,
+  .app.large-mode .screen.game-screen.walnut-live .rh-top-rail,
+  .app.large-mode .screen.game-screen.walnut-live .bot-top-rail {
+    min-height: var(--match-hud-min-height, 86px);
+    padding-bottom: 7px !important;
+  }
+}
+
+.large-mode .rh-top-rail {
+  min-height: 82px !important;
+}
+
+/* ── rh-center-status ── */
+
+.rh-center-status {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  padding-top: 0;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-center-status {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+  grid-column: 2 !important;
+  justify-self: center !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  pointer-events: none;
+}
+
+.screen.game-screen .rh-center-status:has(.tmh) {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding-top: 0;
+  overflow: visible;
+  z-index: 8;
+}
+
+.screen.game-screen.walnut-live.rh-match-live.rh-match-solo-hud .rh-center-status {
+  grid-column: 2 !important;
+  justify-self: center !important;
+}
+
+/* ── rh-turn-label ── */
+
+.rh-turn-label {
+  border-radius: 999px;
+  padding: 15px 30px;
+  font-size: 22px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(8, 14, 18, 0.58);
+  color: rgba(232, 245, 239, 0.92);
+}
+
+@media (max-width: 600px) {
+  .rh-turn-label {
+    padding: 5px 12px;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+  }
+}
+
+.rh-turn-label.your-turn {
+  border-color: rgba(149, 240, 202, 0.56);
+  color: var(--wl-mint);
+}
+
+.rh-turn-label.opp-turn {
+  border-color: rgba(216, 181, 111, 0.56);
+  color: var(--wl-gold);
+}
+
+.screen.game-screen.walnut-live .rh-turn-label {
+  padding: 13px 28px;
+  font-size: var(--match-turn-size, clamp(1.05rem, 1.85vw, 1.32rem));
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: rgba(252, 254, 255, 1);
+  background: rgba(9, 15, 27, 0.96) !important;
+  border-color: rgba(110, 132, 170, 0.18) !important;
+}
+
+.screen.game-screen.walnut-live .rh-turn-label.your-turn {
+  border-color: rgba(231, 182, 74, 0.55);
+  background: rgba(28, 22, 10, 0.88) !important;
+  color: rgba(255, 241, 210, 1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(231, 182, 74, 0.14);
+}
+
+.screen.game-screen.walnut-live .rh-turn-label.opp-turn {
+  border-color: rgba(148, 170, 204, 0.28);
+  color: rgba(220, 230, 244, 0.96);
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-turn-label {
+  min-width: 0;
+  min-height: 40px;
+  padding: 15px 29px !important;
+  border-radius: 17px !important;
+  border: 1px solid rgba(241, 201, 96, 0.42) !important;
+  background: rgba(43, 34, 12, 0.82) !important;
+  color: #f4d98b !important;
+  font-size: clamp(1.2925rem, 1.52vw, 1.52rem) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.18em !important;
+  line-height: 1 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(0, 0, 0, 0.24),
+    0 0 18px rgba(241, 201, 96, 0.08) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-turn-label.your-turn {
+  border-color: rgba(226, 176, 72, 0.42) !important;
+  color: #f2dc9a !important;
+  background: rgba(22, 18, 10, 0.92) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-turn-label.opp-turn {
+  border-color: rgba(196, 212, 232, 0.28) !important;
+  color: rgba(210, 224, 244, 0.92) !important;
+  background: rgba(8, 12, 20, 0.92) !important;
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-turn-label {
+    min-width: 130px;
+    padding: 10px 20px !important;
+    font-size: 0.76rem !important;
+  }
+}
+
+.daily-puzzle-screen .rh-turn-label.your-turn {
+  background: #f0c040;
+  color: #000;
+  font-weight: 850;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.screen.game-screen.walnut-live.practice-lab.rh-match-live.rh-match-solo-hud .rh-turn-label.your-turn {
+  border-color: var(--nbl-accent-soft) !important;
+  background: linear-gradient(
+    145deg,
+    rgba(168, 85, 247, 0.2) 0%,
+    rgba(8, 12, 22, 0.88) 100%
+  ) !important;
+  color: #faf5ff !important;
+  text-shadow: 0 0 28px rgba(168, 85, 247, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 24px rgba(0, 0, 0, 0.24),
+    0 0 32px var(--nbl-accent-glow) !important;
+}
+
+.screen.game-screen .tmh .rh-turn-label {
+  position: relative;
+  z-index: 9;
+}
+
+.bot-match-screen .rh-turn-label {
+  padding: 13px 28px;
+  font-size: clamp(1.05rem, 1.85vw, 1.32rem);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+/* ── rh-stage-shell ── */
+
+.walnut-match-layout .rh-stage-shell {
+  border-top: none;
+}
+
+.walnut-live .rh-stage-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px 2px;
+}
+
+.rh-stage-shell {
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
+  border-radius: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent !important;
+  padding: 0 10px;
+}
+
+.screen.game-screen.walnut-live .rh-stage-shell,
+.screen.game-screen.walnut-live .rh-hand-area {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-stage-shell,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-stage-shell {
+  padding: 0 !important;
+  overflow: visible;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .rh-stage-shell,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .walnut-nbl-stage,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .nbl-stage,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .nbl-board-frame {
+  border: 0 !important;
+  border-radius: 30px !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .rh-stage-shell,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .rh-stage-shell,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .walnut-nbl-stage,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .walnut-nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .nbl-stage,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .nbl-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .rh-board-stage,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .rh-board-stage,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .nbl-board-frame,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .nbl-board-frame,
+.screen.game-screen.walnut-live.bot-match-screen:not(.learn-lesson-screen) .rh-live-board-zone .rh-board-frame,
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .rh-board-frame {
+  width: 100% !important;
+  height: 100%;
+  padding: 0 !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-board-zone .rh-stage-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.daily-puzzle-screen .rh-stage-shell {
+  padding-top: 20px;
+}
+
+/* ── rh-hand-area ── */
+
+.rh-hand-area {
+  position: relative !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  width: auto !important;
+  max-width: none;
+  transform: none !important;
+  margin: -4px 10px 0;
+  border-radius: 14px 14px 0 0;
+  border: 1px solid rgba(110, 132, 170, 0.18);
+  border-bottom: 1px solid rgba(110, 132, 170, 0.1);
+  background: rgba(8, 13, 24, 0.98);
+  box-shadow:
+    0 -6px 18px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: visible;
+  height: var(--tray-height, 138px);
+  min-height: var(--tray-height, 138px);
+  max-height: var(--tray-height, 138px);
+  flex: 0 0 var(--tray-height, 138px);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  z-index: 5;
+}
+
+.screen.game-screen.walnut-live .rh-hand-area {
+  background: rgba(8, 13, 24, 0.98) !important;
+  border-color: rgba(110, 132, 170, 0.16) !important;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .rh-hand-area {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  flex-basis: auto;
+  margin: 0 !important;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  display: flex;
+  align-items: center;
+}
+
+.screen.game-screen.walnut-live.rh-match-live .rh-live-hand-deck .rh-hand-area,
+.screen.game-screen.walnut-live.rh-match-live .learn-guided-live-hand-deck .rh-hand-area {
+  height: 100%;
+  min-height: 0;
+  margin: 0 !important;
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  display: flex;
+  align-items: center;
+}
+
+.screen.game-screen.walnut-live.rh-match-live:not(.learn-lesson-screen) .rh-live-hand-deck .rh-hand-area::before {
+  content: none;
+}
+
+@media (max-height: 860px) {
+  .screen.game-screen.walnut-live .rh-hand-area {
+    margin-top: -2px;
+  }
+}
+
+.daily-puzzle-screen .rh-hand-area {
+  padding-bottom: 24px;
+}

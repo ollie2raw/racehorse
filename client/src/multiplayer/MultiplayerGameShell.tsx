@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import GameReviewer from '../analyzer/GameReviewer';
 import type { BoardHandle } from '../components';
 import type { GameAnalysis } from '../analyzer/moveAnalyzer';
 import {
@@ -20,17 +21,18 @@ import {
 } from '../game/openEndsGeometry';
 import { isRenderableMultiplayerSnapshot } from './boardSnapshotGuards';
 import { useRoomSocketSync } from './useRoomSocketSync';
+import { useLiveMatchSession } from '../match/session/useLiveMatchSession';
 import {
-  useLiveMatchSession,
   findPlacedTile,
   getBoardEnds,
   getBoardTileCount,
-} from '../match/session/useLiveMatchSession';
-import type {
-  MultiplayerLiveMatchRecoveryRuntime,
-  MultiplayerLiveMatchRoomRuntime,
-  MultiplayerRoomRecoverySetters,
-  MultiplayerSessionRefsRuntime,
+} from '../match/boardSessionUtils';
+import {
+  normalizeRoomPlayers,
+  type MultiplayerLiveMatchRecoveryRuntime,
+  type MultiplayerLiveMatchRoomRuntime,
+  type MultiplayerRoomRecoverySetters,
+  type MultiplayerSessionRefsRuntime,
 } from './multiplayerRuntime';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import {
@@ -48,27 +50,7 @@ import {
 import type {
   MultiplayerGameShellBridge,
   MultiplayerGameShellProps,
-  MultiplayerGameShellRoomPlayer,
 } from './multiplayerGameShellTypes';
-
-function normalizeRoomPlayers(value: unknown): MultiplayerGameShellRoomPlayer[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => {
-      if (typeof entry === 'string') {
-        return { id: entry, username: 'Guest', userId: null };
-      }
-      if (entry && typeof entry === 'object') {
-        const rec = entry as { id?: unknown; username?: unknown; userId?: unknown };
-        const id = typeof rec.id === 'string' ? rec.id : '';
-        const raw = typeof rec.username === 'string' ? rec.username.trim() : '';
-        const userId = typeof rec.userId === 'string' ? rec.userId.trim() || null : null;
-        return { id, username: raw || 'Guest', userId };
-      }
-      return { id: '', username: 'Guest', userId: null };
-    })
-    .filter((p) => Boolean(p.id));
-}
 
 function MultiplayerGameShellComponent({
   socket,
@@ -89,8 +71,6 @@ function MultiplayerGameShellComponent({
   authProfileRef,
   supabaseEnabled,
   tournamentMatch,
-  tournamentId,
-  tournamentState,
   tournamentOpponentLabel,
   rejoinInFlightRef,
   joinedRoomRef,
@@ -112,6 +92,7 @@ function MultiplayerGameShellComponent({
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [multiplayerMoveLog, setMultiplayerMoveLog] = useState<MoveEntry[]>([]);
   const multiplayerMoveCounterRef = useRef(1);
+  const multiplayerHandNumberRef = useRef(1);
   const previousStateForAnalysisRef = useRef<import('../types').GameState | null>(null);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [currentAnalysis, setCurrentAnalysis] = useState<GameAnalysis | null>(null);
@@ -137,12 +118,13 @@ function MultiplayerGameShellComponent({
   const schedulePlayerReadyRef = useRef<() => Promise<void>>(async () => {});
   const trySchedulePlayerReadyRef = useRef<() => void>(() => {});
 
-  const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber'>) => {
+  const appendMultiplayerMove = useCallback((entry: Omit<MoveEntry, 'moveNumber' | 'handNumber'>) => {
     const moveNumber =
       entry.player === 'you'
         ? multiplayerMoveCounterRef.current++
         : multiplayerMoveCounterRef.current;
-    setMultiplayerMoveLog((prev) => [...prev, { ...entry, moveNumber }]);
+    const handNumber = multiplayerHandNumberRef.current;
+    setMultiplayerMoveLog((prev) => [...prev, { ...entry, moveNumber, handNumber }]);
   }, []);
 
   const liveMatchRoomRuntime = useMemo(
@@ -412,11 +394,15 @@ function MultiplayerGameShellComponent({
   }, [authProfile?.glicko_rating, state?.gameOver]);
 
   const isSpectatingMatch = Boolean(
-    tournamentId && joinedRoom && state && !state.playerIds.includes(you),
+    tournamentMatch?.isTournament && joinedRoom && state && !state.playerIds.includes(you),
   );
-  const isTournamentMatch = Boolean(
-    tournamentMatch?.isTournament || tournamentId || tournamentState?.status === 'running',
-  );
+  const isTournamentMatch = Boolean(tournamentMatch?.isTournament);
+
+  useEffect(() => {
+    if (state?.handNumber != null) {
+      multiplayerHandNumberRef.current = state.handNumber;
+    }
+  }, [state?.handNumber]);
 
   useEffect(() => {
     if (!state?.gameOver || !joinedRoom || !authUser || isSpectatingMatch || isTournamentMatch) return;
@@ -692,26 +678,29 @@ function MultiplayerGameShellComponent({
     const loserScore = finalState.players[loserSocketId]?.score ?? null;
 
     void Promise.all([import('../analyzer/moveAnalyzer'), import('../stats/statsApi')])
-      .then(([{ analyzeMoveLog }, { recordMatchResult }]) => {
-        const matchAnalysis = analyzeMoveLog(multiplayerMoveLog, true);
-        const avgMoveQuality =
-          matchAnalysis.analyzedMoves.length > 0 && matchAnalysis.accuracy > 0
-            ? matchAnalysis.accuracy
-            : undefined;
+      .then(([{ analyzeMoveLogDeferred }, { recordMatchResult }]) =>
+        analyzeMoveLogDeferred(multiplayerMoveLog, true, { oracleMode: 'tier', tierPlayed: 'standard' }).then(
+          (matchAnalysis) => {
+            const avgMoveQuality =
+              matchAnalysis.analyzedMoves.length > 0 && matchAnalysis.accuracy > 0
+                ? matchAnalysis.accuracy
+                : undefined;
 
-        return recordMatchResult({
-          mode: 'online',
-          opponentType: 'online',
-          winnerUserId,
-          loserUserId,
-          winnerScore,
-          loserScore,
-          avgMoveQuality,
-          moveCount: null,
-          roomCode: joinedRoom,
-          metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
-        });
-      })
+            return recordMatchResult({
+              mode: 'online',
+              opponentType: 'online',
+              winnerUserId,
+              loserUserId,
+              winnerScore,
+              loserScore,
+              avgMoveQuality,
+              moveCount: null,
+              roomCode: joinedRoom,
+              metadata: { roomCode: joinedRoom, winnerSocketId, loserSocketId },
+            });
+          },
+        ),
+      )
       .catch(() => {});
   }, [
     authUser,
@@ -725,11 +714,14 @@ function MultiplayerGameShellComponent({
   ]);
 
   const openMultiplayerAnalyzer = useCallback(() => {
-    void import('../analyzer/moveAnalyzer').then(({ analyzeMoveLog, saveGameAnalysis }) => {
-      const analysis = analyzeMoveLog(multiplayerMoveLog, true);
-      setCurrentAnalysis(analysis);
-      saveGameAnalysis('multiplayer', analysis);
-      setAnalyzerOpen(true);
+    void import('../analyzer/moveAnalyzer').then(({ analyzeMoveLogDeferred, saveGameAnalysis }) => {
+      void analyzeMoveLogDeferred(multiplayerMoveLog, true, { oracleMode: 'tier', tierPlayed: 'standard' }).then(
+        (analysis) => {
+          setCurrentAnalysis(analysis);
+          saveGameAnalysis('multiplayer', analysis);
+          setAnalyzerOpen(true);
+        },
+      );
     });
   }, [multiplayerMoveLog]);
 
@@ -983,8 +975,6 @@ function MultiplayerGameShellComponent({
     publishGameSnapshot(snapshot);
   }, [inGame, routeProps, state]);
 
-  void analyzerOpen;
-  void currentAnalysis;
   void boneyardDisplayCount;
   void canDraw;
   void opponentDragging;
@@ -994,7 +984,14 @@ function MultiplayerGameShellComponent({
   void selectedTile;
   void youRef;
 
-  return null;
+  return (
+    <GameReviewer
+      open={analyzerOpen}
+      onClose={() => setAnalyzerOpen(false)}
+      analysis={currentAnalysis}
+      title="Game Review"
+    />
+  );
 }
 
 export const MultiplayerGameShell = React.memo(MultiplayerGameShellComponent);

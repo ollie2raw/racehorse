@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { GameOverlayPortal } from '../../components/GameOverlayPortal';
+import type { HandAnalysis } from '../../analyzer/analysisTypes';
 import type { PostGameReviewAccent } from './PostGameReviewPrompt';
+import { HandTimeline } from './HandTimeline';
 import {
   computeTopRecurringMissReason,
   formatPivotalLessonLine,
@@ -8,14 +10,18 @@ import {
 } from './pivotalReviewStorage';
 import type { PivotalTurnCandidate } from './pivotalTurnSelector';
 import './pivotalReviewSummary.css';
+import './postGameReviewPrompt.css';
 
 export type PivotalReviewSummaryProps = {
   open: boolean;
   accent?: PostGameReviewAccent;
   session: PivotalReviewSession;
   candidates: PivotalTurnCandidate[];
+  hands: HandAnalysis[];
+  worstHandNumber: number | null;
+  opponentLabel: string;
   onSaveAndClose: () => void;
-  onFullGameReview?: () => void;
+  onSelectHand: (handNumber: number) => void;
 };
 
 export function PivotalReviewSummary({
@@ -23,8 +29,11 @@ export function PivotalReviewSummary({
   accent = 'gold',
   session,
   candidates,
+  hands,
+  worstHandNumber,
+  opponentLabel,
   onSaveAndClose,
-  onFullGameReview,
+  onSelectHand,
 }: PivotalReviewSummaryProps) {
   const lessons = useMemo(() => {
     const candidateByMove = new Map(candidates.map((candidate) => [candidate.moveNumber, candidate]));
@@ -60,7 +69,7 @@ export function PivotalReviewSummary({
           onClick={(event) => event.stopPropagation()}
         >
           <div className="prs-panel">
-            <header>
+            <header className="prs-header">
               <p className="df-result-eyebrow">Post-Game Review</p>
               <h2 className="prs-title">Today&apos;s {lessons.length} lessons</h2>
               <p className="prs-subtitle">
@@ -68,34 +77,40 @@ export function PivotalReviewSummary({
               </p>
             </header>
 
-            <ol className="prs-lessons" aria-label="Pivotal turn lessons">
-              {lessons.map((lesson, index) => (
-                <li key={`${session.id}-lesson-${index}`} className="prs-lesson">
-                  <span className="prs-lesson-index">Lesson {index + 1}</span>
-                  <p className="prs-lesson-copy">{lesson}</p>
-                </li>
-              ))}
-            </ol>
+            <div className="prs-scroll">
+              <ol className="prs-lessons" aria-label="Pivotal turn lessons">
+                {lessons.map((lesson, index) => (
+                  <li key={`${session.id}-lesson-${index}`} className="prs-lesson">
+                    <span className="prs-lesson-index">Lesson {index + 1}</span>
+                    <p className="prs-lesson-copy">{lesson}</p>
+                  </li>
+                ))}
+              </ol>
 
-            {recurringPattern ? (
-              <div className="prs-pattern" aria-label="Recurring miss pattern">
-                <span className="prs-pattern-label">Your recurring pattern this week</span>
-                <p className="prs-pattern-value">
-                  → &ldquo;{recurringPattern.label}&rdquo;{' '}
-                  <span className="prs-pattern-count">({recurringPattern.count} times)</span>
-                </p>
-              </div>
-            ) : null}
-
-            <div className="prs-actions">
-              <button type="button" className="df-result-primary" onClick={onSaveAndClose}>
-                Save &amp; Close
-              </button>
-              {onFullGameReview ? (
-                <button type="button" className="prs-full-review-link" onClick={onFullGameReview}>
-                  Review Full Game
-                </button>
+              {recurringPattern ? (
+                <div className="prs-pattern" aria-label="Recurring miss pattern">
+                  <span className="prs-pattern-label">Your recurring pattern this week</span>
+                  <p className="prs-pattern-value">
+                    → &ldquo;{recurringPattern.label}&rdquo;{' '}
+                    <span className="prs-pattern-count">({recurringPattern.count} times)</span>
+                  </p>
+                </div>
               ) : null}
+
+              <HandTimeline
+                hands={hands}
+                worstHandNumber={worstHandNumber}
+                opponentLabel={opponentLabel}
+                onSelectHand={onSelectHand}
+              />
+            </div>
+
+            <div className="prs-footer">
+              <div className="prs-actions">
+                <button type="button" className="df-result-primary" onClick={onSaveAndClose}>
+                  Save &amp; Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

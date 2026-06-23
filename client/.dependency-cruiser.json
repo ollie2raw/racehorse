@@ -1,0 +1,40 @@
+{
+  "forbidden": [
+    {
+      "name": "no-api-from-components",
+      "comment": "API layer must not import from UI components",
+      "severity": "error",
+      "from": { "path": "^src/api/" },
+      "to": { "path": "^src/components/" }
+    },
+    {
+      "name": "no-game-from-react",
+      "comment": "Pure game logic must not import React",
+      "severity": "error",
+      "from": { "path": "^src/game/" },
+      "to": { "path": "^react$" }
+    },
+    {
+      "name": "no-devtools-in-production",
+      "comment": "devtools must not be imported by production code",
+      "severity": "error",
+      "from": { "path": "^src/(?!devtools)" },
+      "to": { "path": "^src/devtools/" }
+    },
+    {
+      "name": "no-test-in-production",
+      "comment": "Test utilities must not be imported by production code",
+      "severity": "error",
+      "from": { "path": "^src/(?!test)" },
+      "to": { "path": "^src/test/" }
+    }
+  ],
+  "options": {
+    "doNotFollow": { "path": "node_modules" },
+    "tsPreCompilationDeps": true,
+    "externalModuleResolutionStrategy": "node_modules",
+    "reporterOptions": {
+      "text": { "highlightFocused": true }
+    }
+  }
+}

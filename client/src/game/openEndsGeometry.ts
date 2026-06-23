@@ -1,4 +1,5 @@
 import type { BoardState, BranchArm, HubDouble, PlacedTile, PlacementPosition, Tile } from '../types';
+import { logger } from '../utils/logger';
 
 const IS_DEV = Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
 
@@ -523,7 +524,7 @@ export function assertOpenEndsSumConsistent(board: BoardState, context = 'board'
   const sum = computeOpenEndsSum(board);
   const pipSum = getScoringOpenEndPips(board).reduce((a, b) => a + b, 0);
   if (sum !== pipSum) {
-    console.error(`[open-ends:${context}] computeOpenEndsSum=${sum} != pip breakdown ${pipSum}`);
+    logger.error('openEndsGeometry.ts', new Error(`[open-ends:${context}] computeOpenEndsSum=${sum} != pip breakdown ${pipSum}`));
   }
   warnOpenEndsBoardIssues(board, context);
 }
@@ -536,8 +537,9 @@ export function assertDisplayedOpenCountMatchesCanonical(
   if (!IS_DEV) return;
   const canonical = computeOpenEndsSum(board);
   if (displayedSum !== canonical) {
-    console.error(
-      `[open-ends:${context}] displayed open count ${displayedSum} != canonical ${canonical}`,
+    logger.error(
+      'openEndsGeometry.ts',
+      new Error(`[open-ends:${context}] displayed open count ${displayedSum} != canonical ${canonical}`),
     );
     auditOpenEndsBoard(board).forEach((issue) => {
       if (issue.code === 'displayed_open_count_mismatch') return;

@@ -44,7 +44,7 @@
 .rh-sf-ranked-delta {
   font-size: 12px;
   font-weight: 700;
-  color: var(--hub-win, #34d399);
+  color: var(--hub-win, var(--accent-green));
 }
 
 .rh-sf-highlights-grid {

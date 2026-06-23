@@ -117,7 +117,7 @@
     margin-top: -2px;
   }
 
-  .screen.game-screen .nbl-board-frame {
+  .screen.game-screen:not(.rh-match-live) .nbl-board-frame {
     padding: 4px;
   }
 
@@ -251,8 +251,9 @@
   grid-template-columns: auto 1fr auto;
 }
 
-/* Match board: matte table frame; keep inset for corner-pill / fly geometry */
-.screen.game-screen .nbl-board-frame {
+/* Match board: matte table frame; keep inset for corner-pill / fly geometry.
+   Legacy navy frame — rh-match-live owns board chrome (match-live-theme.css). */
+.screen.game-screen:not(.rh-match-live) .nbl-board-frame {
   border: 1px solid rgba(148, 170, 204, 0.2);
   padding: 4px;
   border-radius: 12px;
@@ -263,7 +264,7 @@
     0 12px 28px rgba(0, 0, 0, 0.22);
 }
 
-.screen.game-screen .nbl-board-frame::after {
+.screen.game-screen:not(.rh-match-live) .nbl-board-frame::after {
   content: '';
   position: absolute;
   inset: 8px;

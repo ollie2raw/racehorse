@@ -14,6 +14,7 @@ import {
   ZoomOutIcon,
 } from '../components';
 import type { BoardHandle } from '../components';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { MatchLiveLayout } from './board';
 import LeaveGameModal from '../components/LeaveGameModal';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
@@ -32,12 +33,11 @@ import TournamentMatchHud from '../tournament/TournamentMatchHud';
 import { tournamentStageShortLabel } from '../tournament/displayNames';
 import { shouldShowTournamentGameOverOverlay } from '../tournament/tournamentPostgamePolicy';
 import type { TournamentMatchContext } from './session/useTournamentMatchSession';
-import { tileEquals } from './session/useLiveMatchSession';
+import { tileEquals } from '../game/tileUtils';
 import { useRenderProfiler } from '../debug/renderProfiler';
 import { buildPlayableTileKeys, getHandTileLegality } from '../utils/handTileLegality';
 import type { GameState, Move, PlacementPosition, Tile } from '../types';
-
-type RoomPlayer = { id: string; username: string; userId: string | null };
+import type { RoomPlayer } from '../multiplayer/multiplayerRuntime';
 
 type HandRevealState = {
   handNumber: number;
@@ -901,6 +901,21 @@ export function LiveMatchScreen({
                       <HomeIcon />
                     </button>
                   </div>
+                  <ErrorBoundary
+                    context="board"
+                    fallback={
+                      <div
+                        style={{
+                          height: '100%',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: '#6b7a94',
+                        }}
+                      >
+                        Board unavailable — please refresh
+                      </div>
+                    }
+                  >
                   <Board
                     ref={boardRef}
                     showZoomTray={false}
@@ -912,6 +927,7 @@ export function LiveMatchScreen({
                     tileSize={84}
                     showOpenEndGlow={boardShowOpenEndGlow}
                   />
+                  </ErrorBoundary>
                 </>
               }
               handDock={

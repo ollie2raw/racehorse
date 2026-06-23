@@ -2,7 +2,7 @@ import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'reac
 import type { Socket } from 'socket.io-client';
 import type { GameState, Move, Tile } from '../types';
 import type { StateUpdatePayload } from './useRoomSocketSync';
-import type { FriendInviteState, RoomRecoveryState } from './multiplayerRuntime';
+import type { FriendInviteState, RoomPlayer, RoomRecoveryState } from './multiplayerRuntime';
 
 type HandEndedPayload = {
   handNumber: number;
@@ -51,12 +51,6 @@ export type MultiplayerGameShellConnectionRecovery = {
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
 };
 
-export type MultiplayerGameShellRoomPlayer = {
-  id: string;
-  username: string;
-  userId: string | null;
-};
-
 type RoomEventMeta = {
   matchId?: string;
   lastEventSequence?: number;
@@ -67,12 +61,12 @@ export type MultiplayerGameShellProps = {
   socket: Socket | null;
   joinedRoom: string;
   you: string;
-  players: MultiplayerGameShellRoomPlayer[];
+  players: RoomPlayer[];
   isConnected: boolean;
   showToast: (message: string, duration?: number) => void;
   connectionRecovery: MultiplayerGameShellConnectionRecovery;
   setError: Dispatch<SetStateAction<string>>;
-  setPlayers: Dispatch<SetStateAction<MultiplayerGameShellRoomPlayer[]>>;
+  setPlayers: Dispatch<SetStateAction<RoomPlayer[]>>;
   setFriendInvite: Dispatch<SetStateAction<FriendInviteState>>;
   isMuted: boolean;
   isMutedRef: MutableRefObject<boolean>;
@@ -88,13 +82,11 @@ export type MultiplayerGameShellProps = {
     opponentUsername?: string | null;
     round?: number;
   } | null;
-  tournamentId: string | null;
-  tournamentState: { status?: string } | null;
   tournamentOpponentLabel: string | null;
   rejoinInFlightRef: MutableRefObject<boolean>;
   joinedRoomRef: MutableRefObject<string | null>;
   maxSequenceRef: MutableRefObject<number>;
-  roomPlayersRef: MutableRefObject<MultiplayerGameShellRoomPlayer[]>;
+  roomPlayersRef: MutableRefObject<RoomPlayer[]>;
   resyncInFlightRef: MutableRefObject<boolean>;
   resyncBufferedUpdateRef: MutableRefObject<StateUpdatePayload | null>;
   resyncFlushRef: MutableRefObject<(() => void) | null>;

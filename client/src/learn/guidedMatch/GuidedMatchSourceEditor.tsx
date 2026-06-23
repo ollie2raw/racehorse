@@ -17,6 +17,7 @@ import type {
 } from './guidedMatchCandidateTypes';
 import type { GuidedMatchCoachingTag } from './guidedMatchTypes';
 import type { Tile } from '../../types';
+import { tileEquals } from '../../game/tileUtils';
 
 function isPlayerTileEvent(event: GuidedMatchCandidate['events'][number]): event is GuidedMatchCandidatePlayerTilePlayEvent {
   return event.kind === 'tile-play' && event.actor === 'player';
@@ -28,11 +29,6 @@ function isAnnotated(event: GuidedMatchCandidatePlayerTilePlayEvent): boolean {
 
 function formatTile(event: GuidedMatchCandidatePlayerTilePlayEvent): string {
   return `${event.tile.low}-${event.tile.high}`;
-}
-
-function tileEquals(a: Tile | null | undefined, b: Tile | null | undefined): boolean {
-  if (!a || !b) return false;
-  return (a.low === b.low && a.high === b.high) || (a.low === b.high && a.high === b.low);
 }
 
 function toTileId(tile: Tile): string {

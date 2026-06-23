@@ -45,15 +45,15 @@ export const CHAPTER_1_TRAIL_PATH = [
   'M 14 16',
   'L 36 16',
   'L 58 16',
-  'L 80 16',
-  'L 80 50',
+  'L 88 16',
+  'L 88 50',
   'L 58 50',
   'L 36 50',
   'L 14 50',
   'L 14 84',
   'L 36 84',
   'L 58 84',
-  'L 80 84',
+  'L 88 84',
 ].join(' ');
 
 export function buildChapter1TrailLayout(): Chapter1TrailLayout {

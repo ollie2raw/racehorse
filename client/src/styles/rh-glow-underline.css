@@ -48,13 +48,13 @@
   z-index: 4;
   background-color: color-mix(
     in srgb,
-    var(--rh-hand-playable-accent, #e7b64a) 82%,
+    var(--rh-hand-playable-accent, var(--tier-elite)) 82%,
     transparent
   );
   box-shadow:
-    0 3px 8px color-mix(in srgb, var(--rh-hand-playable-accent, #e7b64a) 46%, transparent),
-    0 0 10px color-mix(in srgb, var(--rh-hand-playable-accent, #e7b64a) 50%, transparent),
-    0 0 18px color-mix(in srgb, var(--rh-hand-playable-accent, #e7b64a) 20%, transparent);
+    0 3px 8px color-mix(in srgb, var(--rh-hand-playable-accent, var(--tier-elite)) 46%, transparent),
+    0 0 10px color-mix(in srgb, var(--rh-hand-playable-accent, var(--tier-elite)) 50%, transparent),
+    0 0 18px color-mix(in srgb, var(--rh-hand-playable-accent, var(--tier-elite)) 20%, transparent);
   opacity: 1;
   transition: opacity 0.2s ease;
 }

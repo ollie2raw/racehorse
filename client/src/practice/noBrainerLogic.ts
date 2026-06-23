@@ -8,6 +8,7 @@ import type {
   TileOrientation,
 } from '../types';
 import { computeOpenEndsSum } from '../game/openEndsGeometry';
+import { tileEquals } from '../game/tileUtils';
 
 export interface NoBrainerPracticeState {
   status: 'playing' | 'won' | 'failed';
@@ -25,10 +26,6 @@ export interface NoBrainerPracticeState {
 export interface PracticeHint {
   tile: Tile;
   position: PlacementPosition;
-}
-
-function tileEquals(a: Tile, b: Tile): boolean {
-  return (a.high === b.high && a.low === b.low) || (a.high === b.low && a.low === b.high);
 }
 
 function isDouble(tile: Tile): boolean {

@@ -54,7 +54,7 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #4ade80;
+  color: var(--tier-rookie);
   flex: 1;
 }
 
@@ -62,7 +62,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #4ade80;
+  background: var(--tier-rookie);
   opacity: 0.7;
   flex-shrink: 0;
 }
@@ -94,7 +94,7 @@
   flex-shrink: 0;
 }
 
-.grade-best      { background: rgba(74, 222, 128, 0.18); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.35); }
+.grade-best      { background: rgba(74, 222, 128, 0.18); color: var(--tier-rookie); border: 1px solid rgba(74, 222, 128, 0.35); }
 .grade-excellent { background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); }
 .grade-good      { background: rgba(129, 140, 248, 0.18); color: #818cf8; border: 1px solid rgba(129, 140, 248, 0.35); }
 .grade-dubious   { background: rgba(251, 191, 36, 0.18);  color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.35); }
@@ -191,7 +191,7 @@
   letter-spacing: 0.05em;
   transition: color 120ms;
 }
-.coach-why-btn:hover { color: #4ade80; }
+.coach-why-btn:hover { color: var(--tier-rookie); }
 
 .coach-body-long {
   margin: 0;
@@ -291,7 +291,7 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #4ade80;
+  color: var(--tier-rookie);
 }
 
 .recap-accuracy-row {
@@ -323,7 +323,7 @@
 .recap-accuracy-fill {
   height: 100%;
   border-radius: 999px;
-  background: #4ade80;
+  background: var(--tier-rookie);
   transition: width 600ms ease;
 }
 
@@ -361,7 +361,7 @@
   border-radius: 999px;
 }
 
-.recap-pill-best      { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+.recap-pill-best      { background: rgba(74, 222, 128, 0.15); color: var(--tier-rookie); }
 .recap-pill-excellent { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
 .recap-pill-good      { background: rgba(129, 140, 248, 0.15); color: #818cf8; }
 .recap-pill-dubious   { background: rgba(251, 191, 36, 0.15);  color: #fbbf24; }

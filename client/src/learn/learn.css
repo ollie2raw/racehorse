@@ -242,7 +242,7 @@
 
 .learn-lesson-screen .learn-coach-panel__progress .rh-progress__fill {
   border-radius: 999px;
-  background: linear-gradient(90deg, #e7b64a 0%, #f5d27c 100%);
+  background: linear-gradient(90deg, var(--tier-elite) 0%, #f5d27c 100%);
   box-shadow: 0 0 14px rgba(231, 182, 74, 0.4);
 }
 
@@ -660,7 +660,7 @@
 }
 
 .learn-hub-main .daily-fritz-card-container.learn-mode-card {
-  --pvf-dynamic-color: #e7b64a;
+  --pvf-dynamic-color: var(--tier-elite);
 }
 
 .learn-mode-card__play.pvf-start-btn {
@@ -794,7 +794,7 @@
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #4ade80;
+  color: var(--tier-rookie);
 }
 
 .learn-start-guided-btn {

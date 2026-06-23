@@ -18,8 +18,8 @@
 }
 
 .learn-academy.pvf-root {
-  --pvf-dynamic-color: #34d399;
-  --pvf-active-color: #34d399;
+  --pvf-dynamic-color: var(--accent-green);
+  --pvf-active-color: var(--accent-green);
   flex: 1 1 0 !important;
   min-height: 0 !important;
   overflow: hidden !important;
@@ -92,7 +92,7 @@
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #34d399;
+  color: var(--accent-green);
   white-space: nowrap;
 }
 
@@ -153,16 +153,16 @@
 }
 
 .learn-academy__path-node--done {
-  border-color: color-mix(in srgb, #34d399 40%, transparent);
+  border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
   color: rgba(52, 211, 153, 0.75);
 }
 
 .learn-academy__path-node--active {
-  border-color: #34d399;
+  border-color: var(--accent-green);
   color: #0a1018;
-  background: #34d399;
+  background: var(--accent-green);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, #34d399 22%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--accent-green) 22%, transparent),
     0 0 20px rgba(52, 211, 153, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
@@ -189,7 +189,7 @@
 }
 
 .learn-academy__path-name--active {
-  color: #34d399;
+  color: var(--accent-green);
   font-weight: 800;
 }
 
@@ -314,7 +314,7 @@
   font-weight: 800;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #34d399;
+  color: var(--accent-green);
 }
 
 .learn-academy__kicker::before {
@@ -322,7 +322,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #34d399;
+  background: var(--accent-green);
   flex-shrink: 0;
 }
 
@@ -370,12 +370,12 @@
   justify-content: space-evenly;
   gap: clamp(14px, 2.4vh, 24px);
   padding: clamp(18px, 2.6vh, 28px) clamp(16px, 2vw, 22px);
-  border: 1px solid color-mix(in srgb, #34d399 28%, rgba(255, 255, 255, 0.1));
+  border: 1px solid color-mix(in srgb, var(--accent-green) 28%, rgba(255, 255, 255, 0.1));
   border-radius: var(--pvf-radius-md);
-  background: color-mix(in srgb, #34d399 6%, rgba(0, 0, 0, 0.32));
+  background: color-mix(in srgb, var(--accent-green) 6%, rgba(0, 0, 0, 0.32));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 24px color-mix(in srgb, #34d399 8%, transparent);
+    0 0 24px color-mix(in srgb, var(--accent-green) 8%, transparent);
 }
 
 .learn-academy__beats li {
@@ -396,7 +396,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #34d399;
+  background: var(--accent-green);
 }
 
 .learn-academy__momentum {
@@ -479,7 +479,7 @@
 
 .learn-academy__btn--primary {
   border: none;
-  background: #34d399;
+  background: var(--accent-green);
   color: #0a1018;
   box-shadow:
     0 0 28px rgba(52, 211, 153, 0.28),
@@ -499,14 +499,14 @@
 }
 
 .learn-academy__btn--secondary:hover:not(:disabled) {
-  border-color: color-mix(in srgb, #34d399 45%, rgba(255, 255, 255, 0.24));
+  border-color: color-mix(in srgb, var(--accent-green) 45%, rgba(255, 255, 255, 0.24));
   color: #fff;
   transform: translateY(-1px);
 }
 
 .learn-academy__btn--next {
   border: none;
-  background: #34d399;
+  background: var(--accent-green);
   color: #0a1018;
   box-shadow:
     0 0 28px rgba(52, 211, 153, 0.28),
@@ -628,11 +628,11 @@
 }
 
 .learn-academy__rhythm-card--mint {
-  border-color: color-mix(in srgb, #34d399 38%, rgba(255, 255, 255, 0.1));
-  background: color-mix(in srgb, #34d399 7%, rgba(255, 255, 255, 0.02));
+  border-color: color-mix(in srgb, var(--accent-green) 38%, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--accent-green) 7%, rgba(255, 255, 255, 0.02));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 0 32px color-mix(in srgb, #34d399 8%, transparent),
+    inset 0 0 32px color-mix(in srgb, var(--accent-green) 8%, transparent),
     0 8px 28px rgba(0, 0, 0, 0.3);
 }
 
@@ -654,16 +654,16 @@
   place-items: center;
   border: 1.5px solid var(--icon-border, rgba(255, 255, 255, 0.2));
   background: var(--icon-bg, rgba(255, 255, 255, 0.04));
-  color: var(--accent-color, #34d399);
+  color: var(--accent-color, var(--accent-green));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 0 28px color-mix(in srgb, var(--accent-color, #34d399) 28%, transparent);
+    0 0 28px color-mix(in srgb, var(--accent-color, var(--accent-green)) 28%, transparent);
 }
 
 .learn-academy__rhythm-icon--mint {
-  --accent-color: #34d399;
-  --icon-border: color-mix(in srgb, #34d399 45%, transparent);
-  --icon-bg: color-mix(in srgb, #34d399 10%, transparent);
+  --accent-color: var(--accent-green);
+  --icon-border: color-mix(in srgb, var(--accent-green) 45%, transparent);
+  --icon-bg: color-mix(in srgb, var(--accent-green) 10%, transparent);
 }
 
 .learn-academy__rhythm-icon--gold {
@@ -756,12 +756,12 @@
 }
 
 .learn-academy__pipe-card--mint {
-  border-color: color-mix(in srgb, #34d399 58%, rgba(255, 255, 255, 0.12));
-  background: color-mix(in srgb, #34d399 8%, rgba(4, 8, 14, 0.7));
+  border-color: color-mix(in srgb, var(--accent-green) 58%, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--accent-green) 8%, rgba(4, 8, 14, 0.7));
   box-shadow:
-    inset 0 0 48px color-mix(in srgb, #34d399 14%, transparent),
+    inset 0 0 48px color-mix(in srgb, var(--accent-green) 14%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 0 20px color-mix(in srgb, #34d399 18%, transparent),
+    0 0 20px color-mix(in srgb, var(--accent-green) 18%, transparent),
     0 10px 28px rgba(0, 0, 0, 0.32);
 }
 
@@ -810,7 +810,7 @@
 }
 
 .learn-academy__pipe-card--mint .learn-academy__pipe-card-n {
-  background: #34d399;
+  background: var(--accent-green);
   box-shadow: 0 0 14px rgba(52, 211, 153, 0.45);
 }
 
@@ -848,16 +848,16 @@
   border-radius: 999px;
   border: 1.5px solid var(--pipe-icon-border, rgba(255, 255, 255, 0.2));
   background: var(--pipe-icon-bg, rgba(255, 255, 255, 0.04));
-  color: var(--pipe-icon-color, #34d399);
+  color: var(--pipe-icon-color, var(--accent-green));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 0 36px color-mix(in srgb, var(--pipe-icon-color, #34d399) 42%, transparent);
+    0 0 36px color-mix(in srgb, var(--pipe-icon-color, var(--accent-green)) 42%, transparent);
 }
 
 .learn-academy__pipe-card-icon--mint {
-  --pipe-icon-color: #34d399;
-  --pipe-icon-border: color-mix(in srgb, #34d399 55%, transparent);
-  --pipe-icon-bg: color-mix(in srgb, #34d399 12%, transparent);
+  --pipe-icon-color: var(--accent-green);
+  --pipe-icon-border: color-mix(in srgb, var(--accent-green) 55%, transparent);
+  --pipe-icon-bg: color-mix(in srgb, var(--accent-green) 12%, transparent);
 }
 
 .learn-academy__pipe-card-icon--gold {
@@ -931,9 +931,9 @@
 }
 
 .learn-academy__pipe-arrow--mint {
-  --pipe-arrow-color: #34d399;
-  --pipe-arrow-border: color-mix(in srgb, #34d399 55%, transparent);
-  --pipe-arrow-bg: color-mix(in srgb, #34d399 10%, rgba(0, 0, 0, 0.35));
+  --pipe-arrow-color: var(--accent-green);
+  --pipe-arrow-border: color-mix(in srgb, var(--accent-green) 55%, transparent);
+  --pipe-arrow-bg: color-mix(in srgb, var(--accent-green) 10%, rgba(0, 0, 0, 0.35));
   --pipe-arrow-glow: rgba(52, 211, 153, 0.32);
 }
 
@@ -1254,11 +1254,11 @@
   padding: 0 44px 0 28px !important;
   font-size: 18px !important;
   font-weight: 800 !important;
-  background: #34d399 !important;
+  background: var(--accent-green) !important;
   color: #0a1018 !important;
-  border: 1px solid color-mix(in srgb, #34d399 55%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--accent-green) 55%, transparent) !important;
   box-shadow:
-    0 0 0 1px color-mix(in srgb, #34d399 35%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent-green) 35%, transparent),
     0 0 32px rgba(52, 211, 153, 0.38),
     inset 0 1px 0 rgba(255, 255, 255, 0.42) !important;
 }

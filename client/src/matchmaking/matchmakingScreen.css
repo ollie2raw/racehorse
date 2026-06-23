@@ -313,7 +313,7 @@
   border: none;
   position: relative;
   cursor: pointer;
-  color: #1a1200;
+  color: var(--text-on-elite);
   background: linear-gradient(
     180deg,
     var(--tier-elite) 0%,

@@ -10,8 +10,8 @@
 }
 
 .learn-howto-v2 {
-  --howto-v2-green: #34d399;
-  --howto-v2-gold: #e7b64a;
+  --howto-v2-green: var(--accent-green);
+  --howto-v2-gold: var(--tier-elite);
   --howto-v2-text: #f2eee8;
   --howto-v2-muted: rgba(201, 212, 226, 0.72);
   --howto-v2-stage-max: min(1420px, calc(100vw - 56px));

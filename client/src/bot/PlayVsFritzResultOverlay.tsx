@@ -18,6 +18,11 @@ export type PlayVsFritzResultOverlayProps = {
     onClick: () => void;
     variant: 'primary' | 'secondary';
   }>;
+  /** Shown below stats while deferred post-game analysis runs. */
+  statusNote?: ReactNode;
+  /** Re-open post-game review prompt after dismissal or reviewer close. */
+  showReviewGame?: boolean;
+  onReviewGame?: () => void;
 };
 
 export function PlayVsFritzResultOverlay({
@@ -32,6 +37,9 @@ export function PlayVsFritzResultOverlay({
   onHome,
   showHome = false,
   customActions,
+  statusNote,
+  showReviewGame = false,
+  onReviewGame,
 }: PlayVsFritzResultOverlayProps) {
   const margin = Math.abs(youScore - botScore);
 
@@ -90,6 +98,14 @@ export function PlayVsFritzResultOverlay({
             </div>
 
             {ratingSlot ? <div className="df-result-meta-row">{ratingSlot}</div> : null}
+
+            {statusNote ? <p className="df-result-status-note">{statusNote}</p> : null}
+
+            {showReviewGame && onReviewGame ? (
+              <button type="button" className="df-result-review-link" onClick={onReviewGame}>
+                Review game ↗
+              </button>
+            ) : null}
 
             <div className="df-result-actions">
               {customActions ? (
