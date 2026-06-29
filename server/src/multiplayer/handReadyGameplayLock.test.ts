@@ -108,6 +108,7 @@ async function startPrivateMatch(
 function armHandOverForReadyTest(roomCode: string) {
   const room = getRoom(roomCode);
   if (!room.state) throw new Error('expected in-progress state');
+  room.preGameDraw = null;
   room.state = { ...room.state, handOver: true };
   room.lastHandEndedAtMs = Date.now() - 10_000;
   room.nextHandReady.clear();

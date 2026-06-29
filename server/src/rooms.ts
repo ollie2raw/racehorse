@@ -633,6 +633,9 @@ export async function readyForNextHand(
 
   const markPhase = await withRoomGameplayLock(code, async (): Promise<MarkPhaseResult> => {
     const room = getRoom(code);
+    if (room.preGameDraw) {
+      return { kind: 'return', value: { started: false, room, ignored: true } };
+    }
     if (!room.state) throw new Error('Game not started.');
     if (room.state.gameOver) {
       return { kind: 'return', value: { started: false, room } };
