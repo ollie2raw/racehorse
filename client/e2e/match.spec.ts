@@ -74,14 +74,20 @@ test.describe('Match lifecycle — Daily Puzzle', () => {
 
     // If lobby page is visible and shows start/resume button, click it to enter puzzle board
     const startBtn = page.getByRole('button', { name: /Start Daily Ladder|Resume Daily/i });
-    if (await startBtn.isVisible()) {
+    try {
+      await startBtn.waitFor({ state: 'visible', timeout: 3000 });
       await startBtn.click();
+    } catch (e) {
+      // Not visible or already past this screen
     }
 
     // Should show either the puzzle board or a loading/error state — not blank
-    const hasBoard = await page.locator('.game-screen, .board-area, .nbl-board-canvas').isVisible().catch(() => false);
-    const hasLoading = await page.locator('.loading-screen, [class*="loading"]').isVisible().catch(() => false);
-    const hasError = await page.locator('[class*="error"], [data-ui*="error"]').isVisible().catch(() => false);
+    const boardOrErrorSelector = '.game-screen, .board-area, .nbl-board-canvas, .loading-screen, [class*="loading"], .df-hub-error, .dpl-ladder-hub-error, [role="alert"]';
+    await expect(page.locator(boardOrErrorSelector).first()).toBeVisible({ timeout: 10_000 });
+
+    const hasBoard = await page.locator('.game-screen, .board-area, .nbl-board-canvas').first().isVisible().catch(() => false);
+    const hasLoading = await page.locator('.loading-screen, [class*="loading"]').first().isVisible().catch(() => false);
+    const hasError = await page.locator('.df-hub-error, .dpl-ladder-hub-error, [role="alert"]').first().isVisible().catch(() => false);
     expect(hasBoard || hasLoading || hasError).toBe(true);
   });
 });

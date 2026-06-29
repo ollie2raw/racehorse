@@ -28,7 +28,6 @@ import {
   upsertDailyPuzzleBestScore,
   type DailyPuzzleLeaderboardEntry,
 } from '../dailyPuzzle/api';
-import GameOverModal from '../components/GameOverModal';
 import { POST_GAME_REVIEW_VISIBLE } from '../appRouteTypes';
 import GameReviewer from '../analyzer/GameReviewer';
 import {
@@ -65,7 +64,6 @@ import { chooseBotMove, toBotVisibleState, type BotChoice } from './botHeuristic
 import { fairnessLog } from './fairnessLog';
 import { FRITZ_TIERS } from './fritzConfig';
 import { predictFritzGlickoUpdate } from '../ranking/predictFritzGlickoUpdate.ts';
-import { FRITZ_POSTGAME_TRUST_LINE } from './fritzTrustCopy';
 import {
   completeGhostGame,
   startGhostMatchSession,
@@ -103,17 +101,16 @@ import {
   type DailyFritzLeaderboardRow,
   type DailyFritzNextHandResponse,
 } from '../dailyFritz/api';
-import { formatOrdinalPlace } from '../dailyFritz/format';
 import { buildShareText } from '../dailyFritz/shareCard';
-import { DailyFritzFinalResultOverlay } from '../dailyFritz/DailyFritzFinalResultOverlay';
-import { PlayVsFritzResultOverlay } from './PlayVsFritzResultOverlay';
-import { PostGameReviewPrompt } from '../training/pivotalReview/PostGameReviewPrompt';
-import { PivotalTurnReviewCard } from '../training/pivotalReview/PivotalTurnReviewCard';
-import { PivotalReviewSummary } from '../training/pivotalReview/PivotalReviewSummary';
+import { BotDailyFritzSetOverlay } from './BotDailyFritzSetOverlay';
+import { BotHandOverModal } from './BotHandOverModal';
+import { BotPostGameCard } from './BotPostGameCard';
+import { BotPivotalReviewPortal } from './BotPivotalReviewPortal';
+import { BotReviewSummaryPortal } from './BotReviewSummaryPortal';
+import { BotGameOverModal } from './BotGameOverModal';
 import { isBotPostGameReviewEligible } from '../training/pivotalReview/postGameReviewPolicy';
 import { tileEquals, asPlayMoves, findMoveForSelection, sumTilePips } from '../game/tileUtils';
 import {
-  formatRatingDelta,
   getGhostResultMessage,
   moveEntriesToGhostMoveLog,
   roundedRatingDelta,
@@ -183,18 +180,11 @@ import '../styles/shared-ui.css';
 import '../learn/learn.css';
 import { useLearningCoach } from '../learning/useLearningCoach';
 import CoachPanel from '../learning/CoachPanel';
-import LearningHandRecap from '../learning/LearningHandRecap';
 import AuthoringCoachPanel from '../learn/AuthoringCoachPanel';
 import LeaveGameModal from '../components/LeaveGameModal';
 import { GameOverlayPortal } from '../components/GameOverlayPortal';
-import HandOverModal from '../components/handOver/HandOverModal';
 import {
   buildBotHandOverReveals,
-  buildHandOverReasonCopy,
-  buildNextHandDealingHint,
-  loserDisplayLabel,
-  resolveWinnerSide,
-  winnerDisplayLabel,
 } from '../components/handOver/handOverCopy';
 import { logLayoutDebug } from '../match/layoutDebug';
 import {
@@ -245,7 +235,6 @@ import {
 } from '../learn/guidedMatch/guidedMatchCapture';
 import { upsertGuidedMatchCandidate } from '../learn/guidedMatch/guidedMatchCandidateStorage';
 import { validateGuidedMatchCandidate } from '../learn/guidedMatch/guidedMatchCandidateValidation';
-import { GuidedMatchFinalDebriefPanel } from '../learn/guidedMatch/GuidedMatchFinalDebriefPanel';
 import { getPublicGuidedMatchFinalDebrief } from '../learn/guidedMatch/guidedMatchLessonLoader';
 import {
   createPreGameDrawShellMatch,
@@ -6206,586 +6195,127 @@ export default function BotMatchScreen({
           { label: 'You', score: match.players.you.score, tone: 'you' },
         ]}
       />
-      {handReveal && !match.gameOver && (
-        <GameOverlayPortal>
-          <HandOverModal
-            variant="sp"
-            pointsAwarded={handReveal.pointsAwarded}
-            winnerSide={resolveWinnerSide(handReveal.winner)}
-            winnerLabel={winnerDisplayLabel(resolveWinnerSide(handReveal.winner), opponentLabel)}
-            loserLabel={loserDisplayLabel(resolveWinnerSide(handReveal.winner), opponentLabel)}
-            loserPips={handReveal.loserPips}
-            reasonCopy={buildHandOverReasonCopy({
-              youWentOut: handReveal.reason !== 'blocked' && handReveal.winner === 'you',
-              opponentWentOut: handReveal.reason !== 'blocked' && handReveal.winner === 'bot',
-              isBlocked: handReveal.reason === 'blocked',
-              opponentName: opponentLabel,
-              pointsAwarded: handReveal.pointsAwarded,
-            })}
-            tileReveals={handRevealTileReveals}
-            nextHandLabel="Next hand starting..."
-            nextHandHint={buildNextHandDealingHint({
-              completedHandNumber: match.handNumber,
-              isDailyFritzMode,
-              opponentLabel,
-            })}
-            progress={isGuidedMode || isGuidedV2Mode ? undefined : handRevealProgress}
-            progressTransitionMs={
-              isGuidedMode || isGuidedV2Mode ? undefined : DAILY_FRITZ_AUTO_ADVANCE_MS
-            }
-            learningRecap={
-              isGuidedMode && coach.handSummary ? (
-                <LearningHandRecap summary={coach.handSummary} />
-              ) : undefined
-            }
-            footer={
-              ghostResultError ? (
-                <footer className="hand-over-modal__footer">
-                  <div className="hand-over-error-zone">
-                    <span className="hand-over-error-text" title={ghostResultError}>
-                      {ghostResultError}
-                    </span>
-                    <button
-                      type="button"
-                      className="mode-inline-btn"
-                      onClick={() => {
-                        setGhostResultError(null);
-                        advanceHand();
-                      }}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                </footer>
-              ) : showManualHandAdvance || handAdvanceError ? (
-                <footer className="hand-over-modal__footer">
-                  <div className="hand-over-error-zone">
-                    {handAdvanceError ? (
-                      <span className="hand-over-error-text" title={handAdvanceError}>
-                        {handAdvanceError}
-                      </span>
-                    ) : (
-                      <span className="hand-over-modal__next-hint">
-                        Next hand is taking longer than expected.
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="mode-inline-btn"
-                      onClick={() => {
-                        setHandAdvanceError(null);
-                        handTransitionInFlightRef.current = false;
-                        dailyFritzNextHandRef.current = null;
-                        advanceHand();
-                      }}
-                    >
-                      {handAdvanceError ? 'Retry' : 'Continue'}
-                    </button>
-                  </div>
-                </footer>
-              ) : isGuidedMode || isGuidedV2Mode ? (
-                <footer className="hand-over-modal__footer">
-                  <button type="button" className="pvf-start-btn" onClick={advanceHand}>
-                    <span>Next Hand</span>
-                    <span className="pvf-start-arrow" aria-hidden>
-                      ›
-                    </span>
-                  </button>
-                </footer>
-              ) : undefined
-            }
-          />
-        </GameOverlayPortal>
-      )}
-      {showPostGameOverlays && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind === 'final' ? (
-        <GameOverlayPortal>
-          <DailyFritzFinalResultOverlay
-            overlay={dailyFritzSetOverlay}
-            shareDone={shareCopied}
-            onShare={handleShareResult}
-          />
-        </GameOverlayPortal>
-      ) : null}
-      {showPostGameOverlays && isDailyFritzMode && dailyFritzSetOverlay && dailyFritzSetOverlay.kind !== 'final' ? (
-        <GameOverlayPortal>
-        <div className="game-over-overlay daily-fritz-set-overlay" role="dialog" aria-label="Daily Fritz set interstitial">
-          <div className="game-over-card daily-fritz-set-overlay-card" onClick={(event) => event.stopPropagation()}>
-            <div className="daily-fritz-set-overlay-hero">
-              <span className="daily-fritz-set-overlay-kicker">{dailyFritzSetOverlay.eyebrow}</span>
-              {dailyFritzSetOverlay.skunkBadge ? (
-                <span className="daily-fritz-skunk-badge" aria-label="Skunk result">
-                  {dailyFritzSetOverlay.skunkBadge}
-                </span>
-              ) : null}
-              <h2 className="daily-fritz-set-overlay-title">{dailyFritzSetOverlay.headline}</h2>
-              <p className="daily-fritz-set-overlay-copy">{dailyFritzSetOverlay.subheadline}</p>
-            </div>
-
-            <div className="daily-fritz-set-overlay-stats" aria-label="Daily Fritz set summary">
-              <div className="daily-fritz-set-overlay-stat">
-                <span>{dailyFritzSetOverlay.gameScoreLabel || 'This game'}</span>
-                <strong>{dailyFritzSetOverlay.gameScoreValue || '—'}</strong>
-              </div>
-              <div className="daily-fritz-set-overlay-stat">
-                <span>Set Score</span>
-                <strong>{dailyFritzSetOverlay.setScoreValue || '—'}</strong>
-              </div>
-              <div className="daily-fritz-set-overlay-stat">
-                <span>Set Margin</span>
-                <strong className={`is-${dailyFritzSetOverlay.marginTone}`}>
-                  {dailyFritzSetOverlay.marginValue || '—'}
-                </strong>
-              </div>
-            </div>
-
-            <div className="daily-fritz-set-overlay-tracker" aria-label="Best of three tracker">
-              {dailyFritzSetOverlay.tracker.map((item) => (
-                <div key={item.gameNumber} className={`daily-fritz-set-overlay-step is-${item.tone}`}>
-                  <span>Game {item.gameNumber}</span>
-                  <strong>{item.label}</strong>
-                </div>
-              ))}
-            </div>
-
-            {dailyFritzSetOverlay.objective ? (
-              <div className="daily-fritz-set-overlay-objective">
-                {dailyFritzSetOverlay.nextLabel ? <span>{dailyFritzSetOverlay.nextLabel}</span> : null}
-                <p>{dailyFritzSetOverlay.objective}</p>
-              </div>
-            ) : null}
-
-            {dailyFritzSetOverlay.practiceHint ? (
-              <p className="daily-fritz-practice-hint">{dailyFritzSetOverlay.practiceHint}</p>
-            ) : null}
-
-            <p className="daily-fritz-trust-note">{FRITZ_POSTGAME_TRUST_LINE}</p>
-
-            {dailyFritzSetOverlay.errorMessage ? (
-              <div className="hand-over-error-zone">
-                <span className="hand-over-error-text" title={dailyFritzSetOverlay.errorMessage}>
-                  {dailyFritzSetOverlay.errorMessage}
-                </span>
-              </div>
-            ) : null}
-
-            <div className="daily-fritz-set-overlay-actions">
-              <button
-                type="button"
-                className={`daily-fritz-set-overlay-primary is-${dailyFritzSetOverlay.primaryTone}`}
-                onClick={dailyFritzSetOverlay.onPrimary}
-                disabled={dailyFritzSetOverlay.primaryDisabled}
-              >
-                {dailyFritzSetOverlay.primaryLabel}
-              </button>
-              {dailyFritzSetOverlay.secondaryLabel ? (
-                <button
-                  type="button"
-                  className="daily-fritz-set-overlay-secondary"
-                  onClick={dailyFritzSetOverlay.onSecondary}
-                >
-                  {dailyFritzSetOverlay.secondaryLabel}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        </GameOverlayPortal>
-      ) : null}
-      {PIVOTAL_REVIEW_WIZARD_ENABLED && pivotalReviewOpen && pivotalSelection ? (
-        <PivotalTurnReviewCard
-          open
-          accent="gold"
-          selection={pivotalSelection}
-          onComplete={completePivotalTurnReview}
-        />
-      ) : null}
-      {PIVOTAL_REVIEW_WIZARD_ENABLED && pivotalReviewSummary && pivotalSelection ? (
-        <PivotalReviewSummary
-          open
-          accent="gold"
-          session={pivotalReviewSummary}
-          candidates={pivotalSelection.candidates}
-          onSaveAndClose={savePivotalReviewSummary}
-          onSelectHand={openHandScopedReview}
-          hands={postGameAnalysis?.hands ?? []}
-          worstHandNumber={postGameAnalysis?.worstHandNumber ?? null}
-          opponentLabel={opponentLabel}
-        />
-      ) : null}
-      {showPostGameReviewPrompt && postGameAnalysis ? (
-        <PostGameReviewPrompt
-          open
-          accent="gold"
-          modeLabel="Play vs Fritz"
-          resultLabel={match.winnerId === 'you' ? 'Victory' : 'Defeat'}
-          won={match.winnerId === 'you'}
-          youScore={match.players.you.score}
-          opponentScore={match.players.bot.score}
-          opponentLabel={opponentLabel}
-          analysis={postGameAnalysis}
-          onReviewGame={openReviewGameFromPrompt}
-          onSkip={skipPostGameReview}
-        />
-      ) : null}
-      {showPlayVsFritzResultOverlay && (
-        <PlayVsFritzResultOverlay
-          won={match.winnerId === 'you'}
-          opponentLabel={opponentLabel}
-          dealSize={match.dealSize}
-          youScore={match.players.you.score}
-          botScore={match.players.bot.score}
-          ratingSlot={
-            isJourneyTrial ? undefined : ghostResultLoading || ghostResultError || hasConfirmedFritzRatingUpdate || fritzNewGlickoRating != null ? (
-              <div className="df-result-meta-pill">
-                <span className="df-result-meta-label">Rating</span>
-                <span className="df-result-meta-value">
-                  {showFritzRatingSyncing
-                    ? (currentGlickoRating ?? matchStartGlickoRating) != null
-                      ? `${Math.round(Number(currentGlickoRating ?? matchStartGlickoRating))}  •  syncing...`
-                      : 'Syncing...'
-                    : fritzGlickoDelta != null && fritzNewGlickoRating != null
-                      ? `${formatRatingDelta(fritzGlickoDelta)}  •  ${fritzNewGlickoRating}`
-                      : fritzNewGlickoRating != null
-                        ? `${fritzNewGlickoRating}`
-                        : ghostResultError
-                          ? ghostResultError
-                          : ghostResult
-                            ? 'Saved, rating unavailable'
-                            : 'Rating unavailable'}
-                </span>
-              </div>
-            ) : undefined
-          }
-          onRematch={startFreshMatch}
-          onChangeSetup={returnToFritzSetup}
-          onHome={onNavigate ? goHome : undefined}
-          showHome={Boolean(onNavigate)}
-          customActions={
-            isJourneyTrial
-              ? match.winnerId === 'you'
-                ? [
-                    {
-                      label: 'Continue Trail',
-                      onClick: () => exitJourneyTrial(true),
-                      variant: 'primary',
-                    },
-                    { label: 'Try Again', onClick: startFreshMatch, variant: 'secondary' },
-                  ]
-                : [
-                    { label: 'Try Again', onClick: startFreshMatch, variant: 'primary' },
-                    {
-                      label: 'Return to Trail',
-                      onClick: () => exitJourneyTrial(false),
-                      variant: 'secondary',
-                    },
-                  ]
-              : undefined
-          }
-          statusNote={
-            botPostGameReviewEligible && postGameAnalysisPending && !postGameAnalysis
-              ? 'Analyzing your game…'
-              : undefined
-          }
-          showReviewGame={botPostGameReviewEligible && postGameAnalysis != null && !showPostGameReviewPrompt}
-          onReviewGame={reopenPostGameReview}
-        />
-      )}
-      {showPostGameOverlays && !isPlayVsFritzGameOver && !(isDailyFritzMode && onDailyFritzGameComplete) && (
-        <GameOverModal
-          open
-          ariaLabel={`${opponentLabel} match over`}
-          matchKind="single-player"
-          layout={isGuidedMatchVictoryResult ? 'guided-split' : 'default'}
-          kicker={
-            isGuidedMatchVictoryResult
-              ? 'Guided Match Complete'
-              : isDailyFritzMode
-                ? 'Daily Fritz Complete'
-                : isGhostMode
-                  ? 'Ghost Match Result'
-                  : 'Play vs Fritz Result'
-          }
-          title={
-            isGhostMode
-              ? match.winnerId === 'you'
-                ? 'Victory'
-                : 'Defeat'
-              : match.winnerId === 'you'
-                ? 'Victory'
-                : 'Defeat'
-          }
-          subtitle={
-            isGhostMode
-              ? match.winnerId === 'you'
-                ? `You finished ahead of ${opponentLabel}.`
-                : `${opponentLabel} closed out the match.`
-              : match.winnerId === 'you'
-                ? `You beat ${opponentLabel} in ${match.dealSize}-tile play.`
-                : `${opponentLabel} took the match in ${match.dealSize}-tile play.`
-          }
-          tone={match.winnerId === 'you' ? 'gold' : 'red'}
-          stats={[
-            {
-              label: 'Final Score',
-              value: `${match.players.you.score}-${match.players.bot.score}`,
-              tone: match.winnerId === 'you' ? 'gold' : 'red',
-            },
-            {
-              label: 'Margin',
-              value: `${match.winnerId === 'you' ? '+' : '-'}${Math.abs(match.players.you.score - match.players.bot.score)}`,
-              tone: match.winnerId === 'you' ? 'gold' : 'red',
-            },
-            {
-              label: isGhostMode ? 'Mode' : 'Deal',
-              value: isGhostMode ? 'Ghost' : `${match.dealSize}-Tile`,
-              tone: isGhostMode ? 'blue' : 'default',
-            },
-          ]}
-          scores={[
-            {
-              label: 'You',
-              value: isGhostMode ? `${match.players.you.score} pts` : match.players.you.score,
-              winner: match.winnerId === 'you',
-              showCrown: match.winnerId === 'you',
-            },
-            {
-              label: isGhostMode ? (
-                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-                  {ghostSubLabel && (
-                    <span style={{ fontSize: '0.94rem', opacity: 0.9, textTransform: 'none', fontWeight: 700 }}>
-                      {formatGhostName(ghostSubLabel)}
-                    </span>
-                  )}
-                  <span style={{ fontSize: '1.12rem', opacity: 0.98, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 850, lineHeight: 1 }}>
-                    {opponentLabel}
-                  </span>
-                </div>
-              ) : opponentLabel,
-              value: isGhostMode ? `${match.players.bot.score} pts` : match.players.bot.score,
-              winner: match.winnerId === 'bot',
-              showCrown: match.winnerId === 'bot',
-            },
-          ]}
-          primaryLabel={
-            isGuidedMatchVictoryResult
-              ? 'Finish Lesson'
-              : isDailyFritzMode
-                ? 'Back Home'
-                : isGhostMode
-                  ? 'Play Again'
-                  : 'Rematch'
-          }
-          onPrimary={isGuidedMatchVictoryResult ? returnToLearn : startFreshMatch}
-          secondaryLabel={
-            isGuidedMatchVictoryResult
-              ? undefined
-              : isDailyFritzMode
-                ? 'Back Home'
-                : isGhostMode
-                  ? 'Home'
-                  : 'Change Setup'
-          }
-          onSecondary={
-            isGuidedMatchVictoryResult
-              ? undefined
-              : isDailyFritzMode
-                ? exitMatch
-                : isGhostMode
-                  ? goHome
-                  : returnToFritzSetup
-          }
-          extraActionLabel={
-            isGuidedMatchVictoryResult
-              ? undefined
-              : canSaveGuidedMatchCandidate
-                ? 'Save as Guided Match Candidate'
-                : !isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate
-                  ? 'Home'
-                  : undefined
-          }
-          onExtraAction={
-            isGuidedMatchVictoryResult
-              ? undefined
-              : canSaveGuidedMatchCandidate
-                ? saveGuidedMatchCandidate
-                : !isGuidedMode && !isGhostMode && !isDailyFritzMode && onNavigate
-                  ? goHome
-                  : undefined
-          }
-          onClose={isGuidedMatchVictoryResult ? returnToLearn : exitMatch}
-        >
-          {isDailyFritzMode && !isGuidedMatchVictoryResult && !isGhostMode && (
-            <p className="rh-go-trust-note">{FRITZ_POSTGAME_TRUST_LINE}</p>
-          )}
-          {guidedMatchFinalDebrief ? (
-            <GuidedMatchFinalDebriefPanel debrief={guidedMatchFinalDebrief} />
-          ) : null}
-          {!isGuidedMatchVictoryResult &&
-            import.meta.env.DEV &&
-            enableGuidedMatchCandidateCapture &&
-            !isJourneyTrial && (
-            <div className="rh-go-rating">
-              <span>Guided Capture</span>
-              <strong>
-                {guidedMatchCaptureStatus.eventCount} events · {guidedMatchCaptureStatus.candidateStatus}
-              </strong>
-              <button
-                type="button"
-                className="btn"
-                onClick={copyGuidedMatchCandidate}
-                style={{ marginTop: 8 }}
-              >
-                Copy Candidate JSON
-              </button>
-              {guidedMatchCandidateSaveStatus ? (
-                <p style={{ margin: '8px 0 0', color: 'rgba(226,232,241,0.78)' }}>
-                  {guidedMatchCandidateSaveStatus}
-                </p>
-              ) : null}
-            </div>
-          )}
-          {isDailyFritzMode && (
-            <div className="rh-go-daily-panel">
-              <div className="rh-go-rating">
-                <span>Daily Run</span>
-                <strong>
-                  {ghostResultLoading
-                    ? 'Submitting...'
-                    : ghostResultError
-                      ? ghostResultError
-                      : formatOrdinalPlace(dailyFritzRank)
-                        ? formatOrdinalPlace(dailyFritzRank)
-                        : dailyFritzLeaderboard.length > 0
-                          ? 'Ranked'
-                        : 'Submitted'}
-                </strong>
-              </div>
-              {ghostResultError ? (
-                <button
-                  type="button"
-                  className="mode-inline-btn"
-                  onClick={retryDailyFritzCompletion}
-                  style={{ alignSelf: 'flex-start' }}
-                >
-                  Retry Submit
-                </button>
-              ) : null}
-            </div>
-          )}
-          {isGhostMode && (
-            <div className="ghost-result-card">
-              <div className="ghost-result-row">
-                <span>YOU</span>
-                <strong>{match.players.you.score} pts</strong>
-                <div className="ghost-result-bar">
-                  <div
-                    className="ghost-result-bar-fill is-you"
-                    style={{
-                      width: `${(match.players.you.score / Math.max(match.players.you.score, match.players.bot.score, 1)) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="ghost-result-row">
-                <span>GHOST</span>
-                <strong>{match.players.bot.score} pts</strong>
-                <div className="ghost-result-bar">
-                  <div
-                    className="ghost-result-bar-fill is-ghost"
-                    style={{
-                      width: `${(match.players.bot.score / Math.max(match.players.you.score, match.players.bot.score, 1)) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="ghost-result-rating">
-                {ghostResultLoading ? (
-                  <span>Analyzing play style...</span>
-                ) : ghostResult ? (
-                  <span>Ghost Rating {ghostRatingDeltaLabel} • {Math.round(ghostResult.newRating)}</span>
-                ) : ghostResultError ? (
-                  <span>{ghostResultError}</span>
-                ) : (
-                  <span>Analyzing play style...</span>
-                )}
-              </div>
-              <p className="ghost-result-message">{ghostResultMessage}</p>
-            </div>
-          )}
-          {isDailyFritzMode && dailyFritzLeaderboard.length > 0 && (
-            <div className="daily-fritz-inline-preview">
-              <h3 className="daily-fritz-inline-preview-title">Today&apos;s Daily Fritz Top Runs</h3>
-              <div className="daily-fritz-inline-preview-list">
-                {dailyFritzLeaderboard.map((entry) => (
-                  <div
-                    key={`${entry.rank}-${entry.username}-${entry.completedAt}`}
-                    className="daily-fritz-inline-preview-row"
-                  >
-                    <strong className="daily-fritz-inline-preview-rank">#{entry.rank}</strong>
-                    <span className="daily-fritz-inline-preview-player">{entry.username}</span>
-                    <span className="daily-fritz-inline-preview-score">{entry.finalScore}-{entry.opponentScore}</span>
-                    <span className="daily-fritz-inline-preview-diff">{entry.pointDiff >= 0 ? '+' : ''}{entry.pointDiff}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {isDailyPuzzleRun && (
-            <div style={{ margin: '2px 0 4px', textAlign: 'left' }}>
-              <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Today&apos;s Top Scores</h3>
-              {!userId && (
-                <p className="lobby-server" style={{ margin: '0 0 8px' }}>
-                  Log in to submit your score.
-                </p>
-              )}
-              {dailyLeaderboardLoading && (
-                <p className="lobby-server" style={{ margin: 0 }}>
-                  Loading leaderboard...
-                </p>
-              )}
-              {!dailyLeaderboardLoading && dailyLeaderboardError && (
-                <p className="lobby-server" style={{ margin: 0 }}>
-                  {dailyLeaderboardError}
-                </p>
-              )}
-              {!dailyLeaderboardLoading &&
-                !dailyLeaderboardError &&
-                dailyLeaderboard.length === 0 && (
-                  <p className="lobby-server" style={{ margin: 0 }}>
-                    No scores posted yet.
-                  </p>
-                )}
-              {!dailyLeaderboardLoading && dailyLeaderboard.length > 0 && (
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {dailyLeaderboard.map((entry, idx) => {
-                    const isCurrentUser = Boolean(userId) && entry.userId === userId;
-                    return (
-                      <div
-                        key={`${entry.userId}-${idx}`}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '52px 1fr auto',
-                          gap: 8,
-                          alignItems: 'center',
-                          borderRadius: 8,
-                          padding: '6px 8px',
-                          background: isCurrentUser
-                            ? 'rgba(255, 215, 0, 0.16)'
-                            : 'rgba(255, 255, 255, 0.04)',
-                        }}
-                      >
-                        <span>#{idx + 1}</span>
-                        <span>@{entry.username}</span>
-                        <span>{entry.bestScore}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </GameOverModal>
-      )}
+      <BotHandOverModal
+        handReveal={handReveal}
+        gameOver={match.gameOver}
+        handRevealProgress={handRevealProgress}
+        handAdvanceError={handAdvanceError}
+        showManualHandAdvance={showManualHandAdvance}
+        ghostResultError={ghostResultError}
+        isGuidedMode={isGuidedMode}
+        isGuidedV2Mode={isGuidedV2Mode}
+        isDailyFritzMode={isDailyFritzMode}
+        opponentLabel={opponentLabel}
+        tileReveals={handRevealTileReveals}
+        coach={coach}
+        autoAdvanceMs={DAILY_FRITZ_AUTO_ADVANCE_MS}
+        onAdvanceHand={advanceHand}
+        onRetryGhost={() => { setGhostResultError(null); advanceHand(); }}
+        onRetryHandAdvance={() => {
+          setHandAdvanceError(null);
+          handTransitionInFlightRef.current = false;
+          dailyFritzNextHandRef.current = null;
+          advanceHand();
+        }}
+        handNumber={match.handNumber}
+      />
+      <BotDailyFritzSetOverlay
+        overlay={dailyFritzSetOverlay}
+        shareCopied={shareCopied}
+        onShare={handleShareResult}
+        showPostGameOverlays={showPostGameOverlays}
+      />
+      <BotPivotalReviewPortal
+        enabled={PIVOTAL_REVIEW_WIZARD_ENABLED}
+        open={pivotalReviewOpen}
+        selection={pivotalSelection}
+        onComplete={completePivotalTurnReview}
+      />
+      <BotReviewSummaryPortal
+        pivotalReviewWizardEnabled={PIVOTAL_REVIEW_WIZARD_ENABLED}
+        pivotalReviewSummary={pivotalReviewSummary}
+        pivotalSelection={pivotalSelection}
+        postGameAnalysis={postGameAnalysis}
+        opponentLabel={opponentLabel}
+        showPostGameReviewPrompt={showPostGameReviewPrompt}
+        winnerId={match.winnerId}
+        youScore={match.players.you.score}
+        opponentScore={match.players.bot.score}
+        onSavePivotalReviewSummary={savePivotalReviewSummary}
+        onOpenHandScopedReview={openHandScopedReview}
+        onOpenReviewGameFromPrompt={openReviewGameFromPrompt}
+        onSkipPostGameReview={skipPostGameReview}
+      />
+      <BotPostGameCard
+        showPlayVsFritzResultOverlay={showPlayVsFritzResultOverlay}
+        winnerId={match.winnerId}
+        opponentLabel={opponentLabel}
+        dealSize={match.dealSize}
+        youScore={match.players.you.score}
+        botScore={match.players.bot.score}
+        isJourneyTrial={isJourneyTrial}
+        ghostResultLoading={ghostResultLoading}
+        ghostResultError={ghostResultError}
+        hasConfirmedFritzRatingUpdate={hasConfirmedFritzRatingUpdate}
+        fritzNewGlickoRating={fritzNewGlickoRating}
+        showFritzRatingSyncing={showFritzRatingSyncing}
+        currentGlickoRating={currentGlickoRating}
+        matchStartGlickoRating={matchStartGlickoRating}
+        fritzGlickoDelta={fritzGlickoDelta}
+        ghostResult={ghostResult}
+        onNavigate={onNavigate}
+        botPostGameReviewEligible={botPostGameReviewEligible}
+        postGameAnalysisPending={postGameAnalysisPending}
+        postGameAnalysis={postGameAnalysis}
+        showPostGameReviewPrompt={showPostGameReviewPrompt}
+        onRematch={startFreshMatch}
+        onChangeSetup={returnToFritzSetup}
+        onHome={onNavigate ? goHome : undefined}
+        exitJourneyTrial={exitJourneyTrial}
+        onReviewGame={reopenPostGameReview}
+      />
+      <BotGameOverModal
+        showPostGameOverlays={showPostGameOverlays}
+        isPlayVsFritzGameOver={isPlayVsFritzGameOver}
+        isDailyFritzMode={isDailyFritzMode}
+        onDailyFritzGameComplete={onDailyFritzGameComplete}
+        opponentLabel={opponentLabel}
+        isGuidedMatchVictoryResult={isGuidedMatchVictoryResult}
+        winnerId={match.winnerId}
+        dealSize={match.dealSize}
+        youScore={match.players.you.score}
+        botScore={match.players.bot.score}
+        isGhostMode={isGhostMode}
+        ghostSubLabel={ghostSubLabel}
+        guidedMatchFinalDebrief={guidedMatchFinalDebrief}
+        enableGuidedMatchCandidateCapture={enableGuidedMatchCandidateCapture}
+        isJourneyTrial={isJourneyTrial}
+        guidedMatchCaptureStatus={guidedMatchCaptureStatus}
+        guidedMatchCandidateSaveStatus={guidedMatchCandidateSaveStatus}
+        ghostResultLoading={ghostResultLoading}
+        ghostResultError={ghostResultError}
+        dailyFritzRank={dailyFritzRank}
+        dailyFritzLeaderboard={dailyFritzLeaderboard}
+        isDailyPuzzleRun={isDailyPuzzleRun}
+        userId={userId}
+        dailyLeaderboardLoading={dailyLeaderboardLoading}
+        dailyLeaderboardError={dailyLeaderboardError}
+        dailyLeaderboard={dailyLeaderboard}
+        ghostRatingDeltaLabel={ghostRatingDeltaLabel}
+        ghostResultMessage={ghostResultMessage}
+        canSaveGuidedMatchCandidate={canSaveGuidedMatchCandidate}
+        isGuidedMode={isGuidedMode}
+        ghostResult={ghostResult}
+        onExitMatch={exitMatch}
+        onGoHome={goHome}
+        onReturnToFritzSetup={returnToFritzSetup}
+        onStartFreshMatch={startFreshMatch}
+        onReturnToLearn={returnToLearn}
+        onCopyGuidedMatchCandidate={copyGuidedMatchCandidate}
+        onSaveGuidedMatchCandidate={saveGuidedMatchCandidate}
+        onRetryDailyFritzCompletion={retryDailyFritzCompletion}
+        onNavigate={onNavigate}
+      />
 
       {isLessonLayoutMode ? (
         <div className="walnut-match-layout game-layout-layer">
