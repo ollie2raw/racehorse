@@ -8,6 +8,7 @@ describe('sanitizePrivateRoomConfig', () => {
       tilesPerPlayer: 7,
       deadTileCount: 2,
       winningScore: 60,
+      skipPregameDraw: false,
     });
   });
 
@@ -16,6 +17,7 @@ describe('sanitizePrivateRoomConfig', () => {
       tilesPerPlayer: 14,
       deadTileCount: 0,
       winningScore: 60,
+      skipPregameDraw: false,
     });
   });
 

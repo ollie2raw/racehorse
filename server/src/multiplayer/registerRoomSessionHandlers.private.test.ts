@@ -89,7 +89,7 @@ async function startPrivateMatch(
   guestSocket: any,
 ) {
   const hostAck = vi.fn();
-  await hostHandlers.get('room:create')?.({ username: 'Host', userId: 'host-user' }, hostAck);
+  await hostHandlers.get('room:create')?.({ username: 'Host', userId: 'host-user', skipPregameDraw: true }, hostAck);
   expect(hostAck).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
   const roomCode = hostAck.mock.calls[0][0].roomCode as string;
   const hostSeatId = hostAck.mock.calls[0][0].you as string;

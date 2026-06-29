@@ -21,9 +21,12 @@ export function sanitizePrivateRoomConfig(raw: Record<string, unknown>): Partial
     ? winningScoreRaw
     : DEFAULT_CONFIG.winningScore;
 
+  const skipPregameDraw = raw.skipPregameDraw === true;
+
   return {
     tilesPerPlayer,
     deadTileCount: tilesPerPlayer === 14 ? 0 : DEFAULT_CONFIG.deadTileCount,
     winningScore,
+    skipPregameDraw,
   };
 }

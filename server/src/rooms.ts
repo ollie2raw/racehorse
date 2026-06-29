@@ -467,6 +467,7 @@ function resolveForcedDrawAtomically(
 }
 
 export function isPregameDrawEligible(room: Room): boolean {
+  if (room.config.skipPregameDraw) return false;
   const tilesPerPlayer = room.config.tilesPerPlayer ?? 7;
   return tilesPerPlayer === 7;
 }

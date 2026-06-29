@@ -42,6 +42,7 @@ export interface Config {
   readonly blockedHandRule: BlockedHandRule;
   readonly endHandBonus: EndHandBonus;
   readonly winningScore: number; // 60
+  readonly skipPregameDraw?: boolean;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -52,6 +53,7 @@ export const DEFAULT_CONFIG: Config = {
   blockedHandRule: 'lowestPips',
   endHandBonus: 'sumOpponentPenalties',
   winningScore: 60,
+  skipPregameDraw: false,
 };
 
 // ─── Player State ────────────────────────────────────────────
