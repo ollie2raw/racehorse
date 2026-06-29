@@ -337,7 +337,6 @@ export type MultiplayerRoomSyncUiRuntime = {
   setFriendInvite: Dispatch<SetStateAction<FriendInviteState>>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
-  setOptimisticPlayedTile: Dispatch<SetStateAction<Tile | null>>;
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
   setOpponentDisconnected: Dispatch<SetStateAction<boolean>>;

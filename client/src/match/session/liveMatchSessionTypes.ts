@@ -69,8 +69,6 @@ export type LiveMatchSessionApi = {
   setCanDraw: Dispatch<SetStateAction<boolean>>;
   selectedTile: Tile | null;
   setSelectedTile: Dispatch<SetStateAction<Tile | null>>;
-  optimisticPlayedTile: Tile | null;
-  setOptimisticPlayedTile: Dispatch<SetStateAction<Tile | null>>;
   pendingUiAction: null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play';
   setPendingUiAction: Dispatch<
     SetStateAction<null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'>

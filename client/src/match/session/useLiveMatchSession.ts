@@ -8,6 +8,7 @@ import {
 import type { GameState, Move, PlacementPosition, Tile } from '../../types';
 import type { PreGameDrawState } from '../preGameDraw/preGameDrawLogic';
 import { tileEquals } from '../../game/tileUtils';
+import { playTileSound } from '../../utils/sound';
 import { projectMultiplayerGameState } from '../../multiplayer/boardSnapshotGuards';
 import { drawAudit, nextDrawRequestId } from '../../multiplayer/drawAudit';
 import {
@@ -88,7 +89,6 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
   const [legalMoves, setLegalMoves] = useState<Move[]>([]);
   const [canDraw, setCanDraw] = useState(false);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
-  const [optimisticPlayedTile, setOptimisticPlayedTile] = useState<Tile | null>(null);
   const [pendingUiAction, setPendingUiAction] = useState<
     null | 'create' | 'join' | 'start' | 'draw' | 'pass' | 'play'
   >(null);
@@ -179,7 +179,6 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     setSelectedTile(null);
     setPendingUiAction(null);
     setActionError('');
-    setOptimisticPlayedTile(null);
     setOpponentDragging(false);
     draggingStateRef.current = false;
     pendingActionRef.current = false;
@@ -268,7 +267,6 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
         setFriendInvite,
         setRoomRecoveryState,
         setRoomRecoveryMessage,
-        setOptimisticPlayedTile,
         setLegalMoves,
         setCanDraw,
         setOpponentDisconnected,
@@ -351,7 +349,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
       showToast('Reconnecting...', 1200);
       return true;
     }
-    if (pendingActionRef.current) return true;
+    if (pendingActionRef.current || drawSequenceActive || flyingTiles.length > 0) return true;
     if (pendingUiAction === 'draw' || pendingUiAction === 'pass' || pendingUiAction === 'play') {
       return true;
     }
@@ -368,6 +366,8 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     rejoinInFlightRef,
     pendingUiAction,
     showToast,
+    drawSequenceActive,
+    flyingTiles,
   ]);
 
   const startGame = useCallback(async () => {
@@ -587,6 +587,7 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
       pendingGameplayActionRef.current = { kind: 'play', baselineSequence };
       mpPerfBeginAction('play', baselineSequence);
       setPendingUiAction('play');
+      playTileSound('standard', isMutedRef.current);
       pendingActionRef.current = true;
       setSelectedTile(null);
       setDrawStepMyHand(null);
@@ -998,8 +999,6 @@ export function useLiveMatchSession(inputParams: UseLiveMatchSessionParams): Liv
     setCanDraw,
     selectedTile,
     setSelectedTile,
-    optimisticPlayedTile,
-    setOptimisticPlayedTile,
     pendingUiAction,
     setPendingUiAction,
     actionError,

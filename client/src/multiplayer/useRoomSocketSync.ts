@@ -22,7 +22,7 @@ export type { StateUpdatePayload } from './multiplayerRuntime';
 
 /** Per-step stagger; chain runs to completion before final hand is shown. */
 const FORCED_DRAW_STAGGER_MS = 72;
-const FORCED_DRAW_FLY_MS = 520;
+const FORCED_DRAW_FLY_MS = 1800;
 
 function isActiveGameplayState(state: GameState | null): boolean {
   return Boolean(
@@ -63,7 +63,6 @@ type FlatRoomSocketSyncParams = {
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   setRoomRecoveryMessage: Dispatch<SetStateAction<string>>;
   setPreGameDraw: Dispatch<SetStateAction<PreGameDrawState | null>>;
-  setOptimisticPlayedTile: Dispatch<SetStateAction<Tile | null>>;
   setLegalMoves: Dispatch<SetStateAction<Move[]>>;
   setCanDraw: Dispatch<SetStateAction<boolean>>;
   setOpponentDisconnected: Dispatch<SetStateAction<boolean>>;
@@ -333,7 +332,6 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
         params.setRoomRecoveryMessage('');
       }
 
-      params.setOptimisticPlayedTile(null);
       params.setLegalMoves(Array.isArray(payload?.legalMoves) ? payload.legalMoves : []);
       params.setCanDraw(Boolean(payload?.canDraw));
       params.setPreGameDraw(payload.preGameDraw ?? null);
@@ -465,7 +463,6 @@ export function useRoomSocketSync(inputParams: UseRoomSocketSyncParams) {
           params.setRoomRecoveryState('idle');
           params.setRoomRecoveryMessage('');
         }
-        params.setOptimisticPlayedTile(null);
         params.setLegalMoves([]);
         params.setCanDraw(false);
         clearDrawPreview(params);
